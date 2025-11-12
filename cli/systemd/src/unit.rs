@@ -14,6 +14,7 @@ use std::io;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -24,6 +25,7 @@ pub enum Error {
 }
 
 /// Represents a systemd service configuration
+#[skip_serializing_none]
 #[derive(Debug, Clone, Default, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct ServiceUnit {
     pub unit: Option<Unit>,
@@ -31,6 +33,7 @@ pub struct ServiceUnit {
 }
 
 /// Unit section configuration
+#[skip_serializing_none]
 #[derive(Debug, Clone, Default, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Unit {
     pub description: Option<String>,
@@ -42,6 +45,7 @@ pub struct Unit {
 }
 
 /// Service section configuration with resource limits
+#[skip_serializing_none]
 #[derive(Debug, Clone, Default, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Service {
     // Basic service configuration

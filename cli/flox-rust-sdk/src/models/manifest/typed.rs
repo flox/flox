@@ -796,11 +796,7 @@ pub struct ServiceDescriptor {
     pub shutdown: Option<ServiceShutdown>,
 
     /// Additional manual config of the systemd service generated for persistent services
-    // Generating more than 1(!) value with proptest,
-    // increases the runtime of `proptest!`s to the point that we exhausted our stack space in CI
-    // Since we don't actually test against properties of systemd config,
-    // exclude this value from proptest state space generation.
-    #[cfg_attr(test, proptest(value = "None"))]
+    #[cfg_attr(test, proptest(strategy = "test::service_unit_with_none_fields()"))]
     pub systemd: Option<ServiceUnit>,
 
     /// Systems to allow running the service on
@@ -1080,6 +1076,20 @@ pub mod test {
     const CATALOG_MANIFEST: &str = indoc! {r#"
         version = 1
     "#};
+
+    /// Generate a single ServiceUnit with just enough fields to test `skip_serializing_none`
+    /// Generating more than 1(!) value with proptest,
+    /// increases the runtime of `proptest!`s to the point that we exhausted our stack space in CI
+    pub(super) fn service_unit_with_none_fields() -> impl Strategy<Value = Option<ServiceUnit>> {
+        Just(Some(ServiceUnit {
+            unit: Some(systemd::unit::Unit {
+                ..Default::default()
+            }),
+            service: Some(systemd::unit::Service {
+                ..Default::default()
+            }),
+        }))
+    }
 
     // Generate a Manifest that has empty install and include sections
     pub fn manifest_without_install_or_include() -> impl Strategy<Value = Manifest> {
