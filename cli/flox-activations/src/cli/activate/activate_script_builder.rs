@@ -44,6 +44,8 @@ fn add_old_cli_options(command: &mut Command, context: ActivateCtx) {
         ("FLOX_PROMPT_COLOR_2", context.prompt_color_2),
         // Set `FLOX_PROMPT_ENVIRONMENTS` to the constructed prompt string,
         // which may be ""
+        // This is used by set-prompt script, and tcsh in particular does not
+        // tolerate references to undefined variables.
         (
             FLOX_PROMPT_ENVIRONMENTS_VAR,
             context.flox_prompt_environments,
