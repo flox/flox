@@ -5,7 +5,6 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
-use flox_core::shell::ShellWithPath;
 use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::{
@@ -43,6 +42,7 @@ use flox_rust_sdk::providers::catalog::{
 };
 use indoc::formatdoc;
 use itertools::Itertools;
+use shell_gen::ShellWithPath;
 use tracing::{debug, info_span, instrument, span, warn};
 
 use super::services::warn_manifest_changes_for_services;

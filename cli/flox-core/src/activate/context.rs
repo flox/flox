@@ -1,8 +1,7 @@
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
-
-use crate::shell::ShellWithPath;
+use shell_gen::ShellWithPath;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActivateCtx {

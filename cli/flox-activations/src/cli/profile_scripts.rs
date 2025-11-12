@@ -2,9 +2,9 @@ use std::path::Path;
 
 use clap::Args;
 use log::debug;
+use shell_gen::{Shell, source_file};
 
 use super::{join_dir_list, separate_dir_list};
-use crate::shell_gen::{Shell, source_file};
 
 #[derive(Debug, Args)]
 pub struct ProfileScriptsArgs {

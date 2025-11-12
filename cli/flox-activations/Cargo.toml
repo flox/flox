@@ -21,6 +21,7 @@ shell-escape.workspace = true
 time.workspace = true
 indoc.workspace = true
 itertools.workspace = true
+shell_gen = { path = "../shell_gen" }
 
 
 [dev-dependencies]

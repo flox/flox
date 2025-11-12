@@ -8,10 +8,10 @@ use activate_script_builder::assemble_command_for_activate_script;
 use anyhow::{Context, Result};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
-use flox_core::shell::ShellWithPath;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
+use shell_gen::ShellWithPath;
 
 #[derive(Debug, Args)]
 pub struct ActivateArgs {

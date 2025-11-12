@@ -8,8 +8,9 @@ members = [
     "flox-core",
     "flox-test-utils",
     "mk_data",
+    "shell_gen",
     "systemd",
-    "xtask",
+    "xtask", 
 ]
 default-members = ["flox", "flox-watchdog", "flox-activations"]
 
