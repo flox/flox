@@ -23,6 +23,7 @@ use crate::config::Config;
 use crate::utils::message;
 
 mod logs;
+mod persist;
 mod restart;
 mod start;
 mod status;
@@ -81,6 +82,10 @@ pub enum ServicesCommands {
         footer("Run 'man flox-services-logs' for more details.")
     )]
     Logs(#[bpaf(external(logs::logs))] logs::Logs),
+
+    /// Generate configs for persistent system managed services
+    #[bpaf(command, hide)]
+    Persist(#[bpaf(external(persist::persist))] persist::Persist),
 }
 
 impl ServicesCommands {
@@ -95,6 +100,7 @@ impl ServicesCommands {
             ServicesCommands::Status(args) => args.handle(flox).await?,
             ServicesCommands::Stop(args) => args.handle(flox).await?,
             ServicesCommands::Logs(args) => args.handle(flox).await?,
+            ServicesCommands::Persist(args) => args.handle(flox).await?,
         }
 
         Ok(())
@@ -362,9 +368,12 @@ pub(crate) fn service_does_not_exist_error(name: &str) -> ServicesCommandsError 
     }
 }
 
-/// Error to return when a service doesn't exist, either in the lockfile or the
-/// current process-compose config.
-fn service_not_available_on_system_error(name: &str, system: &System) -> ServicesCommandsError {
+/// Error to return when a service doesn't exist for the current system,
+/// either in the lockfile or the current process-compose config.
+pub(crate) fn service_not_available_on_system_error(
+    name: &str,
+    system: &System,
+) -> ServicesCommandsError {
     ServicesCommandsError::ServiceNotAvailableOnSystem {
         name: name.to_string(),
         system: system.clone(),
