@@ -107,7 +107,7 @@ let
     remove_after_reading = false;
     env_description = "${containerName}";
     env_cache = "/tmp";
-    flox_env_log_dir = "/log/flox";
+    flox_env_log_dir = "/var/log/flox";
     flox_runtime_dir = "/run/flox";
     prompt_color_1 = "99";
     prompt_color_2 = "141";
