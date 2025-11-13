@@ -115,11 +115,27 @@ fn add_old_activate_script_exports(
     subsystem_verbosity: u32,
     vars_from_environment: VarsFromEnvironment,
 ) {
+    let mut removals = Vec::new();
     let mut exports = HashMap::from([
         ("_flox_activate_tracelevel", subsystem_verbosity.to_string()),
         // Propagate required variables that are documented as exposed.
         ("FLOX_ENV", context.env.clone()),
+        (
+            "FLOX_ENV_CACHE",
+            context.env_cache.to_string_lossy().to_string(),
+        ),
+        ("FLOX_ENV_DESCRIPTION", context.env_description.clone()),
     ]);
+    // Propagate optional variables that are documented as exposed.
+    // NB: `generate_*_start_commands()` performs the same logic except for zsh.
+    if let Some(env_project) = context.env_project.as_ref() {
+        exports.insert(
+            "FLOX_ENV_PROJECT",
+            env_project.to_string_lossy().to_string(),
+        );
+    } else {
+        removals.push("FLOX_ENV_PROJECT");
+    }
 
     // The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.
     // If that env var is empty then activate_tracer is set to the full path of the `true` command in the PATH.
@@ -145,6 +161,9 @@ fn add_old_activate_script_exports(
     exports.extend(fixed_vars_to_export(&context.env, vars_from_environment));
 
     command.envs(&exports);
+    for var in &removals {
+        command.env_remove(var);
+    }
 }
 
 /// Calculate values for FLOX_ENV_DIRS, PATH, and MANPATH

@@ -188,17 +188,6 @@ else
   _flox_invocation_type="inplace"
 fi
 
-# Propagate optional variables that are documented as exposed.
-# NB: `generate_*_start_commands()` performs the same logic except for zsh.
-for var_key in FLOX_ENV_CACHE FLOX_ENV_PROJECT FLOX_ENV_DESCRIPTION; do
-  eval "var_val=\${_$var_key-}"
-  if [ -n "$var_val" ]; then
-    export $var_key="${var_val}"
-  else
-    unset $var_key
-  fi
-done
-
 # Respect _FLOX_SHELL_FORCE if set.
 declare -r _flox_shell="${_FLOX_SHELL_FORCE:-${_FLOX_SHELL}}"
 # Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
