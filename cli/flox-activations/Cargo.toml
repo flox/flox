@@ -23,10 +23,12 @@ indoc.workspace = true
 is_executable.workspace = true
 itertools.workspace = true
 shell_gen = { path = "../shell_gen" }
+dirs.workspace = true
+tempfile.workspace = true
 
 
 [dev-dependencies]
 nix.workspace = true
-tempfile.workspace = true
 temp-env.workspace = true
 pretty_assertions.workspace = true
+expect-test.workspace = true
