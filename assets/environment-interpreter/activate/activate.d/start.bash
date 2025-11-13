@@ -16,6 +16,8 @@ set -euo pipefail
 # shellcheck source-path=SCRIPTDIR/activate.d
 source "${_activate_d}/helpers.bash"
 
+"$_flox_activate_tracer" "$_activate_d/start.bash" START
+
 # Parse command-line arguments.
 OPTIONS="e:c:m:"
 LONGOPTS="command:,\
@@ -25,6 +27,9 @@ env-project:,\
 env-description:,\
 mode:,\
 watchdog:,\
+activation-state-dir:,\
+invocation-type:,\
+activation-id:,\
 noprofile"
 USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
 [--shell <shell>] \
@@ -33,7 +38,10 @@ USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
 [--env-description <name>] \
 [--noprofile] \
 [(-m|--mode) (dev|run)] \
-[--watchdog <path>]"
+[--watchdog <path>] \
+[--activation-state-dir <path>] \
+[--invocation-type <type>] \
+[--activation-id <id>]"
 
 if ! PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@"); then
   echo "Failed to parse options." >&2
@@ -52,7 +60,6 @@ FLOX_NOPROFILE="${FLOX_NOPROFILE:-}"
 # activating from the top-level activation script, so fall back to $SHELL as a
 # default.
 _FLOX_SHELL="$SHELL"
-_FLOX_ENV="$($_dirname -- "${BASH_SOURCE[0]}")"
 _FLOX_ENV_ACTIVATION_MODE="dev"
 _FLOX_WATCHDOG_BIN=""
 while true; do
@@ -127,6 +134,36 @@ while true; do
       _FLOX_WATCHDOG_BIN="$1"
       shift
       ;;
+    --activation-state-dir)
+      shift
+      if [ -z "${1:-}" ]; then
+        echo "Option --activation-state-dir requires a path as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _flox_activation_state_dir="$1"
+      shift
+      ;;
+    --invocation-type)
+      shift
+      if [ -z "${1:-}" ]; then
+        echo "Option --invocation-type requires a type as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _flox_invocation_type="$1"
+      shift
+      ;;
+    --activation-id)
+      shift
+      if [ -z "${1:-}" ]; then
+        echo "Option --activation-id requires an id as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_ACTIVATION_ID="$1"
+      shift
+      ;;
     --noprofile)
       FLOX_NOPROFILE="true"
       shift
@@ -142,24 +179,6 @@ while true; do
       ;;
   esac
 done
-
-
-# Run activate hook
-# If $1 is an empty string, the environment is not captured,
-# and the activation is not added to the activation registry.
-# If $1 is not empty, it is used to capture the environment changes made by the
-# hook.
-_flox_activation_state_dir="${1?}"
-shift
-_flox_invocation_type="${1?}"
-shift
-
-if [ -z "$_flox_activation_state_dir" ]; then
-  echo "Error: _flox_activation_state_dir cannot be empty" >&2
-  exit 1
-fi
-
-"$_flox_activate_tracer" "$_activate_d/start.bash" START
 
 # Don't clobber STDERR or recommend 'exit' for non-interactive shells.
 # If inside a container, FLOX_ENV_DESCRIPTION won't be set, and we don't need to
