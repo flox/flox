@@ -21,9 +21,8 @@ set -euo pipefail
 #       sourced from the environment itself so that users can add pkgs
 #       which add additional scripts to the etc/profile.d directory.
 export _activate_d="__OUT__/activate.d"
-export _profile_d="__OUT__/etc/profile.d"
-export _tcsh_home="__OUT__/activate.d/tcsh_home"
-export _zdotdir="__OUT__/activate.d/zdotdir"
+_tcsh_home="__OUT__/activate.d/tcsh_home"
+_zdotdir="__OUT__/activate.d/zdotdir"
 
 # shellcheck source-path=SCRIPTDIR/activate.d
 source "${_activate_d}/generate-bash-startup-commands.bash"
