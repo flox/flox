@@ -26,7 +26,8 @@ impl Verbosity {
         }
     }
 
-    pub fn filter_from_env_and_arg(arg: Option<u32>) -> Option<String> {
+    /// Returns (number for subsystem verbosity, optional filter string)
+    pub fn verbosity_from_env_and_arg(arg: Option<u32>) -> (u32, Option<String>) {
         let rust_log = std::env::var("RUST_LOG").context("RUST_LOG not present");
         let our_variable = std::env::var(FLOX_ACTIVATIONS_VERBOSITY_VAR)
             .context("verbosity variable not present")
@@ -34,20 +35,25 @@ impl Verbosity {
                 value
                     .parse::<u32>()
                     .context("failed to parse verbosity as int")
-                    .map(Verbosity::from)
-                    .map(|v| v.env_filter().to_string())
             });
-        let explicit_arg = arg.map(Verbosity::from).map(|v| v.env_filter().to_string());
+        let our_variable_filter = our_variable
+            .as_ref()
+            .map(|v| Verbosity::from(*v))
+            .map(|v| v.env_filter().to_string());
+
+        let explicit_arg_filter = arg.map(Verbosity::from).map(|v| v.env_filter().to_string());
         let filter = rust_log
-            .or(our_variable)
-            .or(explicit_arg.ok_or(anyhow!("no arg provided")));
-        filter.ok()
+            .or(our_variable_filter)
+            .or(explicit_arg_filter.ok_or(anyhow!("no arg provided")));
+        let subsystem_verbosity = our_variable.ok().or(arg).unwrap_or(0);
+        (subsystem_verbosity, filter.ok())
     }
 }
 
-pub fn init_logger(verbosity_arg: Option<u32>) -> Result<(), anyhow::Error> {
+pub fn init_logger(verbosity_arg: Option<u32>) -> Result<u32, anyhow::Error> {
     let mut builder = env_logger::Builder::default();
-    if let Some(filter) = Verbosity::filter_from_env_and_arg(verbosity_arg) {
+    let (subsystem_verbosity, filter) = Verbosity::verbosity_from_env_and_arg(verbosity_arg);
+    if let Some(filter) = filter {
         builder.parse_filters(&filter);
     }
     let format = time::format_description::parse("[hour]:[minute]:[second].[subsecond digits:6]")
@@ -75,5 +81,5 @@ pub fn init_logger(verbosity_arg: Option<u32>) -> Result<(), anyhow::Error> {
         )
     });
     builder.init();
-    Ok(())
+    Ok(subsystem_verbosity)
 }

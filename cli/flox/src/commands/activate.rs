@@ -433,7 +433,7 @@ impl Activate {
 
         // `flox-activations` doesn't really have a "quiet" mode, so it makes
         // more sense for 0 to be the default rather than 1.
-        let verbosity_num = 0.max(flox.verbosity - 1);
+        let verbosity_num = flox.verbosity.max(0) as u32;
         let mut command = std::process::Command::new(&*FLOX_ACTIVATIONS_BIN);
         command
             .env(FLOX_ACTIVATIONS_VERBOSITY_VAR, format!("{verbosity_num}"))

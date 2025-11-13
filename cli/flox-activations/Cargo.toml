@@ -20,6 +20,7 @@ serde_json.workspace = true
 shell-escape.workspace = true
 time.workspace = true
 indoc.workspace = true
+is_executable.workspace = true
 itertools.workspace = true
 shell_gen = { path = "../shell_gen" }
 

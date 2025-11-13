@@ -7,7 +7,8 @@ use log::debug;
 fn main() -> Result<(), Error> {
     let args = Cli::parse();
 
-    logger::init_logger(args.verbosity).context("failed to initialize logger")?;
+    let subsystem_verbosity =
+        logger::init_logger(args.verbosity).context("failed to initialize logger")?;
     debug!("{args:?}");
 
     match args.command {
@@ -16,7 +17,7 @@ fn main() -> Result<(), Error> {
         },
         cli::Command::SetReady(args) => args.handle()?,
         cli::Command::Attach(args) => args.handle()?,
-        cli::Command::Activate(args) => args.handle()?,
+        cli::Command::Activate(args) => args.handle(subsystem_verbosity)?,
         cli::Command::FixPaths(args) => args.handle()?,
         cli::Command::SetEnvDirs(args) => args.handle()?,
         cli::Command::ProfileScripts(args) => args.handle()?,

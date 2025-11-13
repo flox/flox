@@ -114,6 +114,7 @@ runCommandNoCC "flox-interpreter"
     # Replace __OUT__ with the output path for both outputs.
     substituteInPlace $out/activate --replace-fail "__OUT__" "$out"
     substituteInPlace $out/activate_temporary --replace-fail "__OUT__" "$out"
+    substituteInPlace $out/activate.d/start.bash --replace-fail "__OUT__" "$out"
 
     # That's the build done, now shellcheck the results.
     ${shellcheck}/bin/shellcheck --external-sources --check-sourced \
