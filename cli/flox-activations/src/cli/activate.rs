@@ -190,9 +190,10 @@ impl ActivateArgs {
                 FLOX_ACTIVATE_START_SERVICES_VAR,
                 data.flox_activate_start_services.to_string(),
             ),
-            (FLOX_SERVICES_SOCKET_VAR, data.flox_services_socket),
         ]);
-
+        if let Some(socket_path) = data.flox_services_socket.as_ref() {
+            exports.insert(FLOX_SERVICES_SOCKET_VAR, socket_path.clone());
+        }
         if let Some(services_to_start) = data.flox_services_to_start {
             exports.insert(FLOX_SERVICES_TO_START_VAR, services_to_start);
         }

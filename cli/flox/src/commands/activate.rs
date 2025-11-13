@@ -417,7 +417,7 @@ impl Activate {
             flox_services_to_start,
             flox_env_cuda_detection,
             flox_activate_start_services,
-            flox_services_socket,
+            flox_services_socket: Some(flox_services_socket),
             interpreter_path,
             invocation_type: Some(invocation_type),
             run_args: self.run_args,

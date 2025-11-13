@@ -63,7 +63,7 @@ pub struct ActivateCtx {
     pub flox_activate_start_services: bool,
 
     /// Services socket path
-    pub flox_services_socket: String,
+    pub flox_services_socket: Option<String>,
 
     // Info needed to run the activate script
     pub interpreter_path: PathBuf,
