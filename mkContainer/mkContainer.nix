@@ -191,11 +191,6 @@ let
           "--activate-data"
           "${activateCtxStorePath}"
         ];
-
-        Env = mapAttrsToList (name: value: "${name}=${value}") {
-          "FLOX_SOURCED_FROM_SHELL_RC" = "1"; # don't source from shell rc (again)
-          "_FLOX_FORCE_INTERACTIVE" = "1"; # Required when running podman without "-t"
-        };
       };
 
       passthru = {
