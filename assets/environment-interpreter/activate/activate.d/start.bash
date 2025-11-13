@@ -1,11 +1,148 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 
+[ "${_flox_activate_tracelevel:?}" -eq 0 ] || set -x
+
 _daemonize="@daemonize@/bin/daemonize"
+_getopt="@getopt@/bin/getopt"
 _flox_activations="@flox_activations@"
 _jq="@jq@/bin/jq"
 
+_activate_d="__OUT__/activate.d"
 _profile_d="__OUT__/etc/profile.d"
+
+set -euo pipefail
+
+# shellcheck source-path=SCRIPTDIR/activate.d
+source "${_activate_d}/helpers.bash"
+
+# Parse command-line arguments.
+OPTIONS="e:c:m:"
+LONGOPTS="command:,\
+shell:,\
+env-cache:,\
+env-project:,\
+env-description:,\
+mode:,\
+watchdog:,\
+noprofile"
+USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
+[--shell <shell>] \
+[--env-cache <path>] \
+[--env-project <path>] \
+[--env-description <name>] \
+[--noprofile] \
+[(-m|--mode) (dev|run)] \
+[--watchdog <path>]"
+
+if ! PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@"); then
+  echo "Failed to parse options." >&2
+  echo "$USAGE" >&2
+  exit 1
+fi
+
+# Use eval to remove quotes and replace them with spaces.
+eval set -- "$PARSED"
+
+# Set default values for options.
+FLOX_CMD=""
+FLOX_NOPROFILE="${FLOX_NOPROFILE:-}"
+# The rust CLI contains sophisticated logic to detect the shell based on
+# $FLOX_SHELL or the process listening on STDOUT, but that won't happen when
+# activating from the top-level activation script, so fall back to $SHELL as a
+# default.
+_FLOX_SHELL="$SHELL"
+_FLOX_ENV="$($_dirname -- "${BASH_SOURCE[0]}")"
+_FLOX_ENV_ACTIVATION_MODE="dev"
+_FLOX_WATCHDOG_BIN=""
+while true; do
+  case "$1" in
+    -c | --command)
+      shift
+      if [ -z "${1:-}" ]; then
+        echo "Option -c requires an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      FLOX_CMD="$1"
+      shift
+      ;;
+    --shell)
+      shift
+      if [ -z "${1:-}" ]; then
+        echo "Option --shell requires a command as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_SHELL="$1"
+      shift
+      ;;
+    --env-cache)
+      shift
+      if [ -z "${1:-}" ] || [ ! -d "$1" ]; then
+        echo "Option --env-cache requires a valid path as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_ENV_CACHE="$1"
+      shift
+      ;;
+    --env-project)
+      shift
+      if [ -z "${1:-}" ] || [ ! -d "$1" ]; then
+        echo "Option --env-project requires a valid path as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_ENV_PROJECT="$1"
+      shift
+      ;;
+    --env-description)
+      shift
+      if [ -z "${1:-}" ]; then
+        echo "Option --env-description requires a name as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_ENV_DESCRIPTION="$1"
+      shift
+      ;;
+    -m | --mode)
+      shift
+      if [ -z "${1:-}" ] || ! { [ "$1" == "run" ] || [ "$1" == "dev" ]; }; then
+        echo "Option --mode requires 'dev' or 'run' as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_ENV_ACTIVATION_MODE="$1"
+      shift
+      ;;
+    --watchdog)
+      shift
+      if [ -z "${1:-}" ] || [ ! -f "$1" ]; then
+        echo "Option --watchdog requires a path to the watchdog binary as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_WATCHDOG_BIN="$1"
+      shift
+      ;;
+    --noprofile)
+      FLOX_NOPROFILE="true"
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "Invalid option: $1" >&2
+      echo "$USAGE" >&2
+      exit 1
+      ;;
+  esac
+done
+
 
 # Run activate hook
 # If $1 is an empty string, the environment is not captured,
