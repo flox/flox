@@ -18,7 +18,7 @@ fn wrap_command(env_dir: &Path, command: &str) -> String {
     let command = command.replace('\n', r"\n");
 
     format!(
-        r#"flox activate -d {} -- bash -c {}"#,
+        r#"flox activate -d {} -- exec bash -c {}"#,
         escape(env_dir.to_string_lossy()),
         escape(command.into()),
     )
@@ -147,7 +147,7 @@ mod tests {
 
         assert_eq!(
             wrap_command(env_dir, input),
-            r#"flox activate -d /test/env -- bash -c true"#
+            r#"flox activate -d /test/env -- exec bash -c true"#
         );
     }
 
@@ -158,7 +158,7 @@ mod tests {
 
         assert_eq!(
             wrap_command(env_dir, input),
-            r#"flox activate -d '/dir with/spaces in' -- bash -c 'echo command with spaces in'"#
+            r#"flox activate -d '/dir with/spaces in' -- exec bash -c 'echo command with spaces in'"#
         );
     }
 
@@ -169,7 +169,7 @@ mod tests {
 
         assert_eq!(
             wrap_command(env_dir, input),
-            r#"flox activate -d /test/env -- bash -c 'echo '\''this is quoted'\'''"#
+            r#"flox activate -d /test/env -- exec bash -c 'echo '\''this is quoted'\'''"#
         );
     }
 
@@ -185,7 +185,7 @@ mod tests {
 
         assert_eq!(
             wrap_command(env_dir, input),
-            r#"flox activate -d /test/env -- bash -c 'while true; do\n  echo hello\n  sleep 2\ndone\n'"#
+            r#"flox activate -d /test/env -- exec bash -c 'while true; do\n  echo hello\n  sleep 2\ndone\n'"#
         );
     }
     // Minimal descriptor fields set and no systemd fields set.
@@ -209,7 +209,7 @@ mod tests {
             unit: None,
             service: Some(Service {
                 exec_start: Some(
-                    r#"flox activate -d /test/env -- bash -c 'echo hello'"#.to_string()
+                    r#"flox activate -d /test/env -- exec bash -c 'echo hello'"#.to_string()
                 ),
                 ..Default::default()
             }),
@@ -245,10 +245,10 @@ mod tests {
             service: Some(Service {
                 type_: Some(ServiceType::Forking),
                 exec_start: Some(
-                    r#"flox activate -d /test/env -- bash -c start-command"#.to_string()
+                    r#"flox activate -d /test/env -- exec bash -c start-command"#.to_string()
                 ),
                 exec_stop: Some(
-                    r#"flox activate -d /test/env -- bash -c stop-command"#.to_string()
+                    r#"flox activate -d /test/env -- exec bash -c stop-command"#.to_string()
                 ),
                 environment: Some(vars),
                 ..Default::default()
@@ -307,16 +307,16 @@ mod tests {
             service: Some(Service {
                 type_: Some(ServiceType::Notify),
                 exec_start: Some(
-                    r#"flox activate -d /test/env -- bash -c start-command"#.to_string()
+                    r#"flox activate -d /test/env -- exec bash -c start-command"#.to_string()
                 ),
                 exec_start_pre: Some(vec![
-                    r#"flox activate -d /test/env -- bash -c pre-command"#.to_string()
+                    r#"flox activate -d /test/env -- exec bash -c pre-command"#.to_string()
                 ]),
                 exec_start_post: Some(vec![
-                    r#"flox activate -d /test/env -- bash -c post-command"#.to_string()
+                    r#"flox activate -d /test/env -- exec bash -c post-command"#.to_string()
                 ]),
                 exec_stop: Some(
-                    r#"flox activate -d /test/env -- bash -c stop-command"#.to_string()
+                    r#"flox activate -d /test/env -- exec bash -c stop-command"#.to_string()
                 ),
                 environment: Some(BTreeMap::from_iter(vec![
                     ("SHARED_KEY".to_string(), "from-systemd".to_string()),
