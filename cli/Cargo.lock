@@ -1345,6 +1345,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "serial_test",
+ "shell_gen",
  "slug",
  "supports-color",
  "sys-info",
@@ -1381,6 +1382,7 @@ dependencies = [
  "pretty_assertions",
  "serde_json",
  "shell-escape",
+ "shell_gen",
  "temp-env",
  "tempfile",
  "time",
@@ -1400,6 +1402,7 @@ dependencies = [
  "schemars 1.0.5",
  "serde",
  "serde_json",
+ "shell_gen",
  "tempfile",
  "thiserror 2.0.17",
  "time",
@@ -4050,6 +4053,14 @@ name = "shell-escape"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
+
+[[package]]
+name = "shell_gen"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.17",
+]
 
 [[package]]
 name = "shlex"

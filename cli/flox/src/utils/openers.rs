@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::{Context, Result};
-use flox_core::shell::ShellWithPath;
 use itertools::Itertools;
+use shell_gen::ShellWithPath;
 use sysinfo::{Pid, ProcessesToUpdate, System};
 use tracing::debug;
 
@@ -113,7 +113,7 @@ impl CliShellExt for ShellWithPath {
         let parent_process_exe = get_parent_process_exe()?;
         debug!("Detected parent process exe: {parent_process_exe:?}");
 
-        Self::try_from(parent_process_exe.as_path())
+        Self::try_from(parent_process_exe.as_path()).map_err(anyhow::Error::from)
     }
 
     /// Detect the current shell from the {var} environment variable
@@ -122,7 +122,7 @@ impl CliShellExt for ShellWithPath {
             .with_context(|| format!("{var} environment variable not set"))
             .and_then(|shell| {
                 let path = PathBuf::from(shell);
-                Self::try_from(path.as_path())
+                Self::try_from(path.as_path()).map_err(anyhow::Error::from)
             })
     }
 }

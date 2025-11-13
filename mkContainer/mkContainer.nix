@@ -99,7 +99,7 @@ let
   activateCtx = {
     mode = "${activationMode}";
     shell = {
-      Bash = "${containerPkgs.bashInteractive}/bin/bash";
+      bash = "${containerPkgs.bashInteractive}/bin/bash";
     };
     env = "${environment}";
     run_args = [ ];

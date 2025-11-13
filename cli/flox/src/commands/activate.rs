@@ -10,7 +10,6 @@ use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_VERBOSITY_VAR;
-use flox_core::shell::ShellWithPath;
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
 use flox_rust_sdk::models::environment::generations::GenerationId;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, EnvironmentError};
@@ -20,6 +19,7 @@ use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processe
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::logging::traceable_path;
 use indoc::{formatdoc, indoc};
+use shell_gen::ShellWithPath;
 use tracing::{debug, warn};
 
 use super::services::ServicesEnvironment;
