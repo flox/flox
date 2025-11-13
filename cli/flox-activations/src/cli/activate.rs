@@ -71,7 +71,9 @@ impl ActivateArgs {
         }
         // For any case where `invocation_type` is None, we should have detected that above
         // and set it to Some.
-        debug_assert!(data.invocation_type.is_some());
+        let invocation_type = data
+            .invocation_type
+            .expect("invocation type should have been some");
 
         let activate_script_command = Self::assemble_command_for_activate_script(data.clone());
 
@@ -82,24 +84,14 @@ impl ActivateArgs {
         // e.g. in a .bashrc or .zshrc file:
         //
         //    eval "$(flox activate)"
-        if data
-            .invocation_type
-            .as_ref()
-            .expect("already checked invocation type was some")
-            == &InvocationType::InPlace
-        {
+        if invocation_type == InvocationType::InPlace {
             Self::activate_in_place(activate_script_command, data.shell)?;
 
             return Ok(());
         }
 
         // These functions will only return if exec fails
-        if data
-            .invocation_type
-            .as_ref()
-            .expect("already checked invocation type was some")
-            == &InvocationType::Interactive
-        {
+        if invocation_type == InvocationType::Interactive {
             Self::activate_interactive(activate_script_command)
         } else {
             Self::activate_command(activate_script_command, data.run_args)

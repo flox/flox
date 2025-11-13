@@ -74,7 +74,7 @@ pub struct ActivateCtx {
     pub remove_after_reading: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub enum InvocationType {
     InPlace,
     Interactive,
