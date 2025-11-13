@@ -11,7 +11,7 @@ pub struct ActivateCtx {
     pub env: String,
 
     /// The project path for the environment
-    pub env_project: PathBuf,
+    pub env_project: Option<PathBuf>,
 
     /// The cache path for the environment
     pub env_cache: PathBuf,
@@ -23,7 +23,7 @@ pub struct ActivateCtx {
     pub mode: String,
 
     /// Path to the watchdog binary
-    pub watchdog_bin: PathBuf,
+    pub watchdog_bin: Option<PathBuf>,
 
     /// Path to the shell executable
     pub shell: ShellWithPath,
@@ -33,7 +33,7 @@ pub struct ActivateCtx {
     pub flox_active_environments: String,
 
     /// Environment log directory
-    pub flox_env_log_dir: String,
+    pub flox_env_log_dir: Option<String>,
 
     /// Prompt color 1
     pub prompt_color_1: String,
@@ -63,15 +63,18 @@ pub struct ActivateCtx {
     pub flox_activate_start_services: bool,
 
     /// Services socket path
-    pub flox_services_socket: String,
+    pub flox_services_socket: Option<String>,
 
     // Info needed to run the activate script
     pub interpreter_path: PathBuf,
-    pub invocation_type: InvocationType,
+    pub invocation_type: Option<InvocationType>,
     pub run_args: Vec<String>,
+
+    /// Whether to clean up the context file after reading it.
+    pub remove_after_reading: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub enum InvocationType {
     InPlace,
     Interactive,

@@ -295,7 +295,7 @@ Exporting a container on macOS requires Docker or Podman to be installed."
   assert_success
   assert_line "✨ 'test:runtime' written to Podman runtime"
 
-  run --separate-stderr podman run -q -i "localhost/test:runtime" -c 'echo $foo'
+  run --separate-stderr podman run -q -i "localhost/test:runtime" echo '$foo'
   assert_success
 }
 
@@ -351,12 +351,12 @@ function assert_container_output() {
   # Also tests writing to STDOUT with `-f -`
   CONTAINER_ID="$("$FLOX_BIN" containerize -f - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
 
-  run --separate-stderr podman run -q -i "$CONTAINER_ID" -c 'echo $foo'
+  run --separate-stderr podman run -q -i "$CONTAINER_ID" echo '$foo'
   assert_success
   assert_container_output
 
   # Next, test without "-i'
-  run --separate-stderr podman run "$CONTAINER_ID" -c 'echo $foo'
+  run --separate-stderr podman run "$CONTAINER_ID" echo '$foo'
   assert_success
   assert_container_output
 }
@@ -433,11 +433,11 @@ EOF
   # Verify that the `activate` entrypoint is still used when an ad-hoc command
   # is used and that (since it's quicker than executing a separate test)
   # `FLOX_ENV_*` are set correctly.
-  run podman run --rm "test:$TAG" -c 'echo $FLOX_ENV_CACHE'
+  run podman run --rm "test:$TAG" echo '$FLOX_ENV_CACHE'
   assert_success
   assert_output "/tmp"
 
-  run podman run --rm "test:$TAG" -c 'echo $FLOX_ENV_DESCRIPTION'
+  run podman run --rm "test:$TAG" echo '$FLOX_ENV_DESCRIPTION'
   assert_success
   assert_output "test"
 }
