@@ -6,14 +6,14 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_command_for_activate_script};
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
-use shell_gen::ShellWithPath;
+use shell_gen::{Shell, ShellWithPath};
 
 use super::StartOrAttachArgs;
 use crate::cli::activate::activate_script_builder::{
@@ -21,6 +21,7 @@ use crate::cli::activate::activate_script_builder::{
     assemble_command_for_start_script,
     old_cli_envs,
 };
+use crate::cli::attach::{AttachArgs, AttachExclusiveArgs};
 use crate::env_diff::EnvDiff;
 use crate::gen_rc::bash::{BashStartupArgs, generate_bash_startup_commands};
 use crate::gen_rc::fish::{FishStartupArgs, generate_fish_startup_commands};
@@ -122,8 +123,6 @@ impl ActivateArgs {
 
         let diff = EnvDiff::from_files(&start_or_attach.activation_state_dir)?;
 
-        let _activate_tracer = activate_tracer(&context.interpreter_path);
-
         let activate_script_command = assemble_command_for_activate_script(
             "activate_temporary",
             context.clone(),
@@ -135,7 +134,7 @@ impl ActivateArgs {
         // Create the path if we're going to need it (we won't for in-place).
         // We're doing this ahead of time here because it's shell-agnostic and the `match`
         // statement below is already going to be huge.
-        let mut _rc_path = None;
+        let mut rc_path = None;
         if invocation_type != InvocationType::InPlace {
             let path = if let Ok(rc_path_str) = std::env::var(STARTUP_SCRIPT_PATH_OVERRIDE_VAR) {
                 PathBuf::from(rc_path_str)
@@ -149,11 +148,19 @@ impl ActivateArgs {
                 tmp.keep()?;
                 rc_path
             };
-            _rc_path = Some(path);
+            rc_path = Some(path);
         }
+        let startup_ctx = Self::startup_ctx(
+            context.clone(),
+            invocation_type,
+            rc_path,
+            diff,
+            &start_or_attach.activation_state_dir,
+            &activate_tracer(&context.interpreter_path),
+            subsystem_verbosity,
+        )?;
 
-        // NOTE: use Self::write_to_path or Self::write_to_stdout
-        //  to actually write the script
+        // TODO: start services
 
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
@@ -163,7 +170,7 @@ impl ActivateArgs {
         //
         //    eval "$(flox activate)"
         if invocation_type == InvocationType::InPlace {
-            Self::activate_in_place(activate_script_command, context)?;
+            Self::activate_in_place(context, startup_ctx, start_or_attach.activation_id)?;
 
             return Ok(());
         }
@@ -176,7 +183,6 @@ impl ActivateArgs {
         }
     }
 
-    #[allow(unused)]
     fn startup_ctx(
         ctx: ActivateCtx,
         invocation_type: InvocationType,
@@ -321,7 +327,6 @@ impl ActivateArgs {
         Ok(())
     }
 
-    #[allow(dead_code)]
     fn write_to_stdout(ctx: &StartupCtx) -> Result<()> {
         let mut writer = std::io::stdout();
         match ctx.args {
@@ -367,24 +372,72 @@ impl ActivateArgs {
     }
 
     /// Used for `eval "$(flox activate)"`
-    fn activate_in_place(mut activate_script_command: Command, context: ActivateCtx) -> Result<()> {
-        debug!("running activation command: {:?}", activate_script_command);
+    fn activate_in_place(
+        context: ActivateCtx,
+        startup_ctx: StartupCtx,
+        activation_id: String,
+    ) -> Result<()> {
+        let attach_command = AttachArgs {
+            pid: std::process::id() as i32,
+            flox_env: (&context.env).into(),
+            id: activation_id.clone(),
+            exclusive: AttachExclusiveArgs {
+                timeout_ms: Some(5000),
+                remove_pid: None,
+            },
+            runtime_dir: (&context.flox_runtime_dir).into(),
+        };
 
-        let output = activate_script_command
-            .output()
-            .context("failed to run activation script")?;
-        eprint!("{}", String::from_utf8_lossy(&output.stderr));
+        // Put a 5 second timeout on the activation
+        attach_command.handle()?;
 
-        let legacy_exports = Self::render_legacy_exports(context);
+        let legacy_exports = Self::render_legacy_exports(context.clone());
 
-        let script = formatdoc! {"
+        let exports_for_zsh = if matches!(context.shell, ShellWithPath::Zsh(_)) {
+            let zdotdir_path = context.interpreter_path.join("activate.d/zdotdir");
+            let mut exports = String::new();
+
+            // TODO: it would probably be better to just not touch ZDOTDIR in
+            // the zsh startup script if invocation type is in-place
+            if let Ok(current_zdotdir) = std::env::var("ZDOTDIR")
+                && !current_zdotdir.is_empty()
+            {
+                exports.push_str(&format!(
+                    "export FLOX_ORIG_ZDOTDIR=\"{}\";\n",
+                    current_zdotdir
+                ));
+            }
+            exports.push_str(&format!("export ZDOTDIR=\"{}\";\n", zdotdir_path.display()));
+
+            exports.push_str(&format!(
+                "export _flox_activate_tracer=\"{}\";\n",
+                activate_tracer(&context.interpreter_path)
+            ));
+
+            exports
+        } else {
+            String::new()
+        };
+
+        let script = formatdoc! {r#"
             {legacy_exports}
-            {output}
-        ",
-        output = String::from_utf8_lossy(&output.stdout),
+            {flox_activations} attach --runtime-dir "{runtime_dir}" --pid {self_pid_var} --flox-env "{flox_env}" --id "{id}" --remove-pid "{pid}";
+            {exports_for_zsh}
+        "#,
+            flox_activations = (*FLOX_ACTIVATIONS_BIN).to_string_lossy(),
+            runtime_dir = context.flox_runtime_dir,
+            self_pid_var = Shell::from(context.shell).self_pid_var(),
+            flox_env = context.env,
+            id = activation_id,
+            pid = std::process::id(),
         };
 
         print!("{script}");
+        debug!(
+            "activation in place script, except for startup commands:\n{}",
+            script
+        );
+        Self::write_to_stdout(&startup_ctx)?;
 
         Ok(())
     }

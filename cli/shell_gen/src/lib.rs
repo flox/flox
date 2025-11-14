@@ -126,6 +126,16 @@ impl Shell {
             Self::Zsh => format!("typeset -g {var}='{value}';"),
         }
     }
+
+    /// The variable a shell uses to refer to its own PID
+    pub fn self_pid_var(&self) -> &'static str {
+        match self {
+            Self::Bash => "$$",
+            Self::Fish => "$fish_pid",
+            Self::Tcsh => "$$",
+            Self::Zsh => "$$",
+        }
+    }
 }
 
 pub trait GenerateShell {
