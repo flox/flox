@@ -1,8 +1,6 @@
-_comm="@coreutils@/bin/comm"
 _daemonize="@daemonize@/bin/daemonize"
 _flox_activations="@flox_activations@"
-_sed="@gnused@/bin/sed"
-_sort="@coreutils@/bin/sort"
+_jq="@jq@/bin/jq"
 
 _profile_d="__OUT__/etc/profile.d"
 
@@ -34,8 +32,8 @@ start() {
   fi
 
   # First activation of this environment. Snapshot environment to start.
-  _start_env="$_flox_activation_state_dir/bare.env"
-  export | LC_ALL=C $_sort > "$_start_env"
+  _start_env="$_flox_activation_state_dir/start.env.json"
+  $_jq -nS env > "$_start_env"
 
   # Process the flox environment customizations, which includes (amongst
   # other things) prepending this environment's bin directory to the PATH.
@@ -89,28 +87,8 @@ start() {
   # Capture _end_env and generate _add_env and _del_env.
   # Mark the environment as ready to use for attachments.
   # Capture ending environment.
-  _end_env="$_flox_activation_state_dir/post-hook.env"
-  export | LC_ALL=C $_sort > "$_end_env"
-
-  # The userShell initialization scripts that follow have the potential to undo
-  # the environment modifications performed above, so we must first calculate
-  # all changes made to the environment so far so that we can restore them after
-  # the userShell initialization scripts have run. We use the `comm(1)` command
-  # to compare the starting and ending environment captures (think of it as a
-  # better diff for comparing sorted files), and `sed(1)` to format the output
-  # in the best format for use in each language-specific activation script.
-  _add_env="$_flox_activation_state_dir/add.env"
-  _del_env="$_flox_activation_state_dir/del.env"
-
-  # Capture environment variables to _set_ as "key=value" pairs.
-  # comm -13: only env declarations unique to `$_end_env` (new declarations)
-  LC_ALL=C $_comm -13 "$_start_env" "$_end_env" \
-    | $_sed -e 's/^declare -x //' > "$_add_env"
-
-  # Capture environment variables to _unset_ as a list of keys.
-  # TODO: remove from $_del_env keys set in $_add_env
-  LC_ALL=C $_comm -23 "$_start_env" "$_end_env" \
-    | $_sed -e 's/^declare -x //' -e 's/=.*//' > "$_del_env"
+  _end_env="$_flox_activation_state_dir/end.env.json"
+  $_jq -nS env > "$_end_env"
 
   # Finally mark the environment as ready to use for attachments.
   "$_flox_activations" \
