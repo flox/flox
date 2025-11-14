@@ -1,4 +1,5 @@
 mod activate_script_builder;
+use std::collections::HashMap;
 use std::fs;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
@@ -12,6 +13,10 @@ use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
 use shell_gen::ShellWithPath;
+
+use super::StartOrAttachArgs;
+use super::start_or_attach::StartOrAttachResult;
+use crate::env_diff::EnvDiff;
 
 #[derive(Debug, Args)]
 pub struct ActivateArgs {
@@ -65,10 +70,82 @@ impl ActivateArgs {
             .invocation_type
             .expect("invocation type should have been some");
 
+        let StartOrAttachResult {
+            attach,
+            activation_state_dir,
+            activation_id,
+        } = StartOrAttachArgs {
+            pid: std::process::id() as i32,
+            flox_env: PathBuf::from(&context.env),
+            store_path: context.flox_activate_store_path.clone(),
+            runtime_dir: PathBuf::from(&context.flox_runtime_dir),
+        }
+        .handle_inner()?;
+
+        let vars_from_env = VarsFromEnvironment::get()?;
+
+        let activation_info_vars = HashMap::from([
+            (
+                "_FLOX_ACTIVATION_STATE_DIR".to_string(),
+                activation_state_dir.to_string_lossy().to_string(),
+            ),
+            ("_FLOX_ACTIVATION_ID".to_string(), activation_id.clone()),
+        ]);
+        if attach {
+            debug!(
+                "Attaching to existing activation in state dir {:?}, id {}",
+                activation_state_dir, activation_id
+            );
+            if invocation_type == InvocationType::Interactive {
+                eprintln!(
+                    "{}",
+                    formatdoc! {"✅ Attached to existing activation of environment '{}'
+                             To stop using this environment, type 'exit'
+                            ",
+                    context.env_description,
+                    }
+                );
+            }
+        } else {
+            debug!("Starting activation");
+            let activation_info_diff = EnvDiff {
+                additions: activation_info_vars,
+                deletions: Vec::new(),
+            };
+            let mut start_command = assemble_command_for_activate_script(
+                "activate.d/start.bash",
+                context.clone(),
+                subsystem_verbosity,
+                vars_from_env.clone(),
+                &activation_info_diff,
+            );
+            start_command.args([
+                "--activation-state-dir",
+                &activation_state_dir.to_string_lossy(),
+                "--invocation-type",
+                &invocation_type.to_string(),
+                "--activation-id",
+                &activation_id,
+            ]);
+            start_command.spawn()?.wait()?;
+        };
+
+        let mut diff = EnvDiff::from_files(&activation_state_dir)?;
+
+        diff.additions.extend([
+            (
+                "_FLOX_ACTIVATION_STATE_DIR".to_string(),
+                activation_state_dir.to_string_lossy().to_string(),
+            ),
+            ("_FLOX_ACTIVATION_ID".to_string(), activation_id.clone()),
+        ]);
+
         let activate_script_command = assemble_command_for_activate_script(
+            "activate_temporary",
             context.clone(),
             subsystem_verbosity,
-            VarsFromEnvironment::get()?,
+            vars_from_env,
+            &diff,
         );
 
         // when output is not a tty, and no command is provided
