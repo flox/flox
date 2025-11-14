@@ -8,7 +8,11 @@ use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::models::environment::generations::GenerationId;
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::typed::{ActivateMode, Inner, Manifest, Services};
-use flox_rust_sdk::providers::services::{ProcessState, ProcessStates, new_services_to_start};
+use flox_rust_sdk::providers::services::process_compose::{
+    ProcessState,
+    ProcessStates,
+    new_services_to_start,
+};
 use tracing::{debug, instrument};
 
 use super::{
@@ -391,7 +395,7 @@ fn defined_service_not_active_error(name: &str) -> ServicesCommandsError {
 #[cfg(test)]
 mod tests {
     use flox_rust_sdk::models::manifest::typed::ServiceDescriptor;
-    use flox_rust_sdk::providers::services::test_helpers::generate_process_state;
+    use flox_rust_sdk::providers::services::process_compose::test_helpers::generate_process_state;
 
     use super::*;
 

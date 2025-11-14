@@ -49,7 +49,7 @@ use crate::providers::buildenv::{
     BuildEnvOutputs,
     BuiltStorePath,
 };
-use crate::providers::services::{ServiceError, maybe_make_service_config_file};
+use crate::providers::services::process_compose::{ServiceError, maybe_make_service_config_file};
 
 const TEMPROOTS_DIR_NAME: &str = "temp-roots";
 
@@ -1194,7 +1194,7 @@ mod tests {
     use crate::models::manifest::raw::CatalogPackage;
     use crate::providers::catalog;
     use crate::providers::catalog::test_helpers::catalog_replay_client;
-    use crate::providers::services::SERVICE_CONFIG_FILENAME;
+    use crate::providers::services::process_compose::SERVICE_CONFIG_FILENAME;
 
     /// Create a CoreEnvironment with an empty manifest (with version = 1)
     fn empty_core_environment() -> (CoreEnvironment, Flox, TempDir) {

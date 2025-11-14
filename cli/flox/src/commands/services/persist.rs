@@ -1,6 +1,5 @@
 use std::env::consts::OS;
 use std::fs::File;
-use std::io::Write;
 use std::path::Path;
 
 use anyhow::{Result, bail};
@@ -8,6 +7,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::models::manifest::typed::{Inner, ServiceDescriptor};
+use flox_rust_sdk::providers::services::systemd::render_systemd_unit_file;
 use tracing::instrument;
 use xdg::BaseDirectories;
 
@@ -71,20 +71,17 @@ impl Persist {
 }
 
 fn persist_systemd(
-    _env_path: &Path,
+    env_path: &Path,
     services_to_persist: Vec<(&String, &ServiceDescriptor)>,
 ) -> Result<()> {
     let systemd_dirs = BaseDirectories::with_prefix("systemd/user");
 
-    for (service_name, _service_descriptor) in services_to_persist {
+    for (service_name, service_descriptor) in services_to_persist {
         let unit_filename = format!("{}.service", service_name);
         let unit_path = systemd_dirs.place_config_file(&unit_filename)?;
 
         let mut output_file = File::create(&unit_path)?;
-
-        // TODO: implement
-        // render_systemd_unit_file(service_descriptor, &env_path, &mut output_file)?;
-        writeln!(output_file, "# placeholder for: {}", service_name)?;
+        render_systemd_unit_file(service_descriptor, env_path, &mut output_file)?;
 
         // TODO: Differentiate between file creation and update?
         message::updated(format!(

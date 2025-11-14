@@ -26,7 +26,7 @@ use systemd::unit::ServiceUnit;
 use super::raw::RawManifest;
 use crate::data::System;
 use crate::models::environment_ref::EnvironmentRef;
-use crate::providers::services::ServiceError;
+use crate::providers::services::process_compose::ServiceError;
 
 pub(crate) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub const DEFAULT_PRIORITY: u64 = 5;
