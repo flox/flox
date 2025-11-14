@@ -147,26 +147,10 @@ fn add_old_activate_script_exports(
         removals.push("FLOX_ENV_PROJECT");
     }
 
-    // The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.
-    // If that env var is empty then activate_tracer is set to the full path of the `true` command in the PATH.
-    // If that env var is not empty and refers to an executable then then activate_tracer is set to that value.
-    // Else activate_tracer is set to refer to {interpreter_path}/activate.d/trace.
-    let activate_tracer = if let Ok(trace_path) = std::env::var("FLOX_ACTIVATE_TRACE") {
-        if Path::new(&trace_path).is_executable() {
-            trace_path
-        } else {
-            context
-                .interpreter_path
-                .join("activate.d")
-                .join("trace")
-                .to_string_lossy()
-                .to_string()
-        }
-    } else {
-        "true".to_string()
-    };
-
-    exports.insert("_flox_activate_tracer", activate_tracer);
+    exports.insert(
+        "_flox_activate_tracer",
+        activate_tracer(&context.interpreter_path),
+    );
 
     exports.extend(fixed_vars_to_export(&context.env, vars_from_environment));
 
@@ -197,4 +181,26 @@ fn fixed_vars_to_export(
         ("PATH", new_path),
         ("MANPATH", new_manpath),
     ])
+}
+
+/// The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.
+/// If that env var is empty then activate_tracer is set to the full path of the `true` command in the PATH.
+/// If that env var is not empty and refers to an executable then then activate_tracer is set to that value.
+/// Else activate_tracer is set to refer to {interpreter_path}/activate.d/trace.
+// TODO: we should probably pass this around rather than recomputing it
+pub fn activate_tracer(interpreter_path: impl AsRef<Path>) -> String {
+    if let Ok(trace_path) = std::env::var("FLOX_ACTIVATE_TRACE") {
+        if Path::new(&trace_path).is_executable() {
+            trace_path
+        } else {
+            interpreter_path
+                .as_ref()
+                .join("activate.d")
+                .join("trace")
+                .to_string_lossy()
+                .to_string()
+        }
+    } else {
+        "true".to_string()
+    }
 }

@@ -18,7 +18,7 @@ use shell_gen::ShellWithPath;
 
 use super::StartOrAttachArgs;
 use super::start_or_attach::StartOrAttachResult;
-use crate::cli::activate::activate_script_builder::old_cli_envs;
+use crate::cli::activate::activate_script_builder::{activate_tracer, old_cli_envs};
 use crate::env_diff::EnvDiff;
 use crate::gen_rc::bash::{BashStartupArgs, generate_bash_startup_commands};
 use crate::gen_rc::{StartupArgs, StartupCtx};
@@ -148,24 +148,7 @@ impl ActivateArgs {
             ("_FLOX_ACTIVATION_ID".to_string(), activation_id.clone()),
         ]);
 
-        // The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.
-        // If that env var is empty then activate_tracer is set to the full path of the `true` command in the PATH.
-        // If that env var is not empty and refers to an executable then then activate_tracer is set to that value.
-        // Else activate_tracer is set to refer to {data.interpreter_path}/activate.d/trace.
-        let _activate_tracer = if let Ok(trace_path) = std::env::var("FLOX_ACTIVATE_TRACE") {
-            if !trace_path.is_empty() && std::path::Path::new(&trace_path).is_executable() {
-                trace_path
-            } else {
-                context
-                    .interpreter_path
-                    .join("activate.d")
-                    .join("trace")
-                    .to_string_lossy()
-                    .to_string()
-            }
-        } else {
-            "true".to_string()
-        };
+        let _activate_tracer = activate_tracer(&context.interpreter_path);
 
         let activate_script_command = assemble_command_for_activate_script(
             "activate_temporary",
