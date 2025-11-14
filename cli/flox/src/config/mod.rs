@@ -6,7 +6,7 @@ use std::{env, fs};
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
 use flox_core::{WriteError, write_atomically};
-use flox_rust_sdk::flox::{EnvironmentRef, Features};
+use flox_rust_sdk::flox::{Features, RemoteEnvironmentRef};
 use flox_rust_sdk::models::search::SearchLimit;
 use itertools::{Either, Itertools};
 use serde::{Deserialize, Serialize};
@@ -73,7 +73,7 @@ pub struct FloxConfig {
 
     /// Remote environments that are trusted for activation
     #[serde(default)]
-    pub trusted_environments: HashMap<EnvironmentRef, EnvironmentTrust>,
+    pub trusted_environments: HashMap<RemoteEnvironmentRef, EnvironmentTrust>,
 
     /// The URL of the FloxHub instance to use
     pub floxhub_url: Option<Url>,

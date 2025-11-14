@@ -29,11 +29,11 @@ pub static DEFAULT_OWNER: &str = "local";
 pub struct EnvironmentOwner(String);
 
 impl FromStr for EnvironmentOwner {
-    type Err = EnvironmentRefError;
+    type Err = RemoteEnvironmentRefError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if [' ', '/'].iter().any(|c| s.contains(*c)) {
-            Err(EnvironmentRefError::InvalidOwner(s.to_string()))?
+            Err(RemoteEnvironmentRefError::InvalidOwner(s.to_string()))?
         }
 
         Ok(EnvironmentOwner(s.to_string()))
@@ -57,11 +57,11 @@ impl FromStr for EnvironmentOwner {
 pub struct EnvironmentName(String);
 
 impl FromStr for EnvironmentName {
-    type Err = EnvironmentRefError;
+    type Err = RemoteEnvironmentRefError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if [' ', '/'].iter().any(|c| s.contains(*c)) {
-            Err(EnvironmentRefError::InvalidName(s.to_string()))?
+            Err(RemoteEnvironmentRefError::InvalidName(s.to_string()))?
         }
 
         Ok(EnvironmentName(s.to_string()))
@@ -70,24 +70,24 @@ impl FromStr for EnvironmentName {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, SerializeDisplay, DeserializeFromStr)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct EnvironmentRef {
+pub struct RemoteEnvironmentRef {
     owner: EnvironmentOwner,
     name: EnvironmentName,
 }
 
-impl Display for EnvironmentRef {
+impl Display for RemoteEnvironmentRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}/{}", self.owner, self.name)
     }
 }
 
-impl FromStr for EnvironmentRef {
-    type Err = EnvironmentRefError;
+impl FromStr for RemoteEnvironmentRef {
+    type Err = RemoteEnvironmentRefError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (owner, name) = s
             .split_once('/')
-            .ok_or(EnvironmentRefError::InvalidOwner(s.to_string()))?;
+            .ok_or(RemoteEnvironmentRefError::InvalidOwner(s.to_string()))?;
         Ok(Self {
             owner: EnvironmentOwner::from_str(owner)?,
             name: EnvironmentName::from_str(name)?,
@@ -95,7 +95,7 @@ impl FromStr for EnvironmentRef {
     }
 }
 
-impl From<ManagedPointer> for EnvironmentRef {
+impl From<ManagedPointer> for RemoteEnvironmentRef {
     fn from(pointer: ManagedPointer) -> Self {
         Self {
             owner: pointer.owner,
@@ -104,7 +104,7 @@ impl From<ManagedPointer> for EnvironmentRef {
     }
 }
 
-impl JsonSchema for EnvironmentRef {
+impl JsonSchema for RemoteEnvironmentRef {
     fn schema_name() -> std::borrow::Cow<'static, str> {
         "EnvironmentRef".into()
     }
@@ -118,7 +118,7 @@ impl JsonSchema for EnvironmentRef {
 }
 
 #[derive(Error, Debug)]
-pub enum EnvironmentRefError {
+pub enum RemoteEnvironmentRefError {
     #[error(
         "Name '{0}' is invalid.\nEnvironment names may only contain alphanumeric characters, '.', '_', and '-'."
     )]
@@ -130,7 +130,7 @@ pub enum EnvironmentRefError {
     InvalidOwner(String),
 }
 
-impl EnvironmentRef {
+impl RemoteEnvironmentRef {
     pub fn owner(&self) -> &EnvironmentOwner {
         &self.owner
     }
@@ -139,7 +139,10 @@ impl EnvironmentRef {
         &self.name
     }
 
-    pub fn new(owner: impl AsRef<str>, name: impl AsRef<str>) -> Result<Self, EnvironmentRefError> {
+    pub fn new(
+        owner: impl AsRef<str>,
+        name: impl AsRef<str>,
+    ) -> Result<Self, RemoteEnvironmentRefError> {
         Ok(Self {
             owner: EnvironmentOwner::from_str(owner.as_ref())?,
             name: EnvironmentName::from_str(name.as_ref())?,

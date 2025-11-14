@@ -25,7 +25,7 @@ use systemd::unit::ServiceUnit;
 
 use super::raw::RawManifest;
 use crate::data::System;
-use crate::models::environment_ref::EnvironmentRef;
+use crate::models::environment_ref::RemoteEnvironmentRef;
 use crate::providers::services::process_compose::ServiceError;
 
 pub(crate) const DEFAULT_GROUP_NAME: &str = "toplevel";
@@ -1038,7 +1038,7 @@ pub enum IncludeDescriptor {
     },
     Remote {
         /// The remote environment reference in the form `owner/name`.
-        remote: EnvironmentRef,
+        remote: RemoteEnvironmentRef,
         /// A name similar to an install ID that a user could use to specify
         /// the environment on the command line e.g. for upgrades, or in an
         /// error message.
@@ -1349,7 +1349,7 @@ pub mod test {
                 name: Some("bar".to_string()),
             },
             IncludeDescriptor::Remote {
-                remote: EnvironmentRef::new("owner", "repo").unwrap(),
+                remote: RemoteEnvironmentRef::new("owner", "repo").unwrap(),
                 name: Some("baz".to_string()),
                 generation: None,
             },
