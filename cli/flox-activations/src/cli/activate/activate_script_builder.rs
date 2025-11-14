@@ -30,7 +30,8 @@ pub(super) fn assemble_command_for_activate_script(
 ) -> Command {
     let activate_path = context.interpreter_path.join(script.as_ref());
     let mut command = Command::new(activate_path);
-    add_old_cli_options(&mut command, context.clone());
+    add_old_cli_options(&mut command, &context);
+    command.envs(old_cli_envs(context.clone()));
     add_old_activate_script_exports(&mut command, &context, subsystem_verbosity, vars_from_env);
     command.envs(&additional_diff.additions);
     for var in &additional_diff.deletions {
@@ -39,9 +40,7 @@ pub(super) fn assemble_command_for_activate_script(
     command
 }
 
-/// Prior to the refactor, these options were passed by the CLI to the activate
-/// script
-fn add_old_cli_options(command: &mut Command, context: ActivateCtx) {
+pub fn old_cli_envs(context: ActivateCtx) -> HashMap<&'static str, String> {
     let mut exports = HashMap::from([
         (
             FLOX_ACTIVE_ENVIRONMENTS_VAR,
@@ -86,8 +85,12 @@ fn add_old_cli_options(command: &mut Command, context: ActivateCtx) {
 
     exports.extend(default_nix_env_vars());
 
-    command.envs(exports);
+    exports
+}
 
+/// Prior to the refactor, these options were passed by the CLI to the activate
+/// script
+fn add_old_cli_options(command: &mut Command, context: &ActivateCtx) {
     if let Some(env_project) = context.env_project.as_ref() {
         command
             .arg("--env-project")
@@ -98,10 +101,10 @@ fn add_old_cli_options(command: &mut Command, context: ActivateCtx) {
         .arg(context.env_cache.to_string_lossy().to_string());
     command
         .arg("--env-description")
-        .arg(context.env_description);
+        .arg(context.env_description.clone());
 
     // Pass down the activation mode
-    command.arg("--mode").arg(context.mode);
+    command.arg("--mode").arg(context.mode.clone());
 
     if let Some(watchdog_bin) = context.watchdog_bin.as_ref() {
         command

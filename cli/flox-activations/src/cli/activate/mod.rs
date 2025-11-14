@@ -1,4 +1,5 @@
 mod activate_script_builder;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::os::unix::process::CommandExt;
@@ -17,6 +18,7 @@ use shell_gen::ShellWithPath;
 
 use super::StartOrAttachArgs;
 use super::start_or_attach::StartOrAttachResult;
+use crate::cli::activate::activate_script_builder::old_cli_envs;
 use crate::env_diff::EnvDiff;
 use crate::gen_rc::bash::{BashStartupArgs, generate_bash_startup_commands};
 use crate::gen_rc::{StartupArgs, StartupCtx};
@@ -201,10 +203,7 @@ impl ActivateArgs {
         //
         //    eval "$(flox activate)"
         if invocation_type == InvocationType::InPlace {
-            Self::activate_in_place(activate_script_command, context.shell)?;
-            // TODO: we've already printed everything, right?
-            //  Do we still need to grab the variables off of the command?
-            // Self::activate_in_place(activate_script_command, data.shell)?;
+            Self::activate_in_place(activate_script_command, context)?;
 
             return Ok(());
         }
@@ -338,7 +337,7 @@ impl ActivateArgs {
     }
 
     /// Used for `eval "$(flox activate)"`
-    fn activate_in_place(mut activate_script_command: Command, shell: ShellWithPath) -> Result<()> {
+    fn activate_in_place(mut activate_script_command: Command, context: ActivateCtx) -> Result<()> {
         debug!("running activation command: {:?}", activate_script_command);
 
         let output = activate_script_command
@@ -346,30 +345,10 @@ impl ActivateArgs {
             .context("failed to run activation script")?;
         eprint!("{}", String::from_utf8_lossy(&output.stderr));
 
-        // Render the exports in the correct shell dialect.
-        let exports_rendered = activate_script_command
-            .get_envs()
-            .filter_map(|(key, value)| {
-                value.map(|v| {
-                    (
-                        key.to_string_lossy(),
-                        shell_escape::escape(v.to_string_lossy()),
-                    )
-                })
-            })
-            // TODO: we should use a method on Shell here, possibly using
-            // shell_escape in the Shell method?
-            // But not quoting here is intentional because we already use shell_escape
-            .map(|(key, value)| match shell {
-                ShellWithPath::Bash(_) => format!("export {key}={value};",),
-                ShellWithPath::Fish(_) => format!("set -gx {key} {value};",),
-                ShellWithPath::Tcsh(_) => format!("setenv {key} {value};",),
-                ShellWithPath::Zsh(_) => format!("export {key}={value};",),
-            })
-            .join("\n");
+        let legacy_exports = Self::render_legacy_exports(context);
 
         let script = formatdoc! {"
-            {exports_rendered}
+            {legacy_exports}
             {output}
         ",
         output = String::from_utf8_lossy(&output.stdout),
@@ -378,6 +357,26 @@ impl ActivateArgs {
         print!("{script}");
 
         Ok(())
+    }
+
+    /// The CLI used to print export statements for in-place activations for
+    /// every environment variable set prior to invoking the activate script
+    fn render_legacy_exports(context: ActivateCtx) -> String {
+        // Render the exports in the correct shell dialect.
+        old_cli_envs(context.clone()).iter()
+        .map(|(key, value)| {
+            (key, shell_escape::escape(Cow::Borrowed(value)))
+            })
+            // TODO: we should use a method on Shell here, possibly using
+            // shell_escape in the Shell method?
+            // But not quoting here is intentional because we already use shell_escape
+            .map(|(key, value)| match context.shell {
+                ShellWithPath::Bash(_) => format!("export {key}={value};",),
+                ShellWithPath::Fish(_) => format!("set -gx {key} {value};",),
+                ShellWithPath::Tcsh(_) => format!("setenv {key} {value};",),
+                ShellWithPath::Zsh(_) => format!("export {key}={value};",),
+            })
+            .join("\n")
     }
 
     /// Quote run args so that words don't get split,
