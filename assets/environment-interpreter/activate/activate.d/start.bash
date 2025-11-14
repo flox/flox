@@ -1,3 +1,6 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+
 _daemonize="@daemonize@/bin/daemonize"
 _flox_activations="@flox_activations@"
 _jq="@jq@/bin/jq"
