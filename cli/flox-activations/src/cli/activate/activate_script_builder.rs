@@ -69,6 +69,28 @@ pub(super) fn assemble_command_for_start_script(
     command
 }
 
+pub fn apply_env_for_invocation(
+    command: &mut Command,
+    context: ActivateCtx,
+    subsystem_verbosity: u32,
+    vars_from_env: VarsFromEnvironment,
+    env_diff: &EnvDiff,
+    start_or_attach_result: &StartOrAttachResult,
+) {
+    command.envs(old_cli_envs(context.clone()));
+    add_old_activate_script_exports(
+        command,
+        &context,
+        subsystem_verbosity,
+        vars_from_env,
+        start_or_attach_result,
+    );
+    command.envs(&env_diff.additions);
+    for var in &env_diff.deletions {
+        command.env_remove(var);
+    }
+}
+
 pub fn old_cli_envs(context: ActivateCtx) -> HashMap<&'static str, String> {
     let mut exports = HashMap::from([
         (
