@@ -70,7 +70,7 @@ fn source_profile_scripts_cmds(
             let shell_specific = dir.join(format!("activate.d/profile-{shell}"));
             for path in [common, shell_specific] {
                 if path_predicate(&path) {
-                    cmds.push(source_file(&path));
+                    cmds.push(format!("source '{}';", path.display()));
                 } else {
                     debug!(path:display = path.display(); "script did not exist");
                 }

@@ -2,7 +2,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use shell_gen::{GenerateShell, SetVar, Shell, Source, UnsetVar};
+use shell_gen::{GenerateShell, Shell, set_exported_unexpanded, source_file, unset};
 
 use crate::env_diff::EnvDiff;
 
@@ -39,10 +39,9 @@ pub fn generate_bash_startup_commands(
     let should_source = args.bashrc_path.is_some() && !args.is_in_place && !args.flox_sourcing_rc;
 
     if should_source {
-        let var = SetVar::exported_no_expansion("_flox_sourcing_rc", "true");
-        stmts.push(var.to_stmt());
-        stmts.push(Source::new(args.bashrc_path.as_ref().unwrap()).to_stmt());
-        stmts.push(var.unset().to_stmt());
+        stmts.push(set_exported_unexpanded("_flox_sourcing_rc", "true"));
+        stmts.push(source_file(args.bashrc_path.as_ref().unwrap()));
+        stmts.push(unset("_flox_sourcing_rc"));
     }
 
     // Restore environment variables set in the previous bash initialization.
@@ -50,36 +49,34 @@ pub fn generate_bash_startup_commands(
     env_diff.generate_statements(&mut stmts);
 
     // Propagate required variables that are documented as exposed.
-    stmts.push(
-        SetVar::exported_no_expansion("FLOX_ENV", args.flox_env.display().to_string()).to_stmt(),
-    );
+    stmts.push(set_exported_unexpanded(
+        "FLOX_ENV",
+        args.flox_env.display().to_string(),
+    ));
 
     // Propagate optional variables that are documented as exposed.
     if let Some(flox_env_cache) = &args.flox_env_cache {
-        stmts.push(
-            SetVar::exported_no_expansion("FLOX_ENV_CACHE", flox_env_cache.display().to_string())
-                .to_stmt(),
-        );
+        stmts.push(set_exported_unexpanded(
+            "FLOX_ENV_CACHE",
+            flox_env_cache.display().to_string(),
+        ));
     } else {
-        stmts.push(UnsetVar::new("FLOX_ENV_CACHE").to_stmt());
+        stmts.push(unset("FLOX_ENV_CACHE"));
     }
 
     if let Some(flox_env_project) = &args.flox_env_project {
-        stmts.push(
-            SetVar::exported_no_expansion(
-                "FLOX_ENV_PROJECT",
-                flox_env_project.display().to_string(),
-            )
-            .to_stmt(),
-        );
+        stmts.push(set_exported_unexpanded(
+            "FLOX_ENV_PROJECT",
+            flox_env_project.display().to_string(),
+        ));
     } else {
-        stmts.push(UnsetVar::new("FLOX_ENV_PROJECT").to_stmt());
+        stmts.push(unset("FLOX_ENV_PROJECT"));
     }
 
     if let Some(description) = &args.flox_env_description {
-        stmts.push(SetVar::exported_no_expansion("FLOX_ENV_DESCRIPTION", description).to_stmt());
+        stmts.push(set_exported_unexpanded("FLOX_ENV_DESCRIPTION", description));
     } else {
-        stmts.push(UnsetVar::new("FLOX_ENV_DESCRIPTION").to_stmt());
+        stmts.push(unset("FLOX_ENV_DESCRIPTION"));
     }
 
     // Set the prompt if we're in an interactive shell.

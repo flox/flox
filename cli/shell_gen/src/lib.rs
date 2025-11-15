@@ -324,6 +324,30 @@ impl GenerateShell for Statement {
     }
 }
 
-pub fn source_file(path: &Path) -> String {
-    format!("source '{}';", path.display())
+pub fn set_unexported_unexpanded(name: impl AsRef<str>, value: impl AsRef<str>) -> Statement {
+    SetVar::not_exported_no_expansion(name, value).to_stmt()
+}
+
+pub fn set_exported_unexpanded(name: impl AsRef<str>, value: impl AsRef<str>) -> Statement {
+    SetVar::exported_no_expansion(name, value).to_stmt()
+}
+
+pub fn set_unexported_expanded(name: impl AsRef<str>, value: impl AsRef<str>) -> Statement {
+    SetVar::not_exported_with_expansion(name, value).to_stmt()
+}
+
+pub fn set_exported_expanded(name: impl AsRef<str>, value: impl AsRef<str>) -> Statement {
+    SetVar::exported_with_expansion(name, value).to_stmt()
+}
+
+pub fn unset(name: impl AsRef<str>) -> Statement {
+    UnsetVar::new(name).to_stmt()
+}
+
+pub fn source_file(path: impl AsRef<Path>) -> Statement {
+    Source::new(path).to_stmt()
+}
+
+pub fn literal(s: impl AsRef<str>) -> Statement {
+    Statement::Literal(s.as_ref().to_string())
 }
