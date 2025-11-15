@@ -209,28 +209,6 @@ esac
 
 # TODO: we could restore _start_env from the prior activation when performing an ephemeral activation
 
-# sets _FLOX_ATTACH, _FLOX_ACTIVATION_STATE_DIR, _FLOX_ACTIVATION_ID
-# Don't eval on one line so that we exit if flox-activations fails
-to_eval="$($_flox_activations \
-  start-or-attach \
-  --runtime-dir "$FLOX_RUNTIME_DIR" \
-  --pid "$$" --flox-env "$FLOX_ENV" --store-path "$_FLOX_ACTIVATE_STORE_PATH")"
-eval "$to_eval"
-export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
-
-# If the current shell is re-activating the same environment then we should only
-# re-run profile scripts, without start or attach, because the shell will
-# already be attached to an activation.
-if [ "$_FLOX_ATTACH" == true ]; then
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/attach.bash"
-  attach "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_invocation_type"
-else
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/start.bash"
-  start "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_invocation_type"
-fi
-
 # Start services before the shell or command is invoked
 if [ "${FLOX_ACTIVATE_START_SERVICES:-}" == "true" ]; then
   # shellcheck source-path=SCRIPTDIR/activate.d

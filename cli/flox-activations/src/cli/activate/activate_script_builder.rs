@@ -10,6 +10,7 @@ use is_executable::IsExecutable;
 use super::VarsFromEnvironment;
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
+use crate::env_diff::EnvDiff;
 pub const FLOX_ENV_LOG_DIR_VAR: &str = "_FLOX_ENV_LOG_DIR";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
 /// This variable is used to communicate what socket to use to the activate
@@ -21,14 +22,20 @@ pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES
 pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
 
 pub(super) fn assemble_command_for_activate_script(
+    script: impl AsRef<str>,
     context: ActivateCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
+    additional_diff: &EnvDiff,
 ) -> Command {
-    let activate_path = context.interpreter_path.join("activate_temporary");
+    let activate_path = context.interpreter_path.join(script.as_ref());
     let mut command = Command::new(activate_path);
     add_old_cli_options(&mut command, context.clone());
     add_old_activate_script_exports(&mut command, &context, subsystem_verbosity, vars_from_env);
+    command.envs(&additional_diff.additions);
+    for var in &additional_diff.deletions {
+        command.env_remove(var);
+    }
     command
 }
 

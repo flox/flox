@@ -17,7 +17,7 @@ type Error = anyhow::Error;
 /// - `flox-activations` and `flox-watchdog`
 ///
 /// Incrementing this will require existing activations to exit.
-const LATEST_VERSION: u8 = 1;
+const LATEST_VERSION: u8 = 2;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct UncheckedVersion(u8);

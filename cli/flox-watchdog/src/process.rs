@@ -238,7 +238,7 @@ pub mod test {
             store_path: store_path.clone(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        let activation_id = start_or_attach_pid1.handle().unwrap();
+        let activation_id = start_or_attach_pid1.handle_inner().unwrap().activation_id;
         let set_ready_pid1 = SetReadyArgs {
             id: activation_id.clone(),
             flox_env: flox_env.clone(),
@@ -254,7 +254,7 @@ pub mod test {
             store_path: store_path.clone(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        let activation_id_2 = start_or_attach_pid2.handle().unwrap();
+        let activation_id_2 = start_or_attach_pid2.handle_inner().unwrap().activation_id;
         assert_eq!(activation_id, activation_id_2);
 
         let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
@@ -296,7 +296,7 @@ pub mod test {
             store_path: store_path.clone(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        let activation_id = start_or_attach_pid1.handle().unwrap();
+        let activation_id = start_or_attach_pid1.handle_inner().unwrap().activation_id;
         let set_ready_pid1 = SetReadyArgs {
             id: activation_id.clone(),
             flox_env: flox_env.clone(),
@@ -312,7 +312,7 @@ pub mod test {
             store_path: store_path.clone(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        let activation_id_2 = start_or_attach_pid2.handle().unwrap();
+        let activation_id_2 = start_or_attach_pid2.handle_inner().unwrap().activation_id;
         assert_eq!(activation_id, activation_id_2);
 
         let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
@@ -395,7 +395,7 @@ pub mod test {
             store_path: store_path.clone(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        let activation_id = start_or_attach.handle().unwrap();
+        let activation_id = start_or_attach.handle_inner().unwrap().activation_id;
         let set_ready = SetReadyArgs {
             id: activation_id.clone(),
             flox_env: flox_env.clone(),
@@ -442,7 +442,7 @@ pub mod test {
             store_path: store_path.clone(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        let activation_id = start_or_attach.handle().unwrap();
+        let activation_id = start_or_attach.handle_inner().unwrap().activation_id;
         let set_ready = SetReadyArgs {
             id: activation_id.clone(),
             flox_env: flox_env.clone(),

@@ -106,6 +106,8 @@ runCommandNoCC "flox-interpreter"
     patchShebangs $out/activate
     chmod +x $out/activate_temporary
     patchShebangs $out/activate_temporary
+    chmod +x $out/activate.d/start.bash
+    patchShebangs $out/activate.d/start.bash
 
     mv $out/activate.d/trace.bash $out/activate.d/trace
     chmod +x $out/activate.d/trace

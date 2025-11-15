@@ -73,9 +73,13 @@ pub struct ActivateCtx {
     pub remove_after_reading: bool,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, derive_more::Display, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum InvocationType {
+    #[display("inplace")]
     InPlace,
+    #[display("interactive")]
     Interactive,
+    #[display("command")]
     Command,
 }
