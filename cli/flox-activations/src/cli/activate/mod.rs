@@ -154,15 +154,33 @@ impl ActivateArgs {
             &diff,
         );
         let env_diff = EnvDiff::from_files(&activation_state_dir)?;
+        // Create the path if we're going to need it (we won't for in-place).
+        // We're doing this ahead of time here because it's shell-agnostic and the `match`
+        // statement below is already going to be huge.
+        let mut rc_path = None;
+        if invocation_type != InvocationType::InPlace {
+            let path = if let Ok(rc_path_str) = std::env::var(STARTUP_SCRIPT_PATH_OVERRIDE_VAR) {
+                PathBuf::from(rc_path_str)
+            } else {
+                let prefix = format!("flox_rc_{}_", context.shell.name());
+                let tmp = tempfile::NamedTempFile::with_prefix_in(prefix, &activation_state_dir)?;
+                let rc_path = tmp.path().to_path_buf();
+                tmp.keep()?;
+                rc_path
+            };
+            rc_path = Some(path);
+        }
         let startup_ctx = Self::startup_ctx(
             context.clone(),
             invocation_type,
+            rc_path,
             env_diff,
             &activation_state_dir,
             subsystem_verbosity,
         )?;
-        // Writes to either a startup file or stdout, depending on invocation type
-        Self::write_rc_script(&startup_ctx)?;
+
+        // NOTE: use Self::write_to_path or Self::write_to_stdout
+        //  to actually write the script
 
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
@@ -191,6 +209,7 @@ impl ActivateArgs {
     fn startup_ctx(
         ctx: ActivateCtx,
         invocation_type: InvocationType,
+        rc_path: Option<PathBuf>,
         env_diff: EnvDiff,
         state_dir: &Path,
         subsystem_verbosity: u32,
@@ -199,23 +218,6 @@ impl ActivateArgs {
         let flox_activations = ctx.interpreter_path.join("libexec/flox-activations");
         let self_destruct =
             !std::env::var(STARTUP_SCRIPT_NO_SELF_DESTRUCT_VAR).is_ok_and(|val| val == "true");
-
-        // Create the path if we're going to need it (we won't for in-place).
-        // We're doing this ahead of time here because it's shell-agnostic and the `match`
-        // statement below is already going to be huge.
-        let mut rc_path = None;
-        if invocation_type != InvocationType::InPlace {
-            let path = if let Ok(rc_path_str) = std::env::var(STARTUP_SCRIPT_PATH_OVERRIDE_VAR) {
-                PathBuf::from(rc_path_str)
-            } else {
-                let prefix = format!("flox_rc_{}_", ctx.shell.name());
-                let tmp = tempfile::NamedTempFile::with_prefix_in(prefix, state_dir)?;
-                let rc_path = tmp.path().to_path_buf();
-                tmp.keep()?;
-                rc_path
-            };
-            rc_path = Some(path);
-        }
 
         let clean_up = if rc_path.is_some() && self_destruct {
             rc_path.clone()
@@ -265,33 +267,28 @@ impl ActivateArgs {
         Ok(s_ctx)
     }
 
-    fn write_rc_script(ctx: &StartupCtx) -> Result<()> {
-        // Get a generic writer depending on the invocation type of the activation.
-        let mut writer: Box<dyn Write> = if ctx
-            .act_ctx
-            .invocation_type
-            .is_some_and(|t| t == InvocationType::InPlace)
-        {
-            Box::new(std::io::stdout())
-        } else if let Some(rc_path) = ctx.rc_path.as_ref() {
-            let file = OpenOptions::new()
-                .create(true)
-                .read(true)
-                .write(true)
-                .truncate(true)
-                .open(rc_path)?;
-            Box::new(file)
-        } else {
-            bail!("expected to find path to rc file");
-        };
-
-        // Generate and write the startup script
+    fn write_to_path(ctx: &StartupCtx, path: &Path) -> Result<()> {
+        let mut writer = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .truncate(true)
+            .open(path)?;
         match ctx.args {
             StartupArgs::Bash(ref args) => {
                 generate_bash_startup_commands(args, &ctx.env_diff, &mut writer)?
             },
         }
+        Ok(())
+    }
 
+    fn write_to_stdout(ctx: &StartupCtx) -> Result<()> {
+        let mut writer = std::io::stdout();
+        match ctx.args {
+            StartupArgs::Bash(ref args) => {
+                generate_bash_startup_commands(args, &ctx.env_diff, &mut writer)?
+            },
+        }
         Ok(())
     }
 
