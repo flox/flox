@@ -18,9 +18,9 @@ use serde_with::skip_serializing_none;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("error while formatting output: .0")]
+    #[error("error while formatting output: {0}")]
     WriteFmt(#[from] std::fmt::Error),
-    #[error("error while writing unit file: .0")]
+    #[error("error while writing unit file: {0}")]
     WriteOutput(#[from] io::Error),
 }
 
