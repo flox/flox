@@ -2,7 +2,7 @@ use std::path::Path;
 
 use clap::Args;
 use log::debug;
-use shell_gen::{Shell, source_file};
+use shell_gen::Shell;
 
 use super::{join_dir_list, separate_dir_list};
 

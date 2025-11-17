@@ -1,13 +1,12 @@
 mod activate_script_builder;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
-use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_command_for_activate_script};
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use indoc::formatdoc;
@@ -190,7 +189,7 @@ impl ActivateArgs {
             };
             rc_path = Some(path);
         }
-        let startup_ctx = Self::startup_ctx(
+        let _startup_ctx = Self::startup_ctx(
             context.clone(),
             invocation_type,
             rc_path,
@@ -290,6 +289,7 @@ impl ActivateArgs {
         Ok(s_ctx)
     }
 
+    #[allow(dead_code)]
     fn write_to_path(ctx: &StartupCtx, path: &Path) -> Result<()> {
         let mut writer = OpenOptions::new()
             .create(true)
@@ -305,6 +305,7 @@ impl ActivateArgs {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn write_to_stdout(ctx: &StartupCtx) -> Result<()> {
         let mut writer = std::io::stdout();
         match ctx.args {

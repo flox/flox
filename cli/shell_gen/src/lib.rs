@@ -216,10 +216,18 @@ impl GenerateShell for SetVar {
             (Shell::Zsh, false, false) => {
                 write!(writer, "typeset -g {}='{}';", self.name, self.value)?;
             },
-            (Shell::Tcsh, true, true) => todo!(),
-            (Shell::Tcsh, true, false) => todo!(),
-            (Shell::Tcsh, false, true) => todo!(),
-            (Shell::Tcsh, false, false) => todo!(),
+            (Shell::Tcsh, true, true) => {
+                write!(writer, "setenv {} \"{}\";", self.name, self.value)?;
+            },
+            (Shell::Tcsh, true, false) => {
+                write!(writer, "setenv {} '{}';", self.name, self.value)?;
+            },
+            (Shell::Tcsh, false, true) => {
+                write!(writer, "set {} = \"{}\";", self.name, self.value)?;
+            },
+            (Shell::Tcsh, false, false) => {
+                write!(writer, "set {} = '{}';", self.name, self.value)?;
+            },
             (Shell::Fish, true, true) => {
                 write!(writer, "set -gx {} \"{}\";", self.name, self.value)?;
             },
@@ -263,7 +271,9 @@ impl GenerateShell for UnsetVar {
             Shell::Zsh => {
                 write!(writer, "unset {};", self.name)?;
             },
-            Shell::Tcsh => todo!(),
+            Shell::Tcsh => {
+                write!(writer, "unsetenv {};", self.name)?;
+            },
             Shell::Fish => {
                 write!(writer, "set -e {};", self.name)?;
             },
@@ -290,19 +300,8 @@ impl Source {
 }
 
 impl GenerateShell for Source {
-    fn generate(&self, shell: Shell, writer: &mut impl Write) -> Result<(), Error> {
-        match shell {
-            Shell::Bash => {
-                write!(writer, "source '{}';", self.path.display())?;
-            },
-            Shell::Zsh => {
-                write!(writer, "source '{}';", self.path.display())?;
-            },
-            Shell::Tcsh => todo!(),
-            Shell::Fish => {
-                write!(writer, "source '{}';", self.path.display())?;
-            },
-        }
+    fn generate(&self, _shell: Shell, writer: &mut impl Write) -> Result<(), Error> {
+        write!(writer, "source '{}';", self.path.display())?;
         Ok(())
     }
 
