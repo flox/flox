@@ -193,21 +193,29 @@ impl GenerateShell for SetVar {
     fn generate(&self, shell: Shell, writer: &mut impl Write) -> Result<(), Error> {
         match (shell, self.exported, self.allow_expansion) {
             (Shell::Bash, true, true) => {
-                write!(writer, "export {}=\"{}\";", self.name, self.value).map_err(Error::IO)?;
+                write!(writer, "export {}=\"{}\";", self.name, self.value)?;
             },
             (Shell::Bash, true, false) => {
-                write!(writer, "export {}='{}\';", self.name, self.value).map_err(Error::IO)?;
+                write!(writer, "export {}='{}\';", self.name, self.value)?;
             },
             (Shell::Bash, false, true) => {
-                write!(writer, "{}=\"{}\";", self.name, self.value).map_err(Error::IO)?;
+                write!(writer, "{}=\"{}\";", self.name, self.value)?;
             },
             (Shell::Bash, false, false) => {
-                write!(writer, "{}='{}\';", self.name, self.value).map_err(Error::IO)?;
+                write!(writer, "{}='{}\';", self.name, self.value)?;
             },
-            (Shell::Zsh, true, true) => todo!(),
-            (Shell::Zsh, true, false) => todo!(),
-            (Shell::Zsh, false, true) => todo!(),
-            (Shell::Zsh, false, false) => todo!(),
+            (Shell::Zsh, true, true) => {
+                write!(writer, "export {}=\"{}\";", self.name, self.value)?;
+            },
+            (Shell::Zsh, true, false) => {
+                write!(writer, "export {}='{}\';", self.name, self.value)?;
+            },
+            (Shell::Zsh, false, true) => {
+                write!(writer, "typeset -g {}=\"{}\";", self.name, self.value)?;
+            },
+            (Shell::Zsh, false, false) => {
+                write!(writer, "typeset -g {}='{}';", self.name, self.value)?;
+            },
             (Shell::Tcsh, true, true) => todo!(),
             (Shell::Tcsh, true, false) => todo!(),
             (Shell::Tcsh, false, true) => todo!(),
@@ -242,9 +250,11 @@ impl GenerateShell for UnsetVar {
     fn generate(&self, shell: Shell, writer: &mut impl Write) -> Result<(), Error> {
         match shell {
             Shell::Bash => {
-                write!(writer, "unset {};", self.name).map_err(Error::IO)?;
+                write!(writer, "unset {};", self.name)?;
             },
-            Shell::Zsh => todo!(),
+            Shell::Zsh => {
+                write!(writer, "unset {};", self.name)?;
+            },
             Shell::Tcsh => todo!(),
             Shell::Fish => todo!(),
         }
@@ -273,9 +283,11 @@ impl GenerateShell for Source {
     fn generate(&self, shell: Shell, writer: &mut impl Write) -> Result<(), Error> {
         match shell {
             Shell::Bash => {
-                write!(writer, "source '{}';", self.path.display()).map_err(Error::IO)?;
+                write!(writer, "source '{}';", self.path.display())?;
             },
-            Shell::Zsh => todo!(),
+            Shell::Zsh => {
+                write!(writer, "source '{}';", self.path.display())?;
+            },
             Shell::Tcsh => todo!(),
             Shell::Fish => todo!(),
         }

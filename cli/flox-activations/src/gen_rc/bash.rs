@@ -36,6 +36,7 @@ pub fn generate_bash_startup_commands(
         stmts.push("set -x".to_stmt());
     }
 
+    // Only `Some` if it was determined to exist by the caller
     let should_source = args.bashrc_path.is_some() && !args.is_in_place && !args.flox_sourcing_rc;
 
     if should_source {
@@ -128,7 +129,6 @@ pub fn generate_bash_startup_commands(
     // N.B. the output of these scripts may be eval'd with backticks which have
     // the effect of removing newlines from the output, so we must ensure that
     // the output is a valid shell script fragment when represented on a single line.
-    // Ok(commands.join(";\n"))
     for stmt in stmts {
         stmt.generate_with_newline(Shell::Bash, writer)?;
     }
