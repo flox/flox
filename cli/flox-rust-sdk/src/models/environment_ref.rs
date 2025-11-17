@@ -1,12 +1,14 @@
 use std::fmt::Display;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use derive_more::{AsRef, Deref, Display};
 use schemars::{JsonSchema, json_schema};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
+use shell_escape::escape;
 use thiserror::Error;
 
-use super::environment::ManagedPointer;
+use super::environment::{ConcreteEnvironment, Environment, EnvironmentError, ManagedPointer};
 
 pub static DEFAULT_NAME: &str = "default";
 pub static DEFAULT_OWNER: &str = "local";
@@ -151,6 +153,46 @@ impl RemoteEnvironmentRef {
 
     pub fn new_from_parts(owner: EnvironmentOwner, name: EnvironmentName) -> Self {
         Self { owner, name }
+    }
+}
+
+/// An environment that can be activated.
+/// ConcreteEnvironment::{Path,Managed} uses a local path that's the parent of `.flox`
+/// ConcreteEnvironment::Remote uses a remote reference on FloxHub
+//
+// TODO: Support pinned generation for managed and remote environments?
+#[derive(Debug, Clone)]
+pub enum ActivateEnvironmentRef {
+    Local(PathBuf),
+    Remote(RemoteEnvironmentRef),
+}
+
+impl ActivateEnvironmentRef {
+    /// Render the activation arguments (`-d`/`-r`) used by `flox activate`.
+    pub fn activate_target_arg(&self) -> String {
+        match self {
+            ActivateEnvironmentRef::Local(path) => {
+                format!("-d {}", escape(path.to_string_lossy()))
+            },
+            ActivateEnvironmentRef::Remote(remote) => {
+                format!("-r {}", escape(remote.to_string().into()))
+            },
+        }
+    }
+}
+
+impl TryFrom<&ConcreteEnvironment> for ActivateEnvironmentRef {
+    type Error = EnvironmentError;
+
+    fn try_from(env: &ConcreteEnvironment) -> Result<Self, Self::Error> {
+        let env_ref = match env {
+            ConcreteEnvironment::Path(env) => ActivateEnvironmentRef::Local(env.parent_path()?),
+            ConcreteEnvironment::Managed(env) => ActivateEnvironmentRef::Local(env.parent_path()?),
+            ConcreteEnvironment::Remote(env) => {
+                ActivateEnvironmentRef::Remote(RemoteEnvironmentRef::from(env.pointer().clone()))
+            },
+        };
+        Ok(env_ref)
     }
 }
 

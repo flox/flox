@@ -36,12 +36,12 @@ use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
 use flox_rust_sdk::flox::{
     DEFAULT_FLOXHUB_URL,
     DEFAULT_NAME,
-    RemoteEnvironmentRef,
     FLOX_VERSION,
     Flox,
     Floxhub,
     FloxhubToken,
     FloxhubTokenError,
+    RemoteEnvironmentRef,
 };
 use flox_rust_sdk::models::env_registry::{ENV_REGISTRY_FILENAME, EnvRegistry};
 use flox_rust_sdk::models::environment::generations::GenerationId;
