@@ -194,6 +194,20 @@ fn add_old_activate_script_exports(
             "_FLOX_ACTIVATION_ID",
             start_or_attach_result.activation_id.clone(),
         ),
+        // These are used by various scripts...custom ZDOTDIR files, set-prompt,
+        // .tcshrc
+        (
+            "_flox_activate_tracer",
+            activate_tracer(&context.interpreter_path),
+        ),
+        (
+            "_activate_d",
+            context
+                .interpreter_path
+                .join("activate.d")
+                .to_string_lossy()
+                .to_string(),
+        ),
     ]);
     // Propagate optional variables that are documented as exposed.
     // NB: `generate_*_start_commands()` performs the same logic except for zsh.
@@ -205,11 +219,6 @@ fn add_old_activate_script_exports(
     } else {
         removals.push("FLOX_ENV_PROJECT");
     }
-
-    exports.insert(
-        "_flox_activate_tracer",
-        activate_tracer(&context.interpreter_path),
-    );
 
     exports.extend(fixed_vars_to_export(&context.env, vars_from_environment));
 

@@ -16,11 +16,6 @@ _flox_activations="@flox_activations@"
 
 set -euo pipefail
 
-# These all derive from the `flox-interpreter` package.
-# FIXME This is wrong; the profile.d scripts in particular should be
-#       sourced from the environment itself so that users can add pkgs
-#       which add additional scripts to the etc/profile.d directory.
-export _activate_d="__OUT__/activate.d"
 _tcsh_home="__OUT__/activate.d/tcsh_home"
 _zdotdir="__OUT__/activate.d/zdotdir"
 
