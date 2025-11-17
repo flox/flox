@@ -1,6 +1,5 @@
 mod activate_script_builder;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -11,13 +10,11 @@ use anyhow::{Context, Result, anyhow};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use indoc::formatdoc;
-use is_executable::IsExecutable;
 use itertools::Itertools;
 use log::debug;
 use shell_gen::ShellWithPath;
 
 use super::StartOrAttachArgs;
-use super::start_or_attach::StartOrAttachResult;
 use crate::cli::activate::activate_script_builder::{activate_tracer, old_cli_envs};
 use crate::env_diff::EnvDiff;
 use crate::gen_rc::bash::{BashStartupArgs, generate_bash_startup_commands};
@@ -78,11 +75,7 @@ impl ActivateArgs {
             .invocation_type
             .expect("invocation type should have been some");
 
-        let StartOrAttachResult {
-            attach,
-            activation_state_dir,
-            activation_id,
-        } = StartOrAttachArgs {
+        let start_or_attach = StartOrAttachArgs {
             pid: std::process::id() as i32,
             flox_env: PathBuf::from(&context.env),
             store_path: context.flox_activate_store_path.clone(),
@@ -92,17 +85,10 @@ impl ActivateArgs {
 
         let vars_from_env = VarsFromEnvironment::get()?;
 
-        let activation_info_vars = HashMap::from([
-            (
-                "_FLOX_ACTIVATION_STATE_DIR".to_string(),
-                activation_state_dir.to_string_lossy().to_string(),
-            ),
-            ("_FLOX_ACTIVATION_ID".to_string(), activation_id.clone()),
-        ]);
-        if attach {
+        if start_or_attach.attach {
             debug!(
                 "Attaching to existing activation in state dir {:?}, id {}",
-                activation_state_dir, activation_id
+                start_or_attach.activation_state_dir, start_or_attach.activation_id
             );
             if invocation_type == InvocationType::Interactive {
                 eprintln!(
@@ -116,37 +102,26 @@ impl ActivateArgs {
             }
         } else {
             debug!("Starting activation");
-            let activation_info_diff = EnvDiff {
-                additions: activation_info_vars,
-                deletions: Vec::new(),
-            };
             let mut start_command = assemble_command_for_activate_script(
                 "activate.d/start.bash",
                 context.clone(),
                 subsystem_verbosity,
                 vars_from_env.clone(),
-                &activation_info_diff,
+                &EnvDiff::new(),
+                &start_or_attach,
             );
             start_command.args([
                 "--activation-state-dir",
-                &activation_state_dir.to_string_lossy(),
+                &start_or_attach.activation_state_dir.to_string_lossy(),
                 "--invocation-type",
                 &invocation_type.to_string(),
                 "--activation-id",
-                &activation_id,
+                &start_or_attach.activation_id,
             ]);
             start_command.spawn()?.wait()?;
         };
 
-        let mut diff = EnvDiff::from_files(&activation_state_dir)?;
-
-        diff.additions.extend([
-            (
-                "_FLOX_ACTIVATION_STATE_DIR".to_string(),
-                activation_state_dir.to_string_lossy().to_string(),
-            ),
-            ("_FLOX_ACTIVATION_ID".to_string(), activation_id.clone()),
-        ]);
+        let diff = EnvDiff::from_files(&start_or_attach.activation_state_dir)?;
 
         let _activate_tracer = activate_tracer(&context.interpreter_path);
 
@@ -156,8 +131,8 @@ impl ActivateArgs {
             subsystem_verbosity,
             vars_from_env,
             &diff,
+            &start_or_attach,
         );
-        let _env_diff = EnvDiff::from_files(&activation_state_dir)?;
         // Create the path if we're going to need it (we won't for in-place).
         // We're doing this ahead of time here because it's shell-agnostic and the `match`
         // statement below is already going to be huge.
@@ -167,7 +142,10 @@ impl ActivateArgs {
                 PathBuf::from(rc_path_str)
             } else {
                 let prefix = format!("flox_rc_{}_", context.shell.name());
-                let tmp = tempfile::NamedTempFile::with_prefix_in(prefix, &activation_state_dir)?;
+                let tmp = tempfile::NamedTempFile::with_prefix_in(
+                    prefix,
+                    &start_or_attach.activation_state_dir,
+                )?;
                 let rc_path = tmp.path().to_path_buf();
                 tmp.keep()?;
                 rc_path

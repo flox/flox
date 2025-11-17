@@ -10,6 +10,7 @@ use is_executable::IsExecutable;
 use super::VarsFromEnvironment;
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
+use crate::cli::start_or_attach::StartOrAttachResult;
 use crate::env_diff::EnvDiff;
 pub const FLOX_ENV_LOG_DIR_VAR: &str = "_FLOX_ENV_LOG_DIR";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
@@ -26,15 +27,22 @@ pub(super) fn assemble_command_for_activate_script(
     context: ActivateCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
-    additional_diff: &EnvDiff,
+    env_diff: &EnvDiff,
+    start_or_attach_result: &StartOrAttachResult,
 ) -> Command {
     let activate_path = context.interpreter_path.join(script.as_ref());
     let mut command = Command::new(activate_path);
     add_old_cli_options(&mut command, &context);
     command.envs(old_cli_envs(context.clone()));
-    add_old_activate_script_exports(&mut command, &context, subsystem_verbosity, vars_from_env);
-    command.envs(&additional_diff.additions);
-    for var in &additional_diff.deletions {
+    add_old_activate_script_exports(
+        &mut command,
+        &context,
+        subsystem_verbosity,
+        vars_from_env,
+        start_or_attach_result,
+    );
+    command.envs(&env_diff.additions);
+    for var in &env_diff.deletions {
         command.env_remove(var);
     }
     command
@@ -124,6 +132,7 @@ fn add_old_activate_script_exports(
     context: &ActivateCtx,
     subsystem_verbosity: u32,
     vars_from_environment: VarsFromEnvironment,
+    start_or_attach_result: &StartOrAttachResult,
 ) {
     let mut removals = Vec::new();
     let mut exports = HashMap::from([
@@ -135,6 +144,17 @@ fn add_old_activate_script_exports(
             context.env_cache.to_string_lossy().to_string(),
         ),
         ("FLOX_ENV_DESCRIPTION", context.env_description.clone()),
+        (
+            "_FLOX_ACTIVATION_STATE_DIR",
+            start_or_attach_result
+                .activation_state_dir
+                .to_string_lossy()
+                .to_string(),
+        ),
+        (
+            "_FLOX_ACTIVATION_ID",
+            start_or_attach_result.activation_id.clone(),
+        ),
     ]);
     // Propagate optional variables that are documented as exposed.
     // NB: `generate_*_start_commands()` performs the same logic except for zsh.
