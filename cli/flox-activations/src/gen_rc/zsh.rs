@@ -20,6 +20,7 @@ pub struct ZshStartupArgs {
 
     // Some(_) if it exists, None otherwise
     pub zshrc_path: Option<PathBuf>,
+    pub flox_activate_tracer: String,
     pub flox_sourcing_rc: bool,
     pub flox_activations: PathBuf,
 }
@@ -83,6 +84,11 @@ pub fn generate_zsh_startup_commands(
     } else {
         stmts.push(unset("FLOX_ENV_DESCRIPTION"));
     }
+
+    stmts.push(set_exported_unexpanded(
+        "_flox_activate_tracer",
+        &args.flox_activate_tracer,
+    ));
 
     // Set the prompt if we're in an interactive shell.
     let set_prompt_path = args.activate_d.join("set-prompt.zsh");
@@ -179,6 +185,7 @@ mod tests {
             is_in_place: false,
             zshrc_path: Some(PathBuf::from("/home/user/.zshrc")),
             flox_sourcing_rc: false,
+            flox_activate_tracer: "TRACER".into(),
             flox_activations: PathBuf::from("/flox_activations"),
             clean_up: Some("/path/to/rc/file".into()),
         };
@@ -196,6 +203,7 @@ mod tests {
             export FLOX_ENV_CACHE='/flox_env_cache';
             export FLOX_ENV_PROJECT='/flox_env_project';
             export FLOX_ENV_DESCRIPTION='env_description';
+            export _flox_activate_tracer='TRACER';
             if [ -t 1 ]; then source '/activate_d/set-prompt.zsh'; fi;
             eval "$('/flox_activations' set-env-dirs --shell zsh --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}")";
             eval "$('/flox_activations' fix-paths --shell zsh --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")";

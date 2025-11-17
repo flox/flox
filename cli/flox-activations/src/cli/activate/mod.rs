@@ -11,6 +11,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use indoc::formatdoc;
+use is_executable::IsExecutable;
 use itertools::Itertools;
 use log::debug;
 use shell_gen::ShellWithPath;
@@ -146,6 +147,25 @@ impl ActivateArgs {
             ("_FLOX_ACTIVATION_ID".to_string(), activation_id.clone()),
         ]);
 
+        // The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.
+        // If that env var is empty then activate_tracer is set to the full path of the `true` command in the PATH.
+        // If that env var is not empty and refers to an executable then then activate_tracer is set to that value.
+        // Else activate_tracer is set to refer to {data.interpreter_path}/activate.d/trace.
+        let activate_tracer = if let Ok(trace_path) = std::env::var("FLOX_ACTIVATE_TRACE") {
+            if !trace_path.is_empty() && std::path::Path::new(&trace_path).is_executable() {
+                trace_path
+            } else {
+                context
+                    .interpreter_path
+                    .join("activate.d")
+                    .join("trace")
+                    .to_string_lossy()
+                    .to_string()
+            }
+        } else {
+            "true".to_string()
+        };
+
         let activate_script_command = assemble_command_for_activate_script(
             "activate_temporary",
             context.clone(),
@@ -176,6 +196,7 @@ impl ActivateArgs {
             rc_path,
             env_diff,
             &activation_state_dir,
+            &activate_tracer,
             subsystem_verbosity,
         )?;
 
@@ -212,6 +233,7 @@ impl ActivateArgs {
         rc_path: Option<PathBuf>,
         env_diff: EnvDiff,
         state_dir: &Path,
+        activate_tracer: &str,
         subsystem_verbosity: u32,
     ) -> Result<StartupCtx> {
         let is_sourcing_rc = std::env::var("_flox_sourcing_rc").is_ok_and(|val| val == "true");
@@ -247,6 +269,7 @@ impl ActivateArgs {
                                 .is_some_and(|inv| inv == InvocationType::InPlace),
                             bashrc_path: Some(bashrc_path),
                             flox_sourcing_rc: is_sourcing_rc,
+                            flox_activate_tracer: activate_tracer.to_string(),
                             flox_activations,
                             clean_up,
                         };

@@ -220,10 +220,18 @@ impl GenerateShell for SetVar {
             (Shell::Tcsh, true, false) => todo!(),
             (Shell::Tcsh, false, true) => todo!(),
             (Shell::Tcsh, false, false) => todo!(),
-            (Shell::Fish, true, true) => todo!(),
-            (Shell::Fish, true, false) => todo!(),
-            (Shell::Fish, false, true) => todo!(),
-            (Shell::Fish, false, false) => todo!(),
+            (Shell::Fish, true, true) => {
+                write!(writer, "set -gx {} \"{}\";", self.name, self.value)?;
+            },
+            (Shell::Fish, true, false) => {
+                write!(writer, "set -gx {} '{}';", self.name, self.value)?;
+            },
+            (Shell::Fish, false, true) => {
+                write!(writer, "set -g {} \"{}\";", self.name, self.value)?;
+            },
+            (Shell::Fish, false, false) => {
+                write!(writer, "set -g {} '{}';", self.name, self.value)?;
+            },
         }
         Ok(())
     }
@@ -256,7 +264,9 @@ impl GenerateShell for UnsetVar {
                 write!(writer, "unset {};", self.name)?;
             },
             Shell::Tcsh => todo!(),
-            Shell::Fish => todo!(),
+            Shell::Fish => {
+                write!(writer, "set -e {};", self.name)?;
+            },
         }
         Ok(())
     }
@@ -289,7 +299,9 @@ impl GenerateShell for Source {
                 write!(writer, "source '{}';", self.path.display())?;
             },
             Shell::Tcsh => todo!(),
-            Shell::Fish => todo!(),
+            Shell::Fish => {
+                write!(writer, "source '{}';", self.path.display())?;
+            },
         }
         Ok(())
     }
