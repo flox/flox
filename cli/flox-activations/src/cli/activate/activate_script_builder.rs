@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 
-use flox_core::activate::context::ActivateCtx;
+use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::{FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_VAR};
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
@@ -45,6 +45,27 @@ pub(super) fn assemble_command_for_activate_script(
     for var in &env_diff.deletions {
         command.env_remove(var);
     }
+    command
+}
+
+pub(super) fn assemble_command_for_start_script(
+    context: ActivateCtx,
+    subsystem_verbosity: u32,
+    vars_from_env: VarsFromEnvironment,
+    start_or_attach_result: &StartOrAttachResult,
+    invocation_type: InvocationType,
+) -> Command {
+    let mut command = Command::new(context.interpreter_path.join("activate.d/start.bash"));
+    add_old_cli_options(&mut command, &context);
+    command.envs(old_cli_envs(context.clone()));
+    add_old_activate_script_exports(
+        &mut command,
+        &context,
+        subsystem_verbosity,
+        vars_from_env,
+        start_or_attach_result,
+    );
+    add_start_script_options(&mut command, start_or_attach_result, invocation_type);
     command
 }
 
@@ -121,6 +142,24 @@ fn add_old_cli_options(command: &mut Command, context: &ActivateCtx) {
     }
 
     command.arg("--shell").arg(context.shell.exe_path());
+}
+
+/// Options parsed by getopt that are only used by start.bash
+fn add_start_script_options(
+    command: &mut Command,
+    start_or_attach_result: &StartOrAttachResult,
+    invocation_type: InvocationType,
+) {
+    command.args([
+        "--activation-state-dir",
+        &start_or_attach_result
+            .activation_state_dir
+            .to_string_lossy(),
+        "--invocation-type",
+        &invocation_type.to_string(),
+        "--activation-id",
+        &start_or_attach_result.activation_id,
+    ]);
 }
 
 /// Prior to the refactor, these variables were exported in the activate script

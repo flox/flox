@@ -15,7 +15,11 @@ use log::debug;
 use shell_gen::ShellWithPath;
 
 use super::StartOrAttachArgs;
-use crate::cli::activate::activate_script_builder::{activate_tracer, old_cli_envs};
+use crate::cli::activate::activate_script_builder::{
+    activate_tracer,
+    assemble_command_for_start_script,
+    old_cli_envs,
+};
 use crate::env_diff::EnvDiff;
 use crate::gen_rc::bash::{BashStartupArgs, generate_bash_startup_commands};
 use crate::gen_rc::{StartupArgs, StartupCtx};
@@ -102,22 +106,13 @@ impl ActivateArgs {
             }
         } else {
             debug!("Starting activation");
-            let mut start_command = assemble_command_for_activate_script(
-                "activate.d/start.bash",
+            let mut start_command = assemble_command_for_start_script(
                 context.clone(),
                 subsystem_verbosity,
                 vars_from_env.clone(),
-                &EnvDiff::new(),
                 &start_or_attach,
+                invocation_type,
             );
-            start_command.args([
-                "--activation-state-dir",
-                &start_or_attach.activation_state_dir.to_string_lossy(),
-                "--invocation-type",
-                &invocation_type.to_string(),
-                "--activation-id",
-                &start_or_attach.activation_id,
-            ]);
             start_command.spawn()?.wait()?;
         };
 
