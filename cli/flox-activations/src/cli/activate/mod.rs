@@ -149,13 +149,25 @@ impl ActivateArgs {
             context.clone(),
             invocation_type,
             rc_path,
-            diff,
+            diff.clone(),
             &start_or_attach.activation_state_dir,
             &activate_tracer(&context.interpreter_path),
             subsystem_verbosity,
         )?;
 
-        // TODO: start services
+        if context.flox_activate_start_services {
+            let mut start_services = assemble_command_for_activate_script(
+                "activate_temporary",
+                context.clone(),
+                subsystem_verbosity,
+                vars_from_env.clone(),
+                &diff,
+                &start_or_attach,
+            );
+
+            debug!("spawning activation services command: {:?}", start_services);
+            start_services.spawn()?.wait()?;
+        }
 
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
