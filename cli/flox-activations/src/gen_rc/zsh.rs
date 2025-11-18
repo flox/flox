@@ -33,24 +33,24 @@ pub fn generate_zsh_startup_commands(args: &ZshStartupArgs, writer: &mut impl Wr
     ));
     // Propagate required variables that are documented as exposed.
     stmts.push(set_unexported_unexpanded(
-        "FLOX_ENV",
+        "_FLOX_ENV",
         args.flox_env.display().to_string(),
     ));
     if let Some(flox_env_cache) = &args.flox_env_cache {
         stmts.push(set_unexported_unexpanded(
-            "FLOX_ENV_CACHE",
+            "_FLOX_ENV_CACHE",
             flox_env_cache.display().to_string(),
         ));
     }
     if let Some(flox_env_project) = &args.flox_env_project {
         stmts.push(set_unexported_unexpanded(
-            "FLOX_ENV_PROJECT",
+            "_FLOX_ENV_PROJECT",
             flox_env_project.display().to_string(),
         ));
     }
     if let Some(description) = &args.flox_env_description {
         stmts.push(set_unexported_unexpanded(
-            "FLOX_ENV_DESCRIPTION",
+            "_FLOX_ENV_DESCRIPTION",
             description,
         ));
     }
@@ -98,10 +98,10 @@ mod tests {
             typeset -g _flox_activate_tracelevel='3';
             typeset -g _FLOX_ACTIVATION_STATE_DIR='/activation_state_dir';
             typeset -g _activate_d='/activate_d';
-            typeset -g FLOX_ENV='/flox_env';
-            typeset -g FLOX_ENV_CACHE='/flox_env_cache';
-            typeset -g FLOX_ENV_PROJECT='/flox_env_project';
-            typeset -g FLOX_ENV_DESCRIPTION='env_description';
+            typeset -g _FLOX_ENV='/flox_env';
+            typeset -g _FLOX_ENV_CACHE='/flox_env_cache';
+            typeset -g _FLOX_ENV_PROJECT='/flox_env_project';
+            typeset -g _FLOX_ENV_DESCRIPTION='env_description';
             source '/activate_d/zsh';
             rm '/path/to/rc/file';
         "#]]
