@@ -23,6 +23,9 @@ use crate::cli::activate::activate_script_builder::{
 };
 use crate::env_diff::EnvDiff;
 use crate::gen_rc::bash::{BashStartupArgs, generate_bash_startup_commands};
+use crate::gen_rc::fish::{FishStartupArgs, generate_fish_startup_commands};
+use crate::gen_rc::tcsh::{TcshStartupArgs, generate_tcsh_startup_commands};
+use crate::gen_rc::zsh::{ZshStartupArgs, generate_zsh_startup_commands};
 use crate::gen_rc::{StartupArgs, StartupCtx};
 
 pub const STARTUP_SCRIPT_PATH_OVERRIDE_VAR: &str = "_FLOX_RC_FILE_PATH";
@@ -206,36 +209,91 @@ impl ActivateArgs {
                 } else {
                     return Err(anyhow!("failed to get home directory"));
                 };
-                match invocation_type {
-                    InvocationType::InPlace => todo!(),
-                    InvocationType::Interactive | InvocationType::Command => {
-                        let startup_args = BashStartupArgs {
-                            flox_activate_tracelevel: subsystem_verbosity,
-                            activate_d: ctx.interpreter_path.join("activate.d"),
-                            flox_env: PathBuf::from(ctx.env.clone()),
-                            flox_env_cache: Some(ctx.env_cache.clone()),
-                            flox_env_project: ctx.env_project.clone(),
-                            flox_env_description: Some(ctx.env_description.clone()),
-                            is_in_place: invocation_type == InvocationType::InPlace,
-                            bashrc_path,
-                            flox_sourcing_rc: is_sourcing_rc,
-                            flox_activate_tracer: activate_tracer.to_string(),
-                            flox_activations,
-                            clean_up,
-                        };
-                        StartupCtx {
-                            args: StartupArgs::Bash(startup_args),
-                            state_dir: state_dir.to_path_buf(),
-                            env_diff,
-                            rc_path,
-                            act_ctx: ctx,
-                        }
-                    },
+                let startup_args = BashStartupArgs {
+                    flox_activate_tracelevel: subsystem_verbosity,
+                    activate_d: ctx.interpreter_path.join("activate.d"),
+                    flox_env: PathBuf::from(ctx.env.clone()),
+                    flox_env_cache: Some(ctx.env_cache.clone()),
+                    flox_env_project: ctx.env_project.clone(),
+                    flox_env_description: Some(ctx.env_description.clone()),
+                    is_in_place: invocation_type == InvocationType::InPlace,
+                    bashrc_path,
+                    flox_sourcing_rc: is_sourcing_rc,
+                    flox_activate_tracer: activate_tracer.to_string(),
+                    flox_activations,
+                    clean_up,
+                };
+                StartupCtx {
+                    args: StartupArgs::Bash(startup_args),
+                    state_dir: state_dir.to_path_buf(),
+                    env_diff,
+                    rc_path,
+                    act_ctx: ctx,
                 }
             },
-            ShellWithPath::Fish(_) => todo!(),
-            ShellWithPath::Tcsh(_) => todo!(),
-            ShellWithPath::Zsh(_) => todo!(),
+            ShellWithPath::Fish(_) => {
+                let startup_args = FishStartupArgs {
+                    flox_activate_tracelevel: subsystem_verbosity,
+                    activate_d: ctx.interpreter_path.join("activate.d"),
+                    flox_env: PathBuf::from(ctx.env.clone()),
+                    flox_env_cache: Some(ctx.env_cache.clone()),
+                    flox_env_project: ctx.env_project.clone(),
+                    flox_env_description: Some(ctx.env_description.clone()),
+                    is_in_place: invocation_type == InvocationType::InPlace,
+                    flox_sourcing_rc: is_sourcing_rc,
+                    flox_activate_tracer: activate_tracer.to_string(),
+                    flox_activations,
+                    clean_up,
+                };
+                StartupCtx {
+                    args: StartupArgs::Fish(startup_args),
+                    state_dir: state_dir.to_path_buf(),
+                    env_diff,
+                    rc_path,
+                    act_ctx: ctx,
+                }
+            },
+            ShellWithPath::Tcsh(_) => {
+                let startup_args = TcshStartupArgs {
+                    flox_activate_tracelevel: subsystem_verbosity,
+                    activate_d: ctx.interpreter_path.join("activate.d"),
+                    flox_env: PathBuf::from(ctx.env.clone()),
+                    flox_env_cache: Some(ctx.env_cache.clone()),
+                    flox_env_project: ctx.env_project.clone(),
+                    flox_env_description: Some(ctx.env_description.clone()),
+                    is_in_place: invocation_type == InvocationType::InPlace,
+                    flox_sourcing_rc: is_sourcing_rc,
+                    flox_activate_tracer: activate_tracer.to_string(),
+                    flox_activations,
+                    clean_up,
+                };
+                StartupCtx {
+                    args: StartupArgs::Tcsh(startup_args),
+                    state_dir: state_dir.to_path_buf(),
+                    env_diff,
+                    rc_path,
+                    act_ctx: ctx,
+                }
+            },
+            ShellWithPath::Zsh(_) => {
+                let startup_args = ZshStartupArgs {
+                    flox_activate_tracelevel: subsystem_verbosity,
+                    activate_d: ctx.interpreter_path.join("activate.d"),
+                    flox_env: PathBuf::from(ctx.env.clone()),
+                    flox_env_cache: Some(ctx.env_cache.clone()),
+                    flox_env_project: ctx.env_project.clone(),
+                    flox_env_description: Some(ctx.env_description.clone()),
+                    clean_up,
+                    activation_state_dir: state_dir.to_path_buf(),
+                };
+                StartupCtx {
+                    args: StartupArgs::Zsh(startup_args),
+                    state_dir: state_dir.to_path_buf(),
+                    env_diff,
+                    rc_path,
+                    act_ctx: ctx,
+                }
+            },
         };
         Ok(s_ctx)
     }
@@ -252,6 +310,13 @@ impl ActivateArgs {
             StartupArgs::Bash(ref args) => {
                 generate_bash_startup_commands(args, &ctx.env_diff, &mut writer)?
             },
+            StartupArgs::Fish(ref args) => {
+                generate_fish_startup_commands(args, &ctx.env_diff, &mut writer)?
+            },
+            StartupArgs::Tcsh(ref args) => {
+                generate_tcsh_startup_commands(args, &ctx.env_diff, &mut writer)?
+            },
+            StartupArgs::Zsh(ref args) => generate_zsh_startup_commands(args, &mut writer)?,
         }
         Ok(())
     }
@@ -263,6 +328,13 @@ impl ActivateArgs {
             StartupArgs::Bash(ref args) => {
                 generate_bash_startup_commands(args, &ctx.env_diff, &mut writer)?
             },
+            StartupArgs::Fish(ref args) => {
+                generate_fish_startup_commands(args, &ctx.env_diff, &mut writer)?
+            },
+            StartupArgs::Tcsh(ref args) => {
+                generate_tcsh_startup_commands(args, &ctx.env_diff, &mut writer)?
+            },
+            StartupArgs::Zsh(ref args) => generate_zsh_startup_commands(args, &mut writer)?,
         }
         Ok(())
     }
