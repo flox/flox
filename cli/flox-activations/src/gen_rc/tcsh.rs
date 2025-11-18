@@ -23,6 +23,9 @@ pub struct TcshStartupArgs {
     pub flox_activations: PathBuf,
 }
 
+// N.B. the output of these scripts may be eval'd with backticks which have
+// the effect of removing newlines from the output, so we must ensure that
+// the output is a valid shell script fragment when represented on a single line.
 pub fn generate_tcsh_startup_commands(
     args: &TcshStartupArgs,
     env_diff: &EnvDiff,
@@ -75,7 +78,7 @@ pub fn generate_tcsh_startup_commands(
     ));
     stmts.push(set_exported_unexpanded(
         "_flox_activations",
-        args.flox_activations.display().to_string()
+        args.flox_activations.display().to_string(),
     ));
 
     stmts.push(set_exported_unexpanded(
@@ -144,9 +147,6 @@ pub fn generate_tcsh_startup_commands(
         stmts.push(format!("rm '{}';", path.display()).to_stmt());
     }
 
-    // N.B. the output of these scripts may be eval'd with backticks which have
-    // the effect of removing newlines from the output, so we must ensure that
-    // the output is a valid shell script fragment when represented on a single line.
     for stmt in stmts {
         stmt.generate_with_newline(Shell::Tcsh, writer)?;
     }

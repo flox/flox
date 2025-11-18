@@ -25,6 +25,9 @@ pub struct BashStartupArgs {
     pub flox_activations: PathBuf,
 }
 
+// N.B. the output of these scripts may be eval'd with backticks which have
+// the effect of removing newlines from the output, so we must ensure that
+// the output is a valid shell script fragment when represented on a single line.
 pub fn generate_bash_startup_commands(
     args: &BashStartupArgs,
     env_diff: &EnvDiff,
@@ -140,9 +143,6 @@ pub fn generate_bash_startup_commands(
         stmts.push(format!("rm '{}';", path.display()).to_stmt());
     }
 
-    // N.B. the output of these scripts may be eval'd with backticks which have
-    // the effect of removing newlines from the output, so we must ensure that
-    // the output is a valid shell script fragment when represented on a single line.
     for stmt in stmts {
         stmt.generate_with_newline(Shell::Bash, writer)?;
     }
