@@ -4,7 +4,6 @@
   darwin,
   flox-interpreter,
   flox-src,
-  flox-activations,
   flox-watchdog,
   gitMinimal,
   glibcLocalesUtf8,
@@ -58,7 +57,6 @@ let
 
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = targetPlatform.system;
-      FLOX_ACTIVATIONS_BIN = "${flox-activations}/libexec/flox-activations";
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
       PATH_LOCALE = "${darwin.locale}/share/locale";
@@ -70,9 +68,6 @@ let
     # In the dev shell these will be set dynamically
     // lib.optionalAttrs (flox-watchdog != null) {
       WATCHDOG_BIN = flox-watchdog;
-    }
-    // lib.optionalAttrs (flox-interpreter != null) {
-      FLOX_INTERPRETER = flox-interpreter;
     }
     // rust-internal-deps.passthru.envs;
 in

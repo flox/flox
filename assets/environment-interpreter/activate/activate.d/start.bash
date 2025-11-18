@@ -13,7 +13,6 @@ _comm="@coreutils@/bin/comm"
 _sed="@gnused@/bin/sed"
 _sort="@coreutils@/bin/sort"
 
-_activate_d="__OUT__/activate.d"
 _profile_d="__OUT__/etc/profile.d"
 
 set -euo pipefail

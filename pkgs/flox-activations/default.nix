@@ -38,6 +38,8 @@ craneLib.buildPackage (
     # used internally to ensure CA certificates are available
     NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
+    FLOX_ACTIVATIONS_BIN = "${placeholder "out"}/libexec/flox-activations";
+
     # runtime dependencies
     buildInputs = rust-external-deps.buildInputs ++ [ ];
 

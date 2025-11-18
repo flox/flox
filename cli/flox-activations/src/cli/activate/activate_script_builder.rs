@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 
-use flox_core::activate::context::ActivateCtx;
+use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::{FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_VAR};
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
@@ -10,6 +10,7 @@ use is_executable::IsExecutable;
 use super::VarsFromEnvironment;
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
+use crate::cli::start_or_attach::StartOrAttachResult;
 use crate::env_diff::EnvDiff;
 pub const FLOX_ENV_LOG_DIR_VAR: &str = "_FLOX_ENV_LOG_DIR";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
@@ -26,22 +27,49 @@ pub(super) fn assemble_command_for_activate_script(
     context: ActivateCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
-    additional_diff: &EnvDiff,
+    env_diff: &EnvDiff,
+    start_or_attach_result: &StartOrAttachResult,
 ) -> Command {
     let activate_path = context.interpreter_path.join(script.as_ref());
     let mut command = Command::new(activate_path);
-    add_old_cli_options(&mut command, context.clone());
-    add_old_activate_script_exports(&mut command, &context, subsystem_verbosity, vars_from_env);
-    command.envs(&additional_diff.additions);
-    for var in &additional_diff.deletions {
+    add_old_cli_options(&mut command, &context);
+    command.envs(old_cli_envs(context.clone()));
+    add_old_activate_script_exports(
+        &mut command,
+        &context,
+        subsystem_verbosity,
+        vars_from_env,
+        start_or_attach_result,
+    );
+    command.envs(&env_diff.additions);
+    for var in &env_diff.deletions {
         command.env_remove(var);
     }
     command
 }
 
-/// Prior to the refactor, these options were passed by the CLI to the activate
-/// script
-fn add_old_cli_options(command: &mut Command, context: ActivateCtx) {
+pub(super) fn assemble_command_for_start_script(
+    context: ActivateCtx,
+    subsystem_verbosity: u32,
+    vars_from_env: VarsFromEnvironment,
+    start_or_attach_result: &StartOrAttachResult,
+    invocation_type: InvocationType,
+) -> Command {
+    let mut command = Command::new(context.interpreter_path.join("activate.d/start.bash"));
+    add_old_cli_options(&mut command, &context);
+    command.envs(old_cli_envs(context.clone()));
+    add_old_activate_script_exports(
+        &mut command,
+        &context,
+        subsystem_verbosity,
+        vars_from_env,
+        start_or_attach_result,
+    );
+    add_start_script_options(&mut command, start_or_attach_result, invocation_type);
+    command
+}
+
+pub fn old_cli_envs(context: ActivateCtx) -> HashMap<&'static str, String> {
     let mut exports = HashMap::from([
         (
             FLOX_ACTIVE_ENVIRONMENTS_VAR,
@@ -86,8 +114,12 @@ fn add_old_cli_options(command: &mut Command, context: ActivateCtx) {
 
     exports.extend(default_nix_env_vars());
 
-    command.envs(exports);
+    exports
+}
 
+/// Prior to the refactor, these options were passed by the CLI to the activate
+/// script
+fn add_old_cli_options(command: &mut Command, context: &ActivateCtx) {
     if let Some(env_project) = context.env_project.as_ref() {
         command
             .arg("--env-project")
@@ -98,10 +130,10 @@ fn add_old_cli_options(command: &mut Command, context: ActivateCtx) {
         .arg(context.env_cache.to_string_lossy().to_string());
     command
         .arg("--env-description")
-        .arg(context.env_description);
+        .arg(context.env_description.clone());
 
     // Pass down the activation mode
-    command.arg("--mode").arg(context.mode);
+    command.arg("--mode").arg(context.mode.clone());
 
     if let Some(watchdog_bin) = context.watchdog_bin.as_ref() {
         command
@@ -110,6 +142,24 @@ fn add_old_cli_options(command: &mut Command, context: ActivateCtx) {
     }
 
     command.arg("--shell").arg(context.shell.exe_path());
+}
+
+/// Options parsed by getopt that are only used by start.bash
+fn add_start_script_options(
+    command: &mut Command,
+    start_or_attach_result: &StartOrAttachResult,
+    invocation_type: InvocationType,
+) {
+    command.args([
+        "--activation-state-dir",
+        &start_or_attach_result
+            .activation_state_dir
+            .to_string_lossy(),
+        "--invocation-type",
+        &invocation_type.to_string(),
+        "--activation-id",
+        &start_or_attach_result.activation_id,
+    ]);
 }
 
 /// Prior to the refactor, these variables were exported in the activate script
@@ -121,6 +171,7 @@ fn add_old_activate_script_exports(
     context: &ActivateCtx,
     subsystem_verbosity: u32,
     vars_from_environment: VarsFromEnvironment,
+    start_or_attach_result: &StartOrAttachResult,
 ) {
     let mut removals = Vec::new();
     let mut exports = HashMap::from([
@@ -132,6 +183,31 @@ fn add_old_activate_script_exports(
             context.env_cache.to_string_lossy().to_string(),
         ),
         ("FLOX_ENV_DESCRIPTION", context.env_description.clone()),
+        (
+            "_FLOX_ACTIVATION_STATE_DIR",
+            start_or_attach_result
+                .activation_state_dir
+                .to_string_lossy()
+                .to_string(),
+        ),
+        (
+            "_FLOX_ACTIVATION_ID",
+            start_or_attach_result.activation_id.clone(),
+        ),
+        // These are used by various scripts...custom ZDOTDIR files, set-prompt,
+        // .tcshrc
+        (
+            "_flox_activate_tracer",
+            activate_tracer(&context.interpreter_path),
+        ),
+        (
+            "_activate_d",
+            context
+                .interpreter_path
+                .join("activate.d")
+                .to_string_lossy()
+                .to_string(),
+        ),
     ]);
     // Propagate optional variables that are documented as exposed.
     // NB: `generate_*_start_commands()` performs the same logic except for zsh.
@@ -143,27 +219,6 @@ fn add_old_activate_script_exports(
     } else {
         removals.push("FLOX_ENV_PROJECT");
     }
-
-    // The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.
-    // If that env var is empty then activate_tracer is set to the full path of the `true` command in the PATH.
-    // If that env var is not empty and refers to an executable then then activate_tracer is set to that value.
-    // Else activate_tracer is set to refer to {interpreter_path}/activate.d/trace.
-    let activate_tracer = if let Ok(trace_path) = std::env::var("FLOX_ACTIVATE_TRACE") {
-        if Path::new(&trace_path).is_executable() {
-            trace_path
-        } else {
-            context
-                .interpreter_path
-                .join("activate.d")
-                .join("trace")
-                .to_string_lossy()
-                .to_string()
-        }
-    } else {
-        "true".to_string()
-    };
-
-    exports.insert("_flox_activate_tracer", activate_tracer);
 
     exports.extend(fixed_vars_to_export(&context.env, vars_from_environment));
 
@@ -194,4 +249,26 @@ fn fixed_vars_to_export(
         ("PATH", new_path),
         ("MANPATH", new_manpath),
     ])
+}
+
+/// The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.
+/// If that env var is empty then activate_tracer is set to the full path of the `true` command in the PATH.
+/// If that env var is not empty and refers to an executable then then activate_tracer is set to that value.
+/// Else activate_tracer is set to refer to {interpreter_path}/activate.d/trace.
+// TODO: we should probably pass this around rather than recomputing it
+pub fn activate_tracer(interpreter_path: impl AsRef<Path>) -> String {
+    if let Ok(trace_path) = std::env::var("FLOX_ACTIVATE_TRACE") {
+        if Path::new(&trace_path).is_executable() {
+            trace_path
+        } else {
+            interpreter_path
+                .as_ref()
+                .join("activate.d")
+                .join("trace")
+                .to_string_lossy()
+                .to_string()
+        }
+    } else {
+        "true".to_string()
+    }
 }

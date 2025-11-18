@@ -13,22 +13,11 @@ pub struct ZshStartupArgs {
     pub flox_env_cache: Option<PathBuf>,
     pub flox_env_project: Option<PathBuf>,
     pub flox_env_description: Option<String>,
-    pub is_in_place: bool,
     pub clean_up: Option<PathBuf>,
     pub activation_state_dir: PathBuf,
-
-    // Some(_) if it exists, None otherwise
-    pub zshrc_path: Option<PathBuf>,
-    pub flox_activate_tracer: String,
-    pub flox_sourcing_rc: bool,
-    pub flox_activations: PathBuf,
 }
 
 pub fn generate_zsh_startup_commands(args: &ZshStartupArgs, writer: &mut impl Write) -> Result<()> {
-    ///////////////////////////////////////////////////////////////////////////
-    // NOTE: everything between these delimiters is exactly the same as Bash
-    //  modulo s/bash/zsh/g
-
     let mut stmts = vec![];
     stmts.push(set_unexported_unexpanded(
         "_flox_activate_tracelevel",
@@ -67,6 +56,10 @@ pub fn generate_zsh_startup_commands(args: &ZshStartupArgs, writer: &mut impl Wr
     }
     stmts.push(source_file(args.activate_d.join("zsh")));
 
+    if let Some(path) = args.clean_up.as_ref() {
+        stmts.push(format!("rm '{}';", path.display()).to_stmt());
+    }
+
     // N.B. the output of these scripts may be eval'd with backticks which have
     // the effect of removing newlines from the output, so we must ensure that
     // the output is a valid shell script fragment when represented on a single line.
@@ -96,11 +89,6 @@ mod tests {
             flox_env_cache: Some("/flox_env_cache".into()),
             flox_env_project: Some("/flox_env_project".into()),
             flox_env_description: Some("env_description".to_string()),
-            is_in_place: false,
-            zshrc_path: Some(PathBuf::from("/home/user/.zshrc")),
-            flox_sourcing_rc: false,
-            flox_activate_tracer: "TRACER".into(),
-            flox_activations: PathBuf::from("/flox_activations"),
             clean_up: Some("/path/to/rc/file".into()),
         };
         let mut buf = Vec::new();
@@ -115,6 +103,7 @@ mod tests {
             typeset -g FLOX_ENV_PROJECT='/flox_env_project';
             typeset -g FLOX_ENV_DESCRIPTION='env_description';
             source '/activate_d/zsh';
+            rm '/path/to/rc/file';
         "#]]
         .assert_eq(&output);
     }

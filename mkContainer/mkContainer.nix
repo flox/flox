@@ -5,6 +5,7 @@
   nixpkgsFlakeRef,
   # the path to the environment that was built previously
   environmentOutPath,
+  interpreterPath,
   # what mode it should be activation with
   activationMode,
   # the system to build for
@@ -111,7 +112,7 @@ let
     prompt_color_1 = "99";
     prompt_color_2 = "141";
     flox_activate_store_path = "${environment}";
-    interpreter_path = "${environment}";
+    interpreter_path = "${interpreterPath}";
     flox_prompt_environments = "floxenv";
     set_prompt = true;
     flox_activate_start_services = false;

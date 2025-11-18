@@ -7,6 +7,7 @@ use shell_gen::{GenerateShell, Shell, set_exported_unexpanded, unset};
 use crate::env_diff::EnvDiff;
 
 /// Arguments for generating fish startup commands
+#[derive(Debug, Clone)]
 pub struct FishStartupArgs {
     pub flox_activate_tracelevel: u32,
     pub activate_d: PathBuf,

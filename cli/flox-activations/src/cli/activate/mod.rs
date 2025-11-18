@@ -1,5 +1,5 @@
 mod activate_script_builder;
-use std::collections::HashMap;
+use std::borrow::Cow;
 use std::fs::{self, OpenOptions};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -9,16 +9,23 @@ use activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_command_for_activate_s
 use anyhow::{Context, Result, anyhow};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
+use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use indoc::formatdoc;
-use is_executable::IsExecutable;
 use itertools::Itertools;
 use log::debug;
 use shell_gen::ShellWithPath;
 
 use super::StartOrAttachArgs;
-use super::start_or_attach::StartOrAttachResult;
+use crate::cli::activate::activate_script_builder::{
+    activate_tracer,
+    assemble_command_for_start_script,
+    old_cli_envs,
+};
 use crate::env_diff::EnvDiff;
 use crate::gen_rc::bash::{BashStartupArgs, generate_bash_startup_commands};
+use crate::gen_rc::fish::{FishStartupArgs, generate_fish_startup_commands};
+use crate::gen_rc::tcsh::{TcshStartupArgs, generate_tcsh_startup_commands};
+use crate::gen_rc::zsh::{ZshStartupArgs, generate_zsh_startup_commands};
 use crate::gen_rc::{StartupArgs, StartupCtx};
 
 pub const STARTUP_SCRIPT_PATH_OVERRIDE_VAR: &str = "_FLOX_RC_FILE_PATH";
@@ -76,11 +83,7 @@ impl ActivateArgs {
             .invocation_type
             .expect("invocation type should have been some");
 
-        let StartOrAttachResult {
-            attach,
-            activation_state_dir,
-            activation_id,
-        } = StartOrAttachArgs {
+        let start_or_attach = StartOrAttachArgs {
             pid: std::process::id() as i32,
             flox_env: PathBuf::from(&context.env),
             store_path: context.flox_activate_store_path.clone(),
@@ -90,17 +93,10 @@ impl ActivateArgs {
 
         let vars_from_env = VarsFromEnvironment::get()?;
 
-        let activation_info_vars = HashMap::from([
-            (
-                "_FLOX_ACTIVATION_STATE_DIR".to_string(),
-                activation_state_dir.to_string_lossy().to_string(),
-            ),
-            ("_FLOX_ACTIVATION_ID".to_string(), activation_id.clone()),
-        ]);
-        if attach {
+        if start_or_attach.attach {
             debug!(
                 "Attaching to existing activation in state dir {:?}, id {}",
-                activation_state_dir, activation_id
+                start_or_attach.activation_state_dir, start_or_attach.activation_id
             );
             if invocation_type == InvocationType::Interactive {
                 eprintln!(
@@ -114,56 +110,19 @@ impl ActivateArgs {
             }
         } else {
             debug!("Starting activation");
-            let activation_info_diff = EnvDiff {
-                additions: activation_info_vars,
-                deletions: Vec::new(),
-            };
-            let mut start_command = assemble_command_for_activate_script(
-                "activate.d/start.bash",
+            let mut start_command = assemble_command_for_start_script(
                 context.clone(),
                 subsystem_verbosity,
                 vars_from_env.clone(),
-                &activation_info_diff,
+                &start_or_attach,
+                invocation_type,
             );
-            start_command.args([
-                "--activation-state-dir",
-                &activation_state_dir.to_string_lossy(),
-                "--invocation-type",
-                &invocation_type.to_string(),
-                "--activation-id",
-                &activation_id,
-            ]);
             start_command.spawn()?.wait()?;
         };
 
-        let mut diff = EnvDiff::from_files(&activation_state_dir)?;
+        let diff = EnvDiff::from_files(&start_or_attach.activation_state_dir)?;
 
-        diff.additions.extend([
-            (
-                "_FLOX_ACTIVATION_STATE_DIR".to_string(),
-                activation_state_dir.to_string_lossy().to_string(),
-            ),
-            ("_FLOX_ACTIVATION_ID".to_string(), activation_id.clone()),
-        ]);
-
-        // The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.
-        // If that env var is empty then activate_tracer is set to the full path of the `true` command in the PATH.
-        // If that env var is not empty and refers to an executable then then activate_tracer is set to that value.
-        // Else activate_tracer is set to refer to {data.interpreter_path}/activate.d/trace.
-        let _activate_tracer = if let Ok(trace_path) = std::env::var("FLOX_ACTIVATE_TRACE") {
-            if !trace_path.is_empty() && std::path::Path::new(&trace_path).is_executable() {
-                trace_path
-            } else {
-                context
-                    .interpreter_path
-                    .join("activate.d")
-                    .join("trace")
-                    .to_string_lossy()
-                    .to_string()
-            }
-        } else {
-            "true".to_string()
-        };
+        let _activate_tracer = activate_tracer(&context.interpreter_path);
 
         let activate_script_command = assemble_command_for_activate_script(
             "activate_temporary",
@@ -171,8 +130,8 @@ impl ActivateArgs {
             subsystem_verbosity,
             vars_from_env,
             &diff,
+            &start_or_attach,
         );
-        let _env_diff = EnvDiff::from_files(&activation_state_dir)?;
         // Create the path if we're going to need it (we won't for in-place).
         // We're doing this ahead of time here because it's shell-agnostic and the `match`
         // statement below is already going to be huge.
@@ -182,7 +141,10 @@ impl ActivateArgs {
                 PathBuf::from(rc_path_str)
             } else {
                 let prefix = format!("flox_rc_{}_", context.shell.name());
-                let tmp = tempfile::NamedTempFile::with_prefix_in(prefix, &activation_state_dir)?;
+                let tmp = tempfile::NamedTempFile::with_prefix_in(
+                    prefix,
+                    &start_or_attach.activation_state_dir,
+                )?;
                 let rc_path = tmp.path().to_path_buf();
                 tmp.keep()?;
                 rc_path
@@ -201,10 +163,7 @@ impl ActivateArgs {
         //
         //    eval "$(flox activate)"
         if invocation_type == InvocationType::InPlace {
-            Self::activate_in_place(activate_script_command, context.shell)?;
-            // TODO: we've already printed everything, right?
-            //  Do we still need to grab the variables off of the command?
-            // Self::activate_in_place(activate_script_command, data.shell)?;
+            Self::activate_in_place(activate_script_command, context)?;
 
             return Ok(());
         }
@@ -228,7 +187,7 @@ impl ActivateArgs {
         subsystem_verbosity: u32,
     ) -> Result<StartupCtx> {
         let is_sourcing_rc = std::env::var("_flox_sourcing_rc").is_ok_and(|val| val == "true");
-        let flox_activations = ctx.interpreter_path.join("libexec/flox-activations");
+        let flox_activations = (*FLOX_ACTIVATIONS_BIN).clone();
         let self_destruct =
             !std::env::var(STARTUP_SCRIPT_NO_SELF_DESTRUCT_VAR).is_ok_and(|val| val == "true");
 
@@ -240,45 +199,101 @@ impl ActivateArgs {
 
         let s_ctx = match ctx.shell {
             ShellWithPath::Bash(_) => {
-                let bashrc_path = if let Some(home_dir) = dirs::home_dir()
-                    && home_dir.exists()
-                {
-                    home_dir.join(".bashrc")
+                let bashrc_path = if let Some(home_dir) = dirs::home_dir() {
+                    let bashrc_path = home_dir.join(".bashrc");
+                    if bashrc_path.exists() {
+                        Some(bashrc_path)
+                    } else {
+                        None
+                    }
                 } else {
                     return Err(anyhow!("failed to get home directory"));
                 };
-                match invocation_type {
-                    InvocationType::InPlace => todo!(),
-                    InvocationType::Interactive | InvocationType::Command => {
-                        let startup_args = BashStartupArgs {
-                            flox_activate_tracelevel: subsystem_verbosity,
-                            activate_d: ctx.interpreter_path.join("activate.d"),
-                            flox_env: PathBuf::from(ctx.env.clone()),
-                            flox_env_cache: Some(ctx.env_cache.clone()),
-                            flox_env_project: ctx.env_project.clone(),
-                            flox_env_description: Some(ctx.env_description.clone()),
-                            is_in_place: ctx
-                                .invocation_type
-                                .is_some_and(|inv| inv == InvocationType::InPlace),
-                            bashrc_path: Some(bashrc_path),
-                            flox_sourcing_rc: is_sourcing_rc,
-                            flox_activate_tracer: activate_tracer.to_string(),
-                            flox_activations,
-                            clean_up,
-                        };
-                        StartupCtx {
-                            args: StartupArgs::Bash(startup_args),
-                            state_dir: state_dir.to_path_buf(),
-                            env_diff,
-                            rc_path,
-                            act_ctx: ctx,
-                        }
-                    },
+                let startup_args = BashStartupArgs {
+                    flox_activate_tracelevel: subsystem_verbosity,
+                    activate_d: ctx.interpreter_path.join("activate.d"),
+                    flox_env: PathBuf::from(ctx.env.clone()),
+                    flox_env_cache: Some(ctx.env_cache.clone()),
+                    flox_env_project: ctx.env_project.clone(),
+                    flox_env_description: Some(ctx.env_description.clone()),
+                    is_in_place: invocation_type == InvocationType::InPlace,
+                    bashrc_path,
+                    flox_sourcing_rc: is_sourcing_rc,
+                    flox_activate_tracer: activate_tracer.to_string(),
+                    flox_activations,
+                    clean_up,
+                };
+                StartupCtx {
+                    args: StartupArgs::Bash(startup_args),
+                    state_dir: state_dir.to_path_buf(),
+                    env_diff,
+                    rc_path,
+                    act_ctx: ctx,
                 }
             },
-            ShellWithPath::Fish(_) => todo!(),
-            ShellWithPath::Tcsh(_) => todo!(),
-            ShellWithPath::Zsh(_) => todo!(),
+            ShellWithPath::Fish(_) => {
+                let startup_args = FishStartupArgs {
+                    flox_activate_tracelevel: subsystem_verbosity,
+                    activate_d: ctx.interpreter_path.join("activate.d"),
+                    flox_env: PathBuf::from(ctx.env.clone()),
+                    flox_env_cache: Some(ctx.env_cache.clone()),
+                    flox_env_project: ctx.env_project.clone(),
+                    flox_env_description: Some(ctx.env_description.clone()),
+                    is_in_place: invocation_type == InvocationType::InPlace,
+                    flox_sourcing_rc: is_sourcing_rc,
+                    flox_activate_tracer: activate_tracer.to_string(),
+                    flox_activations,
+                    clean_up,
+                };
+                StartupCtx {
+                    args: StartupArgs::Fish(startup_args),
+                    state_dir: state_dir.to_path_buf(),
+                    env_diff,
+                    rc_path,
+                    act_ctx: ctx,
+                }
+            },
+            ShellWithPath::Tcsh(_) => {
+                let startup_args = TcshStartupArgs {
+                    flox_activate_tracelevel: subsystem_verbosity,
+                    activate_d: ctx.interpreter_path.join("activate.d"),
+                    flox_env: PathBuf::from(ctx.env.clone()),
+                    flox_env_cache: Some(ctx.env_cache.clone()),
+                    flox_env_project: ctx.env_project.clone(),
+                    flox_env_description: Some(ctx.env_description.clone()),
+                    is_in_place: invocation_type == InvocationType::InPlace,
+                    flox_sourcing_rc: is_sourcing_rc,
+                    flox_activate_tracer: activate_tracer.to_string(),
+                    flox_activations,
+                    clean_up,
+                };
+                StartupCtx {
+                    args: StartupArgs::Tcsh(startup_args),
+                    state_dir: state_dir.to_path_buf(),
+                    env_diff,
+                    rc_path,
+                    act_ctx: ctx,
+                }
+            },
+            ShellWithPath::Zsh(_) => {
+                let startup_args = ZshStartupArgs {
+                    flox_activate_tracelevel: subsystem_verbosity,
+                    activate_d: ctx.interpreter_path.join("activate.d"),
+                    flox_env: PathBuf::from(ctx.env.clone()),
+                    flox_env_cache: Some(ctx.env_cache.clone()),
+                    flox_env_project: ctx.env_project.clone(),
+                    flox_env_description: Some(ctx.env_description.clone()),
+                    clean_up,
+                    activation_state_dir: state_dir.to_path_buf(),
+                };
+                StartupCtx {
+                    args: StartupArgs::Zsh(startup_args),
+                    state_dir: state_dir.to_path_buf(),
+                    env_diff,
+                    rc_path,
+                    act_ctx: ctx,
+                }
+            },
         };
         Ok(s_ctx)
     }
@@ -295,6 +310,13 @@ impl ActivateArgs {
             StartupArgs::Bash(ref args) => {
                 generate_bash_startup_commands(args, &ctx.env_diff, &mut writer)?
             },
+            StartupArgs::Fish(ref args) => {
+                generate_fish_startup_commands(args, &ctx.env_diff, &mut writer)?
+            },
+            StartupArgs::Tcsh(ref args) => {
+                generate_tcsh_startup_commands(args, &ctx.env_diff, &mut writer)?
+            },
+            StartupArgs::Zsh(ref args) => generate_zsh_startup_commands(args, &mut writer)?,
         }
         Ok(())
     }
@@ -306,6 +328,13 @@ impl ActivateArgs {
             StartupArgs::Bash(ref args) => {
                 generate_bash_startup_commands(args, &ctx.env_diff, &mut writer)?
             },
+            StartupArgs::Fish(ref args) => {
+                generate_fish_startup_commands(args, &ctx.env_diff, &mut writer)?
+            },
+            StartupArgs::Tcsh(ref args) => {
+                generate_tcsh_startup_commands(args, &ctx.env_diff, &mut writer)?
+            },
+            StartupArgs::Zsh(ref args) => generate_zsh_startup_commands(args, &mut writer)?,
         }
         Ok(())
     }
@@ -338,7 +367,7 @@ impl ActivateArgs {
     }
 
     /// Used for `eval "$(flox activate)"`
-    fn activate_in_place(mut activate_script_command: Command, shell: ShellWithPath) -> Result<()> {
+    fn activate_in_place(mut activate_script_command: Command, context: ActivateCtx) -> Result<()> {
         debug!("running activation command: {:?}", activate_script_command);
 
         let output = activate_script_command
@@ -346,30 +375,10 @@ impl ActivateArgs {
             .context("failed to run activation script")?;
         eprint!("{}", String::from_utf8_lossy(&output.stderr));
 
-        // Render the exports in the correct shell dialect.
-        let exports_rendered = activate_script_command
-            .get_envs()
-            .filter_map(|(key, value)| {
-                value.map(|v| {
-                    (
-                        key.to_string_lossy(),
-                        shell_escape::escape(v.to_string_lossy()),
-                    )
-                })
-            })
-            // TODO: we should use a method on Shell here, possibly using
-            // shell_escape in the Shell method?
-            // But not quoting here is intentional because we already use shell_escape
-            .map(|(key, value)| match shell {
-                ShellWithPath::Bash(_) => format!("export {key}={value};",),
-                ShellWithPath::Fish(_) => format!("set -gx {key} {value};",),
-                ShellWithPath::Tcsh(_) => format!("setenv {key} {value};",),
-                ShellWithPath::Zsh(_) => format!("export {key}={value};",),
-            })
-            .join("\n");
+        let legacy_exports = Self::render_legacy_exports(context);
 
         let script = formatdoc! {"
-            {exports_rendered}
+            {legacy_exports}
             {output}
         ",
         output = String::from_utf8_lossy(&output.stdout),
@@ -378,6 +387,26 @@ impl ActivateArgs {
         print!("{script}");
 
         Ok(())
+    }
+
+    /// The CLI used to print export statements for in-place activations for
+    /// every environment variable set prior to invoking the activate script
+    fn render_legacy_exports(context: ActivateCtx) -> String {
+        // Render the exports in the correct shell dialect.
+        old_cli_envs(context.clone()).iter()
+        .map(|(key, value)| {
+            (key, shell_escape::escape(Cow::Borrowed(value)))
+            })
+            // TODO: we should use a method on Shell here, possibly using
+            // shell_escape in the Shell method?
+            // But not quoting here is intentional because we already use shell_escape
+            .map(|(key, value)| match context.shell {
+                ShellWithPath::Bash(_) => format!("export {key}={value};",),
+                ShellWithPath::Fish(_) => format!("set -gx {key} {value};",),
+                ShellWithPath::Tcsh(_) => format!("setenv {key} {value};",),
+                ShellWithPath::Zsh(_) => format!("export {key}={value};",),
+            })
+            .join("\n")
     }
 
     /// Quote run args so that words don't get split,

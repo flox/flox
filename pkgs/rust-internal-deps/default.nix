@@ -1,10 +1,12 @@
 {
   cacert,
   coreutils,
+  flox-activations,
   flox-buildenv,
   flox-package-builder,
   flox-mk-container ? ../../mkContainer,
   flox-nix-plugins,
+  flox-interpreter,
   flox-src,
   gitMinimal,
   glibcLocalesUtf8,
@@ -37,6 +39,7 @@ let
     GNUMAKE_BIN = "${gnumake}/bin/make";
     SLEEP_BIN = "${coreutils}/bin/sleep";
     PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
+    FLOX_ACTIVATIONS_BIN = "${flox-activations}/libexec/flox-activations";
     # used internally to ensure CA certificates are available
     NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
@@ -69,6 +72,9 @@ let
   }
   // lib.optionalAttrs (flox-mk-container != null) {
     FLOX_MK_CONTAINER_NIX = "${flox-mk-container}/mkContainer.nix";
+  }
+  // lib.optionalAttrs (flox-interpreter != null) {
+    FLOX_INTERPRETER = flox-interpreter;
   };
 
 in
