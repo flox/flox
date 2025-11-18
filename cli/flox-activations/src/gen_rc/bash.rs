@@ -81,6 +81,15 @@ pub fn generate_bash_startup_commands(
     }
 
     stmts.push(set_exported_unexpanded(
+        "_activate_d",
+        args.activate_d.display().to_string(),
+    ));
+    stmts.push(set_exported_unexpanded(
+        "_flox_activations",
+        args.flox_activations.display().to_string(),
+    ));
+
+    stmts.push(set_exported_unexpanded(
         "_flox_activate_tracer",
         &args.flox_activate_tracer,
     ));
