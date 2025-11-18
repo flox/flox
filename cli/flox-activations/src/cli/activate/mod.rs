@@ -212,9 +212,7 @@ impl ActivateArgs {
                             flox_env_cache: Some(ctx.env_cache.clone()),
                             flox_env_project: ctx.env_project.clone(),
                             flox_env_description: Some(ctx.env_description.clone()),
-                            is_in_place: ctx
-                                .invocation_type
-                                .is_some_and(|inv| inv == InvocationType::InPlace),
+                            is_in_place: invocation_type == InvocationType::InPlace,
                             bashrc_path: Some(bashrc_path),
                             flox_sourcing_rc: is_sourcing_rc,
                             flox_activate_tracer: activate_tracer.to_string(),

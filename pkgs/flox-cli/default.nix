@@ -71,9 +71,6 @@ let
     // lib.optionalAttrs (flox-watchdog != null) {
       WATCHDOG_BIN = flox-watchdog;
     }
-    // lib.optionalAttrs (flox-interpreter != null) {
-      FLOX_INTERPRETER = flox-interpreter;
-    }
     // rust-internal-deps.passthru.envs;
 in
 craneLib.buildPackage (

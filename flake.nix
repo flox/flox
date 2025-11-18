@@ -146,6 +146,7 @@
               flox-package-builder = null;
               flox-nix-plugins = null;
               flox-mk-container = null;
+              flox-interpreter = null;
             };
 
             flox-cli = prev.flox-cli.override {

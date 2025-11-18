@@ -15,7 +15,7 @@ use crate::models::manifest::typed::{ActivateMode, ContainerizeConfig};
 use crate::providers::build::COMMON_NIXPKGS_URL;
 use crate::providers::nix::nix_base_command;
 use crate::utils::gomap::GoMap;
-use crate::utils::{CommandExt, ReaderExt};
+use crate::utils::{CommandExt, FLOX_INTERPRETER, ReaderExt};
 
 static MK_CONTAINER_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::var("FLOX_MK_CONTAINER_NIX")
@@ -157,6 +157,11 @@ impl ContainerBuilder for MkContainerNix {
             "--argstr",
             "activationMode",
             &self.activation_mode.to_string(),
+        ]);
+        command.args([
+            "--argstr",
+            "interpreterPath",
+            (*FLOX_INTERPRETER).to_string_lossy().as_ref(),
         ]);
         command.args(["--argstr", "containerName", name.as_ref()]);
         command.args(["--argstr", "containerTag", tag.as_ref()]);

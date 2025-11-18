@@ -5,6 +5,7 @@
   flox-package-builder,
   flox-mk-container ? ../../mkContainer,
   flox-nix-plugins,
+  flox-interpreter,
   flox-src,
   gitMinimal,
   glibcLocalesUtf8,
@@ -69,6 +70,9 @@ let
   }
   // lib.optionalAttrs (flox-mk-container != null) {
     FLOX_MK_CONTAINER_NIX = "${flox-mk-container}/mkContainer.nix";
+  }
+  // lib.optionalAttrs (flox-interpreter != null) {
+    FLOX_INTERPRETER = flox-interpreter;
   };
 
 in
