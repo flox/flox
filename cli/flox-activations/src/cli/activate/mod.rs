@@ -88,6 +88,12 @@ impl ActivateArgs {
             .invocation_type
             .expect("invocation type should have been some");
 
+        if let Ok(shell_force) = std::env::var("_FLOX_SHELL_FORCE") {
+            context.shell = PathBuf::from(shell_force).as_path().try_into()?;
+        }
+        // Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
+        unsafe { std::env::remove_var("FLOX_SHELL") };
+
         let start_or_attach = StartOrAttachArgs {
             pid: std::process::id() as i32,
             flox_env: PathBuf::from(&context.env),
