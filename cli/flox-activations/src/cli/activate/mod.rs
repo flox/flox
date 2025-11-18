@@ -34,7 +34,7 @@ use crate::gen_rc::zsh::{ZshStartupArgs, generate_zsh_startup_commands};
 use crate::gen_rc::{StartupArgs, StartupCtx};
 
 pub const STARTUP_SCRIPT_PATH_OVERRIDE_VAR: &str = "_FLOX_RC_FILE_PATH";
-pub const STARTUP_SCRIPT_NO_SELF_DESTRUCT_VAR: &str = "_FLOX_RC_FILE_NO_SELF_DESTRUCT";
+pub const NO_REMOVE_ACTIVATION_FILES: &str = "_FLOX_NO_REMOVE_ACTIVATION_FILES";
 
 #[derive(Debug, Args)]
 pub struct ActivateArgs {
@@ -53,7 +53,9 @@ impl ActivateArgs {
         let contents = fs::read_to_string(&self.activate_data)?;
         let mut context: ActivateCtx = serde_json::from_str(&contents)?;
 
-        if context.remove_after_reading {
+        if context.remove_after_reading
+            && !std::env::var(NO_REMOVE_ACTIVATION_FILES).is_ok_and(|val| val == "true")
+        {
             fs::remove_file(&self.activate_data)?;
         }
 
@@ -223,7 +225,7 @@ impl ActivateArgs {
         let is_sourcing_rc = std::env::var("_flox_sourcing_rc").is_ok_and(|val| val == "true");
         let flox_activations = (*FLOX_ACTIVATIONS_BIN).clone();
         let self_destruct =
-            !std::env::var(STARTUP_SCRIPT_NO_SELF_DESTRUCT_VAR).is_ok_and(|val| val == "true");
+            !std::env::var(NO_REMOVE_ACTIVATION_FILES).is_ok_and(|val| val == "true");
 
         let clean_up = if rc_path.is_some() && self_destruct {
             rc_path.clone()
