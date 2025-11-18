@@ -196,10 +196,13 @@ impl ActivateArgs {
 
         let s_ctx = match ctx.shell {
             ShellWithPath::Bash(_) => {
-                let bashrc_path = if let Some(home_dir) = dirs::home_dir()
-                    && home_dir.exists()
-                {
-                    home_dir.join(".bashrc")
+                let bashrc_path = if let Some(home_dir) = dirs::home_dir() {
+                    let bashrc_path = home_dir.join(".bashrc");
+                    if bashrc_path.exists() {
+                        Some(bashrc_path)
+                    } else {
+                        None
+                    }
                 } else {
                     return Err(anyhow!("failed to get home directory"));
                 };
@@ -214,7 +217,7 @@ impl ActivateArgs {
                             flox_env_project: ctx.env_project.clone(),
                             flox_env_description: Some(ctx.env_description.clone()),
                             is_in_place: invocation_type == InvocationType::InPlace,
-                            bashrc_path: Some(bashrc_path),
+                            bashrc_path,
                             flox_sourcing_rc: is_sourcing_rc,
                             flox_activate_tracer: activate_tracer.to_string(),
                             flox_activations,
