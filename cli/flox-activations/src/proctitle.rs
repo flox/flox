@@ -2,10 +2,13 @@
 ///
 /// This module implements setproctitle-style functionality by modifying
 /// the process's argv memory region.
+#[cfg(target_os = "linux")]
 use std::ffi::CString;
 use std::sync::OnceLock;
 
-use anyhow::{Context, Result};
+#[cfg(target_os = "linux")]
+use anyhow::Context;
+use anyhow::Result;
 use log::debug;
 
 /// Information about the argv memory region captured at program startup.
@@ -140,6 +143,7 @@ pub fn init() {
 /// * `title` - The new process title to display
 pub fn setproctitle(title: &str) -> Result<()> {
     // Method 1: Set via prctl for the comm field (limited to 15 chars)
+    #[cfg(target_os = "linux")]
     set_comm_name(title)?;
 
     // Method 2: Overwrite the argv memory region if we have it
@@ -153,6 +157,7 @@ pub fn setproctitle(title: &str) -> Result<()> {
 }
 
 /// Set the process comm name via prctl (limited to 15 characters).
+#[cfg(target_os = "linux")]
 fn set_comm_name(title: &str) -> Result<()> {
     let comm_title = if title.len() > 15 {
         &title[..15]

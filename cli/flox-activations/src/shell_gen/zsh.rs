@@ -1,7 +1,6 @@
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::Result;
 
 use crate::shell_gen::Shell;
 use crate::shell_gen::capture::ExportEnvDiff;
@@ -115,7 +114,7 @@ pub fn generate_zsh_startup_commands(
     // the effect of removing newlines from the output, so we must ensure that
     // the output is a valid shell script fragment when represented on a single line.
     commands.push("".to_string()); // ensure there's a trailing newline
-    let mut joined = commands.join(";\n");
+    let joined = commands.join(";\n");
     Ok(joined)
 }
 
