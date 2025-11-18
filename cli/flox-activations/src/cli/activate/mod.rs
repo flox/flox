@@ -186,7 +186,7 @@ impl ActivateArgs {
         //
         //    eval "$(flox activate)"
         if invocation_type == InvocationType::InPlace {
-            Self::activate_in_place(context, startup_ctx, start_or_attach.activation_id)?;
+            Self::activate_in_place(startup_ctx, start_or_attach.activation_id)?;
 
             return Ok(());
         }
@@ -194,20 +194,16 @@ impl ActivateArgs {
         // These functions will only return if exec fails
         if invocation_type == InvocationType::Interactive {
             Self::activate_interactive(
-                context,
                 startup_ctx,
                 subsystem_verbosity,
                 vars_from_env,
-                &diff,
                 &start_or_attach,
             )
         } else {
             Self::activate_command(
-                context,
                 startup_ctx,
                 subsystem_verbosity,
                 vars_from_env,
-                &diff,
                 &start_or_attach,
             )
         }
@@ -375,20 +371,18 @@ impl ActivateArgs {
 
     /// Used for `flox activate -- run_args`
     fn activate_command(
-        context: ActivateCtx,
         startup_ctx: StartupCtx,
         subsystem_verbosity: u32,
         vars_from_env: VarsFromEnvironment,
-        env_diff: &EnvDiff,
         start_or_attach_result: &StartOrAttachResult,
     ) -> Result<()> {
-        let mut command = Command::new(context.shell.exe_path());
+        let mut command = Command::new(startup_ctx.act_ctx.shell.exe_path());
         apply_env_for_invocation(
             &mut command,
-            context.clone(),
+            startup_ctx.act_ctx.clone(),
             subsystem_verbosity,
             vars_from_env,
-            env_diff,
+            &startup_ctx.env_diff,
             start_or_attach_result,
         );
 
@@ -399,7 +393,7 @@ impl ActivateArgs {
         Self::write_to_path(&startup_ctx, &rcfile)?;
         let rcfile = rcfile.to_string_lossy();
 
-        match context.shell {
+        match startup_ctx.act_ctx.shell {
             ShellWithPath::Bash(_) => {
                 // TODO: I think we need to be checking standard input and error, not stdout
                 // Per man bash:
@@ -423,7 +417,7 @@ impl ActivateArgs {
                         "--rcfile",
                         &rcfile,
                         "-c",
-                        &Self::quote_run_args(&context.run_args),
+                        &Self::quote_run_args(&startup_ctx.act_ctx.run_args),
                     ]);
                 } else {
                     // Non-interactive: source via stdin
@@ -434,7 +428,7 @@ impl ActivateArgs {
 
                     command.arg("--noprofile").arg("--norc").arg("-s");
 
-                    let quoted_run_args = Self::quote_run_args(&context.run_args);
+                    let quoted_run_args = Self::quote_run_args(&startup_ctx.act_ctx.run_args);
                     let source_script = format!("source '{}' && {}\n", rcfile, quoted_run_args);
 
                     // - create a pipe
@@ -456,7 +450,7 @@ impl ActivateArgs {
                     "--init-command",
                     &format!("source '{}'", rcfile),
                     "-c",
-                    &Self::quote_run_args(&context.run_args),
+                    &Self::quote_run_args(&startup_ctx.act_ctx.run_args),
                 ]);
             },
             ShellWithPath::Tcsh(_) => {
@@ -464,13 +458,20 @@ impl ActivateArgs {
                 // which eventually sources $FLOX_TCSH_INIT_SCRIPT after the normal initialization.
                 let home = std::env::var("HOME").unwrap_or("".to_string());
                 command.env("FLOX_ORIG_HOME", home);
-                let tcsh_home = context.interpreter_path.join("activate.d/tcsh_home");
+                let tcsh_home = startup_ctx
+                    .act_ctx
+                    .interpreter_path
+                    .join("activate.d/tcsh_home");
                 command.env("HOME", tcsh_home.to_string_lossy().to_string());
                 command.env("FLOX_TCSH_INIT_SCRIPT", &*rcfile);
 
                 // The -m option is required for tcsh to source a .tcshrc file that
                 // the effective user does not own.
-                command.args(["-m", "-c", &Self::quote_run_args(&context.run_args)]);
+                command.args([
+                    "-m",
+                    "-c",
+                    &Self::quote_run_args(&startup_ctx.act_ctx.run_args),
+                ]);
             },
             ShellWithPath::Zsh(_) => {
                 // Save original ZDOTDIR if it exists
@@ -479,7 +480,10 @@ impl ActivateArgs {
                 {
                     command.env("FLOX_ORIG_ZDOTDIR", zdotdir);
                 }
-                let zdotdir = context.interpreter_path.join("activate.d/zdotdir");
+                let zdotdir = startup_ctx
+                    .act_ctx
+                    .interpreter_path
+                    .join("activate.d/zdotdir");
                 command.env("ZDOTDIR", zdotdir.to_string_lossy().to_string());
                 command.env("FLOX_ZSH_INIT_SCRIPT", &*rcfile);
 
@@ -489,7 +493,7 @@ impl ActivateArgs {
                     "-o",
                     "NO_GLOBAL_RCS",
                     "-c",
-                    &Self::quote_run_args(&context.run_args),
+                    &Self::quote_run_args(&startup_ctx.act_ctx.run_args),
                 ]);
             },
         }
@@ -505,20 +509,18 @@ impl ActivateArgs {
     ///
     /// This function should never return as it replaces the current process
     fn activate_interactive(
-        context: ActivateCtx,
         startup_ctx: StartupCtx,
         subsystem_verbosity: u32,
         vars_from_env: VarsFromEnvironment,
-        env_diff: &EnvDiff,
         start_or_attach_result: &StartOrAttachResult,
     ) -> Result<()> {
-        let mut command = Command::new(context.shell.exe_path());
+        let mut command = Command::new(startup_ctx.act_ctx.shell.exe_path());
         apply_env_for_invocation(
             &mut command,
-            context.clone(),
+            startup_ctx.act_ctx.clone(),
             subsystem_verbosity,
             vars_from_env,
-            env_diff,
+            &startup_ctx.env_diff,
             start_or_attach_result,
         );
 
@@ -529,7 +531,7 @@ impl ActivateArgs {
         Self::write_to_path(&startup_ctx, &rcfile)?;
         let rcfile = rcfile.to_string_lossy();
 
-        match context.shell {
+        match startup_ctx.act_ctx.shell {
             ShellWithPath::Bash(_) => {
                 if std::io::stdout().is_terminal() {
                     command.args(["--noprofile", "--rcfile", &rcfile]);
@@ -568,7 +570,10 @@ impl ActivateArgs {
                 // which eventually sources $FLOX_TCSH_INIT_SCRIPT after the normal initialization.
                 let home = std::env::var("HOME").unwrap_or("".to_string());
                 command.env("FLOX_ORIG_HOME", home);
-                let tcsh_home = context.interpreter_path.join("activate.d/tcsh_home");
+                let tcsh_home = startup_ctx
+                    .act_ctx
+                    .interpreter_path
+                    .join("activate.d/tcsh_home");
                 command.env("HOME", tcsh_home.to_string_lossy().to_string());
                 command.env("FLOX_TCSH_INIT_SCRIPT", &*rcfile);
 
@@ -583,7 +588,10 @@ impl ActivateArgs {
                 {
                     command.env("FLOX_ORIG_ZDOTDIR", zdotdir);
                 }
-                let zdotdir = context.interpreter_path.join("activate.d/zdotdir");
+                let zdotdir = startup_ctx
+                    .act_ctx
+                    .interpreter_path
+                    .join("activate.d/zdotdir");
                 command.env("ZDOTDIR", zdotdir.to_string_lossy().to_string());
                 command.env("FLOX_ZSH_INIT_SCRIPT", &*rcfile);
 
@@ -600,29 +608,28 @@ impl ActivateArgs {
     }
 
     /// Used for `eval "$(flox activate)"`
-    fn activate_in_place(
-        context: ActivateCtx,
-        startup_ctx: StartupCtx,
-        activation_id: String,
-    ) -> Result<()> {
+    fn activate_in_place(startup_ctx: StartupCtx, activation_id: String) -> Result<()> {
         let attach_command = AttachArgs {
             pid: std::process::id() as i32,
-            flox_env: (&context.env).into(),
+            flox_env: (&startup_ctx.act_ctx.env).into(),
             id: activation_id.clone(),
             exclusive: AttachExclusiveArgs {
                 timeout_ms: Some(5000),
                 remove_pid: None,
             },
-            runtime_dir: (&context.flox_runtime_dir).into(),
+            runtime_dir: (&startup_ctx.act_ctx.flox_runtime_dir).into(),
         };
 
         // Put a 5 second timeout on the activation
         attach_command.handle()?;
 
-        let legacy_exports = Self::render_legacy_exports(context.clone());
+        let legacy_exports = Self::render_legacy_exports(startup_ctx.act_ctx.clone());
 
-        let exports_for_zsh = if matches!(context.shell, ShellWithPath::Zsh(_)) {
-            let zdotdir_path = context.interpreter_path.join("activate.d/zdotdir");
+        let exports_for_zsh = if matches!(startup_ctx.act_ctx.shell, ShellWithPath::Zsh(_)) {
+            let zdotdir_path = startup_ctx
+                .act_ctx
+                .interpreter_path
+                .join("activate.d/zdotdir");
             let mut exports = String::new();
 
             // TODO: it would probably be better to just not touch ZDOTDIR in
@@ -639,7 +646,7 @@ impl ActivateArgs {
 
             exports.push_str(&format!(
                 "export _flox_activate_tracer=\"{}\";\n",
-                activate_tracer(&context.interpreter_path)
+                activate_tracer(&startup_ctx.act_ctx.interpreter_path)
             ));
 
             exports
@@ -653,9 +660,9 @@ impl ActivateArgs {
             {exports_for_zsh}
         "#,
             flox_activations = (*FLOX_ACTIVATIONS_BIN).to_string_lossy(),
-            runtime_dir = context.flox_runtime_dir,
-            self_pid_var = Shell::from(context.shell).self_pid_var(),
-            flox_env = context.env,
+            runtime_dir = startup_ctx.act_ctx.flox_runtime_dir,
+            self_pid_var = Shell::from(startup_ctx.act_ctx.shell.clone()).self_pid_var(),
+            flox_env = startup_ctx.act_ctx.env,
             id = activation_id,
             pid = std::process::id(),
         };
