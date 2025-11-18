@@ -10,7 +10,7 @@ members = [
     "mk_data",
     "shell_gen",
     "systemd",
-    "xtask", 
+    "xtask",
 ]
 default-members = ["flox", "flox-watchdog", "flox-activations"]
 
@@ -54,7 +54,7 @@ is_executable = "1.0.5"
 itertools = "0.14.0"
 jsonwebtoken = { version = "10.1", features = ["rust_crypto"] }
 log = { version = "0.4.28", features = ["kv"] }
-nix = { version = "0.30", features = ["signal", "process", "user"] }
+nix = { version = "0.30", features = ["signal", "process", "user", "fs"] }
 oauth2 = "5.0"
 path-dedot = "3.1.1"
 pollster = "0.4.0"

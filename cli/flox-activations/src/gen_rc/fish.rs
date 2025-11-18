@@ -146,7 +146,7 @@ pub fn generate_fish_startup_commands(
     }
 
     for stmt in stmts {
-        stmt.generate_with_newline(Shell::Zsh, writer)?;
+        stmt.generate_with_newline(Shell::Fish, writer)?;
     }
     Ok(())
 }
@@ -189,16 +189,16 @@ mod tests {
         generate_fish_startup_commands(&args, &env_diff, &mut buf).unwrap();
         let output = String::from_utf8_lossy(&buf);
         expect![[r#"
-            export fish_trace='1';
-            export ADDED_VAR='ADDED_VALUE';
-            unset DELETED_VAR;
-            export FLOX_ENV='/flox_env';
-            export FLOX_ENV_CACHE='/flox_env_cache';
-            export FLOX_ENV_PROJECT='/flox_env_project';
-            export FLOX_ENV_DESCRIPTION='env_description';
-            export _activate_d='/activate_d';
-            export _flox_activations='/flox_activations';
-            export _flox_activate_tracer='TRACER';
+            set -gx fish_trace '1';
+            set -gx ADDED_VAR 'ADDED_VALUE';
+            set -e DELETED_VAR;
+            set -gx FLOX_ENV '/flox_env';
+            set -gx FLOX_ENV_CACHE '/flox_env_cache';
+            set -gx FLOX_ENV_PROJECT '/flox_env_project';
+            set -gx FLOX_ENV_DESCRIPTION 'env_description';
+            set -gx _activate_d '/activate_d';
+            set -gx _flox_activations '/flox_activations';
+            set -gx _flox_activate_tracer 'TRACER';
             if isatty 1; source '/activate_d/set-prompt.fish'; end;
             set -gx FLOX_ENV_DIRS (if set -q FLOX_ENV_DIRS; echo "$FLOX_ENV_DIRS"; else; echo empty; end);
             /flox_activations set-env-dirs --shell fish --flox-env "/flox_env" --env-dirs "$FLOX_ENV_DIRS" | source;

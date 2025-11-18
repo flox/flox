@@ -182,23 +182,6 @@ else
   _flox_invocation_type="inplace"
 fi
 
-# Respect _FLOX_SHELL_FORCE if set.
-declare -r _flox_shell="${_FLOX_SHELL_FORCE:-${_FLOX_SHELL}}"
-# Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
-unset FLOX_SHELL
-
-# Bail if the shell is unsupported.
-case "$_flox_shell" in
-  *bash) ;;
-  *fish) ;;
-  *tcsh) ;;
-  *zsh) ;;
-  *)
-    echo "Unsupported shell: $_flox_shell" >&2
-    exit 1
-    ;;
-esac
-
 # The CLI is responsible for erroring if the environment is already active.
 # We can start-or-attach no matter what
 
@@ -209,24 +192,5 @@ if [ "${FLOX_ACTIVATE_START_SERVICES:-}" == "true" ]; then
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/start-services.bash"
 fi
-
-case "${_flox_invocation_type}" in
-  command)
-    # shellcheck source-path=SCRIPTDIR/activate.d
-    source "${_activate_d}/attach-command.bash"
-    ;;
-  interactive)
-    # shellcheck source-path=SCRIPTDIR/activate.d
-    source "${_activate_d}/attach-interactive.bash"
-    ;;
-  inplace)
-    # shellcheck source-path=SCRIPTDIR/activate.d
-    source "${_activate_d}/attach-inplace.bash"
-    ;;
-  *)
-    echo "Unsupported invocation type: ${_flox_invocation_type}" >&2
-    exit 1
-    ;;
-esac
 
 "$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" END

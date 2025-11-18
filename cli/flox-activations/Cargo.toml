@@ -16,6 +16,7 @@ env_logger = { version = "0.11.8", default-features = false, features = ["auto-c
 flox-core.workspace = true
 fslock.workspace = true
 log.workspace = true
+nix.workspace = true
 serde_json.workspace = true
 shell-escape.workspace = true
 time.workspace = true
