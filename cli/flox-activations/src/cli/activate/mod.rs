@@ -9,6 +9,7 @@ use activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_command_for_activate_s
 use anyhow::{Context, Result, anyhow};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
+use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
@@ -183,7 +184,7 @@ impl ActivateArgs {
         subsystem_verbosity: u32,
     ) -> Result<StartupCtx> {
         let is_sourcing_rc = std::env::var("_flox_sourcing_rc").is_ok_and(|val| val == "true");
-        let flox_activations = ctx.interpreter_path.join("libexec/flox-activations");
+        let flox_activations = (*FLOX_ACTIVATIONS_BIN).clone();
         let self_destruct =
             !std::env::var(STARTUP_SCRIPT_NO_SELF_DESTRUCT_VAR).is_ok_and(|val| val == "true");
 

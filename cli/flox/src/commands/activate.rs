@@ -9,7 +9,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
-use flox_core::activate::vars::FLOX_ACTIVATIONS_VERBOSITY_VAR;
+use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY_VAR};
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
 use flox_rust_sdk::models::environment::generations::GenerationId;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, EnvironmentError};
@@ -51,11 +51,6 @@ pub static INTERACTIVE_BASH_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
 });
 pub static WATCHDOG_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(env::var("WATCHDOG_BIN").unwrap_or(env!("WATCHDOG_BIN").to_string()))
-});
-pub static FLOX_ACTIVATIONS_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
-    PathBuf::from(
-        env::var("FLOX_ACTIVATIONS_BIN").unwrap_or(env!("FLOX_ACTIVATIONS_BIN").to_string()),
-    )
 });
 
 #[derive(Bpaf, Clone)]
