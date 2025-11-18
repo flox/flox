@@ -150,7 +150,7 @@ impl ActivateArgs {
         // If that env var is empty then activate_tracer is set to the full path of the `true` command in the PATH.
         // If that env var is not empty and refers to an executable then then activate_tracer is set to that value.
         // Else activate_tracer is set to refer to {data.interpreter_path}/activate.d/trace.
-        let activate_tracer = if let Ok(trace_path) = std::env::var("FLOX_ACTIVATE_TRACE") {
+        let _activate_tracer = if let Ok(trace_path) = std::env::var("FLOX_ACTIVATE_TRACE") {
             if !trace_path.is_empty() && std::path::Path::new(&trace_path).is_executable() {
                 trace_path
             } else {
@@ -172,11 +172,11 @@ impl ActivateArgs {
             vars_from_env,
             &diff,
         );
-        let env_diff = EnvDiff::from_files(&activation_state_dir)?;
+        let _env_diff = EnvDiff::from_files(&activation_state_dir)?;
         // Create the path if we're going to need it (we won't for in-place).
         // We're doing this ahead of time here because it's shell-agnostic and the `match`
         // statement below is already going to be huge.
-        let mut rc_path = None;
+        let mut _rc_path = None;
         if invocation_type != InvocationType::InPlace {
             let path = if let Ok(rc_path_str) = std::env::var(STARTUP_SCRIPT_PATH_OVERRIDE_VAR) {
                 PathBuf::from(rc_path_str)
@@ -187,17 +187,8 @@ impl ActivateArgs {
                 tmp.keep()?;
                 rc_path
             };
-            rc_path = Some(path);
+            _rc_path = Some(path);
         }
-        let _startup_ctx = Self::startup_ctx(
-            context.clone(),
-            invocation_type,
-            rc_path,
-            env_diff,
-            &activation_state_dir,
-            &activate_tracer,
-            subsystem_verbosity,
-        )?;
 
         // NOTE: use Self::write_to_path or Self::write_to_stdout
         //  to actually write the script
@@ -226,6 +217,7 @@ impl ActivateArgs {
         }
     }
 
+    #[allow(unused)]
     fn startup_ctx(
         ctx: ActivateCtx,
         invocation_type: InvocationType,
