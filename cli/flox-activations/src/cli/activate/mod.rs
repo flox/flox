@@ -14,6 +14,7 @@ use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
+use nix::unistd::{close, dup2_stdin, pipe, write};
 use shell_gen::{Shell, ShellWithPath};
 
 use super::StartOrAttachArgs;
@@ -392,6 +393,22 @@ impl ActivateArgs {
 
         match context.shell {
             ShellWithPath::Bash(_) => {
+                // TODO: I think we need to be checking standard input and error, not stdout
+                // Per man bash:
+                // An interactive shell is one...whose standard input and error are both connected to terminals (as determined by isatty(3))
+                //
+                // But I preserved the behavior on main.
+                // Running from main, profile scripts aren't run unless stdout is a pipe
+                // > flox list -c
+                // version = 1
+                //
+                // [profile]
+                // bash = '''
+                //   echo hello profile.bash
+                // '''
+                // > FLOX_SHELL=bash flox activate -- true
+                // > FLOX_SHELL=bash flox activate -- true | cat
+                // hello profile.bash
                 if std::io::stdout().is_terminal() {
                     command.args([
                         "--noprofile",
@@ -406,7 +423,24 @@ impl ActivateArgs {
                     // so we need to cobble together our own means of sourcing our
                     // startup script for non-interactive shells.
                     // Equivalent to: exec bash --noprofile --norc -s <<< "source '$RCFILE' && $*"
-                    unimplemented!();
+
+                    command.arg("--noprofile").arg("--norc").arg("-s");
+
+                    let quoted_run_args = Self::quote_run_args(&context.run_args);
+                    let source_script = format!("source '{}' && {}\n", rcfile, quoted_run_args);
+
+                    // - create a pipe
+                    // - dup2 the read end to stdin, so that after exec'ing reading from stdin reads from the pipe
+                    // - close the read end of the pipe since it's now dup2'd to stdin
+                    // - write the source line to the write end of the pipe
+                    // - close the write end of the pipe since we've written all we need to
+                    let (read_fd, write_fd) = pipe()?;
+
+                    dup2_stdin(&read_fd)?;
+                    close(read_fd)?;
+
+                    write(&write_fd, source_script.as_bytes())?;
+                    close(write_fd)?;
                 }
             },
             ShellWithPath::Fish(_) => {
@@ -500,7 +534,22 @@ impl ActivateArgs {
                     // XXX Is this case even a thing? What's the point of activating with
                     //     no command to be invoked and no controlling terminal from which
                     //     to issue commands?!? A broken docker experience maybe?!?
-                    unimplemented!();
+                    command.arg("--noprofile").arg("--norc").arg("-s");
+
+                    let source_script = format!("source '{}'\n", rcfile);
+
+                    // - create a pipe
+                    // - dup2 the read end to stdin, so that after exec'ing reading from stdin reads from the pipe
+                    // - close the read end of the pipe since it's now dup2'd to stdin
+                    // - write the source line to the write end of the pipe
+                    // - close the write end of the pipe since we've written all we need to
+                    let (read_fd, write_fd) = pipe()?;
+
+                    dup2_stdin(&read_fd)?;
+                    close(read_fd)?;
+
+                    write(&write_fd, source_script.as_bytes())?;
+                    close(write_fd)?;
                 }
             },
             ShellWithPath::Fish(_) => {
