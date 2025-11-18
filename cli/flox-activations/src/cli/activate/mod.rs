@@ -248,7 +248,9 @@ impl ActivateArgs {
 
         let s_ctx = match ctx.shell {
             ShellWithPath::Bash(_) => {
-                let bashrc_path = if let Some(home_dir) = dirs::home_dir() {
+                let bashrc_path = if let Some(home_dir) = dirs::home_dir()
+                    && home_dir.exists()
+                {
                     home_dir.join(".bashrc")
                 } else {
                     return Err(anyhow!("failed to get home directory"));
