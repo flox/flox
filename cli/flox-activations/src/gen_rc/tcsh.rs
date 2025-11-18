@@ -36,7 +36,6 @@ pub fn generate_tcsh_startup_commands(
     }
 
     // Restore environment variables set in the previous tcsh initialization.
-    // Read del.env and add.env files
     env_diff.generate_statements(&mut stmts);
 
     // Propagate required variables that are documented as exposed.
