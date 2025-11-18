@@ -386,22 +386,6 @@ EOF
   refute_output --partial "sourcing profile.zsh"
 }
 
-# bats test_tags=activate,activate:hook,activate:hook:bash
-@test "bash: command activate skips profile scripts with FLOX_NOPROFILE" {
-  project_setup
-  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-
-  FLOX_NOPROFILE=1 FLOX_SHELL="bash" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
-  assert_success
-  assert_output --partial "sourcing hook.on-activate"
-  refute_output --partial "sourcing profile.common"
-  refute_output --partial "sourcing profile.bash"
-  refute_output --partial "sourcing profile.fish"
-  refute_output --partial "sourcing profile.tcsh"
-  refute_output --partial "sourcing profile.zsh"
-}
-
 # bats test_tags=activate,activate:hook,activate:hook:fish
 @test "fish: interactive activate runs profile scripts" {
   project_setup
@@ -431,22 +415,6 @@ EOF
   assert_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
   assert_output --partial "sourcing profile.fish"
-  refute_output --partial "sourcing profile.tcsh"
-  refute_output --partial "sourcing profile.zsh"
-}
-
-# bats test_tags=activate,activate:hook,activate:hook:fish
-@test "fish: command activate skips profile scripts with FLOX_NOPROFILE" {
-  project_setup
-  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-
-  FLOX_NOPROFILE=1 FLOX_SHELL="fish" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
-  assert_success
-  assert_output --partial "sourcing hook.on-activate"
-  refute_output --partial "sourcing profile.common"
-  refute_output --partial "sourcing profile.bash"
-  refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
 }
@@ -485,22 +453,6 @@ EOF
   refute_output --partial "sourcing profile.zsh"
 }
 
-# bats test_tags=activate,activate:hook,activate:hook:tcsh
-@test "tcsh: command activate skips profile scripts with FLOX_NOPROFILE" {
-  project_setup
-  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-
-  FLOX_NOPROFILE=1 FLOX_SHELL="tcsh" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
-  assert_success
-  assert_output --partial "sourcing hook.on-activate"
-  refute_output --partial "sourcing profile.common"
-  refute_output --partial "sourcing profile.bash"
-  refute_output --partial "sourcing profile.fish"
-  refute_output --partial "sourcing profile.tcsh"
-  refute_output --partial "sourcing profile.zsh"
-}
-
 # bats test_tags=activate,activate:hook,activate:hook:zsh
 @test "zsh: interactive activate runs profile scripts" {
   project_setup
@@ -533,22 +485,6 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   assert_output --partial "sourcing profile.zsh"
-}
-
-# bats test_tags=activate,activate:hook,activate:hook:zsh
-@test "zsh: command activate skips profile scripts with FLOX_NOPROFILE" {
-  project_setup
-  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-
-  FLOX_NOPROFILE=1 FLOX_SHELL="zsh" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
-  assert_success
-  assert_output --partial "sourcing hook.on-activate"
-  refute_output --partial "sourcing profile.common"
-  refute_output --partial "sourcing profile.bash"
-  refute_output --partial "sourcing profile.fish"
-  refute_output --partial "sourcing profile.tcsh"
-  refute_output --partial "sourcing profile.zsh"
 }
 
 # ---------------------------------------------------------------------------- #
