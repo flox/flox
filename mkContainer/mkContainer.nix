@@ -27,7 +27,6 @@ let
     match
     ;
   inherit (pkgs.lib)
-    mapAttrsToList
     optionalAttrs
     optionals
     toIntBase10

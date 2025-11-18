@@ -107,6 +107,7 @@ xdg = "3.0"
 pretty_assertions = "1.4"
 serial_test = "3.2.0"
 temp-env = "0.3.2"
+expect-test = "1"
 
 # watchdog dependencies
 kqueue = "1.1.1"

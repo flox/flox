@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -7,6 +8,8 @@ use serde::{Deserialize, Serialize};
 pub enum Error {
     #[error("Unsupported shell '{}'", .0)]
     UnsupportedShell(String),
+    #[error(transparent)]
+    IO(#[from] std::io::Error),
 }
 
 /// ShellWithPath represents a shell along with a PathBuf used to run it,
@@ -53,6 +56,16 @@ impl ShellWithPath {
             ShellWithPath::Fish(path) => path,
             ShellWithPath::Tcsh(path) => path,
             ShellWithPath::Zsh(path) => path,
+        }
+    }
+
+    /// Get the name of the shell rather than the path to the executable
+    pub fn name(&self) -> &str {
+        match self {
+            ShellWithPath::Bash(_) => "bash",
+            ShellWithPath::Fish(_) => "fish",
+            ShellWithPath::Tcsh(_) => "tcsh",
+            ShellWithPath::Zsh(_) => "zsh",
         }
     }
 }
@@ -115,6 +128,249 @@ impl Shell {
     }
 }
 
-pub fn source_file(path: &Path) -> String {
-    format!("source '{}';", path.display())
+pub trait GenerateShell {
+    fn generate(&self, shell: Shell, writer: &mut impl Write) -> Result<(), Error>;
+    fn to_stmt(&self) -> Statement;
+
+    fn generate_with_newline(&self, shell: Shell, writer: &mut impl Write) -> Result<(), Error> {
+        self.generate(shell, writer)?;
+        writer.write_all("\n".as_bytes())?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SetVar {
+    exported: bool,
+    allow_expansion: bool,
+    name: String,
+    value: String,
+}
+
+impl SetVar {
+    pub fn exported_no_expansion(name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
+        Self {
+            exported: true,
+            allow_expansion: false,
+            name: name.as_ref().to_string(),
+            value: value.as_ref().to_string(),
+        }
+    }
+
+    pub fn exported_with_expansion(name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
+        Self {
+            exported: true,
+            allow_expansion: true,
+            name: name.as_ref().to_string(),
+            value: value.as_ref().to_string(),
+        }
+    }
+
+    pub fn not_exported_no_expansion(name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
+        Self {
+            exported: false,
+            allow_expansion: false,
+            name: name.as_ref().to_string(),
+            value: value.as_ref().to_string(),
+        }
+    }
+
+    pub fn not_exported_with_expansion(name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
+        Self {
+            exported: false,
+            allow_expansion: true,
+            name: name.as_ref().to_string(),
+            value: value.as_ref().to_string(),
+        }
+    }
+
+    pub fn unset(&self) -> UnsetVar {
+        UnsetVar::new(self.name.clone())
+    }
+}
+
+impl GenerateShell for SetVar {
+    fn generate(&self, shell: Shell, writer: &mut impl Write) -> Result<(), Error> {
+        match (shell, self.exported, self.allow_expansion) {
+            (Shell::Bash, true, true) => {
+                write!(writer, "export {}=\"{}\";", self.name, self.value)?;
+            },
+            (Shell::Bash, true, false) => {
+                write!(writer, "export {}='{}\';", self.name, self.value)?;
+            },
+            (Shell::Bash, false, true) => {
+                write!(writer, "{}=\"{}\";", self.name, self.value)?;
+            },
+            (Shell::Bash, false, false) => {
+                write!(writer, "{}='{}\';", self.name, self.value)?;
+            },
+            (Shell::Zsh, true, true) => {
+                write!(writer, "export {}=\"{}\";", self.name, self.value)?;
+            },
+            (Shell::Zsh, true, false) => {
+                write!(writer, "export {}='{}\';", self.name, self.value)?;
+            },
+            (Shell::Zsh, false, true) => {
+                write!(writer, "typeset -g {}=\"{}\";", self.name, self.value)?;
+            },
+            (Shell::Zsh, false, false) => {
+                write!(writer, "typeset -g {}='{}';", self.name, self.value)?;
+            },
+            (Shell::Tcsh, true, true) => {
+                write!(writer, "setenv {} \"{}\";", self.name, self.value)?;
+            },
+            (Shell::Tcsh, true, false) => {
+                write!(writer, "setenv {} '{}';", self.name, self.value)?;
+            },
+            (Shell::Tcsh, false, true) => {
+                write!(writer, "set {} = \"{}\";", self.name, self.value)?;
+            },
+            (Shell::Tcsh, false, false) => {
+                write!(writer, "set {} = '{}';", self.name, self.value)?;
+            },
+            (Shell::Fish, true, true) => {
+                write!(writer, "set -gx {} \"{}\";", self.name, self.value)?;
+            },
+            (Shell::Fish, true, false) => {
+                write!(writer, "set -gx {} '{}';", self.name, self.value)?;
+            },
+            (Shell::Fish, false, true) => {
+                write!(writer, "set -g {} \"{}\";", self.name, self.value)?;
+            },
+            (Shell::Fish, false, false) => {
+                write!(writer, "set -g {} '{}';", self.name, self.value)?;
+            },
+        }
+        Ok(())
+    }
+
+    fn to_stmt(&self) -> Statement {
+        Statement::SetVar(self.clone())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct UnsetVar {
+    name: String,
+}
+
+impl UnsetVar {
+    pub fn new(name: impl AsRef<str>) -> Self {
+        Self {
+            name: name.as_ref().to_string(),
+        }
+    }
+}
+
+impl GenerateShell for UnsetVar {
+    fn generate(&self, shell: Shell, writer: &mut impl Write) -> Result<(), Error> {
+        match shell {
+            Shell::Bash => {
+                write!(writer, "unset {};", self.name)?;
+            },
+            Shell::Zsh => {
+                write!(writer, "unset {};", self.name)?;
+            },
+            Shell::Tcsh => {
+                write!(writer, "unsetenv {};", self.name)?;
+            },
+            Shell::Fish => {
+                write!(writer, "set -e {};", self.name)?;
+            },
+        }
+        Ok(())
+    }
+
+    fn to_stmt(&self) -> Statement {
+        Statement::UnsetVar(self.clone())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Source {
+    path: PathBuf,
+}
+
+impl Source {
+    pub fn new(path: impl AsRef<Path>) -> Self {
+        Self {
+            path: path.as_ref().to_path_buf(),
+        }
+    }
+}
+
+impl GenerateShell for Source {
+    fn generate(&self, _shell: Shell, writer: &mut impl Write) -> Result<(), Error> {
+        write!(writer, "source '{}';", self.path.display())?;
+        Ok(())
+    }
+
+    fn to_stmt(&self) -> Statement {
+        Statement::Source(self.clone())
+    }
+}
+
+// So you can use the `generate` method on literal strings e.g. for things
+// that aren't variable exports or sourcing files.
+impl<T: AsRef<str>> GenerateShell for T {
+    fn generate(&self, _shell: Shell, writer: &mut impl Write) -> Result<(), Error> {
+        write!(writer, "{}", self.as_ref()).map_err(Error::IO)?;
+        Ok(())
+    }
+
+    fn to_stmt(&self) -> Statement {
+        Statement::Literal(self.as_ref().to_string())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Statement {
+    SetVar(SetVar),
+    UnsetVar(UnsetVar),
+    Source(Source),
+    Literal(String),
+}
+
+impl GenerateShell for Statement {
+    fn generate(&self, shell: Shell, writer: &mut impl Write) -> Result<(), Error> {
+        match self {
+            Statement::SetVar(var) => var.generate(shell, writer),
+            Statement::UnsetVar(var) => var.generate(shell, writer),
+            Statement::Source(source) => source.generate(shell, writer),
+            Statement::Literal(s) => s.generate(shell, writer),
+        }
+    }
+
+    fn to_stmt(&self) -> Statement {
+        // lol
+        self.clone()
+    }
+}
+
+pub fn set_unexported_unexpanded(name: impl AsRef<str>, value: impl AsRef<str>) -> Statement {
+    SetVar::not_exported_no_expansion(name, value).to_stmt()
+}
+
+pub fn set_exported_unexpanded(name: impl AsRef<str>, value: impl AsRef<str>) -> Statement {
+    SetVar::exported_no_expansion(name, value).to_stmt()
+}
+
+pub fn set_unexported_expanded(name: impl AsRef<str>, value: impl AsRef<str>) -> Statement {
+    SetVar::not_exported_with_expansion(name, value).to_stmt()
+}
+
+pub fn set_exported_expanded(name: impl AsRef<str>, value: impl AsRef<str>) -> Statement {
+    SetVar::exported_with_expansion(name, value).to_stmt()
+}
+
+pub fn unset(name: impl AsRef<str>) -> Statement {
+    UnsetVar::new(name).to_stmt()
+}
+
+pub fn source_file(path: impl AsRef<Path>) -> Statement {
+    Source::new(path).to_stmt()
+}
+
+pub fn literal(s: impl AsRef<str>) -> Statement {
+    Statement::Literal(s.as_ref().to_string())
 }

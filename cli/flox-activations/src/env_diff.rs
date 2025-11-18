@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Result;
+use shell_gen::{GenerateShell, SetVar, Statement, UnsetVar};
 
+#[derive(Debug, Clone)]
 pub struct EnvDiff {
     pub additions: HashMap<String, String>,
     pub deletions: Vec<String>,
@@ -25,6 +27,25 @@ impl EnvDiff {
         let end_env = parse_env_json(end_json)?;
 
         Ok(from_parsed_files(&start_env, &end_env))
+    }
+
+    // Primarily for testing
+    pub fn from_parts(additions: HashMap<String, String>, deletions: Vec<String>) -> Self {
+        Self {
+            additions,
+            deletions,
+        }
+    }
+
+    pub fn generate_statements(&self, stmts: &mut Vec<Statement>) {
+        for (name, value) in self.additions.iter() {
+            let var = SetVar::exported_no_expansion(name, value);
+            stmts.push(var.to_stmt());
+        }
+        for name in self.deletions.iter() {
+            let var = UnsetVar::new(name);
+            stmts.push(var.to_stmt());
+        }
     }
 }
 

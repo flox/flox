@@ -1,8 +1,8 @@
 mod activate_script_builder;
 use std::collections::HashMap;
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::os::unix::process::CommandExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_command_for_activate_script};
@@ -10,6 +10,7 @@ use anyhow::{Context, Result, anyhow};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use indoc::formatdoc;
+use is_executable::IsExecutable;
 use itertools::Itertools;
 use log::debug;
 use shell_gen::ShellWithPath;
@@ -17,6 +18,11 @@ use shell_gen::ShellWithPath;
 use super::StartOrAttachArgs;
 use super::start_or_attach::StartOrAttachResult;
 use crate::env_diff::EnvDiff;
+use crate::gen_rc::bash::{BashStartupArgs, generate_bash_startup_commands};
+use crate::gen_rc::{StartupArgs, StartupCtx};
+
+pub const STARTUP_SCRIPT_PATH_OVERRIDE_VAR: &str = "_FLOX_RC_FILE_PATH";
+pub const STARTUP_SCRIPT_NO_SELF_DESTRUCT_VAR: &str = "_FLOX_RC_FILE_NO_SELF_DESTRUCT";
 
 #[derive(Debug, Args)]
 pub struct ActivateArgs {
@@ -140,6 +146,25 @@ impl ActivateArgs {
             ("_FLOX_ACTIVATION_ID".to_string(), activation_id.clone()),
         ]);
 
+        // The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.
+        // If that env var is empty then activate_tracer is set to the full path of the `true` command in the PATH.
+        // If that env var is not empty and refers to an executable then then activate_tracer is set to that value.
+        // Else activate_tracer is set to refer to {data.interpreter_path}/activate.d/trace.
+        let _activate_tracer = if let Ok(trace_path) = std::env::var("FLOX_ACTIVATE_TRACE") {
+            if !trace_path.is_empty() && std::path::Path::new(&trace_path).is_executable() {
+                trace_path
+            } else {
+                context
+                    .interpreter_path
+                    .join("activate.d")
+                    .join("trace")
+                    .to_string_lossy()
+                    .to_string()
+            }
+        } else {
+            "true".to_string()
+        };
+
         let activate_script_command = assemble_command_for_activate_script(
             "activate_temporary",
             context.clone(),
@@ -147,6 +172,26 @@ impl ActivateArgs {
             vars_from_env,
             &diff,
         );
+        let _env_diff = EnvDiff::from_files(&activation_state_dir)?;
+        // Create the path if we're going to need it (we won't for in-place).
+        // We're doing this ahead of time here because it's shell-agnostic and the `match`
+        // statement below is already going to be huge.
+        let mut _rc_path = None;
+        if invocation_type != InvocationType::InPlace {
+            let path = if let Ok(rc_path_str) = std::env::var(STARTUP_SCRIPT_PATH_OVERRIDE_VAR) {
+                PathBuf::from(rc_path_str)
+            } else {
+                let prefix = format!("flox_rc_{}_", context.shell.name());
+                let tmp = tempfile::NamedTempFile::with_prefix_in(prefix, &activation_state_dir)?;
+                let rc_path = tmp.path().to_path_buf();
+                tmp.keep()?;
+                rc_path
+            };
+            _rc_path = Some(path);
+        }
+
+        // NOTE: use Self::write_to_path or Self::write_to_stdout
+        //  to actually write the script
 
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
@@ -157,6 +202,9 @@ impl ActivateArgs {
         //    eval "$(flox activate)"
         if invocation_type == InvocationType::InPlace {
             Self::activate_in_place(activate_script_command, context.shell)?;
+            // TODO: we've already printed everything, right?
+            //  Do we still need to grab the variables off of the command?
+            // Self::activate_in_place(activate_script_command, data.shell)?;
 
             return Ok(());
         }
@@ -167,6 +215,99 @@ impl ActivateArgs {
         } else {
             Self::activate_command(activate_script_command, context.run_args)
         }
+    }
+
+    #[allow(unused)]
+    fn startup_ctx(
+        ctx: ActivateCtx,
+        invocation_type: InvocationType,
+        rc_path: Option<PathBuf>,
+        env_diff: EnvDiff,
+        state_dir: &Path,
+        activate_tracer: &str,
+        subsystem_verbosity: u32,
+    ) -> Result<StartupCtx> {
+        let is_sourcing_rc = std::env::var("_flox_sourcing_rc").is_ok_and(|val| val == "true");
+        let flox_activations = ctx.interpreter_path.join("libexec/flox-activations");
+        let self_destruct =
+            !std::env::var(STARTUP_SCRIPT_NO_SELF_DESTRUCT_VAR).is_ok_and(|val| val == "true");
+
+        let clean_up = if rc_path.is_some() && self_destruct {
+            rc_path.clone()
+        } else {
+            None
+        };
+
+        let s_ctx = match ctx.shell {
+            ShellWithPath::Bash(_) => {
+                let bashrc_path = if let Some(home_dir) = dirs::home_dir()
+                    && home_dir.exists()
+                {
+                    home_dir.join(".bashrc")
+                } else {
+                    return Err(anyhow!("failed to get home directory"));
+                };
+                match invocation_type {
+                    InvocationType::InPlace => todo!(),
+                    InvocationType::Interactive | InvocationType::Command => {
+                        let startup_args = BashStartupArgs {
+                            flox_activate_tracelevel: subsystem_verbosity,
+                            activate_d: ctx.interpreter_path.join("activate.d"),
+                            flox_env: PathBuf::from(ctx.env.clone()),
+                            flox_env_cache: Some(ctx.env_cache.clone()),
+                            flox_env_project: ctx.env_project.clone(),
+                            flox_env_description: Some(ctx.env_description.clone()),
+                            is_in_place: ctx
+                                .invocation_type
+                                .is_some_and(|inv| inv == InvocationType::InPlace),
+                            bashrc_path: Some(bashrc_path),
+                            flox_sourcing_rc: is_sourcing_rc,
+                            flox_activate_tracer: activate_tracer.to_string(),
+                            flox_activations,
+                            clean_up,
+                        };
+                        StartupCtx {
+                            args: StartupArgs::Bash(startup_args),
+                            state_dir: state_dir.to_path_buf(),
+                            env_diff,
+                            rc_path,
+                            act_ctx: ctx,
+                        }
+                    },
+                }
+            },
+            ShellWithPath::Fish(_) => todo!(),
+            ShellWithPath::Tcsh(_) => todo!(),
+            ShellWithPath::Zsh(_) => todo!(),
+        };
+        Ok(s_ctx)
+    }
+
+    #[allow(dead_code)]
+    fn write_to_path(ctx: &StartupCtx, path: &Path) -> Result<()> {
+        let mut writer = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .truncate(true)
+            .open(path)?;
+        match ctx.args {
+            StartupArgs::Bash(ref args) => {
+                generate_bash_startup_commands(args, &ctx.env_diff, &mut writer)?
+            },
+        }
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    fn write_to_stdout(ctx: &StartupCtx) -> Result<()> {
+        let mut writer = std::io::stdout();
+        match ctx.args {
+            StartupArgs::Bash(ref args) => {
+                generate_bash_startup_commands(args, &ctx.env_diff, &mut writer)?
+            },
+        }
+        Ok(())
     }
 
     /// Used for `flox activate -- run_args`
