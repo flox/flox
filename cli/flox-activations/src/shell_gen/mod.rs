@@ -59,7 +59,6 @@ impl Shell {
             Self::Fish => format!("set -gx {var} '{value}'"),
             Self::Tcsh => format!("setenv {var} '{value}'"),
             Self::Zsh => format!("export {var}='{value}'"),
-            _ => unimplemented!(),
         }
     }
 

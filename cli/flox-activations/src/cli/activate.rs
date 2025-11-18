@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::env::Vars;
 use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
@@ -10,7 +9,6 @@ use std::process::{Command, Stdio};
 use anyhow::{Context, Result, anyhow};
 use clap::Args;
 use flox_core::activate_data::ActivateData;
-use flox_core::activations::activations_json_path;
 use flox_core::shell::Shell;
 use flox_core::util::default_nix_env_vars;
 use indoc::formatdoc;
@@ -20,10 +18,9 @@ use itertools::Itertools;
 use libc::{PR_SET_CHILD_SUBREAPER, prctl, setsid};
 use log::debug;
 use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
-use nix::unistd::{ForkResult, Pid, fork, getpid, getppid};
+use nix::unistd::{ForkResult, fork, getpid};
 use signal_hook::consts::{SIGCHLD, SIGUSR1};
 use signal_hook::iterator::Signals;
-use time::{Duration, OffsetDateTime};
 
 use super::attach::AttachArgs;
 use super::fix_paths::{fix_manpath_var, fix_path_var};
@@ -31,7 +28,6 @@ use super::set_env_dirs::fix_env_dirs_var;
 use super::{SetReadyArgs, StartOrAttachArgs};
 use crate::cli::attach::AttachExclusiveArgs;
 use crate::executive::executive;
-use crate::shell_gen::Shell as ShellGen;
 use crate::shell_gen::bash::{BashStartupArgs, generate_bash_startup_commands};
 use crate::shell_gen::capture::{EnvDiff, ExportEnvDiff};
 use crate::shell_gen::fish::{FishStartupArgs, generate_fish_startup_commands};
@@ -258,7 +254,6 @@ fn apply_shell_specific_env(
     command: Option<&mut Command>,
     interpreter_path: &std::path::Path,
 ) -> Result<Vec<String>> {
-    use std::path::Path;
     match shell {
         Shell::Tcsh(_) => {
             let home_dir = interpreter_path.join("activate.d").join("tcsh_home");
@@ -474,10 +469,10 @@ impl ActivateArgs {
             let parent_pid = getpid();
             match unsafe { fork() } {
                 Ok(ForkResult::Child) => {
+                    #[cfg(target_os = "linux")]
                     unsafe {
                         setsid();
                         // register as subreaper on Linux only
-                        #[cfg(target_os = "linux")]
                         prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0);
                     }
                     // Executive runs monitoring loop and exits when all PIDs are gone
@@ -574,7 +569,7 @@ impl ActivateArgs {
             debug!("Finished spawning activation - proceeding to attach");
         }
 
-        let mut command = Self::assemble_command_for_activate_script(data.clone());
+        let command = Self::assemble_command_for_activate_script(data.clone());
 
         // Replay environment variables directly in the Rust process
         // This implements the replayEnv() step from the Mermaid diagram
@@ -662,7 +657,7 @@ impl ActivateArgs {
                 &activation_state_dir,
                 activate_tracer,
             )?;
-        } else if let Some(ref command_string) = data.command_string {
+        } else if let Some(_) = data.command_string {
             Self::new_activate_command_string(
                 verbosity,
                 data,
@@ -799,38 +794,6 @@ impl ActivateArgs {
         ])
     }
 
-    /// Used for `flox activate -- run_args`
-    fn activate_command(
-        mut command: Command,
-        run_args: Vec<String>,
-        is_ephemeral: bool,
-    ) -> Result<()> {
-        // The activation script works like a shell in that it accepts the "-c"
-        // flag which takes exactly one argument to be passed verbatim to the
-        // userShell invocation. Take this opportunity to combine these args
-        // safely, and *exactly* as the user provided them in argv.
-        command.arg("-c").arg(Self::quote_run_args(&run_args));
-
-        debug!("running activation command: {:?}", command);
-
-        if is_ephemeral {
-            let output = command
-                .stderr(Stdio::piped())
-                .stdout(Stdio::piped())
-                .output()?;
-            if !output.status.success() {
-                Err(anyhow!(
-                    "failed to run activation script: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                ))?;
-            }
-            Ok(())
-        } else {
-            // exec should never return
-            Err(command.exec().into())
-        }
-    }
-
     /// Execute the user's command directly using exec().
     ///
     /// The environment modifications from activation are applied to the command
@@ -882,7 +845,7 @@ impl ActivateArgs {
     ) -> Result<()> {
         // Set _flox_* variables in the environment prior to sourcing
         // our custom .tcshrc and ZDOTDIR that will otherwise fall over.
-        /// SAFETY: called once, prior to possible concurrent access to env
+        // SAFETY: called once, prior to possible concurrent access to env
         debug_set_var!(
             "_activate_d",
             data.interpreter_path
@@ -967,7 +930,6 @@ impl ActivateArgs {
                 );
                 command.arg("-c").arg(data.command_string.unwrap());
             },
-            _ => unimplemented!(),
         }
 
         debug!("running command string in shell: {:?}", command);
@@ -987,17 +949,6 @@ impl ActivateArgs {
             // exec should never return
             Err(command.exec().into())
         }
-    }
-
-    /// Activate the environment interactively by spawning a new shell
-    /// and running the respective activation scripts.
-    ///
-    /// This function should never return as it replaces the current process
-    fn activate_interactive(mut command: Command) -> Result<()> {
-        debug!("running activation command: {:?}", command);
-
-        // exec should never return
-        Err(command.exec().into())
     }
 
     fn new_activate_interactive(
@@ -1020,7 +971,7 @@ impl ActivateArgs {
 
         // Set _flox_* variables in the environment prior to sourcing
         // our custom .tcshrc and ZDOTDIR that will otherwise fall over.
-        /// SAFETY: called once, prior to possible concurrent access to env
+        // SAFETY: called once, prior to possible concurrent access to env
         debug_set_var!(
             "_activate_d",
             data.interpreter_path
@@ -1054,14 +1005,14 @@ impl ActivateArgs {
         // Set shell-specific init script environment variables
         match &data.shell {
             Shell::Tcsh(_) => {
-                /// SAFETY: called once, prior to possible concurrent access to env
+                // SAFETY: called once, prior to possible concurrent access to env
                 debug_set_var!(
                     "FLOX_TCSH_INIT_SCRIPT",
                     script_gen.script_path.to_string_lossy().to_string()
                 );
             },
             Shell::Zsh(_) => {
-                /// SAFETY: called once, prior to possible concurrent access to env
+                // SAFETY: called once, prior to possible concurrent access to env
                 debug_set_var!(
                     "FLOX_ZSH_INIT_SCRIPT",
                     script_gen.script_path.to_string_lossy().to_string()
@@ -1119,7 +1070,6 @@ impl ActivateArgs {
                 // exec should never return
                 Err(command.exec().into())
             },
-            _ => unimplemented!(),
         }
     }
 
@@ -1144,33 +1094,10 @@ impl ActivateArgs {
             .join("\n")
     }
 
-    /// Used for `eval "$(flox activate)"`
-    fn activate_in_place(mut command: Command, shell: Shell) -> Result<()> {
-        debug!("activating in place with command: {:?}", command);
-
-        let output = command
-            .output()
-            .context("failed to run activation script")?;
-        eprint!("{}", String::from_utf8_lossy(&output.stderr));
-
-        let exports_rendered = Self::render_legacy_exports(&command, &shell);
-
-        let script = formatdoc! {"
-            {exports_rendered}
-            {output}
-        ",
-        output = String::from_utf8_lossy(&output.stdout),
-        };
-
-        print!("{script}");
-
-        Ok(())
-    }
-
     fn new_activate_in_place(
         data: ActivateData,
         activation_id: String,
-        activation_state_dir: PathBuf,
+        _activation_state_dir: PathBuf,
         legacy_exports: String,
         flox_sourcing_rc: bool,
         verbosity: u8,
@@ -1214,7 +1141,6 @@ impl ActivateArgs {
                 let args = args_builder.build_zsh_args();
                 generate_zsh_startup_commands(&args, &export_env_diff)?
             },
-            _ => unimplemented!(),
         };
         let script = formatdoc! {r#"
             {legacy_exports}
@@ -1230,25 +1156,6 @@ impl ActivateArgs {
         debug!("activation in place script:\n{}", script);
         print!("{script}");
         Ok(())
-    }
-
-    /// Quote run args so that words don't get split,
-    /// but don't escape all characters.
-    ///
-    /// To do this we escape '"' and '`',
-    /// but we don't escape anything else.
-    /// We want '$' for example to be expanded by the shell.
-    fn quote_run_args(run_args: &[String]) -> String {
-        run_args
-            .iter()
-            .map(|arg| {
-                if arg.contains(' ') || arg.contains('"') || arg.contains('`') {
-                    format!(r#""{}""#, arg.replace('"', r#"\""#).replace('`', r#"\`"#))
-                } else {
-                    arg.to_string()
-                }
-            })
-            .join(" ")
     }
 
     fn start_services() {

@@ -173,7 +173,6 @@ impl ExportEnvDiff {
                     }
                 }
             },
-            _ => unimplemented!(),
         };
         commands
     }

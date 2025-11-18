@@ -511,7 +511,7 @@ fn cleanup_activation_state(activation_state_dir: &Path, log: &LogWriter) -> Res
 fn exec_activate_script(
     data: ActivateData,
     activation_state_dir: PathBuf,
-    activation_id: String,
+    _activation_id: String,
 ) -> Result<()> {
     let exports = build_activation_env_vars(&data);
 

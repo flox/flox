@@ -11,12 +11,7 @@ use flox_core::activate_data::ActivateData;
 use flox_core::shell::Shell;
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
 use flox_rust_sdk::models::environment::generations::GenerationId;
-use flox_rust_sdk::models::environment::{
-    ConcreteEnvironment,
-    Environment,
-    EnvironmentError,
-    FLOX_ACTIVE_ENVIRONMENTS_VAR,
-};
+use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, EnvironmentError};
 use flox_rust_sdk::models::lockfile::LockResult;
 use flox_rust_sdk::models::manifest::typed::{ActivateMode, IncludeDescriptor, Inner};
 use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
@@ -51,7 +46,9 @@ pub static INTERACTIVE_BASH_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
         env::var("INTERACTIVE_BASH_BIN").unwrap_or(env!("INTERACTIVE_BASH_BIN").to_string()),
     )
 });
+#[allow(dead_code)]
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
+#[allow(dead_code)]
 pub const FLOX_SERVICES_TO_START_VAR: &str = "_FLOX_SERVICES_TO_START";
 pub static FLOX_INTERPRETER: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(env::var("FLOX_INTERPRETER").unwrap_or(env!("FLOX_INTERPRETER").to_string()))
