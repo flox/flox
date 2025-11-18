@@ -198,6 +198,8 @@ mod tests {
             setenv FLOX_ENV_CACHE '/flox_env_cache';
             setenv FLOX_ENV_PROJECT '/flox_env_project';
             setenv FLOX_ENV_DESCRIPTION 'env_description';
+            setenv _activate_d '/activate_d';
+            setenv _flox_activations '/flox_activations';
             setenv _flox_activate_tracer 'TRACER';
             if ( $?tty ) then; source '/activate_d/set-prompt.tcsh'; endif;
             if (! $?FLOX_ENV_DIRS) setenv FLOX_ENV_DIRS "empty";

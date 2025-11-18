@@ -195,6 +195,8 @@ mod tests {
             export FLOX_ENV_CACHE='/flox_env_cache';
             export FLOX_ENV_PROJECT='/flox_env_project';
             export FLOX_ENV_DESCRIPTION='env_description';
+            export _activate_d='/activate_d';
+            export _flox_activations='/flox_activations';
             export _flox_activate_tracer='TRACER';
             if isatty 1; source '/activate_d/set-prompt.fish'; end;
             set -gx FLOX_ENV_DIRS (if set -q FLOX_ENV_DIRS; echo "$FLOX_ENV_DIRS"; else; echo empty; end);

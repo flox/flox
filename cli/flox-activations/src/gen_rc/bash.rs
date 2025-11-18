@@ -198,6 +198,8 @@ mod tests {
             export FLOX_ENV_CACHE='/flox_env_cache';
             export FLOX_ENV_PROJECT='/flox_env_project';
             export FLOX_ENV_DESCRIPTION='env_description';
+            export _activate_d='/activate_d';
+            export _flox_activations='/flox_activations';
             export _flox_activate_tracer='TRACER';
             if [ -t 1 ]; then source '/activate_d/set-prompt.bash'; fi;
             eval "$('/flox_activations' set-env-dirs --shell bash --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}")";
