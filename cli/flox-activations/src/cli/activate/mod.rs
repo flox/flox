@@ -172,16 +172,14 @@ impl ActivateArgs {
 
         // These functions will only return if exec fails
         if invocation_type == InvocationType::Interactive {
-            let activate_script_command = assemble_command_for_activate_script(
-                "activate_temporary",
-                context.clone(),
+            Self::activate_interactive(
+                context,
+                startup_ctx,
                 subsystem_verbosity,
                 vars_from_env,
                 &diff,
                 &start_or_attach,
-            );
-
-            Self::activate_interactive(activate_script_command)
+            )
         } else {
             Self::activate_command(
                 context,
@@ -452,11 +450,84 @@ impl ActivateArgs {
     /// and running the respective activation scripts.
     ///
     /// This function should never return as it replaces the current process
-    fn activate_interactive(mut activate_script_command: Command) -> Result<()> {
-        debug!("running activation command: {:?}", activate_script_command);
+    fn activate_interactive(
+        context: ActivateCtx,
+        startup_ctx: StartupCtx,
+        subsystem_verbosity: u32,
+        vars_from_env: VarsFromEnvironment,
+        env_diff: &EnvDiff,
+        start_or_attach_result: &StartOrAttachResult,
+    ) -> Result<()> {
+        let mut command = Command::new(context.shell.exe_path());
+        apply_env_for_invocation(
+            &mut command,
+            context.clone(),
+            subsystem_verbosity,
+            vars_from_env,
+            env_diff,
+            start_or_attach_result,
+        );
+
+        let rcfile = startup_ctx
+            .rc_path
+            .clone()
+            .expect("rc_path should be some for interactive invocation");
+        Self::write_to_path(&startup_ctx, &rcfile)?;
+        let rcfile = rcfile.to_string_lossy();
+
+        match context.shell {
+            ShellWithPath::Bash(_) => {
+                if std::io::stdout().is_terminal() {
+                    command.args(["--noprofile", "--rcfile", &rcfile]);
+                } else {
+                    // Non-interactive: source via stdin
+                    // Equivalent to: exec bash --noprofile --norc <<< "source '$RCFILE'"
+                    // The bash --rcfile option only works for interactive shells
+                    // so we need to cobble together our own means of sourcing our
+                    // startup script for non-interactive shells.
+                    // XXX Is this case even a thing? What's the point of activating with
+                    //     no command to be invoked and no controlling terminal from which
+                    //     to issue commands?!? A broken docker experience maybe?!?
+                    unimplemented!();
+                }
+            },
+            ShellWithPath::Fish(_) => {
+                command.args(["--init-command", &format!("source '{}'", rcfile)]);
+            },
+            ShellWithPath::Tcsh(_) => {
+                // The tcsh implementation will source our custom `~/.tcshrc`,
+                // which eventually sources $FLOX_TCSH_INIT_SCRIPT after the normal initialization.
+                let home = std::env::var("HOME").unwrap_or("".to_string());
+                command.env("FLOX_ORIG_HOME", home);
+                let tcsh_home = context.interpreter_path.join("activate.d/tcsh_home");
+                command.env("HOME", tcsh_home.to_string_lossy().to_string());
+                command.env("FLOX_TCSH_INIT_SCRIPT", &*rcfile);
+
+                // The -m option is required for tcsh to source a .tcshrc file that
+                // the effective user does not own.
+                command.args(["-m"]);
+            },
+            ShellWithPath::Zsh(_) => {
+                // Save original ZDOTDIR if it exists
+                if let Ok(zdotdir) = std::env::var("ZDOTDIR")
+                    && !zdotdir.is_empty()
+                {
+                    command.env("FLOX_ORIG_ZDOTDIR", zdotdir);
+                }
+                let zdotdir = context.interpreter_path.join("activate.d/zdotdir");
+                command.env("ZDOTDIR", zdotdir.to_string_lossy().to_string());
+                command.env("FLOX_ZSH_INIT_SCRIPT", &*rcfile);
+
+                // The "NO_GLOBAL_RCS" option is necessary to prevent zsh from
+                // automatically sourcing /etc/zshrc et al.
+                command.args(["-o", "NO_GLOBAL_RCS"]);
+            },
+        }
+
+        debug!("running activation command: {:?}", command);
 
         // exec should never return
-        Err(activate_script_command.exec().into())
+        Err(command.exec().into())
     }
 
     /// Used for `eval "$(flox activate)"`
