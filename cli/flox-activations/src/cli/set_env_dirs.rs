@@ -5,6 +5,7 @@ use clap::Args;
 use log::debug;
 
 use super::{join_dir_list, separate_dir_list};
+use crate::debug_set_var;
 
 #[derive(Debug, Args)]
 pub struct SetEnvDirsArgs {
@@ -60,6 +61,22 @@ pub fn fix_env_dirs_var(flox_env: impl AsRef<Path>, env_dirs: impl AsRef<str>) -
     let existing_dirs = separate_dir_list(env_dirs.as_ref());
     let new_dirs = populate_env_dirs(flox_env.as_ref(), &existing_dirs);
     join_dir_list(new_dirs)
+}
+
+/// Set FLOX_ENV_DIRS environment variable directly in the current Rust process.
+///
+/// This prepends the current flox_env to FLOX_ENV_DIRS if it's not already there.
+///
+/// # Safety
+/// This function uses unsafe to modify the process environment.
+/// It should be called before any concurrent access to environment variables.
+pub fn set_env_dirs_in_process(flox_env: impl AsRef<Path>) -> Result<(), anyhow::Error> {
+    let env_dirs = std::env::var("FLOX_ENV_DIRS").unwrap_or_default();
+    let new_env_dirs = fix_env_dirs_var(flox_env, &env_dirs);
+
+    debug_set_var!("FLOX_ENV_DIRS", new_env_dirs);
+
+    Ok(())
 }
 
 /// Adds a new environment to the list of active env dirs if its not already present.

@@ -110,6 +110,8 @@ where
 #[cfg(test)]
 mod tests {
 
+    use flox_core::shell::{Shell, get_parent_process_exe};
+
     use super::*;
 
     /// On Linux, Browser::detect() finds xdg-open if it's in path

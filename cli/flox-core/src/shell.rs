@@ -75,7 +75,7 @@ impl Shell {
     }
 }
 
-fn get_parent_process_exe() -> Result<PathBuf> {
+pub fn get_parent_process_exe() -> Result<PathBuf> {
     let parent_pid = Pid::from_u32(std::os::unix::process::parent_id());
     let mut system = System::new();
     system.refresh_processes(ProcessesToUpdate::Some(&[parent_pid]), false);

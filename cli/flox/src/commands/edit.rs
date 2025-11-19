@@ -210,6 +210,13 @@ impl Edit {
 
                 warn_manifest_changes_for_services(flox, environment);
 
+                // Warn if services were added to an active environment
+                super::services::warn_services_added_to_active_environment(
+                    old_lockfile.as_ref().as_ref(),
+                    new_lockfile,
+                    environment,
+                );
+
                 if new_lockfile.compose.is_some() {
                     message::print_overridden_manifest_fields(new_lockfile);
                     message::info("Run 'flox list -c' to see merged manifest.");

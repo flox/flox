@@ -44,7 +44,7 @@ type Error = anyhow::Error;
 
 // Nifty things:
 // - By storing a reference to the isolated home directory, you can ensure that the
-//   directories live as long or longer than the watchdog and process-compose, which
+//   directories live as long or longer than the executive and process-compose, which
 //   is the cause of some weird test failures (at cleanup time) in `bats`.
 // - By using `tempfile` we ensure that any temporary files we create are cleaned up
 //   when the test completes.
@@ -414,7 +414,7 @@ impl IsolatedHome {
 //         Ok(())
 //     }
 
-//     /// Performs an activation and returns handles to the watchdog and process-compose
+//     /// Performs an activation and returns handles to the executive and process-compose
 //     pub fn activate_with_services(&mut self, args: &[&str]) -> Result<(ProcToGC, ProcToGC), Error> {
 //         // TODO: remove the timing prints
 //         let start = start_timer();
@@ -432,13 +432,13 @@ impl IsolatedHome {
 //         print_elapsed_with_prefix(start, "activate", "wait for prompt");
 //         let uuid = self.read_activation_uuid()?;
 //         print_elapsed_with_prefix(start, "activate", "read activation uuid");
-//         let watchdog =
-//             watchdog_with_uuid(&uuid).context("activation with services didn't spawn watchdog")?;
-//         print_elapsed_with_prefix(start, "activate", "get watchdog");
+//         let executive =
+//             executive_with_uuid(&uuid).context("activation with services didn't spawn executive")?;
+//         print_elapsed_with_prefix(start, "activate", "get executive");
 //         let process_compose = process_compose_with_uuid(&uuid)
 //             .context("activation with services didn't spawn process-compose")?;
 //         print_elapsed_with_prefix(start, "activate", "get process-compose");
-//         Ok((watchdog, process_compose))
+//         Ok((executive, process_compose))
 //     }
 
 //     /// Constructs the `flox activate` command from the provided arguments
@@ -522,22 +522,22 @@ impl IsolatedHome {
 //     }
 // }
 
-// /// Locates the watchdog fingerprinted with the provided UUID
-// pub fn find_watchdog_pid_with_uuid(uuid: impl AsRef<str>) -> Option<u32> {
-//     pid_with_var("flox-watchdog", "_FLOX_ACTIVATION_UUID", uuid)
+// /// Locates the executive fingerprinted with the provided UUID
+// pub fn find_executive_pid_with_uuid(uuid: impl AsRef<str>) -> Option<u32> {
+//     pid_with_var("flox-executive", "_FLOX_ACTIVATION_UUID", uuid)
 //         .unwrap_or_default()
 //         .map(|pid_i32| pid_i32 as u32)
 // }
 
-// /// Locates the watchdog fingerprinted with the provided UUID
+// /// Locates the executive fingerprinted with the provided UUID
 // pub fn find_process_compose_pid_with_uuid(uuid: impl AsRef<str>) -> Option<u32> {
 //     pid_with_var("process-compose", "_FLOX_ACTIVATION_UUID", uuid)
 //         .unwrap_or_default()
 //         .map(|pid_i32| pid_i32 as u32)
 // }
 
-// fn watchdog_with_uuid(uuid: impl AsRef<str>) -> Option<ProcToGC> {
-//     find_watchdog_pid_with_uuid(uuid).map(|pid| ProcToGC::new_with_pid(pid))
+// fn executive_with_uuid(uuid: impl AsRef<str>) -> Option<ProcToGC> {
+//     find_executive_pid_with_uuid(uuid).map(|pid| ProcToGC::new_with_pid(pid))
 // }
 
 // pub fn process_compose_with_uuid(uuid: impl AsRef<str>) -> Option<ProcToGC> {
@@ -759,7 +759,7 @@ fn path_to_generated_env(name: &str) -> PathBuf {
 //     }
 
 //     #[test]
-//     fn can_locate_watchdog() {
+//     fn can_locate_executive() {
 //         let dirs = IsolatedHome::new().unwrap();
 //         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
 //         shell
@@ -767,8 +767,8 @@ fn path_to_generated_env(name: &str) -> PathBuf {
 //             .unwrap();
 //         shell.activate(&[]).unwrap();
 //         let uuid = shell.read_activation_uuid().unwrap();
-//         let watchdog = find_watchdog_pid_with_uuid(uuid);
-//         assert!(watchdog.is_some());
+//         let executive = find_executive_pid_with_uuid(uuid);
+//         assert!(executive.is_some());
 //         shell.exit_shell(); // once for the activation
 //     }
 
@@ -789,7 +789,7 @@ fn path_to_generated_env(name: &str) -> PathBuf {
 //     }
 
 //     #[test]
-//     fn cleans_up_watchdog() {
+//     fn cleans_up_executive() {
 //         let dirs = IsolatedHome::new().unwrap();
 //         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
 //         shell
@@ -797,14 +797,14 @@ fn path_to_generated_env(name: &str) -> PathBuf {
 //             .unwrap();
 //         shell.activate(&[]).unwrap();
 //         let uuid = shell.read_activation_uuid().unwrap();
-//         let watchdog_proc = watchdog_with_uuid(uuid);
-//         assert!(watchdog_proc.is_some());
-//         let Some(mut watchdog_proc) = watchdog_proc else {
+//         let executive_proc = executive_with_uuid(uuid);
+//         assert!(executive_proc.is_some());
+//         let Some(mut executive_proc) = executive_proc else {
 //             panic!("we literally just checked that it was Some(_)");
 //         };
-//         assert!(watchdog_proc.is_running());
+//         assert!(executive_proc.is_running());
 //         shell.exit_shell(); // once for the activation
-//         watchdog_proc
+//         executive_proc
 //             .wait_for_termination_with_timeout(1000)
 //             .unwrap();
 //     }
@@ -816,7 +816,7 @@ fn path_to_generated_env(name: &str) -> PathBuf {
 //         shell
 //             .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
 //             .unwrap();
-//         let (_watchdog, mut process_compose_proc) = shell.activate_with_services(&[]).unwrap();
+//         let (_executive, mut process_compose_proc) = shell.activate_with_services(&[]).unwrap();
 //         shell.assert_is_activated().unwrap();
 //         assert!(process_compose_proc.is_running());
 //         shell.exit_shell(); // once for the activation
@@ -832,11 +832,11 @@ fn path_to_generated_env(name: &str) -> PathBuf {
 //         shell
 //             .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
 //             .unwrap();
-//         let (mut watchdog, mut process_compose) = shell.activate_with_services(&[]).unwrap();
+//         let (mut executive, mut process_compose) = shell.activate_with_services(&[]).unwrap();
 //         shell.assert_is_activated().unwrap();
 //         shell.exit_shell(); // once for the activation
 
-//         watchdog.wait_for_termination_with_timeout(1000).unwrap();
+//         executive.wait_for_termination_with_timeout(1000).unwrap();
 //         process_compose
 //             .wait_for_termination_with_timeout(1000)
 //             .unwrap();
@@ -849,9 +849,9 @@ fn path_to_generated_env(name: &str) -> PathBuf {
 //         shell
 //             .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
 //             .unwrap();
-//         let (mut watchdog, mut process_compose) = shell.activate_with_services(&[]).unwrap();
-//         watchdog.send_sigkill(); // kill this first so it doesn't kill process-compose
-//         watchdog.wait_for_termination_with_timeout(1000).unwrap();
+//         let (mut executive, mut process_compose) = shell.activate_with_services(&[]).unwrap();
+//         executive.send_sigkill(); // kill this first so it doesn't kill process-compose
+//         executive.wait_for_termination_with_timeout(1000).unwrap();
 //         shell.exit_shell();
 //         let timed_out = process_compose
 //             .wait_for_termination_with_timeout(250)
@@ -870,9 +870,9 @@ fn path_to_generated_env(name: &str) -> PathBuf {
 //         shell
 //             .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
 //             .unwrap();
-//         let (mut watchdog, mut process_compose) = shell.activate_with_services(&[]).unwrap();
+//         let (mut executive, mut process_compose) = shell.activate_with_services(&[]).unwrap();
 //         shell.exit_shell(); // once for the activation
-//         watchdog.send_sigkill();
+//         executive.send_sigkill();
 //         // The Drop impl for the process-compose struct should cause
 //         // a panic because nothing is cleaning up the process. We set
 //         // a short drop timeout because we expect it to time out and don't
@@ -972,7 +972,7 @@ fn path_to_generated_env(name: &str) -> PathBuf {
 //     }
 
 //     #[test]
-//     fn attach_doesnt_start_second_watchdog() {
+//     fn attach_doesnt_start_second_executive() {
 //         let dirs = IsolatedHome::new().unwrap();
 //         let mut shell1 = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
 //         shell1
@@ -985,7 +985,7 @@ fn path_to_generated_env(name: &str) -> PathBuf {
 //         shell2.activate(&[]).unwrap();
 //         let uuid = shell2.read_activation_uuid().unwrap();
 //         sleep_millis(50);
-//         assert!(watchdog_with_uuid(&uuid).is_none());
+//         assert!(executive_with_uuid(&uuid).is_none());
 //         shell1.exit_shell(); // once for the activation
 //         shell2.exit_shell();
 //     }

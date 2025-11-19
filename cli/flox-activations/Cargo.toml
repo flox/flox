@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow.workspace = true
 backtrace = "0.3"
+chrono.workspace = true
 clap = { version = "4.5.49", default-features = false, features = [
     "std",
     "usage",
@@ -19,9 +20,12 @@ flox-core.workspace = true
 fslock.workspace = true
 is_executable.workspace = true
 itertools.workspace = true
+libc.workspace = true
 log.workspace = true
+nix.workspace = true
 serde_json.workspace = true
 shell-escape.workspace = true
+signal-hook.workspace = true
 tempfile.workspace = true
 time.workspace = true
 indoc.workspace = true

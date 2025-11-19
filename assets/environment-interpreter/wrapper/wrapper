@@ -43,7 +43,7 @@ source "${_activate_d}/helpers.bash"
 
 # Parse command-line arguments.
 OPTIONS="e:c:"
-LONGOPTS="set-vars,env:,command:"
+LONGOPTS="set-vars,env:,command-string:"
 USAGE="Usage: $0 [--set-vars] [(-e|--env) <env>] [-c \"<cmd> <args>\"] "
 
 PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@")
@@ -60,7 +60,7 @@ eval set -- "$PARSED"
 FLOX_CMD=""
 while true; do
   case "$1" in
-    -c | --command)
+    -c | --command-string)
       shift
       if [ -z "${1:-}" ]; then
         echo "Option -c requires an argument." >&2
