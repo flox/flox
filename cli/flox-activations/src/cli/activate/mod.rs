@@ -131,8 +131,39 @@ impl ActivateArgs {
                 invocation_type,
             );
             start_command.spawn()?.wait()?;
-        };
+        }
 
+        if context.flox_activate_start_services {
+            let diff = EnvDiff::from_files(&start_or_attach.activation_state_dir)?;
+            let mut start_services = assemble_command_for_activate_script(
+                "activate_temporary",
+                context.clone(),
+                subsystem_verbosity,
+                vars_from_env.clone(),
+                &diff,
+                &start_or_attach,
+            );
+
+            debug!("spawning activation services command: {:?}", start_services);
+            start_services.spawn()?.wait()?;
+        }
+
+        Self::attach(
+            context,
+            invocation_type,
+            subsystem_verbosity,
+            vars_from_env,
+            start_or_attach,
+        )
+    }
+
+    fn attach(
+        context: ActivateCtx,
+        invocation_type: InvocationType,
+        subsystem_verbosity: u32,
+        vars_from_env: VarsFromEnvironment,
+        start_or_attach: StartOrAttachResult,
+    ) -> Result<(), anyhow::Error> {
         let diff = EnvDiff::from_files(&start_or_attach.activation_state_dir)?;
 
         // Create the path if we're going to need it (we won't for in-place).
@@ -163,20 +194,6 @@ impl ActivateArgs {
             &activate_tracer(&context.interpreter_path),
             subsystem_verbosity,
         )?;
-
-        if context.flox_activate_start_services {
-            let mut start_services = assemble_command_for_activate_script(
-                "activate_temporary",
-                context.clone(),
-                subsystem_verbosity,
-                vars_from_env.clone(),
-                &diff,
-                &start_or_attach,
-            );
-
-            debug!("spawning activation services command: {:?}", start_services);
-            start_services.spawn()?.wait()?;
-        }
 
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
