@@ -8,10 +8,12 @@ use flox_core::activations::{self, Activations};
 use fslock::LockFile;
 use indoc::indoc;
 use log::debug;
+use serde::{Deserialize, Serialize};
 use time::{Duration, OffsetDateTime};
 
 use crate::Error;
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct StartOrAttachResult {
     pub attach: bool,
     pub activation_state_dir: PathBuf,

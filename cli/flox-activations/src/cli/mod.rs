@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand};
 
 pub mod activate;
 pub mod attach;
+pub mod executive;
 mod fix_fpath;
 pub mod fix_paths;
 mod prepend_and_dedup;
@@ -14,6 +15,7 @@ mod set_ready;
 pub mod start_or_attach;
 
 use activate::ActivateArgs;
+use executive::ExecutiveArgs;
 use fix_fpath::FixFpathArgs;
 use fix_paths::FixPathsArgs;
 use prepend_and_dedup::PrependAndDedupArgs;
@@ -49,6 +51,8 @@ pub enum Command {
     Attach(AttachArgs),
     #[command(about = "Activate a Flox environment.")]
     Activate(ActivateArgs),
+    #[command(about = "Start an activation and then run the executive")]
+    Executive(ExecutiveArgs),
     #[command(about = "Print sourceable output fixing PATH and MANPATH for a shell.")]
     FixPaths(FixPathsArgs),
     #[command(about = "Print sourceable output setting FLOX_ENV_DIRS.")]
