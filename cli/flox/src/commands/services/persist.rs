@@ -1,11 +1,10 @@
 use std::env::consts::OS;
 use std::fs::File;
-use std::path::Path;
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::models::environment_ref::ActivateEnvironmentRef;
 use flox_rust_sdk::models::manifest::typed::{Inner, ServiceDescriptor};
 use flox_rust_sdk::providers::services::systemd::render_systemd_unit_file;
 use tracing::instrument;
@@ -62,16 +61,18 @@ impl Persist {
             return Ok(());
         }
 
+        let env_ref = ActivateEnvironmentRef::try_from(&env.environment)?;
+
         // TODO: Detect working systemd install rather than OS?
         match OS {
-            "linux" => persist_systemd(&env.environment.parent_path()?, services_to_persist),
+            "linux" => persist_systemd(env_ref, services_to_persist),
             _ => bail!("This command is currently only supported on Linux systems."),
         }
     }
 }
 
 fn persist_systemd(
-    env_path: &Path,
+    env_ref: ActivateEnvironmentRef,
     services_to_persist: Vec<(&String, &ServiceDescriptor)>,
 ) -> Result<()> {
     let systemd_dirs = BaseDirectories::with_prefix("systemd/user");
@@ -81,7 +82,7 @@ fn persist_systemd(
         let unit_path = systemd_dirs.place_config_file(&unit_filename)?;
 
         let mut output_file = File::create(&unit_path)?;
-        render_systemd_unit_file(service_descriptor, env_path, &mut output_file)?;
+        render_systemd_unit_file(&env_ref, service_descriptor, &mut output_file)?;
 
         // TODO: Differentiate between file creation and update?
         message::updated(format!(

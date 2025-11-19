@@ -1,19 +1,20 @@
 //! Backend for persisting Flox services to systemd.
 
 use std::io;
-use std::path::Path;
 
 use shell_escape::escape;
 use systemd::unit::ServiceUnit;
 
+use crate::models::environment_ref::ActivateEnvironmentRef;
 use crate::models::manifest::typed::{Inner, ServiceDescriptor};
 
 /// Wrap a command with Flox activation.
 //
 // TODO: set or allow configuration of activation mode?
 // TODO: use store path for bash?
-fn wrap_command(env_dir: &Path, command: &str) -> String {
-    let modified_command = {
+fn wrap_command(env_ref: &ActivateEnvironmentRef, command: &str) -> String {
+    let activate_arg = env_ref.activate_target_arg();
+    let bash_script_arg = {
         // Workaround logging association for user services:
         // https://github.com/systemd/systemd/issues/2913#issuecomment-3289916490
         let logging_prefix = "exec 1> >(cat); exec 2> >(cat >&2); ";
@@ -22,28 +23,27 @@ fn wrap_command(env_dir: &Path, command: &str) -> String {
         // commands can be quoted and fit in a single systemd directive line.
         let escaped_newlines = command.replace('\n', r"\n");
 
-        format!("{logging_prefix}{escaped_newlines}")
+        escape(format!("{logging_prefix}{escaped_newlines}").into())
     };
 
     format!(
-        r#"flox activate -d {} -- exec bash -c {}"#,
-        escape(env_dir.to_string_lossy()),
-        escape(modified_command.into()),
+        r#"flox activate {} -- exec bash -c {}"#,
+        activate_arg, bash_script_arg,
     )
 }
 
 /// Wrap multiple commands with Flox activation.
-fn wrap_commands(env_dir: &Path, commands: Vec<String>) -> Vec<String> {
+fn wrap_commands(env_ref: &ActivateEnvironmentRef, commands: Vec<String>) -> Vec<String> {
     commands
         .iter()
-        .map(|cmd| wrap_command(env_dir, cmd))
+        .map(|cmd| wrap_command(env_ref, cmd))
         .collect()
 }
 
 /// Context for converting a ServiceDescriptor to a ServiceUnit.
 pub struct ServiceUnitContext<'a> {
+    pub env_ref: &'a ActivateEnvironmentRef,
     pub descriptor: &'a ServiceDescriptor,
-    pub env_dir: &'a Path,
 }
 
 impl<'a> ServiceUnitContext<'a> {
@@ -89,18 +89,18 @@ impl<'a> From<ServiceUnitContext<'a>> for ServiceUnit {
         let exec_start = base_service
             .exec_start
             .or_else(|| Some(descriptor.command.clone()))
-            .map(|cmd| wrap_command(ctx.env_dir, &cmd));
+            .map(|cmd| wrap_command(ctx.env_ref, &cmd));
         let exec_stop = base_service
             .exec_stop
             .or_else(|| descriptor.shutdown.as_ref().map(|s| s.command.clone()))
-            .map(|cmd| wrap_command(ctx.env_dir, &cmd));
+            .map(|cmd| wrap_command(ctx.env_ref, &cmd));
 
         let exec_start_pre = base_service
             .exec_start_pre
-            .map(|cmds| wrap_commands(ctx.env_dir, cmds));
+            .map(|cmds| wrap_commands(ctx.env_ref, cmds));
         let exec_start_post = base_service
             .exec_start_post
-            .map(|cmds| wrap_commands(ctx.env_dir, cmds));
+            .map(|cmds| wrap_commands(ctx.env_ref, cmds));
 
         let environment = ctx.merge_env_vars(base_service.environment);
 
@@ -123,13 +123,13 @@ impl<'a> From<ServiceUnitContext<'a>> for ServiceUnit {
 
 /// Render a ServiceDescriptor to a systemd unit file.
 pub fn render_systemd_unit_file(
+    env_ref: &ActivateEnvironmentRef,
     descriptor: &ServiceDescriptor,
-    env_dir: impl AsRef<Path>,
     output: &mut impl io::Write,
 ) -> Result<(), systemd::unit::Error> {
     let ctx = ServiceUnitContext {
+        env_ref,
         descriptor,
-        env_dir: env_dir.as_ref(),
     };
     let service_unit = ServiceUnit::from(ctx);
     systemd::unit::write_service_unit(output, &service_unit)
@@ -138,63 +138,80 @@ pub fn render_systemd_unit_file(
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::path::Path;
 
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use systemd::unit::{Service, ServiceType, ServiceUnit, Unit};
 
     use super::*;
+    use crate::models::environment_ref::RemoteEnvironmentRef;
     use crate::models::manifest::typed::{ServiceDescriptor, ServiceShutdown, Vars};
 
-    const TEST_ENV_DIR: &str = "/test/env";
-
-    #[test]
-    fn wrap_command_simple() {
-        let env_dir = Path::new(TEST_ENV_DIR);
-        let input = "true";
-
-        assert_eq!(
-            wrap_command(env_dir, input),
-            r#"flox activate -d /test/env -- exec bash -c 'exec 1> >(cat); exec 2> >(cat >&2); true'"#
-        );
+    fn project_env_ref() -> ActivateEnvironmentRef {
+        ActivateEnvironmentRef::Local(Path::new("/test/env").to_path_buf())
     }
 
-    #[test]
-    fn wrap_command_with_spaces() {
-        let env_dir = Path::new("/dir with/spaces in");
-        let input = "echo command with spaces in";
-
-        assert_eq!(
-            wrap_command(env_dir, input),
-            r#"flox activate -d '/dir with/spaces in' -- exec bash -c 'exec 1> >(cat); exec 2> >(cat >&2); echo command with spaces in'"#
-        );
+    fn remote_env_ref() -> ActivateEnvironmentRef {
+        ActivateEnvironmentRef::Remote(RemoteEnvironmentRef::new("owner", "name").unwrap())
     }
 
+    // table driven tests with a test case type for wrap_command
     #[test]
-    fn wrap_command_quoted() {
-        let env_dir = Path::new(TEST_ENV_DIR);
-        let input = "echo 'this is quoted'";
+    fn wrap_command_table_tests() {
+        struct TestCase {
+            description: &'static str,
+            env_ref: ActivateEnvironmentRef,
+            input: String,
+            expected: String,
+        }
 
-        assert_eq!(
-            wrap_command(env_dir, input),
-            r#"flox activate -d /test/env -- exec bash -c 'exec 1> >(cat); exec 2> >(cat >&2); echo '\''this is quoted'\'''"#
-        );
-    }
+        let test_cases = vec![
+            TestCase {
+                description: "project env with simple command",
+                env_ref: project_env_ref(),
+                input: "true".to_string(),
+                expected: r#"flox activate -d /test/env -- exec bash -c 'exec 1> >(cat); exec 2> >(cat >&2); true'"#.to_string(),
+            },
+            TestCase {
+                description: "remote env with simple command",
+                env_ref: remote_env_ref(),
+                input: "true".to_string(),
+                expected: r#"flox activate -r owner/name -- exec bash -c 'exec 1> >(cat); exec 2> >(cat >&2); true'"#.to_string(),
+            },
+            TestCase {
+                description: "project env path with spaces",
+                env_ref: ActivateEnvironmentRef::Local(Path::new("/dir with/spaces in").to_path_buf()),
+                input: "echo command with spaces in".to_string(),
+                expected: r#"flox activate -d '/dir with/spaces in' -- exec bash -c 'exec 1> >(cat); exec 2> >(cat >&2); echo command with spaces in'"#.to_string(),
+            },
+            TestCase {
+                description: "command with quotes",
+                env_ref: project_env_ref(),
+                input: "echo 'this is quoted'".to_string(),
+                expected: r#"flox activate -d /test/env -- exec bash -c 'exec 1> >(cat); exec 2> >(cat >&2); echo '\''this is quoted'\'''"#.to_string(),
+            },
+            TestCase {
+                description: "command with multi-line shell script",
+                env_ref: project_env_ref(),
+                input: indoc! {"
+                    while true; do
+                      echo hello
+                      sleep 2
+                    done
+                "}.to_string(),
+                expected: r#"flox activate -d /test/env -- exec bash -c 'exec 1> >(cat); exec 2> >(cat >&2); while true; do\n  echo hello\n  sleep 2\ndone\n'"#.to_string(),
+            },
+        ];
 
-    #[test]
-    fn wrap_command_multiline() {
-        let env_dir = Path::new(TEST_ENV_DIR);
-        let input = indoc! {"
-            while true; do
-              echo hello
-              sleep 2
-            done
-        "};
-
-        assert_eq!(
-            wrap_command(env_dir, input),
-            r#"flox activate -d /test/env -- exec bash -c 'exec 1> >(cat); exec 2> >(cat >&2); while true; do\n  echo hello\n  sleep 2\ndone\n'"#
-        );
+        for case in test_cases {
+            assert_eq!(
+                wrap_command(&case.env_ref, &case.input),
+                case.expected,
+                "wrap_command test case: {}",
+                case.description
+            );
+        }
     }
 
     #[test]
@@ -209,8 +226,8 @@ mod tests {
         };
 
         let ctx = ServiceUnitContext {
+            env_ref: &project_env_ref(),
             descriptor: &descriptor,
-            env_dir: Path::new(TEST_ENV_DIR),
         };
 
         assert_eq!(ServiceUnit::from(ctx), ServiceUnit {
@@ -244,8 +261,8 @@ mod tests {
         };
 
         let ctx = ServiceUnitContext {
+            env_ref: &project_env_ref(),
             descriptor: &descriptor,
-            env_dir: Path::new(TEST_ENV_DIR),
         };
 
         assert_eq!(ServiceUnit::from(ctx), ServiceUnit {
@@ -303,8 +320,8 @@ mod tests {
         };
 
         let ctx = ServiceUnitContext {
+            env_ref: &project_env_ref(),
             descriptor: &descriptor,
-            env_dir: Path::new(TEST_ENV_DIR),
         };
 
         assert_eq!(ServiceUnit::from(ctx), ServiceUnit {

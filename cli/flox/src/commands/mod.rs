@@ -36,12 +36,12 @@ use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
 use flox_rust_sdk::flox::{
     DEFAULT_FLOXHUB_URL,
     DEFAULT_NAME,
-    EnvironmentRef,
     FLOX_VERSION,
     Flox,
     Floxhub,
     FloxhubToken,
     FloxhubTokenError,
+    RemoteEnvironmentRef,
 };
 use flox_rust_sdk::models::env_registry::{ENV_REGISTRY_FILENAME, EnvRegistry};
 use flox_rust_sdk::models::environment::generations::GenerationId;
@@ -878,7 +878,7 @@ pub enum EnvironmentSelect {
     Remote(
         /// A remote environment on FloxHub
         #[bpaf(long("remote"), short('r'), argument("owner>/<name"))]
-        environment_ref::EnvironmentRef,
+        environment_ref::RemoteEnvironmentRef,
     ),
     #[default]
     #[bpaf(hide)]
@@ -1121,7 +1121,7 @@ fn query_which_environment(
 pub(super) async fn ensure_environment_trust(
     config: &mut Config,
     flox: &Flox,
-    env_ref: &EnvironmentRef,
+    env_ref: &RemoteEnvironmentRef,
     env_included: bool,
     manifest_contents: &String,
 ) -> Result<()> {
