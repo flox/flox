@@ -125,7 +125,7 @@ setup_start_counter_services() {
 @test "can call process-compose" {
   run "$PROCESS_COMPOSE_BIN" version
   assert_success
-  assert_output --partial "v1.73.0"
+  assert_output --partial "v1.75.2"
 }
 
 @test "process-compose can run generated config file" {
@@ -1606,4 +1606,37 @@ EOF
   assert_success
   assert_output --partial "Service 'one' started."
   assert_output --partial "some_value"
+}
+
+@test "vars: aren't overridden by .env file" {
+  echo "myvar=wrong_value" > .env
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [vars]
+    myvar = "right_value"
+
+    [services]
+    one.command = '''
+      echo "hello $myvar"
+    '''
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  SCRIPT="$(cat << "EOF"
+    set -euo pipefail
+
+    "$FLOX_BIN" services start one
+    "$FLOX_BIN" services logs -n 10 one
+EOF
+  )"
+
+  run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
+  assert_success
+  assert_output --partial "Service 'one' started."
+  assert_output --partial "right_value"
 }

@@ -10,7 +10,7 @@ use flox_rust_sdk::flox::{FLOX_VERSION, FLOX_VERSION_STRING, FLOX_VERSION_VAR};
 use flox_rust_sdk::models::environment::EnvironmentError;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
-use flox_rust_sdk::providers::services::ServiceError;
+use flox_rust_sdk::providers::services::process_compose::ServiceError;
 use tracing::debug;
 use utils::errors::format_service_error;
 use utils::init::{init_logger, init_sentry};

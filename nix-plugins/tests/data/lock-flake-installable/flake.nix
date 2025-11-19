@@ -1,5 +1,5 @@
 {
-  inputs.nixpkgs.url = "github:nixos/nixpkgs?rev=ab5fd150146dcfe41fda501134e6503932cc8dfd";
+  inputs.nixpkgs.url = "github:nixos/nixpkgs?rev=8a6d5427d99ec71c64f0b93d45778c889005d9c2";
   outputs =
     { nixpkgs, self }:
     let
@@ -29,6 +29,13 @@
         in
         {
           default = self.packages.${system}.hello;
+
+          refreshable = self.packages.${system}.hello.overrideAttrs (old: {
+            meta.description = builtins.addErrorContext "expecting `./refreshable-description.txt` to be written by the test" (
+              pkgs.lib.trim (builtins.readFile ./refreshable-description.txt)
+            );
+
+          });
 
           # a simple derivation without any special attributes
           hello = pkgs.runCommand "hello" { } ''

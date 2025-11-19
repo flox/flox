@@ -7,9 +7,10 @@
  *
  * -------------------------------------------------------------------------- */
 
-#include <fstream>
 
 #include <nix/cmd/installable-flake.hh>
+
+#include <nix/cmd/installable-value.hh>
 #include <nix/expr/attr-path.hh>
 #include <nix/expr/eval-cache.hh>
 #include <nix/expr/eval.hh>
@@ -277,9 +278,9 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   }
 
   // try read `meta.outputsToInstall` field
-  std::optional<std::set<std::string>> outputsToInstall;
+  std::optional<std::set<std::string, std::less<>>> outputsToInstall;
   {
-    std::set<std::string> outputsToInstallFound;
+    std::set<std::string, std::less<>> outputsToInstallFound;
     auto metaOutputsToInstallCursor = cursor->findAlongAttrPath(
       nix::parseAttrPath( *state, "meta.outputsToInstall" ) );
     if ( metaOutputsToInstallCursor )
@@ -296,30 +297,32 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
 
   // the requested outputs to install by means of the extended outputs spec
   // i.e. `#^<outputs>` in the flake installable
-  std::optional<std::set<std::string>> requestedOutputs;
+  std::optional<std::set<std::string, std::less<>>> requestedOutputs;
   {
     requestedOutputs = std::visit(
       overloaded {
         [&]( const nix::ExtendedOutputsSpec::Default & )
-          -> std::optional<std::set<std::string>> { return std::nullopt; },
+          -> std::optional<std::set<std::string, std::less<>>>
+          { return std::nullopt; },
         [&]( const nix::ExtendedOutputsSpec::Explicit & e )
-          -> std::optional<std::set<std::string>>
-        {
-          return std::visit(
-            overloaded {
-              [&]( const nix::OutputsSpec::Names & n ) -> std::set<std::string>
-              { return n; },
-              [&]( const nix::OutputsSpec::All & ) -> std::set<std::string>
-              {
-                std::set<std::string> outputNamesSet;
-                for ( auto output : outputNames )
+          -> std::optional<std::set<std::string, std::less<>>>
+          {
+            return std::visit(
+              overloaded {
+                [&]( const nix::OutputsSpec::Names & n )
+                  -> std::set<std::string, std::less<>> { return n; },
+                [&]( const nix::OutputsSpec::All & )
+                  -> std::set<std::string, std::less<>>
                   {
-                    outputNamesSet.insert( output );
-                  }
-                return outputNamesSet;
-              } },
-            e.raw );
-        },
+                    std::set<std::string, std::less<>> outputNamesSet;
+                    for ( auto output : outputNames )
+                      {
+                        outputNamesSet.insert( output );
+                      }
+                    return outputNamesSet;
+                  } },
+              e.raw );
+          },
       },
       extendedOutputsSpec.raw );
   }
@@ -396,7 +399,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
         std::vector<std::string> licenseStrings;
         if ( licenseValue.isList() )
           {
-            for ( auto licenseValueInner : licenseValue.listItems() )
+            for ( auto licenseValueInner : licenseValue.listView() )
               {
                 state->forceValueDeep( *licenseValueInner );
                 if ( auto licenseString

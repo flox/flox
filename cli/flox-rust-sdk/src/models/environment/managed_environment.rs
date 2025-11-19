@@ -41,7 +41,7 @@ use super::{
     services_socket_path,
 };
 use crate::data::CanonicalPath;
-use crate::flox::{EnvironmentRef, Flox};
+use crate::flox::{Flox, RemoteEnvironmentRef};
 use crate::models::env_registry::{EnvRegistryError, deregister, ensure_registered};
 use crate::models::environment::{LOCKFILE_FILENAME, copy_dir_recursive};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
@@ -142,7 +142,7 @@ pub enum ManagedEnvironmentError {
     AccessDenied,
     #[error("environment '{env_ref}' does not exist at upstream '{upstream}'")]
     UpstreamNotFound {
-        env_ref: EnvironmentRef,
+        env_ref: RemoteEnvironmentRef,
         upstream: String,
         user: Option<String>,
     },
@@ -150,7 +150,7 @@ pub enum ManagedEnvironmentError {
     /// if the pushed environmentname already exists
     #[error("environment '{env_ref}' already exists at upstream '{upstream}'")]
     UpstreamAlreadyExists {
-        env_ref: EnvironmentRef,
+        env_ref: RemoteEnvironmentRef,
         upstream: String,
     },
 
@@ -1177,7 +1177,7 @@ impl ManagedEnvironment {
         Ok(())
     }
 
-    pub fn env_ref(&self) -> EnvironmentRef {
+    pub fn env_ref(&self) -> RemoteEnvironmentRef {
         self.pointer.clone().into()
     }
 }
@@ -1718,7 +1718,7 @@ impl ManagedEnvironment {
             Err(GitRemoteCommandError::AccessDenied) => Err(ManagedEnvironmentError::AccessDenied)?,
             Err(GitRemoteCommandError::Diverged) => {
                 Err(ManagedEnvironmentError::UpstreamAlreadyExists {
-                    env_ref: EnvironmentRef::new_from_parts(owner, name),
+                    env_ref: RemoteEnvironmentRef::new_from_parts(owner, name),
                     upstream: flox.floxhub.base_url().to_string(),
                 })?
             },

@@ -208,7 +208,7 @@ impl InstallableLocker for Nix {
     ) -> Result<LockedInstallable, FlakeInstallableError> {
         let mut command = nix_base_command();
         command.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
-
+        command.arg("--refresh");
         command.args(["--option", "pure-eval", "false"]);
         command.arg("eval");
         command.arg("--no-update-lock-file");
@@ -250,8 +250,8 @@ mod tests {
 
     use super::*;
     use crate::flox::test_helpers::flox_instance;
-    use crate::models::environment::Environment;
     use crate::models::environment::path_environment::test_helpers::new_path_environment;
+    use crate::models::environment::{Environment, copy_dir_recursive};
     use crate::models::manifest::raw::{FlakePackage, PackageToInstall};
 
     /// Returns the path to a bundled flake that contains a number of test packages
@@ -425,5 +425,68 @@ mod tests {
         };
         set_priority(&mut locked, &descriptor);
         assert_eq!(locked.priority, DEFAULT_PRIORITY);
+    }
+
+    #[test]
+    fn locking_always_fetches_fresh_copy() {
+        let system = env!("system");
+        let tempdir = tempfile::tempdir().unwrap();
+        let flake_copy_path = tempdir.path().join("flake");
+
+        // Copy the test flake to a temporary directory
+        copy_dir_recursive(local_test_flake(), &flake_copy_path, true).unwrap();
+
+        // Write initial description to the copied flake
+        let description_file = flake_copy_path.join("refreshable-description.txt");
+        let original_description = "original";
+        std::fs::write(&description_file, original_description).unwrap();
+
+        // Create a tarball of the flake
+        let tarball_path = tempdir.path().join("flake.tar");
+        let tar_file = std::fs::File::create(&tarball_path).unwrap();
+        let mut tar = tar::Builder::new(tar_file);
+        tar.append_dir_all(".", &flake_copy_path).unwrap();
+        tar.finish().unwrap();
+
+        // Lock the flake for the first time
+        let installable = format!("tarball+file://{}#refreshable", tarball_path.display());
+        let first_lock = Nix
+            .lock_flake_installable(system, &PackageDescriptorFlake {
+                flake: installable.clone(),
+                priority: None,
+                systems: None,
+            })
+            .expect("First lock should succeed");
+
+        let first_description = first_lock.description.clone();
+        assert_eq!(first_description, Some(original_description.to_string()));
+
+        // Update the description file
+        let updated_description = "updated";
+        std::fs::write(&description_file, updated_description).unwrap();
+
+        // Recreate the tarball with the updated description
+        let tar_file = std::fs::File::create(&tarball_path).unwrap();
+        let mut tar = tar::Builder::new(tar_file);
+        tar.append_dir_all(".", &flake_copy_path).unwrap();
+        tar.finish().unwrap();
+
+        // Lock the flake again - this should fetch the fresh copy with updated description
+        let second_lock = Nix
+            .lock_flake_installable(system, &PackageDescriptorFlake {
+                flake: installable,
+                priority: None,
+                systems: None,
+            })
+            .expect("Second lock should succeed");
+
+        let second_description = second_lock.description.clone();
+        assert_eq!(second_description, Some(updated_description.to_string()));
+
+        // Verify that the descriptions are different, proving fresh fetch occurred
+        assert_ne!(
+            first_description, second_description,
+            "Locking should always fetch a fresh copy and reflect updated description.txt content",
+        );
     }
 }

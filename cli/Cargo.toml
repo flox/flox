@@ -85,6 +85,7 @@ sysinfo = "0.37.2"
 # TODO: review if we need this
 sys-info = "0.9"
 systemd = { path = "systemd" }
+tar = "0.4"
 tempfile = "3.23.0"
 textwrap = { version = "0.16.2", features = ["terminal_size"] }
 thiserror = "2"

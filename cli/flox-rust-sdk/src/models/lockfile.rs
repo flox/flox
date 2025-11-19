@@ -1897,7 +1897,7 @@ pub(crate) mod tests {
 
     use self::catalog::PackageResolutionInfo;
     use super::*;
-    use crate::flox::EnvironmentRef;
+    use crate::flox::RemoteEnvironmentRef;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use crate::models::environment::Environment;
     use crate::models::environment::fetcher::test_helpers::mock_include_fetcher;
@@ -4371,7 +4371,7 @@ pub(crate) mod tests {
 
     #[test]
     fn merge_manifest_uses_the_merged_manifests_of_includes() {
-        let env_ref = EnvironmentRef::new("owner", "name").unwrap();
+        let env_ref = RemoteEnvironmentRef::new("owner", "name").unwrap();
         let (flox, _tempdir) = flox_instance_with_optional_floxhub(Some(env_ref.owner()));
 
         // Create two "child" environments, local and remote.

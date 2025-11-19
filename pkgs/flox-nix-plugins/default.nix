@@ -3,7 +3,7 @@
   lib,
   doxygen,
   boost,
-  clang-tools_16,
+  clang-tools,
   lcov,
   nix,
   pkg-config,
@@ -56,7 +56,7 @@ stdenv.mkDerivation (
         # ccls
         # bear
         # For lints/fmt
-        clang-tools_16
+        clang-tools
         # include-what-you-use
         # llvm # for `llvm-symbolizer'
         # For debugging

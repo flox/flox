@@ -9,8 +9,7 @@
 
 #pragma once
 
-#include <filesystem>
-
+#include <nix/expr/eval.hh>
 #include <nix/store/globals.hh>
 
 /* -------------------------------------------------------------------------- */
@@ -21,14 +20,14 @@ namespace flox {
 
 struct LockedInstallable
 {
-  std::string                          lockedUrl;
-  std::optional<std::string>           flakeDescription;
-  std::string                          lockedFlakeAttrPath;
-  std::string                          derivation;
-  std::map<std::string, std::string>   outputs;
-  std::vector<std::string>             outputNames;
-  std::optional<std::set<std::string>> outputsToInstall;
-  std::optional<std::set<std::string>> requestedOutputsToInstall;
+  std::string                                       lockedUrl;
+  std::optional<std::string>                        flakeDescription;
+  std::string                                       lockedFlakeAttrPath;
+  std::string                                       derivation;
+  std::map<std::string, std::string>                outputs;
+  std::vector<std::string>                          outputNames;
+  std::optional<std::set<std::string, std::less<>>> outputsToInstall;
+  std::optional<std::set<std::string, std::less<>>> requestedOutputsToInstall;
   /** The system the package reports in <drv>.system */
   std::string packageSystem;
   /** The system passed to pkgdb when locking an installable, which is used to

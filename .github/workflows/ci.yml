@@ -206,6 +206,9 @@ jobs:
     runs-on: "ubuntu-latest"
     timeout-minutes: 120
 
+    permissions:
+      id-token: write # Needed for AWS Creds
+
     outputs:
       closure-size-x86_64-linux: ${{ steps.closure.outputs.closure-size-x86_64-linux }}
       closure-size-aarch64-linux: ${{ steps.closure.outputs.closure-size-aarch64-linux }}
@@ -250,34 +253,32 @@ jobs:
           TAILSCALE_AUTH_KEY: "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"
           REMOTE_BUILDERS: "${{ vars.MANAGED_REMOTE_BUILDERS }}"
           SYSTEM: "${{ matrix.system }}"
+          SETUP_NIX: "false"
+
+      - name: "Configure AWS Credentials"
+        uses: "aws-actions/configure-aws-credentials@v5"
+        with:
+          role-to-assume: "arn:aws:iam::759020684799:role/github-oidc-role-flox-cache-public"
+          role-session-name: "${{ github.run_id }}"
+          aws-region: "us-east-1"
+          output-env-credentials: true
+          unset-current-credentials: true
 
       - name: "Build"
         id: "build"
+        env:
+          NIX_SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
+          NIX_SUBSTITUTER_KEY: ${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
         run: |
-          for package in '.#packages.${{ matrix.system }}.flox-nix-plugins' '.#packages.${{ matrix.system }}.flox-cli' '.#packages.${{ matrix.system }}.flox' '.#packages.${{ matrix.system }}.flox-cli-tests'; do
-            echo "Building $package ..."
-            git clean -xfd .
-            if nix path-info                 \
-                --store "$CONFIGURE_NIX_SUBSTITUTER"  \
-                --eval-store auto            \
-                --builders ''                \
-                -j0                          \
-                  "$package".outPath ; then
-               echo "  -> Paths for $package already exists in the substituter";
-            else
-              nix build -L             \
-                --no-update-lock-file  \
-                --print-out-paths      \
-                  "$package";
-              if [[ "$package" = *flox ]]; then
-                  CLOSURE_SIZE=$(nix path-info ./result -S | awk '{print $2}')
-                  echo "closure-size-${{ matrix.system }}=$CLOSURE_SIZE" >> "$GITHUB_OUTPUT"
-                  if [[ "$CLOSURE_SIZE" -gt 360000000 ]]; then # 360MB-ish
-                    echo "  -> $package is too large: $CLOSURE_SIZE";
-                    exit 1;
-                  fi
-              fi
-            fi
+          export AWS_ACCESS_KEY_ID
+          export AWS_SECRET_ACCESS_KEY
+          export AWS_SESSION_TOKEN
+          export NIX_SUBSTITUTER_KEY
+
+          for package in 'packages.${{ matrix.system }}.flox-nix-plugins' 'packages.${{ matrix.system }}.flox-cli' 'packages.${{ matrix.system }}.flox' 'packages.${{ matrix.system }}.flox-cli-tests'; do
+            echo "::group::Building $package"
+            ./.github/scripts/remote-execute-nix-build.sh "$package" "$NIX_SUBSTITUTER"
+            echo "::endgroup::"
           done
 
       - name: "Get Flox version"

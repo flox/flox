@@ -29,7 +29,7 @@ use super::{
     UninstallationAttempt,
     gcroots_dir,
 };
-use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
+use crate::flox::{EnvironmentOwner, Flox, RemoteEnvironmentRef};
 use crate::models::environment::RenderedEnvironmentLink;
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmeta::{FloxMeta, FloxMetaError};
@@ -212,8 +212,8 @@ impl RemoteEnvironment {
         self.inner.owner()
     }
 
-    pub fn env_ref(&self) -> EnvironmentRef {
-        EnvironmentRef::new_from_parts(self.owner().clone(), self.name())
+    pub fn env_ref(&self) -> RemoteEnvironmentRef {
+        RemoteEnvironmentRef::new_from_parts(self.owner().clone(), self.name())
     }
 
     pub fn pointer(&self) -> &ManagedPointer {

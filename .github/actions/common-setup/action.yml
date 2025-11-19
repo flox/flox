@@ -25,15 +25,20 @@ inputs:
   SYSTEM:
     required: false
     default: ""
+  SETUP_NIX:
+    required: false
+    default: "true"
 
 runs:
   using: "composite"
   steps:
     - name: "Install newer Nix"
+      if: ${{ inputs.SETUP_NIX }} == "true"
       uses: "cachix/install-nix-action@v31"
 
     - name: "Configure Nix"
       uses: "flox/configure-nix-action@main"
+      if: ${{ inputs.SETUP_NIX }} == "true"
       with:
         github-access-token: "${{ inputs.GITHUB_ACCESS_TOKEN }}"
         substituter: "${{ inputs.SUBSTITUTER }}"
@@ -44,6 +49,7 @@ runs:
         remote-builders: "${{ inputs.REMOTE_BUILDERS }}"
 
     - name: "Configure Nix"
+      if: ${{ inputs.SETUP_NIX }} == "true"
       shell: "bash"
       run: |
         sudo echo
