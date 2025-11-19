@@ -1,4 +1,3 @@
-mod activate_script_builder;
 use std::borrow::Cow;
 use std::fs::{self, OpenOptions};
 use std::io::IsTerminal;
@@ -6,7 +5,6 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_command_for_activate_script};
 use anyhow::{Result, anyhow};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
@@ -18,9 +16,11 @@ use nix::unistd::{close, dup2_stdin, pipe, write};
 use shell_gen::{Shell, ShellWithPath};
 
 use super::StartOrAttachArgs;
-use crate::cli::activate::activate_script_builder::{
+use crate::activate_script_builder::{
+    FLOX_ENV_DIRS_VAR,
     activate_tracer,
     apply_env_for_invocation,
+    assemble_command_for_activate_script,
     assemble_command_for_start_script,
     old_cli_envs,
 };
@@ -718,10 +718,10 @@ impl ActivateArgs {
 }
 
 #[derive(Clone, Debug)]
-struct VarsFromEnvironment {
-    flox_env_dirs: Option<String>,
-    path: String,
-    manpath: Option<String>,
+pub struct VarsFromEnvironment {
+    pub flox_env_dirs: Option<String>,
+    pub path: String,
+    pub manpath: Option<String>,
 }
 
 impl VarsFromEnvironment {
