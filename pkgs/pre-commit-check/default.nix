@@ -6,7 +6,7 @@
   rustfmt,
   fenix,
   rust-toolchain,
-  clang-tools_16,
+  clang-tools,
   makeWrapper,
   bash,
 }:
@@ -126,6 +126,6 @@ pre-commit-hooks.lib.${system}.run {
     # use fenix provided clippy
     clippy = rust-toolchain.clippy;
     cargo = rust-toolchain.cargo;
-    clang-tools = clang-tools_16;
+    clang-tools = clang-tools;
   };
 }

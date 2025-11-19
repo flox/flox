@@ -5,7 +5,12 @@ use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::manifest::typed::Inner;
-use flox_rust_sdk::providers::services::{LoggedError, ProcessState, ProcessStates, ServiceError};
+use flox_rust_sdk::providers::services::process_compose::{
+    LoggedError,
+    ProcessState,
+    ProcessStates,
+    ServiceError,
+};
 use itertools::Itertools;
 use serde::Serialize;
 use tracing::instrument;
@@ -218,7 +223,7 @@ impl Display for ProcessStatesDisplay {
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::providers::services::test_helpers::{
+    use flox_rust_sdk::providers::services::process_compose::test_helpers::{
         generate_completed_process_state,
         generate_process_state,
         generate_stopped_process_state,

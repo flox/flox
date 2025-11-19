@@ -6,7 +6,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::manifest::typed::Services;
-use flox_rust_sdk::providers::services::{
+use flox_rust_sdk::providers::services::process_compose::{
     ProcessStates,
     shutdown_process_compose_if_all_processes_stopped,
     start_service,
@@ -127,8 +127,11 @@ mod tests {
     use std::collections::BTreeMap;
     use std::io;
 
-    use flox_rust_sdk::providers::services::test_helpers::TestProcessComposeInstance;
-    use flox_rust_sdk::providers::services::{ProcessComposeConfig, generate_never_exit_process};
+    use flox_rust_sdk::providers::services::process_compose::test_helpers::TestProcessComposeInstance;
+    use flox_rust_sdk::providers::services::process_compose::{
+        ProcessComposeConfig,
+        generate_never_exit_process,
+    };
 
     use super::*;
 

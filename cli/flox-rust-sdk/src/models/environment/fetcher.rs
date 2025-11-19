@@ -7,7 +7,7 @@ use crate::models::environment::generations::GenerationsExt;
 use crate::models::environment::managed_environment::ManagedEnvironmentError;
 use crate::models::environment::remote_environment::RemoteEnvironment;
 use crate::models::environment::{Environment, ManagedPointer};
-use crate::models::environment_ref::EnvironmentRef;
+use crate::models::environment_ref::RemoteEnvironmentRef;
 use crate::models::lockfile::{LockedInclude, Lockfile, RecoverableMergeError};
 use crate::models::manifest::typed::{IncludeDescriptor, Manifest};
 
@@ -101,7 +101,7 @@ impl IncludeFetcher {
     fn fetch_remote(
         &self,
         flox: &Flox,
-        remote: &EnvironmentRef,
+        remote: &RemoteEnvironmentRef,
         name: &Option<String>,
         generation: Option<usize>,
     ) -> Result<(Manifest, String), EnvironmentError> {
@@ -348,7 +348,7 @@ mod test {
 
     #[test]
     fn fetch_remote() {
-        let env_ref = EnvironmentRef::new("owner", "name").unwrap();
+        let env_ref = RemoteEnvironmentRef::new("owner", "name").unwrap();
         let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(env_ref.owner()));
 
         let mut remote_env = mock_remote_environment(
@@ -422,7 +422,7 @@ mod test {
 
     #[test]
     fn fetch_remote_with_generation() {
-        let env_ref = EnvironmentRef::new("owner", "name").unwrap();
+        let env_ref = RemoteEnvironmentRef::new("owner", "name").unwrap();
         let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(env_ref.owner()));
 
         let mut remote_env = mock_remote_environment(

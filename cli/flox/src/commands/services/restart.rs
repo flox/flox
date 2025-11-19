@@ -5,7 +5,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::manifest::typed::Services;
-use flox_rust_sdk::providers::services::{
+use flox_rust_sdk::providers::services::process_compose::{
     LoggedError,
     ProcessStates,
     ServiceError,

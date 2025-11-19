@@ -6,7 +6,6 @@
  *
  * -------------------------------------------------------------------------- */
 
-#include <fstream>
 #include <nix/expr/eval-gc.hh>
 #include <nix/expr/eval.hh>
 
@@ -15,6 +14,7 @@
 #include <nix/flake/flake.hh>
 #include <nix/main/shared.hh>
 #include <nix/store/store-api.hh>
+#include <nix/store/store-open.hh>
 #include <nlohmann/json.hpp>
 
 #include "flox/lock-flake-installable.hh"
