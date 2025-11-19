@@ -11,7 +11,7 @@ use flox_core::canonical_path::CanonicalPath;
 use pollster::FutureExt as _;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::{debug, info_span, instrument, trace};
+use tracing::{Span, debug, info_span, instrument, trace};
 
 use super::auth::{AuthError, AuthProvider};
 use super::catalog::ClientTrait;
@@ -120,6 +120,9 @@ pub enum BuildEnvError {
     #[error("couldn't download package:\n{0}")]
     NixCopyError(String),
 
+    #[error("internal error downloadng packages")]
+    ThreadPanicked,
+
     /// An unhandled condition was encountered in the lockfile.  One example is
     /// a package that is expected to be a base catalog package but the
     /// lockfile appears to be a custom package or vice versa.
@@ -186,7 +189,7 @@ where
         self.gc_root_base_path.as_ref().join(prefix.as_ref())
     }
 
-    fn base_command(&self) -> Command {
+    fn base_command() -> Command {
         let mut nix_build_command = nix_base_command();
         // allow impure language features such as `builtins.storePath`,
         // and use the auto store (which is used by the preceding `realise` command)
@@ -276,6 +279,11 @@ where
         system: &System,
         pre_checked_store_paths: &CheckedStorePaths,
     ) -> Result<(), BuildEnvError> {
+        let mut base_catalog_pkgs = vec![];
+        let mut custom_catalog_pkgs = vec![];
+        let mut flake_pkgs = vec![];
+        let mut store_path_pkgs = vec![];
+
         for package in lockfile.packages.iter() {
             if package.system() != system {
                 continue;
@@ -292,23 +300,33 @@ where
                     ))
                 })?;
 
-            // ManifestPackageDescriptor
-
+            // match package {
+            //     LockedPackage::Catalog(locked) => self.realise_nixpkgs(
+            //         client,
+            //         &manifest_package,
+            //         locked,
+            //         pre_checked_store_paths,
+            //     )?,
+            //     LockedPackage::Flake(locked) => {
+            //         self.realise_flakes(locked, pre_checked_store_paths)?
+            //     },
+            //     LockedPackage::StorePath(locked) => {
+            //         self.realise_store_path(locked, pre_checked_store_paths)?
+            //     },
+            // }
             match package {
-                LockedPackage::Catalog(locked) => self.realise_nixpkgs(
-                    client,
-                    &manifest_package,
-                    locked,
-                    pre_checked_store_paths,
-                )?,
-                LockedPackage::Flake(locked) => {
-                    self.realise_flakes(locked, pre_checked_store_paths)?
+                LockedPackage::Catalog(pkg) => {
+                    if manifest_package.is_from_custom_catalog() {
+                        custom_catalog_pkgs.push((manifest_package, pkg));
+                    } else {
+                        base_catalog_pkgs.push(pkg);
+                    }
                 },
-                LockedPackage::StorePath(locked) => {
-                    self.realise_store_path(locked, pre_checked_store_paths)?
-                },
+                LockedPackage::Flake(pkg) => flake_pkgs.push(pkg),
+                LockedPackage::StorePath(pkg) => store_path_pkgs.push(pkg),
             }
         }
+        self.realise_base_catalog_pkgs(&base_catalog_pkgs, pre_checked_store_paths)?;
         Ok(())
     }
 
@@ -457,6 +475,131 @@ where
         Ok(true)
     }
 
+    fn realise_base_catalog_pkgs(
+        &self,
+        pkgs: &[&LockedPackageCatalog],
+        pre_checked_store_paths: &CheckedStorePaths,
+    ) -> Result<(), BuildEnvError> {
+        let gc_root_base_path = self.gc_root_base_path.as_ref();
+        let span = Span::current();
+        std::thread::scope(move |s| {
+            let mut thread_handles = vec![];
+            for locked_pkg in pkgs {
+                let inner_span = span.clone();
+                let handle = s.spawn(move || {
+                    Self::realise_single_base_catalog_pkg(
+                        locked_pkg,
+                        gc_root_base_path,
+                        pre_checked_store_paths,
+                        inner_span,
+                    )
+                });
+                thread_handles.push(handle);
+            }
+            let mut thread_panicked = false;
+            for h in thread_handles {
+                thread_panicked |= h.join().is_err();
+            }
+            if thread_panicked {
+                return Err(BuildEnvError::ThreadPanicked);
+            }
+            Ok::<(), BuildEnvError>(())
+        })
+        .map_err(|_| BuildEnvError::ThreadPanicked)?;
+        Ok(())
+    }
+
+    fn realise_single_base_catalog_pkg(
+        locked_pkg: &LockedPackageCatalog,
+        gc_root_base_dir: &Path,
+        pre_checked_store_paths: &CheckedStorePaths,
+        span: Span,
+    ) -> Result<(), BuildEnvError> {
+        // Check if all store paths are valid, or can be substituted.
+        let all_valid_in_pre_checked = locked_pkg
+            .outputs
+            .values()
+            .all(|path| pre_checked_store_paths.valid(path).unwrap_or_default());
+
+        // If all store paths are already valid, we can return early.
+        if all_valid_in_pre_checked {
+            return Ok(());
+        }
+
+        let gc_root_path = gc_root_base_dir.join(format!("by-iid/{}", locked_pkg.install_id));
+
+        // Check if store paths have _become_ valid in the meantime or can be substituted.
+        let all_valid_after_build_or_substitution = {
+            let span = info_span!(
+                parent: span.clone(),
+                "substitute catalog package",
+                progress = format!("Downloading '{}'", locked_pkg.attr_path)
+            );
+            span.in_scope(|| {
+                Self::check_store_path_with_substituters(&gc_root_path, locked_pkg.outputs.values())
+            })?
+        };
+
+        // If all store paths are valid after substitution, we can return early.
+        if all_valid_after_build_or_substitution {
+            return Ok(());
+        }
+
+        let installable = {
+            let mut locked_url = locked_pkg.locked_url.to_string();
+            if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
+                locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
+            } else {
+                return Err(BuildEnvError::Other(format!(
+                    "Locked package '{}' is a base catalog package, but the locked url '{}' does not start with the expected prefix '{}'",
+                    locked_pkg.install_id, locked_pkg.locked_url, NIXPKGS_CATALOG_URL_PREFIX
+                )));
+            }
+
+            // build all out paths
+            let attrpath = format!(
+                "legacyPackages.{}.{}^*",
+                locked_pkg.system, locked_pkg.attr_path
+            );
+
+            format!("{}#{}", locked_url, attrpath)
+        };
+
+        let _span = info_span!(
+            parent: span,
+            "build from catalog",
+            progress = format!("Building '{}' from source", locked_pkg.attr_path)
+        )
+        .entered();
+
+        let mut nix_build_command = Self::base_command();
+
+        nix_build_command.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
+
+        nix_build_command.arg("build");
+        nix_build_command.arg("--no-write-lock-file");
+        nix_build_command.arg("--no-update-lock-file");
+        nix_build_command.args(["--option", "pure-eval", "true"]);
+        nix_build_command.arg("--out-link");
+        nix_build_command.arg(&gc_root_path);
+        nix_build_command.arg(&installable);
+
+        debug!(%installable, cmd=%nix_build_command.display(), "building catalog package");
+
+        let output = nix_build_command
+            .output()
+            .map_err(BuildEnvError::CallNixBuild)?;
+
+        if !output.status.success() {
+            return Err(BuildEnvError::Realise2 {
+                install_id: locked_pkg.install_id.clone(),
+                message: String::from_utf8_lossy(&output.stderr).to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
     /// Realise a package from the (nixpkgs) catalog.
     /// [LockedPackageCatalog] is a locked package from the catalog.
     /// The package is realised by checking if the store paths are valid,
@@ -506,7 +649,10 @@ where
                 progress = format!("Downloading '{}'", locked.attr_path)
             );
             span.in_scope(|| {
-                self.check_store_path_with_substituters(&locked.install_id, locked.outputs.values())
+                Self::check_store_path_with_substituters(
+                    &self.new_gc_root_path(format!("by-iid/{}", &locked.install_id)),
+                    locked.outputs.values(),
+                )
             })?
         };
 
@@ -562,7 +708,7 @@ where
         )
         .entered();
 
-        let mut nix_build_command = self.base_command();
+        let mut nix_build_command = Self::base_command();
 
         nix_build_command.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
 
@@ -623,7 +769,7 @@ where
             return Ok(());
         }
 
-        let mut nix_build_command = self.base_command();
+        let mut nix_build_command = Self::base_command();
 
         // naïve url construction
         let installable = {
@@ -684,7 +830,13 @@ where
                 progress = format!("Downloading '{}'", locked.store_path)
             );
             span.in_scope(|| {
-                self.check_store_path_with_substituters(&locked.install_id, [&locked.store_path])
+                Self::check_store_path_with_substituters(
+                    &self
+                        .gc_root_base_path
+                        .as_ref()
+                        .join(format!("by-store-path/{}", &locked.store_path)),
+                    [&locked.store_path],
+                )
             })?
         };
 
@@ -708,14 +860,14 @@ where
     /// To avoid GC of substituted paths, pass an `--out-links` argument,
     /// to create "temproots".
     fn check_store_path_with_substituters(
-        &self,
-        install_id: &str,
+        gc_root_path: &Path,
         paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
     ) -> Result<bool, BuildEnvError> {
-        let mut cmd = self.base_command();
+        let mut cmd = Self::base_command();
         cmd.arg("build");
         cmd.arg("--out-link");
-        cmd.arg(self.new_gc_root_path(format!("by-store-path/{install_id}")));
+        cmd.arg(gc_root_path);
+        // cmd.arg(self.new_gc_root_path(format!("by-iid/{install_id}")));
         cmd.args(paths);
 
         debug!(cmd=%cmd.display(), "checking store paths, including substituters");
@@ -769,7 +921,7 @@ where
         lockfile_path: &Path,
         service_config_path: Option<PathBuf>,
     ) -> Result<BuildEnvOutputs, BuildEnvError> {
-        let mut nix_build_command = self.base_command();
+        let mut nix_build_command = Self::base_command();
         nix_build_command.args(["build", "--no-link", "--offline", "--json"]);
         nix_build_command.arg("--file").arg(&*BUILDENV_NIX);
         nix_build_command
