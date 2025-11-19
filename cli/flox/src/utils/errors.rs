@@ -21,7 +21,7 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::models::floxmeta::FloxMetaError;
 use flox_rust_sdk::models::lockfile::ResolveError;
 use flox_rust_sdk::providers::git::GitRemoteCommandError;
-use flox_rust_sdk::providers::services::{LoggedError, ServiceError};
+use flox_rust_sdk::providers::services::process_compose::{LoggedError, ServiceError};
 use indent::indent_by;
 use indoc::{formatdoc, indoc};
 use tracing::trace;

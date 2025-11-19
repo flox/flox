@@ -110,7 +110,7 @@ mod test {
     }
 
     #[test]
-    fn validate_store_path_folow_symlinks() {
+    fn validate_store_path_follow_symlinks() {
         let store_path = known_store_path();
         let tempdir = tempfile::tempdir().unwrap();
         let symlink = tempdir.path().join("test-link");

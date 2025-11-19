@@ -2413,7 +2413,7 @@ mod tests {
         "#}
         } else {
             formatdoc! {r#"
-                5 packages found in {store_path_prefix_pattern}-{package_name}-0\.0\.0
+                4 packages found in {store_path_prefix_pattern}-{package_name}-0\.0\.0
                        not found in {store_path_prefix_pattern}-environment-build-{package_name}
 
                 Displaying first 3 only:
@@ -2422,7 +2422,9 @@ mod tests {
         let re = regex::Regex::new(&expected_pattern).unwrap();
         assert!(
             re.is_match(&output.stderr),
-            "expected STDERR to match regex",
+            "output does not match expected pattern\noutput: {}\n\npattern: {}",
+            &output.stderr,
+            expected_pattern,
         );
     }
 

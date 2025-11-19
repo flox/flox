@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::services::{ProcessStates, stop_services};
+use flox_rust_sdk::providers::services::process_compose::{ProcessStates, stop_services};
 use tracing::instrument;
 
 use crate::commands::services::{ServicesEnvironment, guard_service_commands_available};

@@ -19,15 +19,15 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <variant>
-#include <vector>
 
 #include <nix/cmd/command.hh>
 #include <nix/expr/eval.hh>
 #include <nix/expr/search-path.hh>
 #include <nix/fetchers/attrs.hh>
 #include <nix/fetchers/cache.hh>
+#include <nix/fetchers/fetch-settings.hh>
 #include <nix/fetchers/fetchers.hh>
+#include <nix/fetchers/git-utils.hh>
 #include <nix/fetchers/store-path-accessor.hh>
 #include <nix/flake/flake.hh>
 #include <nix/flake/flakeref.hh>
@@ -283,7 +283,7 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
   /* Check the ref field if present */
   if ( auto ref = nix::fetchers::maybeGetStrAttr( attrs, "ref" ) )
     {
-      if ( std::regex_search( *ref, nix::badGitRefRegex ) )
+      if ( ! nix::isLegalRefName( *ref ) )
         {
           throw nix::BadURL( "invalid Git branch/tag name '%s'", *ref );
         }
@@ -328,7 +328,7 @@ WrappedNixpkgsInputScheme::inputFromURL(
        && ( std::find_if( version.begin() + 1,
                           version.end(),
                           []( unsigned char chr )
-                          { return std::isdigit( chr ) == 0; } )
+                            { return std::isdigit( chr ) == 0; } )
             == version.end() ) )
     {
       input.attrs.insert_or_assign(
@@ -367,7 +367,7 @@ WrappedNixpkgsInputScheme::inputFromURL(
     }
   else if ( std::regex_match( ref_or_rev, nix::refRegex ) )
     {
-      if ( std::regex_match( ref_or_rev, nix::badGitRefRegex ) )
+      if ( ! nix::isLegalRefName( ref_or_rev ) )
         {
           throw nix::BadURL(
             "in URL '%s', '%s' is not a valid Git branch/tag name",
@@ -400,12 +400,18 @@ WrappedNixpkgsInputScheme::toURL( const nix::fetchers::Input & input ) const
     {
       url.path = "v" + std::to_string( *version );
     }
-  else { throw nix::Error( "missing 'version' attribute in input" ); }
+  else
+    {
+      throw nix::Error( "missing 'version' attribute in input" );
+    }
   if ( auto owner = nix::fetchers::maybeGetStrAttr( input.attrs, "owner" ) )
     {
       url.path += "/" + *owner;
     }
-  else { throw nix::Error( "missing 'owner' attribute in input" ); }
+  else
+    {
+      throw nix::Error( "missing 'owner' attribute in input" );
+    }
   if ( auto rev = nix::fetchers::maybeGetStrAttr( input.attrs, "rev" ) )
     {
       url.path += "/" + *rev;
@@ -414,7 +420,10 @@ WrappedNixpkgsInputScheme::toURL( const nix::fetchers::Input & input ) const
     {
       url.path += "/" + *ref;
     }
-  else { throw nix::Error( "missing 'rev' or 'ref' attribute in input" ); }
+  else
+    {
+      throw nix::Error( "missing 'rev' or 'ref' attribute in input" );
+    }
 
   return url;
 }
@@ -473,7 +482,8 @@ WrappedNixpkgsInputScheme::applyOverrides( const nix::fetchers::Input & _input,
 /** @brief Clones the repository for analysis, but does not modify/patch it. */
 void
 WrappedNixpkgsInputScheme::clone( const nix::fetchers::Input & input,
-                                  const nix::Path &            destDir ) const
+
+                                  const nix::Path & destDir ) const
 {
   auto githubInput = nix::fetchers::Input::fromAttrs(
     *input.settings,
@@ -527,8 +537,10 @@ WrappedNixpkgsInputScheme::getAccessor(
 
   /* If we're already cached then we're done. */
   nix::fetchers::Cache::Key storeKey( "flox-nixpkgs", lockedAttrs );
+  nix::fetchers::Settings   fetchSettings;
+
   if ( auto res
-       = nix::fetchers::getCache()->lookupStorePath( storeKey, *store ) )
+       = fetchSettings.getCache()->lookupStorePath( storeKey, *store ) )
     {
       auto accessor = nix::makeStorePathAccessor( store, res->storePath );
       return { accessor, input };
@@ -560,17 +572,17 @@ WrappedNixpkgsInputScheme::getAccessor(
       nix::fetchers::Cache::Key storeKeyOriginaInput( "flox-nixpkgs",
                                                       _input.attrs );
 
-      nix::fetchers::getCache()->upsert( storeKeyOriginaInput,
-                                         *store,
-                                         { { "rev", rev->gitRev() } },
-                                         storePath );
+      fetchSettings.getCache()->upsert( storeKeyOriginaInput,
+                                        *store,
+                                        { { "rev", rev->gitRev() } },
+                                        storePath );
     }
 
   /* Add a cache entry for our locked reference. */
-  nix::fetchers::getCache()->upsert( storeKey,
-                                     *store,
-                                     { { "rev", rev->gitRev() } },
-                                     storePath );
+  fetchSettings.getCache()->upsert( storeKey,
+                                    *store,
+                                    { { "rev", rev->gitRev() } },
+                                    storePath );
 
   /* Return the store path for the generated flake, and it's
    * _locked_ input representation. */
@@ -585,10 +597,10 @@ WrappedNixpkgsInputScheme::getAccessor(
 // NOLINTNEXTLINE(cert-err58-cpp)
 static const auto rWrappedNixpkgsInputScheme = nix::OnStartup(
   []
-  {
-    nix::fetchers::registerInputScheme(
-      std::make_unique<WrappedNixpkgsInputScheme>() );
-  } );
+    {
+      nix::fetchers::registerInputScheme(
+        std::make_unique<WrappedNixpkgsInputScheme>() );
+    } );
 
 
 /* -------------------------------------------------------------------------- */

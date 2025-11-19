@@ -1,7 +1,7 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::services::{
+use flox_rust_sdk::providers::services::process_compose::{
     DEFAULT_TAIL,
     ProcessComposeLogLine,
     ProcessComposeLogStream,
