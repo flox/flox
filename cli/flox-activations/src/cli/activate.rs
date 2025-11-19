@@ -1,38 +1,15 @@
-use std::borrow::Cow;
-use std::fs::{self, OpenOptions};
-use std::io::IsTerminal;
-use std::os::unix::process::CommandExt;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::fs::{self};
+use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
-use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use indoc::formatdoc;
-use itertools::Itertools;
 use log::debug;
-use nix::unistd::{close, dup2_stdin, pipe, write};
-use shell_gen::{Shell, ShellWithPath};
 
 use super::StartOrAttachArgs;
-use crate::activate_script_builder::{
-    FLOX_ENV_DIRS_VAR,
-    activate_tracer,
-    apply_env_for_invocation,
-    assemble_command_for_activate_script,
-    assemble_command_for_start_script,
-    old_cli_envs,
-};
+use crate::activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_command_for_start_script};
 use crate::attach::attach;
-use crate::cli::attach::{AttachArgs, AttachExclusiveArgs};
-use crate::cli::start_or_attach::StartOrAttachResult;
-use crate::env_diff::EnvDiff;
-use crate::gen_rc::bash::{BashStartupArgs, generate_bash_startup_commands};
-use crate::gen_rc::fish::{FishStartupArgs, generate_fish_startup_commands};
-use crate::gen_rc::tcsh::{TcshStartupArgs, generate_tcsh_startup_commands};
-use crate::gen_rc::zsh::{ZshStartupArgs, generate_zsh_startup_commands};
-use crate::gen_rc::{StartupArgs, StartupCtx};
 
 pub const NO_REMOVE_ACTIVATION_FILES: &str = "_FLOX_NO_REMOVE_ACTIVATION_FILES";
 
