@@ -1402,6 +1402,7 @@ dependencies = [
  "serde_json",
  "shell-escape",
  "shell_gen",
+ "signal-hook",
  "temp-env",
  "tempfile",
  "time",

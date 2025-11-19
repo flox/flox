@@ -6,10 +6,15 @@ use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use indoc::formatdoc;
 use log::debug;
+use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
+use nix::unistd::{ForkResult, Pid, fork, getpid};
+use signal_hook::consts::{SIGCHLD, SIGUSR1};
+use signal_hook::iterator::Signals;
 
 use super::StartOrAttachArgs;
-use crate::activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_command_for_start_script};
+use crate::activate_script_builder::FLOX_ENV_DIRS_VAR;
 use crate::attach::attach;
+use crate::executive::executive;
 
 pub const NO_REMOVE_ACTIVATION_FILES: &str = "_FLOX_NO_REMOVE_ACTIVATION_FILES";
 
@@ -99,30 +104,31 @@ impl ActivateArgs {
                 );
             }
         } else {
-            debug!("Starting activation");
-            let mut start_command = assemble_command_for_start_script(
-                context.clone(),
-                subsystem_verbosity,
-                vars_from_env.clone(),
-                &start_or_attach,
-                invocation_type,
-            );
-            start_command.spawn()?.wait()?;
-        }
-
-        if context.flox_activate_start_services {
-            let diff = EnvDiff::from_files(&start_or_attach.activation_state_dir)?;
-            let mut start_services = assemble_command_for_activate_script(
-                "activate_temporary",
-                context.clone(),
-                subsystem_verbosity,
-                vars_from_env.clone(),
-                &diff,
-                &start_or_attach,
-            );
-
-            debug!("spawning activation services command: {:?}", start_services);
-            start_services.spawn()?.wait()?;
+            let parent_pid = getpid();
+            match unsafe { fork() } {
+                Ok(ForkResult::Child) => {
+                    #[cfg(target_os = "linux")]
+                    unsafe {
+                        setsid();
+                        // register as subreaper on Linux only
+                        prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0);
+                    }
+                    return executive(
+                        context,
+                        subsystem_verbosity,
+                        vars_from_env,
+                        start_or_attach,
+                        invocation_type,
+                        parent_pid,
+                    );
+                },
+                Ok(ForkResult::Parent { child: child_pid }) => Self::wait_for_start(child_pid)?,
+                Err(e) => {
+                    // Fork failed
+                    return Err(anyhow!("Fork failed: {}", e));
+                },
+            }
+            debug!("Finished spawning activation - proceeding to attach");
         }
 
         attach(
@@ -132,6 +138,68 @@ impl ActivateArgs {
             vars_from_env,
             start_or_attach,
         )
+    }
+
+    // Wait for the executive to start the activation, mark it ready, and send SIGUSR1.
+    fn wait_for_start(child_pid: Pid) -> Result<(), anyhow::Error> {
+        debug!(
+            "Awaiting SIGUSR1 from child process with PID: {}",
+            child_pid
+        );
+
+        // Set up signal handler to await the death of the child.
+        // If the child dies, then we should error out. We expect
+        // to receive SIGUSR1 from the child when it's ready.
+        let mut signals = Signals::new([SIGCHLD, SIGUSR1])?;
+        for signal in signals.forever() {
+            match signal {
+                SIGUSR1 => {
+                    debug!("Received SIGUSR1 from child process {}", child_pid);
+                    return Ok(()); // Proceed after receiving SIGUSR1
+                },
+                SIGCHLD => {
+                    // SIGCHLD can come from any child process, not just ours.
+                    // Use waitpid with WNOHANG to check if OUR child has exited.
+                    match waitpid(child_pid, Some(WaitPidFlag::WNOHANG)) {
+                        Ok(WaitStatus::StillAlive) => {
+                            // Our child is still alive, SIGCHLD was from a different process
+                            debug!(
+                                "Received SIGCHLD but child {} is still alive, continuing to wait",
+                                child_pid
+                            );
+                            continue;
+                        },
+                        Ok(status) => {
+                            // Our child has exited
+                            return Err(anyhow!(
+                                // TODO: we should print the path to the log file
+                                "Activation process {} terminated unexpectedly with status: {:?}",
+                                child_pid,
+                                status
+                            ));
+                        },
+                        Err(nix::errno::Errno::ECHILD) => {
+                            // Child already reaped, this shouldn't happen but handle gracefully
+                            return Err(anyhow!(
+                                "Activation process {} terminated unexpectedly (already reaped)",
+                                child_pid
+                            ));
+                        },
+                        Err(e) => {
+                            // Unexpected error from waitpid
+                            return Err(anyhow!(
+                                "Failed to check status of activation process {}: {}",
+                                child_pid,
+                                e
+                            ));
+                        },
+                    }
+                },
+                _ => unreachable!(),
+            }
+        }
+
+        unreachable!();
     }
 }
 
