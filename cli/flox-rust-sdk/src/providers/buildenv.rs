@@ -300,20 +300,6 @@ where
                     ))
                 })?;
 
-            // match package {
-            //     LockedPackage::Catalog(locked) => self.realise_nixpkgs(
-            //         client,
-            //         &manifest_package,
-            //         locked,
-            //         pre_checked_store_paths,
-            //     )?,
-            //     LockedPackage::Flake(locked) => {
-            //         self.realise_flakes(locked, pre_checked_store_paths)?
-            //     },
-            //     LockedPackage::StorePath(locked) => {
-            //         self.realise_store_path(locked, pre_checked_store_paths)?
-            //     },
-            // }
             match package {
                 LockedPackage::Catalog(pkg) => {
                     if manifest_package.is_from_custom_catalog() {
@@ -326,7 +312,12 @@ where
                 LockedPackage::StorePath(pkg) => store_path_pkgs.push(pkg),
             }
         }
+
         self.realise_base_catalog_pkgs(&base_catalog_pkgs, pre_checked_store_paths)?;
+        self.realise_store_path_pkgs(&store_path_pkgs, pre_checked_store_paths)?;
+        for flake in flake_pkgs.iter() {
+            self.realise_flakes(flake, pre_checked_store_paths)?;
+        }
         Ok(())
     }
 
@@ -814,11 +805,11 @@ where
     /// The package is realised by checking if the store paths are valid,
     /// if the store path is not valid (and the store lacks the ability to reproduce it),
     /// This function will return an error.
-    #[instrument(skip(self), fields(progress = format!("Realising store path for '{}'", locked.install_id)))]
-    fn realise_store_path(
-        &self,
+    fn realise_single_store_path(
         locked: &LockedPackageStorePath,
+        gc_root_base_path: &Path,
         pre_checked_store_paths: &CheckedStorePaths,
+        parent_span: Span,
     ) -> Result<(), BuildEnvError> {
         let pre_valid = pre_checked_store_paths
             .valid(&locked.store_path)
@@ -826,15 +817,13 @@ where
 
         let valid = pre_valid || {
             let span = info_span!(
+                parent: parent_span,
                 "substitute store path",
                 progress = format!("Downloading '{}'", locked.store_path)
             );
             span.in_scope(|| {
                 Self::check_store_path_with_substituters(
-                    &self
-                        .gc_root_base_path
-                        .as_ref()
-                        .join(format!("by-store-path/{}", &locked.store_path)),
+                    &gc_root_base_path.join(format!("by-store-path/{}", &locked.store_path)),
                     [&locked.store_path],
                 )
             })?
@@ -846,6 +835,40 @@ where
                 message: format!("'{}' is not available", locked.store_path),
             });
         }
+        Ok(())
+    }
+
+    fn realise_store_path_pkgs(
+        &self,
+        pkgs: &[&LockedPackageStorePath],
+        pre_checked_store_paths: &CheckedStorePaths,
+    ) -> Result<(), BuildEnvError> {
+        let gc_root_base_path = self.gc_root_base_path.as_ref();
+        let span = Span::current();
+        std::thread::scope(move |s| {
+            let mut thread_handles = vec![];
+            for locked_pkg in pkgs {
+                let inner_span = span.clone();
+                let handle = s.spawn(move || {
+                    Self::realise_single_store_path(
+                        locked_pkg,
+                        gc_root_base_path,
+                        pre_checked_store_paths,
+                        inner_span,
+                    )
+                });
+                thread_handles.push(handle);
+            }
+            let mut thread_panicked = false;
+            for h in thread_handles {
+                thread_panicked |= h.join().is_err();
+            }
+            if thread_panicked {
+                return Err(BuildEnvError::ThreadPanicked);
+            }
+            Ok::<(), BuildEnvError>(())
+        })
+        .map_err(|_| BuildEnvError::ThreadPanicked)?;
         Ok(())
     }
 
@@ -1849,6 +1872,7 @@ mod realise_store_path_tests {
 
     use super::*;
     use crate::models::manifest::typed::DEFAULT_PRIORITY;
+    use crate::providers::auth::Auth;
 
     fn mock_store_path(valid: bool) -> LockedPackageStorePath {
         LockedPackageStorePath {
@@ -1870,10 +1894,15 @@ mod realise_store_path_tests {
 
         // show that the store path is valid
         assert!(buildenv.check_store_path([&locked.store_path]).unwrap());
+        let span = info_span!("dummy");
 
-        buildenv
-            .realise_store_path(&locked, &Default::default())
-            .expect("an existing store path should realise");
+        BuildEnvNix::<PathBuf, Auth>::realise_single_store_path(
+            &locked,
+            buildenv.gc_root_base_path.path(),
+            &Default::default(),
+            span,
+        )
+        .expect("an existing store path should realise");
     }
 
     #[test]
@@ -1883,10 +1912,15 @@ mod realise_store_path_tests {
 
         // show that the store path is invalid
         assert!(!buildenv.check_store_path([&locked.store_path]).unwrap());
+        let span = info_span!("dummy");
 
-        let result = buildenv
-            .realise_store_path(&locked, &Default::default())
-            .expect_err("invalid store path should fail to realise");
+        let result = BuildEnvNix::<PathBuf, Auth>::realise_single_store_path(
+            &locked,
+            buildenv.gc_root_base_path.path(),
+            &Default::default(),
+            span,
+        )
+        .expect_err("invalid store path should fail to realise");
         assert!(matches!(result, BuildEnvError::Realise2 { .. }));
     }
 }
