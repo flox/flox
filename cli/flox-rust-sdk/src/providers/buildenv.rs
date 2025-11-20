@@ -5,11 +5,12 @@ use std::hash::Hash;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock, Mutex};
 
 use flox_core::canonical_path::CanonicalPath;
 use pollster::FutureExt as _;
 use serde::{Deserialize, Serialize};
+use tempfile::TempPath;
 use thiserror::Error;
 use tracing::{Span, debug, info_span, instrument, trace};
 
@@ -27,7 +28,7 @@ use crate::models::lockfile::{
 use crate::models::manifest::typed::{ActivateMode, ManifestPackageDescriptor};
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::providers::auth::{catalog_auth_to_envs, store_needs_auth};
-use crate::providers::catalog::CatalogClientError;
+use crate::providers::catalog::{CatalogClientError, StoreInfo};
 use crate::utils::CommandExt;
 
 static BUILDENV_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -120,8 +121,13 @@ pub enum BuildEnvError {
     #[error("couldn't download package:\n{0}")]
     NixCopyError(String),
 
+    // You will 99.9999% never see this in real life.
     #[error("internal error downloadng packages")]
     ThreadPanicked,
+
+    // You will 99.9999% never see this in real life.
+    #[error("internal error: mutex was poisoned")]
+    PoisonedMutex,
 
     /// An unhandled condition was encountered in the lockfile.  One example is
     /// a package that is expected to be a base catalog package but the
@@ -164,6 +170,33 @@ pub trait BuildEnv {
         lockfile: &Path,
         service_config_path: Option<PathBuf>,
     ) -> Result<BuildEnvOutputs, BuildEnvError>;
+}
+
+#[derive(Debug)]
+pub struct NetRcAndAuth<A> {
+    netrc_path: Option<TempPath>,
+    auth: Arc<Mutex<A>>,
+}
+
+impl<A> NetRcAndAuth<A>
+where
+    A: AuthProvider,
+{
+    /// Returns the path to a populated netrc file, creating one if necessary.
+    pub fn get_netrc_path(&mut self) -> Result<&TempPath, BuildEnvError> {
+        if let Some(ref path) = self.netrc_path {
+            Ok(path)
+        } else {
+            let path = self
+                .auth
+                .lock()
+                .map_err(|_| BuildEnvError::PoisonedMutex)?
+                .create_netrc()
+                .map_err(BuildEnvError::Auth)?;
+            self.netrc_path = Some(path);
+            self.get_netrc_path()
+        }
+    }
 }
 
 pub struct BuildEnvNix<P, A> {
@@ -314,11 +347,167 @@ where
         }
 
         self.realise_base_catalog_pkgs(&base_catalog_pkgs, pre_checked_store_paths)?;
+        self.realise_custom_catalog_pkgs(client, &base_catalog_pkgs, pre_checked_store_paths)?;
         self.realise_store_path_pkgs(&store_path_pkgs, pre_checked_store_paths)?;
         for flake in flake_pkgs.iter() {
             self.realise_flakes(flake, pre_checked_store_paths)?;
         }
         Ok(())
+    }
+
+    fn realise_custom_catalog_pkgs(
+        &self,
+        client: &impl ClientTrait,
+        pkgs: &[&LockedPackageCatalog],
+        pre_checked_store_paths: &CheckedStorePaths,
+    ) -> Result<(), BuildEnvError> {
+        let all_store_paths = pkgs
+            .iter()
+            .flat_map(|pkg| pkg.outputs.values().map(|sp| sp.to_string()))
+            .collect::<Vec<_>>();
+        let store_locations = client
+            .get_store_info(all_store_paths)
+            .block_on()
+            .map_err(BuildEnvError::CatalogError)?;
+        let no_netrc_is_error = self.auth.token().is_none();
+        let netrc_path = self.auth.try_create_netrc();
+        let borrowed_netrc_path = netrc_path.as_ref();
+        let span = Span::current();
+        let gc_root_base_dir = self.gc_root_base_path.as_ref();
+        let borrowed_store_locations = &store_locations;
+        std::thread::scope(move |s| {
+            let mut thread_handles = vec![];
+            for pkg in pkgs.iter() {
+                for store_path in pkg.outputs.values() {
+                    let all_valid_in_pre_checked = pkg
+                        .outputs
+                        .values()
+                        .all(|path| pre_checked_store_paths.valid(path).unwrap_or_default());
+                    if all_valid_in_pre_checked {
+                        continue;
+                    }
+                    let inner_span = span.clone();
+                    let handle = s.spawn(move || {
+                        Self::try_substitute_single_custom_catalog_pkg_store_path(
+                            store_path,
+                            &pkg.install_id,
+                            &pkg.attr_path,
+                            gc_root_base_dir,
+                            borrowed_store_locations,
+                            no_netrc_is_error,
+                            borrowed_netrc_path,
+                            inner_span,
+                        )
+                    });
+                    thread_handles.push(handle);
+                }
+            }
+            let mut thread_panicked = false;
+            for h in thread_handles {
+                thread_panicked |= h.join().is_err();
+            }
+            if thread_panicked {
+                return Err(BuildEnvError::ThreadPanicked);
+            }
+            Ok::<(), BuildEnvError>(())
+        })
+        .map_err(|_| BuildEnvError::ThreadPanicked)?;
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn try_substitute_single_custom_catalog_pkg_store_path(
+        store_path: &str,
+        install_id: &str,
+        attr_path: &str,
+        gc_root_base_dir: &Path,
+        store_locations: &HashMap<String, Vec<StoreInfo>>,
+        no_netrc_is_error: bool,
+        maybe_netrc_path: Option<&PathBuf>,
+        parent_span: Span,
+    ) -> Result<(), BuildEnvError> {
+        let mut auth_error = None;
+        let locations =
+            store_locations
+                .get(store_path)
+                .ok_or(BuildEnvError::NoPackageStoreLocation(
+                    install_id.to_string(),
+                ))?;
+        let span = info_span!(
+            parent: parent_span.clone(),
+            "substitute custom catalog package",
+            progress = format!("Downloading '{}'", attr_path)
+        );
+        let _ = span.enter();
+        for location in locations {
+            // nix copy
+            let mut copy_command = nix_base_command();
+            let location_url = match &location.url {
+                Some(url) => url,
+                None => {
+                    return Err(BuildEnvError::NixCopyError(format!(
+                        "Missing store location URL for package '{}'",
+                        install_id
+                    )));
+                },
+            };
+            copy_command.arg("copy");
+            // auth.is_some() corresponds to Publisher store type
+            // auth.is_none() corresponds to NixCopy
+            // TODO: this is turning into spaghetti and would be good to refactor,
+            // but this code isn't very stable so hold off for now.
+            if let Some(auth) = &location.auth {
+                copy_command.envs(catalog_auth_to_envs(auth).map_err(BuildEnvError::Auth)?);
+            } else {
+                // We don't need a floxhub token for the NixOS public cache
+                if store_needs_auth(location_url) {
+                    if let Some(ref netrc_path) = maybe_netrc_path {
+                        copy_command.arg("--netrc-file").arg(netrc_path);
+                    } else if no_netrc_is_error {
+                        return Err(BuildEnvError::Auth(AuthError::NoToken));
+                    }
+                }
+            }
+            copy_command.arg("--from").arg(location_url).arg(store_path);
+            debug!(cmd=%copy_command.display(), "trying to copy published package");
+            let output = copy_command
+                .output()
+                .map_err(|e| BuildEnvError::CacheError(e.to_string()))?;
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if stderr.contains("because it lacks a signature by a trusted key") {
+                    return Err(BuildEnvError::UntrustedPackage(install_id.to_string()));
+                }
+                // We're expecting errors for netrc type auth, but not for
+                // catalog provided auth.
+                if location.auth.is_some() {
+                    auth_error = Some(BuildEnvError::NixCopyError(stderr.to_string()));
+                }
+                // If we failed, log the error and try the next location.
+                debug!(%store_path, %location_url, %stderr, "Failed to copy package from store");
+            } else {
+                // If we succeeded, then we can continue with the next path
+                debug!(%store_path, %location_url, "Succesfully copied package from store");
+
+                // TODO: there is a real but very short period between the successful copy
+                // and setting the gc root in which the path _could_ be collected as garbage,
+                // which we could guard against by wrapping the copy/link/check in a loop.
+                // At this point its not clear whether that is worth the additional complexity.
+                let filename = Path::new(store_path)
+                    .file_name()
+                    .ok_or_else(|| BuildEnvError::Link(format!("Invalid store path {store_path}")))?
+                    .to_string_lossy();
+                create_gc_root_in(
+                    [store_path],
+                    gc_root_base_dir.join(format!("by-store-path/{filename}")),
+                )?;
+            }
+        }
+        if let Some(err) = auth_error {
+            Err(err)
+        } else {
+            Ok(())
+        }
     }
 
     /// Try to substitute a published package by copying it from an associated store.
