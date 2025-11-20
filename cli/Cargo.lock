@@ -4297,6 +4297,7 @@ dependencies = [
  "indoc",
  "schemars 1.0.5",
  "serde",
+ "serde_json",
  "serde_with",
  "thiserror 2.0.17",
 ]

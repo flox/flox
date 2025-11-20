@@ -609,6 +609,7 @@
       "type": "object"
     },
     "Service": {
+      "additionalProperties": false,
       "description": "Service section configuration with resource limits",
       "properties": {
         "cpu_quota": {
@@ -1042,6 +1043,7 @@
       "type": "string"
     },
     "ServiceUnit": {
+      "additionalProperties": false,
       "description": "Represents a systemd service configuration",
       "properties": {
         "service": {
@@ -1075,6 +1077,7 @@
       "type": "object"
     },
     "Unit": {
+      "additionalProperties": false,
       "description": "Unit section configuration",
       "properties": {
         "after": {
