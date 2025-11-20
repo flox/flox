@@ -18,7 +18,7 @@ flox [<general-options>] activate
      [-s]
      [-m=(dev|run)]
      [-g=<generation>]
-     [-- <command> [<arguments>]]
+     [-c=<shell command> | -- <exec command>...]
 ```
 
 # DESCRIPTION
@@ -35,10 +35,15 @@ Configures a shell with everything defined by the environment:
 * interactive: `flox activate` when invoked from an interactive shell\
   Launches an interactive sub-shell.
   The shell to be launched is determined by `$FLOX_SHELL` or `$SHELL`.
-* command: `flox activate -- CMD`\
-  Executes `CMD` in the same environment as if run inside an interactive shell
+* shell command: `flox activate -c CMD`\
+  Runs `CMD` in the same environment as if run inside an interactive shell
   produced by an interactive `flox activate`
   The shell `CMD` is run by is determined by `$FLOX_SHELL` or `$SHELL`.
+  Because `CMD` is passed to a shell, shell features like running multiple
+  commands with `&&` can be used.
+* exec command: `flox activate -- CMD`\
+  Execs `CMD` directly after performing all parts of activation except for
+  running scripts in `[profile]`.
 * in-place: `flox activate` when invoked from a non-interactive shell
   with it's `stdout` redirected e.g. `eval "$(flox activate)"`\
   Produces commands to be sourced by the parent shell.
@@ -68,10 +73,13 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
 
 ## Activate Options
 
+`-c <command>`, `--command <command>`
+:   Shell command string to run in a subshell started in the activated
+    environment
+
 `-- <command> [<arguments>]`
-:   Command to run in the environment.
-    Spawns the command in a subshell that does not leak into the calling
-    process.
+:   Command to exec in the activated environment.
+    This does not run any profile scripts
 
 `-t`, `--trust`
 :   Trust a remote environment for this activation.

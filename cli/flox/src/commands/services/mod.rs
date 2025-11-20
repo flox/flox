@@ -22,7 +22,7 @@ use super::{
     UninitializedEnvironment,
     activated_environments,
 };
-use crate::commands::activate::Activate;
+use crate::commands::activate::{Activate, CommandSelect};
 use crate::commands::display_help;
 use crate::config::Config;
 use crate::utils::message;
@@ -335,13 +335,16 @@ pub async fn start_services_with_new_process_compose(
         start_services: true,
         mode: Some(activate_mode),
         generation,
-        run_args: vec!["true".to_string()],
+        // this isn't actually used because we pass invocation type below
+        command: Some(CommandSelect::ExecCommand {
+            exec_command: vec!["true".to_string()],
+        }),
     }
     .activate(
         config,
         flox,
         concrete_environment,
-        InvocationType::Command,
+        InvocationType::ExecCommand(vec!["true".to_string()]),
         true,
         &new_services_to_start(names),
     )

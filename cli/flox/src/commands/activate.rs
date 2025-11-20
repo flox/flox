@@ -53,6 +53,20 @@ pub static WATCHDOG_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(env::var("WATCHDOG_BIN").unwrap_or(env!("WATCHDOG_BIN").to_string()))
 });
 
+#[derive(Debug, Clone, Bpaf)]
+pub enum CommandSelect {
+    ShellCommand {
+        /// Shell command string to run in a subshell started in the activated environment
+        #[bpaf(long("command"), short('c'))]
+        shell_command: String,
+    },
+    ExecCommand {
+        /// Command to exec in the activated environment. This does not run any profile scripts
+        #[bpaf(positional("cmd"), strict, some("must provide a non-empty command"))]
+        exec_command: Vec<String>,
+    },
+}
+
 #[derive(Bpaf, Clone)]
 pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -80,9 +94,8 @@ pub struct Activate {
     #[bpaf(long, short)]
     pub generation: Option<GenerationId>,
 
-    /// Command to run interactively in the context of the environment
-    #[bpaf(positional("cmd"), strict, many)]
-    pub run_args: Vec<String>,
+    #[bpaf(external(command_select), optional)]
+    pub command: Option<CommandSelect>,
 }
 
 impl Activate {
@@ -123,16 +136,30 @@ impl Activate {
             .await?;
         }
 
-        let invocation_type =
-            if self.print_script || (!stdout().is_tty() && self.run_args.is_empty()) {
-                InvocationType::InPlace
-            } else if self.run_args.is_empty() {
-                InvocationType::Interactive
-            } else {
-                InvocationType::Command
-            };
+        let invocation_type = match self.command {
+            None => {
+                if self.print_script || !stdout().is_tty() {
+                    InvocationType::InPlace
+                } else {
+                    InvocationType::Interactive
+                }
+            },
+            Some(CommandSelect::ExecCommand { ref exec_command }) => {
+                if exec_command.is_empty() {
+                    unreachable!("empty command provided when expected some");
+                } else if exec_command[0].is_empty() {
+                    bail!("empty command provided");
+                } else {
+                    InvocationType::ExecCommand(exec_command.clone())
+                }
+            },
+            Some(CommandSelect::ShellCommand { ref shell_command }) => {
+                InvocationType::ShellCommand(shell_command.clone())
+            },
+        };
 
-        if invocation_type != InvocationType::Command
+        if (invocation_type == InvocationType::Interactive
+            || invocation_type == InvocationType::InPlace)
             && config.flox.upgrade_notifications.unwrap_or(true)
         {
             // Read the results of a previous upgrade check
@@ -415,7 +442,6 @@ impl Activate {
             flox_services_socket: Some(flox_services_socket),
             interpreter_path,
             invocation_type: Some(invocation_type),
-            run_args: self.run_args,
             remove_after_reading: true,
         };
 
