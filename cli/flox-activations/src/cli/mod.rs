@@ -3,15 +3,15 @@ use std::path::PathBuf;
 use attach::AttachArgs;
 use clap::{Parser, Subcommand};
 
-mod activate;
+pub mod activate;
 pub mod attach;
 mod fix_fpath;
-mod fix_paths;
+pub mod fix_paths;
 mod prepend_and_dedup;
 mod profile_scripts;
-mod set_env_dirs;
+pub mod set_env_dirs;
 mod set_ready;
-mod start_or_attach;
+pub mod start_or_attach;
 
 use activate::ActivateArgs;
 use fix_fpath::FixFpathArgs;

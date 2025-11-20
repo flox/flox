@@ -7,7 +7,7 @@ use flox_core::activate::vars::{FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_V
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
 
-use super::VarsFromEnvironment;
+use crate::cli::activate::VarsFromEnvironment;
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
 use crate::cli::start_or_attach::StartOrAttachResult;
