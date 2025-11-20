@@ -102,7 +102,6 @@ let
       bash = "${containerPkgs.bashInteractive}/bin/bash";
     };
     env = "${environment}";
-    run_args = [ ];
     invocation_type = null;
     remove_after_reading = false;
     env_description = "${containerName}";

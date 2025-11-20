@@ -13,7 +13,7 @@ use crate::activate_script_builder::{
     assemble_command_for_activate_script,
     assemble_command_for_start_script,
 };
-use crate::attach::attach;
+use crate::attach::{attach, quote_run_args};
 use crate::env_diff::EnvDiff;
 
 pub const NO_REMOVE_ACTIVATION_FILES: &str = "_FLOX_NO_REMOVE_ACTIVATION_FILES";
@@ -48,7 +48,6 @@ impl ActivateArgs {
         let run_args = self
             .cmd
             .as_ref()
-            .or(Some(&context.run_args))
             .and_then(|args| if args.is_empty() { None } else { Some(args) });
 
         match (context.invocation_type.as_ref(), run_args) {
@@ -58,8 +57,7 @@ impl ActivateArgs {
             // This is a container invocation, and we need to set the invocation type
             // based on the presence of command arguments.
             (None, Some(args)) => {
-                context.invocation_type = Some(InvocationType::Command);
-                context.run_args = args.clone();
+                context.invocation_type = Some(InvocationType::ShellCommand(quote_run_args(args)));
             },
             // The following two cases are normal shell activations, and don't need
             // to modify the activation context.
@@ -70,6 +68,7 @@ impl ActivateArgs {
         // and set it to Some.
         let invocation_type = context
             .invocation_type
+            .clone()
             .expect("invocation type should have been some");
 
         if let Ok(shell_force) = std::env::var("_FLOX_SHELL_FORCE") {
@@ -110,7 +109,7 @@ impl ActivateArgs {
                 subsystem_verbosity,
                 vars_from_env.clone(),
                 &start_or_attach,
-                invocation_type,
+                invocation_type.clone(),
             );
             start_command.spawn()?.wait()?;
         }

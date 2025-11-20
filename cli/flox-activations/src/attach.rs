@@ -57,7 +57,7 @@ pub fn attach(
     }
     let startup_ctx = startup_ctx(
         context.clone(),
-        invocation_type,
+        invocation_type.clone(),
         rc_path,
         diff.clone(),
         &start_or_attach.activation_state_dir,
@@ -65,34 +65,33 @@ pub fn attach(
         subsystem_verbosity,
     )?;
 
-    // when output is not a tty, and no command is provided
-    // we just print an activation script to stdout
-    //
-    // That script can then be `eval`ed in the current shell,
-    // e.g. in a .bashrc or .zshrc file:
-    //
-    //    eval "$(flox activate)"
-    if invocation_type == InvocationType::InPlace {
-        activate_in_place(startup_ctx, start_or_attach.activation_id)?;
-
-        return Ok(());
-    }
-
-    // These functions will only return if exec fails
-    if invocation_type == InvocationType::Interactive {
-        activate_interactive(
+    match invocation_type {
+        // when output is not a tty, and no command is provided
+        // we just print an activation script to stdout
+        //
+        // That script can then be `eval`ed in the current shell,
+        // e.g. in a .bashrc or .zshrc file:
+        //
+        //    eval "$(flox activate)"
+        InvocationType::InPlace => {
+            activate_in_place(startup_ctx, start_or_attach.activation_id)?;
+            Ok(())
+        },
+        // All other invocation types only return if exec fails
+        InvocationType::Interactive => activate_interactive(
             startup_ctx,
             subsystem_verbosity,
             vars_from_env,
             &start_or_attach,
-        )
-    } else {
-        activate_command(
+        ),
+        InvocationType::ShellCommand(shell_command) => activate_shell_command(
+            shell_command,
             startup_ctx,
             subsystem_verbosity,
             vars_from_env,
             &start_or_attach,
-        )
+        ),
+        InvocationType::ExecCommand(exec_command) => activate_exec_command(exec_command),
     }
 }
 
@@ -255,8 +254,13 @@ fn write_to_stdout(ctx: &StartupCtx) -> Result<()> {
     Ok(())
 }
 
-/// Used for `flox activate -- run_args`
-fn activate_command(
+fn activate_exec_command(_exec_command: Vec<String>) -> Result<()> {
+    Ok(())
+}
+
+/// Used for `flox activate -c shell_command`
+fn activate_shell_command(
+    shell_command: String,
     startup_ctx: StartupCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
@@ -298,13 +302,7 @@ fn activate_command(
             // > FLOX_SHELL=bash flox activate -- true | cat
             // hello profile.bash
             if std::io::stdout().is_terminal() {
-                command.args([
-                    "--noprofile",
-                    "--rcfile",
-                    &rcfile,
-                    "-c",
-                    &quote_run_args(&startup_ctx.act_ctx.run_args),
-                ]);
+                command.args(["--noprofile", "--rcfile", &rcfile, "-c", &shell_command]);
             } else {
                 // Non-interactive: source via stdin
                 // The bash --rcfile option only works for interactive shells
@@ -314,8 +312,7 @@ fn activate_command(
 
                 command.arg("--noprofile").arg("--norc").arg("-s");
 
-                let quoted_run_args = quote_run_args(&startup_ctx.act_ctx.run_args);
-                let source_script = format!("source '{}' && {}\n", rcfile, quoted_run_args);
+                let source_script = format!("source '{}' && {shell_command}\n", rcfile);
 
                 // - create a pipe
                 // - dup2 the read end to stdin, so that after exec'ing reading from stdin reads from the pipe
@@ -336,7 +333,7 @@ fn activate_command(
                 "--init-command",
                 &format!("source '{}'", rcfile),
                 "-c",
-                &quote_run_args(&startup_ctx.act_ctx.run_args),
+                &shell_command,
             ]);
         },
         ShellWithPath::Tcsh(_) => {
@@ -353,7 +350,7 @@ fn activate_command(
 
             // The -m option is required for tcsh to source a .tcshrc file that
             // the effective user does not own.
-            command.args(["-m", "-c", &quote_run_args(&startup_ctx.act_ctx.run_args)]);
+            command.args(["-m", "-c", &shell_command]);
         },
         ShellWithPath::Zsh(_) => {
             // Save original ZDOTDIR if it exists
@@ -371,12 +368,7 @@ fn activate_command(
 
             // The "NO_GLOBAL_RCS" option is necessary to prevent zsh from
             // automatically sourcing /etc/zshrc et al.
-            command.args([
-                "-o",
-                "NO_GLOBAL_RCS",
-                "-c",
-                &quote_run_args(&startup_ctx.act_ctx.run_args),
-            ]);
+            command.args(["-o", "NO_GLOBAL_RCS", "-c", &shell_command]);
         },
     }
 
@@ -585,7 +577,7 @@ fn render_legacy_exports(context: ActivateCtx) -> String {
 /// To do this we escape '"' and '`',
 /// but we don't escape anything else.
 /// We want '$' for example to be expanded by the shell.
-fn quote_run_args(run_args: &[String]) -> String {
+pub fn quote_run_args(run_args: &[String]) -> String {
     run_args
         .iter()
         .map(|arg| {
