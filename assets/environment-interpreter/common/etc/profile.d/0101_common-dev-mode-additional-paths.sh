@@ -47,7 +47,7 @@ if [ -n "${FLOX_ENV_DIRS:-}" ]; then
         # biome: 1553
         # fd: 1561
         # See https://sourceware.org/bugzilla/show_bug.cgi?id=31991
-        export GLIBC_TUNABLES=glibc.rtld.optional_static_tls=2500
+        export GLIBC_TUNABLES=glibc.rtld.optional_static_tls=25000
       fi
       ;;
     Darwin*)
