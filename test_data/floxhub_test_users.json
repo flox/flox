@@ -2,10 +2,9 @@
   {
     "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTksImh0dHBzOi8vZmxveC5kZXYvaGFuZGxlIjoidGVzdDEifQ.FFOGO7ZFov7139oNFr1QqqbJxBpkE1pZ0VYnzCDMo_Q",
     "handle": "test1",
-    "roles": {"flox": ["Reader"],
+    "roles": {"flox": ["Owner"],
               "publish_tests_read_write": ["Reader", "Writer"] ,
               "publish_tests_read_only": ["Reader"],
-              "flox-public": ["Owner"],
               "nixpkgs": ["Writer"]
             }
   },
