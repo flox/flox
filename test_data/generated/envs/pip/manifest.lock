@@ -20,19 +20,18 @@
     {
       "attr_path": "python312Packages.pip",
       "broken": false,
-      "derivation": "/nix/store/pf1vb63kg1277ak9ql4c3p4l2hnwjj4n-python3.12-pip-25.0.1.drv",
+      "derivation": "/nix/store/b7qs01lm7lc2zy02lnbxkkv18n1yx322-python3.12-pip-25.0.1.drv",
       "description": "PyPA recommended tool for installing Python packages",
       "install_id": "pip",
       "license": "[ MIT ]",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b3d51a0365f6695e7dd5cdf3e180604530ed33b4",
       "name": "python3.12-pip-25.0.1",
       "pname": "pip",
-      "rev": "7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "rev_count": 870157,
-      "rev_date": "2025-10-02T04:57:58Z",
-      "scrape_date": "2025-10-03T04:41:00.339706Z",
+      "rev": "b3d51a0365f6695e7dd5cdf3e180604530ed33b4",
+      "rev_count": 888552,
+      "rev_date": "2025-11-02T19:18:41Z",
+      "scrape_date": "2025-11-04T00:36:07.635086Z",
       "stabilities": [
-        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -42,9 +41,9 @@
         "out"
       ],
       "outputs": {
-        "dist": "/nix/store/d0s60qh1h7nnnr3fczaff0v5cf9wny17-python3.12-pip-25.0.1-dist",
-        "man": "/nix/store/5l164idpkhwj44cx50phvclrrh8q5ply-python3.12-pip-25.0.1-man",
-        "out": "/nix/store/j2l2f6psl3a8bwzpb4kcxlrvsgv9z1ph-python3.12-pip-25.0.1"
+        "dist": "/nix/store/f31f6h8bqjn1bmc6dnj03p083034yrn8-python3.12-pip-25.0.1-dist",
+        "man": "/nix/store/php3niwpl5v6b4y1a6hm3av460mn386l-python3.12-pip-25.0.1-man",
+        "out": "/nix/store/a3ddadjfc9ynhig68ajrsxaxh9w6p910-python3.12-pip-25.0.1"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -53,19 +52,18 @@
     {
       "attr_path": "python312Packages.pip",
       "broken": false,
-      "derivation": "/nix/store/zjbmgf6aslk5mkcjbn8b67iicjqqc5nq-python3.12-pip-25.0.1.drv",
+      "derivation": "/nix/store/izawggybyvvg9nmilb0fax9471njypc8-python3.12-pip-25.0.1.drv",
       "description": "PyPA recommended tool for installing Python packages",
       "install_id": "pip",
       "license": "[ MIT ]",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b3d51a0365f6695e7dd5cdf3e180604530ed33b4",
       "name": "python3.12-pip-25.0.1",
       "pname": "pip",
-      "rev": "7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "rev_count": 870157,
-      "rev_date": "2025-10-02T04:57:58Z",
-      "scrape_date": "2025-10-03T04:57:54.539337Z",
+      "rev": "b3d51a0365f6695e7dd5cdf3e180604530ed33b4",
+      "rev_count": 888552,
+      "rev_date": "2025-11-02T19:18:41Z",
+      "scrape_date": "2025-11-05T16:30:13.011294Z",
       "stabilities": [
-        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -75,9 +73,9 @@
         "out"
       ],
       "outputs": {
-        "dist": "/nix/store/h3af4prj9j5lm1q4xi207y5cjlg7za5j-python3.12-pip-25.0.1-dist",
-        "man": "/nix/store/xhk2jvxj2x35xwm4bb8vh55ikiznaddl-python3.12-pip-25.0.1-man",
-        "out": "/nix/store/8yabji3h06jc68yvd13plcsqmb3vn503-python3.12-pip-25.0.1"
+        "dist": "/nix/store/99adv4fdqmcjqx875n1p3pn7xmha35zj-python3.12-pip-25.0.1-dist",
+        "man": "/nix/store/ijm05gi3325chrd8fc9ng4phy2mj44ha-python3.12-pip-25.0.1-man",
+        "out": "/nix/store/0xghspmpn4kw37kc8gfdyg7qpbf9mqzx-python3.12-pip-25.0.1"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -86,19 +84,18 @@
     {
       "attr_path": "python312Packages.pip",
       "broken": false,
-      "derivation": "/nix/store/s5x623n67ln2vngrx19c39g537dpkq32-python3.12-pip-25.0.1.drv",
+      "derivation": "/nix/store/dsla8z10dc7zw52p3dsrhfzlg3hvzfl2-python3.12-pip-25.0.1.drv",
       "description": "PyPA recommended tool for installing Python packages",
       "install_id": "pip",
       "license": "[ MIT ]",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b3d51a0365f6695e7dd5cdf3e180604530ed33b4",
       "name": "python3.12-pip-25.0.1",
       "pname": "pip",
-      "rev": "7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "rev_count": 870157,
-      "rev_date": "2025-10-02T04:57:58Z",
-      "scrape_date": "2025-10-03T05:13:03.804909Z",
+      "rev": "b3d51a0365f6695e7dd5cdf3e180604530ed33b4",
+      "rev_count": 888552,
+      "rev_date": "2025-11-02T19:18:41Z",
+      "scrape_date": "2025-11-05T16:55:46.350918Z",
       "stabilities": [
-        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -108,9 +105,9 @@
         "out"
       ],
       "outputs": {
-        "dist": "/nix/store/by2qir280d5x49rkqjjp4pyx2hzpjb7n-python3.12-pip-25.0.1-dist",
-        "man": "/nix/store/z6cgadibi8b5x7mvxinv1k9gwk1hzqil-python3.12-pip-25.0.1-man",
-        "out": "/nix/store/pajsipkhl0sbaw1vbldsc8py8v97k28g-python3.12-pip-25.0.1"
+        "dist": "/nix/store/4if9fnr4wcbx1cxai4shh8g2yc9fsz6c-python3.12-pip-25.0.1-dist",
+        "man": "/nix/store/6sa0459pbpflk55mb6ag9sn8vjhypnkz-python3.12-pip-25.0.1-man",
+        "out": "/nix/store/37m8dn20g3qj1rpm2821b0nyrc5rhvvq-python3.12-pip-25.0.1"
       },
       "system": "x86_64-darwin",
       "group": "toplevel",
@@ -119,19 +116,18 @@
     {
       "attr_path": "python312Packages.pip",
       "broken": false,
-      "derivation": "/nix/store/a19mmi8184a53xkhc8zl0b4ghfsl9mwv-python3.12-pip-25.0.1.drv",
+      "derivation": "/nix/store/49vvnsraz96zb7si6xd6vndilg10cwqv-python3.12-pip-25.0.1.drv",
       "description": "PyPA recommended tool for installing Python packages",
       "install_id": "pip",
       "license": "[ MIT ]",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b3d51a0365f6695e7dd5cdf3e180604530ed33b4",
       "name": "python3.12-pip-25.0.1",
       "pname": "pip",
-      "rev": "7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "rev_count": 870157,
-      "rev_date": "2025-10-02T04:57:58Z",
-      "scrape_date": "2025-10-03T05:28:51.748698Z",
+      "rev": "b3d51a0365f6695e7dd5cdf3e180604530ed33b4",
+      "rev_count": 888552,
+      "rev_date": "2025-11-02T19:18:41Z",
+      "scrape_date": "2025-11-05T17:22:08.987849Z",
       "stabilities": [
-        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -141,9 +137,9 @@
         "out"
       ],
       "outputs": {
-        "dist": "/nix/store/36rk008prryhwifviwkxrys399ryz9s4-python3.12-pip-25.0.1-dist",
-        "man": "/nix/store/s0a9k1nxsa37w0vp12z24scgk8prgs2q-python3.12-pip-25.0.1-man",
-        "out": "/nix/store/gslcifc89z227p479jb2lbzy6n4kqkfb-python3.12-pip-25.0.1"
+        "dist": "/nix/store/m4d0qx27182fimym6gc33yrb45483b76-python3.12-pip-25.0.1-dist",
+        "man": "/nix/store/i8k3wcfjmlcwv8as1sdpsa45rwvyc003-python3.12-pip-25.0.1-man",
+        "out": "/nix/store/5fq6350dnf6lyv5wz3r0l6dp9q0qxrcn-python3.12-pip-25.0.1"
       },
       "system": "x86_64-linux",
       "group": "toplevel",
