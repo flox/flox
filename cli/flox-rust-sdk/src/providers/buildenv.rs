@@ -345,14 +345,17 @@ where
             }
         }
 
-        let gc_root_base_path = self.gc_root_base_path.as_ref();
-        let span = Span::current();
-        let max_parallel_downloads: Option<u16> = None;
+        let max_parallel_downloads: Option<u16> = std::env::var("FLOX_MAX_PARALLEL_DOWNLOADS")
+            .ok()
+            .and_then(|value| value.parse::<u16>().ok());
         let semaphore = if let Some(max_par) = max_parallel_downloads {
             Semaphore::new(max_par, max_par)
         } else {
             Semaphore::new(u16::MAX, u16::MAX)
         };
+
+        let gc_root_base_path = self.gc_root_base_path.as_ref();
+        let span = Span::current();
 
         // Only query store info if we have custom catalog packages and they
         // aren't already on the system.
