@@ -1,11 +1,10 @@
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode};
+use std::process::Command;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, LazyLock};
 use std::{env, fs};
 
 use anyhow::{Context, Result, bail};
-use clap::Parser;
 use flox_core::activations::{
     activation_state_dir_path,
     activations_json_path,
@@ -13,12 +12,10 @@ use flox_core::activations::{
     write_activations_json,
 };
 use flox_core::traceable_path;
-use flox_core::vars::FLOX_VERSION_STRING;
-use logger::{init_logger, spawn_heartbeat_log, spawn_logs_gc_threads};
+use logger::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
 use process::{LockedActivations, PidWatcher, WaitResult};
-use sentry::init_sentry;
 use tracing::{debug, error, info, instrument};
 
 use crate::process::Watcher;
@@ -26,6 +23,7 @@ use crate::process::Watcher;
 mod logger;
 mod process;
 mod sentry;
+pub use sentry::init_sentry;
 
 type Error = anyhow::Error;
 
@@ -33,61 +31,25 @@ pub static PROCESS_COMPOSE_BIN: LazyLock<String> = LazyLock::new(|| {
     env::var("PROCESS_COMPOSE_BIN").unwrap_or(env!("PROCESS_COMPOSE_BIN").to_string())
 });
 
-const SHORT_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
-const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.
-
-The watchdog (fka. klaus) is spawned during activation to aid in service cleanup
-when the final activation of an environment has terminated. This cleanup can
-be manually triggered via signal (SIGUSR1), but otherwise runs automatically.";
-
-#[derive(Debug, Parser)]
-#[command(version = &*FLOX_VERSION_STRING.as_str())]
-#[command(about = SHORT_HELP, long_about = LONG_HELP)]
+#[derive(Debug, Clone)]
 pub struct Cli {
-    #[arg(short, long, value_name = "PATH")]
+    /// The path to the Flox environment
     pub flox_env: PathBuf,
 
-    #[arg(
-        short,
-        long,
-        value_name = "PATH",
-        help = "The path to the runtime directory keeping activation data.\n\
-                Defaults to XDG_RUNTIME_DIR/flox or XDG_CACHE_HOME/flox if not provided."
-    )]
+    /// The path to the runtime directory keeping activation data
     pub runtime_dir: PathBuf,
 
     /// The activation ID to monitor
-    #[arg(short, long = "activation-id", value_name = "ID")]
     pub activation_id: String,
 
     /// The path to the process-compose socket
-    #[arg(short, long = "socket", value_name = "PATH")]
     pub socket_path: PathBuf,
 
     /// The directory to store and garbage collect logs
-    #[arg(short, long = "log-dir", value_name = "PATH")]
     pub log_dir: PathBuf,
 
     /// Disable metric reporting
-    #[arg(long)]
     pub disable_metrics: bool,
-}
-
-fn main() -> ExitCode {
-    let args = Cli::parse();
-
-    // Initialization
-    let watchdog_log_prefix = format!("watchdog.{}.log", args.activation_id);
-    init_logger(&args.log_dir, &watchdog_log_prefix)
-        .context("failed to initialize logger")
-        .unwrap();
-    let _sentry_guard = (!args.disable_metrics).then(init_sentry);
-
-    // Main
-    match run(args) {
-        Err(_) => ExitCode::FAILURE,
-        Ok(_) => ExitCode::SUCCESS,
-    }
 }
 
 #[instrument("watchdog",
@@ -98,7 +60,7 @@ fn main() -> ExitCode {
         dot_flox_hash = tracing::field::Empty,
         socket = tracing::field::Empty,
         log_dir = tracing::field::Empty))]
-fn run(args: Cli) -> Result<(), Error> {
+pub fn run(args: Cli) -> Result<(), Error> {
     let span = tracing::Span::current();
     span.record("flox_env", traceable_path(&args.flox_env));
     span.record("runtime_dir", traceable_path(&args.runtime_dir));

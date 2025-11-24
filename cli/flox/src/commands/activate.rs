@@ -49,9 +49,6 @@ pub static INTERACTIVE_BASH_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
         env::var("INTERACTIVE_BASH_BIN").unwrap_or(env!("INTERACTIVE_BASH_BIN").to_string()),
     )
 });
-pub static WATCHDOG_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
-    PathBuf::from(env::var("WATCHDOG_BIN").unwrap_or(env!("WATCHDOG_BIN").to_string()))
-});
 
 #[derive(Debug, Clone, Bpaf)]
 pub enum CommandSelect {
@@ -419,7 +416,6 @@ impl Activate {
             env_cache: concrete_environment.cache_path()?.into_inner(),
             env_description: now_active.bare_description(),
             mode: mode.to_string(),
-            watchdog_bin: Some((*WATCHDOG_BIN).clone()),
             shell,
             flox_active_environments: flox_active_environments.to_string(),
             flox_env_log_dir: concrete_environment
@@ -440,6 +436,7 @@ impl Activate {
             flox_services_socket,
             interpreter_path,
             invocation_type: Some(invocation_type),
+            run_monitoring_loop: true,
             remove_after_reading: true,
         };
 

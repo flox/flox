@@ -120,7 +120,7 @@ let
     flox_active_environments = "[]";
     flox_services_to_start = null;
     env_project = null;
-    watchdog_bin = null;
+    run_monitoring_loop = false;
   };
 
   activateCtxJson = builtins.toJSON activateCtx;

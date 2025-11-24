@@ -153,12 +153,6 @@ fn add_old_cli_options(command: &mut Command, context: &ActivateCtx) {
     // Pass down the activation mode
     command.arg("--mode").arg(context.mode.clone());
 
-    if let Some(watchdog_bin) = context.watchdog_bin.as_ref() {
-        command
-            .arg("--watchdog")
-            .arg(watchdog_bin.to_string_lossy().to_string());
-    }
-
     command.arg("--shell").arg(context.shell.exe_path());
 }
 

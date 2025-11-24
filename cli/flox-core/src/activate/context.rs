@@ -21,9 +21,6 @@ pub struct ActivateCtx {
     /// The activation mode (dev or run)
     pub mode: String,
 
-    /// Path to the watchdog binary
-    pub watchdog_bin: Option<PathBuf>,
-
     /// Path to the shell executable
     pub shell: ShellWithPath,
 
@@ -67,6 +64,9 @@ pub struct ActivateCtx {
     // Info needed to run the activate script
     pub interpreter_path: PathBuf,
     pub invocation_type: Option<InvocationType>,
+
+    /// Whether to run the monitoring loop (aka. watchdog)
+    pub run_monitoring_loop: bool,
 
     /// Whether to clean up the context file after reading it.
     pub remove_after_reading: bool,

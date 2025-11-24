@@ -16,6 +16,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "ansi"] }
 tracing-appender = "0.2"
 flox-core.workspace = true
+flox-watchdog.workspace = true
 fslock.workspace = true
 nix.workspace = true
 serde.workspace = true
