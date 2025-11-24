@@ -1370,6 +1370,7 @@ dependencies = [
  "dirs",
  "expect-test",
  "flox-core",
+ "flox-watchdog",
  "fslock",
  "indoc",
  "is_executable",

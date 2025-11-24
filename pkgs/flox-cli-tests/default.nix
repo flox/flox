@@ -18,7 +18,6 @@
   flox-activations,
   flox-buildenv,
   flox-nix-plugins,
-  flox-watchdog,
   flox,
   flox-interpreter,
   gawk,
@@ -202,7 +201,6 @@ writeShellScriptBin PROJECT_NAME ''
     export NIX_BIN="${nix}/bin/nix"
     export BUILDENV_BIN="${flox-buildenv}/bin/buildenv"
     export NIX_PLUGINS="${flox-nix-plugins}/lib/nix-plugins"
-    export WATCHDOG_BIN="${flox-watchdog}/libexec/flox-watchdog"
     export FLOX_ACTIVATIONS_BIN="${flox-activations}/libexec/flox-activations"
     export PROCESS_COMPOSE_BIN='${process-compose}/bin/process-compose'
     export FLOX_INTERPRETER='${flox-interpreter}'
@@ -243,7 +241,7 @@ writeShellScriptBin PROJECT_NAME ''
 
   # Run basts either via entr or just a single run
   if [[ -n "''${WATCH:-}" ]]; then
-    find "$TESTS_DIR" "$NIX_BIN" "$BUILDENV_BIN" "$NIX_PLUGINS" "$WATCHDOG_BIN" "$FLOX_BIN"    \
+    find "$TESTS_DIR" "$NIX_BIN" "$BUILDENV_BIN" "$NIX_PLUGINS" "$FLOX_BIN"    \
       |${entr}/bin/entr -s "bats ''${_BATS_ARGS[*]} ''${_FLOX_TESTS[*]}";
   else
     ${batsWith}/bin/bats "''${_BATS_ARGS[@]}"    \

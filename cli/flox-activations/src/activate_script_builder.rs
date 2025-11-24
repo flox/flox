@@ -125,10 +125,16 @@ pub fn old_cli_envs(context: ActivateCtx) -> HashMap<&'static str, String> {
         ),
     ]);
     if let Some(log_dir) = context.flox_env_log_dir.as_ref() {
-        exports.insert(FLOX_ENV_LOG_DIR_VAR, log_dir.clone());
+        exports.insert(
+            FLOX_ENV_LOG_DIR_VAR,
+            log_dir.clone().to_string_lossy().to_string(),
+        );
     }
     if let Some(socket_path) = context.flox_services_socket.as_ref() {
-        exports.insert(FLOX_SERVICES_SOCKET_VAR, socket_path.clone());
+        exports.insert(
+            FLOX_SERVICES_SOCKET_VAR,
+            socket_path.clone().to_string_lossy().to_string(),
+        );
     }
     if let Some(services_to_start) = context.flox_services_to_start {
         exports.insert(FLOX_SERVICES_TO_START_VAR, services_to_start);
@@ -156,12 +162,6 @@ fn add_old_cli_options(command: &mut Command, context: &ActivateCtx) {
 
     // Pass down the activation mode
     command.arg("--mode").arg(context.mode.clone());
-
-    if let Some(watchdog_bin) = context.watchdog_bin.as_ref() {
-        command
-            .arg("--watchdog")
-            .arg(watchdog_bin.to_string_lossy().to_string());
-    }
 
     command.arg("--shell").arg(context.shell.exe_path());
 }

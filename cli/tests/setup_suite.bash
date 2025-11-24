@@ -95,7 +95,6 @@ reals_setup() {
     print_var _FLOX_LOCAL_DEV
     print_var FLOX_BIN
     print_var BUILDENV_BIN
-    print_var WATCHDOG_BIN
     print_var FLOX_ACTIVATIONS_BIN
     print_var FLOX_INTERPRETER
     print_var NIX_PLUGINS

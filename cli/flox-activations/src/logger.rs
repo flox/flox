@@ -2,10 +2,11 @@ use std::io;
 use std::io::IsTerminal;
 use std::path::Path;
 
+use anyhow::Context;
 use flox_core::activate::vars::FLOX_ACTIVATIONS_VERBOSITY_VAR;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{EnvFilter, Layer, fmt, reload};
+use tracing_subscriber::{EnvFilter, Layer, Registry, fmt, reload};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Verbosity {
@@ -20,11 +21,12 @@ impl From<u32> for Verbosity {
 
 impl Verbosity {
     pub fn env_filter(&self) -> &'static str {
+        // TODO: change watchdog levels
         match self.inner {
-            0 => "flox_activations=error",
-            1 => "flox_activations=debug",
-            2 => "flox_activations=trace",
-            _ => "flox_activations=trace",
+            0 => "flox_activations=error,flox_watchdog=debug",
+            1 => "flox_activations=debug,flox_watchdog=trace",
+            2 => "flox_activations=trace,flox_watchdog=trace",
+            _ => "flox_activations=trace,flox_watchdog=trace",
         }
     }
 
@@ -47,7 +49,15 @@ impl Verbosity {
     }
 }
 
-pub fn init_logger(verbosity_arg: Option<u32>) -> Result<u32, anyhow::Error> {
+pub type ReloadHandle = reload::Handle<Box<dyn Layer<Registry> + Send + Sync>, Registry>;
+
+pub struct LoggerHandle {
+    pub subsystem_verbosity: u32,
+    pub reload_handle: ReloadHandle,
+}
+
+/// Initialize logging to STDERR.
+pub fn init_logger(verbosity_arg: Option<u32>) -> Result<LoggerHandle, anyhow::Error> {
     let (subsystem_verbosity, filter) = Verbosity::verbosity_from_env_and_arg(verbosity_arg);
     let env_filter = EnvFilter::try_new(filter)?;
 
@@ -56,12 +66,36 @@ pub fn init_logger(verbosity_arg: Option<u32>) -> Result<u32, anyhow::Error> {
         .with_ansi(io::stderr().is_terminal())
         .with_target(true)
         .boxed();
-    let (reloadable, _reload_handle) = reload::Layer::new(stderr_layer);
+    let (reloadable, reload_handle) = reload::Layer::new(stderr_layer);
 
     tracing_subscriber::registry()
         .with(reloadable)
         .with(env_filter)
         .init();
 
-    Ok(subsystem_verbosity)
+    Ok(LoggerHandle {
+        subsystem_verbosity,
+        reload_handle,
+    })
+}
+
+/// Replace existing logging with a file. Used by long-living child processes.
+pub fn switch_to_file_logging(
+    reload_handle: ReloadHandle,
+    log_file: impl AsRef<str>,
+    log_dir: impl AsRef<Path>,
+) -> Result<(), anyhow::Error> {
+    let file_appender = tracing_appender::rolling::daily(log_dir, log_file.as_ref());
+
+    let file_layer = fmt::layer()
+        .with_writer(file_appender)
+        .with_ansi(false)
+        .with_target(true)
+        .boxed();
+
+    reload_handle
+        .reload(file_layer)
+        .context("failed to reload logger with file output")?;
+
+    Ok(())
 }

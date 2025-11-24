@@ -4,7 +4,6 @@
   darwin,
   flox-interpreter,
   flox-src,
-  flox-watchdog,
   gitMinimal,
   glibcLocalesUtf8,
   gnused,
@@ -64,11 +63,6 @@ let
     // lib.optionalAttrs hostPlatform.isLinux {
       LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
     }
-    # Our own tools
-    # In the dev shell these will be set dynamically
-    // lib.optionalAttrs (flox-watchdog != null) {
-      WATCHDOG_BIN = flox-watchdog;
-    }
     // rust-internal-deps.passthru.envs;
 in
 craneLib.buildPackage (
@@ -78,17 +72,8 @@ craneLib.buildPackage (
     src = flox-src;
 
     # Set up incremental compilation
-    #
-    # Cargo artifacts are built for the union of features used transitively
-    # by `flox` and `flox-watchdog`.
-    # Compiling either separately would result in a different set of features
-    # and thus cache misses.
     cargoArtifacts = rust-internal-deps;
-    cargoExtraArgs = "--locked -p flox -p flox-watchdog";
-    postPatch = ''
-      rm -rf ./flox-watchdog/*
-      cp -rf --no-preserve=mode ${craneLib.mkDummySrc { src = flox-src; }}/flox-watchdog/* ./flox-watchdog
-    '';
+    cargoExtraArgs = "--locked -p flox";
 
     CARGO_LOG = "cargo::core::compiler::fingerprint=info";
 
