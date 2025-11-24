@@ -5,6 +5,7 @@ pub mod canonical_path;
 pub mod proc_status;
 pub mod util;
 mod version;
+pub mod vars;
 
 use std::fmt::Display;
 use std::io::{BufWriter, Write};

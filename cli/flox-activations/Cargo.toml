@@ -14,6 +14,7 @@ clap = { version = "4.5.51", default-features = false, features = [
 ] }
 env_logger = { version = "0.11.8", default-features = false, features = ["auto-color"] }
 flox-core.workspace = true
+flox-watchdog.workspace = true
 fslock.workspace = true
 log.workspace = true
 nix.workspace = true

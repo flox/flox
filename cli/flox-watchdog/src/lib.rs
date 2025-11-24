@@ -95,7 +95,7 @@ fn main() -> ExitCode {
         dot_flox_hash = tracing::field::Empty,
         socket = tracing::field::Empty,
         log_dir = tracing::field::Empty))]
-fn run(args: Cli) -> Result<(), Error> {
+pub fn run(args: Cli) -> Result<(), Error> {
     let span = tracing::Span::current();
     span.record("flox_env", traceable_path(&args.flox_env));
     span.record("runtime_dir", traceable_path(&args.runtime_dir));

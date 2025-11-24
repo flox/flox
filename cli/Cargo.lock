@@ -1392,6 +1392,7 @@ dependencies = [
  "env_logger",
  "expect-test",
  "flox-core",
+ "flox-watchdog",
  "fslock",
  "indoc",
  "is_executable",

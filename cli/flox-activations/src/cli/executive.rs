@@ -1,9 +1,10 @@
-use std::fs;
 use std::path::PathBuf;
+use std::{env, fs};
 
 use anyhow::Result;
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
+use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 use log::debug;
 use nix::sys::signal::Signal::SIGUSR1;
 use nix::sys::signal::kill;
@@ -78,10 +79,17 @@ impl ExecutiveArgs {
         debug!("sending SIGUSR1 to parent {}", parent_pid);
         kill(Pid::from_raw(parent_pid), SIGUSR1)?;
 
-        // TODO: once we wait for activations to exit, we can remove this,
-        // but at this point flox-activations activate may receive SIGCHLD
-        // before SIGUSR1 if we don't wait around a bit
-        sleep(1);
+        // TODO: should we do this conditionally based on whether we're in a container?
+        // TODO: log level
+        let watchdog = flox_watchdog::Cli {
+            flox_env: context.env.into(),
+            runtime_dir: context.flox_runtime_dir.into(),
+            activation_id: start_or_attach.activation_id,
+            socket_path: todo!("figure out whether this is optional"),
+            log_dir: todo!("figure out whether this is optional"),
+            disable_metrics: env::var(FLOX_DISABLE_METRICS_VAR).is_ok(),
+        };
+
         Ok(())
     }
 }
