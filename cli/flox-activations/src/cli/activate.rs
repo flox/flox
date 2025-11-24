@@ -43,6 +43,11 @@ impl ActivateArgs {
             && !std::env::var(NO_REMOVE_ACTIVATION_FILES).is_ok_and(|val| val == "true")
         {
             fs::remove_file(&self.activate_data)?;
+        } else {
+            debug!(
+                "Leaving activation context file at {:?}",
+                &self.activate_data
+            );
         }
 
         // In the case of containerize, you can't bake-in the invocation type or the
