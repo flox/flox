@@ -1,0 +1,10 @@
+[package]
+name = "executive-poc"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libc.workspace = true
+nix.workspace = true
+proctitle = "0.1.1"
+signal-hook.workspace = true

@@ -10,6 +10,7 @@ members = [
     "mk_data",
     "systemd",
     "xtask",
+    "executive-poc"
 ]
 default-members = ["flox", "flox-watchdog", "flox-activations"]
 
