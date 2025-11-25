@@ -85,8 +85,8 @@ impl ExecutiveArgs {
             flox_env: context.env.into(),
             runtime_dir: context.flox_runtime_dir.into(),
             activation_id: start_or_attach.activation_id,
-            socket_path: todo!("figure out whether this is optional"),
-            log_dir: todo!("figure out whether this is optional"),
+            socket_path: context.flox_services_socket.into(),
+            log_dir: context.flox_env_log_dir.into(),
             disable_metrics: env::var(FLOX_DISABLE_METRICS_VAR).is_ok(),
         };
 

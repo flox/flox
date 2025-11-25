@@ -32,7 +32,7 @@ pub struct ActivateCtx {
     pub flox_active_environments: String,
 
     /// Environment log directory
-    pub flox_env_log_dir: Option<String>,
+    pub flox_env_log_dir: String,
 
     /// Prompt color 1
     pub prompt_color_1: String,
@@ -62,7 +62,7 @@ pub struct ActivateCtx {
     pub flox_activate_start_services: bool,
 
     /// Services socket path
-    pub flox_services_socket: Option<String>,
+    pub flox_services_socket: String,
 
     // Info needed to run the activate script
     pub interpreter_path: PathBuf,
