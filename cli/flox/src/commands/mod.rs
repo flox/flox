@@ -33,6 +33,7 @@ use std::{env, fmt, mem};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
+use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 use flox_rust_sdk::flox::{
     DEFAULT_FLOXHUB_URL,
     DEFAULT_NAME,
@@ -69,13 +70,7 @@ use xdg::BaseDirectories;
 
 use self::envs::DisplayEnvironments;
 use crate::commands::general::update_config;
-use crate::config::{
-    Config,
-    EnvironmentTrust,
-    FLOX_CONFIG_FILE,
-    FLOX_DIR_NAME,
-    FLOX_DISABLE_METRICS_VAR,
-};
+use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE, FLOX_DIR_NAME};
 use crate::utils::active_environments::{
     ActiveEnvironments,
     activated_environments,
