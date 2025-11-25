@@ -1,16 +1,3 @@
-use std::path::PathBuf;
-
-pub use flox_core::traceable_path;
-
-/// Returns a `tracing`-compatible form of an `Option<PathBuf>`
-pub fn maybe_traceable_path(maybe_path: &Option<PathBuf>) -> impl tracing::Value {
-    if let Some(p) = maybe_path {
-        p.display().to_string()
-    } else {
-        String::from("null")
-    }
-}
-
 #[cfg(any(test, feature = "tests"))]
 pub mod test_helpers {
     use std::fmt::Display;

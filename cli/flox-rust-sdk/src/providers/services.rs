@@ -13,6 +13,7 @@ use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 use std::sync::mpsc::{Receiver, Sender};
 
+use flox_core::traceable_path;
 #[cfg(test)]
 use flox_test_utils::proptest::alphanum_string;
 #[cfg(test)]
@@ -27,7 +28,6 @@ use crate::flox::Flox;
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::typed::{Inner, ServiceShutdown, Services};
 use crate::utils::CommandExt;
-use crate::utils::logging::traceable_path;
 
 const PROCESS_NEVER_EXIT_NAME: &str = "flox_never_exit";
 /// The path to the nix provided `sleep` binary.
