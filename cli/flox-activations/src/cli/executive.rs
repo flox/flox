@@ -1,13 +1,13 @@
 use std::fs;
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use log::debug;
-use nix::sys::signal::Signal::SIGUSR1;
+use nix::sys::signal::Signal::{SIGUSR1, SIGUSR2};
 use nix::sys::signal::kill;
-use nix::unistd::{Pid, sleep};
+use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 
 use crate::activate_script_builder::{
@@ -58,7 +58,13 @@ impl ExecutiveArgs {
             invocation_type,
         );
         debug!("spawning start.bash: {:?}", start_command);
-        start_command.spawn()?.wait()?;
+        let status = start_command.spawn()?.wait()?;
+        if !status.success() {
+            kill(Pid::from_raw(parent_pid), SIGUSR2)?;
+            // hook.on-activate may have already printed to stderr
+            // We're still sharing stderr with `flox-activations activate`
+            bail!("Running hook.on-activate failed");
+        }
         if context.flox_activate_start_services {
             let diff = EnvDiff::from_files(&start_or_attach.activation_state_dir)?;
             let mut start_services = assemble_command_for_activate_script(
@@ -71,17 +77,19 @@ impl ExecutiveArgs {
             );
 
             debug!("spawning activation services command: {:?}", start_services);
-            start_services.spawn()?.wait()?;
+            let status = start_services.spawn()?.wait()?;
+            if !status.success() {
+                kill(Pid::from_raw(parent_pid), SIGUSR2)?;
+                // Start services may have already printed to stderr
+                // We're still sharing stderr with `flox-activations activate`
+                bail!("Starting services failed");
+            }
         };
 
         // Signal the parent that activation is ready
         debug!("sending SIGUSR1 to parent {}", parent_pid);
         kill(Pid::from_raw(parent_pid), SIGUSR1)?;
 
-        // TODO: once we wait for activations to exit, we can remove this,
-        // but at this point flox-activations activate may receive SIGCHLD
-        // before SIGUSR1 if we don't wait around a bit
-        sleep(1);
         Ok(())
     }
 }

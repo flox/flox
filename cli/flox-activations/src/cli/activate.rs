@@ -1,17 +1,18 @@
 use std::fs::{self};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Result, anyhow};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
+use flox_core::activations::{self, activations_json_path};
 use indoc::formatdoc;
 use log::debug;
 use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::{Pid, getpid};
 use serde::{Deserialize, Serialize};
-use signal_hook::consts::{SIGCHLD, SIGUSR1};
+use signal_hook::consts::{SIGCHLD, SIGUSR1, SIGUSR2};
 use signal_hook::iterator::Signals;
 
 use super::StartOrAttachArgs;
@@ -159,7 +160,11 @@ impl ActivateArgs {
             );
             // We want stdin, stdout, and stderr inherited
             let child = executive.spawn()?;
-            Self::wait_for_start(Pid::from_raw(child.id() as i32))?;
+            Self::wait_for_start(
+                Pid::from_raw(child.id() as i32),
+                &context,
+                &start_or_attach.activation_id,
+            )?;
         }
 
         attach(
@@ -172,66 +177,108 @@ impl ActivateArgs {
     }
 
     /// Wait for the executive to start the activation, mark it ready, and send
-    /// SIGUSR1.
-    fn wait_for_start(child_pid: Pid) -> Result<(), anyhow::Error> {
+    /// SIGUSR1 to signal success.
+    /// The executive sends SIGUSR2 on failure.
+    /// If the child dies, then we error.
+    fn wait_for_start(
+        child_pid: Pid,
+        context: &ActivateCtx,
+        activation_id: &str,
+    ) -> Result<(), anyhow::Error> {
         debug!(
             "Awaiting SIGUSR1 from child process with PID: {}",
             child_pid
         );
 
-        // Set up signal handler to await the death of the child.
-        // If the child dies, then we should error out. We expect
-        // to receive SIGUSR1 from the child when it's ready.
-        let mut signals = Signals::new([SIGCHLD, SIGUSR1])?;
-        for signal in signals.forever() {
-            match signal {
-                SIGUSR1 => {
-                    debug!("Received SIGUSR1 from child process {}", child_pid);
-                    return Ok(()); // Proceed after receiving SIGUSR1
-                },
-                SIGCHLD => {
-                    // SIGCHLD can come from any child process, not just ours.
-                    // Use waitpid with WNOHANG to check if OUR child has exited.
-                    match waitpid(child_pid, Some(WaitPidFlag::WNOHANG)) {
-                        Ok(WaitStatus::StillAlive) => {
-                            // Our child is still alive, SIGCHLD was from a different process
-                            debug!(
-                                "Received SIGCHLD but child {} is still alive, continuing to wait",
-                                child_pid
-                            );
-                            continue;
-                        },
-                        Ok(status) => {
-                            // Our child has exited
-                            return Err(anyhow!(
-                                // TODO: we should print the path to the log file
-                                "Activation process {} terminated unexpectedly with status: {:?}",
-                                child_pid,
-                                status
-                            ));
-                        },
-                        Err(nix::errno::Errno::ECHILD) => {
-                            // Child already reaped, this shouldn't happen but handle gracefully
-                            return Err(anyhow!(
-                                "Activation process {} terminated unexpectedly (already reaped)",
-                                child_pid
-                            ));
-                        },
-                        Err(e) => {
-                            // Unexpected error from waitpid
-                            return Err(anyhow!(
-                                "Failed to check status of activation process {}: {}",
-                                child_pid,
-                                e
-                            ));
-                        },
-                    }
-                },
-                _ => unreachable!(),
+        let mut signals = Signals::new([SIGCHLD, SIGUSR1, SIGUSR2])?;
+        loop {
+            let pending = signals.wait();
+            // We want to handle SIGUSR1 and SIGUSR2 rather than SIGCHLD if both
+            // are received
+            // I'm not 100% confident SIGCHLD couldn't be delivered prior to
+            // SIGUSR1 or SIGUSR2,
+            // but I haven't seen that since switching to signals.wait() instead
+            // of signals.forever()
+            // If that does happen, the user would see
+            // "Error: Activation process {} terminated unexpectedly"
+            // which isn't a huge problem
+            let signals = pending.collect::<Vec<_>>();
+            // Proceed after receiving SIGUSR1
+            if signals.contains(&SIGUSR1) {
+                debug!(
+                    "Received SIGUSR1 (start completed successfully) from child process {}",
+                    child_pid
+                );
+                return Ok(());
+            // Bail on SIGUSR2
+            } else if signals.contains(&SIGUSR2) {
+                debug!(
+                    "Received SIGUSR2 (start failed) from child process {}",
+                    child_pid
+                );
+                Self::cleanup_on_failure(activation_id, &context.flox_runtime_dir, &context.env)?;
+                // Exit non-zero, but don't print anything as the executive
+                // prints an error
+                // TODO: don't exit prior to destructors
+                std::process::exit(1);
+            } else if signals.contains(&SIGCHLD) {
+                // SIGCHLD can come from any child process, not just ours.
+                // Use waitpid with WNOHANG to check if OUR child has exited.
+                match waitpid(child_pid, Some(WaitPidFlag::WNOHANG)) {
+                    Ok(WaitStatus::StillAlive) => {
+                        // Our child is still alive, SIGCHLD was from a different process
+                        debug!(
+                            "Received SIGCHLD but child {} is still alive, continuing to wait",
+                            child_pid
+                        );
+                        continue;
+                    },
+                    Ok(status) => {
+                        // Our child has exited
+                        return Err(anyhow!(
+                            // TODO: we should print the path to the log file
+                            "Activation process {} terminated unexpectedly with status: {:?}",
+                            child_pid,
+                            status
+                        ));
+                    },
+                    Err(nix::errno::Errno::ECHILD) => {
+                        // Child already reaped, this shouldn't happen but handle gracefully
+                        return Err(anyhow!(
+                            "Activation process {} terminated unexpectedly (already reaped)",
+                            child_pid
+                        ));
+                    },
+                    Err(e) => {
+                        // Unexpected error from waitpid
+                        return Err(anyhow!(
+                            "Failed to check status of activation process {}: {}",
+                            child_pid,
+                            e
+                        ));
+                    },
+                }
+            } else {
+                unreachable!("Received unexpected signal or empty iterator over signals");
             }
         }
+    }
 
-        unreachable!();
+    fn cleanup_on_failure(
+        activation_id: &str,
+        runtime_dir: impl AsRef<Path>,
+        flox_env: impl AsRef<Path>,
+    ) -> Result<()> {
+        let activations_json_path = activations_json_path(runtime_dir, flox_env);
+        let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
+        let Some(activations) = activations else {
+            anyhow::bail!("Expected an existing activations.json file");
+        };
+        let mut activations = activations.check_version()?;
+        activations.remove_activation(activation_id);
+        activations::write_activations_json(&activations, activations_json_path, lock)?;
+        // TODO: should we remove the directory or activations.json file?
+        Ok(())
     }
 }
 
