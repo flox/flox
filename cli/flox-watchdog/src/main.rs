@@ -12,8 +12,8 @@ use flox_core::activations::{
     read_activations_json,
     write_activations_json,
 };
+use flox_core::traceable_path;
 use flox_core::vars::FLOX_VERSION_STRING;
-use flox_core::{maybe_traceable_path, traceable_path};
 use logger::{init_logger, spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
@@ -66,7 +66,7 @@ pub struct Cli {
 
     /// The directory to store and garbage collect logs
     #[arg(short, long = "log-dir", value_name = "PATH")]
-    pub log_dir: Option<PathBuf>,
+    pub log_dir: PathBuf,
 
     /// Disable metric reporting
     #[arg(long)]
@@ -104,7 +104,7 @@ fn run(args: Cli) -> Result<(), Error> {
     span.record("runtime_dir", traceable_path(&args.runtime_dir));
     span.record("id", &args.activation_id);
     span.record("socket", traceable_path(&args.socket_path));
-    span.record("log_dir", maybe_traceable_path(&args.log_dir));
+    span.record("log_dir", traceable_path(&args.log_dir));
     debug!("starting");
 
     ensure_process_group_leader().context("failed to ensure watchdog is detached from terminal")?;
@@ -151,9 +151,7 @@ fn run_inner(
         "watchdog is on duty"
     );
     spawn_heartbeat_log();
-    if let Some(log_dir) = args.log_dir {
-        spawn_logs_gc_threads(log_dir);
-    }
+    spawn_logs_gc_threads(args.log_dir);
 
     debug!("waiting for termination");
 
@@ -343,7 +341,7 @@ mod test {
             runtime_dir: runtime_dir.to_path_buf(),
             activation_id,
             socket_path: PathBuf::from("/does_not_exist"),
-            log_dir: Some(log_dir.to_path_buf()),
+            log_dir: log_dir.to_path_buf(),
             disable_metrics: true,
         };
 

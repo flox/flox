@@ -18,23 +18,19 @@ const KEEP_LAST_N_PROCESSES: usize = 5;
 
 /// Initializes a logger that persists logs to an optional file in addition to `stderr`
 pub(crate) fn init_logger(
-    logs_dir: &Option<PathBuf>,
+    logs_dir: impl AsRef<Path>,
     log_file_prefix: &str,
 ) -> Result<(), anyhow::Error> {
     let stderr_layer = tracing_subscriber::fmt::layer()
         .with_writer(std::io::stderr)
         .with_filter(EnvFilter::from_default_env());
-    let file_layer = if let Some(dir_path) = logs_dir {
-        let appender = tracing_appender::rolling::daily(dir_path, log_file_prefix);
-        Some(
-            tracing_subscriber::fmt::layer()
-                .with_ansi(false)
-                .with_writer(appender)
-                .with_filter(EnvFilter::from_env("_FLOX_WATCHDOG_LOG_LEVEL")),
-        )
-    } else {
-        None
-    };
+    let appender = tracing_appender::rolling::daily(logs_dir, log_file_prefix);
+    let file_layer = Some(
+        tracing_subscriber::fmt::layer()
+            .with_ansi(false)
+            .with_writer(appender)
+            .with_filter(EnvFilter::from_env("_FLOX_WATCHDOG_LOG_LEVEL")),
+    );
     let sentry_layer = sentry::integrations::tracing::layer().enable_span_attributes();
     tracing_subscriber::registry()
         .with(file_layer)

@@ -422,12 +422,10 @@ impl Activate {
             watchdog_bin: Some((*WATCHDOG_BIN).clone()),
             shell,
             flox_active_environments: flox_active_environments.to_string(),
-            flox_env_log_dir: Some(
-                concrete_environment
-                    .log_path()?
-                    .to_string_lossy()
-                    .to_string(),
-            ),
+            flox_env_log_dir: concrete_environment
+                .log_path()?
+                .to_string_lossy()
+                .to_string(),
             prompt_color_1,
             prompt_color_2,
             flox_prompt_environments,
@@ -439,7 +437,7 @@ impl Activate {
             flox_services_to_start,
             flox_env_cuda_detection,
             flox_activate_start_services,
-            flox_services_socket: Some(flox_services_socket),
+            flox_services_socket,
             interpreter_path,
             invocation_type: Some(invocation_type),
             remove_after_reading: true,

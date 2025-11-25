@@ -123,13 +123,9 @@ pub fn old_cli_envs(context: ActivateCtx) -> HashMap<&'static str, String> {
             FLOX_ACTIVATE_START_SERVICES_VAR,
             context.flox_activate_start_services.to_string(),
         ),
+        (FLOX_ENV_LOG_DIR_VAR, context.flox_env_log_dir),
+        (FLOX_SERVICES_SOCKET_VAR, context.flox_services_socket),
     ]);
-    if let Some(log_dir) = context.flox_env_log_dir.as_ref() {
-        exports.insert(FLOX_ENV_LOG_DIR_VAR, log_dir.clone());
-    }
-    if let Some(socket_path) = context.flox_services_socket.as_ref() {
-        exports.insert(FLOX_SERVICES_SOCKET_VAR, socket_path.clone());
-    }
     if let Some(services_to_start) = context.flox_services_to_start {
         exports.insert(FLOX_SERVICES_TO_START_VAR, services_to_start);
     }
