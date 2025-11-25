@@ -107,6 +107,15 @@ pub fn traceable_path(p: impl AsRef<Path>) -> impl tracing::Value {
     path.display().to_string()
 }
 
+/// Returns a `tracing`-compatible form of an `Option<PathBuf>`
+pub fn maybe_traceable_path(maybe_path: &Option<PathBuf>) -> impl tracing::Value {
+    if let Some(p) = maybe_path {
+        p.display().to_string()
+    } else {
+        String::from("null")
+    }
+}
+
 /// Returns a log file name, or glob pattern, for upgrade-check logs.
 pub fn log_file_format_upgrade_check(index: impl Display) -> String {
     format!("upgrade-check.{}.log", index)
