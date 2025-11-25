@@ -206,7 +206,7 @@ ssh_key_setup() {
   # start a new one.
   unset SSH_AUTH_SOCK SSH_AGENT_PID
   # You can't find work in this town without a good agent. Lets get one.
-  eval "$(ssh-agent -s)"
+  eval "$(ssh-agent -sT)"
   ssh-add "$FLOX_TEST_SSH_KEY"
   unset SSH_ASKPASS
   export __FT_RAN_SSH_KEY_SETUP=:

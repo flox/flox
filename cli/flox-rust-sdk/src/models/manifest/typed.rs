@@ -25,8 +25,8 @@ use systemd::unit::ServiceUnit;
 
 use super::raw::RawManifest;
 use crate::data::System;
-use crate::models::environment_ref::EnvironmentRef;
-use crate::providers::services::ServiceError;
+use crate::models::environment_ref::RemoteEnvironmentRef;
+use crate::providers::services::process_compose::ServiceError;
 
 pub(crate) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub const DEFAULT_PRIORITY: u64 = 5;
@@ -386,17 +386,13 @@ pub enum ManifestPackageDescriptor {
 }
 
 impl ManifestPackageDescriptor {
-    /// Check if the package descriptor is from a custom catalog by parsing the
-    /// pkg-path and looking for a catalog prefix.  Only Catalog type descriptors
-    /// are considered to be from a custom catalog.
+    /// Check if the package descriptor is from a custom catalog.
+    /// Only Catalog type descriptors are considered to be from a custom catalog.
     pub(crate) fn is_from_custom_catalog(&self) -> bool {
-        if let ManifestPackageDescriptor::Catalog(pkg) = self {
-            let parts: Vec<&str> = pkg.pkg_path.split('/').collect();
-            let is_base_catalog_pkg =
-                parts.len() == 1 || parts.first().is_some_and(|p| p.contains('.'));
-            return !is_base_catalog_pkg;
+        match self {
+            ManifestPackageDescriptor::Catalog(pkg) => super::raw::is_custom_package(&pkg.pkg_path),
+            _ => false,
         }
-        false
     }
 }
 
@@ -800,11 +796,7 @@ pub struct ServiceDescriptor {
     pub shutdown: Option<ServiceShutdown>,
 
     /// Additional manual config of the systemd service generated for persistent services
-    // Generating more than 1(!) value with proptest,
-    // increases the runtime of `proptest!`s to the point that we exhausted our stack space in CI
-    // Since we don't actually test against properties of systemd config,
-    // exclude this value from proptest state space generation.
-    #[cfg_attr(test, proptest(value = "None"))]
+    #[cfg_attr(test, proptest(strategy = "test::service_unit_with_none_fields()"))]
     pub systemd: Option<ServiceUnit>,
 
     /// Systems to allow running the service on
@@ -1046,7 +1038,7 @@ pub enum IncludeDescriptor {
     },
     Remote {
         /// The remote environment reference in the form `owner/name`.
-        remote: EnvironmentRef,
+        remote: RemoteEnvironmentRef,
         /// A name similar to an install ID that a user could use to specify
         /// the environment on the command line e.g. for upgrades, or in an
         /// error message.
@@ -1084,6 +1076,20 @@ pub mod test {
     const CATALOG_MANIFEST: &str = indoc! {r#"
         version = 1
     "#};
+
+    /// Generate a single ServiceUnit with just enough fields to test `skip_serializing_none`
+    /// Generating more than 1(!) value with proptest,
+    /// increases the runtime of `proptest!`s to the point that we exhausted our stack space in CI
+    pub(super) fn service_unit_with_none_fields() -> impl Strategy<Value = Option<ServiceUnit>> {
+        Just(Some(ServiceUnit {
+            unit: Some(systemd::unit::Unit {
+                ..Default::default()
+            }),
+            service: Some(systemd::unit::Service {
+                ..Default::default()
+            }),
+        }))
+    }
 
     // Generate a Manifest that has empty install and include sections
     pub fn manifest_without_install_or_include() -> impl Strategy<Value = Manifest> {
@@ -1343,7 +1349,7 @@ pub mod test {
                 name: Some("bar".to_string()),
             },
             IncludeDescriptor::Remote {
-                remote: EnvironmentRef::new("owner", "repo").unwrap(),
+                remote: RemoteEnvironmentRef::new("owner", "repo").unwrap(),
                 name: Some("baz".to_string()),
                 generation: None,
             },
@@ -1491,44 +1497,8 @@ pub mod test {
 
     #[test]
     fn test_is_from_custom_catalog() {
-        // Test cases: (pkg_path, expected_result, description)
-        let test_cases = vec![
-            ("hello", false, "basic pkg-path"),
-            ("python3.11", false, "packages with dots in the name"),
-            (
-                "mycatalog/hello",
-                true,
-                "package with custom catalog prefix",
-            ),
-            (
-                "custom/category/package",
-                true,
-                "package with nested path and custom catalog",
-            ),
-            (
-                "nodePackages.@angular/cli",
-                false,
-                "first part contains a dot (should be treated as attr-path)",
-            ),
-            (
-                "nodePackages.tedicross-git+https://github.com/TediCross/TediCross.git#v0.8.7",
-                false,
-                "complex package name with dots and special characters, ugly but valid",
-            ),
-            ("", false, "edge case with empty pkg_path"),
-            ("/", true, "edge case with just a slash"),
-        ];
-
-        for (pkg_path, expected, description) in test_cases {
-            let descriptor = create_catalog_descriptor(pkg_path);
-            assert_eq!(
-                descriptor.is_from_custom_catalog(),
-                expected,
-                "Failed for {}: {}",
-                pkg_path,
-                description
-            );
-        }
+        assert!(!create_catalog_descriptor("hello").is_from_custom_catalog());
+        assert!(create_catalog_descriptor("mycatalog/hello").is_from_custom_catalog());
 
         // Test non-catalog descriptors always return false
         assert!(!create_flake_descriptor("github:owner/repo").is_from_custom_catalog());

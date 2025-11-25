@@ -19,7 +19,7 @@ use flox_rust_sdk::models::environment::{
     EnvironmentError,
 };
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
-use flox_rust_sdk::providers::services::ServiceError;
+use flox_rust_sdk::providers::services::process_compose::ServiceError;
 use itertools::Itertools;
 use tracing::{debug, instrument};
 

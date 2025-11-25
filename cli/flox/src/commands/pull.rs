@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
-use flox_rust_sdk::flox::{EnvironmentRef, Flox};
+use flox_rust_sdk::flox::{Flox, RemoteEnvironmentRef};
 use flox_rust_sdk::models::environment::generations::{GenerationId, GenerationsExt};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
@@ -40,12 +40,12 @@ enum PullSelect {
     New {
         /// ID of the environment to pull
         #[bpaf(long, short, argument("owner>/<name"))]
-        remote: EnvironmentRef,
+        remote: RemoteEnvironmentRef,
     },
     NewAbbreviated {
         /// ID of the environment to pull
         #[bpaf(positional("owner>/<name"))]
-        remote: EnvironmentRef,
+        remote: RemoteEnvironmentRef,
     },
     Existing {},
 }
@@ -228,7 +228,7 @@ impl Pull {
     fn pull_new_environment(
         flox: &Flox,
         env_path: PathBuf,
-        env_ref: EnvironmentRef,
+        env_ref: RemoteEnvironmentRef,
         copy: bool,
         force: bool,
         generation: Option<GenerationId>,
