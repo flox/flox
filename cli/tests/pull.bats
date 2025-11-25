@@ -69,6 +69,8 @@ function update_dummy_env() {
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/gzip.yaml" \
     "$FLOX_BIN" install gzip --remote "$OWNER/$ENV_NAME"
+
+  "$FLOX_BIN" push --remote "$OWNER/$ENV_NAME"
 }
 
 # make the environment with specified owner and name incompatible with the current system
@@ -190,7 +192,7 @@ function add_incompatible_package() {
   make_dummy_env "owner" "name"
   unset FLOX_FLOXHUB_TOKEN # logout, effectively
 
-  run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
+  run "$FLOX_BIN" pull owner/name # dummy remote as we are not actually pulling anything
   assert_success
 }
 
@@ -199,7 +201,7 @@ function add_incompatible_package() {
 @test "l?: pull environment from FloxHub" {
   skip "floxtest/default is not available for all systems"
   unset _FLOX_FLOXHUB_GIT_URL
-  run "$FLOX_BIN" pull --remote floxtest/default
+  run "$FLOX_BIN" pull floxtest/default
   assert_success
 }
 
@@ -214,7 +216,7 @@ function add_incompatible_package() {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 
   # pull a fresh environment
-  "$FLOX_BIN" pull --remote owner/name
+  "$FLOX_BIN" pull owner/name
   # pull it again, and expect an info message
   run "$FLOX_BIN" pull
   assert_success
@@ -229,7 +231,7 @@ function add_incompatible_package() {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 
   # dummy remote as we are not actually pulling anything
-  run "$FLOX_BIN" pull --remote owner/name
+  run "$FLOX_BIN" pull owner/name
   assert_success
   assert [ -e ".flox/env.json" ]
   assert [ -e ".flox/env.lock" ]
@@ -238,26 +240,26 @@ function add_incompatible_package() {
 }
 
 # bats test_tags=pull:l2,pull:l2:b
-@test "l2.b: flox pull with --remote fails if an env is already present" {
+@test "l2.b: flox pull remote fails if an env is already present" {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 
-  "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
+  "$FLOX_BIN" pull owner/name # dummy remote as we are not actually pulling anything
 
-  run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
+  run "$FLOX_BIN" pull owner/name # dummy remote as we are not actually pulling anything
   assert_failure
 }
 
 # bats test_tags=pull:l2,pull:l2:c
-@test "l2.c: flox pull with --remote and --dir pulls into the specified directory" {
+@test "l2.c: flox pull remote --dir pulls into the specified directory" {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 
-  run "$FLOX_BIN" pull --remote owner/name --dir ./inner
+  run "$FLOX_BIN" pull owner/name --dir ./inner
   assert_success
   assert [ -e "inner/.flox/env.json" ]
   assert [ -e "inner/.flox/env.lock" ]
@@ -272,7 +274,7 @@ function add_incompatible_package() {
   # dummy environment has no packages to resolve
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 
-  "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
+  "$FLOX_BIN" pull owner/name # dummy remote as we are not actually pulling anything
   LOCKED_BEFORE=$(cat .flox/env.lock | jq -r '.rev')
 
   update_dummy_env "owner" "name"
@@ -294,7 +296,7 @@ function add_incompatible_package() {
   # dummy environment has no packages to resolve
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 
-  "$FLOX_BIN" pull --remote owner/name --dir ./inner # dummy remote as we are not actually pulling anything
+  "$FLOX_BIN" pull owner/name --dir ./inner # dummy remote as we are not actually pulling anything
   LOCKED_BEFORE=$(cat ./inner/.flox/env.lock | jq -r '.rev')
 
   update_dummy_env "owner" "name"
@@ -315,14 +317,14 @@ function add_incompatible_package() {
   mkdir first second
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml" \
-    "$FLOX_BIN" pull --remote owner/name --dir first
+    "$FLOX_BIN" pull owner/name --dir first
   LOCKED_FIRST_BEFORE=$(cat ./first/.flox/env.lock | jq -r '.rev')
 
   update_dummy_env "owner" "name"
   LOCKED_FIRST_AFTER=$(cat ./first/.flox/env.lock | jq -r '.rev')
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml" \
-    "$FLOX_BIN" pull --remote owner/name --dir second
+    "$FLOX_BIN" pull owner/name --dir second
   LOCKED_SECOND=$(cat ./second/.flox/env.lock | jq -r '.rev')
 
   assert [ "$LOCKED_FIRST_BEFORE" == "$LOCKED_FIRST_AFTER" ]
@@ -346,11 +348,11 @@ function add_incompatible_package() {
   update_dummy_env "owner" "name"
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/gzip.yaml" \
-    run "$FLOX_BIN" pull --remote owner/name
+    run "$FLOX_BIN" pull owner/name
   assert_success
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/gzip.yaml" \
-    run "$FLOX_BIN" pull --remote owner/name
+    run "$FLOX_BIN" pull owner/name
   assert_failure
 }
 
@@ -360,11 +362,11 @@ function add_incompatible_package() {
   update_dummy_env "owner" "name"
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/gzip.yaml" \
-    run "$FLOX_BIN" pull --remote owner/name
+    run "$FLOX_BIN" pull owner/name
   assert_success
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/gzip.yaml" \
-    run "$FLOX_BIN" pull --remote owner/name --force
+    run "$FLOX_BIN" pull owner/name --force
   assert_success
 }
 
@@ -383,12 +385,12 @@ function add_incompatible_package() {
 
   # add_incompatible_package does not _lock_ the environment,
   # but pull won't either because it will expect it to already have a lock
-  run "$FLOX_BIN" pull --remote owner/name
+  run "$FLOX_BIN" pull owner/name
   assert_failure
   assert_line --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
 
   _FLOX_USE_CATALOG_MOCK="$INCOMPATIBLE_MOCK_RESPONSE" \
-    run "$FLOX_BIN" pull --remote owner/name --force
+    run "$FLOX_BIN" pull owner/name --force
   assert_success
   assert_line --partial "Modified the manifest to include your system but could not build."
 
@@ -402,7 +404,7 @@ function add_incompatible_package() {
 @test "'pull --copy' creates path environment" {
   make_dummy_env "owner" "name"
 
-  run "$FLOX_BIN" pull --remote owner/name --copy
+  run "$FLOX_BIN" pull owner/name --copy
   assert_success
   assert [ ! -e ".flox/env.lock" ]
   assert [ $(cat .flox/env.json | jq -r '.name') == "name" ]
@@ -417,7 +419,7 @@ function add_incompatible_package() {
   update_dummy_env "owner" "name"
   make_incompatible "owner" "name" 2
 
-  run "$FLOX_BIN" pull --remote owner/name
+  run "$FLOX_BIN" pull owner/name
   assert_failure
 }
 
@@ -425,7 +427,7 @@ function add_incompatible_package() {
 @test "'pull --copy' converts managed env to path environment" {
   make_dummy_env "owner" "name"
 
-  run "$FLOX_BIN" pull --remote owner/name
+  run "$FLOX_BIN" pull owner/name
   assert_success
   assert [ -e ".flox/env.lock" ]
   assert [ $(cat .flox/env.json | jq -r '.name') == "name" ]
@@ -445,7 +447,7 @@ function add_incompatible_package() {
 @test "'pull --copy' converts to path environment even if upstream deleted" {
   make_dummy_env "owner" "name"
 
-  "$FLOX_BIN" pull --remote owner/name
+  "$FLOX_BIN" pull owner/name
 
   # delete upstream
   rm -rf "$FLOX_FLOXHUB_PATH"
@@ -459,7 +461,7 @@ function add_incompatible_package() {
 @test "'pull --copy' does not pull" {
   make_dummy_env "owner" "name"
 
-  "$FLOX_BIN" pull --remote owner/name
+  "$FLOX_BIN" pull owner/name
 
   update_dummy_env "owner" "name"
 
@@ -493,21 +495,21 @@ function add_incompatible_package() {
   update_dummy_env "owner" "env"
 
   # No build if latest generation specified explicitly
-  "$FLOX_BIN" pull --remote owner/env --copy --generation 2
+  "$FLOX_BIN" pull owner/env --copy --generation 2
 
   _FLOX_TESTING_NO_BUILD=true "$FLOX_BIN" activate -- true
   wait_for_watchdogs "$PROJECT_DIR"
   "$FLOX_BIN" delete -f
 
   # No build if an earlier generation specified explicitly
-  "$FLOX_BIN" pull --remote owner/env --copy --generation 1
+  "$FLOX_BIN" pull owner/env --copy --generation 1
 
   _FLOX_TESTING_NO_BUILD=true "$FLOX_BIN" activate -- true
   wait_for_watchdogs "$PROJECT_DIR"
   "$FLOX_BIN" delete -f
 
   # No build if no generation specified
-  "$FLOX_BIN" pull --remote owner/env --copy
+  "$FLOX_BIN" pull owner/env --copy
 
   _FLOX_TESTING_NO_BUILD=true "$FLOX_BIN" activate -- true
   wait_for_watchdogs "$PROJECT_DIR"
