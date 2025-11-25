@@ -12,8 +12,8 @@ use flox_core::activations::{
     read_activations_json,
     write_activations_json,
 };
+use flox_core::vars::FLOX_VERSION_STRING;
 use flox_core::{maybe_traceable_path, traceable_path};
-use flox_rust_sdk::flox::FLOX_VERSION_STRING;
 use logger::{init_logger, spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
