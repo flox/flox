@@ -5,6 +5,7 @@
   inputs,
   lib,
   pkgsFor,
+  process-compose,
   rust-toolchain,
   rustfmt ? rust-toolchain.rustfmt,
   flox-src,
@@ -38,6 +39,7 @@ craneLib.buildPackage (
     # used internally to ensure CA certificates are available
     NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
+    PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
     FLOX_ACTIVATIONS_BIN = "${placeholder "out"}/libexec/flox-activations";
 
     # runtime dependencies
@@ -46,7 +48,9 @@ craneLib.buildPackage (
     # build dependencies
     nativeBuildInputs = rust-external-deps.nativeBuildInputs;
 
-    propagatedBuildInputs = rust-external-deps.propagatedBuildInputs ++ [ ];
+    propagatedBuildInputs = rust-external-deps.propagatedBuildInputs ++ [
+      process-compose
+    ];
 
     # https://github.com/ipetkov/crane/issues/385
     # doNotLinkInheritedArtifacts = true;
