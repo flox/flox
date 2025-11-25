@@ -3,8 +3,9 @@ use std::path::{Path, PathBuf};
 use std::{env, fs, io};
 
 use anyhow::{Result, anyhow};
+use flox_core::vars::FLOX_SENTRY_ENV;
 use flox_rust_sdk::data::FloxVersion;
-use flox_rust_sdk::flox::{FLOX_SENTRY_ENV, FLOX_VERSION};
+use flox_rust_sdk::flox::FLOX_VERSION;
 use futures::Future;
 use indoc::formatdoc;
 use reqwest;

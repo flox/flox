@@ -32,3 +32,6 @@ pub static FLOX_VERSION_STRING: LazyLock<String> = LazyLock::new(|| {
     // and default configurations in IDEs.
     "0.0.0-dirty".to_string()
 });
+
+pub static FLOX_SENTRY_ENV: LazyLock<Option<String>> =
+    LazyLock::new(|| std::env::var("FLOX_SENTRY_ENV").ok());

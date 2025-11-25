@@ -22,8 +22,6 @@ pub static FLOX_VERSION: LazyLock<FloxVersion> = LazyLock::new(|| {
     };
     version
 });
-pub static FLOX_SENTRY_ENV: LazyLock<Option<String>> =
-    LazyLock::new(|| std::env::var("FLOX_SENTRY_ENV").ok());
 
 /// The main API struct for our flox implementation
 ///
