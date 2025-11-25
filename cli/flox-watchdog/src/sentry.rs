@@ -1,8 +1,7 @@
 use std::borrow::Cow;
 
 use anyhow::anyhow;
-use flox_core::vars::FLOX_VERSION_STRING;
-use flox_rust_sdk::flox::FLOX_SENTRY_ENV;
+use flox_core::vars::{FLOX_SENTRY_ENV, FLOX_VERSION_STRING};
 use sentry::{ClientInitGuard, IntoDsn};
 use tracing::{debug, warn};
 
