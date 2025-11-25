@@ -9,7 +9,6 @@ edition = "2024"
 anyhow.workspace = true
 clap.workspace = true
 flox-core.workspace = true
-flox-rust-sdk.workspace = true
 fslock.workspace = true
 glob = "0.3.3"
 nix.workspace = true
