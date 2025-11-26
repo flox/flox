@@ -729,13 +729,13 @@ fn notify_upgrade_if_available(flox: &Flox, environment: &mut ConcreteEnvironmen
 
     let current_lockfile = environment.lockfile(flox)?.into();
 
-    if Some(current_lockfile) != info.result.old_lockfile {
+    if Some(current_lockfile) != info.upgrade_result.old_lockfile {
         // todo: delete the info file?
         debug!("Not notifying user of upgrade, lockfile has changed since last check");
         return Ok(());
     }
 
-    let diff = info.result.diff();
+    let diff = info.upgrade_result.diff();
     if diff.is_empty() {
         debug!("Not notifying user of upgrade, no changes in lockfile");
         return Ok(());
@@ -940,12 +940,13 @@ mod upgrade_notification_tests {
 
         let _ = locked.info_mut().insert(UpgradeInformation {
             last_checked: OffsetDateTime::now_utc(),
-            result: UpgradeResult {
+            upgrade_result: UpgradeResult {
                 old_lockfile: Some(environment.lockfile(flox).unwrap().into()),
                 new_lockfile,
 
                 store_path: None,
             },
+            remote_generations_metadata: None,
         });
 
         locked.commit().unwrap();
@@ -1031,12 +1032,13 @@ mod upgrade_notification_tests {
 
             let _ = locked.info_mut().insert(UpgradeInformation {
                 last_checked: OffsetDateTime::now_utc(),
-                result: UpgradeResult {
+                upgrade_result: UpgradeResult {
                     old_lockfile: Some(old_lockfile),
                     new_lockfile: environment.lockfile(&flox).unwrap().into(),
 
                     store_path: None,
                 },
+                remote_generations_metadata: None,
             });
 
             locked.commit().unwrap();
@@ -1063,20 +1065,21 @@ mod upgrade_notification_tests {
             let upgrade_information =
                 UpgradeInformationGuard::read_in(environment.cache_path().unwrap()).unwrap();
 
-            let result = UpgradeResult {
+            let upgrade_result = UpgradeResult {
                 old_lockfile: Some(environment.lockfile(&flox).unwrap().into()),
                 new_lockfile: environment.lockfile(&flox).unwrap().into(),
 
                 store_path: None,
             };
 
-            assert!(result.diff().is_empty());
+            assert!(upgrade_result.diff().is_empty());
 
             let mut locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
 
             let _ = locked.info_mut().insert(UpgradeInformation {
                 last_checked: OffsetDateTime::now_utc(),
-                result,
+                upgrade_result,
+                remote_generations_metadata: None,
             });
 
             locked.commit().unwrap();
