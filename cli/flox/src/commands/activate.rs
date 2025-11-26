@@ -21,7 +21,7 @@ use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use flox_rust_sdk::utils::logging::traceable_path;
 use indoc::{formatdoc, indoc};
 use shell_gen::ShellWithPath;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 use super::services::ServicesEnvironment;
 use super::{
@@ -423,6 +423,7 @@ impl Activate {
 
         let writer = BufWriter::new(&tempfile);
         serde_json::to_writer_pretty(writer, &activate_data)?;
+        let (_, tempfile) = tempfile.keep()?;
 
         // `flox-activations` doesn't really have a "quiet" mode, so it makes
         // more sense for 0 to be the default rather than 1.
@@ -432,7 +433,7 @@ impl Activate {
             .env(FLOX_ACTIVATIONS_VERBOSITY_VAR, format!("{verbosity_num}"))
             .arg("activate")
             .arg("--activate-data")
-            .arg(tempfile.path());
+            .arg(tempfile);
 
         if is_ephemeral {
             debug!("running ephemeral activation command: {:?}", command);
@@ -446,6 +447,10 @@ impl Activate {
                     String::from_utf8_lossy(&output.stderr)
                 ))?;
             }
+            trace!(
+                "ephemeral activation stderr:\n{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
             Ok(())
         } else {
             debug!("running activation command: {:?}", command);

@@ -5055,3 +5055,32 @@ EOF
   assert_output --partial "/project:"
   assert_output --partial "/rc_extra_path:"
 }
+
+@test "correct messaging when hook.on-activate fails" {
+  project_setup
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+    [hook]
+    on-activate = """
+      echo "on-activate stdout message"
+      echo "on-activate stderr message" >&2
+      exit 1
+    """
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  unset RUST_BACKTRACE
+  run --separate-stderr "$FLOX_BIN" activate -- true
+  assert_failure
+  assert_output ""
+  expected_stderr="$(cat << EOF
+on-activate stdout message
+on-activate stderr message
+Error: Running hook.on-activate failed
+EOF
+)"
+  assert_equal "$stderr" "$expected_stderr"
+}
