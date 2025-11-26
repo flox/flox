@@ -769,6 +769,12 @@ impl GenerationsExt for ManagedEnvironment {
 
         Ok(rendered_env_links)
     }
+
+    fn remote_generations_metadata(
+        &self,
+    ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
+        Generations::new(self.floxmeta.git.clone(), remote_branch_name(&self.pointer)).metadata()
+    }
 }
 
 /// Constructors and related functions
