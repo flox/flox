@@ -296,6 +296,11 @@ impl RemoteEnvironment {
         Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
         Ok(result)
     }
+
+    pub fn fetch_remote_state(&self, flox: &Flox) -> Result<(), EnvironmentError> {
+        self.inner.fetch_remote_state(flox)?;
+        Ok(())
+    }
 }
 
 impl Environment for RemoteEnvironment {
