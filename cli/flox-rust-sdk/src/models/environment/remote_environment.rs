@@ -494,6 +494,12 @@ impl GenerationsExt for RemoteEnvironment {
         self.inner
             .rendered_env_links_for_generation(flox, generation)
     }
+
+    fn remote_generations_metadata(
+        &self,
+    ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
+        self.inner.remote_generations_metadata()
+    }
 }
 
 #[cfg(any(test, feature = "tests"))]
