@@ -163,7 +163,7 @@ EOF
   "$FLOX_BIN" install hello --remote "$OWNER/test"
 
   export FLOX_CACHE_DIR="$(realpath $FLOX_CACHE_DIR)"
-  run "$FLOX_BIN" activate --trust --remote "$OWNER/test" -- command -v hello
+  run "$FLOX_BIN" activate --trust --remote "$OWNER/test" -c 'command -v hello'
   assert_success
   assert_output --partial "$FLOX_CACHE_DIR/run/owner/$NIX_SYSTEM.test.dev/bin/hello"
 }

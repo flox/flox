@@ -618,7 +618,7 @@ EOF
     echo "Testing: flox services $command"
     command="$command" run "$FLOX_BIN" activate -- bash <(
       cat << 'EOF'
-        echo "$PPID" > activation_pid
+        echo "$$" > activation_pid
 
         ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
         ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
@@ -1477,7 +1477,7 @@ EOF
   # Start a background activation with an initial value of FOO.
   TEARDOWN_FIFO="$PROJECT_DIR/finished"
   mkfifo "$TEARDOWN_FIFO"
-  "$FLOX_BIN" activate -s -- echo \> "$TEARDOWN_FIFO" &
+  "$FLOX_BIN" activate -s -c "echo > \"$TEARDOWN_FIFO\"" &
 
   # The initial value of FOO should be written.
   wait_for_file_content out foo_one

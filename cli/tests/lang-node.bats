@@ -59,7 +59,7 @@ teardown() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/node_npm.yaml" \
     run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'nodejs' installed"
-  run "$FLOX_BIN" activate -- npm run start
+  run "$FLOX_BIN" activate -c "npm run start"
   assert_output --partial "86400000"
 }
 
@@ -75,7 +75,7 @@ teardown() {
   refute_output "nodejs"
   run "$FLOX_BIN" list
   assert_regex "$output" "yarn: yarn \(.+\)"
-  run "$FLOX_BIN" activate -- yarn run start
+  run "$FLOX_BIN" activate -c "yarn run start"
   assert_output --partial "86400000"
 }
 
@@ -135,7 +135,7 @@ teardown() {
       # XXX "$TESTS_DIR/init/node/krb5.sh" is not always present so only run
       #     once we have confirmed that it exists, and then expect it to fail.
       if [ -f "$TESTS_DIR/init/node/krb5.sh" ]; then
-        run "$FLOX_BIN" activate -- bash "$TESTS_DIR/init/node/krb5.sh"
+        run "$FLOX_BIN" activate -c "bash \"$TESTS_DIR/init/node/krb5.sh\""
         assert_failure
       fi
 
@@ -143,7 +143,7 @@ teardown() {
         run "$FLOX_BIN" install krb5
       assert_success
 
-      run "$FLOX_BIN" activate -- bash "$INPUT_DATA/init/node/krb5.sh"
+      run "$FLOX_BIN" activate -c "bash \"$INPUT_DATA/init/node/krb5.sh\""
       assert_success
       ;;
     *-darwin)
@@ -152,7 +152,7 @@ teardown() {
       # XXX "$TESTS_DIR/init/node/krb5.sh" is not always present so only run
       #     once we have confirmed that it exists, and then expect it to fail.
       if [ -f "$TESTS_DIR/init/node/krb5.sh" ]; then
-        run "$FLOX_BIN" activate -- bash -c 'CPATH="$FLOX_ENV/include/c++/v1:$CPATH" . "$TESTS_DIR/init/node/krb5.sh"'
+        run "$FLOX_BIN" activate -c "bash -c 'CPATH=\"\$FLOX_ENV/include/c++/v1:\$CPATH\" . \"\$TESTS_DIR/init/node/krb5.sh\"'"
         assert_failure
       fi
 
@@ -161,7 +161,7 @@ teardown() {
       assert_success
 
       # TODO: fix CPATH in activate
-      run "$FLOX_BIN" activate -- bash -c 'CPATH="$FLOX_ENV/include/c++/v1:$CPATH" . "$INPUT_DATA/init/node/krb5.sh"'
+      run "$FLOX_BIN" activate -c "bash -c 'CPATH=\"\$FLOX_ENV/include/c++/v1:\$CPATH\" . \"\$INPUT_DATA/init/node/krb5.sh\"'"
       assert_success
       ;;
     *)
