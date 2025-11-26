@@ -1606,6 +1606,27 @@ fn check_for_local_includes(lockfile: &Lockfile) -> Result<(), ManagedEnvironmen
 
 /// FloxHub synchronization implementation (pull/push)
 impl ManagedEnvironment {
+    /// Fetch the remote branch into the local sync branch.
+    /// The sync branch is always a reset to the remote branch
+    /// and it's state should not be depended on.
+    #[instrument(skip(flox), fields(progress = "Looking up environment on FloxHub"))]
+    pub fn fetch_remote_state(&self, flox: &Flox) -> Result<(), ManagedEnvironmentError> {
+        let sync_branch = remote_branch_name(&self.pointer);
+        self.floxmeta
+            .git
+            .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}"))
+            .map_err(|err| match err {
+                GitRemoteCommandError::RefNotFound(_) => {
+                    ManagedEnvironmentError::UpstreamNotFound {
+                        env_ref: self.env_ref(),
+                        upstream: self.pointer.floxhub_base_url.to_string(),
+                        user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
+                    }
+                },
+                e => ManagedEnvironmentError::FetchUpdates(e),
+            })
+    }
+
     /// Create a new [ManagedEnvironment] from a [PathEnvironment]
     /// by pushing the contents of the original environment as a generation to floxhub.
     ///
@@ -1788,17 +1809,14 @@ impl ManagedEnvironment {
             check_for_local_includes(&lockfile)?;
         }
 
-        // Fetch the remote branch into sync branch
-        match self
-            .floxmeta
-            .git
-            .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}",))
-        {
+        // Fetch the remote branch into sync branch,
+        // we can ignore if the upstream was deleted since we are going to create it on push anyway.
+        match self.fetch_remote_state(flox) {
             Ok(_) => {},
-            Err(GitRemoteCommandError::RefNotFound(_)) => {
+            Err(ManagedEnvironmentError::UpstreamNotFound { .. }) => {
                 debug!("Upstream environment was deleted.")
             },
-            Err(e) => Err(ManagedEnvironmentError::FetchUpdates(e))?,
+            e @ Err(_) => e?,
         };
 
         // Check whether we can fast-forward merge the remote branch into the local branch
@@ -1878,24 +1896,7 @@ impl ManagedEnvironment {
         let sync_branch = remote_branch_name(&self.pointer);
         let project_branch = branch_name(&self.pointer, &self.path);
 
-        // Fetch the remote branch into the local sync branch.
-        // The sync branch is always a reset to the remote branch
-        // and it's state should not be depended on.
-        match self
-            .floxmeta
-            .git
-            .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}"))
-        {
-            Ok(_) => {},
-            Err(GitRemoteCommandError::RefNotFound(_)) => {
-                Err(ManagedEnvironmentError::UpstreamNotFound {
-                    env_ref: self.env_ref(),
-                    upstream: self.pointer.floxhub_base_url.to_string(),
-                    user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
-                })?
-            },
-            Err(e) => Err(ManagedEnvironmentError::FetchUpdates(e))?,
-        };
+        self.fetch_remote_state(flox)?;
 
         // Check whether we can fast-forward the remote branch to the local branch,
         // if not the environment has diverged.
