@@ -361,13 +361,13 @@ impl List {
 
         let current_lockfile = environment.lockfile(flox)?.into();
 
-        if Some(current_lockfile) != info.result.old_lockfile {
+        if Some(current_lockfile) != info.upgrade_result.old_lockfile {
             // todo: delete the info file?
             debug!("Not using upgrade information; lockfile has changed since last check");
             return Ok(None);
         }
 
-        Ok(Some(info.result.diff_for_system(&flox.system)))
+        Ok(Some(info.upgrade_result.diff_for_system(&flox.system)))
     }
 }
 

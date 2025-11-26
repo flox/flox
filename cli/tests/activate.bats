@@ -4853,7 +4853,7 @@ Setting PATH from .bashrc"
 
     timeout 5s bash -c "while [ ! -f .flox/cache/upgrade-checks.json ]; do sleep 0.1; done"
 
-    run jq '.result.new_lockfile == .result.old_lockfile'  .flox/cache/upgrade-checks.json
+    run jq '.upgrade_result.new_lockfile == .upgrade_result.old_lockfile'  .flox/cache/upgrade-checks.json
     assert_success
     assert_output false # lockfile content should differ due to upgrade
 }

@@ -634,7 +634,7 @@ impl TryFrom<ConcreteEnvironment> for GenerationsEnvironment {
 /// Generations are defined as immutable copy-on-write folders.
 /// Rollbacks and associated [SingleGenerationMetadata] are tracked per environment
 /// in a metadata file at the root of the environment branch.
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, JsonSchema)]
 #[skip_serializing_none]
 pub struct AllGenerationsMetadata {
     /// Schema version of the metadata file
