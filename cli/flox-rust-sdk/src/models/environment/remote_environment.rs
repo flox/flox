@@ -85,6 +85,18 @@ pub struct RemoteEnvironment {
 }
 
 impl RemoteEnvironment {
+    /// Check if a remote environment is already cached locally.
+    /// I.e. whether there is a backing managed environment in the cache.
+    pub fn is_cached(flox: &Flox, pointer: &ManagedPointer) -> bool {
+        let path = flox
+            .cache_dir
+            .join(REMOTE_ENVIRONMENT_BASE_DIR)
+            .join(pointer.owner.as_ref())
+            .join(pointer.name.as_ref())
+            .join(DOT_FLOX);
+        path.exists()
+    }
+
     /// Pull a remote environment into a flox-provided managed environment
     /// in `<FLOX_CACHE_DIR>/remote/<owner>/<name>`
     ///
@@ -164,7 +176,7 @@ impl RemoteEnvironment {
             )
         };
 
-        let mut inner = ManagedEnvironment::open_with(
+        let inner = ManagedEnvironment::open_with(
             floxmeta,
             flox,
             pointer.clone(),
@@ -179,11 +191,8 @@ impl RemoteEnvironment {
         )
         .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
 
-        // (force) Pull latest changes of the environment from upstream.
-        // remote environments stay in sync with upstream without providing a local staging state.
-        inner
-            .pull(flox, true)
-            .map_err(RemoteEnvironmentError::ResetManagedEnvironment)?;
+        // Note: Remote environments used to get reset to the latest upstream here.
+        // Now they require explicit `pull`s to refresh upstream state.
 
         let rendered_env_links = {
             let gcroots_dir = gcroots_dir(flox, &pointer.owner);
@@ -261,6 +270,32 @@ impl RemoteEnvironment {
 
         Ok(())
     }
+
+    /// Push local changes to FloxHub for this remote environment
+    ///
+    /// This pushes any local changes made to the cached remote environment back to FloxHub.
+    pub fn push(
+        &mut self,
+        flox: &Flox,
+        force: bool,
+    ) -> Result<super::managed_environment::PushResult, EnvironmentError> {
+        self.inner
+            .push(flox, force)
+            .map_err(EnvironmentError::ManagedEnvironment)
+    }
+
+    /// Pull updates from FloxHub for this remote environment
+    ///
+    /// This updates the cached remote environment with the latest changes from FloxHub.
+    pub fn pull(
+        &mut self,
+        flox: &Flox,
+        force: bool,
+    ) -> Result<super::managed_environment::PullResult, EnvironmentError> {
+        let result = self.inner.pull(flox, force)?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
+        Ok(result)
+    }
 }
 
 impl Environment for RemoteEnvironment {
@@ -282,10 +317,7 @@ impl Environment for RemoteEnvironment {
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError> {
         let result = self.inner.install(packages, flox)?;
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
         // TODO: clean up git branch for temporary environment
         Ok(result)
     }
@@ -297,10 +329,7 @@ impl Environment for RemoteEnvironment {
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         let result = self.inner.uninstall(packages, flox)?;
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
 
         Ok(result)
     }
@@ -311,10 +340,7 @@ impl Environment for RemoteEnvironment {
         if result == EditResult::Unchanged {
             return Ok(result);
         }
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
 
         Ok(result)
     }
@@ -334,10 +360,7 @@ impl Environment for RemoteEnvironment {
         groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError> {
         let result = self.inner.upgrade(flox, groups_or_iids)?;
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
 
         Ok(result)
     }
@@ -349,10 +372,7 @@ impl Environment for RemoteEnvironment {
         to_upgrade: Vec<String>,
     ) -> Result<UpgradeResult, EnvironmentError> {
         let result = self.inner.include_upgrade(flox, to_upgrade)?;
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
 
         Ok(result)
     }
@@ -448,10 +468,7 @@ impl GenerationsExt for RemoteEnvironment {
         generation: GenerationId,
     ) -> Result<(), EnvironmentError> {
         self.inner.switch_generation(flox, generation)?;
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
         Ok(())
     }
 
