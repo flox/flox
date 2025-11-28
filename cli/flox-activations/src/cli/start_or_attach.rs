@@ -7,9 +7,9 @@ use clap::Args;
 use flox_core::activations::{self, Activations};
 use fslock::LockFile;
 use indoc::indoc;
-use log::debug;
 use serde::{Deserialize, Serialize};
 use time::{Duration, OffsetDateTime};
+use tracing::debug;
 
 use crate::Error;
 

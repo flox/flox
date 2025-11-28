@@ -4,11 +4,11 @@ use std::path::PathBuf;
 use anyhow::{Result, bail};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
-use log::debug;
 use nix::sys::signal::Signal::{SIGUSR1, SIGUSR2};
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
+use tracing::debug;
 
 use crate::activate_script_builder::{
     assemble_command_for_activate_script,

@@ -8,12 +8,12 @@ use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use flox_core::activations::{self, activations_json_path};
 use indoc::formatdoc;
-use log::debug;
 use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::{Pid, getpid};
 use serde::{Deserialize, Serialize};
 use signal_hook::consts::{SIGCHLD, SIGUSR1, SIGUSR2};
 use signal_hook::iterator::Signals;
+use tracing::debug;
 
 use super::StartOrAttachArgs;
 use crate::activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_command_for_activate_script};
