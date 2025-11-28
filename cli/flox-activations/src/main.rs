@@ -2,7 +2,7 @@ use anyhow::Context;
 use clap::Parser;
 use flox_activations::cli::Cli;
 use flox_activations::{Error, cli, logger};
-use log::debug;
+use tracing::debug;
 
 fn main() -> Result<(), Error> {
     let args = Cli::parse();

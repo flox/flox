@@ -12,10 +12,11 @@ clap = { version = "4.5.51", default-features = false, features = [
     "error-context",
     "derive",
 ] }
-env_logger = { version = "0.11.8", default-features = false, features = ["auto-color"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "ansi"] }
+tracing-appender = "0.2"
 flox-core.workspace = true
 fslock.workspace = true
-log.workspace = true
 nix.workspace = true
 serde.workspace = true
 serde_json.workspace = true
