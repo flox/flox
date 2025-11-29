@@ -6,13 +6,32 @@ then:
   status: 200
   header:
   - name: date
-    value: Mon, 20 Oct 2025 14:40:56 GMT
+    value: Fri, 07 Nov 2025 21:34:03 GMT
   - name: content-type
     value: application/json
   - name: content-length
-    value: '1558'
+    value: '1448'
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: SwB-3gZ_oAMEYiw=
-  body: '{"items":[{"name":"toplevel","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"attr_path_not_found.systems_not_on_same_page","message":"The attr_path glibc is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-linux,x86_64-linux), (x86_64-linux).","context":{"attr_path":"glibc","install_id":"glibc","system_groupings":"(aarch64-linux,x86_64-linux), (x86_64-linux)"}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'
+    value: TsTX0ja1IAMEMyA=
+  body: '{"items":[{"name":"toplevel","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"attr_path_not_found.not_found_for_all_systems","message":"The package ''glibc'' is not found for all the requested systems, suggest limiting systems to (x86_64-linux).","context":{"attr_path":"glibc","install_id":"glibc","valid_systems":"x86_64-linux"}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'
+---
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"glibc","install_id":"glibc","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Fri, 07 Nov 2025 21:34:03 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '1402'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: TsTX3giloAMEYog=
+  body: '{"items":[{"name":"toplevel","page":{"page":888552,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"glibc","pkg_path":"glibc","derivation":"/nix/store/p78syrvly0lz68qw3k2clmy3vkbvjgk4-glibc-2.40-66.drv","name":"glibc-2.40-66","pname":"glibc","version":"2.40-66","system":"x86_64-linux","outputs":[{"name":"bin","store_path":"/nix/store/76zn66xib0r80s5y7p0m1ba3y036sxwh-glibc-2.40-66-bin"},{"name":"dev","store_path":"/nix/store/0vqrw0y515015i3065r9s00jcp1cd4hy-glibc-2.40-66-dev"},{"name":"out","store_path":"/nix/store/daamdpmaz2vjvna55ccrc30qw3qb8h6d-glibc-2.40-66"},{"name":"debug","store_path":"/nix/store/2s31qdd7vsgwnkcf2mhbsmdkxqny6am7-glibc-2.40-66-debug"},{"name":"getent","store_path":"/nix/store/h7s2cwm56yq37xsriswrwj28b1s1hgr8-glibc-2.40-66-getent"},{"name":"static","store_path":"/nix/store/rs29f78wkisdx4jrkhm5kj9n3v803azr-glibc-2.40-66-static"}],"outputs_to_install":["bin"],"description":"GNU C Library","license":"LGPL-2.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=b3d51a0365f6695e7dd5cdf3e180604530ed33b4","rev":"b3d51a0365f6695e7dd5cdf3e180604530ed33b4","rev_count":888552,"rev_date":"2025-11-02T19:18:41Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-11-05T17:20:48.348208Z","cache_uri":null,"install_id":"glibc"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
