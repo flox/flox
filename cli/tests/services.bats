@@ -991,12 +991,8 @@ EOF
   assert_success
 
   # Poll because watchdog may not have started by the time the activation finishes.
-  run timeout 1s bash -c "
-    while ! grep 'flox_watchdog: starting' \"$PROJECT_DIR\"/.flox/log/watchdog.*.log*; do
-      sleep 0.1
-    done
-  "
-  assert_success
+  watchdog_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log.*)"
+  wait_for_partial_file_content "$watchdog_log" "woof"
 }
 
 @test "activate: --start-services warns if environment does not have services" {

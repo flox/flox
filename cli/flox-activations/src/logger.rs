@@ -21,11 +21,11 @@ impl From<u32> for Verbosity {
 
 impl Verbosity {
     pub fn env_filter(&self) -> &'static str {
-        // TODO: change watchdog levels
+        // watchdog is more conservative because it backgrounds and writes to a file
         match self.inner {
-            0 => "flox_activations=error,flox_watchdog=debug",
-            1 => "flox_activations=debug,flox_watchdog=trace",
-            2 => "flox_activations=trace,flox_watchdog=trace",
+            0 => "flox_activations=error,flox_watchdog=info",
+            1 => "flox_activations=debug,flox_watchdog=error",
+            2 => "flox_activations=trace,flox_watchdog=debug",
             _ => "flox_activations=trace,flox_watchdog=trace",
         }
     }
