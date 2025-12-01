@@ -4,6 +4,7 @@ pub mod canonical_path;
 #[cfg(feature = "proc_status")]
 pub mod proc_status;
 pub mod util;
+pub mod vars;
 mod version;
 
 use std::fmt::Display;
