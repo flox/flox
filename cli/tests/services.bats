@@ -1431,6 +1431,35 @@ EOF
   assert_success
 }
 
+@test "start: shuts down process-compose started by imperative start" {
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "sleep infinity"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  SCRIPT="$(cat << "EOF"
+    set -euo pipefail
+
+    "$FLOX_BIN" services start
+EOF
+  )"
+
+  run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
+  assert_success
+  assert_output --partial "Service 'one' started."
+
+
+  watchdog_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log.*)"
+  wait_for_partial_file_content "$watchdog_log" "woof"
+  wait_for_partial_file_content "$watchdog_log" "finished cleanup"
+}
+
 @test "kills daemon process" {
 
   MANIFEST_CONTENTS="$(cat <<"EOF"
