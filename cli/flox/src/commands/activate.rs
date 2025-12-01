@@ -70,8 +70,8 @@ pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     pub environment: EnvironmentSelect,
 
-    /// Trust a remote environment temporarily for this activation.
-    /// This is not applied to includes of remote environments.
+    /// Trust a remote environment temporarily for this activation, including
+    /// the includes of any remote environments.
     #[bpaf(long, short)]
     pub trust: bool,
 
@@ -210,7 +210,9 @@ impl Activate {
         };
         let manifest = &lockfile.manifest;
 
-        if let Some(compose) = &lockfile.compose {
+        if !self.trust
+            && let Some(compose) = &lockfile.compose
+        {
             for include in &compose.include {
                 if let IncludeDescriptor::Remote { ref remote, .. } = include.descriptor {
                     ensure_environment_trust(
