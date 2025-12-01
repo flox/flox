@@ -6,7 +6,7 @@ use std::time::{Duration, SystemTime};
 use anyhow::{Context, Result};
 use flox_core::log_file_format_upgrade_check;
 use glob::glob;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(3600);
 const WATCHDOG_GC_INTERVAL: Duration = Duration::from_secs(3600);
@@ -25,7 +25,7 @@ pub(crate) fn spawn_heartbeat_log() {
 
     spawn(|| {
         loop {
-            debug!("still watching, woof woof");
+            info!("still watching, woof woof");
             sleep(HEARTBEAT_INTERVAL);
         }
     });

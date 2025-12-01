@@ -52,14 +52,7 @@ pub struct Cli {
     pub disable_metrics: bool,
 }
 
-#[instrument("watchdog",
-    err(Debug),
-    skip_all,
-    fields(pid = tracing::field::Empty,
-        registry = tracing::field::Empty,
-        dot_flox_hash = tracing::field::Empty,
-        socket = tracing::field::Empty,
-        log_dir = tracing::field::Empty))]
+#[instrument("watchdog", err(Debug), skip_all)]
 pub fn run(args: Cli) -> Result<(), Error> {
     let span = tracing::Span::current();
     span.record("flox_env", traceable_path(&args.flox_env));
@@ -102,20 +95,18 @@ fn run_inner(
     );
 
     debug!(
-        path = traceable_path(&args.socket_path),
+        socket = traceable_path(&args.socket_path),
         exists = &args.socket_path.exists(),
         "checked socket"
     );
 
+    spawn_heartbeat_log();
+    spawn_logs_gc_threads(args.log_dir);
     info!(
         this_pid = nix::unistd::getpid().as_raw(),
         target_activation_id = args.activation_id,
         "watchdog is on duty"
     );
-    spawn_heartbeat_log();
-    spawn_logs_gc_threads(args.log_dir);
-
-    debug!("waiting for termination");
 
     let activation_state_dir =
         activation_state_dir_path(&args.runtime_dir, &args.flox_env, &args.activation_id)?;
@@ -170,7 +161,7 @@ fn cleanup(
     activation_state_dir_path: impl AsRef<Path>,
     activation_id: impl AsRef<str>,
 ) -> Result<()> {
-    debug!("running cleanup");
+    info!("running cleanup");
 
     let (mut activations_json, lock) = locked_activations;
     activations_json.remove_activation(activation_id);
@@ -183,8 +174,9 @@ fn cleanup(
             if let Err(err) = process_compose_down(socket_path) {
                 error!(%err, "failed to run process-compose shutdown command");
             }
+            info!("shut down process-compose");
         } else {
-            debug!(reason = "no socket", "did not shut down process-compose");
+            info!(reason = "no socket", "did not shut down process-compose");
         }
     }
 
@@ -198,7 +190,7 @@ fn cleanup(
     //   state dir
     write_activations_json(&activations_json, activations_json_path, lock)?;
 
-    debug!("finished cleanup");
+    info!("finished cleanup");
 
     Ok(())
 }

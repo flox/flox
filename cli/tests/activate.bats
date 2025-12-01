@@ -3185,10 +3185,10 @@ EOF
   # Start a first_activation which sets FOO=first_activation
   case "$mode" in
     command)
-      FLOX_SHELL=bash injected="first_activation" _FLOX_WATCHDOG_LOG_LEVEL=trace "$FLOX_BIN" activate -c "echo \$FOO > output && echo > activate_started_fifo && echo > $TEARDOWN_FIFO" &
+      FLOX_SHELL=bash injected="first_activation" "$FLOX_BIN" activate -c "echo \$FOO > output && echo > activate_started_fifo && echo > $TEARDOWN_FIFO" &
       ;;
     in-place)
-      TEARDOWN_FIFO="$TEARDOWN_FIFO" injected="first_activation" bash -c 'eval "$(_FLOX_WATCHDOG_LOG_LEVEL=trace "$FLOX_BIN" activate)" && echo $FOO > output && echo > activate_started_fifo && echo > "$TEARDOWN_FIFO"' &
+      TEARDOWN_FIFO="$TEARDOWN_FIFO" injected="first_activation" bash -c 'eval "$("$FLOX_BIN" activate)" && echo $FOO > output && echo > activate_started_fifo && echo > "$TEARDOWN_FIFO"' &
       ;;
   esac
 
