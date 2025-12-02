@@ -3293,9 +3293,17 @@ EOF
 
       ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
       ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
-      jq_edit "$ACTIVATIONS_JSON" '.version = 0'
+      ACTIVATIONS_VERSION="$(jq -r '.version' ${ACTIVATIONS_JSON})"
 
+      jq_edit "$ACTIVATIONS_JSON" '.version = 0'
       "$FLOX_BIN" activate -c 'echo "should fail"'
+      EXIT_CODE=$?
+
+      # Force cleanup because the watchdog will exit early on a version mismatch.
+      jq_edit "$ACTIVATIONS_JSON" ".version = ${ACTIVATIONS_VERSION}"
+      jq_edit "$ACTIVATIONS_JSON" '.activations |= []'
+
+      exit $EXIT_CODE
 EOF
   )"
   FLOX_SHELL=bash run "$FLOX_BIN" activate -c "$SCRIPT"

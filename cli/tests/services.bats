@@ -622,16 +622,22 @@ EOF
 
         ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
         ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
-        echo "$ACTIVATIONS_JSON" > activations_json
+        ACTIVATIONS_VERSION="$(jq -r '.version' ${ACTIVATIONS_JSON})"
 
         jq_edit "$ACTIVATIONS_JSON" '.version = 0'
         "$FLOX_BIN" services "$command"
+        EXIT_CODE=$?
+
+        # Force cleanup because the watchdog will exit early on a version mismatch.
+        jq_edit "$ACTIVATIONS_JSON" ".version = ${ACTIVATIONS_VERSION}"
+        jq_edit "$ACTIVATIONS_JSON" '.activations |= []'
+
+        exit $EXIT_CODE
 EOF
     )
 
     # Capture from the previous activation.
     ACTIVATION_PID=$(cat activation_pid)
-    ACTIVATIONS_JSON=$(cat activations_json)
 
     assert_failure
     assert_output "❌ ERROR: failed to run activation script: Error: This environment has already been activated with an incompatible version of 'flox'.
@@ -639,9 +645,8 @@ EOF
 Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"
 
-    # give the watchdog a chance to clean up the services before the next iteration
+    # In case the watchdog managed to survive this far.
     wait_for_watchdogs "$PROJECT_DIR"
-    rm "$ACTIVATIONS_JSON"
   done
 }
 
