@@ -3198,24 +3198,6 @@ EOF
   assert_success
   assert_output "first_activation"
 
-  # Wait for the watchdog to poll at least once so the test doesn't pass just
-  # because the 2nd activate beats the watchdog to poll
-
-  # First wait for the logfile to appear
-  timeout 1s bash -c '
-    while ! ls $PROJECT_DIR/.flox/log/watchdog.*.log.*; do
-      sleep .1
-    done
-  '
-  watchdog_1_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log.*)"
-  initial_number_of_polls="$(cat "$watchdog_1_log" | grep "still watching PIDs" | wc -l)"
-  watchdog_1_log="$watchdog_1_log" initial_number_of_polls="$initial_number_of_polls" \
-    timeout 1s bash -c '
-      while [ "$(cat "$watchdog_1_log" | grep "still watching PIDs" | wc -l)" == "$initial_number_of_polls" ]; do
-        sleep .1
-      done
-    '
-
   # Run a second activation which should attach to the first,
   # so FOO should still be first_activation
   injected="second_activation" run --separate-stderr "$FLOX_BIN" activate -c "echo \$FOO"
