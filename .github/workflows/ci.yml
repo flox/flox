@@ -61,7 +61,7 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v5"
+        uses: "actions/checkout@v6"
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
@@ -97,7 +97,7 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v5"
+        uses: "actions/checkout@v6"
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
@@ -140,7 +140,7 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v5"
+        uses: "actions/checkout@v6"
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
@@ -227,7 +227,7 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v5"
+        uses: "actions/checkout@v6"
         # needed for git describe to work
         with:
           fetch-depth: 0
@@ -412,7 +412,7 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v5"
+        uses: "actions/checkout@v6"
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}

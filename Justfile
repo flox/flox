@@ -52,7 +52,8 @@ version:
 
 # Clean the nix-plugins build cache
 @clean-nix-plugins:
-   meson compile -C nix-plugins/builddir --clean
+   meson compile -C nix-plugins/builddir --clean; \
+   rm -rf build/nix-plugins
 
 
 # ---------------------------------------------------------------------------- #
