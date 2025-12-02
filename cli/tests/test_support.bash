@@ -174,8 +174,11 @@ common_file_teardown() {
 
 teardown_file() { common_file_teardown; }
 
-# Wait for all watchdogs called with `project_dir` as part of one of their
-# arguments.
+# Wait for all activations started by the current test to be cleaned up by the
+# executive (watchdog). Detects activations from the per-test `FLOX_CACHE_DIR`
+# that is created by `setup_isolated_flox`. This is safe to call before the
+# executive/watchdog has started. The `project_dir` argument is only used to
+# report logs.
 #
 # This is primarily used in `teardown()` to prevent us leaving stray
 # activations, services, and other processes running after a test has finished.
@@ -185,58 +188,67 @@ teardown_file() { common_file_teardown; }
 #
 # NB1: It must be appended with `|| return 1` to fail the offending test and
 # preserve other output, at the expense of aborting any other cleanup.
-#
-# NB2: It cannot be reliably used inlined of tests to wait for activations or
-# services to be cleaned up because it can exit before a watchdog has started.
-wait_for_watchdogs() {
+wait_for_activations() {
   project_dir="${1?}"
   if [ -z "$project_dir" ]; then
     echo "ERROR: cannot wait for watchdogs with empty project_dir" >&3
     return 1
   fi
-  # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
-  # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
-  # grep command itself doesn't get listed when we search for the data dir.
-  # The `sed` removes any leading whitespace,
-  # that is present in the output of `ps` on linux apparently?!.
-  # The `cut` just extracts the PID.
 
-  local pids
-  pids="$(
-    ps -Ao pid,args \
-    | grep flox-watchdog \
-    | grep "$project_dir" \
-    | sed 's/^[[:blank:]]*//' \
-    | cut -d' ' -f1)"
+  # Find all activations.json files in FLOX_CACHE_DIR
+  local activations_json_files=()
+  while IFS= read -r -d '' activations_json; do
+    activations_json_files+=("$activations_json")
+  done < <(find "${FLOX_CACHE_DIR}" -name "activations.json" -print0)
 
-  # Uncomment to debug which watchdogs are running.
-  #
-  # echo "project_dir => ${project_dir}" >&3
-  # ps -Ao pid,args \
-  #  | grep flox-watchdog \
-  #  >&3
+  # This could cause false-positives if there are no `activations.json` files at
+  # all but we have some tests in suites that use `wait_for_activations` and
+  # don't perform activations.
+  if [ ${#activations_json_files[@]} -eq 0 ]; then
+    echo "wait_for_activations: no activations.json files found in FLOX_CACHE_DIR" >&2
+    return 0
+  fi
 
-  if [ -n "${pids?}" ]; then
-    tries=0
-    while true; do
-      tries=$((tries + 1))
-      if ! kill -0 $pids > /dev/null 2>&1; then
+  # Wait for all activations.json files to be empty
+  local tries=0
+  while true; do
+    local has_activations=false
+
+    for activations_json in "${activations_json_files[@]}"; do
+      if jq -e '.activations | length > 0' "$activations_json" > /dev/null; then
+        has_activations=true
         break
-      else
-        if [[ $tries -gt 1000 ]]; then
-          echo "ERROR: flox-watchdog processes did not finish after 10 seconds" >&3
-          echo "Watchdog logs:" >&3
-          cat "${project_dir}"/.flox/log/watchdog.* >&3
-          echo "Bats processes:" >&3
-          pstree -ws "$BATS_RUN_TMPDIR" >&3
-          # This will fail the test giving us a better idea of which watchdog
-          # didn't get cleaned up
-          return 1
-        fi
-        sleep 0.01;
       fi
     done
-  fi
+
+    if [ "$has_activations" = false ]; then
+      echo "wait_for_activations: all activations cleaned up, exiting" >&2
+      break
+    fi
+
+    tries=$((tries + 1))
+    if [[ $tries -gt 1000 ]]; then
+      echo "ERROR: activations not get cleaned up activations after 10 seconds" >&3
+
+      echo "Files still containing activations:" >&3
+      for activations_json in "${activations_json_files[@]}"; do
+        if [ -f "$activations_json" ]; then
+          echo "$activations_json:" >&3
+          jq . "$activations_json" >&3
+        fi
+      done
+
+      echo "Watchdog logs:" >&3
+      cat "${project_dir}"/.flox/log/watchdog.* >&3
+
+      echo "Bats processes:" >&3
+      pstree -ws "$BATS_RUN_TMPDIR" >&3
+
+      return 1
+    fi
+
+    sleep 0.01
+  done
 }
 
 common_test_teardown() {

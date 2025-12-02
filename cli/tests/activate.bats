@@ -151,7 +151,7 @@ setup() {
 }
 teardown() {
   # fifo is in PROJECT_DIR and keeps watchdog running,
-  # so cat_teardown_fifo must be run before wait_for_watchdogs and
+  # so cat_teardown_fifo must be run before wait_for_activations and
   # project_teardown
   cat_teardown_fifo
   # Cleaning up the `BATS_TEST_TMPDIR` occasionally fails,
@@ -159,7 +159,7 @@ teardown() {
   # by the watchdog as the activation terminates.
   if [ -n "${PROJECT_DIR:-}" ]; then
     # Not all tests call project_setup
-    wait_for_watchdogs "$PROJECT_DIR" || return 1
+    wait_for_activations "$PROJECT_DIR" || return 1
     project_teardown
   fi
   common_test_teardown
@@ -2508,7 +2508,7 @@ EOF
 }
 
 @test "profile: JUPYTER_PATH is modified when Jupyter is installed" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -2563,7 +2563,7 @@ EOF
 }
 
 @test "profile: CMAKE_PREFIX_PATH is modified when cmake is installed" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3225,7 +3225,7 @@ EOF
   # Teardown the first activation and wait for the watchdog to clean it up
   cat "$TEARDOWN_FIFO"
   unset TEARDOWN_FIFO # otherwise teardown will hang
-  wait_for_watchdogs "$PROJECT_DIR"
+  wait_for_activations "$PROJECT_DIR"
 
   # Verify that a third activation starts rather than attaching
   injected="third_activation" run  "$FLOX_BIN" activate -c "echo \$FOO"
@@ -3338,7 +3338,7 @@ EOF
   # Wait for the "start" to exit.
   # Add some output to the buffer to debug later assertion failures.
   echo "$(date -u +'%FT%T.%6NZ'): Initial activation finished."
-  wait_for_watchdogs "$PROJECT_DIR"
+  wait_for_activations "$PROJECT_DIR"
   cat "${PROJECT_DIR}"/.flox/log/watchdog.*
 
   # Capture and modify from the previous activation.
@@ -3461,7 +3461,7 @@ EOF
 
 # bats test_tags=activate,activate:attach
 @test "attach doesn't break PATH" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3505,7 +3505,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "bash: repeat activation in .bashrc doesn't break aliases" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3556,7 +3556,7 @@ EOF
 }
 
 @test "bash: repeat activation in .bashrc creates correct PATH ordering" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3596,7 +3596,7 @@ EOF
 }
 
 @test "tcsh: repeat activation in .tcshrc doesn't break aliases" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3652,7 +3652,7 @@ EOF
 }
 
 @test "tcsh: repeat activation in .tcshrc creates correct PATH ordering" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3692,7 +3692,7 @@ EOF
 }
 
 @test "fish: repeat activation in config.fish doesn't break aliases" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3738,7 +3738,7 @@ EOF
 }
 
 @test "fish: repeat activation in config.fish creates correct PATH ordering" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3819,7 +3819,7 @@ EOF
 }
 
 @test "zsh: repeat activation in .zshrc doesn't break aliases" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3827,7 +3827,7 @@ EOF
 }
 
 @test "zsh: repeat activation in .zshenv doesn't break aliases" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3835,7 +3835,7 @@ EOF
 }
 
 @test "zsh: repeat activation in .zshenv and .zshrc doesn't break aliases" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3878,7 +3878,7 @@ EOF
 }
 
 @test "zsh: repeat activation in .zshrc creates correct PATH ordering" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3886,7 +3886,7 @@ EOF
 }
 
 @test "zsh: repeat activation in .zshenv creates correct PATH ordering" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3898,7 +3898,7 @@ EOF
 }
 
 @test "zsh: repeat activation in .zshenv and .zshrc creates correct PATH ordering" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
