@@ -80,14 +80,14 @@ teardown() {
   # I'd check the logs to confirm what's happening...
   # ...if only the reproducer wasn't to delete the logs.
   #
-  # When running in parallel `wait_for_watchdogs`
+  # When running in parallel `wait_for_activations`
   # may wait for watchdog processes of unrelated tests.
   # It tries to avoid non-test processes by looking for the data dir argument,
   # passed to the watchdog process.
   # Within the `services` tests, we call `setup_isolated_flox` during `setup()`,
   # which sets the data dir to a unique value for every test,
   # thus avoiding waiting for unrelated watchdog processes.
-  wait_for_watchdogs "$PROJECT_DIR" || return 1
+  wait_for_activations "$PROJECT_DIR" || return 1
   project_teardown
   common_test_teardown
 }
@@ -601,7 +601,7 @@ EOF
     assert_success
 
     # give the watchdog a chance to clean up the services before the next iteration
-    wait_for_watchdogs "$PROJECT_DIR"
+    wait_for_activations "$PROJECT_DIR"
   done
 }
 
@@ -646,7 +646,7 @@ Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"
 
     # In case the watchdog managed to survive this far.
-    wait_for_watchdogs "$PROJECT_DIR"
+    wait_for_activations "$PROJECT_DIR"
   done
 }
 
@@ -1094,7 +1094,7 @@ EOF
 @test "activate: starts services for in-place activations" {
   setup_sleeping_services
 
-  # Run in a sub-shell so that `wait_for_watchdogs` in `teardown` can verify
+  # Run in a sub-shell so that `wait_for_activations` in `teardown` can verify
   # that the activation is cleaned up on exit and implicitly that services are
   # shutdown.
   run bash -c '
@@ -1408,7 +1408,7 @@ EOF
   assert_success
   assert_output --partial '"exit_code": 0'
 
-  wait_for_watchdogs "$PROJECT_DIR"
+  wait_for_activations "$PROJECT_DIR"
 
   CPATH= \
     run "$FLOX_BIN" activate --mode run -- bash -c "$SCRIPT"
