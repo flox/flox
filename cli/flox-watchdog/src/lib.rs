@@ -22,8 +22,9 @@ use crate::process::Watcher;
 
 mod logger;
 mod process;
-mod sentry;
-pub use sentry::init_sentry;
+// TODO: Re-enable sentry after fixing OpenSSL dependency issues
+// mod sentry;
+// pub use sentry::init_sentry;
 
 type Error = anyhow::Error;
 
