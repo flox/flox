@@ -123,7 +123,8 @@ impl ExecutiveArgs {
         }
 
         // TODO: Enable earlier in `flox-activations` rather than just when detached?
-        let _sentry_guard = (!watchdog.disable_metrics).then(flox_watchdog::init_sentry);
+        // TODO: Re-enable sentry after fixing OpenSSL dependency issues
+        // let _sentry_guard = (!watchdog.disable_metrics).then(flox_watchdog::init_sentry);
 
         debug!(watchdog = ?watchdog, "starting watchdog");
         flox_watchdog::run(watchdog)

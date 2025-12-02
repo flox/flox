@@ -1488,7 +1488,6 @@ dependencies = [
  "glob",
  "kqueue",
  "nix",
- "sentry",
  "serde_json",
  "signal-hook",
  "tempfile",
