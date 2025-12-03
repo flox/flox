@@ -27,6 +27,7 @@
   gnupg,
   gnused,
   gnutar,
+  gzip,
   jq,
   man,
   nix,
@@ -72,6 +73,7 @@ let
     gnupg
     gnused
     gnutar
+    gzip
     jq
     man
     ncurses
