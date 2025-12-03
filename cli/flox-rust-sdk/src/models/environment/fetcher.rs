@@ -387,6 +387,7 @@ mod test {
         remote_env
             .edit(&flox, manifest_contents.to_string())
             .unwrap();
+        remote_env.push(&flox, true).unwrap();
 
         // Fetch and lock the remote environment.
         let include_fetcher = IncludeFetcher {
