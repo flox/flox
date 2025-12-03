@@ -106,7 +106,7 @@ let
     remove_after_reading = false;
     env_description = "${containerName}";
     env_cache = "/tmp";
-    flox_env_log_dir = null;
+    flox_env_log_dir = "/run/flox";
     flox_runtime_dir = "/run/flox";
     prompt_color_1 = "99";
     prompt_color_2 = "141";
@@ -115,7 +115,7 @@ let
     flox_prompt_environments = "floxenv";
     set_prompt = true;
     flox_activate_start_services = false;
-    flox_services_socket = null;
+    flox_services_socket = "/run/flox/no_services.sock";
     flox_env_cuda_detection = "0";
     flox_active_environments = "[]";
     flox_services_to_start = null;
