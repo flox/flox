@@ -2476,7 +2476,7 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rust-lib-src.yaml" \
     "$FLOX_BIN" install rustPlatform.rustLibSrc
 
-  cat <<'EOF' > "$PWD/test_rust_env.sh"
+  SCRIPT="$(cat <<'EOF'
     if ! [ -e "$FLOX_ENV/etc/profile.d/0501_rust.sh" ]; then
       echo "profile script did not exist" >&3
       exit 1
@@ -2486,7 +2486,8 @@ EOF
       exit 1
     fi
 EOF
-  run "$FLOX_BIN" activate -c "bash $PWD/test_rust_env.sh"
+  )"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -c "$SCRIPT"
   assert_success
 }
 
@@ -2571,13 +2572,14 @@ EOF
     run "$FLOX_BIN" install cmake gnumake
   assert_success
 
-  cat <<'EOF' > "$PWD/test_cmake_env.sh"
+  SCRIPT="$(cat <<'EOF'
     if [ "$CMAKE_PREFIX_PATH" != "$FLOX_ENV" ]; then
       echo "CMAKE_PREFIX_PATH was not set as expected" >&3
       exit 1
     fi
 EOF
-  run "$FLOX_BIN" activate -c "bash $PWD/test_cmake_env.sh"
+  )"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -c "$SCRIPT"
   assert_success
 }
 
@@ -2691,7 +2693,7 @@ attach_runs_hooks_once() {
   TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
   mkfifo "$TEARDOWN_FIFO"
 
-  "$FLOX_BIN" activate -c "bash -c \"echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"\"" 2> output &
+  FLOX_SHELL=bash "$FLOX_BIN" activate -c "echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" 2> output &
 
   cat activate_started_fifo
   run cat output
@@ -3183,7 +3185,7 @@ EOF
   # Start a first_activation which sets FOO=first_activation
   case "$mode" in
     command)
-      injected="first_activation" _FLOX_WATCHDOG_LOG_LEVEL=trace "$FLOX_BIN" activate -c "bash -c \"echo \$FOO > output && echo > activate_started_fifo && echo > $TEARDOWN_FIFO\"" &
+      FLOX_SHELL=bash injected="first_activation" _FLOX_WATCHDOG_LOG_LEVEL=trace "$FLOX_BIN" activate -c "echo \$FOO > output && echo > activate_started_fifo && echo > $TEARDOWN_FIFO" &
       ;;
     in-place)
       TEARDOWN_FIFO="$TEARDOWN_FIFO" injected="first_activation" bash -c 'eval "$(_FLOX_WATCHDOG_LOG_LEVEL=trace "$FLOX_BIN" activate)" && echo $FOO > output && echo > activate_started_fifo && echo > "$TEARDOWN_FIFO"' &
@@ -3286,8 +3288,8 @@ EOF
   unset RUST_BACKTRACE
 
   export -f jq_edit
-  cat <<'EOF' > "$PWD/test_activation_version.sh"
-      echo "$PPID" > activation_pid
+  SCRIPT="$(cat <<'EOF'
+      echo "$$" > activation_pid
 
       ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
       ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
@@ -3295,7 +3297,8 @@ EOF
 
       "$FLOX_BIN" activate -c 'echo "should fail"'
 EOF
-  run "$FLOX_BIN" activate -c "bash $PWD/test_activation_version.sh"
+  )"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -c "$SCRIPT"
 
   # Capture from the previous activation.
   ACTIVATION_PID=$(cat activation_pid)
@@ -3315,12 +3318,13 @@ PIDs of the running activations: ${ACTIVATION_PID}"
   # This has to be updated with [flox_core::activations::LATEST_VERSION].
   LATEST_VERSION=2
 
-  cat <<'EOF' > "$PWD/test_activations_json.sh"
+  SCRIPT="$(cat <<'EOF'
       ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
       ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
       echo "$ACTIVATIONS_JSON" > activations_json
 EOF
-  run "$FLOX_BIN" activate -c "bash $PWD/test_activations_json.sh"
+  )"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -c "$SCRIPT"
   assert_success
 
   # Wait for the "start" to exit.
@@ -3398,7 +3402,7 @@ EOF
       refute_output "$EMACS_MAN"
 
       # vim gets added to MANPATH
-      _man=$_man "$FLOX_BIN" activate -d vim -c "bash -c \"$_man --path vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"\"" &
+      _man=$_man FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -c "$_man --path vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
       cat activate_started_fifo
       run cat output
       assert_success
@@ -3423,7 +3427,7 @@ EOF
       refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
 
       # vim gets added to MANPATH
-      "$FLOX_BIN" activate -d vim -c "bash -c \"/usr/bin/manpath > output && echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"\"" &
+      FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -c "/usr/bin/manpath > output && echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
       cat activate_started_fifo
       run cat output
       assert_success
@@ -3431,8 +3435,8 @@ EOF
       refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
 
       # emacs gets added to MANPATH, and then a nested attach also adds vim
-      "$FLOX_BIN" activate -d emacs -c \
-        "bash -c '/usr/bin/manpath > output_1 && \"$FLOX_BIN\" activate -d vim -c \"bash -c \"/usr/bin/manpath > output_2\"\"'"
+      FLOX_SHELL=bash "$FLOX_BIN" activate -d emacs -c \
+        "/usr/bin/manpath > output_1 && \"$FLOX_BIN\" activate -d vim -c '/usr/bin/manpath > output_2'"
       run cat output_1
       refute_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
       assert_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
@@ -3470,7 +3474,7 @@ EOF
   run command -v emacs
   refute_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/bin/emacs"
 
-  "$FLOX_BIN" activate -d vim -c "bash -c \"command -v vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"\"" &
+  FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -c "command -v vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
   cat activate_started_fifo
 
   run cat output

@@ -143,7 +143,7 @@ teardown() {
         run "$FLOX_BIN" install krb5
       assert_success
 
-      run "$FLOX_BIN" activate -c "bash \"$INPUT_DATA/init/node/krb5.sh\""
+      run "$FLOX_BIN" activate -c "source \"$INPUT_DATA/init/node/krb5.sh\""
       assert_success
       ;;
     *-darwin)
@@ -152,7 +152,7 @@ teardown() {
       # XXX "$TESTS_DIR/init/node/krb5.sh" is not always present so only run
       #     once we have confirmed that it exists, and then expect it to fail.
       if [ -f "$TESTS_DIR/init/node/krb5.sh" ]; then
-        run "$FLOX_BIN" activate -c "bash -c 'CPATH=\"\$FLOX_ENV/include/c++/v1:\$CPATH\" . \"\$TESTS_DIR/init/node/krb5.sh\"'"
+        run "$FLOX_BIN" activate -c "CPATH=\"\$FLOX_ENV/include/c++/v1:\$CPATH\" source \"\$TESTS_DIR/init/node/krb5.sh\""
         assert_failure
       fi
 

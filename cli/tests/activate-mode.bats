@@ -137,7 +137,7 @@ function assert_run_mode() {
     [ ! -e "$FLOX_ENV/bin/python3" ]
 EOF
   )"
-  run "$FLOX_BIN" activate -m run -c "bash -c '$SCRIPT'"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -m run -c "$SCRIPT"
   assert_success
 }
 
@@ -181,7 +181,7 @@ EOF
 EOF
   )"
 
-  run "$FLOX_BIN" activate -m run -d "$bottom_layer_dir" -c "bash -c '$SCRIPT'"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -m run -d "$bottom_layer_dir" -c "$SCRIPT"
   assert_success
 }
 
@@ -211,7 +211,7 @@ EOF
     echo success
 EOF
   )"
-  run "$FLOX_BIN" activate -d "$bottom_layer_dir" -m run  -c "bash -c '$SCRIPT'"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -d "$bottom_layer_dir" -m run  -c "$SCRIPT"
   assert_success
   assert_output success
 }
