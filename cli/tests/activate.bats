@@ -376,7 +376,7 @@ EOF
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="bash" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  FLOX_SHELL="bash" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -c :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
@@ -409,7 +409,7 @@ EOF
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="fish" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  FLOX_SHELL="fish" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -c :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
@@ -443,7 +443,7 @@ EOF
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="tcsh" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  FLOX_SHELL="tcsh" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -c :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
@@ -477,7 +477,7 @@ EOF
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="zsh" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  FLOX_SHELL="zsh" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -c :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
@@ -720,7 +720,7 @@ EOF
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
 
-  FLOX_SHELL="bash" NO_COLOR=1 run "$FLOX_BIN" activate -- :
+  FLOX_SHELL="bash" NO_COLOR=1 run "$FLOX_BIN" activate -c :
   assert_success
   refute_output --partial "ERROR"
   assert_output --partial "sourcing hook.on-activate for first time"
@@ -746,7 +746,7 @@ EOF
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
 
-  FLOX_SHELL="zsh" NO_COLOR=1 run "$FLOX_BIN" activate -- :
+  FLOX_SHELL="zsh" NO_COLOR=1 run "$FLOX_BIN" activate -c :
   assert_success
   refute_output --partial "ERROR"
   assert_output --partial "sourcing hook.on-activate for first time"
@@ -901,19 +901,19 @@ EOF
   project_setup
 
   # First activation should generate the .zcompdump file.
-  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -v -- stat '${FLOX_ENV_CACHE}/.zcompdump'
+  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -v -c 'stat "$FLOX_ENV_CACHE/.zcompdump"'
   assert_success
   assert_output --partial "No existing compdump file found, regenerating"
 
   # Repeat activation should not regenerate the .zcompdump file.
-  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -v -- stat '${FLOX_ENV_CACHE}/.zcompdump'
+  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -v -c 'stat "$FLOX_ENV_CACHE/.zcompdump"'
   assert_success
   refute_output --partial "regenerating"
 
   # New packages that contain completions should regenerate the .zcompdump file.
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/fd.yaml" \
     "$FLOX_BIN" install fd
-  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -v -- stat '${FLOX_ENV_CACHE}/.zcompdump'
+  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -v -c 'stat "$FLOX_ENV_CACHE/.zcompdump"'
   assert_success
   assert_output --partial "Loading dump file skipped, regenerating"
 }
@@ -928,7 +928,7 @@ EOF
   FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" 'echo $foo'
   assert_output --partial "baz"
 
-  FLOX_SHELL="bash" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
+  FLOX_SHELL="bash" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c 'echo "$foo"'
   assert_success
   assert_output --partial "baz"
 }
@@ -941,7 +941,7 @@ EOF
   FLOX_SHELL="fish" run -0 expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" 'echo $foo'
   assert_output --partial "baz"
 
-  FLOX_SHELL="fish" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
+  FLOX_SHELL="fish" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c 'echo "$foo"'
   assert_success
   assert_output --partial "baz"
 }
@@ -954,7 +954,7 @@ EOF
   FLOX_SHELL="tcsh" run -0 expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" 'echo $foo'
   assert_output --partial "baz"
 
-  FLOX_SHELL="tcsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
+  FLOX_SHELL="tcsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c 'echo "$foo"'
   assert_success
   assert_output --partial "baz"
 }
@@ -968,7 +968,7 @@ EOF
   FLOX_SHELL="zsh" run -0 expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" 'echo $foo'
   assert_output --partial "baz"
 
-  FLOX_SHELL="zsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
+  FLOX_SHELL="zsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c 'echo "$foo"'
   assert_success
   assert_output --partial "baz"
 }
@@ -982,7 +982,7 @@ EOF
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT_ECHO_FOO//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
 
-  FLOX_SHELL="bash" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
+  FLOX_SHELL="bash" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c exit
   assert_success
   assert_output --partial "baz"
 }
@@ -993,7 +993,7 @@ EOF
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT_ECHO_FOO//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="fish" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
+  FLOX_SHELL="fish" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c exit
   assert_success
   assert_output --partial "baz"
 }
@@ -1005,7 +1005,7 @@ EOF
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT_ECHO_FOO//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="tcsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
+  FLOX_SHELL="tcsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c exit
   assert_success
   assert_output --partial "baz"
 }
@@ -1017,7 +1017,7 @@ EOF
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT_ECHO_FOO//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="zsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
+  FLOX_SHELL="zsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c exit
   assert_success
   assert_output --partial "baz"
 }
@@ -1028,7 +1028,7 @@ EOF
 @test "'flox activate' modifies path (bash)" {
   project_setup
   original_path="$PATH"
-  FLOX_SHELL="bash" run "$FLOX_BIN" activate -- echo '$PATH'
+  FLOX_SHELL="bash" run "$FLOX_BIN" activate -c "echo '\$PATH'"
   assert_success
   assert_not_equal "$original_path" "$output"
 
@@ -1039,7 +1039,7 @@ EOF
   run "$FLOX_BIN" install hello
   assert_success
 
-  FLOX_SHELL="bash" run "$FLOX_BIN" activate -- hello
+  FLOX_SHELL="bash" run "$FLOX_BIN" activate -c hello
   assert_success
   assert_output --partial "Hello, world!"
 }
@@ -1048,7 +1048,7 @@ EOF
 @test "'flox activate' modifies path (fish)" {
   project_setup
   original_path="$PATH"
-  FLOX_SHELL="fish" run "$FLOX_BIN" activate -- echo '$PATH'
+  FLOX_SHELL="fish" run "$FLOX_BIN" activate -c "echo '\$PATH'"
   assert_success
   assert_not_equal "$original_path" "$output"
 
@@ -1059,7 +1059,7 @@ EOF
   run "$FLOX_BIN" install hello
   assert_success
 
-  FLOX_SHELL="fish" run "$FLOX_BIN" activate -- hello
+  FLOX_SHELL="fish" run "$FLOX_BIN" activate -c hello
   assert_success
   assert_output --partial "Hello, world!"
 }
@@ -1068,7 +1068,7 @@ EOF
 @test "'flox activate' modifies path (tcsh)" {
   project_setup
   original_path="$PATH"
-  FLOX_SHELL="tcsh" run "$FLOX_BIN" activate -- echo '$PATH'
+  FLOX_SHELL="tcsh" run "$FLOX_BIN" activate -c "echo '\$PATH'"
   assert_success
   assert_not_equal "$original_path" "$output"
 
@@ -1079,7 +1079,7 @@ EOF
   run "$FLOX_BIN" install hello
   assert_success
 
-  FLOX_SHELL="tcsh" run "$FLOX_BIN" activate -- hello
+  FLOX_SHELL="tcsh" run "$FLOX_BIN" activate -c hello
   assert_success
   assert_output --partial "Hello, world!"
 }
@@ -1088,7 +1088,7 @@ EOF
 @test "'flox activate' modifies path (zsh)" {
   project_setup
   original_path="$PATH"
-  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -- echo '$PATH'
+  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -c "echo '\$PATH'"
   assert_success
   assert_not_equal "$original_path" "$output"
 
@@ -1099,7 +1099,7 @@ EOF
   run "$FLOX_BIN" install hello
   assert_success
 
-  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -- hello
+  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -c hello
   assert_success
   assert_output --partial "Hello, world!"
 }
@@ -1245,7 +1245,7 @@ sets_NIX_SSL_CERT_FILE() {
   cp -r "$GENERATED_DATA"/envs/heredocs/* .flox/env/
 
   FLOX_SHELL="bash" NO_COLOR=1 \
-  run "$FLOX_BIN" activate -- true
+  run "$FLOX_BIN" activate -c true
 
   assert_success
   assert_line "running on-activate"
@@ -1259,7 +1259,7 @@ sets_NIX_SSL_CERT_FILE() {
   cp -r "$GENERATED_DATA"/envs/heredocs/* .flox/env/
 
   FLOX_SHELL="zsh" NO_COLOR=1 \
-  run "$FLOX_BIN" activate -- true
+  run "$FLOX_BIN" activate -c true
   assert_success
 
   assert_line "running on-activate"
@@ -1275,7 +1275,7 @@ sets_NIX_SSL_CERT_FILE() {
   cp -r "$GENERATED_DATA"/envs/heredocs/* .flox/env/
 
   FLOX_SHELL="tcsh" NO_COLOR=1 \
-  run "$FLOX_BIN" activate -- true
+  run "$FLOX_BIN" activate -c true
 
   assert_success
   assert_line "running on-activate"
@@ -1300,8 +1300,8 @@ sets_NIX_SSL_CERT_FILE() {
   project_setup
   _bash="$(command -v bash)"
   FLOX_SHELL="bash" run -- \
-    "$FLOX_BIN" activate -- \
-    $_bash -c "source <($FLOX_BIN activate); $_bash $TESTS_DIR/activate/verify_PATH.bash"
+    "$FLOX_BIN" activate -c \
+    "$_bash -c \"source <($FLOX_BIN activate); $_bash $TESTS_DIR/activate/verify_PATH.bash\""
   assert_success
 }
 
@@ -1311,8 +1311,8 @@ sets_NIX_SSL_CERT_FILE() {
   _bash="$(command -v bash)"
   _fish="$(command -v fish)"
   FLOX_SHELL="fish" run -- \
-    "$FLOX_BIN" activate -- \
-    $_fish -c "$FLOX_BIN activate | source; $_bash $TESTS_DIR/activate/verify_PATH.bash"
+    "$FLOX_BIN" activate -c \
+    "$_fish -c \"$FLOX_BIN activate | source; $_bash $TESTS_DIR/activate/verify_PATH.bash\""
   assert_success
 }
 
@@ -1322,8 +1322,8 @@ sets_NIX_SSL_CERT_FILE() {
   _bash="$(command -v bash)"
   _tcsh="$(command -v tcsh)"
   FLOX_SHELL="tcsh" run -- \
-    "$FLOX_BIN" activate -- \
-    $_tcsh -c "$FLOX_BIN activate | source /dev/stdin; $_bash $TESTS_DIR/activate/verify_PATH.bash"
+    "$FLOX_BIN" activate -c \
+    "$_tcsh -c \"$FLOX_BIN activate | source /dev/stdin; $_bash $TESTS_DIR/activate/verify_PATH.bash\""
   assert_success
 }
 
@@ -1333,8 +1333,8 @@ sets_NIX_SSL_CERT_FILE() {
   _bash="$(command -v bash)"
   _zsh="$(command -v zsh)"
   FLOX_SHELL="zsh" run -- \
-    "$FLOX_BIN" activate -- \
-    $_zsh -c "source =($FLOX_BIN activate); $_bash $TESTS_DIR/activate/verify_PATH.bash"
+    "$FLOX_BIN" activate -c \
+    "$_zsh -c \"source =($FLOX_BIN activate); $_bash $TESTS_DIR/activate/verify_PATH.bash\""
   assert_success
 }
 
@@ -1351,11 +1351,11 @@ sets_NIX_SSL_CERT_FILE() {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/python311Packages.pip.yaml"
   "$FLOX_BIN" install python311Packages.pip
 
-  run -- "$FLOX_BIN" activate -- echo PYTHONPATH is '$PYTHONPATH'
+  run -- "$FLOX_BIN" activate -c 'echo PYTHONPATH is "$PYTHONPATH"'
   assert_success
   assert_line "PYTHONPATH is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/lib/python3.11/site-packages"
 
-  run -- "$FLOX_BIN" activate -- echo PIP_CONFIG_FILE is '$PIP_CONFIG_FILE'
+  run -- "$FLOX_BIN" activate -c 'echo PIP_CONFIG_FILE is "$PIP_CONFIG_FILE"'
   assert_success
   assert_line "PIP_CONFIG_FILE is $(realpath $PROJECT_DIR)/.flox/pip.ini"
 }
@@ -1369,11 +1369,11 @@ sets_NIX_SSL_CERT_FILE() {
   export PYTHONPATH="/some/other/pythonpath"
   export PIP_CONFIG_FILE="/some/other/pip.ini"
 
-  run -- "$FLOX_BIN" activate -- echo PYTHONPATH is '$PYTHONPATH'
+  run -- "$FLOX_BIN" activate -c 'echo PYTHONPATH is "$PYTHONPATH"'
   assert_success
   assert_line "PYTHONPATH is /some/other/pythonpath"
 
-  run -- "$FLOX_BIN" activate -- echo PIP_CONFIG_FILE is '$PIP_CONFIG_FILE'
+  run -- "$FLOX_BIN" activate -c 'echo PIP_CONFIG_FILE is "$PIP_CONFIG_FILE"'
   assert_success
   assert_line "PIP_CONFIG_FILE is /some/other/pip.ini"
 }
@@ -1402,7 +1402,7 @@ sets_NIX_SSL_CERT_FILE() {
 
   # Run flox list within the default environment.
   # Flox should choose the local environment over the default environment.
-  run -- "$FLOX_BIN" activate --dir default -- "$FLOX_BIN" list -n
+  run -- "$FLOX_BIN" activate --dir default -c "$FLOX_BIN list -n"
   assert_success
   assert_line "emacs"
 }
@@ -1415,7 +1415,7 @@ sets_NIX_SSL_CERT_FILE() {
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
   # Run a command that causes the activation scripts to run without putting us
   # in the interactive shell
-  run "$FLOX_BIN" activate -- echo "hello"
+  run "$FLOX_BIN" activate -c 'echo "hello"'
   # The on-activate script creates a directory whose name is the value of the
   # "$foo" environment variable.
   [ -d "$PROJECT_DIR/bar" ]
@@ -1433,7 +1433,7 @@ sets_NIX_SSL_CERT_FILE() {
   # - The [vars] section sets foo=bar
   # - The on-activate script exports foo=baz
   # - We echo $foo from within userShell and see "baz" as expected
-  FLOX_SHELL="bash" run --separate-stderr "$FLOX_BIN" activate -- echo '$foo'
+  FLOX_SHELL="bash" run --separate-stderr "$FLOX_BIN" activate -c 'echo "$foo"'
   assert_equal "${#lines[@]}" 1 # 1 result
   assert_equal "${lines[0]}" "baz"
 }
@@ -1448,7 +1448,7 @@ sets_NIX_SSL_CERT_FILE() {
   # - The [vars] section sets foo=bar
   # - The on-activate script exports foo=baz
   # - We echo $foo from within userShell and see "baz" as expected
-  SHELL="$(which fish)" run --separate-stderr "$FLOX_BIN" activate -- echo '$foo'
+  SHELL="$(which fish)" run --separate-stderr "$FLOX_BIN" activate -c 'echo "$foo"'
   assert_equal "${#lines[@]}" 1 # 1 result
   assert_equal "${lines[0]}" "baz"
 }
@@ -1463,7 +1463,7 @@ sets_NIX_SSL_CERT_FILE() {
   # - The [vars] section sets foo=bar
   # - The on-activate script exports foo=baz
   # - We echo $foo from within userShell and see "baz" as expected
-  SHELL="$(which tcsh)" run --separate-stderr "$FLOX_BIN" activate -- echo '$foo'
+  SHELL="$(which tcsh)" run --separate-stderr "$FLOX_BIN" activate -c 'echo "$foo"'
   assert_equal "${#lines[@]}" 1 # 1 result
   assert_equal "${lines[0]}" "baz"
 }
@@ -1478,7 +1478,7 @@ sets_NIX_SSL_CERT_FILE() {
   # - The [vars] section sets foo=bar
   # - The on-activate script exports foo=baz
   # - We echo $foo from within userShell and see "baz" as expected
-  FLOX_SHELL="zsh" run --separate-stderr "$FLOX_BIN" activate -- echo '$foo'
+  FLOX_SHELL="zsh" run --separate-stderr "$FLOX_BIN" activate -c 'echo "$foo"'
   assert_equal "${#lines[@]}" 1 # 1 result
   assert_equal "${lines[0]}" "baz"
 }
@@ -2028,7 +2028,7 @@ EOF
 # bats test_tags=activate,activate:custom_zdotdir,activate:custom_zdotdir:bash
 @test "bash: preserve custom ZDOTDIR" {
   project_setup
-  FLOX_SHELL=bash ZDOTDIR=/custom/zdotdir run "$FLOX_BIN" activate -- echo '$ZDOTDIR'
+  FLOX_SHELL=bash ZDOTDIR=/custom/zdotdir run "$FLOX_BIN" activate -c "echo \$ZDOTDIR"
   assert_success
   assert_line "/custom/zdotdir"
 }
@@ -2036,7 +2036,7 @@ EOF
 # bats test_tags=activate,activate:custom_zdotdir,activate:custom_zdotdir:fish
 @test "fish: preserve custom ZDOTDIR" {
   project_setup
-  FLOX_SHELL=fish ZDOTDIR=/custom/zdotdir run "$FLOX_BIN" activate -- echo '$ZDOTDIR'
+  FLOX_SHELL=fish ZDOTDIR=/custom/zdotdir run "$FLOX_BIN" activate -c "echo \$ZDOTDIR"
   assert_success
   assert_line "/custom/zdotdir"
 }
@@ -2044,7 +2044,7 @@ EOF
 # bats test_tags=activate,activate:custom_zdotdir,activate:custom_zdotdir:tcsh
 @test "tcsh: preserve custom ZDOTDIR" {
   project_setup
-  FLOX_SHELL=tcsh ZDOTDIR=/custom/zdotdir run "$FLOX_BIN" activate -- echo '$ZDOTDIR'
+  FLOX_SHELL=tcsh ZDOTDIR=/custom/zdotdir run "$FLOX_BIN" activate -c "echo \$ZDOTDIR"
   assert_success
   assert_line "/custom/zdotdir"
 }
@@ -2052,7 +2052,7 @@ EOF
 # bats test_tags=activate,activate:custom_zdotdir,activate:custom_zdotdir:zsh
 @test "zsh: preserve custom ZDOTDIR" {
   project_setup
-  FLOX_SHELL=zsh ZDOTDIR=/custom/zdotdir run "$FLOX_BIN" activate -- echo '$ZDOTDIR'
+  FLOX_SHELL=zsh ZDOTDIR=/custom/zdotdir run "$FLOX_BIN" activate -c "echo \$ZDOTDIR"
   assert_success
   assert_line "/custom/zdotdir"
 }
@@ -2264,7 +2264,7 @@ EOF
 # bats test_tags=activate,activate:do_not_leak_FLOX_SHELL
 @test "command: activation does not leak FLOX_SHELL variable" {
   project_setup
-  FLOX_SHELL="bash" run $FLOX_BIN activate --dir "$PROJECT_DIR" -- env
+  FLOX_SHELL="bash" run $FLOX_BIN activate --dir "$PROJECT_DIR" -c env
   assert_success
   refute_output --partial "FLOX_SHELL="
   refute_output --partial "_flox_shell="
@@ -2476,7 +2476,7 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rust-lib-src.yaml" \
     "$FLOX_BIN" install rustPlatform.rustLibSrc
 
-  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+  SCRIPT="$(cat <<'EOF'
     if ! [ -e "$FLOX_ENV/etc/profile.d/0501_rust.sh" ]; then
       echo "profile script did not exist" >&3
       exit 1
@@ -2486,7 +2486,8 @@ EOF
       exit 1
     fi
 EOF
-)
+  )"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -c "$SCRIPT"
   assert_success
 }
 
@@ -2494,14 +2495,14 @@ EOF
   project_setup
 
   # Shouldn't be set by default.
-  run --separate-stderr "$FLOX_BIN" activate -- \
-    bash -c 'echo "JUPYTER_PATH is: $JUPYTER_PATH"'
+  run --separate-stderr "$FLOX_BIN" activate -c \
+    "bash -c 'echo \"JUPYTER_PATH is: \$JUPYTER_PATH\"'"
   assert_success
   assert_output "JUPYTER_PATH is: "
 
   # Should respect existing variable from outside activation.
-  JUPYTER_PATH="/fakepath" run --separate-stderr "$FLOX_BIN" activate -- \
-    bash -c 'echo "JUPYTER_PATH is: $JUPYTER_PATH"'
+  JUPYTER_PATH="/fakepath" run --separate-stderr "$FLOX_BIN" activate -c \
+    "bash -c 'echo \"JUPYTER_PATH is: \$JUPYTER_PATH\"'"
   assert_success
   assert_output "JUPYTER_PATH is: /fakepath"
 }
@@ -2524,8 +2525,8 @@ EOF
     run "$FLOX_BIN" install --dir=outer $PACKAGES_OUTER
   assert_success
 
-  run "$FLOX_BIN" activate --dir=outer -- \
-    jupyter labextension list
+  run "$FLOX_BIN" activate --dir=outer -c \
+    "jupyter labextension list"
   assert_success
   assert_line --partial "$EXPECTED_NOTEBOOK" # from outer
   assert_line --partial "$EXPECTED_WIDGETS"  # from outer
@@ -2537,9 +2538,8 @@ EOF
     run "$FLOX_BIN" install --dir=inner $PACKAGES_INNER
   assert_success
 
-  run "$FLOX_BIN" activate --dir=outer -- \
-    "$FLOX_BIN" activate --dir=inner -- \
-    jupyter labextension list
+  run "$FLOX_BIN" activate --dir=outer -c \
+    "$FLOX_BIN activate --dir=inner -c \"jupyter labextension list\""
   assert_success
   assert_line --partial "$EXPECTED_NOTEBOOK" # from either
   assert_line --partial "$EXPECTED_WIDGETS"  # from outer
@@ -2550,14 +2550,14 @@ EOF
   project_setup
 
   # Shouldn't be set by default.
-  run --separate-stderr "$FLOX_BIN" activate -- \
-    bash -c 'echo "CMAKE_PREFIX_PATH is: $CMAKE_PREFIX_PATH"'
+  run --separate-stderr "$FLOX_BIN" activate -c \
+    "bash -c 'echo \"CMAKE_PREFIX_PATH is: \$CMAKE_PREFIX_PATH\"'"
   assert_success
   assert_output "CMAKE_PREFIX_PATH is: "
 
   # Should respect existing variable from outside activation.
-  CMAKE_PREFIX_PATH="/fakepath" run --separate-stderr "$FLOX_BIN" activate -- \
-    bash -c 'echo "CMAKE_PREFIX_PATH is: $CMAKE_PREFIX_PATH"'
+  CMAKE_PREFIX_PATH="/fakepath" run --separate-stderr "$FLOX_BIN" activate -c \
+    "bash -c 'echo \"CMAKE_PREFIX_PATH is: \$CMAKE_PREFIX_PATH\"'"
   assert_success
   assert_output "CMAKE_PREFIX_PATH is: /fakepath"
 }
@@ -2572,13 +2572,14 @@ EOF
     run "$FLOX_BIN" install cmake gnumake
   assert_success
 
-  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+  SCRIPT="$(cat <<'EOF'
     if [ "$CMAKE_PREFIX_PATH" != "$FLOX_ENV" ]; then
       echo "CMAKE_PREFIX_PATH was not set as expected" >&3
       exit 1
     fi
 EOF
-)
+  )"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -c "$SCRIPT"
   assert_success
 }
 
@@ -2593,7 +2594,7 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/fish_3_2_2.yaml" \
     "$FLOX_BIN" install fish@3.2.2
 
-  FLOX_SHELL="./.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/fish" run "$FLOX_BIN" activate -- echo "\$FISH_VERSION"
+  FLOX_SHELL="./.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/fish" run "$FLOX_BIN" activate -c "echo \$FISH_VERSION"
   assert_success
   # fish doesn't have the equivalent of set -e, so refute "Error"
   refute_output --partial Error
@@ -2692,7 +2693,7 @@ attach_runs_hooks_once() {
   TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
   mkfifo "$TEARDOWN_FIFO"
 
-  "$FLOX_BIN" activate -- bash -c "echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" 2> output &
+  FLOX_SHELL=bash "$FLOX_BIN" activate -c "echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" 2> output &
 
   cat activate_started_fifo
   run cat output
@@ -2704,7 +2705,7 @@ attach_runs_hooks_once() {
       run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" true
       ;;
     command)
-      run "$FLOX_BIN" activate -- true
+      run "$FLOX_BIN" activate -c true
       ;;
     in-place)
       run bash -c 'eval "$("$FLOX_BIN" activate)"'
@@ -2753,7 +2754,7 @@ attach_runs_profile_twice() {
   mkfifo "$TEARDOWN_FIFO"
 
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
-  FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" >> output 2>&1 &
+  FLOX_SHELL="$shell" "$FLOX_BIN" activate -c "bash -c \"echo > activate_started_fifo && echo > $TEARDOWN_FIFO\"" >> output 2>&1 &
 
   cat activate_started_fifo
   run cat output
@@ -2765,7 +2766,7 @@ attach_runs_profile_twice() {
       FLOX_SHELL="$shell" run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" true
       ;;
     command)
-      FLOX_SHELL="$shell" run "$FLOX_BIN" activate -- true
+      FLOX_SHELL="$shell" run "$FLOX_BIN" activate -c true
       ;;
     in-place)
       if [ "$shell" == "tcsh" ]; then
@@ -2881,7 +2882,7 @@ EOF
   mkfifo "$TEARDOWN_FIFO"
 
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
-  FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" >> output 2>&1 &
+  FLOX_SHELL="$shell" "$FLOX_BIN" activate -c "bash -c \"echo > activate_started_fifo && echo > $TEARDOWN_FIFO\"" >> output 2>&1 &
 
   cat activate_started_fifo
 
@@ -2890,7 +2891,7 @@ EOF
       FLOX_SHELL="$shell" run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" "echo \$HOOK_ON_ACTIVATE"
       ;;
     command)
-      FLOX_SHELL="$shell" run "$FLOX_BIN" activate -- echo \$HOOK_ON_ACTIVATE
+      FLOX_SHELL="$shell" run "$FLOX_BIN" activate -c "echo \$HOOK_ON_ACTIVATE"
       ;;
     in-place)
       if [ "$shell" == "tcsh" ]; then
@@ -2997,7 +2998,7 @@ attach_sets_profile_vars() {
   mkfifo "$TEARDOWN_FIFO"
 
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
-  FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" &
+  FLOX_SHELL="$shell" "$FLOX_BIN" activate -c "bash -c \"echo > activate_started_fifo && echo > $TEARDOWN_FIFO\"" &
 
   cat activate_started_fifo
 
@@ -3008,7 +3009,7 @@ attach_sets_profile_vars() {
       run cat output
       ;;
     command)
-      FLOX_SHELL="$shell" run "$FLOX_BIN" activate -- echo \$PROFILE_COMMON \&\& echo "\$PROFILE_$shell"
+      FLOX_SHELL="$shell" run "$FLOX_BIN" activate -c "echo \$PROFILE_COMMON && echo \$PROFILE_$shell"
       ;;
     in-place)
       if [ "$shell" == "tcsh" ]; then
@@ -3184,7 +3185,7 @@ EOF
   # Start a first_activation which sets FOO=first_activation
   case "$mode" in
     command)
-      injected="first_activation" _FLOX_WATCHDOG_LOG_LEVEL=trace "$FLOX_BIN" activate -- bash -c "echo \$FOO > output && echo > activate_started_fifo && echo > $TEARDOWN_FIFO" &
+      FLOX_SHELL=bash injected="first_activation" _FLOX_WATCHDOG_LOG_LEVEL=trace "$FLOX_BIN" activate -c "echo \$FOO > output && echo > activate_started_fifo && echo > $TEARDOWN_FIFO" &
       ;;
     in-place)
       TEARDOWN_FIFO="$TEARDOWN_FIFO" injected="first_activation" bash -c 'eval "$(_FLOX_WATCHDOG_LOG_LEVEL=trace "$FLOX_BIN" activate)" && echo $FOO > output && echo > activate_started_fifo && echo > "$TEARDOWN_FIFO"' &
@@ -3217,7 +3218,7 @@ EOF
 
   # Run a second activation which should attach to the first,
   # so FOO should still be first_activation
-  injected="second_activation" run --separate-stderr "$FLOX_BIN" activate -- echo \$FOO
+  injected="second_activation" run --separate-stderr "$FLOX_BIN" activate -c "echo \$FOO"
   assert_success
   assert_output "first_activation"
 
@@ -3227,7 +3228,7 @@ EOF
   wait_for_watchdogs "$PROJECT_DIR"
 
   # Verify that a third activation starts rather than attaching
-  injected="third_activation" run  "$FLOX_BIN" activate -- echo \$FOO
+  injected="third_activation" run  "$FLOX_BIN" activate -c "echo \$FOO"
   assert_success
   assert_output --partial "third_activation"
 }
@@ -3268,7 +3269,7 @@ EOF
   assert_success
 
   # Additional activations of the modified environment should still work.
-  run "$FLOX_BIN" activate -d "${PROJECT_DIR}" -- hello
+  run "$FLOX_BIN" activate -d "${PROJECT_DIR}" -c hello
   assert_success
   assert_output "Hello, world!"
 }
@@ -3287,17 +3288,17 @@ EOF
   unset RUST_BACKTRACE
 
   export -f jq_edit
-  run "$FLOX_BIN" activate -- bash <(
-    cat << 'EOF'
-      echo "$PPID" > activation_pid
+  SCRIPT="$(cat <<'EOF'
+      echo "$$" > activation_pid
 
       ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
       ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
       jq_edit "$ACTIVATIONS_JSON" '.version = 0'
 
-      "$FLOX_BIN" activate -- echo "should fail"
+      "$FLOX_BIN" activate -c 'echo "should fail"'
 EOF
-  )
+  )"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -c "$SCRIPT"
 
   # Capture from the previous activation.
   ACTIVATION_PID=$(cat activation_pid)
@@ -3317,13 +3318,13 @@ PIDs of the running activations: ${ACTIVATION_PID}"
   # This has to be updated with [flox_core::activations::LATEST_VERSION].
   LATEST_VERSION=2
 
-  run "$FLOX_BIN" activate -- bash <(
-    cat << 'EOF'
+  SCRIPT="$(cat <<'EOF'
       ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
       ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
       echo "$ACTIVATIONS_JSON" > activations_json
 EOF
-  )
+  )"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -c "$SCRIPT"
   assert_success
 
   # Wait for the "start" to exit.
@@ -3337,7 +3338,7 @@ EOF
   jq_edit "$ACTIVATIONS_JSON" '.version = 0'
 
   # New "start" with old version should succeed.
-  run "$FLOX_BIN" activate -- echo "should succeed"
+  run "$FLOX_BIN" activate -c 'echo "should succeed"'
   assert_success
   assert_line "should succeed"
 
@@ -3356,7 +3357,7 @@ EOF
   # Unset from test suite.
   unset FLOX_DISABLE_METRICS
 
-  run --separate-stderr "$FLOX_BIN" activate -- printenv FLOX_DISABLE_METRICS
+  run --separate-stderr "$FLOX_BIN" activate -c "printenv FLOX_DISABLE_METRICS"
   assert_output "true"
 }
 
@@ -3369,7 +3370,7 @@ EOF
 
   # Ensure that an empty MANPATH is replaced with something with a trailing
   # colon so that the default list is honoured as a fallback.
-  MANPATH= run "$FLOX_BIN" activate -- sh -c 'echo $MANPATH'
+  MANPATH= run "$FLOX_BIN" activate -c "sh -c 'echo \$MANPATH'"
   assert_success
   assert_output --regexp ".*:$"
 
@@ -3401,15 +3402,15 @@ EOF
       refute_output "$EMACS_MAN"
 
       # vim gets added to MANPATH
-      _man=$_man "$FLOX_BIN" activate -d vim -- bash -c "$_man --path vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
+      _man=$_man FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -c "$_man --path vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
       cat activate_started_fifo
       run cat output
       assert_success
       assert_output "$VIM_MAN"
 
       # emacs gets added to MANPATH, and then a nested attach also adds vim
-      _man=$_man "$FLOX_BIN" activate -d emacs -- \
-        bash -c '$_man --path emacs > output_emacs_1 && "$FLOX_BIN" activate -d vim -- bash -c "$_man --path vim > output_vim && $_man --path emacs > output_emacs_2"'
+      _man=$_man "$FLOX_BIN" activate -d emacs -c \
+        '$_man --path emacs > output_emacs_1 && "$FLOX_BIN" activate -d vim -c "$_man --path vim > output_vim && $_man --path emacs > output_emacs_2"'
       run cat output_emacs_1
       assert_output "$EMACS_MAN"
       run cat output_vim
@@ -3426,7 +3427,7 @@ EOF
       refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
 
       # vim gets added to MANPATH
-      "$FLOX_BIN" activate -d vim -- bash -c "/usr/bin/manpath > output && echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
+      FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -c "/usr/bin/manpath > output && echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
       cat activate_started_fifo
       run cat output
       assert_success
@@ -3434,8 +3435,8 @@ EOF
       refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
 
       # emacs gets added to MANPATH, and then a nested attach also adds vim
-      "$FLOX_BIN" activate -d emacs -- \
-        bash -c '/usr/bin/manpath > output_1 && "$FLOX_BIN" activate -d vim -- bash -c "/usr/bin/manpath > output_2"'
+      FLOX_SHELL=bash "$FLOX_BIN" activate -d emacs -c \
+        "/usr/bin/manpath > output_1 && \"$FLOX_BIN\" activate -d vim -c '/usr/bin/manpath > output_2'"
       run cat output_1
       refute_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
       assert_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
@@ -3473,15 +3474,15 @@ EOF
   run command -v emacs
   refute_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/bin/emacs"
 
-  "$FLOX_BIN" activate -d vim -- bash -c "command -v vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
+  FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -c "command -v vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
   cat activate_started_fifo
 
   run cat output
   assert_success
   assert_output "$(realpath "$PROJECT_DIR")/vim/.flox/run/$NIX_SYSTEM.vim.dev/bin/vim"
 
-  "$FLOX_BIN" activate -d emacs -- \
-    bash -c 'command -v emacs > output_emacs_1; "$FLOX_BIN" activate -d vim -- bash -c "command -v vim > output_vim && command -v emacs > output_emacs_2 || true"'
+  "$FLOX_BIN" activate -d emacs -c \
+    'command -v emacs > output_emacs_1; "$FLOX_BIN" activate -d vim -c "command -v vim > output_vim && command -v emacs > output_emacs_2 || true"'
   run cat output_emacs_1
   assert_success
   assert_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/bin/emacs"
@@ -3956,6 +3957,8 @@ Setting PATH from ${rc_file}"
   # Use setsid so that wait_for_background_activation can kill the process group
   # TODO: Remove unsetting of mocks when `$FLOX_LATEST_VERSION` is using YAML
   #       instead of JSON mock files.
+  # TODO: when we release a new version of Flox, we'll have to change from using
+  # activate -- to activate -c
   env -u _FLOX_USE_CATALOG_MOCK -u FLOX_INTERPRETER -u FLOX_ACTIVATIONS_BIN \
     setsid ./result/bin/flox activate -- \
     "$shell_path" -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" > output 2>&1 &
@@ -4026,14 +4029,14 @@ EOF
     command)
       if [ "$incrementing_version_this_release" == true ]; then
         unset RUST_BACKTRACE
-        run env -u RUST_BACKTRACE "$FLOX_BIN" activate -- true
+        run env -u RUST_BACKTRACE "$FLOX_BIN" activate -c true
         assert_failure
         # Remove the PIDs line that appears after the error message
         filtered_output="$(echo "$output" | sed '/PIDs of the running activations:/d')"
         run echo "$filtered_output"
         assert_output "$error_text"
       else
-        run "$FLOX_BIN" activate -- true
+        run "$FLOX_BIN" activate -c true
         assert_success
         assert_output "$output_from_rc_files"
       fi
@@ -4281,8 +4284,8 @@ EOF
 @test "profile scripts run for all environments in nested bash command activation" {
   nested_environment_setup
   _FLOX_SHELL_FORCE="$(command -v bash)" NO_COLOR=1 run -0 \
-     "$FLOX_BIN" activate --dir "$PROJECT_DIR/outer" -- \
-     "$FLOX_BIN" activate --dir "$PROJECT_DIR/inner" -- :
+     "$FLOX_BIN" activate --dir "$PROJECT_DIR/outer" -c \
+     '"$FLOX_BIN" activate --dir "$PROJECT_DIR/inner" -c :'
   assert_success
   assert_output --partial "bash: common hook running from outer"
   assert_output --partial "bash: sourcing outer profile"
@@ -4294,8 +4297,8 @@ EOF
 @test "profile scripts run for all environments in nested fish command activation" {
   nested_environment_setup
   _FLOX_SHELL_FORCE="$(command -v fish)" NO_COLOR=1 run -0 \
-     "$FLOX_BIN" activate --dir "$PROJECT_DIR/outer" -- \
-     "$FLOX_BIN" activate --dir "$PROJECT_DIR/inner" -- :
+     "$FLOX_BIN" activate --dir "$PROJECT_DIR/outer" -c \
+     '"$FLOX_BIN" activate --dir "$PROJECT_DIR/inner" -c :'
   assert_success
   assert_output --partial "fish: common hook running from outer"
   assert_output --partial "fish: sourcing outer profile"
@@ -4307,8 +4310,8 @@ EOF
 @test "profile scripts run for all environments in nested tcsh command activation" {
   nested_environment_setup
   _FLOX_SHELL_FORCE="$(command -v tcsh)" NO_COLOR=1 run -0 \
-     "$FLOX_BIN" activate --dir "$PROJECT_DIR/outer" -- \
-     "$FLOX_BIN" activate --dir "$PROJECT_DIR/inner" -- :
+     "$FLOX_BIN" activate --dir "$PROJECT_DIR/outer" -c \
+     '"$FLOX_BIN" activate --dir "$PROJECT_DIR/inner" -c :'
   assert_success
   assert_output --partial "tcsh: common hook running from outer"
   assert_output --partial "tcsh: sourcing outer profile"
@@ -4320,8 +4323,8 @@ EOF
 @test "profile scripts run for all environments in nested zsh command activation" {
   nested_environment_setup
   _FLOX_SHELL_FORCE="$(command -v zsh)" NO_COLOR=1 run -0 \
-     "$FLOX_BIN" activate --dir "$PROJECT_DIR/outer" -- \
-     "$FLOX_BIN" activate --dir "$PROJECT_DIR/inner" -- :
+     "$FLOX_BIN" activate --dir "$PROJECT_DIR/outer" -c \
+     '"$FLOX_BIN" activate --dir "$PROJECT_DIR/inner" -c :'
   assert_success
   assert_output --partial "zsh: common hook running from outer"
   assert_output --partial "zsh: sourcing outer profile"
@@ -4456,7 +4459,7 @@ EOF
 
   # Pass commands unquoted and without `$shell -c` because we don't want to
   # start an extra shell which also sources the RC file.
-  run "$FLOX_BIN" activate -m "$MODE" -d "${PROJECT_USER}" -- ${ECHO_COMMANDS}
+  run "$FLOX_BIN" activate -m "$MODE" -d "${PROJECT_USER}" -c "${ECHO_COMMANDS}"
   assert_success
 
   # Assert on both activations to ensure that we really got an in-place activation first.
@@ -4530,7 +4533,7 @@ EOF
   )"
   echo "$MANIFEST_CONTENTS_HIGHEST_PRECEDENCE" | "$FLOX_BIN" edit -f -
 
-  run "$FLOX_BIN" activate -- echo 'foo: $foo; bar: $bar'
+  run "$FLOX_BIN" activate -c 'echo "foo: $foo; bar: $bar"'
   assert_success
   assert_output - <<EOF
 Sourcing .bashrc
@@ -4561,7 +4564,7 @@ environments = [
 ]
 EOF
 
-  run --separate-stderr "$FLOX_BIN" activate -d composer -- echo "locking"
+  run --separate-stderr "$FLOX_BIN" activate -d composer -c 'echo "locking"'
   assert_success
   assert_equal "$stderr" "ℹ️  The following manifest fields were overridden during merging:
 - This environment set:
@@ -4569,7 +4572,7 @@ EOF
 Sourcing .bashrc
 Setting PATH from .bashrc"
 
-  run --separate-stderr "$FLOX_BIN" activate -d composer -- echo "already locked"
+  run --separate-stderr "$FLOX_BIN" activate -d composer -c 'echo "already locked"'
   assert_success
   assert_equal "$stderr" "Sourcing .bashrc
 Setting PATH from .bashrc"
@@ -4581,7 +4584,7 @@ Setting PATH from .bashrc"
     unset _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS # allow background checks for this test
     "$FLOX_BIN" init
     _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" "$FLOX_BIN" install hello
-    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" "$FLOX_BIN" activate -- true
+    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" "$FLOX_BIN" activate -c true
 
     timeout 5s bash -c "while [ ! -f .flox/cache/upgrade-checks.json ]; do sleep 0.1; done"
 
@@ -4672,7 +4675,7 @@ run_activation_check_command() {
   flags="${2:?}"
   # Quotes around PATH are needed with fish, otherwise it prints components
   # separated by spaces instead of ':' (since all variables in fish are lists).
-  run "$shell" "$flags" "$FLOX_BIN activate -d outer -- $shell $flags 'echo PATH is \"\\\$PATH\"; echo MANPATH is \"\\\$MANPATH\"'"
+  run "$shell" "$flags" "$FLOX_BIN activate -d outer -c \"$shell $flags 'echo PATH is:; printenv PATH; echo MANPATH is:; printenv MANPATH'\""
 }
 
 # Produces a script that when sourced will produce output from the nested
@@ -4721,9 +4724,9 @@ nested_activation_get_output() {
 # are present in PATH, and the outer environment appears first.
 nested_activation_assertions() {
   # Check that PATH is repaired
-  assert_output --partial "PATH is $outer_stub/bin:$outer_stub/sbin:$default_stub/bin:$default_stub/sbin:before_path"
+  assert_output --partial "$outer_stub/bin:$outer_stub/sbin:$default_stub/bin:$default_stub/sbin:before_path"
   # Check that MANPATH is repaired
-  assert_output --partial "MANPATH is $outer_stub/share/man:$default_stub/share/man"
+  assert_output --partial "$outer_stub/share/man:$default_stub/share/man"
 }
 
 # Check that the nested activation process (for a particular shell and way of
@@ -4827,7 +4830,7 @@ EOF
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -d project -f -
 
   _FLOX_SHELL_FORCE="$shell" \
-    run "$FLOX_BIN" activate -d project -- true
+    run "$FLOX_BIN" activate -d project -c true
   assert_success
   assert_output - <<EOF
 project profile.$shell
@@ -4913,17 +4916,17 @@ EOF
     # Use a login shell instead of an interactive one because of the /dev/tty
     # issue
     _FLOX_SHELL_FORCE="$shell" \
-      run "$FLOX_BIN" activate -d project -- "$shell" -lc 'echo "$shell_var"'
+      run "$FLOX_BIN" activate -d project -c "\"$shell\" -lc 'echo \$shell_var'"
   elif [[ "$shell" == "tcsh" ]]; then
     # tcsh does not parse the following:
     #   % tcsh -m -c 'tcsh -ic "echo \"$shell_var\""'
     #   Unmatched '"'.
     # ... so we skip the quoting of $shell_var below.
     _FLOX_SHELL_FORCE="$shell" \
-      run "$FLOX_BIN" activate -d project -- "$shell" -ic "echo \$shell_var"
+      run "$FLOX_BIN" activate -d project -c "\"$shell\" -ic 'echo \$shell_var'"
   else
     _FLOX_SHELL_FORCE="$shell" \
-      run "$FLOX_BIN" activate -d project -- "$shell" -ic 'echo "$shell_var"'
+      run "$FLOX_BIN" activate -d project -c "\"$shell\" -ic 'echo \$shell_var'"
   fi
   assert_success
   assert_output - <<EOF
@@ -5007,17 +5010,17 @@ EOF
     # Use a login shell instead of an interactive one because of the /dev/tty
     # issue
     _FLOX_SHELL_FORCE="$shell" \
-      run "$FLOX_BIN" activate -d project -- "$shell" -lc 'echo "$PATH"'
+      run "$FLOX_BIN" activate -d project -c "\"$shell\" -lc 'printenv PATH'"
   elif [[ "$shell" == "tcsh" ]]; then
     # tcsh does not parse the following:
     #   % tcsh -m -c 'tcsh -ic "echo \"$shell_var\""'
     #   Unmatched '"'.
     # ... so we skip the quoting of $shell_var below.
     _FLOX_SHELL_FORCE="$shell" \
-      run "$FLOX_BIN" activate -d project -- "$shell" -ic "echo \$PATH"
+      run "$FLOX_BIN" activate -d project -c "\"$shell\" -ic 'printenv PATH'"
   else
     _FLOX_SHELL_FORCE="$shell" \
-      run "$FLOX_BIN" activate -d project -- "$shell" -ic 'echo "$PATH"'
+      run "$FLOX_BIN" activate -d project -c "\"$shell\" -ic 'printenv PATH'"
   fi
   assert_success
   assert_output --regexp '^/me-first:'
@@ -5073,7 +5076,7 @@ EOF
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   unset RUST_BACKTRACE
-  run --separate-stderr "$FLOX_BIN" activate -- true
+  run --separate-stderr "$FLOX_BIN" activate -c true
   assert_failure
   assert_output ""
   expected_stderr="$(cat << EOF

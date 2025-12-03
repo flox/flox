@@ -316,7 +316,7 @@ Remote:
     "$FLOX_BIN" install hello
 
   export PROJECT_DIR="$(realpath "$PROJECT_DIR")"
-  run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- command -v hello
+  run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c 'command -v hello'
   assert_success
   assert_output --regexp "${PROJECT_DIR}/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}.dev/bin/hello"
 }
@@ -510,7 +510,7 @@ Remote:
   # after resetting uses the original empty env
   "$FLOX_BIN" edit --reset
 
-  run -127 "$FLOX_BIN" activate -- hello
+  run -1 "$FLOX_BIN" activate -- hello
   assert_failure
 }
 

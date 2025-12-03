@@ -63,11 +63,11 @@ teardown() {
   assert_success
   assert_line --partial "'go' installed"
 
-  run "$FLOX_BIN" activate -- go version
+  run "$FLOX_BIN" activate -c "go version"
   assert_success
   assert_line --partial "go version go1."
 
-  run "$FLOX_BIN" activate -- go build
+  run "$FLOX_BIN" activate -c "go build"
   assert_success
 }
 
@@ -85,10 +85,10 @@ teardown() {
   assert_success
   assert_line --partial "'go' installed"
 
-  run "$FLOX_BIN" activate -- go version
+  run "$FLOX_BIN" activate -c "go version"
   assert_success
   assert_line --partial "go version go1."
 
-  run "$FLOX_BIN" activate -- go build
+  run "$FLOX_BIN" activate -c "go build"
   assert_success
 }

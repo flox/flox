@@ -67,13 +67,12 @@ pub struct ActivateCtx {
     // Info needed to run the activate script
     pub interpreter_path: PathBuf,
     pub invocation_type: Option<InvocationType>,
-    pub run_args: Vec<String>,
 
     /// Whether to clean up the context file after reading it.
     pub remove_after_reading: bool,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, derive_more::Display, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, derive_more::Display, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InvocationType {
     #[display("inplace")]
@@ -81,5 +80,7 @@ pub enum InvocationType {
     #[display("interactive")]
     Interactive,
     #[display("command")]
-    Command,
+    ShellCommand(String),
+    #[display("execcommand")]
+    ExecCommand(Vec<String>),
 }

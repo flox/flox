@@ -48,7 +48,7 @@ teardown() {
 @test "rejects invalid activate mode" {
   project_setup
 
-  run "$FLOX_BIN" activate -m invalid -- true
+  run "$FLOX_BIN" activate -m invalid -c true
   assert_failure
   assert_output "❌ ERROR: couldn't parse \`invalid\`: not a valid activation mode"
 }
@@ -69,7 +69,7 @@ function assert_run_mode() {
 @test "activate defaults to dev mode" {
   project_setup
 
-  run "$FLOX_BIN" activate -- printenv FLOX_ENV
+  run "$FLOX_BIN" activate -c "printenv FLOX_ENV"
   assert_success
   assert_dev_mode
 }
@@ -77,7 +77,7 @@ function assert_run_mode() {
 @test "can activate in dev mode with flag" {
   project_setup
 
-  run "$FLOX_BIN" activate -m dev -- printenv FLOX_ENV
+  run "$FLOX_BIN" activate -m dev -c "printenv FLOX_ENV"
   assert_success
   assert_dev_mode
 }
@@ -85,7 +85,7 @@ function assert_run_mode() {
 @test "can activate in run mode with flag" {
   project_setup
 
-  run "$FLOX_BIN" activate -m run -- printenv FLOX_ENV
+  run "$FLOX_BIN" activate -m run -c "printenv FLOX_ENV"
   assert_success
   assert_run_mode
 }
@@ -94,7 +94,7 @@ function assert_run_mode() {
   project_setup
   set_manifest_mode dev
 
-  run "$FLOX_BIN" activate -- printenv FLOX_ENV
+  run "$FLOX_BIN" activate -c "printenv FLOX_ENV"
   assert_success
   assert_dev_mode
 }
@@ -103,7 +103,7 @@ function assert_run_mode() {
   project_setup
   set_manifest_mode run
 
-  run "$FLOX_BIN" activate -- printenv FLOX_ENV
+  run "$FLOX_BIN" activate -c "printenv FLOX_ENV"
   assert_success
   assert_run_mode
 }
@@ -112,7 +112,7 @@ function assert_run_mode() {
   project_setup
   set_manifest_mode run
 
-  run "$FLOX_BIN" activate -m dev -- printenv FLOX_ENV
+  run "$FLOX_BIN" activate -m dev -c "printenv FLOX_ENV"
   assert_success
   assert_dev_mode
 }
@@ -121,7 +121,7 @@ function assert_run_mode() {
   project_setup
   set_manifest_mode dev
 
-  run "$FLOX_BIN" activate -m run -- printenv FLOX_ENV
+  run "$FLOX_BIN" activate -m run -c "printenv FLOX_ENV"
   assert_success
   assert_run_mode
 }
@@ -132,11 +132,12 @@ function assert_run_mode() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/almonds.yaml" "$FLOX_BIN" install almonds
   # `almonds` brings in Python as a development dependency, and we don't want
   # that in runtime mode
-  run "$FLOX_BIN" activate -m run -- bash <(cat <<'EOF'
+  SCRIPT="$(cat << 'EOF'
     [ -e "$FLOX_ENV/bin/almonds" ]
     [ ! -e "$FLOX_ENV/bin/python3" ]
 EOF
-)
+  )"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -m run -c "$SCRIPT"
   assert_success
 }
 
@@ -144,7 +145,7 @@ EOF
   project_setup
   "$FLOX_BIN" edit -n "runtime_project" # give it a stable name
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/almonds.yaml" "$FLOX_BIN" install almonds
-  run "$FLOX_BIN" activate -m run -- which almonds
+  run "$FLOX_BIN" activate -m run -c "which almonds"
   assert_output --partial ".flox/run/$NIX_SYSTEM.runtime_project.run/bin/almonds"
 }
 
@@ -159,7 +160,8 @@ EOF
   "$FLOX_BIN" init -d "$top_layer_dir"
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" "$FLOX_BIN" install -d "$top_layer_dir" hello
 
-  run "$FLOX_BIN" activate -m run -d "$bottom_layer_dir" -- bash <(cat <<'EOF'
+
+  SCRIPT="$(cat << 'EOF'
     set -euo pipefail
 
     # This is where we *would* find `python3` if it was present
@@ -172,12 +174,14 @@ EOF
     to_eval=$("$FLOX_BIN" activate -d "$top_layer_dir")
     eval "$to_eval"
 
-    # Ensure that we don't find Python from the bottom environment
+    # Ensure that we do not find Python from the bottom environment
     if [ "$(command -v python3)" = "$python_path_bottom" ]; then
       exit 1
     fi
 EOF
-)
+  )"
+
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -m run -d "$bottom_layer_dir" -c "$SCRIPT"
   assert_success
 }
 
@@ -192,29 +196,30 @@ EOF
   "$FLOX_BIN" init -d "$top_layer_dir"
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/almonds.yaml" "$FLOX_BIN" install -d "$top_layer_dir" almonds
 
-  run "$FLOX_BIN" activate -d "$bottom_layer_dir" -m run  -- bash <(cat <<'EOF'
+  SCRIPT="$(cat << 'EOF'
     set -euo pipefail
 
     # Layer another environment on top
     to_eval=$("$FLOX_BIN" activate -m run -d "$top_layer_dir")
     eval "$to_eval"
 
-    # Ensure that we don't find Python from the bottom environment
+    # Ensure that we do not find Python from the bottom environment
     if [ "$(command -v python3)" = "$FLOX_ENV/bin/python3" ]; then
       exit 1
     fi
+
+    echo success
 EOF
-)
+  )"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -d "$bottom_layer_dir" -m run  -c "$SCRIPT"
   assert_success
+  assert_output success
 }
 
 @test "runtime: doesn't set CPATH" {
   project_setup
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" "$FLOX_BIN" install hello
   export outer_cpath="$CPATH"
-  run "$FLOX_BIN" activate -m run -- bash <(cat <<'EOF'
-    [ "$CPATH" = "$outer_cpath" ]
-EOF
-)
+  run "$FLOX_BIN" activate -m run -c '[ "$CPATH" = "$outer_cpath" ]'
   assert_success
 }
