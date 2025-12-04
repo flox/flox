@@ -14,7 +14,7 @@ use nix::unistd::{close, dup2_stdin, pipe, write};
 use shell_gen::{Shell, ShellWithPath};
 use tracing::debug;
 
-use crate::activate_script_builder::{activate_tracer, apply_env_for_invocation, old_cli_envs};
+use crate::activate_script_builder::{activate_tracer, apply_activation_env, old_cli_envs};
 use crate::cli::activate::{NO_REMOVE_ACTIVATION_FILES, VarsFromEnvironment};
 use crate::cli::attach::{AttachArgs, AttachExclusiveArgs};
 use crate::cli::start_or_attach::StartOrAttachResult;
@@ -276,7 +276,7 @@ fn activate_exec_command(
         command.args(&exec_command[1..]);
     };
 
-    apply_env_for_invocation(
+    apply_activation_env(
         &mut command,
         startup_ctx.act_ctx.clone(),
         subsystem_verbosity,
@@ -304,7 +304,7 @@ fn activate_shell_command(
     start_or_attach_result: &StartOrAttachResult,
 ) -> Result<()> {
     let mut command = Command::new(startup_ctx.act_ctx.shell.exe_path());
-    apply_env_for_invocation(
+    apply_activation_env(
         &mut command,
         startup_ctx.act_ctx.clone(),
         subsystem_verbosity,
@@ -426,7 +426,7 @@ fn activate_interactive(
     start_or_attach_result: &StartOrAttachResult,
 ) -> Result<()> {
     let mut command = Command::new(startup_ctx.act_ctx.shell.exe_path());
-    apply_env_for_invocation(
+    apply_activation_env(
         &mut command,
         startup_ctx.act_ctx.clone(),
         subsystem_verbosity,

@@ -347,7 +347,7 @@ impl Activate {
         let flox_services_to_start = if is_ephemeral && !services_to_start.is_empty() {
             // Store JSON in an env var because bash doesn't
             // support storing arrays in env vars
-            Some(serde_json::to_string(&services_to_start)?)
+            Some(Vec::from(services_to_start))
         } else {
             None
         };

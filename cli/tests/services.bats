@@ -1018,9 +1018,7 @@ EOF
 )
   assert_success
   assert_line "outer FLOX_ACTIVATE_START_SERVICES=true"
-  assert_line "outer _FLOX_SERVICES_TO_START=unset"
   assert_line "inner FLOX_ACTIVATE_START_SERVICES=false"
-  assert_line "inner _FLOX_SERVICES_TO_START=unset"
 }
 
 @test "activate: outer activation imperatively starts services and inner activation doesn't" {
@@ -1039,9 +1037,7 @@ EOF
 )
   assert_success
   assert_line "outer FLOX_ACTIVATE_START_SERVICES=false"
-  assert_line "outer _FLOX_SERVICES_TO_START=unset"
   assert_line "inner FLOX_ACTIVATE_START_SERVICES=false"
-  assert_line "inner _FLOX_SERVICES_TO_START=unset"
 }
 
 @test "activate: services can be layered" {

@@ -1,4 +1,5 @@
 {
+  bash,
   cacert,
   glibcLocalesUtf8,
   hostPlatform,
@@ -15,6 +16,14 @@
 let
   # crane (<https://crane.dev/>) library for building rust packages
   craneLib = (inputs.crane.mkLib pkgsFor).overrideToolchain rust-toolchain.toolchain;
+  envs = {
+    # used internally to ensure CA certificates are available
+    NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
+    PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
+    FLOX_ACTIVATIONS_BIN = "${placeholder "out"}/libexec/flox-activations";
+    # Nix will ignore this if it starts with just BASH
+    X_BASH_BIN = "${bash}/bin/bash";
+  };
 
 in
 craneLib.buildPackage (
@@ -37,11 +46,6 @@ craneLib.buildPackage (
 
     CARGO_LOG = "cargo::core::compiler::fingerprint=info";
     CARGO_PROFILE = "small";
-    # used internally to ensure CA certificates are available
-    NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
-
-    PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
-    FLOX_ACTIVATIONS_BIN = "${placeholder "out"}/libexec/flox-activations";
 
     # runtime dependencies
     buildInputs = rust-external-deps.buildInputs ++ [ ];
@@ -82,7 +86,8 @@ craneLib.buildPackage (
       devEnvs = {
         RUST_SRC_PATH = "${rust-toolchain.rust-src}/lib/rustlib/src/rust/library";
         RUSTFMT = "${rustfmt}/bin/rustfmt";
-      };
+      }
+      // envs;
 
       devShellHook = ''
         #  # Find the project root and add the `bin' directory to `PATH'.
@@ -93,6 +98,7 @@ craneLib.buildPackage (
       '';
     };
   }
+  // envs
   // lib.optionalAttrs hostPlatform.isLinux {
     LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
   }
