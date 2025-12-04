@@ -10,6 +10,7 @@ use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY_VAR};
+use flox_core::traceable_path;
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
 use flox_rust_sdk::models::environment::generations::GenerationId;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, EnvironmentError};
@@ -18,7 +19,6 @@ use flox_rust_sdk::models::manifest::typed::{ActivateMode, IncludeDescriptor, In
 use flox_rust_sdk::providers::services::process_compose::shutdown_process_compose_if_all_processes_stopped;
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
-use flox_rust_sdk::utils::logging::traceable_path;
 use indoc::{formatdoc, indoc};
 use shell_gen::ShellWithPath;
 use tracing::{debug, trace, warn};
@@ -48,9 +48,6 @@ pub static INTERACTIVE_BASH_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(
         env::var("INTERACTIVE_BASH_BIN").unwrap_or(env!("INTERACTIVE_BASH_BIN").to_string()),
     )
-});
-pub static WATCHDOG_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
-    PathBuf::from(env::var("WATCHDOG_BIN").unwrap_or(env!("WATCHDOG_BIN").to_string()))
 });
 
 #[derive(Debug, Clone, Bpaf)]
@@ -398,7 +395,6 @@ impl Activate {
             "setting service variables"
         );
         let flox_activate_start_services = start_new_process_compose;
-        let flox_services_socket = socket_path.to_string_lossy().to_string();
         if should_have_services && !start_new_process_compose {
             message::warning("Skipped starting services, services are already running");
         }
@@ -419,15 +415,9 @@ impl Activate {
             env_cache: concrete_environment.cache_path()?.into_inner(),
             env_description: now_active.bare_description(),
             mode: mode.to_string(),
-            watchdog_bin: Some((*WATCHDOG_BIN).clone()),
             shell,
             flox_active_environments: flox_active_environments.to_string(),
-            flox_env_log_dir: Some(
-                concrete_environment
-                    .log_path()?
-                    .to_string_lossy()
-                    .to_string(),
-            ),
+            flox_env_log_dir: Some(concrete_environment.log_path()?.to_path_buf()),
             prompt_color_1,
             prompt_color_2,
             flox_prompt_environments,
@@ -439,9 +429,10 @@ impl Activate {
             flox_services_to_start,
             flox_env_cuda_detection,
             flox_activate_start_services,
-            flox_services_socket: Some(flox_services_socket),
+            flox_services_socket: Some(socket_path),
             interpreter_path,
             invocation_type: Some(invocation_type),
+            run_monitoring_loop: true,
             remove_after_reading: true,
         };
 

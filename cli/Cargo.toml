@@ -12,7 +12,7 @@ members = [
     "systemd",
     "xtask",
 ]
-default-members = ["flox", "flox-watchdog", "flox-activations"]
+default-members = ["flox", "flox-activations"]
 
 resolver = "2"
 
@@ -34,6 +34,7 @@ flox-activations = { path = "flox-activations" }
 flox-core = { path = "flox-core" }
 flox-rust-sdk = { path = "flox-rust-sdk" }
 flox-test-utils = { path = "flox-test-utils" }
+flox-watchdog = { path = "flox-watchdog" }
 fslock = "0.2.1"
 fs_extra = "1.3.0"
 futures = "0.3"

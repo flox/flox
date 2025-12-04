@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use flox_core::traceable_path;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::raw::CatalogPackage;
@@ -12,7 +13,6 @@ use flox_rust_sdk::providers::catalog::{
     PackageDescriptor,
     PackageGroup,
 };
-use flox_rust_sdk::utils::logging::traceable_path;
 use indoc::{formatdoc, indoc};
 use regex::Regex;
 use semver::VersionReq;

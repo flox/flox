@@ -21,9 +21,6 @@ pub struct ActivateCtx {
     /// The activation mode (dev or run)
     pub mode: String,
 
-    /// Path to the watchdog binary
-    pub watchdog_bin: Option<PathBuf>,
-
     /// Path to the shell executable
     pub shell: ShellWithPath,
 
@@ -32,7 +29,7 @@ pub struct ActivateCtx {
     pub flox_active_environments: String,
 
     /// Environment log directory
-    pub flox_env_log_dir: Option<String>,
+    pub flox_env_log_dir: Option<PathBuf>,
 
     /// Prompt color 1
     pub prompt_color_1: String,
@@ -62,11 +59,14 @@ pub struct ActivateCtx {
     pub flox_activate_start_services: bool,
 
     /// Services socket path
-    pub flox_services_socket: Option<String>,
+    pub flox_services_socket: Option<PathBuf>,
 
     // Info needed to run the activate script
     pub interpreter_path: PathBuf,
     pub invocation_type: Option<InvocationType>,
+
+    /// Whether to run the monitoring loop (aka. watchdog)
+    pub run_monitoring_loop: bool,
 
     /// Whether to clean up the context file after reading it.
     pub remove_after_reading: bool,

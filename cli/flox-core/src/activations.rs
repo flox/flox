@@ -74,7 +74,9 @@ impl Activations<UncheckedVersion> {
     ///
     /// If there are no activations, the version will be upgraded to the [LATEST_VERSION].
     /// If in the future we change the intepretation or schema with a clear migration path,
-    /// this method would also upgrade the [Activations] to the new version.
+    /// this method would also upgrade the [Activations] to the new version, taking
+    /// care that any other executives using the same file are still able to
+    /// remove their activations when they exit.
     pub fn check_version(self) -> Result<Activations<CheckedVersion>, Unsupported> {
         if self.activations.is_empty() {
             return Ok(Activations {

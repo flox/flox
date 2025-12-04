@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::bail;
 use clap::Args;
-use log::debug;
+use tracing::debug;
 
 use super::{join_dir_list, separate_dir_list};
 

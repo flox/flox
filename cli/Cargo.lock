@@ -1202,27 +1202,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "env_filter"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f2c92ceda6ceec50f43169f9ee8424fe2db276791afde7b2cd8bc084cb376ab"
-dependencies = [
- "log",
-]
-
-[[package]]
-name = "env_logger"
-version = "0.11.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13c863f0904021b108aa8b2f55046443e6b1ebde8fd4a15c399893aae4fa069f"
-dependencies = [
- "anstream",
- "anstyle",
- "env_filter",
- "log",
-]
-
-[[package]]
 name = "equivalent"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1389,14 +1368,13 @@ dependencies = [
  "anyhow",
  "clap",
  "dirs",
- "env_logger",
  "expect-test",
  "flox-core",
+ "flox-watchdog",
  "fslock",
  "indoc",
  "is_executable",
  "itertools",
- "log",
  "nix",
  "pretty_assertions",
  "serde",
@@ -1407,6 +1385,9 @@ dependencies = [
  "temp-env",
  "tempfile",
  "time",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -1503,12 +1484,10 @@ dependencies = [
  "filetime",
  "flox-activations",
  "flox-core",
- "flox-rust-sdk",
  "fslock",
  "glob",
  "kqueue",
  "nix",
- "sentry",
  "serde_json",
  "signal-hook",
  "tempfile",

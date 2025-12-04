@@ -80,14 +80,14 @@ teardown() {
   # I'd check the logs to confirm what's happening...
   # ...if only the reproducer wasn't to delete the logs.
   #
-  # When running in parallel `wait_for_watchdogs`
+  # When running in parallel `wait_for_activations`
   # may wait for watchdog processes of unrelated tests.
   # It tries to avoid non-test processes by looking for the data dir argument,
   # passed to the watchdog process.
   # Within the `services` tests, we call `setup_isolated_flox` during `setup()`,
   # which sets the data dir to a unique value for every test,
   # thus avoiding waiting for unrelated watchdog processes.
-  wait_for_watchdogs "$PROJECT_DIR" || return 1
+  wait_for_activations "$PROJECT_DIR" || return 1
   project_teardown
   common_test_teardown
 }
@@ -601,7 +601,7 @@ EOF
     assert_success
 
     # give the watchdog a chance to clean up the services before the next iteration
-    wait_for_watchdogs "$PROJECT_DIR"
+    wait_for_activations "$PROJECT_DIR"
   done
 }
 
@@ -622,16 +622,22 @@ EOF
 
         ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
         ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
-        echo "$ACTIVATIONS_JSON" > activations_json
+        ACTIVATIONS_VERSION="$(jq -r '.version' ${ACTIVATIONS_JSON})"
 
         jq_edit "$ACTIVATIONS_JSON" '.version = 0'
         "$FLOX_BIN" services "$command"
+        EXIT_CODE=$?
+
+        # Force cleanup because the watchdog will exit early on a version mismatch.
+        jq_edit "$ACTIVATIONS_JSON" ".version = ${ACTIVATIONS_VERSION}"
+        jq_edit "$ACTIVATIONS_JSON" '.activations |= []'
+
+        exit $EXIT_CODE
 EOF
     )
 
     # Capture from the previous activation.
     ACTIVATION_PID=$(cat activation_pid)
-    ACTIVATIONS_JSON=$(cat activations_json)
 
     assert_failure
     assert_output "❌ ERROR: failed to run activation script: Error: This environment has already been activated with an incompatible version of 'flox'.
@@ -639,9 +645,8 @@ EOF
 Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"
 
-    # give the watchdog a chance to clean up the services before the next iteration
-    wait_for_watchdogs "$PROJECT_DIR"
-    rm "$ACTIVATIONS_JSON"
+    # In case the watchdog managed to survive this far.
+    wait_for_activations "$PROJECT_DIR"
   done
 }
 
@@ -986,12 +991,8 @@ EOF
   assert_success
 
   # Poll because watchdog may not have started by the time the activation finishes.
-  run timeout 1s bash -c "
-    while ! grep 'flox_watchdog: starting' \"$PROJECT_DIR\"/.flox/log/watchdog.*.log*; do
-      sleep 0.1
-    done
-  "
-  assert_success
+  watchdog_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log.*)"
+  wait_for_partial_file_content "$watchdog_log" "woof"
 }
 
 @test "activate: --start-services warns if environment does not have services" {
@@ -1089,7 +1090,7 @@ EOF
 @test "activate: starts services for in-place activations" {
   setup_sleeping_services
 
-  # Run in a sub-shell so that `wait_for_watchdogs` in `teardown` can verify
+  # Run in a sub-shell so that `wait_for_activations` in `teardown` can verify
   # that the activation is cleaned up on exit and implicitly that services are
   # shutdown.
   run bash -c '
@@ -1403,7 +1404,7 @@ EOF
   assert_success
   assert_output --partial '"exit_code": 0'
 
-  wait_for_watchdogs "$PROJECT_DIR"
+  wait_for_activations "$PROJECT_DIR"
 
   CPATH= \
     run "$FLOX_BIN" activate --mode run -- bash -c "$SCRIPT"
@@ -1429,6 +1430,35 @@ EOF
   # This also appears to hang forever if process-compose doesn't get shutdown
   run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/start_shuts_down_process_compose.sh"
   assert_success
+}
+
+@test "start: shuts down process-compose started by imperative start" {
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "sleep infinity"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  SCRIPT="$(cat << "EOF"
+    set -euo pipefail
+
+    "$FLOX_BIN" services start
+EOF
+  )"
+
+  run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
+  assert_success
+  assert_output --partial "Service 'one' started."
+
+
+  watchdog_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log.*)"
+  wait_for_partial_file_content "$watchdog_log" "woof"
+  wait_for_partial_file_content "$watchdog_log" "finished cleanup"
 }
 
 @test "kills daemon process" {

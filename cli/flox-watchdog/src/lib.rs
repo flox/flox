@@ -1,107 +1,66 @@
-use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
-use std::sync::Arc;
+use std::process::Command;
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, LazyLock};
+use std::{env, fs};
 
 use anyhow::{Context, Result, bail};
-use clap::Parser;
 use flox_core::activations::{
     activation_state_dir_path,
     activations_json_path,
     read_activations_json,
     write_activations_json,
 };
-use flox_rust_sdk::flox::FLOX_VERSION_STRING;
-use flox_rust_sdk::providers::services::process_compose::process_compose_down;
-use flox_rust_sdk::utils::logging::{maybe_traceable_path, traceable_path};
-use logger::{init_logger, spawn_heartbeat_log, spawn_logs_gc_threads};
+use flox_core::traceable_path;
+use logger::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
 use process::{LockedActivations, PidWatcher, WaitResult};
-use sentry::init_sentry;
 use tracing::{debug, error, info, instrument};
 
 use crate::process::Watcher;
 
 mod logger;
 mod process;
-mod sentry;
+// TODO: Re-enable sentry after fixing OpenSSL dependency issues
+// mod sentry;
+// pub use sentry::init_sentry;
 
 type Error = anyhow::Error;
 
-const SHORT_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
-const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.
+pub static PROCESS_COMPOSE_BIN: LazyLock<String> = LazyLock::new(|| {
+    env::var("PROCESS_COMPOSE_BIN").unwrap_or(env!("PROCESS_COMPOSE_BIN").to_string())
+});
 
-The watchdog (fka. klaus) is spawned during activation to aid in service cleanup
-when the final activation of an environment has terminated. This cleanup can
-be manually triggered via signal (SIGUSR1), but otherwise runs automatically.";
-
-#[derive(Debug, Parser)]
-#[command(version = &*FLOX_VERSION_STRING.as_str())]
-#[command(about = SHORT_HELP, long_about = LONG_HELP)]
+#[derive(Debug, Clone)]
 pub struct Cli {
-    #[arg(short, long, value_name = "PATH")]
+    /// The path to the Flox environment
     pub flox_env: PathBuf,
 
-    #[arg(
-        short,
-        long,
-        value_name = "PATH",
-        help = "The path to the runtime directory keeping activation data.\n\
-                Defaults to XDG_RUNTIME_DIR/flox or XDG_CACHE_HOME/flox if not provided."
-    )]
+    /// The path to the runtime directory keeping activation data
     pub runtime_dir: PathBuf,
 
     /// The activation ID to monitor
-    #[arg(short, long = "activation-id", value_name = "ID")]
     pub activation_id: String,
 
     /// The path to the process-compose socket
-    #[arg(short, long = "socket", value_name = "PATH")]
     pub socket_path: PathBuf,
 
     /// The directory to store and garbage collect logs
-    #[arg(short, long = "log-dir", value_name = "PATH")]
-    pub log_dir: Option<PathBuf>,
+    pub log_dir: PathBuf,
 
     /// Disable metric reporting
-    #[arg(long)]
     pub disable_metrics: bool,
 }
 
-fn main() -> ExitCode {
-    let args = Cli::parse();
-
-    // Initialization
-    let watchdog_log_prefix = format!("watchdog.{}.log", args.activation_id);
-    init_logger(&args.log_dir, &watchdog_log_prefix)
-        .context("failed to initialize logger")
-        .unwrap();
-    let _sentry_guard = (!args.disable_metrics).then(init_sentry);
-
-    // Main
-    match run(args) {
-        Err(_) => ExitCode::FAILURE,
-        Ok(_) => ExitCode::SUCCESS,
-    }
-}
-
-#[instrument("watchdog",
-    err(Debug),
-    skip_all,
-    fields(pid = tracing::field::Empty,
-        registry = tracing::field::Empty,
-        dot_flox_hash = tracing::field::Empty,
-        socket = tracing::field::Empty,
-        log_dir = tracing::field::Empty))]
-fn run(args: Cli) -> Result<(), Error> {
+#[instrument("watchdog", err(Debug), skip_all)]
+pub fn run(args: Cli) -> Result<(), Error> {
     let span = tracing::Span::current();
     span.record("flox_env", traceable_path(&args.flox_env));
     span.record("runtime_dir", traceable_path(&args.runtime_dir));
     span.record("id", &args.activation_id);
     span.record("socket", traceable_path(&args.socket_path));
-    span.record("log_dir", maybe_traceable_path(&args.log_dir));
+    span.record("log_dir", traceable_path(&args.log_dir));
     debug!("starting");
 
     ensure_process_group_leader().context("failed to ensure watchdog is detached from terminal")?;
@@ -137,22 +96,18 @@ fn run_inner(
     );
 
     debug!(
-        path = traceable_path(&args.socket_path),
+        socket = traceable_path(&args.socket_path),
         exists = &args.socket_path.exists(),
         "checked socket"
     );
 
+    spawn_heartbeat_log();
+    spawn_logs_gc_threads(args.log_dir);
     info!(
         this_pid = nix::unistd::getpid().as_raw(),
         target_activation_id = args.activation_id,
         "watchdog is on duty"
     );
-    spawn_heartbeat_log();
-    if let Some(log_dir) = args.log_dir {
-        spawn_logs_gc_threads(log_dir);
-    }
-
-    debug!("waiting for termination");
 
     let activation_state_dir =
         activation_state_dir_path(&args.runtime_dir, &args.flox_env, &args.activation_id)?;
@@ -207,7 +162,7 @@ fn cleanup(
     activation_state_dir_path: impl AsRef<Path>,
     activation_id: impl AsRef<str>,
 ) -> Result<()> {
-    debug!("running cleanup");
+    info!("running cleanup");
 
     let (mut activations_json, lock) = locked_activations;
     activations_json.remove_activation(activation_id);
@@ -220,8 +175,9 @@ fn cleanup(
             if let Err(err) = process_compose_down(socket_path) {
                 error!(%err, "failed to run process-compose shutdown command");
             }
+            info!("shut down process-compose");
         } else {
-            debug!(reason = "no socket", "did not shut down process-compose");
+            info!(reason = "no socket", "did not shut down process-compose");
         }
     }
 
@@ -235,9 +191,39 @@ fn cleanup(
     //   state dir
     write_activations_json(&activations_json, activations_json_path, lock)?;
 
-    debug!("finished cleanup");
+    info!("finished cleanup");
 
     Ok(())
+}
+
+/// Shuts down process-compose by running `process-compose down` via the unix socket.
+///
+/// This is a variation of `providers::services::process_compose_down` to avoid
+/// the dependency on `flox-rust-sdk`.
+fn process_compose_down(socket_path: impl AsRef<Path>) -> Result<()> {
+    let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
+    cmd.arg("down");
+    cmd.arg("--unix-socket");
+    cmd.arg(socket_path.as_ref());
+    cmd.env("NO_COLOR", "1");
+
+    debug!(
+        command = format!(
+            "{} down --unix-socket {}",
+            *PROCESS_COMPOSE_BIN,
+            socket_path.as_ref().display()
+        ),
+        "running process-compose down"
+    );
+
+    let output = cmd
+        .output()
+        .context("failed to execute process-compose down")?;
+
+    output.status.success().then_some(()).ok_or_else(|| {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::anyhow!("process-compose down failed: {}", stderr)
+    })
 }
 
 /// We want to make sure that the watchdog is detached from the terminal in case it sends
@@ -310,7 +296,7 @@ mod test {
             runtime_dir: runtime_dir.to_path_buf(),
             activation_id,
             socket_path: PathBuf::from("/does_not_exist"),
-            log_dir: Some(log_dir.to_path_buf()),
+            log_dir: log_dir.to_path_buf(),
             disable_metrics: true,
         };
 

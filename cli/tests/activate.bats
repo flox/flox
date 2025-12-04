@@ -151,7 +151,7 @@ setup() {
 }
 teardown() {
   # fifo is in PROJECT_DIR and keeps watchdog running,
-  # so cat_teardown_fifo must be run before wait_for_watchdogs and
+  # so cat_teardown_fifo must be run before wait_for_activations and
   # project_teardown
   cat_teardown_fifo
   # Cleaning up the `BATS_TEST_TMPDIR` occasionally fails,
@@ -159,7 +159,7 @@ teardown() {
   # by the watchdog as the activation terminates.
   if [ -n "${PROJECT_DIR:-}" ]; then
     # Not all tests call project_setup
-    wait_for_watchdogs "$PROJECT_DIR" || return 1
+    wait_for_activations "$PROJECT_DIR" || return 1
     project_teardown
   fi
   common_test_teardown
@@ -2508,7 +2508,7 @@ EOF
 }
 
 @test "profile: JUPYTER_PATH is modified when Jupyter is installed" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -2563,7 +2563,7 @@ EOF
 }
 
 @test "profile: CMAKE_PREFIX_PATH is modified when cmake is installed" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3185,10 +3185,10 @@ EOF
   # Start a first_activation which sets FOO=first_activation
   case "$mode" in
     command)
-      FLOX_SHELL=bash injected="first_activation" _FLOX_WATCHDOG_LOG_LEVEL=trace "$FLOX_BIN" activate -c "echo \$FOO > output && echo > activate_started_fifo && echo > $TEARDOWN_FIFO" &
+      FLOX_SHELL=bash injected="first_activation" "$FLOX_BIN" activate -c "echo \$FOO > output && echo > activate_started_fifo && echo > $TEARDOWN_FIFO" &
       ;;
     in-place)
-      TEARDOWN_FIFO="$TEARDOWN_FIFO" injected="first_activation" bash -c 'eval "$(_FLOX_WATCHDOG_LOG_LEVEL=trace "$FLOX_BIN" activate)" && echo $FOO > output && echo > activate_started_fifo && echo > "$TEARDOWN_FIFO"' &
+      TEARDOWN_FIFO="$TEARDOWN_FIFO" injected="first_activation" bash -c 'eval "$("$FLOX_BIN" activate)" && echo $FOO > output && echo > activate_started_fifo && echo > "$TEARDOWN_FIFO"' &
       ;;
   esac
 
@@ -3197,24 +3197,6 @@ EOF
   run cat output
   assert_success
   assert_output "first_activation"
-
-  # Wait for the watchdog to poll at least once so the test doesn't pass just
-  # because the 2nd activate beats the watchdog to poll
-
-  # First wait for the logfile to appear
-  timeout 1s bash -c '
-    while ! ls $PROJECT_DIR/.flox/log/watchdog.*.log.*; do
-      sleep .1
-    done
-  '
-  watchdog_1_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log.*)"
-  initial_number_of_polls="$(cat "$watchdog_1_log" | grep "still watching PIDs" | wc -l)"
-  watchdog_1_log="$watchdog_1_log" initial_number_of_polls="$initial_number_of_polls" \
-    timeout 1s bash -c '
-      while [ "$(cat "$watchdog_1_log" | grep "still watching PIDs" | wc -l)" == "$initial_number_of_polls" ]; do
-        sleep .1
-      done
-    '
 
   # Run a second activation which should attach to the first,
   # so FOO should still be first_activation
@@ -3225,7 +3207,7 @@ EOF
   # Teardown the first activation and wait for the watchdog to clean it up
   cat "$TEARDOWN_FIFO"
   unset TEARDOWN_FIFO # otherwise teardown will hang
-  wait_for_watchdogs "$PROJECT_DIR"
+  wait_for_activations "$PROJECT_DIR"
 
   # Verify that a third activation starts rather than attaching
   injected="third_activation" run  "$FLOX_BIN" activate -c "echo \$FOO"
@@ -3293,9 +3275,17 @@ EOF
 
       ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
       ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
-      jq_edit "$ACTIVATIONS_JSON" '.version = 0'
+      ACTIVATIONS_VERSION="$(jq -r '.version' ${ACTIVATIONS_JSON})"
 
+      jq_edit "$ACTIVATIONS_JSON" '.version = 0'
       "$FLOX_BIN" activate -c 'echo "should fail"'
+      EXIT_CODE=$?
+
+      # Force cleanup because the watchdog will exit early on a version mismatch.
+      jq_edit "$ACTIVATIONS_JSON" ".version = ${ACTIVATIONS_VERSION}"
+      jq_edit "$ACTIVATIONS_JSON" '.activations |= []'
+
+      exit $EXIT_CODE
 EOF
   )"
   FLOX_SHELL=bash run "$FLOX_BIN" activate -c "$SCRIPT"
@@ -3330,7 +3320,7 @@ EOF
   # Wait for the "start" to exit.
   # Add some output to the buffer to debug later assertion failures.
   echo "$(date -u +'%FT%T.%6NZ'): Initial activation finished."
-  wait_for_watchdogs "$PROJECT_DIR"
+  wait_for_activations "$PROJECT_DIR"
   cat "${PROJECT_DIR}"/.flox/log/watchdog.*
 
   # Capture and modify from the previous activation.
@@ -3453,7 +3443,7 @@ EOF
 
 # bats test_tags=activate,activate:attach
 @test "attach doesn't break PATH" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3497,7 +3487,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "bash: repeat activation in .bashrc doesn't break aliases" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3548,7 +3538,7 @@ EOF
 }
 
 @test "bash: repeat activation in .bashrc creates correct PATH ordering" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3588,7 +3578,7 @@ EOF
 }
 
 @test "tcsh: repeat activation in .tcshrc doesn't break aliases" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3644,7 +3634,7 @@ EOF
 }
 
 @test "tcsh: repeat activation in .tcshrc creates correct PATH ordering" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3684,7 +3674,7 @@ EOF
 }
 
 @test "fish: repeat activation in config.fish doesn't break aliases" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3730,7 +3720,7 @@ EOF
 }
 
 @test "fish: repeat activation in config.fish creates correct PATH ordering" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3811,7 +3801,7 @@ EOF
 }
 
 @test "zsh: repeat activation in .zshrc doesn't break aliases" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3819,7 +3809,7 @@ EOF
 }
 
 @test "zsh: repeat activation in .zshenv doesn't break aliases" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3827,7 +3817,7 @@ EOF
 }
 
 @test "zsh: repeat activation in .zshenv and .zshrc doesn't break aliases" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3870,7 +3860,7 @@ EOF
 }
 
 @test "zsh: repeat activation in .zshrc creates correct PATH ordering" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3878,7 +3868,7 @@ EOF
 }
 
 @test "zsh: repeat activation in .zshenv creates correct PATH ordering" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
@@ -3890,7 +3880,7 @@ EOF
 }
 
 @test "zsh: repeat activation in .zshenv and .zshrc creates correct PATH ordering" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
