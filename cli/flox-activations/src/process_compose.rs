@@ -145,11 +145,11 @@ pub fn start_services_blocking(
     if !started {
         // Startup failed, return error with log file contents if available
         if !log_file.exists() {
-            bail!("❌ Failed to start services");
+            bail!("Failed to start services");
         } else {
             let log_contents = std::fs::read_to_string(&log_file)
                 .unwrap_or_else(|_| format!("unable to read logs in '{}'", log_file.display()));
-            bail!("❌ Failed to start services:\n{}", log_contents);
+            bail!("Failed to start services:\n{}", log_contents);
         }
     }
 

@@ -42,7 +42,7 @@ use crate::commands::{
 use crate::config::{Config, EnvironmentPromptConfig};
 use crate::utils::message;
 use crate::utils::openers::CliShellExt;
-use crate::{environment_subcommand_metric, subcommand_metric, utils};
+use crate::{Exit, environment_subcommand_metric, subcommand_metric, utils};
 
 pub static INTERACTIVE_BASH_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(
@@ -459,10 +459,11 @@ impl Activate {
                 .stdout(Stdio::piped())
                 .output()?;
             if !output.status.success() {
-                Err(anyhow!(
-                    "failed to run activation script: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                ))?;
+                // flox-activations formats its own errors
+                // We might be able to just use Stdio::inherit above but I'm not
+                // 100% flox-activations will only print in the error case
+                eprint!("{}", String::from_utf8_lossy(&output.stderr));
+                Err(Exit(1.into()))?;
             }
             trace!(
                 "ephemeral activation stderr:\n{}",

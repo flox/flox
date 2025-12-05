@@ -640,7 +640,7 @@ EOF
     ACTIVATION_PID=$(cat activation_pid)
 
     assert_failure
-    assert_output "❌ ERROR: failed to run activation script: Error: This environment has already been activated with an incompatible version of 'flox'.
+    assert_output "❌ ERROR: This environment has already been activated with an incompatible version of 'flox'.
 
 Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"
@@ -953,15 +953,16 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-@test "blocking: error message when startup times out" {
+@test "blocking: error messages when startup times out" {
   setup_sleeping_services
   export _FLOX_SERVICES_ACTIVATE_TIMEOUT=0.1
+
   # process-compose will never be able to create this socket,
   # which looks the same as taking a long time to create the socket
   export _FLOX_SERVICES_SOCKET_OVERRIDE="/no_permission.sock"
-
   run "$FLOX_BIN" activate -s -- true
-  assert_output --partial "❌ Failed to start services"
+  assert_output --partial "❌ ERROR: Failed to start services"
+  assert_output --partial 'ERR error="listen unix /no_permission.sock: bind:'
 }
 
 @test "blocking: activation blocks on process list" {
