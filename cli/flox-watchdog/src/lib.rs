@@ -22,6 +22,7 @@ use crate::process::Watcher;
 
 mod logger;
 mod process;
+pub mod reaper;
 // TODO: Re-enable sentry after fixing OpenSSL dependency issues
 // mod sentry;
 // pub use sentry::init_sentry;
