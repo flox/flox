@@ -21,7 +21,10 @@ use flox_core::activations::{
     write_activations_json,
 };
 use fslock::LockFile;
+use signal_hook::iterator::Signals;
 use tracing::trace;
+
+use crate::reaper::reap_orphaned_children;
 /// How long to wait between watcher updates.
 pub const WATCHER_SLEEP_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -59,6 +62,7 @@ pub struct PidWatcher {
     activations_json_path: PathBuf,
     should_terminate_flag: Arc<AtomicBool>,
     should_clean_up_flag: Arc<AtomicBool>,
+    should_reap_signals: Signals,
 }
 
 impl PidWatcher {
@@ -69,12 +73,14 @@ impl PidWatcher {
         activation_id: String,
         should_terminate_flag: Arc<AtomicBool>,
         should_clean_up_flag: Arc<AtomicBool>,
+        should_reap_signals: Signals,
     ) -> Self {
         Self {
             activations_json_path,
             activation_id,
             should_terminate_flag,
             should_clean_up_flag,
+            should_reap_signals,
         }
     }
 }
@@ -101,6 +107,9 @@ impl Watcher for PidWatcher {
                 };
                 let activations = activations_json.check_version()?;
                 return Ok(WaitResult::CleanUp((activations, lock)));
+            }
+            for _ in self.should_reap_signals.pending() {
+                reap_orphaned_children();
             }
             std::thread::sleep(WATCHER_SLEEP_INTERVAL);
         }
@@ -180,12 +189,13 @@ pub mod test {
         child.wait().expect("failed to wait");
     }
 
-    /// Makes two Arc<AtomicBool>s to mimic the shutdown flags used by
-    /// the watchdog
-    pub fn shutdown_flags() -> (Arc<AtomicBool>, Arc<AtomicBool>) {
+    /// Makes shutdown flags to mimic those used by the watchdog
+    pub fn shutdown_flags() -> (Arc<AtomicBool>, Arc<AtomicBool>, Signals) {
+        const NO_SIGNALS: &[i32] = &[];
         (
             Arc::new(AtomicBool::new(false)),
             Arc::new(AtomicBool::new(false)),
+            Signals::new(NO_SIGNALS).expect("failed to create Signals"),
         )
     }
 
@@ -258,12 +268,13 @@ pub mod test {
         assert_eq!(activation_id, activation_id_2);
 
         let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
-        let (terminate_flag, cleanup_flag) = shutdown_flags();
+        let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
             activations_json_path,
             activation_id,
             terminate_flag,
             cleanup_flag,
+            reap_flag,
         );
         let barrier = Arc::new(std::sync::Barrier::new(2));
         let wait_result = std::thread::scope(move |s| {
@@ -340,12 +351,13 @@ pub mod test {
         drop(lockfile); // Prevents a deadlock
         stop_process(proc1);
 
-        let (terminate_flag, cleanup_flag) = shutdown_flags();
+        let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
             activations_json_path.clone(),
             activation_id,
             terminate_flag.clone(),
             cleanup_flag,
+            reap_flag,
         );
         let maybe_final_activations = std::thread::scope(move |s| {
             let watcher_thread = s.spawn(move || watcher.wait_for_termination().unwrap());
@@ -404,12 +416,13 @@ pub mod test {
         set_ready.handle().unwrap();
 
         let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
-        let (terminate_flag, cleanup_flag) = shutdown_flags();
+        let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
             activations_json_path,
             activation_id,
             terminate_flag.clone(),
             cleanup_flag.clone(),
+            reap_flag,
         );
         let barrier = Arc::new(std::sync::Barrier::new(2));
         let wait_result = std::thread::scope(move |s| {
@@ -451,12 +464,13 @@ pub mod test {
         set_ready.handle().unwrap();
 
         let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
-        let (terminate_flag, cleanup_flag) = shutdown_flags();
+        let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
             activations_json_path,
             activation_id,
             terminate_flag.clone(),
             cleanup_flag.clone(),
+            reap_flag,
         );
         let barrier = Arc::new(std::sync::Barrier::new(2));
         let wait_result = std::thread::scope(move |s| {

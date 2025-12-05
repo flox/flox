@@ -13,9 +13,10 @@ use flox_core::activations::{
 };
 use flox_core::traceable_path;
 use logger::{spawn_heartbeat_log, spawn_logs_gc_threads};
-use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
+use nix::libc::{SIGCHLD, SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
 use process::{LockedActivations, PidWatcher, WaitResult};
+use signal_hook::iterator::Signals;
 use tracing::{debug, error, info, instrument};
 
 use crate::process::Watcher;
@@ -66,7 +67,7 @@ pub fn run(args: Cli) -> Result<(), Error> {
 
     ensure_process_group_leader().context("failed to ensure watchdog is detached from terminal")?;
 
-    // Set the signal handler
+    // Set the signal handlers
     let should_clean_up = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(SIGUSR1, Arc::clone(&should_clean_up))
         .context("failed to set SIGUSR1 signal handler")?;
@@ -77,8 +78,13 @@ pub fn run(args: Cli) -> Result<(), Error> {
         .context("failed to set SIGTERM signal handler")?;
     signal_hook::flag::register(SIGQUIT, Arc::clone(&should_terminate))
         .context("failed to set SIGQUIT signal handler")?;
+    // This compliments the SubreaperGuard setup by `flox_activations::executive`
+    // WARNING: You cannot reliably use Command::wait after we've entered the
+    // monitoring loop, including concurrent threads like GCing logs, because
+    // children will be reaped automatically.
+    let should_reap = Signals::new([SIGCHLD])?;
 
-    run_inner(args, should_terminate, should_clean_up)
+    run_inner(args, should_terminate, should_clean_up, should_reap)
 }
 
 /// Function to be used for unit tests that doesn't do weird process stuff
@@ -86,6 +92,7 @@ fn run_inner(
     args: Cli,
     should_terminate: Arc<AtomicBool>,
     should_clean_up: Arc<AtomicBool>,
+    should_reap: Signals,
 ) -> Result<(), Error> {
     let activations_json_path = activations_json_path(&args.runtime_dir, &args.flox_env);
 
@@ -94,6 +101,7 @@ fn run_inner(
         args.activation_id.clone(),
         should_terminate,
         should_clean_up,
+        should_reap,
     );
 
     debug!(
@@ -301,8 +309,8 @@ mod test {
             disable_metrics: true,
         };
 
-        let (terminate_flag, cleanup_flag) = shutdown_flags();
-        run_inner(cli, terminate_flag, cleanup_flag).unwrap();
+        let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
+        run_inner(cli, terminate_flag, cleanup_flag, reap_flag).unwrap();
 
         let activations_json = read_activations_json(&activations_json_path)
             .unwrap()
