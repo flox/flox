@@ -149,6 +149,26 @@ pub mod linux {
                         assert!(is_subreaper, "should be set as subreaper");
 
                         let grandchild_pid = create_orphaned_grandchild();
+
+                        // Verify the grandchild was actually reparented to us by checking
+                        // that we can see it as a zombie (not yet reaped).
+                        // If subreaper didn't work, waitpid would return ECHILD immediately.
+                        match waitpid(grandchild_pid, Some(WaitPidFlag::WNOHANG)) {
+                            Ok(WaitStatus::StillAlive) => {
+                                // Good: we can wait on it, meaning it's our child now
+                            },
+                            Err(Errno::ECHILD) => {
+                                panic!(
+                                    "grandchild PID {} was not reparented to us - subreaper didn't work",
+                                    grandchild_pid
+                                );
+                            },
+                            other => panic!(
+                                "unexpected status for grandchild PID {}: {:?}",
+                                grandchild_pid, other
+                            ),
+                        }
+
                         // Guard drops here, should trigger reaping via Drop impl
                         drop(guard);
                         grandchild_pid
