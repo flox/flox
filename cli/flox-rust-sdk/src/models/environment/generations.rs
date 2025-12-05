@@ -244,7 +244,9 @@ impl Generations<ReadOnly> {
         let repo = checkout_to_tempdir(
             &self.repo,
             &self.branch,
-            tempfile::tempdir_in(tempdir).unwrap().keep(),
+            tempfile::tempdir_in(&tempdir)
+                .map_err(GenerationsError::CreateTempDir)?
+                .keep(),
         )?;
 
         Ok(Generations {
@@ -476,6 +478,8 @@ pub enum GenerationsError {
     #[error("could not show lockfile")]
     ShowLockfile(#[source] GitCommandError),
     // endregion
+    #[error("could not create temporary directory")]
+    CreateTempDir(#[source] std::io::Error),
 }
 
 /// Realize the generations branch into a temporary directory

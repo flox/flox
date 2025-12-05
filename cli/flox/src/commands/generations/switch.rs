@@ -36,6 +36,6 @@ impl Switch {
         debug!(%to, "target generation provided, attempting rollback");
         env.switch_generation(&flox, to)?;
         message::updated(format!("Switched to generation {to}"));
-        return Ok(());
+        Ok(())
     }
 }
