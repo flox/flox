@@ -638,7 +638,7 @@ enum ModifyCommands {
     ),
 
     /// Upgrade packages in an environment
-    #[bpaf(command, footer("Run 'man flox-upgrade' for more details."), header(indoc! {"
+    #[bpaf(command, long("update"), footer("Run 'man flox-upgrade' for more details."), header(indoc! {"
         When no arguments are specified,
         all packages in the environment are upgraded if possible.
         A package is upgraded if its version, build configuration,

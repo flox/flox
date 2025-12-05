@@ -17,7 +17,7 @@ pub enum IncludeCommands {
     #[bpaf(command, hide)]
     Help,
     /// Upgrade an environment with latest changes to its included environments
-    #[bpaf(command, header(indoc! {"
+    #[bpaf(command, long("update"), header(indoc! {"
         Get the latest contents of included environments and merge them with the
         composing environment.
 
