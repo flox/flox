@@ -4,7 +4,15 @@ use flox_activations::cli::Cli;
 use flox_activations::{Error, cli, logger};
 use tracing::{debug, debug_span};
 
-fn main() -> Result<(), Error> {
+fn main() {
+    if let Err(e) = try_main() {
+        // TODO: should we share code with CLI formatting?
+        eprintln!("❌ ERROR: {e:#}");
+        std::process::exit(1);
+    }
+}
+
+fn try_main() -> Result<(), Error> {
     let args = Cli::parse();
 
     let logger_handle =
@@ -20,18 +28,21 @@ fn main() -> Result<(), Error> {
     debug!("{args:?}");
 
     match args.command {
-        cli::Command::StartOrAttach(args) => {
-            args.handle()?;
+        cli::Command::StartOrAttach(args) => args.handle(),
+        cli::Command::SetReady(args) => args.handle(),
+        cli::Command::Attach(args) => args.handle(),
+        cli::Command::Activate(args) => args.handle(logger_handle.subsystem_verbosity),
+        cli::Command::Executive(cmd_args) => cmd_args.handle(logger_handle.reload_handle),
+        cli::Command::FixPaths(args) => args.handle(),
+        cli::Command::SetEnvDirs(args) => args.handle(),
+        cli::Command::ProfileScripts(args) => args.handle(),
+        cli::Command::PrependAndDedup(args) => {
+            args.handle();
+            Ok(())
         },
-        cli::Command::SetReady(args) => args.handle()?,
-        cli::Command::Attach(args) => args.handle()?,
-        cli::Command::Activate(args) => args.handle(logger_handle.subsystem_verbosity)?,
-        cli::Command::Executive(cmd_args) => cmd_args.handle(logger_handle.reload_handle)?,
-        cli::Command::FixPaths(args) => args.handle()?,
-        cli::Command::SetEnvDirs(args) => args.handle()?,
-        cli::Command::ProfileScripts(args) => args.handle()?,
-        cli::Command::PrependAndDedup(args) => args.handle(),
-        cli::Command::FixFpath(args) => args.handle(),
+        cli::Command::FixFpath(args) => {
+            args.handle();
+            Ok(())
+        },
     }
-    Ok(())
 }

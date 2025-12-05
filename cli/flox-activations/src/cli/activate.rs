@@ -16,10 +16,11 @@ use signal_hook::iterator::Signals;
 use tracing::debug;
 
 use super::StartOrAttachArgs;
-use crate::activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_command_for_activate_script};
+use crate::activate_script_builder::FLOX_ENV_DIRS_VAR;
 use crate::attach::{attach, quote_run_args};
 use crate::cli::executive::ExecutiveCtx;
 use crate::env_diff::EnvDiff;
+use crate::process_compose::start_services_blocking;
 
 pub const NO_REMOVE_ACTIVATION_FILES: &str = "_FLOX_NO_REMOVE_ACTIVATION_FILES";
 
@@ -104,17 +105,13 @@ impl ActivateArgs {
             );
             if context.flox_activate_start_services {
                 let diff = EnvDiff::from_files(&start_or_attach.activation_state_dir)?;
-                let mut start_services = assemble_command_for_activate_script(
-                    "activate_temporary",
-                    context.clone(),
+                start_services_blocking(
+                    &context,
                     subsystem_verbosity,
                     vars_from_env.clone(),
-                    &diff,
                     &start_or_attach,
-                );
-
-                debug!("spawning activation services command: {:?}", start_services);
-                start_services.spawn()?.wait()?;
+                    diff,
+                )?;
             };
             if invocation_type == InvocationType::Interactive {
                 eprintln!(

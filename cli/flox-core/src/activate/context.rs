@@ -49,8 +49,8 @@ pub struct ActivateCtx {
     /// Runtime directory
     pub flox_runtime_dir: String,
 
-    /// Services to start (JSON array)
-    pub flox_services_to_start: Option<String>,
+    /// Services to start
+    pub flox_services_to_start: Option<Vec<String>>,
 
     /// CUDA detection enabled
     pub flox_env_cuda_detection: String,

@@ -165,4 +165,5 @@ mkShell (
     '';
   }
   // flox-cli.devEnvs
+  // flox-activations.devEnvs
 )
