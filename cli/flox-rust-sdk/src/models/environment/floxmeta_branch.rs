@@ -111,7 +111,46 @@ pub enum FloxmetaBranchError {
     BranchSetup(#[source] GitCommandError),
 }
 
-impl FloxmetaBranch {}
+impl FloxmetaBranch {
+    /// Create validated floxmeta access
+    ///
+    /// Performs all necessary git validation:
+    /// - Opens or clones the floxmeta repository
+    /// - Ensures the generation is locked (validates/fetches commit)
+    /// - Sets up the branch to track the environment state
+    ///
+    /// Returns the FloxmetaBranch and the validated GenerationLock that the
+    /// caller should write to disk.
+    pub fn new(
+        flox: &Flox,
+        pointer: &ManagedPointer,
+        dot_flox_path: &CanonicalPath,
+        maybe_lock: Option<GenerationLock>,
+    ) -> Result<(Self, GenerationLock), FloxmetaBranchError> {
+        // Acquire lock
+
+        let _lock = acquire_floxmeta_lock(&floxmeta_dir(flox, &pointer.owner))?;
+
+        // Open or clone floxmeta
+        let floxmeta = open_or_clone_floxmeta(flox, pointer)?;
+
+        // Ensure generation is locked
+        let remote_branch = remote_branch_name(pointer);
+        let local_branch = branch_name(pointer, dot_flox_path);
+        let lock = ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, maybe_lock)?;
+
+        // Set up branch
+        ensure_branch(&local_branch, &lock, &floxmeta)?;
+
+        Ok((
+            Self {
+                floxmeta,
+                branch: local_branch,
+            },
+            lock,
+        ))
+    }
+}
 
 /// Acquire exclusive lock on floxmeta directory
 #[tracing::instrument(fields(
@@ -965,5 +1004,144 @@ mod tests {
         // Verify it was cloned
         let floxmeta_path = floxmeta_dir(&flox, &test_pointer.owner);
         assert!(floxmeta_path.exists());
+    }
+
+    /// Test that FloxmetaBranch::new() completes successfully with existing repo
+    #[test]
+    fn test_new_complete_flow_existing_repo() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Create a mock remote
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let remote_branch = remote_branch_name(&test_pointer);
+        remote.checkout(&remote_branch, true).unwrap();
+        commit_file(&remote, "file 1");
+        let hash_1 = remote.branch_hash(&remote_branch).unwrap();
+
+        // Clone the floxmeta (simulating it already exists locally)
+        let _existing_floxmeta =
+            create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+
+        // Create .flox directory
+        let dot_flox_dir = flox.temp_dir.join("project").join(".flox");
+        fs::create_dir_all(&dot_flox_dir).unwrap();
+        let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
+
+        // Should successfully create FloxmetaBranch (no existing lock)
+        let result = FloxmetaBranch::new(&flox, &test_pointer, &dot_flox_path, None);
+        assert!(result.is_ok());
+
+        let (branch_access, lock) = result.unwrap();
+        let expected_branch = branch_name(&test_pointer, &dot_flox_path);
+        assert_eq!(branch_access.branch, expected_branch);
+        assert_eq!(lock.rev, hash_1);
+        assert_eq!(lock.local_rev, None);
+    }
+
+    /// Test that FloxmetaBranch::new() completes successfully by cloning new repo
+    #[test]
+    fn test_new_complete_flow_clone_repo() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Create a mock remote
+        let (test_pointer, _remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let remote_branch = remote_branch_name(&test_pointer);
+        remote.checkout(&remote_branch, true).unwrap();
+        commit_file(&remote, "file 1");
+        let hash_1 = remote.branch_hash(&remote_branch).unwrap();
+
+        // Create the floxmeta parent directory so lock can be acquired
+        let user_floxmeta_dir = floxmeta_dir(&flox, &test_pointer.owner);
+        fs::create_dir_all(user_floxmeta_dir.parent().unwrap()).unwrap();
+
+        // Create .flox directory
+        let dot_flox_dir = flox.temp_dir.join("project").join(".flox");
+        fs::create_dir_all(&dot_flox_dir).unwrap();
+        let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
+
+        // Should successfully create FloxmetaBranch by cloning
+        let result = FloxmetaBranch::new(&flox, &test_pointer, &dot_flox_path, None);
+        assert!(result.is_ok(), "error: {:?}", result.unwrap_err());
+
+        let (branch_access, lock) = result.unwrap();
+        let expected_branch = branch_name(&test_pointer, &dot_flox_path);
+        assert_eq!(branch_access.branch, expected_branch);
+        assert_eq!(lock.rev, hash_1);
+        assert_eq!(lock.local_rev, None);
+
+        // Verify floxmeta was cloned
+        let floxmeta_path = floxmeta_dir(&flox, &test_pointer.owner);
+        assert!(floxmeta_path.exists());
+    }
+
+    /// Test that FloxmetaBranch::new() handles upstream not found error
+    #[test]
+    fn test_new_upstream_not_found() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Create a mock remote with a valid git repo but without the expected branch
+        let (test_pointer, _remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        // Create a different branch name, not the one we're looking for
+        remote.checkout("different_branch", true).unwrap();
+        commit_file(&remote, "file 1");
+
+        // Create the floxmeta parent directory so lock can be acquired
+        let user_floxmeta_dir = floxmeta_dir(&flox, &test_pointer.owner);
+        fs::create_dir_all(user_floxmeta_dir.parent().unwrap()).unwrap();
+
+        // Create .flox directory
+        let dot_flox_dir = flox.temp_dir.join("project").join(".flox");
+        fs::create_dir_all(&dot_flox_dir).unwrap();
+        let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
+
+        // Should fail with UpstreamNotFound (branch doesn't exist)
+        let result = FloxmetaBranch::new(&flox, &test_pointer, &dot_flox_path, None);
+        assert!(
+            matches!(result, Err(FloxmetaBranchError::UpstreamNotFound { .. })),
+            "got instead: {result:?}"
+        );
+    }
+
+    /// Test that FloxmetaBranch::new() accepts existing lock and validates it
+    #[test]
+    fn test_new_with_existing_lock() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Create a mock remote
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let remote_branch = remote_branch_name(&test_pointer);
+        remote.checkout(&remote_branch, true).unwrap();
+        commit_file(&remote, "file 1");
+        let hash_1 = remote.branch_hash(&remote_branch).unwrap();
+
+        // Clone the floxmeta
+        let _existing_floxmeta =
+            create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+
+        // Create .flox directory
+        let dot_flox_dir = flox.temp_dir.join("project").join(".flox");
+        fs::create_dir_all(&dot_flox_dir).unwrap();
+        let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
+
+        // Provide an existing lock
+        let input_lock = GenerationLock {
+            rev: hash_1.clone(),
+            local_rev: None,
+            version: Version::<1>,
+        };
+
+        // Should successfully create FloxmetaBranch with existing lock
+        let result = FloxmetaBranch::new(
+            &flox,
+            &test_pointer,
+            &dot_flox_path,
+            Some(input_lock.clone()),
+        );
+        assert!(result.is_ok());
+
+        let (branch_access, lock) = result.unwrap();
+        let expected_branch = branch_name(&test_pointer, &dot_flox_path);
+        assert_eq!(branch_access.branch, expected_branch);
+        assert_eq!(lock, input_lock);
     }
 }
