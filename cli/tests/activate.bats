@@ -3295,7 +3295,7 @@ EOF
 
   assert_failure
   refute_line "should fail"
-  assert_output "Error: This environment has already been activated with an incompatible version of 'flox'.
+  assert_output "❌ ERROR: This environment has already been activated with an incompatible version of 'flox'.
 
 Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"
@@ -3967,7 +3967,7 @@ EOF
 
   # All modes unset RUST_BACKTRACE so we don't get the backtrace
   error_text="$(cat << EOF
-Error: This environment has already been activated with an incompatible version of 'flox'.
+❌ ERROR: This environment has already been activated with an incompatible version of 'flox'.
 
 Exit all activations of the environment and try again.
 EOF
@@ -5072,7 +5072,7 @@ EOF
   expected_stderr="$(cat << EOF
 on-activate stdout message
 on-activate stderr message
-Error: Running hook.on-activate failed
+❌ ERROR: Running hook.on-activate failed
 EOF
 )"
   assert_equal "$stderr" "$expected_stderr"

@@ -13,14 +13,12 @@ use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use crate::activate_script_builder::{
-    assemble_command_for_activate_script,
-    assemble_command_for_start_script,
-};
+use crate::activate_script_builder::assemble_command_for_start_script;
 use crate::cli::activate::{NO_REMOVE_ACTIVATION_FILES, VarsFromEnvironment};
 use crate::cli::start_or_attach::StartOrAttachResult;
 use crate::env_diff::EnvDiff;
 use crate::logger;
+use crate::process_compose::start_services_blocking;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutiveCtx {
@@ -59,7 +57,7 @@ impl ExecutiveArgs {
             subsystem_verbosity,
             vars_from_env.clone(),
             &start_or_attach,
-            invocation_type,
+            invocation_type.clone(),
         );
         debug!("spawning start.bash: {:?}", start_command);
         let status = start_command.spawn()?.wait()?;
@@ -71,22 +69,17 @@ impl ExecutiveArgs {
         }
         if context.flox_activate_start_services {
             let diff = EnvDiff::from_files(&start_or_attach.activation_state_dir)?;
-            let mut start_services = assemble_command_for_activate_script(
-                "activate_temporary",
-                context.clone(),
+            let result = start_services_blocking(
+                &context,
                 subsystem_verbosity,
-                vars_from_env.clone(),
-                &diff,
+                vars_from_env,
                 &start_or_attach,
+                diff,
             );
-
-            debug!("spawning activation services command: {:?}", start_services);
-            let status = start_services.spawn()?.wait()?;
-            if !status.success() {
+            if let Err(e) = result {
                 kill(Pid::from_raw(parent_pid), SIGUSR2)?;
-                // Start services may have already printed to stderr
                 // We're still sharing stderr with `flox-activations activate`
-                bail!("Starting services failed");
+                return Err(e);
             }
         };
 
@@ -107,9 +100,9 @@ impl ExecutiveArgs {
         };
 
         let watchdog = flox_watchdog::Cli {
-            flox_env: context.env.into(),
-            runtime_dir: context.flox_runtime_dir.into(),
-            activation_id: start_or_attach.activation_id,
+            flox_env: context.env.clone().into(),
+            runtime_dir: context.flox_runtime_dir.clone().into(),
+            activation_id: start_or_attach.activation_id.clone(),
             socket_path: socket_path.into(),
             log_dir: log_dir.into(),
             disable_metrics: env::var(FLOX_DISABLE_METRICS_VAR).is_ok(),
