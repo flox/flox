@@ -4,9 +4,10 @@ use fslock::LockFile;
 use thiserror::Error;
 use tracing::debug;
 
-use super::ManagedPointer;
+use super::{ManagedPointer, path_hash};
+use crate::data::CanonicalPath;
 use crate::flox::{Flox, RemoteEnvironmentRef};
-use crate::models::floxmeta::{FloxMeta, FloxMetaError, floxmeta_dir};
+use crate::models::floxmeta::{BRANCH_NAME_PATH_SEPARATOR, FloxMeta, FloxMetaError};
 use crate::providers::git::GitRemoteCommandError;
 
 /// An abstraction over the git backed storage of managed environments.
@@ -140,6 +141,26 @@ fn open_or_clone_floxmeta(
 
 fn remote_branch_name(pointer: &ManagedPointer) -> String {
     format!("{}", pointer.name)
+}
+
+/// Unique branch name for a specific link.
+///
+/// Use this function over [`remote_branch_name`] within the context of an instance of [ManagedEnvironment]
+///
+/// When pulling the same remote environment in multiple directories,
+/// unique copies of the environment are created.
+/// I.e. `install`ing a package in one directory does not affect the other
+/// until synchronized through FloxHub.
+///
+/// `dot_flox_path` is expected to point to the `.flox/` directory
+/// that link to an environment identified by `pointer`.
+pub fn branch_name(pointer: &ManagedPointer, dot_flox_path: &CanonicalPath) -> String {
+    format!(
+        "{}{}{}",
+        pointer.name,
+        BRANCH_NAME_PATH_SEPARATOR,
+        path_hash(dot_flox_path)
+    )
 }
 
 #[cfg(test)]
