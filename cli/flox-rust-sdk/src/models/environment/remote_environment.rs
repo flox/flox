@@ -177,8 +177,8 @@ impl RemoteEnvironment {
         };
 
         let inner = ManagedEnvironment::open_with(
-            floxmeta,
             flox,
+            floxmeta_branch,
             pointer.clone(),
             dot_flox_path,
             inner_rendered_env_links,
