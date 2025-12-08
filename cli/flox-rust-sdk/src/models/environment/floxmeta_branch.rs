@@ -8,6 +8,7 @@ use tracing::debug;
 use super::{ManagedPointer, path_hash};
 use crate::data::CanonicalPath;
 use crate::flox::{Flox, RemoteEnvironmentRef};
+use crate::models::environment::generations::Generations;
 use crate::models::floxmeta::{BRANCH_NAME_PATH_SEPARATOR, FloxMeta, FloxMetaError, floxmeta_dir};
 use crate::providers::git::{GitCommandBranchHashError, GitCommandError, GitRemoteCommandError};
 
@@ -149,6 +150,21 @@ impl FloxmetaBranch {
             },
             lock,
         ))
+    }
+
+    /// Access the underlying git provider
+    pub fn git(&self) -> &crate::providers::git::GitCommandProvider {
+        &self.floxmeta.git
+    }
+
+    /// Get the branch name for this environment
+    pub fn branch(&self) -> &str {
+        &self.branch
+    }
+
+    /// Access generations (read-only by default)
+    pub fn generations(&self) -> Generations {
+        Generations::new(self.floxmeta.git.clone(), self.branch.clone())
     }
 }
 
