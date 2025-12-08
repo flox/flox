@@ -1,14 +1,31 @@
 use std::path::Path;
 
 use fslock::LockFile;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
 
 use super::{ManagedPointer, path_hash};
 use crate::data::CanonicalPath;
 use crate::flox::{Flox, RemoteEnvironmentRef};
-use crate::models::floxmeta::{BRANCH_NAME_PATH_SEPARATOR, FloxMeta, FloxMetaError};
-use crate::providers::git::GitRemoteCommandError;
+use crate::models::floxmeta::{BRANCH_NAME_PATH_SEPARATOR, FloxMeta, FloxMetaError, floxmeta_dir};
+use crate::providers::git::{GitCommandBranchHashError, GitCommandError, GitRemoteCommandError};
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct GenerationLock {
+    pub version: flox_core::Version<1>,
+    /// Revision of the environment on FloxHub.
+    /// This could be stale if the environment has since been changed.
+    pub rev: String,
+    /// Revision of the environment in local floxmeta repository.
+    /// Since an environment can be pulled into multiple different directories
+    /// locally, each could have its own local_rev if the environments are
+    /// modified.
+    /// This is changed when the environment is modified locally,
+    /// so it can diverge from both the remote environment and other copies of
+    /// the environment pulled into other directories.
+    pub local_rev: Option<String>,
+}
 
 /// An abstraction over the git backed storage of managed environments.
 ///
@@ -65,6 +82,30 @@ pub enum FloxmetaBranchError {
         upstream: String,
         user: Option<String>,
     },
+
+    #[error("failed to check for git revision: {0}")]
+    CheckGitRevision(#[source] GitCommandError),
+
+    #[error("failed to check for branch existence")]
+    CheckBranchExists(#[source] GitCommandBranchHashError),
+
+    #[error(
+        "can't find local_rev specified in lockfile; \
+         local_rev could have been mistakenly committed on another machine"
+    )]
+    LocalRevDoesNotExist,
+
+    #[error(
+        "can't find rev specified in lockfile; \
+         the environment may have been deleted on FloxHub"
+    )]
+    RevDoesNotExist,
+
+    #[error("failed to fetch environment: {0}")]
+    Fetch(#[source] GitRemoteCommandError),
+
+    #[error("failed to get branch hash: {0}")]
+    GitBranchHash(#[source] GitCommandBranchHashError),
 }
 
 impl FloxmetaBranch {}
@@ -163,12 +204,109 @@ pub fn branch_name(pointer: &ManagedPointer, dot_flox_path: &CanonicalPath) -> S
     )
 }
 
+/// Ensure generation is locked and commit exists in floxmeta
+///
+/// Takes an optional GenerationLock (read from disk by caller) and validates that:
+/// - If local_rev is set, it exists in the floxmeta repo
+/// - If only rev is set, it exists (fetching if necessary)
+/// - If no lock provided, fetches latest from remote and creates new lock data
+///
+/// Returns validated GenerationLock data that caller should write to disk
+fn ensure_generation_locked(
+    remote_branch: &str,
+    local_branch: &str,
+    floxmeta: &FloxMeta,
+    maybe_lock: Option<GenerationLock>,
+) -> Result<GenerationLock, FloxmetaBranchError> {
+    Ok(match maybe_lock {
+        // Use local_rev if we have it
+        Some(lock) if lock.local_rev.is_some() => {
+            // Verify local_rev exists in floxmeta
+            if !floxmeta
+                .git
+                .contains_commit(lock.local_rev.as_ref().unwrap())
+                .map_err(FloxmetaBranchError::CheckGitRevision)?
+            {
+                Err(FloxmetaBranchError::LocalRevDoesNotExist)?;
+            }
+            lock
+        },
+        // We have rev but not local_rev
+        Some(lock) => {
+            // Check if commit exists on remote or local branch
+            let has_branch = floxmeta
+                .git
+                .has_branch(local_branch)
+                .map_err(FloxmetaBranchError::CheckBranchExists)?;
+
+            let in_local = has_branch
+                && floxmeta
+                    .git
+                    .branch_contains_commit(&lock.rev, local_branch)
+                    .map_err(FloxmetaBranchError::CheckGitRevision)?;
+
+            // If not in local, try fetching from remote
+            if !in_local {
+                let span = tracing::info_span!(
+                    "ensure_generation_locked::restore_locked",
+                    rev = %lock.rev,
+                    progress = "Fetching locked generation"
+                );
+                let _guard = span.enter();
+
+                floxmeta
+                    .git
+                    .fetch_ref("dynamicorigin", &format!("+{0}:{0}", remote_branch))
+                    .map_err(FloxmetaBranchError::Fetch)?;
+            }
+
+            // Verify commit exists after fetch
+            let in_remote = floxmeta
+                .git
+                .branch_contains_commit(&lock.rev, remote_branch)
+                .map_err(FloxmetaBranchError::CheckGitRevision)?;
+
+            if !in_remote && !in_local {
+                Err(FloxmetaBranchError::RevDoesNotExist)?;
+            }
+
+            lock
+        },
+        // No lockfile, create one from latest remote
+        None => {
+            let span = tracing::info_span!(
+                "ensure_generation_locked::lock_latest",
+                progress = "Fetching latest generation"
+            );
+            let _guard = span.enter();
+
+            floxmeta
+                .git
+                .fetch_ref("dynamicorigin", &format!("+{0}:{0}", remote_branch))
+                .map_err(FloxmetaBranchError::Fetch)?;
+
+            // Get the hash of the remote branch
+            let rev = floxmeta
+                .git
+                .branch_hash(remote_branch)
+                .map_err(FloxmetaBranchError::GitBranchHash)?;
+
+            GenerationLock {
+                rev,
+                local_rev: None,
+                version: flox_core::Version::<1> {},
+            }
+        },
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::str::FromStr;
 
+    use flox_core::Version;
     use url::Url;
 
     use super::*;
@@ -226,6 +364,365 @@ mod tests {
         .unwrap();
 
         FloxMeta::open(flox, test_pointer).unwrap()
+    }
+
+    /// Test that when ensure_generation_locked has input state of:
+    /// - no lock
+    /// - floxmeta at commit 1
+    /// - remote at commit 2
+    ///
+    /// It results in output state of:
+    /// - lock at commit 2
+    /// - [fetches from remote]
+    #[test]
+    fn test_ensure_generation_locked_no_lockfile() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Create a mock remote
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let remote_branch = remote_branch_name(&test_pointer);
+        remote.checkout(&remote_branch, true).unwrap();
+        commit_file(&remote, "file 1");
+        let hash_1 = remote.branch_hash(&remote_branch).unwrap();
+
+        // Create floxmeta
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+
+        // Add a second commit to the remote
+        commit_file(&remote, "file 2");
+        let hash_2 = remote.branch_hash(&remote_branch).unwrap();
+
+        // Create a .flox directory
+        let dot_flox_dir = flox.temp_dir.join(".flox");
+        fs::create_dir(&dot_flox_dir).unwrap();
+        let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
+        let local_branch = branch_name(&test_pointer, &dot_flox_path);
+
+        // No lockfile, should fetch latest
+        let lock =
+            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, None).unwrap();
+
+        let expected = GenerationLock {
+            rev: hash_2.clone(),
+            local_rev: None,
+            version: Version::<1>,
+        };
+        assert_eq!(lock, expected);
+        assert_ne!(hash_1, hash_2);
+    }
+
+    /// Test that when ensure_generation_locked has input state of:
+    /// - lock at {rev: commit 1, local_rev: commit 1}
+    /// - floxmeta at commit 1
+    /// - remote at commit 1
+    ///
+    /// It results in output state of:
+    /// - lock at {rev: commit 1, local_rev: commit 1}
+    /// - [no fetch, validates local_rev exists]
+    #[test]
+    fn test_ensure_generation_locked_with_local_rev() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Create a mock remote
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let remote_branch = remote_branch_name(&test_pointer);
+        remote.checkout(&remote_branch, true).unwrap();
+        commit_file(&remote, "file 1");
+        let hash_1 = remote.branch_hash(&remote_branch).unwrap();
+
+        // Create floxmeta
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+
+        let dot_flox_dir = flox.temp_dir.join(".flox");
+        fs::create_dir(&dot_flox_dir).unwrap();
+        let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
+        let local_branch = branch_name(&test_pointer, &dot_flox_path);
+
+        // Provide a lock with local_rev that exists
+        let input_lock = GenerationLock {
+            rev: hash_1.clone(),
+            local_rev: Some(hash_1.clone()),
+            version: flox_core::Version::<1>,
+        };
+
+        let expected_lock = input_lock.clone();
+        let lock =
+            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock))
+                .unwrap();
+
+        // Should return unchanged
+        assert_eq!(lock, expected_lock);
+    }
+
+    /// Test that when ensure_generation_locked has input state of:
+    /// - lock at {rev: commit 1, local_rev: None}
+    /// - floxmeta with local_branch at commit 1
+    /// - remote at commit 1
+    ///
+    /// It results in output state of:
+    /// - lock at {rev: commit 1, local_rev: None}
+    /// - [no fetch, finds rev in local branch]
+    #[test]
+    fn test_ensure_generation_locked_with_rev_in_local() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Create a mock remote
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let remote_branch = remote_branch_name(&test_pointer);
+        remote.checkout(&remote_branch, true).unwrap();
+        commit_file(&remote, "file 1");
+        let hash_1 = remote.branch_hash(&remote_branch).unwrap();
+
+        let dot_flox_dir = flox.temp_dir.join(".flox");
+        fs::create_dir(&dot_flox_dir).unwrap();
+        let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
+
+        // Create the local branch on the remote first
+        let local_branch = branch_name(&test_pointer, &dot_flox_path);
+        remote.checkout(&local_branch, true).unwrap();
+
+        // Create floxmeta and fetch the local branch
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+        floxmeta
+            .git
+            .fetch_ref("origin", &format!("+{}:{}", local_branch, local_branch))
+            .ok();
+
+        // Provide a lock with rev (no local_rev)
+        let input_lock = GenerationLock {
+            rev: hash_1.clone(),
+            local_rev: None,
+            version: flox_core::Version::<1>,
+        };
+
+        let expected_lock = input_lock.clone();
+        let lock =
+            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock))
+                .unwrap();
+
+        // Should return unchanged, no fetch needed
+        assert_eq!(lock, expected_lock);
+    }
+
+    /// Test that when ensure_generation_locked has input state of:
+    /// - lock at {rev: commit 1, local_rev: nonexistent commit}
+    /// - floxmeta at commit 1
+    /// - remote at commit 1
+    ///
+    /// It results in output state of:
+    /// - error: LocalRevDoesNotExist
+    #[test]
+    fn test_ensure_generation_locked_local_rev_missing() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Create a mock remote
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let remote_branch = remote_branch_name(&test_pointer);
+        remote.checkout(&remote_branch, true).unwrap();
+        commit_file(&remote, "file 1");
+        let hash_1 = remote.branch_hash(&remote_branch).unwrap();
+
+        // Create floxmeta
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+
+        let dot_flox_dir = flox.temp_dir.join(".flox");
+        fs::create_dir(&dot_flox_dir).unwrap();
+        let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
+        let local_branch = branch_name(&test_pointer, &dot_flox_path);
+
+        // Provide a lock with local_rev that doesn't exist
+        let input_lock = GenerationLock {
+            rev: hash_1.clone(),
+            local_rev: Some("nonexistent_commit_hash".to_string()),
+            version: flox_core::Version::<1>,
+        };
+
+        let result =
+            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock));
+
+        assert!(matches!(
+            result,
+            Err(FloxmetaBranchError::LocalRevDoesNotExist)
+        ));
+    }
+
+    /// Test that when ensure_generation_locked has input state of:
+    /// - lock at {rev: commit 1, local_rev: None}
+    /// - floxmeta with local_branch at commit 2 (different commit)
+    /// - remote at commit 1
+    ///
+    /// It results in output state of:
+    /// - lock at {rev: commit 1, local_rev: None}
+    /// - [fetches from remote, finds rev there]
+    #[test]
+    fn test_ensure_generation_locked_rev_not_in_local_but_in_remote() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Create a mock remote
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let remote_branch = remote_branch_name(&test_pointer);
+        remote.checkout(&remote_branch, true).unwrap();
+        commit_file(&remote, "file 1");
+        let hash_1 = remote.branch_hash(&remote_branch).unwrap();
+
+        let dot_flox_dir = flox.temp_dir.join(".flox");
+        fs::create_dir(&dot_flox_dir).unwrap();
+        let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
+
+        // Create local branch on remote with different commit
+        let local_branch = branch_name(&test_pointer, &dot_flox_path);
+        remote.checkout(&local_branch, true).unwrap();
+        commit_file(&remote, "different file");
+
+        // Create floxmeta and fetch the local branch
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+        floxmeta
+            .git
+            .fetch_ref("origin", &format!("+{}:{}", local_branch, local_branch))
+            .ok();
+
+        // Provide a lock with rev that's only in remote branch
+        let input_lock = GenerationLock {
+            rev: hash_1.clone(),
+            local_rev: None,
+            version: flox_core::Version::<1>,
+        };
+
+        let expected_lock = input_lock.clone();
+        let lock =
+            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock))
+                .unwrap();
+
+        // Should fetch and find the rev in remote
+        assert_eq!(lock, expected_lock);
+    }
+
+    /// Test that when ensure_generation_locked has input state of:
+    /// - lock at {rev: nonexistent commit, local_rev: None}
+    /// - floxmeta with local_branch at commit 1
+    /// - remote at commit 1
+    ///
+    /// It results in output state of:
+    /// - error: RevDoesNotExist
+    /// - [fetches from remote, but rev not found anywhere]
+    #[test]
+    fn test_ensure_generation_locked_rev_not_found() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Create a mock remote
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let remote_branch = remote_branch_name(&test_pointer);
+        remote.checkout(&remote_branch, true).unwrap();
+        commit_file(&remote, "file 1");
+
+        let dot_flox_dir = flox.temp_dir.join(".flox");
+        fs::create_dir(&dot_flox_dir).unwrap();
+        let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
+
+        // Create local branch
+        let local_branch = branch_name(&test_pointer, &dot_flox_path);
+        remote.checkout(&local_branch, true).unwrap();
+
+        // Create floxmeta and fetch the local branch
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+        floxmeta
+            .git
+            .fetch_ref("origin", &format!("+{}:{}", local_branch, local_branch))
+            .ok();
+
+        // Provide a lock with rev that doesn't exist
+        let input_lock = GenerationLock {
+            rev: "nonexistent_commit_hash".to_string(),
+            local_rev: None,
+            version: flox_core::Version::<1>,
+        };
+
+        let result =
+            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock));
+
+        assert!(matches!(result, Err(FloxmetaBranchError::RevDoesNotExist)));
+    }
+
+    /// Test that when ensure_generation_locked has input state of:
+    /// - lock at {rev: commit 1, local_rev: None}
+    /// - floxmeta without local_branch
+    /// - remote at commit 1
+    ///
+    /// It results in output state of:
+    /// - lock at {rev: commit 1, local_rev: None}
+    /// - [fetches from remote, finds rev there]
+    #[test]
+    fn test_ensure_generation_locked_no_local_branch_rev_in_remote() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Create a mock remote
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let remote_branch = remote_branch_name(&test_pointer);
+        remote.checkout(&remote_branch, true).unwrap();
+        commit_file(&remote, "file 1");
+        let hash_1 = remote.branch_hash(&remote_branch).unwrap();
+
+        // Create floxmeta - no local branch exists
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+
+        let dot_flox_dir = flox.temp_dir.join(".flox");
+        fs::create_dir(&dot_flox_dir).unwrap();
+        let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
+        let local_branch = branch_name(&test_pointer, &dot_flox_path);
+
+        // Provide a lock with rev that's in remote
+        let input_lock = GenerationLock {
+            rev: hash_1.clone(),
+            local_rev: None,
+            version: flox_core::Version::<1>,
+        };
+
+        let expected_lock = input_lock.clone();
+        let lock =
+            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock))
+                .unwrap();
+
+        // Should fetch and find the rev in remote
+        assert_eq!(lock, expected_lock);
+    }
+
+    /// Test that when ensure_generation_locked has input state of:
+    /// - lock at {rev: nonexistent commit, local_rev: None}
+    /// - floxmeta without local_branch
+    /// - remote at commit 1
+    ///
+    /// It results in output state of:
+    /// - error: RevDoesNotExist
+    /// - [fetches from remote, but rev not found]
+    #[test]
+    fn test_ensure_generation_locked_no_local_branch_rev_not_in_remote() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Create a mock remote
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let remote_branch = remote_branch_name(&test_pointer);
+        remote.checkout(&remote_branch, true).unwrap();
+        commit_file(&remote, "file 1");
+
+        // Create floxmeta - no local branch exists
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+
+        let dot_flox_dir = flox.temp_dir.join(".flox");
+        fs::create_dir(&dot_flox_dir).unwrap();
+        let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
+        let local_branch = branch_name(&test_pointer, &dot_flox_path);
+
+        // Provide a lock with rev that doesn't exist
+        let input_lock = GenerationLock {
+            rev: "nonexistent_commit_hash".to_string(),
+            local_rev: None,
+            version: flox_core::Version::<1>,
+        };
+
+        let result =
+            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock));
+
+        assert!(matches!(result, Err(FloxmetaBranchError::RevDoesNotExist)));
     }
 
     #[test]

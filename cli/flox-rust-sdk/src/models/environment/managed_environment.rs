@@ -218,7 +218,7 @@ pub struct DivergedMetadata {
     pub remote: AllGenerationsMetadata,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct GenerationLock {
     /// Revision of the environment on FloxHub.
     /// This could be stale if the environment has since been changed.
