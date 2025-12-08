@@ -39,13 +39,19 @@ pub enum ContainerizeProxyError {
 pub(crate) struct ContainerizeProxy {
     environment_path: PathBuf,
     container_runtime: Runtime,
+    labels: Vec<String>,
 }
 
 impl ContainerizeProxy {
-    pub(crate) fn new(environment_path: PathBuf, container_runtime: Runtime) -> Self {
+    pub(crate) fn new(
+        environment_path: PathBuf,
+        container_runtime: Runtime,
+        labels: Vec<String>,
+    ) -> Self {
         Self {
             environment_path,
             container_runtime,
+            labels,
         }
     }
 
@@ -226,6 +232,7 @@ impl ContainerizeProxy {
         command.args(["--dir", MOUNT_ENV]);
         command.args(["--tag", tag.as_ref()]);
         command.args(["--file", "-"]);
+        command.args(self.labels.iter().flat_map(|l| ["--label", l]));
     }
 }
 
