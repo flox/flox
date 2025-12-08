@@ -28,6 +28,22 @@ pub struct GenerationLock {
     pub local_rev: Option<String>,
 }
 
+impl GenerationLock {
+    /// Read lockfile if it exists, returning None if file doesn't exist
+    pub fn read_maybe(path: impl AsRef<Path>) -> Result<Option<Self>, FloxmetaBranchError> {
+        let lock_contents = match std::fs::read(path) {
+            Ok(contents) => contents,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(FloxmetaBranchError::ReadLock(e)),
+        };
+
+        let lock: Self =
+            serde_json::from_slice(&lock_contents).map_err(FloxmetaBranchError::InvalidLock)?;
+
+        Ok(Some(lock))
+    }
+}
+
 /// An abstraction over the git backed storage of managed environments.
 ///
 /// [FloxmetaBranch] separates the FloxHub connected storage of environments
@@ -110,6 +126,12 @@ pub enum FloxmetaBranchError {
 
     #[error("failed to create/update branch: {0}")]
     BranchSetup(#[source] GitCommandError),
+
+    #[error("failed to read lockfile")]
+    ReadLock(#[source] std::io::Error),
+
+    #[error("invalid lockfile")]
+    InvalidLock(#[source] serde_json::Error),
 }
 
 impl FloxmetaBranch {
