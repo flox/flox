@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::Path;
 
 use fslock::LockFile;
@@ -132,6 +133,12 @@ pub enum FloxmetaBranchError {
 
     #[error("invalid lockfile")]
     InvalidLock(#[source] serde_json::Error),
+
+    #[error("failed to serialize lockfile")]
+    SerializeLock(#[source] serde_json::Error),
+
+    #[error("failed to write lockfile")]
+    WriteLock(#[source] std::io::Error),
 }
 
 impl FloxmetaBranch {
@@ -413,6 +420,80 @@ fn ensure_branch(
         },
         Err(err) => Err(FloxmetaBranchError::GitBranchHash(err))?,
     }
+    Ok(())
+}
+
+/// Write a pointer lockfile to the specified `lock_path`.
+///
+/// The lockfile stores the current git revision of the tracked upstream repository.
+/// When a local revision is specified,
+/// and the local revision is different from the remote revision,
+/// the local revision is also stored in the lockfile.
+///
+/// When committed to a project,
+/// guarantees that the same version of the linked environment
+/// is used by all instances across different machines.
+/// When a local revision is specified,
+/// flox will **try to** use the local revision
+/// rather than the remote revision **failing if it can't**.
+///
+/// Committing a lockfile with a local revision will thus cause flox to fail
+/// if the local revision is not available on the machine,
+/// i.e. any machine other than the one that committed the lockfile.
+/// See [`ManagedEnvironment::ensure_locked`] for more details.
+///
+/// todo: allow updating only the local revision
+/// avoid race conditions where the remote revision is unintentionally updated.
+/// If I pull an environment at rev A,
+/// -> somebody pushes rev B,
+/// -> I do an operation with -r that fetches the environment,
+/// -> and then I make a change that takes me from rev A to rev C,
+/// my lock will set rev to B.
+/// That's undesirable, and rev should always be in local_rev's history.
+/// Write a validated GenerationLock to disk
+pub(super) fn write_generation_lock(
+    lock_path: impl AsRef<Path>,
+    lock: &GenerationLock,
+) -> Result<(), FloxmetaBranchError> {
+    // Log what we're writing
+    if let Some(ref local_rev) = lock.local_rev {
+        debug!(
+            "writing pointer lockfile: remote_rev='{}', local_rev='{}', lockfile={:?}",
+            lock.rev,
+            local_rev,
+            lock_path.as_ref()
+        );
+    } else {
+        debug!(
+            "writing pointer lockfile: remote_rev='{}', local_rev=<unset>, lockfile={:?}",
+            lock.rev,
+            lock_path.as_ref()
+        );
+    }
+
+    // Check if lock is unchanged
+    {
+        let existing_lock = GenerationLock::read_maybe(&lock_path);
+
+        // Convert floxmeta_branch::GenerationLock to managed_environment::GenerationLock for comparison
+        let lock_for_comparison = GenerationLock {
+            rev: lock.rev.clone(),
+            local_rev: lock.local_rev.clone(),
+            version: flox_core::Version::<1> {},
+        };
+
+        if matches!(existing_lock, Ok(Some(ref existing_lock)) if existing_lock == &lock_for_comparison)
+        {
+            debug!("skip writing unchanged generation lock");
+            return Ok(());
+        }
+    }
+
+    // Write to disk
+    let lock_contents =
+        serde_json::to_string_pretty(&lock).map_err(FloxmetaBranchError::SerializeLock)?;
+
+    fs::write(lock_path, lock_contents).map_err(FloxmetaBranchError::WriteLock)?;
     Ok(())
 }
 
