@@ -164,9 +164,12 @@ impl RemoteEnvironment {
             )
         };
 
+        // TODO: Convert floxmeta to FloxmetaBranch
+        let floxmeta_branch = todo!("Create FloxmetaBranch for remote environment");
+
         let mut inner = ManagedEnvironment::open_with(
-            floxmeta,
             flox,
+            floxmeta_branch,
             pointer.clone(),
             dot_flox_path,
             inner_rendered_env_links,
