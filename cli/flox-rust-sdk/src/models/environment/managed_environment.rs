@@ -43,6 +43,10 @@ use super::{
 use crate::data::CanonicalPath;
 use crate::flox::{Flox, RemoteEnvironmentRef};
 use crate::models::env_registry::{EnvRegistryError, deregister, ensure_registered};
+use crate::models::environment::floxmeta_branch::{
+    FloxmetaBranchError,
+    GenerationLock,
+};
 use crate::models::environment::{LOCKFILE_FILENAME, copy_dir_recursive};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmeta::{
@@ -81,6 +85,9 @@ pub struct ManagedEnvironment {
 
 #[derive(Debug, Error)]
 pub enum ManagedEnvironmentError {
+    #[error(transparent)]
+    FloxmetaBranch(#[from] FloxmetaBranchError),
+
     #[error("failed to lock floxmeta git repo")]
     LockFloxmeta(fslock::Error),
     #[error("failed to open floxmeta git repo: {0}")]
@@ -216,37 +223,6 @@ pub enum ManagedEnvironmentError {
 pub struct DivergedMetadata {
     pub local: AllGenerationsMetadata,
     pub remote: AllGenerationsMetadata,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct GenerationLock {
-    /// Revision of the environment on FloxHub.
-    /// This could be stale if the environment has since been changed.
-    rev: String,
-    /// Revision of the environment in local floxmeta repository.
-    /// Since an environment can be pulled into multiple different directories
-    /// locally, each could have its own local_rev if the environments are
-    /// modified.
-    /// This is changed when the environment is modified locally,
-    /// so it can diverge from both the remote environment and other copies of
-    /// the environment pulled into other directories.
-    local_rev: Option<String>,
-    version: Version<1>,
-}
-
-impl GenerationLock {
-    fn read_maybe(path: impl AsRef<Path>) -> Result<Option<Self>, ManagedEnvironmentError> {
-        let lock_contents = match fs::read(path) {
-            Ok(contents) => contents,
-            Err(err) => match err.kind() {
-                io::ErrorKind::NotFound => return Ok(None),
-                _ => Err(ManagedEnvironmentError::ReadPointerLock(err))?,
-            },
-        };
-        serde_json::from_slice(&lock_contents)
-            .map(Some)
-            .map_err(ManagedEnvironmentError::InvalidLock)
-    }
 }
 
 impl Environment for ManagedEnvironment {
@@ -896,53 +872,6 @@ impl ManagedEnvironment {
         dot_flox_path: impl AsRef<Path>,
         generation: Option<GenerationId>,
     ) -> Result<Self, EnvironmentError> {
-        let _lock = Self::require_floxmeta_lock(&floxmeta_dir(flox, &pointer.owner));
-
-        let existing_floxmeta = match FloxMeta::open(flox, &pointer) {
-            Ok(floxmeta) => Some(floxmeta),
-            Err(FloxMetaError::NotFound(_)) => None,
-            Err(FloxMetaError::FetchBranch(GitRemoteCommandError::AccessDenied)) => {
-                return Err(EnvironmentError::ManagedEnvironment(
-                    ManagedEnvironmentError::AccessDenied,
-                ))?;
-            },
-            Err(FloxMetaError::FetchBranch(GitRemoteCommandError::RefNotFound(_))) => {
-                return Err(EnvironmentError::ManagedEnvironment(
-                    ManagedEnvironmentError::UpstreamNotFound {
-                        env_ref: pointer.into(),
-                        upstream: flox.floxhub.base_url().to_string(),
-                        user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
-                    },
-                ))?;
-            },
-            Err(e) => return Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
-        };
-
-        let floxmeta = match existing_floxmeta {
-            Some(floxmeta) => floxmeta,
-            None => {
-                debug!("cloning floxmeta for {}", &pointer.owner);
-                match FloxMeta::clone(flox, &pointer) {
-                    Ok(floxmeta) => floxmeta,
-                    Err(FloxMetaError::CloneBranch(GitRemoteCommandError::AccessDenied)) => {
-                        return Err(EnvironmentError::ManagedEnvironment(
-                            ManagedEnvironmentError::AccessDenied,
-                        ))?;
-                    },
-                    Err(FloxMetaError::CloneBranch(GitRemoteCommandError::RefNotFound(_))) => {
-                        return Err(EnvironmentError::ManagedEnvironment(
-                            ManagedEnvironmentError::UpstreamNotFound {
-                                env_ref: pointer.into(),
-                                upstream: flox.floxhub.base_url().to_string(),
-                                user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
-                            },
-                        ))?;
-                    },
-                    Err(e) => Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
-                }
-            },
-        };
-
         let dot_flox_path =
             CanonicalPath::new(dot_flox_path).map_err(ManagedEnvironmentError::CanonicalizePath)?;
 
