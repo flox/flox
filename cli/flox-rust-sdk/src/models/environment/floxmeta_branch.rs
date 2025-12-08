@@ -106,6 +106,9 @@ pub enum FloxmetaBranchError {
 
     #[error("failed to get branch hash: {0}")]
     GitBranchHash(#[source] GitCommandBranchHashError),
+
+    #[error("failed to create/update branch: {0}")]
+    BranchSetup(#[source] GitCommandError),
 }
 
 impl FloxmetaBranch {}
@@ -298,6 +301,42 @@ fn ensure_generation_locked(
             }
         },
     })
+}
+
+/// Ensure the branch exists and points at rev or local_rev
+fn ensure_branch(
+    branch: &str,
+    lock: &GenerationLock,
+    floxmeta: &FloxMeta,
+) -> Result<(), FloxmetaBranchError> {
+    let current_rev = lock.local_rev.as_ref().unwrap_or(&lock.rev);
+    match floxmeta.git.branch_hash(branch) {
+        Ok(ref branch_rev) => {
+            if branch_rev != current_rev {
+                // Maybe the user pulled a new lockfile or there was a race with
+                // another `flox` process and the ManagedLock has now been
+                // updated.
+                // TODO need to clarify the meaning of the branch name and what
+                // guarantees it represents
+                // For now just point the branch at current_rev.
+                // We're not discarding work, just allowing it to possibly be
+                // garbage collected.
+                floxmeta
+                    .git
+                    .reset_branch(branch, current_rev)
+                    .map_err(FloxmetaBranchError::BranchSetup)?;
+            }
+        },
+        // create branch if it doesn't exist
+        Err(GitCommandBranchHashError::DoesNotExist) => {
+            floxmeta
+                .git
+                .create_branch(branch, current_rev)
+                .map_err(FloxmetaBranchError::BranchSetup)?;
+        },
+        Err(err) => Err(FloxmetaBranchError::GitBranchHash(err))?,
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -723,6 +762,172 @@ mod tests {
             ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock));
 
         assert!(matches!(result, Err(FloxmetaBranchError::RevDoesNotExist)));
+    }
+
+    /// Test that ensure_branch is a no-op with input state:
+    /// - branch at commit 1
+    /// - lock at {rev: commit 1, local_rev: None}
+    #[test]
+    fn test_ensure_branch_noop() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Create a mock remote
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let remote_branch = remote_branch_name(&test_pointer);
+        remote.checkout(&remote_branch, true).unwrap();
+        commit_file(&remote, "file 1");
+        let hash_1 = remote.branch_hash(&remote_branch).unwrap();
+
+        // Create floxmeta
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+
+        let dot_flox_dir = flox.temp_dir.join(".flox");
+        fs::create_dir(&dot_flox_dir).unwrap();
+        let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
+        let local_branch = branch_name(&test_pointer, &dot_flox_path);
+
+        // Create the branch at the correct commit
+        floxmeta.git.create_branch(&local_branch, &hash_1).unwrap();
+
+        let lock = GenerationLock {
+            rev: hash_1.clone(),
+            local_rev: None,
+            version: Version::<1>,
+        };
+
+        // Should be a no-op
+        ensure_branch(&local_branch, &lock, &floxmeta).unwrap();
+
+        // Verify branch still at same commit
+        let branch_hash = floxmeta.git.branch_hash(&local_branch).unwrap();
+        assert_eq!(branch_hash, hash_1);
+    }
+
+    /// Test that with input state:
+    /// - branch at commit 1
+    /// - lock at {rev: commit 1, local_rev: commit 2}
+    ///
+    /// ensure_branch resets the branch to commit 2
+    #[test]
+    fn test_ensure_branch_resets_to_local_rev() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Create a mock remote
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let remote_branch = remote_branch_name(&test_pointer);
+        remote.checkout(&remote_branch, true).unwrap();
+        commit_file(&remote, "file 1");
+        let hash_1 = remote.branch_hash(&remote_branch).unwrap();
+        commit_file(&remote, "file 2");
+        let hash_2 = remote.branch_hash(&remote_branch).unwrap();
+
+        // Create floxmeta
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+
+        let dot_flox_dir = flox.temp_dir.join(".flox");
+        fs::create_dir(&dot_flox_dir).unwrap();
+        let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
+        let local_branch = branch_name(&test_pointer, &dot_flox_path);
+
+        // Create branch at commit 1
+        floxmeta.git.create_branch(&local_branch, &hash_1).unwrap();
+
+        // Lock points to commit 2 via local_rev
+        let lock = GenerationLock {
+            rev: hash_1.clone(),
+            local_rev: Some(hash_2.clone()),
+            version: Version::<1>,
+        };
+
+        // Should reset branch to commit 2
+        ensure_branch(&local_branch, &lock, &floxmeta).unwrap();
+
+        // Verify branch now at commit 2
+        let branch_hash = floxmeta.git.branch_hash(&local_branch).unwrap();
+        assert_eq!(branch_hash, hash_2);
+    }
+
+    /// Test that with input state:
+    /// - branch does not exist
+    /// - lock at {rev: commit 1, local_rev: None}
+    ///
+    /// ensure_branch creates branch at commit 1
+    #[test]
+    fn test_ensure_branch_creates_new() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Create a mock remote
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let remote_branch = remote_branch_name(&test_pointer);
+        remote.checkout(&remote_branch, true).unwrap();
+        commit_file(&remote, "file 1");
+        let hash_1 = remote.branch_hash(&remote_branch).unwrap();
+
+        // Create floxmeta
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+
+        let dot_flox_dir = flox.temp_dir.join(".flox");
+        fs::create_dir(&dot_flox_dir).unwrap();
+        let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
+        let local_branch = branch_name(&test_pointer, &dot_flox_path);
+
+        // Branch doesn't exist yet
+        let lock = GenerationLock {
+            rev: hash_1.clone(),
+            local_rev: None,
+            version: Version::<1>,
+        };
+
+        // Should create the branch
+        ensure_branch(&local_branch, &lock, &floxmeta).unwrap();
+
+        // Verify branch created at correct commit
+        let branch_hash = floxmeta.git.branch_hash(&local_branch).unwrap();
+        assert_eq!(branch_hash, hash_1);
+    }
+
+    /// Test that with input state:
+    /// - branch at commit 1
+    /// - lock at {rev: commit 2, local_rev: None}
+    ///
+    /// ensure_branch resets the branch to commit 2
+    #[test]
+    fn test_ensure_branch_resets_wrong_commit() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Create a mock remote
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let remote_branch = remote_branch_name(&test_pointer);
+        remote.checkout(&remote_branch, true).unwrap();
+        commit_file(&remote, "file 1");
+        let hash_1 = remote.branch_hash(&remote_branch).unwrap();
+        commit_file(&remote, "file 2");
+        let hash_2 = remote.branch_hash(&remote_branch).unwrap();
+
+        // Create floxmeta
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+
+        let dot_flox_dir = flox.temp_dir.join(".flox");
+        fs::create_dir(&dot_flox_dir).unwrap();
+        let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
+        let local_branch = branch_name(&test_pointer, &dot_flox_path);
+
+        // Create branch at commit 1
+        floxmeta.git.create_branch(&local_branch, &hash_1).unwrap();
+
+        // Lock points to commit 2
+        let lock = GenerationLock {
+            rev: hash_2.clone(),
+            local_rev: None,
+            version: Version::<1>,
+        };
+
+        // Should reset branch to commit 2
+        ensure_branch(&local_branch, &lock, &floxmeta).unwrap();
+
+        // Verify branch now at commit 2
+        let branch_hash = floxmeta.git.branch_hash(&local_branch).unwrap();
+        assert_eq!(branch_hash, hash_2);
     }
 
     #[test]
