@@ -1759,35 +1759,6 @@ mod test {
         }
     }
 
-    /// Create a .flox directory at dot_flox_path with a pointer
-    /// and optional generation lock.
-    ///
-    /// Mimics the state of a managed environment
-    /// without an existing view of the current generation.
-    fn create_dot_flox(
-        dot_flox_path: &Path,
-        pointer: &ManagedPointer,
-        lock: Option<&GenerationLock>,
-    ) -> CanonicalPath {
-        if !dot_flox_path.exists() {
-            fs::create_dir(dot_flox_path).unwrap();
-        }
-
-        let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
-        fs::write(
-            pointer_path,
-            serde_json::to_string_pretty(&pointer).unwrap(),
-        )
-        .unwrap();
-
-        if let Some(lock) = lock {
-            let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
-            fs::write(lock_path, serde_json::to_string_pretty(lock).unwrap()).unwrap();
-        }
-
-        CanonicalPath::new(dot_flox_path).unwrap()
-    }
-
     /// Create an empty mock remote repository
     fn create_mock_remote(path: impl AsRef<Path>) -> (ManagedPointer, PathBuf, GitCommandProvider) {
         let test_pointer = make_test_pointer(path.as_ref());
