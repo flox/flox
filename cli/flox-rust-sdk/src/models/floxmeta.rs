@@ -291,17 +291,6 @@ pub(super) fn floxmeta_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
         .join(owner.to_string())
 }
 
-pub mod test_helpers {
-    use super::*;
-    use crate::providers::git::test_helpers::mock_provider;
-
-    pub fn unusable_mock_floxmeta() -> FloxMeta {
-        FloxMeta {
-            git: mock_provider(),
-        }
-    }
-}
-
 #[cfg(test)]
 #[cfg(feature = "impure-unit-tests")]
 mod tests {
