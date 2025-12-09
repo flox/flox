@@ -15,6 +15,7 @@ flox [<general-options>] containerize
      [-d=<path> | -r=<owner/name>]
      [-f=<file>] [--runtime=<runtime>]
      [--tag=<tag>]
+     [--label=<key=value>]
 ```
 
 # DESCRIPTION
@@ -52,6 +53,12 @@ similar to `flox activate --`.
     store the image (when `--file` is not specified)
     or build the image (when on macOS).
     Defaults to detecting the first available on PATH.
+
+`--label`
+:   Set metadata for the container image.
+    Specify as `key=value` pairs.
+    Can be specified multiple times.
+    Works alongside labels defined in the manifest's `[containerize.config]` section.
 
 ```{.include}
 ./include/environment-options.md

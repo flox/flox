@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::fmt::Display;
 use std::io::Write;
@@ -50,8 +49,9 @@ pub struct Containerize {
     #[bpaf(short, long, argument("tag"))]
     tag: Option<String>,
 
-    #[bpaf(long, argument("key=value"))]
-    label: Vec<String>,
+    /// Set metadata for an image
+    #[bpaf(long("label"), argument("key=value"))]
+    labels: Vec<String>,
 }
 impl Containerize {
     #[instrument(name = "containerize", skip_all)]
@@ -94,9 +94,9 @@ impl Containerize {
             let container_config = manifest
                 .containerize
                 .and_then(|c| c.config)
-                .or_else(|| should_extend_config(&self.label).then(Default::default))
+                .or_else(|| should_extend_config(&self.labels).then(Default::default))
                 .map(|mut c| {
-                    extend_config(&self.label, &mut c);
+                    extend_config(&self.labels, &mut c);
                     c.into()
                 });
             // this method is only executed on linux
@@ -114,7 +114,7 @@ impl Containerize {
                     Exporting a container on macOS requires Docker or Podman to be installed.
                 "#});
             };
-            let builder = ContainerizeProxy::new(env_path, proxy_runtime, self.label);
+            let builder = ContainerizeProxy::new(env_path, proxy_runtime, self.labels);
             builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
         };
 
@@ -132,17 +132,19 @@ fn should_extend_config(labels: &[String]) -> bool {
 }
 
 fn extend_config(labels: &[String], config: &mut ContainerizeConfig) {
-    let label_map: BTreeMap<String, String> = labels
-        .iter()
-        .filter_map(|label| {
+    if !labels.is_empty() {
+        let mut label_map = config.labels.take().unwrap_or_default();
+
+        label_map.extend(labels.iter().map(|label| {
             if let Some((key, value)) = label.split_once('=') {
-                Some((key.to_string(), value.to_string()))
+                (key.to_string(), value.to_string())
             } else {
-                None
+                (label.to_string(), String::new())
             }
-        })
-        .collect();
-    config.labels = Some(label_map);
+        }));
+
+        config.labels = Some(label_map);
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
