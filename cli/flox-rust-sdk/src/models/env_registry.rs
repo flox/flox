@@ -10,6 +10,7 @@ use super::environment::{EnvironmentPointer, path_hash};
 use super::floxmeta::{FloxMeta, FloxMetaError};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
+use crate::models::environment::floxmeta_branch::prune_branches_from_floxmeta_by_pointer;
 use crate::utils::logging::traceable_path;
 
 pub const ENV_REGISTRY_FILENAME: &str = "env-registry.json";
@@ -131,8 +132,8 @@ impl EnvRegistry {
                     if let EnvironmentPointer::Managed(ref pointer) = env.pointer {
                         // Previously canonicalized path that we know no longer exists.
                         let path = CanonicalPath::new_unchecked(&entry.path);
-                        let floxmeta = FloxMeta::open(flox, pointer)?;
-                        floxmeta.prune_branches(pointer, &path)?;
+                        let mut floxmeta = FloxMeta::open(flox, pointer)?;
+                        prune_branches_from_floxmeta_by_pointer(&mut floxmeta, pointer, &path)?;
                     }
                 }
 

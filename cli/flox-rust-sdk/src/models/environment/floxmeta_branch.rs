@@ -49,6 +49,7 @@ impl GenerationLock {
 pub struct FloxmetaBranch {
     floxmeta: FloxMeta,
     branch: String,
+    remote_branch: String,
 }
 
 #[derive(Debug, Error)]
@@ -150,6 +151,7 @@ impl FloxmetaBranch {
             Self {
                 floxmeta,
                 branch: local_branch,
+                remote_branch,
             },
             lock,
         ))
@@ -548,7 +550,8 @@ pub mod test_helpers {
             floxmeta: FloxMeta {
                 git: mock_provider(),
             },
-            branch: "example".into(),
+            branch: "example.hash".into(),
+            remote_branch: "example".into(),
         }
     }
 
