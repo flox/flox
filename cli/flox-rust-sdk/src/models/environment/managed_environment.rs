@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{fs, io};
 
-use flox_core::Version;
 use thiserror::Error;
 use tracing::{debug, instrument};
 
@@ -446,12 +445,7 @@ impl Environment for ManagedEnvironment {
                 .add_generation(&mut local_checkout, change)
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
-            write_pointer_lockfile(
-                self.path.join(GENERATION_LOCK_FILENAME),
-                &self.floxmeta,
-                remote_branch_name(&self.pointer),
-                branch_name(&self.pointer, &self.path).into(),
-            )?;
+            self.lock_pointer()?;
         }
         Ok(result)
     }
@@ -491,12 +485,7 @@ impl Environment for ManagedEnvironment {
                 .add_generation(&mut local_checkout, change)
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
-            write_pointer_lockfile(
-                self.path.join(GENERATION_LOCK_FILENAME),
-                &self.floxmeta,
-                remote_branch_name(&self.pointer),
-                branch_name(&self.pointer, &self.path).into(),
-            )?;
+            self.lock_pointer()?;
         }
 
         Ok(result)
@@ -1171,13 +1160,9 @@ impl ManagedEnvironment {
     /// Lock the environment to the current revision
     fn lock_pointer(&self) -> Result<(), ManagedEnvironmentError> {
         let lock_path = self.path.join(GENERATION_LOCK_FILENAME);
+        let lock = self.floxmeta_branch.generation_lock(&self.pointer)?;
 
-        write_pointer_lockfile(
-            lock_path,
-            &self.floxmeta,
-            remote_branch_name(&self.pointer),
-            branch_name(&self.pointer, &self.path).into(),
-        )?;
+        write_generation_lock(lock_path, &lock)?;
         Ok(())
     }
 
@@ -1214,59 +1199,6 @@ impl ManagedEnvironment {
             .get_current_generation(self.include_fetcher.clone())
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)
     }
-}
-
-fn write_pointer_lockfile(
-    lock_path: PathBuf,
-    floxmeta: &FloxMeta,
-    remote_ref: String,
-    local_ref: Option<String>,
-) -> Result<GenerationLock, ManagedEnvironmentError> {
-    let rev = floxmeta
-        .git
-        .branch_hash(&remote_ref)
-        .map_err(ManagedEnvironmentError::GitBranchHash)?;
-
-    let local_rev = if let Some(ref local_ref) = local_ref {
-        match floxmeta.git.branch_hash(local_ref) {
-            Ok(local_rev) if local_rev == rev => None,
-            Ok(local_rev) => Some(local_rev),
-            Err(err) => Err(ManagedEnvironmentError::GitBranchHash(err))?,
-        }
-    } else {
-        None
-    };
-
-    if let Some(ref local_rev) = local_rev {
-        debug!(
-            "writing pointer lockfile: remote_rev='{rev}', local_rev='{local_rev}', lockfile={lock_path:?}"
-        );
-    } else {
-        debug!(
-            "writing pointer lockfile: remote_rev='{rev}', local_rev=<unset>, ,lockfile={lock_path:?}"
-        );
-    }
-
-    let lock = GenerationLock {
-        rev,
-        local_rev,
-        version: Version::<1> {},
-    };
-
-    {
-        let existing_lock = GenerationLock::read_maybe(&lock_path);
-
-        if matches!(existing_lock, Ok(Some(ref existing_lock)) if existing_lock == &lock) {
-            debug!("skip writing unchanged generation lock");
-            return Ok(lock);
-        }
-    }
-
-    let lock_contents =
-        serde_json::to_string_pretty(&lock).map_err(ManagedEnvironmentError::SerializeLock)?;
-
-    fs::write(lock_path, lock_contents).map_err(ManagedEnvironmentError::WriteLock)?;
-    Ok(lock)
 }
 
 /// Unique branch name for a specific link.
@@ -1483,15 +1415,6 @@ impl ManagedEnvironment {
             serde_json::to_string(&pointer).map_err(ManagedEnvironmentError::SerializePointer)?,
         )
         .map_err(ManagedEnvironmentError::WritePointer)?;
-
-        write_pointer_lockfile(
-            dot_flox_path.join(GENERATION_LOCK_FILENAME),
-            &FloxMeta {
-                git: temp_floxmeta_git,
-            },
-            remote_branch_name(&pointer),
-            None,
-        )?;
 
         let env = ManagedEnvironment::open(flox, pointer, dot_flox_path, None)?;
 
@@ -1839,6 +1762,7 @@ mod test {
     use std::collections::BTreeMap;
     use std::str::FromStr;
 
+    use flox_core::Version;
     use indoc::{formatdoc, indoc};
     use test_helpers::{
         mock_managed_environment_from_env_files,
