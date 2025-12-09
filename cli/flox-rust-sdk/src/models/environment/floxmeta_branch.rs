@@ -195,6 +195,38 @@ impl FloxmetaBranch {
     pub fn generations(&self) -> Generations {
         Generations::new(self.floxmeta.git.clone(), self.branch.clone())
     }
+
+    /// Compute the current GenerationLock based on branch state
+    ///
+    /// Returns a lock with:
+    /// - `rev`: hash of the remote branch
+    /// - `local_rev`: hash of the local branch (if different from rev)
+    pub fn generation_lock(
+        &self,
+        pointer: &ManagedPointer,
+    ) -> Result<GenerationLock, FloxmetaBranchError> {
+        let remote_branch = remote_branch_name(pointer);
+
+        // Get rev from remote branch
+        let rev = self
+            .floxmeta
+            .git
+            .branch_hash(&remote_branch)
+            .map_err(FloxmetaBranchError::GitBranchHash)?;
+
+        // Get local_rev from local branch (only if it differs from rev)
+        let local_rev = match self.floxmeta.git.branch_hash(&self.branch) {
+            Ok(local_rev) if local_rev == rev => None,
+            Ok(local_rev) => Some(local_rev),
+            Err(err) => return Err(FloxmetaBranchError::GitBranchHash(err)),
+        };
+
+        Ok(GenerationLock {
+            rev,
+            local_rev,
+            version: flox_core::Version::<1>,
+        })
+    }
 }
 
 /// Acquire exclusive lock on floxmeta directory
@@ -1262,5 +1294,52 @@ mod tests {
         let expected_branch = branch_name(&test_pointer, &dot_flox_path);
         assert_eq!(branch_access.branch, expected_branch);
         assert_eq!(lock, input_lock);
+    }
+
+    /// Test that generation_lock() computes the correct lock from branch state
+    #[test]
+    fn test_generation_lock() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Create a mock remote
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let remote_branch = remote_branch_name(&test_pointer);
+        remote.checkout(&remote_branch, true).unwrap();
+        commit_file(&remote, "file 1");
+        let hash_1 = remote.branch_hash(&remote_branch).unwrap();
+
+        // Create floxmeta
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+
+        let dot_flox_dir = flox.temp_dir.join(".flox");
+        fs::create_dir_all(&dot_flox_dir).unwrap();
+        let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
+        let local_branch = branch_name(&test_pointer, &dot_flox_path);
+
+        // Case 1: Local branch at same commit as remote - local_rev should be None
+        floxmeta.git.create_branch(&local_branch, &hash_1).unwrap();
+
+        let branch_access = FloxmetaBranch {
+            floxmeta: floxmeta.clone(),
+            branch: local_branch.clone(),
+        };
+
+        let lock = branch_access.generation_lock(&test_pointer).unwrap();
+        assert_eq!(lock.rev, hash_1);
+        assert_eq!(lock.local_rev, None);
+
+        // Case 2: Local branch at different commit - local_rev should be set
+        commit_file(&remote, "file 2");
+        let hash_2 = remote.branch_hash(&remote_branch).unwrap();
+
+        // Fetch the new commit into floxmeta
+        floxmeta
+            .git
+            .fetch_ref("origin", &format!("+{}:{}", remote_branch, remote_branch))
+            .unwrap();
+
+        let lock2 = branch_access.generation_lock(&test_pointer).unwrap();
+        assert_eq!(lock2.rev, hash_2);
+        assert_eq!(lock2.local_rev, Some(hash_1));
     }
 }
