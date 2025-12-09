@@ -637,12 +637,10 @@ pub(super) fn write_generation_lock(
 }
 
 pub mod test_helpers {
+
     use super::*;
-    use crate::data::CanonicalPath;
-    use crate::models::floxmeta::{FloxMeta, floxmeta_dir};
+    use crate::models::floxmeta::FloxMeta;
     use crate::providers::git::test_helpers::mock_provider;
-    use crate::providers::git::GitCommandProvider;
-    use std::path::Path;
 
     pub fn unusable_mock_floxmeta_branch() -> FloxmetaBranch {
         FloxmetaBranch {
@@ -652,34 +650,6 @@ pub mod test_helpers {
             branch: "example.hash".into(),
             remote_branch: "example".into(),
         }
-    }
-
-    /// Clone a git repo specified by remote_path into the floxmeta dir
-    /// corresponding to pointer, and create a FloxmetaBranch for it.
-    ///
-    /// This is useful for tests that need a real FloxmetaBranch with git operations
-    /// but don't want to go through the full FloxmetaBranch::new() validation.
-    pub fn create_floxmeta_branch(
-        flox: &crate::flox::Flox,
-        remote_path: &Path,
-        pointer: &ManagedPointer,
-        remote_branch: &str,
-        dot_flox_path: &CanonicalPath,
-    ) -> FloxmetaBranch {
-        let user_floxmeta_dir = floxmeta_dir(flox, &pointer.owner);
-        std::fs::create_dir_all(&user_floxmeta_dir).unwrap();
-        GitCommandProvider::clone_branch(
-            format!("file://{}", remote_path.to_string_lossy()),
-            user_floxmeta_dir,
-            remote_branch,
-            true,
-        )
-        .unwrap();
-
-        let floxmeta = FloxMeta::open(flox, pointer).unwrap();
-        let branch = branch_name(pointer, dot_flox_path);
-
-        FloxmetaBranch { floxmeta, branch }
     }
 }
 
@@ -1413,15 +1383,11 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // Create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let (test_pointer, _remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
         let remote_branch = remote_branch_name(&test_pointer);
         remote.checkout(&remote_branch, true).unwrap();
         commit_file(&remote, "file 1");
         let hash_1 = remote.branch_hash(&remote_branch).unwrap();
-
-        // Clone the floxmeta
-        let _existing_floxmeta =
-            create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
 
         // Create .flox directory
         let dot_flox_dir = flox.temp_dir.join("project").join(".flox");
@@ -1456,29 +1422,20 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // Create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let (test_pointer, _remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
         let remote_branch = remote_branch_name(&test_pointer);
         remote.checkout(&remote_branch, true).unwrap();
         commit_file(&remote, "file 1");
         let hash_1 = remote.branch_hash(&remote_branch).unwrap();
 
-        // Create floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
-
         let dot_flox_dir = flox.temp_dir.join(".flox");
         fs::create_dir_all(&dot_flox_dir).unwrap();
         let dot_flox_path = CanonicalPath::new(dot_flox_dir).unwrap();
-        let local_branch = branch_name(&test_pointer, &dot_flox_path);
+
+        let (branch_access, lock) =
+            FloxmetaBranch::new(&flox, &test_pointer, &dot_flox_path, None).unwrap();
 
         // Case 1: Local branch at same commit as remote - local_rev should be None
-        floxmeta.git.create_branch(&local_branch, &hash_1).unwrap();
-
-        let branch_access = FloxmetaBranch {
-            floxmeta: floxmeta.clone(),
-            branch: local_branch.clone(),
-        };
-
-        let lock = branch_access.generation_lock(&test_pointer).unwrap();
         assert_eq!(lock.rev, hash_1);
         assert_eq!(lock.local_rev, None);
 
@@ -1487,8 +1444,8 @@ mod tests {
         let hash_2 = remote.branch_hash(&remote_branch).unwrap();
 
         // Fetch the new commit into floxmeta
-        floxmeta
-            .git
+        branch_access
+            .git()
             .fetch_ref("origin", &format!("+{}:{}", remote_branch, remote_branch))
             .unwrap();
 

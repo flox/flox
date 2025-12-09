@@ -1756,7 +1756,6 @@ mod test {
         garbage_collect,
         read_environment_registry,
     };
-    use crate::models::environment::floxmeta_branch::test_helpers::create_floxmeta_branch;
     use crate::models::environment::test_helpers::{
         new_core_environment,
         new_core_environment_with_lockfile,
@@ -2199,15 +2198,15 @@ mod test {
             RenderedEnvironmentLinks::new_unchecked(PathBuf::new(), PathBuf::new());
 
         // create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let (test_pointer, _remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
         commit_file(&remote, "file 1");
 
         // create a mock floxmeta
-        let floxmeta_branch =
-            create_floxmeta_branch(&flox, &remote_path, &test_pointer, &branch, &dot_flox_path);
+        let (floxmeta_branch, _lock) =
+            FloxmetaBranch::new(&flox, &test_pointer, &dot_flox_path, None).unwrap();
 
         let _env = ManagedEnvironment::open_with(
             &flox,
@@ -2242,16 +2241,15 @@ mod test {
             RenderedEnvironmentLinks::new_unchecked(PathBuf::new(), PathBuf::new());
 
         // create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let (test_pointer, _remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
         commit_file(&remote, "file 1");
 
         // create a mock floxmeta
-        let floxmeta_branch =
-            create_floxmeta_branch(&flox, &remote_path, &test_pointer, &branch, &dot_flox_path);
-
+        let (floxmeta_branch, _lock) =
+            FloxmetaBranch::new(&flox, &test_pointer, &dot_flox_path, None).unwrap();
         // Create the registry
         let env = ManagedEnvironment::open_with(
             &flox,
@@ -2291,7 +2289,7 @@ mod test {
             RenderedEnvironmentLinks::new_unchecked(PathBuf::new(), PathBuf::new());
 
         // create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let (test_pointer, _remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let remote_branch = remote_branch_name(&test_pointer);
         remote.checkout(&remote_branch, true).unwrap();
@@ -2301,11 +2299,11 @@ mod test {
         let env2_branch = branch_name(&test_pointer, &env2_dir);
 
         // create a mock floxmeta
-        let floxmeta_branch_1 =
-            create_floxmeta_branch(&flox, &remote_path, &test_pointer, &env1_branch, &env1_dir);
+        let (floxmeta_branch_1, _lock) =
+            FloxmetaBranch::new(&flox, &test_pointer, &env1_dir, None).unwrap();
 
-        let floxmeta_branch_2 =
-            create_floxmeta_branch(&flox, &remote_path, &test_pointer, &env2_branch, &env2_dir);
+        let (floxmeta_branch_2, _lock) =
+            FloxmetaBranch::new(&flox, &test_pointer, &env2_dir, None).unwrap();
 
         // both environments refer to the same git repo,
         // so lets extract a reference to perform assertions against the git state
