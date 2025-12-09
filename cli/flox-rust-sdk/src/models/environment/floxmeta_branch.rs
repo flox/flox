@@ -566,7 +566,11 @@ pub(super) fn write_generation_lock(
 
 pub mod test_helpers {
     use super::*;
+    use crate::data::CanonicalPath;
+    use crate::models::floxmeta::{FloxMeta, floxmeta_dir};
     use crate::providers::git::test_helpers::mock_provider;
+    use crate::providers::git::GitCommandProvider;
+    use std::path::Path;
 
     pub fn unusable_mock_floxmeta_branch() -> FloxmetaBranch {
         FloxmetaBranch {
@@ -575,6 +579,34 @@ pub mod test_helpers {
             },
             branch: "example".into(),
         }
+    }
+
+    /// Clone a git repo specified by remote_path into the floxmeta dir
+    /// corresponding to pointer, and create a FloxmetaBranch for it.
+    ///
+    /// This is useful for tests that need a real FloxmetaBranch with git operations
+    /// but don't want to go through the full FloxmetaBranch::new() validation.
+    pub fn create_floxmeta_branch(
+        flox: &crate::flox::Flox,
+        remote_path: &Path,
+        pointer: &ManagedPointer,
+        remote_branch: &str,
+        dot_flox_path: &CanonicalPath,
+    ) -> FloxmetaBranch {
+        let user_floxmeta_dir = floxmeta_dir(flox, &pointer.owner);
+        std::fs::create_dir_all(&user_floxmeta_dir).unwrap();
+        GitCommandProvider::clone_branch(
+            format!("file://{}", remote_path.to_string_lossy()),
+            user_floxmeta_dir,
+            remote_branch,
+            true,
+        )
+        .unwrap();
+
+        let floxmeta = FloxMeta::open(flox, pointer).unwrap();
+        let branch = branch_name(pointer, dot_flox_path);
+
+        FloxmetaBranch { floxmeta, branch }
     }
 }
 

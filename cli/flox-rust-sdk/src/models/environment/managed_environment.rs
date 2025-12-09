@@ -48,12 +48,7 @@ use crate::models::environment::floxmeta_branch::{
 };
 use crate::models::environment::{LOCKFILE_FILENAME, copy_dir_recursive};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
-use crate::models::floxmeta::{
-    BRANCH_NAME_PATH_SEPARATOR,
-    FloxMeta,
-    FloxMetaError,
-    floxmeta_git_options,
-};
+use crate::models::floxmeta::{BRANCH_NAME_PATH_SEPARATOR, FloxMetaError, floxmeta_git_options};
 use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, FlakePackage, PackageToInstall, StorePath};
 use crate::models::manifest::typed::IncludeDescriptor;
@@ -1759,6 +1754,7 @@ mod test {
         garbage_collect,
         read_environment_registry,
     };
+    use crate::models::environment::floxmeta_branch::test_helpers::create_floxmeta_branch;
     use crate::models::environment::test_helpers::{
         new_core_environment,
         new_core_environment_with_lockfile,
@@ -1827,31 +1823,6 @@ mod test {
         fs::create_dir_all(&remote_path).unwrap();
         let remote = GitCommandProvider::init(&remote_path, false).unwrap();
         (test_pointer, remote_path, remote)
-    }
-
-    /// Clone a git repo specified by remote_path into the floxmeta dir
-    /// corresponding to test_pointer,
-    /// and open that as a FloxmetaV2
-    ///
-    /// TODO: creating the remote repo should probably be pulled into this
-    /// function
-    fn create_floxmeta(
-        flox: &Flox,
-        remote_path: &Path,
-        test_pointer: &ManagedPointer,
-        branch: &str,
-    ) -> FloxMeta {
-        let user_floxmeta_dir = floxmeta_dir(flox, &test_pointer.owner);
-        fs::create_dir_all(&user_floxmeta_dir).unwrap();
-        GitCommandProvider::clone_branch(
-            format!("file://{}", remote_path.to_string_lossy()),
-            user_floxmeta_dir,
-            branch,
-            true,
-        )
-        .unwrap();
-
-        FloxMeta::open(flox, test_pointer).unwrap()
     }
 
     fn init_generations_from_core_env(
@@ -2219,6 +2190,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         std::fs::create_dir_all(&dot_flox_path).unwrap();
+        let dot_flox_path = CanonicalPath::new(&dot_flox_path).unwrap();
 
         // dummy paths since we are not rendering the environment
         let rendered_env_links =
@@ -2232,13 +2204,14 @@ mod test {
         commit_file(&remote, "file 1");
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
+        let floxmeta_branch =
+            create_floxmeta_branch(&flox, &remote_path, &test_pointer, &branch, &dot_flox_path);
 
         let _env = ManagedEnvironment::open_with(
             &flox,
-            todo!("create floxmeta branch"),
+            floxmeta_branch,
             test_pointer,
-            CanonicalPath::new(&dot_flox_path).unwrap(),
+            dot_flox_path.clone(),
             rendered_env_links,
             IncludeFetcher {
                 base_directory: Some(dot_flox_path.parent().unwrap().to_path_buf()),
@@ -2260,6 +2233,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         std::fs::create_dir_all(&dot_flox_path).unwrap();
+        let dot_flox_path = CanonicalPath::new(&dot_flox_path).unwrap();
 
         // dummy paths since we are not rendering the environment
         let rendered_env_links =
@@ -2273,12 +2247,13 @@ mod test {
         commit_file(&remote, "file 1");
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
+        let floxmeta_branch =
+            create_floxmeta_branch(&flox, &remote_path, &test_pointer, &branch, &dot_flox_path);
 
         // Create the registry
         let env = ManagedEnvironment::open_with(
             &flox,
-            todo!("create floxmeta branch"),
+            floxmeta_branch,
             test_pointer,
             CanonicalPath::new(&dot_flox_path).unwrap(),
             rendered_env_links,
@@ -2323,13 +2298,21 @@ mod test {
         let env1_branch = branch_name(&test_pointer, &env1_dir);
         let env2_branch = branch_name(&test_pointer, &env2_dir);
 
-        // Create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+        // create a mock floxmeta
+        let floxmeta_branch_1 =
+            create_floxmeta_branch(&flox, &remote_path, &test_pointer, &env1_branch, &env1_dir);
+
+        let floxmeta_branch_2 =
+            create_floxmeta_branch(&flox, &remote_path, &test_pointer, &env2_branch, &env2_dir);
+
+        // both environments refer to the same git repo,
+        // so lets extract a reference to perform assertions against the git state
+        let common_git_repo = floxmeta_branch_1.git().clone();
 
         // Create two environments that use the same pointer.
         let env1 = ManagedEnvironment::open_with(
             &flox,
-            todo!("create floxmeta branch"),
+            floxmeta_branch_1,
             test_pointer.clone(),
             env1_dir.clone(),
             rendered_env_links.clone(),
@@ -2341,7 +2324,7 @@ mod test {
         .unwrap();
         let env2 = ManagedEnvironment::open_with(
             &flox,
-            todo!(),
+            floxmeta_branch_2,
             test_pointer.clone(),
             env2_dir.clone(),
             rendered_env_links.clone(),
@@ -2353,27 +2336,27 @@ mod test {
         .unwrap();
 
         // All branches should exist.
-        assert!(floxmeta.git.has_branch(&remote_branch).unwrap());
-        assert!(floxmeta.git.has_branch(&env1_branch).unwrap());
-        assert!(floxmeta.git.has_branch(&env2_branch).unwrap());
+        assert!(common_git_repo.has_branch(&remote_branch).unwrap());
+        assert!(common_git_repo.has_branch(&env1_branch).unwrap());
+        assert!(common_git_repo.has_branch(&env2_branch).unwrap());
 
         // env2 is pruned when no longer on disk.
         fs::remove_dir_all(&env2.path).unwrap();
         garbage_collect(&flox).unwrap();
-        assert!(floxmeta.git.has_branch(&remote_branch).unwrap());
-        assert!(floxmeta.git.has_branch(&env1_branch).unwrap());
-        assert!(!floxmeta.git.has_branch(&env2_branch).unwrap());
+        assert!(common_git_repo.has_branch(&remote_branch).unwrap());
+        assert!(common_git_repo.has_branch(&env1_branch).unwrap());
+        assert!(!common_git_repo.has_branch(&env2_branch).unwrap());
 
         // env1 is pruned when no longer on disk, remote is pruned when there
         // are no local branches, and is resilient to the branch not existing,
         // e.g. if the floxmeta repo has been manually deleted or the hashing
         // algorithm has changed in the past.
         fs::remove_dir_all(&env1.path).unwrap();
-        floxmeta.git.delete_branch(&env1_branch, true).unwrap();
+        common_git_repo.delete_branch(&env1_branch, true).unwrap();
         garbage_collect(&flox).unwrap();
-        assert!(!floxmeta.git.has_branch(&remote_branch).unwrap());
-        assert!(!floxmeta.git.has_branch(&env1_branch).unwrap());
-        assert!(!floxmeta.git.has_branch(&env2_branch).unwrap());
+        assert!(!common_git_repo.has_branch(&remote_branch).unwrap());
+        assert!(!common_git_repo.has_branch(&env1_branch).unwrap());
+        assert!(!common_git_repo.has_branch(&env2_branch).unwrap());
     }
 
     #[test]
