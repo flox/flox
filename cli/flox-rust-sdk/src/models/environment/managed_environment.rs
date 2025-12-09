@@ -74,7 +74,6 @@ pub struct ManagedEnvironment {
     path: CanonicalPath,
     rendered_env_links: RenderedEnvironmentLinks,
     pointer: ManagedPointer,
-    floxmeta: FloxMeta,
     floxmeta_branch: FloxmetaBranch,
     include_fetcher: IncludeFetcher,
     /// Specific generation to use, i.e. from `flox activate`
@@ -627,9 +626,9 @@ impl Environment for ManagedEnvironment {
         fs::remove_dir_all(&self.path)
             .map_err(|e| ManagedEnvironmentError::DeleteEnvironment(self.path.to_path_buf(), e))?;
 
-        self.floxmeta
-            .prune_branches(&self.pointer, &self.path)
-            .map_err(ManagedEnvironmentError::UpdateFloxmeta)?;
+        self.floxmeta_branch
+            .delete_branch()
+            .map_err(ManagedEnvironmentError::FloxmetaBranch)?;
 
         deregister(flox, &self.path, &EnvironmentPointer::Managed(self.pointer))?;
 
@@ -915,7 +914,6 @@ impl ManagedEnvironment {
         )?;
 
         let env = ManagedEnvironment {
-            floxmeta: todo!("to be removed"),
             path: dot_flox_path,
             rendered_env_links,
             pointer,
@@ -1178,10 +1176,7 @@ impl ManagedEnvironment {
     }
 
     pub(crate) fn generations(&self) -> Generations {
-        Generations::new(
-            self.floxmeta.git.clone(),
-            branch_name(&self.pointer, &self.path),
-        )
+        self.floxmeta_branch.generations()
     }
 
     fn get_current_generation(
@@ -1272,20 +1267,9 @@ impl ManagedEnvironment {
     /// and it's state should not be depended on.
     #[instrument(skip(flox), fields(progress = "Looking up environment on FloxHub"))]
     pub fn fetch_remote_state(&self, flox: &Flox) -> Result<(), ManagedEnvironmentError> {
-        let sync_branch = remote_branch_name(&self.pointer);
-        self.floxmeta
-            .git
-            .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}"))
-            .map_err(|err| match err {
-                GitRemoteCommandError::RefNotFound(_) => {
-                    ManagedEnvironmentError::UpstreamNotFound {
-                        env_ref: self.env_ref(),
-                        upstream: self.pointer.floxhub_base_url.to_string(),
-                        user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
-                    }
-                },
-                e => ManagedEnvironmentError::FetchUpdates(e),
-            })
+        self.floxmeta_branch
+            .fetch_remote_state(flox, &self.pointer)
+            .map_err(ManagedEnvironmentError::FloxmetaBranch)
     }
 
     /// Create a new [ManagedEnvironment] from a [PathEnvironment]
@@ -1472,8 +1456,8 @@ impl ManagedEnvironment {
         // if `--force` flag is set we skip this check
         if !force {
             let consistent_history = self
-                .floxmeta
-                .git
+                .floxmeta_branch
+                .git()
                 .branch_contains_commit(&sync_branch, &project_branch)
                 .map_err(ManagedEnvironmentError::Git)?;
 
@@ -1483,10 +1467,11 @@ impl ManagedEnvironment {
                     .map_err(ManagedEnvironmentError::Generations)?
                     .into_inner();
 
-                let remote = Generations::new(self.floxmeta.git.clone(), sync_branch.clone())
-                    .metadata()
-                    .map_err(ManagedEnvironmentError::Generations)?
-                    .into_inner();
+                let remote =
+                    Generations::new(self.floxmeta_branch.git().clone(), sync_branch.clone())
+                        .metadata()
+                        .map_err(ManagedEnvironmentError::Generations)?
+                        .into_inner();
 
                 Err(ManagedEnvironmentError::Diverged(DivergedMetadata {
                     local,
@@ -1496,8 +1481,8 @@ impl ManagedEnvironment {
         }
 
         let push_flag = self
-            .floxmeta
-            .git
+            .floxmeta_branch
+            .git()
             .push_ref(
                 "dynamicorigin",
                 format!("{}:{}", project_branch, sync_branch),
@@ -1545,8 +1530,8 @@ impl ManagedEnvironment {
         // Check whether we can fast-forward the remote branch to the local branch,
         // if not the environment has diverged.
         let consistent_history = self
-            .floxmeta
-            .git
+            .floxmeta_branch
+            .git()
             .branch_contains_commit(&project_branch, &sync_branch)
             .map_err(ManagedEnvironmentError::Git)?;
         if !consistent_history && !force {
@@ -1555,7 +1540,7 @@ impl ManagedEnvironment {
                 .map_err(ManagedEnvironmentError::Generations)?
                 .into_inner();
 
-            let remote = Generations::new(self.floxmeta.git.clone(), sync_branch.clone())
+            let remote = Generations::new(self.floxmeta_branch.git().clone(), sync_branch.clone())
                 .metadata()
                 .map_err(ManagedEnvironmentError::Generations)?
                 .into_inner();
@@ -1566,8 +1551,8 @@ impl ManagedEnvironment {
             }))?;
         }
 
-        let sync_branch_commit = self.floxmeta.git.branch_hash(&sync_branch).ok();
-        let project_branch_commit = self.floxmeta.git.branch_hash(&project_branch).ok();
+        let sync_branch_commit = self.floxmeta_branch.git().branch_hash(&sync_branch).ok();
+        let project_branch_commit = self.floxmeta_branch.git().branch_hash(&project_branch).ok();
 
         // Regardless of whether `--force` is set, we want to accurately return UpToDate
         // If the checkout is not the same as the current generation, we should
@@ -1577,8 +1562,8 @@ impl ManagedEnvironment {
         }
 
         // update the project branch to the remote branch, using `force` if specified
-        self.floxmeta
-            .git
+        self.floxmeta_branch
+            .git()
             .push_ref(
                 ".",
                 format!("refs/heads/{sync_branch}:refs/heads/{project_branch}",),
@@ -1613,9 +1598,7 @@ impl ManagedEnvironment {
 
         // remove the environment branch
         // this can be recovered from the generation lock
-        self.floxmeta
-            .prune_branches(&self.pointer, &self.path)
-            .unwrap();
+        self.floxmeta_branch.delete_branch().unwrap();
 
         fs::remove_file(self.path.join(GENERATION_LOCK_FILENAME))
             .map_err(ManagedEnvironmentError::WriteLock)?;
@@ -1654,12 +1637,12 @@ pub mod test_helpers {
     use super::*;
     use crate::flox::{DEFAULT_FLOXHUB_URL, Floxhub};
     use crate::models::environment::fetcher::test_helpers::mock_include_fetcher;
+    use crate::models::environment::floxmeta_branch::test_helpers::unusable_mock_floxmeta_branch;
     use crate::models::environment::path_environment::test_helpers::{
         new_named_path_environment_from_env_files,
         new_named_path_environment_in,
     };
     use crate::models::environment::test_helpers::new_core_environment;
-    use crate::models::floxmeta::test_helpers::unusable_mock_floxmeta;
 
     /// Get a [ManagedEnvironment] that is invalid but can be used in tests
     /// where methods on [ManagedEnvironment] will never be called.
@@ -1668,8 +1651,7 @@ pub mod test_helpers {
     /// [mock_managed_environment].
     pub fn unusable_mock_managed_environment() -> ManagedEnvironment {
         let floxhub = Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None).unwrap();
-        let floxmeta = unusable_mock_floxmeta();
-        let floxmeta_branch = todo!("Create mock FloxmetaBranch");
+        let floxmeta_branch = unusable_mock_floxmeta_branch();
         ManagedEnvironment {
             path: CanonicalPath::new(PathBuf::from("/")).unwrap(),
             rendered_env_links: RenderedEnvironmentLinks::new_unchecked(
@@ -1681,7 +1663,6 @@ pub mod test_helpers {
                 "test".parse().unwrap(),
                 &floxhub,
             ),
-            floxmeta,
             floxmeta_branch,
             include_fetcher: mock_include_fetcher(),
             generation: None,
@@ -2420,8 +2401,8 @@ mod test {
         );
         assert!(
             environment
-                .floxmeta
-                .git
+                .floxmeta_branch
+                .git()
                 .has_branch(&branch_name(&pointer, &environment.path))
                 .unwrap()
         );
@@ -2430,7 +2411,7 @@ mod test {
         // due to risk of corrupting the state of the git repo.
         // Since the original will be dropped however,
         // its safe to do so in this instance.
-        let git = environment.floxmeta.git.clone();
+        let git = environment.floxmeta_branch.git().clone();
         let path_before = environment.path.clone();
         let out_links_before = environment.rendered_env_links.clone();
 

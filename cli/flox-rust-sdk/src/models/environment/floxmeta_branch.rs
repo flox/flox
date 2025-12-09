@@ -128,6 +128,9 @@ pub enum FloxmetaBranchError {
     #[error("failed to create/update branch: {0}")]
     BranchSetup(#[source] GitCommandError),
 
+    #[error("failed to delete branch: {0}")]
+    DeleteBranch(#[source] GitCommandError),
+
     #[error("failed to read lockfile")]
     ReadLock(#[source] std::io::Error),
 
@@ -247,6 +250,17 @@ impl FloxmetaBranch {
                 },
                 e => FloxmetaBranchError::Fetch(e),
             })
+    }
+
+    /// Delete the local branch managed by this FloxmetaBranch
+    ///
+    /// This is typically called when deleting an environment or cleaning up
+    /// after an operation. The branch can be recovered from the generation lock.
+    pub fn delete_branch(&self) -> Result<(), FloxmetaBranchError> {
+        self.floxmeta
+            .git
+            .delete_branch(&self.branch, true)
+            .map_err(FloxmetaBranchError::DeleteBranch)
     }
 }
 
@@ -548,6 +562,20 @@ pub(super) fn write_generation_lock(
 
     fs::write(lock_path, lock_contents).map_err(FloxmetaBranchError::WriteLock)?;
     Ok(())
+}
+
+pub mod test_helpers {
+    use super::*;
+    use crate::providers::git::test_helpers::mock_provider;
+
+    pub fn unusable_mock_floxmeta_branch() -> FloxmetaBranch {
+        FloxmetaBranch {
+            floxmeta: FloxMeta {
+                git: mock_provider(),
+            },
+            branch: "example".into(),
+        }
+    }
 }
 
 #[cfg(test)]
