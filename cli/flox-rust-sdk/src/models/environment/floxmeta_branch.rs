@@ -197,8 +197,19 @@ impl FloxmetaBranch {
     }
 
     /// Get the branch name for this environment
-    pub fn branch(&self) -> &str {
+    ///
+    /// TODO: Eventually we should encapsulate git operations
+    /// that require these branches into this abstraction.
+    pub(crate) fn branch(&self) -> &str {
         &self.branch
+    }
+
+    /// Get the remote/sync branch name for this environment
+    ///
+    /// TODO: Eventually we should encapsulate git operations
+    /// that require these branches into this abstraction.
+    pub(crate) fn remote_branch(&self) -> &str {
+        &self.remote_branch
     }
 
     /// Access generations (read-only by default)
@@ -211,17 +222,12 @@ impl FloxmetaBranch {
     /// Returns a lock with:
     /// - `rev`: hash of the remote branch
     /// - `local_rev`: hash of the local branch (if different from rev)
-    pub fn generation_lock(
-        &self,
-        pointer: &ManagedPointer,
-    ) -> Result<GenerationLock, FloxmetaBranchError> {
-        let remote_branch = remote_branch_name(pointer);
-
+    pub fn generation_lock(&self) -> Result<GenerationLock, FloxmetaBranchError> {
         // Get rev from remote branch
         let rev = self
             .floxmeta
             .git
-            .branch_hash(&remote_branch)
+            .branch_hash(&self.remote_branch)
             .map_err(FloxmetaBranchError::GitBranchHash)?;
 
         // Get local_rev from local branch (only if it differs from rev)
@@ -246,7 +252,7 @@ impl FloxmetaBranch {
         flox: &Flox,
         pointer: &ManagedPointer,
     ) -> Result<(), FloxmetaBranchError> {
-        let sync_branch = remote_branch_name(&pointer);
+        let sync_branch = &self.remote_branch;
         self.git()
             .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}"))
             .map_err(|err| match err {
@@ -406,7 +412,18 @@ fn open_or_clone_floxmeta(
     Ok(floxmeta)
 }
 
-fn remote_branch_name(pointer: &ManagedPointer) -> String {
+/// The original branch name of an environment that is used to sync an environment with the hub
+///
+/// In most cases [`branch_name`] should be used over this,
+/// within the context of an instance of [ManagedEnvironment].
+///
+/// [`remote_branch_name`] is primarily used when talking to upstream on FloxHub,
+/// during opening to reconciliate with the upstream repo
+/// as well as during [`ManagedEnvironment::pull`].
+///
+/// TODO: public consumers of this should be integrated into this module
+/// to decouple environments from raw git operations.
+pub(crate) fn remote_branch_name(pointer: &ManagedPointer) -> String {
     format!("{}", pointer.name)
 }
 
@@ -1449,7 +1466,7 @@ mod tests {
             .fetch_ref("origin", &format!("+{}:{}", remote_branch, remote_branch))
             .unwrap();
 
-        let lock2 = branch_access.generation_lock(&test_pointer).unwrap();
+        let lock2 = branch_access.generation_lock().unwrap();
         assert_eq!(lock2.rev, hash_2);
         assert_eq!(lock2.local_rev, Some(hash_1));
     }
