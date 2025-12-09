@@ -179,49 +179,6 @@ impl FloxMeta {
 
         Ok(FloxMeta { git })
     }
-
-    /// Prune the local branch for a deleted environment. If there are no more
-    /// local branches, then also prune the remote branch. Already absent
-    /// branches are not treated as errors.
-    pub fn prune_branches(
-        &self,
-        pointer: &ManagedPointer,
-        dot_flox_path: &CanonicalPath,
-    ) -> Result<(), FloxMetaError> {
-        let branch_names = self
-            .git
-            .list_branches()
-            .map_err(FloxMetaError::ListBranch)?
-            .iter()
-            .map(|branch| branch.name.clone())
-            .collect::<Vec<_>>();
-
-        let local_branch = branch_name(pointer, dot_flox_path);
-        if branch_names.contains(&local_branch) {
-            self.git
-                .delete_branch(&local_branch, true)
-                .map_err(FloxMetaError::DeleteBranch)?;
-        }
-
-        let remote_branch = remote_branch_name(pointer);
-        if branch_names.contains(&remote_branch) {
-            let branch_prefix = pointer.name.to_string();
-            let branches_for_other_paths = branch_names.iter().any(|name| {
-                match name.rsplit_once(BRANCH_NAME_PATH_SEPARATOR) {
-                    Some((prefix, _)) => prefix == branch_prefix,
-                    _ => false,
-                }
-            });
-
-            if !branches_for_other_paths {
-                self.git
-                    .delete_branch(&remote_branch_name(pointer), true)
-                    .map_err(FloxMetaError::DeleteBranch)?;
-            }
-        }
-
-        Ok(())
-    }
 }
 
 /// Returns the git options for interacting with floxmeta repositories
