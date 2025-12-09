@@ -25,3 +25,6 @@ filetime = "0.2.26"
 tempfile.workspace = true
 serde_json.workspace = true
 flox-activations.workspace = true
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+procfs = "0.18.0"

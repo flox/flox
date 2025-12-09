@@ -6,6 +6,8 @@ use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::traceable_path;
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
+#[cfg(target_os = "linux")]
+use flox_watchdog::reaper::linux::SubreaperGuard;
 use nix::libc::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use nix::sys::signal::Signal::{SIGUSR1, SIGUSR2};
 use nix::sys::signal::kill;
@@ -51,6 +53,10 @@ impl ExecutiveArgs {
         if !std::env::var(NO_REMOVE_ACTIVATION_FILES).is_ok_and(|val| val == "true") {
             fs::remove_file(&self.executive_ctx)?;
         }
+
+        // Set as subreaper immediately. The guard ensures cleanup on all exit paths.
+        #[cfg(target_os = "linux")]
+        let _subreaper_guard = SubreaperGuard::new()?;
 
         let mut start_command = assemble_command_for_start_script(
             context.clone(),
