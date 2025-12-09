@@ -1,14 +1,13 @@
 use std::path::{Path, PathBuf};
 
-use flox_core::canonical_path::CanonicalPath;
 use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
 
 use super::environment::ManagedPointer;
-use super::environment::managed_environment::{branch_name, remote_branch_name};
 use super::environment_ref::EnvironmentOwner;
 use crate::flox::{Flox, Floxhub, FloxhubError, FloxhubToken};
+use crate::models::environment::floxmeta_branch::remote_branch_name;
 use crate::providers::git::{
     GitCommandBranchHashError,
     GitCommandError,

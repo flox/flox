@@ -44,11 +44,12 @@ use crate::models::environment::floxmeta_branch::{
     FloxmetaBranch,
     FloxmetaBranchError,
     GenerationLock,
+    remote_branch_name,
     write_generation_lock,
 };
 use crate::models::environment::{LOCKFILE_FILENAME, copy_dir_recursive};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
-use crate::models::floxmeta::{BRANCH_NAME_PATH_SEPARATOR, FloxMetaError, floxmeta_git_options};
+use crate::models::floxmeta::{FloxMetaError, floxmeta_git_options};
 use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, FlakePackage, PackageToInstall, StorePath};
 use crate::models::manifest::typed::IncludeDescriptor;
@@ -1158,7 +1159,7 @@ impl ManagedEnvironment {
     /// Lock the environment to the current revision
     fn lock_pointer(&self) -> Result<(), ManagedEnvironmentError> {
         let lock_path = self.path.join(GENERATION_LOCK_FILENAME);
-        let lock = self.floxmeta_branch.generation_lock(&self.pointer)?;
+        let lock = self.floxmeta_branch.generation_lock()?;
 
         write_generation_lock(lock_path, &lock)?;
         Ok(())
@@ -1194,38 +1195,6 @@ impl ManagedEnvironment {
             .get_current_generation(self.include_fetcher.clone())
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)
     }
-}
-
-/// Unique branch name for a specific link.
-///
-/// Use this function over [`remote_branch_name`] within the context of an instance of [ManagedEnvironment]
-///
-/// When pulling the same remote environment in multiple directories,
-/// unique copies of the environment are created.
-/// I.e. `install`ing a package in one directory does not affect the other
-/// until synchronized through FloxHub.
-///
-/// `dot_flox_path` is expected to point to the `.flox/` directory
-/// that link to an environment identified by `pointer`.
-pub fn branch_name(pointer: &ManagedPointer, dot_flox_path: &CanonicalPath) -> String {
-    format!(
-        "{}{}{}",
-        pointer.name,
-        BRANCH_NAME_PATH_SEPARATOR,
-        path_hash(dot_flox_path)
-    )
-}
-
-/// The original branch name of an environment that is used to sync an environment with the hub
-///
-/// In most cases [`branch_name`] should be used over this,
-/// within the context of an instance of [ManagedEnvironment].
-///
-/// [`remote_branch_name`] is primarily used when talking to upstream on FloxHub,
-/// during opening to reconciliate with the upstream repo
-/// as well as during [`ManagedEnvironment::pull`].
-pub fn remote_branch_name(pointer: &ManagedPointer) -> String {
-    format!("{}", pointer.name)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1411,8 +1380,10 @@ impl ManagedEnvironment {
         flox: &Flox,
         force: bool,
     ) -> Result<PushResult, ManagedEnvironmentError> {
-        let project_branch = branch_name(&self.pointer, &self.path);
-        let sync_branch = remote_branch_name(&self.pointer);
+        // TODO: move git pushing logic into floxmeta_branch module
+
+        let project_branch = self.floxmeta_branch.branch();
+        let sync_branch = self.floxmeta_branch.remote_branch();
 
         // Ensure the environment builds before we push it,
         // and that it does not include local environments.
@@ -1462,7 +1433,7 @@ impl ManagedEnvironment {
             let consistent_history = self
                 .floxmeta_branch
                 .git()
-                .branch_contains_commit(&sync_branch, &project_branch)
+                .branch_contains_commit(sync_branch, project_branch)
                 .map_err(ManagedEnvironmentError::Git)?;
 
             if !consistent_history {
@@ -1472,7 +1443,7 @@ impl ManagedEnvironment {
                     .into_inner();
 
                 let remote =
-                    Generations::new(self.floxmeta_branch.git().clone(), sync_branch.clone())
+                    Generations::new(self.floxmeta_branch.git().clone(), sync_branch.to_owned())
                         .metadata()
                         .map_err(ManagedEnvironmentError::Generations)?
                         .into_inner();
@@ -1519,6 +1490,8 @@ impl ManagedEnvironment {
         flox: &Flox,
         force: bool,
     ) -> Result<PullResult, ManagedEnvironmentError> {
+        // TODO: move git pull logic into floxmeta_branch module
+
         // Check whether the local checkout is in sync with the current generation
         // before potentially updating generations and resetting the local checkout.
         let generations = self.generations();
@@ -1530,8 +1503,8 @@ impl ManagedEnvironment {
             Err(ManagedEnvironmentError::CheckoutOutOfSync)?
         }
 
-        let sync_branch = remote_branch_name(&self.pointer);
-        let project_branch = branch_name(&self.pointer, &self.path);
+        let sync_branch = self.floxmeta_branch.remote_branch();
+        let project_branch = self.floxmeta_branch.branch();
 
         self.fetch_remote_state(flox)?;
 
@@ -1540,7 +1513,7 @@ impl ManagedEnvironment {
         let consistent_history = self
             .floxmeta_branch
             .git()
-            .branch_contains_commit(&project_branch, &sync_branch)
+            .branch_contains_commit(project_branch, sync_branch)
             .map_err(ManagedEnvironmentError::Git)?;
         if !consistent_history && !force {
             let local = generations
@@ -1548,10 +1521,11 @@ impl ManagedEnvironment {
                 .map_err(ManagedEnvironmentError::Generations)?
                 .into_inner();
 
-            let remote = Generations::new(self.floxmeta_branch.git().clone(), sync_branch.clone())
-                .metadata()
-                .map_err(ManagedEnvironmentError::Generations)?
-                .into_inner();
+            let remote =
+                Generations::new(self.floxmeta_branch.git().clone(), sync_branch.to_owned())
+                    .metadata()
+                    .map_err(ManagedEnvironmentError::Generations)?
+                    .into_inner();
 
             Err(ManagedEnvironmentError::Diverged(DivergedMetadata {
                 local,
@@ -1559,8 +1533,8 @@ impl ManagedEnvironment {
             }))?;
         }
 
-        let sync_branch_commit = self.floxmeta_branch.git().branch_hash(&sync_branch).ok();
-        let project_branch_commit = self.floxmeta_branch.git().branch_hash(&project_branch).ok();
+        let sync_branch_commit = self.floxmeta_branch.git().branch_hash(sync_branch).ok();
+        let project_branch_commit = self.floxmeta_branch.git().branch_hash(project_branch).ok();
 
         // Regardless of whether `--force` is set, we want to accurately return UpToDate
         // If the checkout is not the same as the current generation, we should
@@ -2306,15 +2280,14 @@ mod test {
         remote.checkout(&remote_branch, true).unwrap();
         commit_file(&remote, "file 1");
 
-        let env1_branch = branch_name(&test_pointer, &env1_dir);
-        let env2_branch = branch_name(&test_pointer, &env2_dir);
-
         // create a mock floxmeta
         let (floxmeta_branch_1, _lock) =
             FloxmetaBranch::new(&flox, &test_pointer, &env1_dir, None).unwrap();
+        let env1_branch = floxmeta_branch_1.branch().to_owned();
 
         let (floxmeta_branch_2, _lock) =
             FloxmetaBranch::new(&flox, &test_pointer, &env2_dir, None).unwrap();
+        let env2_branch = floxmeta_branch_2.branch().to_owned();
 
         // both environments refer to the same git repo,
         // so lets extract a reference to perform assertions against the git state
@@ -2385,7 +2358,7 @@ mod test {
         // - it has a ManagedPointer
         // - it has a generation lock
         // - it has a branch in the git repo
-        let pointer: ManagedPointer = serde_json::from_str(
+        let _pointer: ManagedPointer = serde_json::from_str(
             &fs::read_to_string(environment.path.join(ENVIRONMENT_POINTER_FILENAME)).unwrap(),
         )
         .expect("env pointer should be a managed pointer");
@@ -2397,7 +2370,7 @@ mod test {
             environment
                 .floxmeta_branch
                 .git()
-                .has_branch(&branch_name(&pointer, &environment.path))
+                .has_branch(environment.floxmeta_branch.branch())
                 .unwrap()
         );
 
@@ -2408,6 +2381,8 @@ mod test {
         let git = environment.floxmeta_branch.git().clone();
         let path_before = environment.path.clone();
         let out_links_before = environment.rendered_env_links.clone();
+
+        let branch_name = environment.floxmeta_branch.branch().to_owned();
 
         // Convert the environment to a path environment
         let mut path_env = environment.into_path_environment(&flox).unwrap();
@@ -2430,8 +2405,7 @@ mod test {
             "generation lock should be deleted"
         );
         assert!(
-            !git.has_branch(&branch_name(&pointer, &path_env.path))
-                .unwrap(),
+            !git.has_branch(&branch_name).unwrap(),
             "branch should be deleted"
         );
 
