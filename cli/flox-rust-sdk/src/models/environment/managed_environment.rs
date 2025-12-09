@@ -622,7 +622,7 @@ impl Environment for ManagedEnvironment {
             .map_err(|e| ManagedEnvironmentError::DeleteEnvironment(self.path.to_path_buf(), e))?;
 
         self.floxmeta_branch
-            .delete_branch()
+            .delete()
             .map_err(ManagedEnvironmentError::FloxmetaBranch)?;
 
         deregister(flox, &self.path, &EnvironmentPointer::Managed(self.pointer))?;
@@ -1604,7 +1604,9 @@ impl ManagedEnvironment {
 
         // remove the environment branch
         // this can be recovered from the generation lock
-        self.floxmeta_branch.delete_branch().unwrap();
+        self.floxmeta_branch
+            .delete()
+            .map_err(ManagedEnvironmentError::FloxmetaBranch)?;
 
         fs::remove_file(self.path.join(GENERATION_LOCK_FILENAME))
             .map_err(ManagedEnvironmentError::WriteLock)?;
@@ -1617,7 +1619,7 @@ impl ManagedEnvironment {
         )?;
 
         // create the metadata for a path environment
-        let path_pointer = PathPointer::new(self.name());
+        let path_pointer = PathPointer::new(self.pointer.name);
         fs::write(
             self.path.join(ENVIRONMENT_POINTER_FILENAME),
             serde_json::to_string(&path_pointer)
