@@ -26,7 +26,7 @@ clap = { version = "4.5.53", features = ["derive"] }
 close_fds = "0.3"
 config = { version = "0.15", default-features = false, features = ["toml"] }
 crossterm = "0.29"
-derive_more = { version = "2.0.1", features= ["as_ref", "deref", "deref_mut", "display", "from", "from_str"]}
+derive_more = { version = "2.1.0", features= ["as_ref", "deref", "deref_mut", "display", "from", "from_str"]}
 dirs = "6.0.0"
 enum_dispatch = "0.3.13"
 flox-activations = { path = "flox-activations" }
@@ -51,7 +51,7 @@ inquire = "0.9.1"
 indicatif = "0.18"
 itertools = "0.14.0"
 jsonwebtoken = { version = "10.2", features = ["rust_crypto"] }
-log = { version = "0.4.28", features = ["kv"] }
+log = { version = "0.4.29", features = ["kv"] }
 nix = { version = "0.30", features = ["signal", "process", "user"] }
 oauth2 = "5.0"
 path-dedot = "3.1.1"
@@ -93,7 +93,7 @@ toml = "0.9.8"
 toml_edit = { version = "0.23", features = ["serde"] }
 tracing = "0.1"
 tracing-appender = "0.2"
-tracing-indicatif = "0.3.13"
+tracing-indicatif = "0.3.14"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = { version = "2.5", features = ["serde"] }
 url-escape = "0.1.1"
