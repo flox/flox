@@ -7,6 +7,7 @@ use clap::Args;
 use log::debug;
 
 use super::{join_dir_list, separate_dir_list};
+use crate::debug_set_var;
 
 #[derive(Debug, Args)]
 pub struct FixPathsArgs {
@@ -157,6 +158,28 @@ pub fn fix_manpath_var(flox_env_dirs_var: &str, manpath_var: &str) -> String {
         joined.push(':');
     }
     joined
+}
+
+/// Fix PATH and MANPATH environment variables directly in the current Rust process.
+///
+/// This prepends bin/sbin directories from FLOX_ENV_DIRS to PATH,
+/// and share/man directories from FLOX_ENV_DIRS to MANPATH.
+///
+/// # Safety
+/// This function uses unsafe to modify the process environment.
+/// It should be called before any concurrent access to environment variables.
+pub fn fix_paths_in_process() -> Result<(), anyhow::Error> {
+    let flox_env_dirs = std::env::var("FLOX_ENV_DIRS").unwrap_or_default();
+    let path = std::env::var("PATH").unwrap_or_default();
+    let manpath = std::env::var("MANPATH").unwrap_or_default();
+
+    let new_path = fix_path_var(&flox_env_dirs, &path);
+    let new_manpath = fix_manpath_var(&flox_env_dirs, &manpath);
+
+    debug_set_var!("PATH", new_path);
+    debug_set_var!("MANPATH", new_manpath);
+
+    Ok(())
 }
 
 #[cfg(test)]

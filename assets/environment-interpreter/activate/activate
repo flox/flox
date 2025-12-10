@@ -24,8 +24,10 @@ else
 fi
 "$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" START
 
+_bash="@bash@/bin/bash"
 _dirname="@coreutils@/bin/dirname"
 _getopt="@getopt@/bin/getopt"
+_jq="@jq@/bin/jq"
 _readlink="@coreutils@/bin/readlink"
 _flox_activations="@flox_activations@"
 
@@ -40,51 +42,44 @@ export _profile_d="__OUT__/etc/profile.d"
 export _tcsh_home="__OUT__/activate.d/tcsh_home"
 export _zdotdir="__OUT__/activate.d/zdotdir"
 
-# shellcheck source-path=SCRIPTDIR/activate.d
-source "${_activate_d}/generate-bash-startup-commands.bash"
-# shellcheck source-path=SCRIPTDIR/activate.d
-source "${_activate_d}/generate-zsh-startup-script.bash"
-# shellcheck source-path=SCRIPTDIR/activate.d
-source "${_activate_d}/generate-fish-startup-commands.bash"
-# shellcheck source-path=SCRIPTDIR/activate.d
-source "${_activate_d}/generate-tcsh-startup-commands.bash"
+"$_flox_activate_tracer"  "$_activate_d/helpers.bash" START
 # shellcheck source-path=SCRIPTDIR/activate.d
 source "${_activate_d}/helpers.bash"
+"$_flox_activate_tracer"  "$_activate_d/helpers.bash" END
 
 # Top-level Flox environment activation script.
-
-# Ensure mandatory environment variables are defined as required by
-# other scripts. For example, we provide defaults for the following
-# variables as required by the various set-prompt scripts, and tcsh
-# in particular does not tolerate references to undefined variables.
-export FLOX_PROMPT_ENVIRONMENTS="${FLOX_PROMPT_ENVIRONMENTS:-}"
-export _FLOX_SET_PROMPT="${_FLOX_SET_PROMPT:-true}"
-export FLOX_PROMPT_COLOR_1="${FLOX_PROMPT_COLOR_1:-99}"
-export FLOX_PROMPT_COLOR_2="${FLOX_PROMPT_COLOR_2:-141}"
+#
+# The activate script is called in one of two "modes":
+# - dev: (default) sources the entire set of etc/profile.d scripts,
+#   setting "dangerous" environment variables such as PYTHONPATH as
+#   a result, then sources hook.on-activate script
+# - run: sources "$_profile_d/0100_common-run-mode-paths.sh" only;
+#   does NOT source hook.on-activate script
+#
+# Thereafter, it behaves differently in two distinct ways:
+# - if passed a command in the form of "-c 'command string'" or by
+#   way of args to be directly invoked with "-- command args", then
+#   will exec() into that command by way of "bash -c"
+# - else it will record environment snapshots in the path denoted by
+#   the --activation-state-dir arg, both before and after sourcing
+#   activation scripts
 
 # Parse command-line arguments.
-OPTIONS="e:c:m:"
-LONGOPTS="command:,\
-shell:,\
+OPTIONS="c:e:m:ns:v"
+LONGOPTS="activation-state-dir:,\
+command-string:,\
 env:,\
-env-cache:,\
-env-project:,\
-env-description:,\
+env-cache:,env-description:,env-project:,watchdog:,\
 mode:,\
-watchdog:,\
-activation-state-dir:,\
-activation-id:,\
-noprofile"
-USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
-[--shell <shell>] \
+no-run-hook-on-activate,\
+shell:,\
+verbose"
+USAGE="Usage: $0 [(-c|--command-string) \"<cmd> <args>\"] \
 [(-e|--env) <env>] \
-[--env-cache <path>] \
-[--env-project <path>] \
-[--env-description <name>] \
-[--noprofile] \
 [(-m|--mode) (dev|run)] \
-[--watchdog <path>]"
-
+[(-n|--no-run-hook-on-activate)] \
+[(-s|--shell) <shell>] \
+[(-v|--verbose)]"
 if ! PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@"); then
   echo "Failed to parse options." >&2
   echo "$USAGE" >&2
@@ -96,20 +91,28 @@ eval set -- "$PARSED"
 
 # Set default values for options.
 FLOX_CMD=""
-FLOX_NOPROFILE="${FLOX_NOPROFILE:-}"
 # The rust CLI contains sophisticated logic to detect the shell based on
 # $FLOX_SHELL or the process listening on STDOUT, but that won't happen when
 # activating from the top-level activation script, so fall back to $SHELL as a
 # default.
 _FLOX_SHELL="$SHELL"
 _FLOX_ENV="$($_dirname -- "${BASH_SOURCE[0]}")"
-_FLOX_ENV_ACTIVATION_MODE="dev"
-_FLOX_WATCHDOG_BIN=""
-_FLOX_ACTIVATION_STATE_DIR=""
-_FLOX_ACTIVATION_ID=""
+_flox_env_activation_mode="dev"
+_flox_activation_state_dir=""
+_no_run_hook_on_activate=""
 while true; do
   case "$1" in
-    -c | --command)
+    --activation-state-dir)
+      shift
+      if [ -z "${1:-}" ]; then
+        echo "Option --activation-state-dir requires a path as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _flox_activation_state_dir="$1"
+      shift
+      ;;
+    -c | --command-string)
       shift
       if [ -z "${1:-}" ]; then
         echo "Option -c requires an argument." >&2
@@ -117,16 +120,6 @@ while true; do
         exit 1
       fi
       FLOX_CMD="$1"
-      shift
-      ;;
-    --shell)
-      shift
-      if [ -z "${1:-}" ]; then
-        echo "Option --shell requires a command as an argument." >&2
-        echo "$USAGE" >&2
-        exit 1
-      fi
-      _FLOX_SHELL="$1"
       shift
       ;;
     -e | --env)
@@ -139,6 +132,40 @@ while true; do
       _FLOX_ENV="$1"
       shift
       ;;
+    -m | --mode)
+      shift
+      if [ -z "${1:-}" ] || ! { [ "$1" == "run" ] || [ "$1" == "dev" ]; }; then
+        echo "Option --mode requires 'dev' or 'run' as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _flox_env_activation_mode="$1"
+      shift
+      ;;
+    -n | --no-run-hook-on-activate)
+      shift
+      _no_run_hook_on_activate=true
+      ;;
+    -s | --shell)
+      shift
+      if [ -z "${1:-}" ]; then
+        echo "Option --shell requires a command as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_SHELL="$1"
+      shift
+      ;;
+    -v | --verbose)
+      shift
+      set -x
+      ;;
+    --)
+      shift
+      break
+      ;;
+
+    # <DEPRECATED OPTIONS>: keeping for a limited time for backwards compatibility only .. delete after 20260101
     --env-cache)
       shift
       if [ -z "${1:-}" ] || [ ! -d "$1" ]; then
@@ -169,16 +196,6 @@ while true; do
       _FLOX_ENV_DESCRIPTION="$1"
       shift
       ;;
-    -m | --mode)
-      shift
-      if [ -z "${1:-}" ] || ! { [ "$1" == "run" ] || [ "$1" == "dev" ] || [ "$1" == "build" ] || [ "$1" == "start" ]; }; then
-        echo "Option --mode requires 'dev', 'run', 'build', or 'start' as an argument." >&2
-        echo "$USAGE" >&2
-        exit 1
-      fi
-      _FLOX_ENV_ACTIVATION_MODE="$1"
-      shift
-      ;;
     --watchdog)
       shift
       if [ -z "${1:-}" ] || [ ! -f "$1" ]; then
@@ -189,34 +206,8 @@ while true; do
       _FLOX_WATCHDOG_BIN="$1"
       shift
       ;;
-    --activation-state-dir)
-      shift
-      if [ -z "${1:-}" ]; then
-        echo "Option --activation-state-dir requires a path as an argument." >&2
-        echo "$USAGE" >&2
-        exit 1
-      fi
-      _FLOX_ACTIVATION_STATE_DIR="$1"
-      shift
-      ;;
-    --activation-id)
-      shift
-      if [ -z "${1:-}" ]; then
-        echo "Option --activation-id requires an ID as an argument." >&2
-        echo "$USAGE" >&2
-        exit 1
-      fi
-      _FLOX_ACTIVATION_ID="$1"
-      shift
-      ;;
-    --noprofile)
-      FLOX_NOPROFILE="true"
-      shift
-      ;;
-    --)
-      shift
-      break
-      ;;
+    # </DEPRECATED>
+
     -*)
       echo "Invalid option: $1" >&2
       echo "$USAGE" >&2
@@ -225,43 +216,8 @@ while true; do
   esac
 done
 
-# Convert the provided command string into an array of arguments in "$@".
-# Henceforth in the script it is assumed that these are the arguments to be
-# invoked either by this shell (when in build mode) or with the chosen userShell.
-if [ -n "$FLOX_CMD" ]; then
-  # Throw an error if passed additional arguments along with the -c arg.
-  if [ $# -gt 0 ]; then
-    echo "Unexpected arguments provided with -c argument: $*" >&2
-    echo "$USAGE" >&2
-    exit 1
-  fi
-
-  # Set $@ to reflect the command to be invoked.
-  set -- "$FLOX_CMD"
-fi
-
-# This is distinct from "_FLOX_ACTIVATION_MODE"
-if [ $# -gt 0 ]; then
-  _flox_shell_mode="command"
-elif [ -t 1 ] || [ -n "${_FLOX_FORCE_INTERACTIVE:-}" ]; then
-  _flox_shell_mode="interactive"
-else
-  _flox_shell_mode="inplace"
-fi
-
 # Propagate required variables that are documented as exposed.
 export FLOX_ENV="${_FLOX_ENV}"
-
-# Propagate optional variables that are documented as exposed.
-# NB: `generate_*_start_commands()` performs the same logic except for zsh.
-for var_key in FLOX_ENV_CACHE FLOX_ENV_PROJECT FLOX_ENV_DESCRIPTION; do
-  eval "var_val=\${_$var_key-}"
-  if [ -n "$var_val" ]; then
-    export $var_key="${var_val}"
-  else
-    unset $var_key
-  fi
-done
 
 # shellcheck disable=SC1090
 source <("$_flox_activations" set-env-dirs --shell bash --flox-env "$FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
@@ -291,72 +247,127 @@ case "$_flox_shell" in
     ;;
 esac
 
-if [ "$_FLOX_ENV_ACTIVATION_MODE" = "build" ]; then
-  if [ $# -eq 0 ]; then
-    echo "build mode is only supported for running a command" >&2
+###
+### Main logic
+###
+
+if [ -n "$FLOX_CMD" ] || [ $# -gt 0 ]; then
+  # Command mode.
+
+  if [ -n "$FLOX_CMD" ]; then
+    # "command string" mode: invoke with `bash -c "$FLOX_CMD"`
+
+    # Throw an error if passed additional arguments along with the -c arg.
+    if [ $# -gt 0 ]; then
+      echo "Unexpected arguments provided with -c argument: $*" >&2
+      echo "$USAGE" >&2
+      exit 1
+    fi
+
+    # We don't ever need to attach,
+    # and we don't want to run hook.on-activate, (?)
+    # so just set the variables we need.
+    source_profile_d "$_profile_d" "set" "$FLOX_ENV_DIRS"
+    # Set static environment variables from the manifest
+    set_manifest_vars "$FLOX_ENV"
+
+    # Source the hook-on-activate script (if it exists).
+    if [ -z "${_no_run_hook_on_activate:-}" ]; then
+      set +euo pipefail
+      source_script "$FLOX_ENV/activate.d/hook-on-activate" 1>&2
+      set -euo pipefail
+    fi
+
+    # Exec bash to run the command string. Note that bash will exec()
+    # the final command found in the string so there will be just one
+    # PID and no issues with signal handling.
+    exec $_bash --noprofile --norc -c "$FLOX_CMD"
+
+  else
+    # exec() mode: invoke with `exec "$@"`
+
+    # We don't ever need to attach,
+    # and we don't want to run hook.on-activate, (?)
+    # so just set the variables we need.
+    source_profile_d "$_profile_d" "set" "$FLOX_ENV_DIRS"
+    # Set static environment variables from the manifest
+    set_manifest_vars "$FLOX_ENV"
+
+    # Exec the provided command and args.
+    exec "$@"
+  fi
+
+else
+
+  # Executive activation mode.
+
+  # First confirm that $_flox_activation_state_dir is defined.
+  if [ -z "${_flox_activation_state_dir:-}" ]; then
+    echo "--activation-state-dir arg not provided; cannot proceed." >&2
     exit 1
   fi
-  # We don't ever need to attach, and we don't want to run hook.on-activate,
-  # so just run the parts of start.bash that we need
-  source_profile_d "$_profile_d" "set" "$FLOX_ENV_DIRS"
-  # Set static environment variables from the manifest
+
+  # Use jq to capture environment as properly-escaped JSON
+  _start_env="$_flox_activation_state_dir/start.env.json"
+  $_jq -nS env > "$_start_env"
+
+  # Process etc-profiles scripts differently based on activation mode.
+  if [ "$_flox_env_activation_mode" = "dev" ]; then
+    # shellcheck disable=SC1090 # from rendered environment
+    source_profile_d "$_profile_d" "prepend" "$FLOX_ENV_DIRS"
+  else
+    # shellcheck disable=SC1091 # from rendered environment
+    source "$_profile_d/0100_common-run-mode-paths.sh"
+  fi
+
+  # Set static environment variables from the manifest.
   set_manifest_vars "$FLOX_ENV"
 
-  exec "$@"
+  # Source the hook-on-activate script (if it exists).
+  if [ -z "${_no_run_hook_on_activate:-}" ]; then
+    set +euo pipefail
+    source_script "$FLOX_ENV/activate.d/hook-on-activate" 1>&2
+    set -euo pipefail
+  fi
+
+  # Capture ending environment as JSON.
+  _end_env="$_flox_activation_state_dir/end.env.json"
+  $_jq -nS env > "$_end_env"
+
+  # XXX everything in the following block is no longer necessary; remove as final step in the refactor
+  {
+    # Generate _add_env and _del_env.
+    # The userShell initialization scripts that follow have the potential to undo
+    # the environment modifications performed above, so we must first calculate
+    # all changes made to the environment so far so that we can restore them after
+    # the userShell initialization scripts have run. We use jq to diff the two
+    # JSON environment snapshots.
+    _add_env="$_flox_activation_state_dir/add.env"
+    _del_env="$_flox_activation_state_dir/del.env"
+    # Capture environment variables to _set_ as "key=value" pairs with proper JSON escaping.
+    # This finds keys that are new or changed in $_end_env compared to $_start_env.
+    # shellcheck disable=SC2016
+    $_jq -rS --slurpfile start "$_start_env" '
+      to_entries |
+      map(select(
+        ($start[0][.key] // null) != .value
+      )) |
+      map("\(.key)=\(.value | @sh)") |
+      .[]
+    ' "$_end_env" > "$_add_env"
+    # Capture environment variables to _unset_ as a list of keys.
+    # This finds keys that exist in $_start_env but not in $_end_env.
+    # shellcheck disable=SC2016
+    $_jq -rS --slurpfile end "$_end_env" '
+      to_entries |
+      map(select(
+        ($end[0][.key] // null) == null
+      )) |
+      map(.key) |
+      .[]
+    ' "$_start_env" > "$_del_env"
+  }
+
 fi
-
-if [ "$_FLOX_ENV_ACTIVATION_MODE" = "start" ]; then
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/start.bash"
-  start "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_shell_mode"
-
-  exit 0
-fi
-
-# The CLI is responsible for erroring if the environment is already active.
-# We can start-or-attach no matter what
-
-# TODO: we could restore _start_env from the prior activation when performing an ephemeral activation
-
-# Ensure required activation arguments are provided
-if [ -z "$_FLOX_ACTIVATION_STATE_DIR" ]; then
-  echo "Error: --activation-state-dir is required" >&2
-  exit 1
-fi
-if [ -z "$_FLOX_ACTIVATION_ID" ]; then
-  echo "Error: --activation-id is required" >&2
-  exit 1
-fi
-
-export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
-
-# shellcheck source-path=SCRIPTDIR/activate.d
-source "${_activate_d}/attach.bash"
-attach "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_shell_mode"
-
-# Start services before the shell or command is invoked
-if [ "${FLOX_ACTIVATE_START_SERVICES:-}" == "true" ]; then
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/start-services.bash"
-fi
-
-case "${_flox_shell_mode}" in
-  command)
-    # shellcheck source-path=SCRIPTDIR/activate.d
-    true source "${_activate_d}/attach-command.bash"
-    ;;
-  interactive)
-    # shellcheck source-path=SCRIPTDIR/activate.d
-    true source "${_activate_d}/attach-interactive.bash"
-    ;;
-  inplace)
-    # shellcheck source-path=SCRIPTDIR/activate.d
-    true source "${_activate_d}/attach-inplace.bash"
-    ;;
-  *)
-    echo "Unsupported shell mode: ${_flox_shell_mode}" >&2
-    exit 1
-    ;;
-esac
 
 "$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" END

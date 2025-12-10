@@ -1,3 +1,17 @@
+# Helper function to source script only if it exists, with tracing.
+function source_script {
+  local _script="${1?}"
+  local _flox_activate_tracer="${_flox_activate_tracer:-true}"
+  if [ -e "$_script" ]; then
+    "$_flox_activate_tracer" "$_script" START
+    # shellcheck disable=SC1090 # from rendered environment
+    source "$_script"
+    "$_flox_activate_tracer" "$_script" END
+  else
+    "$_flox_activate_tracer" "$_script" NOT FOUND
+  fi
+}
+
 # source_profile_d <profile.d directory> <profile variable mode> <FLOX_ENV_DIRS>
 #
 # source all scripts in <profile.d directory>
@@ -23,8 +37,7 @@ function source_profile_d {
     echo *.sh
   )
   for profile_script in "${_profile_scripts[@]}"; do
-    # shellcheck disable=SC1090 # from rendered environment
-    source "$_profile_d/$profile_script"
+    source_script "$_profile_d/$profile_script"
   done
 
   # shellcheck disable=SC1091 # from rendered environment

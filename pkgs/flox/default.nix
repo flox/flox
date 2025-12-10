@@ -7,7 +7,6 @@
   makeBinaryWrapper,
   flox-buildenv,
   flox-nix-plugins,
-  flox-watchdog,
   flox-cli,
   flox-manpages,
   process-compose,
@@ -35,7 +34,6 @@ symlinkJoin {
 
   paths = [
     flox-cli
-    flox-watchdog
     flox-manpages
   ];
   nativeBuildInputs = [ makeBinaryWrapper ];
@@ -47,7 +45,6 @@ symlinkJoin {
       --set NIX_BIN             "${nix}/bin/nix" \
       --set BUILDENV_NIX        "${flox-buildenv}/lib/buildenv.nix" \
       --set NIX_PLUGINS         "${flox-nix-plugins}/lib/nix-plugins" \
-      --set WATCHDOG_BIN        "${flox-watchdog}/libexec/flox-watchdog" \
       --set PROCESS_COMPOSE_BIN "${process-compose}/bin/process-compose" \
       --set FLOX_VERSION        "${version}"
 

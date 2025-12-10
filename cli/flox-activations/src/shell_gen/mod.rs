@@ -43,28 +43,36 @@ impl fmt::Display for Shell {
 }
 impl Shell {
     /// Set a shell variable that is not exported
-    /// Include a trailing ;
     pub fn set_var_not_exported(&self, var: &str, value: &str) -> String {
         match self {
-            Self::Bash => format!("{var}='{value}';"),
-            Self::Fish => format!("set -g {var} '{value}';"),
-            Self::Tcsh => format!("set {var} = '{value}';"),
-            Self::Zsh => format!("typeset -g {var}='{value}';"),
+            Self::Bash => format!("{var}='{value}'"),
+            Self::Fish => format!("set -g {var} '{value}'"),
+            Self::Tcsh => format!("set {var} = '{value}'"),
+            Self::Zsh => format!("typeset -g {var}='{value}'"),
         }
     }
 
-    /// Do not include a trailing ;
+    /// Set a shell variable that is exported
     pub fn export_var(&self, var: &str, value: &str) -> String {
         match self {
             Self::Bash => format!("export {var}='{value}'"),
             Self::Fish => format!("set -gx {var} '{value}'"),
             Self::Tcsh => format!("setenv {var} '{value}'"),
             Self::Zsh => format!("export {var}='{value}'"),
-            _ => unimplemented!(),
+        }
+    }
+
+    /// Unset/remove an environment variable
+    pub fn unset_var(&self, var: &str) -> String {
+        match self {
+            Self::Bash => format!("unset {var}"),
+            Self::Fish => format!("set -e {var}"),
+            Self::Tcsh => format!("unsetenv {var}"),
+            Self::Zsh => format!("unset {var}"),
         }
     }
 }
 
 pub fn source_file(path: &Path) -> String {
-    format!("source '{}';", path.display())
+    format!("source '{}'", path.display())
 }

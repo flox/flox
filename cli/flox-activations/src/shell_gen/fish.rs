@@ -1,7 +1,6 @@
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::Result;
 
 use crate::shell_gen::Shell;
 use crate::shell_gen::capture::ExportEnvDiff;
@@ -63,9 +62,10 @@ pub fn generate_fish_startup_commands(
         commands.push("unset FLOX_ENV_DESCRIPTION".to_string());
     }
 
-    commands.push("true not setting _activate_d".to_string()); // DELETEME FOR DEBUGGING
+    // Export the value of $_activate_d to the environment.
+    commands.push(Shell::Fish.export_var("_activate_d", &args.activate_d.display().to_string()));
 
-    // Export the value of $_flox_activate_tracer from the environment.
+    // Export the value of $_flox_activate_tracer to the environment.
     commands.push(Shell::Fish.export_var("_flox_activate_tracer", &args.flox_activate_tracer));
 
     commands.push("true not setting _flox_activations".to_string()); // DELETEME FOR DEBUGGING
@@ -108,7 +108,7 @@ pub fn generate_fish_startup_commands(
     );
 
     commands.push(format!(
-        r#"{} profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source"#,
+        r#"if set -q FLOX_NOPROFILE; true; else; {} profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS"; end | source"#,
         args.flox_activations.display()
     ));
 
@@ -124,7 +124,7 @@ pub fn generate_fish_startup_commands(
     // the effect of removing newlines from the output, so we must ensure that
     // the output is a valid shell script fragment when represented on a single line.
     commands.push("".to_string()); // ensure there's a trailing newline
-    let mut joined = commands.join(";\n");
+    let joined = commands.join(";\n");
     Ok(joined)
 }
 

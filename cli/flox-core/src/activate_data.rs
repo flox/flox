@@ -22,9 +22,6 @@ pub struct ActivateData {
     /// The activation mode (dev or run)
     pub mode: String,
 
-    /// Path to the watchdog binary
-    pub watchdog: PathBuf,
-
     /// Path to the shell executable
     pub shell: Shell,
 
@@ -71,5 +68,10 @@ pub struct ActivateData {
     pub interactive: bool,
     pub is_ephemeral: bool,
     pub run_args: Vec<String>,
+    pub command_string: Option<String>,
     pub path_to_self: String,
+
+    /// Original command-line arguments from the flox CLI invocation
+    /// Used by the executive to set a descriptive process title
+    pub original_argv: Vec<String>,
 }

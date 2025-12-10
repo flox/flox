@@ -28,16 +28,16 @@ setup() {
 }
 
 teardown() {
-  # fifo is in PROJECT_DIR and keeps watchdog running,
-  # so cat_teardown_fifo must be run before wait_for_watchdogs and
+  # fifo is in PROJECT_DIR and keeps executive running,
+  # so cat_teardown_fifo must be run before wait_for_executives and
   # project_teardown
   cat_teardown_fifo
   # Cleaning up the `BATS_TEST_TMPDIR` occasionally fails,
   # because of an 'env-registry.json' that gets concurrently written
-  # by the watchdog as the activation terminates.
+  # by the executive as the activation terminates.
   if [ -n "${PROJECT_DIR:-}" ]; then
     # Not all tests call project_setup
-    wait_for_watchdogs "$PROJECT_DIR" || return 1
+    wait_for_executives "$PROJECT_DIR" || return 1
     project_teardown
   fi
   common_test_teardown
