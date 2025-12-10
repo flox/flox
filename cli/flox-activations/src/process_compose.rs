@@ -1,11 +1,17 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
-use std::{env, thread};
+use std::{env, result, thread};
 
 use anyhow::{Context, Error, bail};
 use flox_core::activate::context::ActivateCtx;
+use flox_core::activations::{
+    EnvForProcessCompose,
+    activations_json_path,
+    read_activations_json,
+    write_activations_json,
+};
 use time::OffsetDateTime;
 use time::macros::format_description;
 use tracing::debug;
@@ -21,6 +27,81 @@ static PROCESS_COMPOSE_BIN: LazyLock<String> = LazyLock::new(|| {
     std::env::var("PROCESS_COMPOSE_BIN").unwrap_or(env!("PROCESS_COMPOSE_BIN").to_string())
 });
 const BASH_BIN: &str = env!("X_BASH_BIN");
+
+/// Set env_for_process_compose to Starting in activations.json
+fn set_env_for_process_compose_starting(runtime_dir: &str, flox_env: &str) -> Result<(), Error> {
+    let activations_path = activations_json_path(runtime_dir, flox_env);
+    let (activations, lock) = read_activations_json(&activations_path)?;
+    let Some(activations) = activations else {
+        bail!("bad state: shouldn't be starting services when activations.json doesn't exist");
+    };
+    let mut activations = activations.check_version()?;
+    let env_for_process_compose = activations.env_for_process_compose_mut();
+
+    match env_for_process_compose {
+        Some(EnvForProcessCompose::Started(_)) => {
+            bail!("cannot start services when another process already started them");
+        },
+        Some(env_for_process_compose @ EnvForProcessCompose::Starting(_)) => {
+            // Allow restarting if the previous starting process is no longer running
+            if env_for_process_compose.still_starting() {
+                bail!("cannot start services when another process is simultaneously starting them");
+            }
+            debug!(
+                "overwriting Starting env_for_process_compose entry since pid {} is no longer running",
+                std::process::id()
+            );
+        },
+        None => {},
+    }
+
+    *env_for_process_compose = Some(EnvForProcessCompose::Starting(std::process::id() as i32));
+    write_activations_json(&activations, &activations_path, lock)?;
+    Ok(())
+}
+
+/// Set env_for_process_compose to Started(store_path) in activations.json
+fn set_env_for_process_compose_started(
+    runtime_dir: &str,
+    flox_env: &str,
+    store_path: &str,
+) -> Result<(), Error> {
+    let activations_path = activations_json_path(runtime_dir, flox_env);
+    let (activations, lock) = read_activations_json(&activations_path)?;
+    let Some(activations) = activations else {
+        bail!(
+            "bad state: shouldn't be marking services started when activations.json doesn't exist"
+        );
+    };
+    let mut activations = activations.check_version()?;
+    let env_for_process_compose = activations.env_for_process_compose_mut();
+
+    if !matches!(
+        env_for_process_compose,
+        Some(EnvForProcessCompose::Starting(_))
+    ) {
+        bail!("bad state: expected env_for_process_compose to be Starting");
+    }
+
+    *env_for_process_compose = Some(EnvForProcessCompose::Started(store_path.to_string()));
+    write_activations_json(&activations, &activations_path, lock)?;
+    Ok(())
+}
+
+/// Set env_for_process_compose to None
+fn clear_env_for_process_compose(runtime_dir: &str, flox_env: &str) -> Result<(), Error> {
+    let activations_path = activations_json_path(runtime_dir, flox_env);
+    let (activations, lock) = read_activations_json(&activations_path)?;
+    let Some(activations) = activations else {
+        bail!("bad state: shouldn't be starting when activations.json doesn't exist");
+    };
+    let mut activations = activations.check_version()?;
+    let env_for_process_compose = activations.env_for_process_compose_mut();
+
+    *env_for_process_compose = None;
+    write_activations_json(&activations, &activations_path, lock)?;
+    Ok(())
+}
 
 /// Wait for the process-compose socket to become ready.
 ///
@@ -131,6 +212,39 @@ pub fn start_services_blocking(
         .stdout(Stdio::null())
         .stderr(Stdio::null());
 
+    // Set state to starting immediately before spawning process-compose
+    set_env_for_process_compose_starting(&context.flox_runtime_dir, &context.env)?;
+
+    let result = try_start_services_blocking(command, socket_file, log_file);
+
+    if let Err(e) = result {
+        let result = clear_env_for_process_compose(&context.flox_runtime_dir, &context.env);
+        if let Err(cleanup_err) = result {
+            eprintln!(
+                "Failed to clear env_for_process_compose after failed start: {:?}",
+                cleanup_err
+            );
+        }
+        return Err(e);
+    }
+
+    // Update activations.json to mark process-compose as Started with the store path
+    set_env_for_process_compose_started(
+        &context.flox_runtime_dir,
+        &context.env,
+        &context.flox_activate_store_path,
+    )?;
+
+    Ok(())
+}
+
+/// Wrapping function for starting process-compose and blocking so we can catch
+/// all errors and cleanup activations.json on failure
+fn try_start_services_blocking(
+    mut command: Command,
+    socket_file: &PathBuf,
+    log_file: PathBuf,
+) -> Result<(), Error> {
     debug!("Spawning process-compose: {:?}", command);
     command.spawn().context("Failed to spawn process-compose")?;
 
@@ -154,5 +268,6 @@ pub fn start_services_blocking(
     }
 
     debug!("Process-compose socket ready at: {:?}", socket_file);
+
     Ok(())
 }

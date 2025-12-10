@@ -49,6 +49,12 @@ impl Default for CheckedVersion {
 pub struct Activations<VERSION = CheckedVersion> {
     version: VERSION,
     activations: Vec<Activation>,
+    /// Whether process-compose is running, and if it is, the store path of the
+    /// environment it was started in
+    /// Note that this is not necessarily authoritative, and in some cases we
+    /// also need to check the process-compose socket
+    #[serde(skip_serializing_if = "Option::is_none")]
+    env_for_process_compose: Option<EnvForProcessCompose>,
 }
 
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
@@ -82,6 +88,7 @@ impl Activations<UncheckedVersion> {
             return Ok(Activations {
                 version: CheckedVersion(LATEST_VERSION),
                 activations: self.activations,
+                env_for_process_compose: self.env_for_process_compose,
             });
         }
 
@@ -89,6 +96,7 @@ impl Activations<UncheckedVersion> {
             return Ok(Activations {
                 version: CheckedVersion(self.version.0),
                 activations: self.activations,
+                env_for_process_compose: self.env_for_process_compose,
             });
         }
 
@@ -165,6 +173,10 @@ impl Activations<CheckedVersion> {
 
         Ok(self.activations.last_mut().unwrap())
     }
+
+    pub fn env_for_process_compose_mut(&mut self) -> &mut Option<EnvForProcessCompose> {
+        &mut self.env_for_process_compose
+    }
 }
 
 impl<V> Activations<V> {
@@ -185,6 +197,23 @@ impl<V> Activations<V> {
 
     pub fn is_empty(&self) -> bool {
         self.activations.is_empty()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum EnvForProcessCompose {
+    /// process-compose is currently being started by this PID
+    Starting(i32),
+    /// Process-compose was started with this store path
+    Started(String),
+}
+
+impl EnvForProcessCompose {
+    pub fn still_starting(&self) -> bool {
+        let Self::Starting(pid) = self else {
+            return false;
+        };
+        pid_is_running(*pid)
     }
 }
 
@@ -417,6 +446,7 @@ mod test {
         let activations = Activations::<UncheckedVersion> {
             version: UncheckedVersion(0),
             activations: vec![],
+            env_for_process_compose: None,
         };
 
         let checked_activations = activations.check_version().unwrap();
@@ -445,6 +475,7 @@ mod test {
                     },
                 ],
             }],
+            env_for_process_compose: None,
         };
 
         let checked_activations = activations.check_version().unwrap();
@@ -473,6 +504,7 @@ mod test {
                     },
                 ],
             }],
+            env_for_process_compose: None,
         };
 
         let unsupported = activations.check_version().unwrap_err();
