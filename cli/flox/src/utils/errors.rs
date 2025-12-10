@@ -1,6 +1,7 @@
 use std::ops::Deref;
 
 use flox_rust_sdk::data::CanonicalizeError;
+use flox_rust_sdk::models::environment::floxmeta_branch::FloxmetaBranchError;
 use flox_rust_sdk::models::environment::generations::{
     GenerationsError,
     HistorySpec,
@@ -334,6 +335,8 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
     trace!("formatting managed_environment_error: {err:?}");
 
     match err {
+        ManagedEnvironmentError::FloxmetaBranch(inner) => format_floxmeta_branch_error(inner),
+
         ManagedEnvironmentError::LockFloxmeta(_) => display_chain(err),
 
         // todo: communicate reasons for this error
@@ -544,6 +547,123 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
         ManagedEnvironmentError::Core(core_environment_error) => {
             format_core_error(core_environment_error)
         },
+    }
+}
+
+pub fn format_floxmeta_branch_error(err: &FloxmetaBranchError) -> String {
+    trace!("formatting floxmeta_branch_error: {err:?}");
+
+    match err {
+        FloxmetaBranchError::CreateFloxmetaDir(io_err) => formatdoc! {"
+            Failed to create floxmeta directory: {io_err}
+
+            Please ensure that you have write permissions to the floxmeta cache directory.
+        "},
+
+        FloxmetaBranchError::LockFloxmeta(_) => display_chain(err),
+
+        FloxmetaBranchError::OpenFloxmeta(floxmeta_err) => formatdoc! {"
+            Failed to open environment metadata: {floxmeta_err}
+
+            Please ensure that you have network connectivity
+            and access to the remote environment.
+        "},
+
+        FloxmetaBranchError::AccessDenied => formatdoc! {"
+            Access denied to the remote environment.
+
+            This can happen if the remote is not owned by you
+            or the owner did not grant you access.
+
+            Please check the spelling of the remote environment
+            and make sure that you have access to it.
+        "},
+
+        FloxmetaBranchError::UpstreamNotFound {
+            env_ref,
+            upstream: _,
+            user,
+        } => {
+            let by_current_user = user
+                .as_ref()
+                .map(|u| u == env_ref.owner().as_str())
+                .unwrap_or_default();
+            let message = "Environment not found in FloxHub.";
+            if by_current_user {
+                formatdoc! {"
+                    {message}
+
+                    You can run 'flox push' to push the environment back to FloxHub.
+                "}
+            } else {
+                message.to_string()
+            }
+        },
+
+        FloxmetaBranchError::CheckGitRevision(_) => display_chain(err),
+        FloxmetaBranchError::CheckBranchExists(_) => display_chain(err),
+
+        FloxmetaBranchError::LocalRevDoesNotExist => formatdoc! {"
+            The environment lockfile refers to a version of the environment
+            that does not exist locally.
+
+            This can happen if the environment is modified on another machine,
+            and the lockfile is committed to the version control system
+            before the environment is pushed.
+
+            To resolve this issue, either
+             * remove '.flox/{GENERATION_LOCK_FILENAME}' (this will reset the environment to the latest version)
+             * push the environment on the remote machine and commit the updated lockfile
+        "},
+
+        FloxmetaBranchError::RevDoesNotExist => formatdoc! {"
+            The environment lockfile refers to a version of the environment
+            that does not exist locally or on the remote.
+
+            This can happen if the environment was force-pushed
+            after the lockfile was committed to the version control system.
+
+            To resolve this issue, remove '.flox/{GENERATION_LOCK_FILENAME}' (this will reset the environment to the latest version)
+        "},
+
+        FloxmetaBranchError::Fetch(fetch_err) => formatdoc! {"
+            Failed to fetch updates for environment: {fetch_err}
+
+            Please ensure that you have network connectivity
+            and access to the remote environment.
+        "},
+
+        FloxmetaBranchError::GitBranchHash(_) => display_chain(err),
+        FloxmetaBranchError::BranchSetup(_) => display_chain(err),
+
+        FloxmetaBranchError::DeleteBranch(floxmeta_err) => formatdoc! {"
+            Failed to delete environment branch: {floxmeta_err}
+
+            This may indicate a problem with the local git repository.
+            Try again or contact support if the problem persists.
+        "},
+
+        FloxmetaBranchError::ReadLock(io_err) => formatdoc! {"
+            Failed to read pointer lockfile: {io_err}
+
+            Please ensure that you have read permissions to '.flox/{GENERATION_LOCK_FILENAME}'.
+        "},
+
+        FloxmetaBranchError::InvalidLock(parse_err) => formatdoc! {"
+            The environment lockfile is invalid: {parse_err}
+
+            This can happen if the lockfile was manually edited.
+
+            To resolve this issue, remove '.flox/{GENERATION_LOCK_FILENAME}' (this will reset the environment to the latest version)
+        "},
+
+        FloxmetaBranchError::SerializeLock(_) => display_chain(err),
+
+        FloxmetaBranchError::WriteLock(io_err) => formatdoc! {"
+            Failed to write to lockfile: {io_err}
+
+            Please ensure that you have write permissions to '.flox/{GENERATION_LOCK_FILENAME}'
+        "},
     }
 }
 
