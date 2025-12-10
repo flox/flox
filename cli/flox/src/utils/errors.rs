@@ -19,7 +19,6 @@ use flox_rust_sdk::models::environment::{
     EnvironmentError,
     UpgradeError,
 };
-use flox_rust_sdk::models::floxmeta::FloxMetaError;
 use flox_rust_sdk::models::lockfile::ResolveError;
 use flox_rust_sdk::providers::git::GitRemoteCommandError;
 use flox_rust_sdk::providers::services::process_compose::{LoggedError, ServiceError};
@@ -337,18 +336,13 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
     match err {
         ManagedEnvironmentError::FloxmetaBranch(inner) => format_floxmeta_branch_error(inner),
 
-        ManagedEnvironmentError::LockFloxmeta(_) => display_chain(err),
-
         // todo: communicate reasons for this error
         // git auth errors may be caught separately or reported
-        ManagedEnvironmentError::OpenFloxmeta(err)
-        | ManagedEnvironmentError::UpdateFloxmeta(err) => formatdoc! {"
+        ManagedEnvironmentError::UpdateFloxmeta(err) => formatdoc! {"
             Failed to fetch environment: {err}
         "},
 
-        // todo: merge errors or make more specific
-        // now they represent the same thing.
-        ManagedEnvironmentError::Fetch(err) | ManagedEnvironmentError::FetchUpdates(err) => {
+        ManagedEnvironmentError::FetchUpdates(err) => {
             formatdoc! {"
             Failed to fetch updates for environment: {err}
 
@@ -356,50 +350,13 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             and access to the remote environment.
         "}
         },
-        ManagedEnvironmentError::CheckGitRevision(_) => display_chain(err),
-        ManagedEnvironmentError::CheckBranchExists(_) => display_chain(err),
-        ManagedEnvironmentError::LocalRevDoesNotExist => formatdoc! {"
-            The environment lockfile refers to a version of the environment
-            that does not exist locally.
-
-            This can happen if the environment is modified on another machine,
-            and the lockfile is committed to the version control system
-            before the environment is pushed.
-
-            To resolve this issue, either
-             * remove '.flox/{GENERATION_LOCK_FILENAME}' (this will reset the environment to the latest version)
-             * push the environment on the remote machine and commit the updated lockfile
-        "},
-        ManagedEnvironmentError::RevDoesNotExist => formatdoc! {"
-            The environment lockfile refers to a version of the environment
-            that does not exist locally or on the remote.
-
-            This can happen if the environment was force-pushed
-            after the lockfile was committed to the version control system.
-
-            To resolve this issue, remove '.flox/{GENERATION_LOCK_FILENAME}' (this will reset the environment to the latest version)
-        "},
-        ManagedEnvironmentError::InvalidLock(err) => formatdoc! {"
-            The environment lockfile is invalid: {err}
-
-            This can happen if the lockfile was manually edited.
-
-            To resolve this issue, remove '.flox/{GENERATION_LOCK_FILENAME}' (this will reset the environment to the latest version)
-        "},
-        ManagedEnvironmentError::ReadPointerLock(err) => formatdoc! {"
-            Failed to read pointer lockfile: {err}
-
-            Please ensure that you have read permissions to '.flox/{GENERATION_LOCK_FILENAME}'.
-        "},
         // various internal git errors while acting on the floxmeta repo
         ManagedEnvironmentError::Git(_) => display_chain(err),
-        ManagedEnvironmentError::GitBranchHash(_) => display_chain(err),
         ManagedEnvironmentError::WriteLock(err) => formatdoc! {"
             Failed to write to lockfile: {err}
 
             Please ensure that you have write permissions to '.flox/{GENERATION_LOCK_FILENAME}'
         "},
-        ManagedEnvironmentError::SerializeLock(_) => display_chain(err),
 
         // the following two errors are related to create reverse links to the .flox directory
         // those are internal errors but may arise if the user does not have write permissions to
@@ -686,17 +643,14 @@ pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
         RemoteEnvironmentError::ResetManagedEnvironment(ManagedEnvironmentError::FetchUpdates(
             GitRemoteCommandError::RefNotFound(_),
         ))
-        | RemoteEnvironmentError::GetLatestVersion(FloxMetaError::FetchBranch(
-            GitRemoteCommandError::RefNotFound(_),
-        ))
-        | RemoteEnvironmentError::GetLatestVersion(FloxMetaError::CloneBranch(
-            GitRemoteCommandError::AccessDenied,
-        ))
-        | RemoteEnvironmentError::GetLatestVersion(FloxMetaError::CloneBranch(
-            GitRemoteCommandError::RefNotFound(_),
-        )) => formatdoc! {"
+        | RemoteEnvironmentError::GetLatestVersion(FloxmetaBranchError::UpstreamNotFound {
+            ..
+        })
+        | RemoteEnvironmentError::GetLatestVersion(FloxmetaBranchError::AccessDenied) => {
+            formatdoc! {"
             Environment not found in FloxHub.
-            "},
+            "}
+        },
 
         RemoteEnvironmentError::ResetManagedEnvironment(err) => formatdoc! {"
             Failed to reset remote environment to latest upstream version:
