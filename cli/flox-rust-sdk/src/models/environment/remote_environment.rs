@@ -31,10 +31,13 @@ use super::{
 };
 use crate::flox::{EnvironmentOwner, Flox, RemoteEnvironmentRef};
 use crate::models::environment::RenderedEnvironmentLink;
-use crate::models::environment::floxmeta_branch::{FloxmetaBranch, GenerationLock};
+use crate::models::environment::floxmeta_branch::{
+    FloxmetaBranch,
+    FloxmetaBranchError,
+    GenerationLock,
+};
 use crate::models::environment::managed_environment::GENERATION_LOCK_FILENAME;
 use crate::models::environment_ref::EnvironmentName;
-use crate::models::floxmeta::FloxMetaError;
 use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::PackageToInstall;
 
@@ -49,7 +52,7 @@ pub enum RemoteEnvironmentError {
     CreateGcRootDir(#[source] std::io::Error),
 
     #[error("could not get latest version of environment")]
-    GetLatestVersion(#[source] FloxMetaError),
+    GetLatestVersion(#[source] FloxmetaBranchError),
 
     #[error("could not reset managed environment")]
     ResetManagedEnvironment(#[source] ManagedEnvironmentError),
@@ -142,10 +145,10 @@ impl RemoteEnvironment {
 
         let (floxmeta_branch, _lock) =
             FloxmetaBranch::new(flox, &pointer, &dot_flox_path, maybe_lock)
-                .map_err(ManagedEnvironmentError::FloxmetaBranch)
-                .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
+                .map_err(RemoteEnvironmentError::GetLatestVersion)?;
 
         let pointer_content = serde_json::to_string_pretty(&pointer).unwrap();
+
         fs::write(
             dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME),
             pointer_content,

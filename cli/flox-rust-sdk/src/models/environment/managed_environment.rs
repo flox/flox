@@ -54,13 +54,7 @@ use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, FlakePackage, PackageToInstall, StorePath};
 use crate::models::manifest::typed::IncludeDescriptor;
 use crate::providers::buildenv::BuildEnvOutputs;
-use crate::providers::git::{
-    GitCommandBranchHashError,
-    GitCommandError,
-    GitProvider,
-    GitRemoteCommandError,
-    PushFlag,
-};
+use crate::providers::git::{GitCommandError, GitProvider, GitRemoteCommandError, PushFlag};
 
 pub const GENERATION_LOCK_FILENAME: &str = "env.lock";
 
@@ -82,38 +76,12 @@ pub enum ManagedEnvironmentError {
     #[error(transparent)]
     FloxmetaBranch(#[from] FloxmetaBranchError),
 
-    #[error("failed to lock floxmeta git repo")]
-    LockFloxmeta(fslock::Error),
-    #[error("failed to open floxmeta git repo: {0}")]
-    OpenFloxmeta(FloxMetaError),
     #[error("failed to update floxmeta git repo: {0}")]
     UpdateFloxmeta(FloxMetaError),
-    #[error("failed to fetch environment: {0}")]
-    Fetch(GitRemoteCommandError),
-    #[error("failed to check for git revision: {0}")]
-    CheckGitRevision(GitCommandError),
-    #[error("failed to check for branch existence")]
-    CheckBranchExists(#[source] GitCommandBranchHashError),
-    #[error(
-        "can't find local_rev specified in lockfile; local_rev could have been mistakenly committed on another machine"
-    )]
-    LocalRevDoesNotExist,
-    #[error(
-        "can't find environment at revision specified in lockfile; this could have been caused by force pushing"
-    )]
-    RevDoesNotExist,
-    #[error("invalid {0} file: {filename}", filename = GENERATION_LOCK_FILENAME)]
-    InvalidLock(serde_json::Error),
-    #[error("failed to read pointer lockfile")]
-    ReadPointerLock(#[source] io::Error),
     #[error("internal error: {0}")]
     Git(GitCommandError),
-    #[error("internal error: {0}")]
-    GitBranchHash(GitCommandBranchHashError),
     #[error("couldn't write environment lockfile: {0}")]
     WriteLock(io::Error),
-    #[error("couldn't serialize environment lockfile: {0}")]
-    SerializeLock(serde_json::Error),
     #[error("couldn't create symlink to project: {0}")]
     ReverseLink(std::io::Error),
     #[error("couldn't create links directory: {0}")]
