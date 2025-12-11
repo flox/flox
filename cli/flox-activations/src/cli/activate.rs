@@ -147,6 +147,8 @@ impl ActivateArgs {
             let mut executive = Command::new((*FLOX_ACTIVATIONS_BIN).clone());
             executive.args([
                 "executive",
+                "--env",
+                &context.env,
                 "--executive-ctx",
                 &executive_ctx_path.to_string_lossy(),
             ]);

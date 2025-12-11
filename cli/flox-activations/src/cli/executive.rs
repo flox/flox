@@ -34,6 +34,12 @@ pub struct ExecutiveCtx {
 
 #[derive(Debug, Args)]
 pub struct ExecutiveArgs {
+    /// Environment path
+    // This isn't consumed and serves only to identify in process listings which
+    // environment the executive is responsible for.
+    #[arg(long)]
+    pub env: String,
+
     /// Path to JSON file containing executive context
     #[arg(long)]
     pub executive_ctx: PathBuf,
