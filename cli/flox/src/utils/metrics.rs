@@ -26,6 +26,7 @@ pub const METRICS_EVENTS_FILE_NAME: &str = "metrics-events-v2.json";
 pub const METRICS_UUID_FILE_NAME: &str = "metrics-uuid";
 pub const METRICS_LOCK_FILE_NAME: &str = "metrics-lock";
 const DEFAULT_BUFFER_EXPIRY: Duration = Duration::minutes(2);
+const MAX_BUFFER_SIZE: usize = 1000;
 
 pub static METRICS_EVENTS_URL: LazyLock<String> = LazyLock::new(|| {
     std::env::var("_FLOX_METRICS_URL_OVERRIDE").unwrap_or(env!("METRICS_EVENTS_URL").to_string())
@@ -246,23 +247,54 @@ impl MetricsBuffer {
             .unwrap_or(false)
     }
 
+    /// Overwrites the buffer file with the current in-memory buffer contents
+    fn overwrite_file(&mut self) -> Result<()> {
+        self.storage
+            .set_len(0)
+            .context("Could not truncate metrics buffer file")?;
+        for entry in &self.buffer {
+            let mut buffer_json = String::new();
+            buffer_json.push_str(&serde_json::to_string(entry)?);
+            buffer_json.push('\n');
+            self.storage
+                .write_all(buffer_json.as_bytes())
+                .context("could not write metrics entry to buffer file")?;
+        }
+        self.storage.flush()?;
+        Ok(())
+    }
+
     /// Pushes a new metric entry to the buffer and syncs it to the buffer file
     fn push(&mut self, entry: MetricEntry) -> Result<()> {
         debug!("pushing entry to metrics buffer: {entry:?}");
 
-        // update file with new entry
+        // Enforce maximum buffer size by removing oldest entry if at capacity
+        let needs_rewrite = if self.buffer.len() >= MAX_BUFFER_SIZE {
+            debug!("Buffer at max size ({MAX_BUFFER_SIZE}), removing oldest entry");
+            self.buffer.pop_front();
+            true
+        } else {
+            false
+        };
+
+        // update the buffer in memory
+        self.buffer.push_back(entry);
+
+        if needs_rewrite {
+            // Rewrite the entire file when we've hit the limit
+            self.overwrite_file()?;
+        } else {
+            // Just append the new entry
         // [MetricsBuffer::read] ensures that the file is opened with write permissions
         // and append mode.
         let mut buffer_json = String::new();
-        buffer_json.push_str(&serde_json::to_string(&entry)?);
+            buffer_json.push_str(&serde_json::to_string(self.buffer.back().unwrap())?);
         buffer_json.push('\n');
         self.storage
             .write_all(buffer_json.as_bytes())
             .context("could not write new metrics entry to buffer file")?;
         self.storage.flush()?;
-
-        // update the buffer in memory
-        self.buffer.push_back(entry);
+        }
 
         Ok(())
     }
