@@ -46,6 +46,7 @@ pub use core_environment::{
 };
 
 pub mod fetcher;
+pub mod floxmeta_branch;
 pub mod generations;
 pub mod managed_environment;
 pub mod path_environment;

@@ -31,8 +31,8 @@ use super::{
 };
 use crate::flox::{EnvironmentOwner, Flox, RemoteEnvironmentRef};
 use crate::models::environment::RenderedEnvironmentLink;
+use crate::models::environment::floxmeta_branch::{FloxmetaBranch, FloxmetaBranchError};
 use crate::models::environment_ref::EnvironmentName;
-use crate::models::floxmeta::{FloxMeta, FloxMetaError};
 use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::PackageToInstall;
 
@@ -47,7 +47,7 @@ pub enum RemoteEnvironmentError {
     CreateGcRootDir(#[source] std::io::Error),
 
     #[error("could not get latest version of environment")]
-    GetLatestVersion(#[source] FloxMetaError),
+    GetLatestVersion(#[source] FloxmetaBranchError),
 
     #[error("could not reset managed environment")]
     ResetManagedEnvironment(#[source] ManagedEnvironmentError),
@@ -114,20 +114,14 @@ impl RemoteEnvironment {
         pointer: ManagedPointer,
         generation: Option<GenerationId>,
     ) -> Result<Self, RemoteEnvironmentError> {
-        let floxmeta = match FloxMeta::open(flox, &pointer) {
-            Ok(floxmeta) => floxmeta,
-            Err(FloxMetaError::NotFound(_)) => {
-                debug!("cloning floxmeta for {}", pointer.owner);
-                FloxMeta::clone(flox, &pointer).map_err(RemoteEnvironmentError::GetLatestVersion)?
-            },
-            Err(e) => Err(RemoteEnvironmentError::GetLatestVersion(e))?,
-        };
-
         let path = path.as_ref().join(DOT_FLOX);
         fs::create_dir_all(&path).map_err(RemoteEnvironmentError::CreateTempDotFlox)?;
 
         let dot_flox_path =
             CanonicalPath::new(&path).map_err(RemoteEnvironmentError::InvalidTempPath)?;
+
+        let (floxmeta_branch, _lock) = FloxmetaBranch::new(flox, &pointer, &dot_flox_path, None)
+            .map_err(RemoteEnvironmentError::GetLatestVersion)?;
 
         let pointer_content = serde_json::to_string_pretty(&pointer).unwrap();
         fs::write(
@@ -165,8 +159,8 @@ impl RemoteEnvironment {
         };
 
         let mut inner = ManagedEnvironment::open_with(
-            floxmeta,
             flox,
+            floxmeta_branch,
             pointer.clone(),
             dot_flox_path,
             inner_rendered_env_links,
