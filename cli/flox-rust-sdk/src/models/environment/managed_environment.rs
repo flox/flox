@@ -721,6 +721,16 @@ impl GenerationsExt for ManagedEnvironment {
         Ok(())
     }
 
+    fn remote_lockfile_contents_for_current_generation(&self) -> Result<String, GenerationsError> {
+        Generations::new(self.floxmeta.git.clone(), remote_branch_name(&self.pointer))
+            .current_gen_lockfile()
+    }
+
+    fn remote_manifest_contents_for_current_generation(&self) -> Result<String, GenerationsError> {
+        Generations::new(self.floxmeta.git.clone(), remote_branch_name(&self.pointer))
+            .current_gen_manifest()
+    }
+
     fn lockfile_contents_for_generation(
         &self,
         generation: usize,
@@ -3567,5 +3577,57 @@ mod test {
         });
 
         assert!(floxmeta_dir.exists());
+    }
+
+    /// Test that remote_lockfile_contents_for_current_generation returns remote data, not local
+    #[tokio::test(flavor = "multi_thread")]
+    async fn remote_lockfile_contents_returns_remote_not_local() {
+        use crate::models::lockfile::Lockfile;
+
+        let owner = "owner".parse().unwrap();
+        let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("empty.yaml")).await;
+        let initial_manifest = indoc! {r#"
+            version = 1
+            [install]
+        "#};
+
+        let mut environment = mock_managed_environment_in(
+            &flox,
+            initial_manifest,
+            owner.clone(),
+            &tempdir,
+            Some("test-env"),
+        );
+
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+        environment
+            .install(
+                &[PackageToInstall::parse(&flox.system, "hello").unwrap()],
+                &flox,
+            )
+            .unwrap();
+
+        // Get remote lockfile
+        environment.fetch_remote_state(&flox).unwrap();
+        let remote_lockfile_contents = environment
+            .remote_lockfile_contents_for_current_generation()
+            .unwrap();
+        let remote_lockfile: Lockfile = serde_json::from_str(&remote_lockfile_contents).unwrap();
+
+        // Verify local lockfile has a package
+        let local_lockfile: Lockfile = environment.lockfile(&flox).unwrap().into();
+        let local_packages = local_lockfile.list_packages(&flox.system).unwrap();
+        assert_eq!(local_packages.len(), 1, "Local should have hello");
+
+        // Verify remote lockfile has no packages yet
+        let packages = remote_lockfile.list_packages(&flox.system).unwrap();
+        assert_eq!(
+            packages.len(),
+            0,
+            "Remote should not yet have hello package"
+        );
     }
 }
