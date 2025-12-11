@@ -23,6 +23,9 @@ pub struct History {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
+    #[bpaf(long, short)]
+    upstream: bool,
+
     #[bpaf(external(output_mode))]
     output_mode: OutputMode,
 
@@ -50,7 +53,11 @@ impl History {
         environment_subcommand_metric!("generations::history", env);
 
         let env: GenerationsEnvironment = env.try_into()?;
-        let metadata = env.generations_metadata()?;
+        let metadata = if self.upstream {
+            env.remote_generations_metadata()?
+        } else {
+            env.generations_metadata()?
+        };
 
         let output = match self.output_mode {
             OutputMode::Pretty => DisplayHistory {

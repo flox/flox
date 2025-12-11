@@ -25,6 +25,9 @@ pub struct List {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
+    #[bpaf(long, short)]
+    upstream: bool,
+
     #[bpaf(external(output_mode))]
     output_mode: OutputMode,
 
@@ -59,7 +62,11 @@ impl List {
         );
 
         let env: GenerationsEnvironment = env.try_into()?;
-        let metadata = env.generations_metadata()?;
+        let metadata = if self.upstream {
+            env.remote_generations_metadata()?
+        } else {
+            env.generations_metadata()?
+        };
 
         let output = match self.output_mode {
             OutputMode::Pretty => DisplayAllMetadata {
