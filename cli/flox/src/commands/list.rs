@@ -1,8 +1,10 @@
 use std::io::{Write, stdout};
+use std::str::FromStr;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment::generations::GenerationsExt;
 use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
     Environment,
@@ -26,6 +28,9 @@ use crate::utils::tracing::sentry_set_tag;
 pub struct List {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
+
+    #[bpaf(long, short)]
+    upstream: bool,
 
     #[bpaf(external(list_mode), fallback(ListMode::Extended))]
     list_mode: ListMode,
@@ -60,9 +65,39 @@ impl List {
             .detect_concrete_environment(&flox, "List using")?;
         environment_subcommand_metric!("list", env);
 
-        let lockfile = env.lockfile(&flox)?.into();
+        let (manifest_contents, lockfile) = match (&mut env, self.upstream) {
+            (ConcreteEnvironment::Path(_), true) => {
+                bail!("'--upstream' can not be used with path environments");
+            },
+            (ConcreteEnvironment::Managed(managed_environment), true) => {
+                managed_environment.fetch_remote_state(&flox)?;
+
+                let remote_manifest_contents =
+                    managed_environment.remote_manifest_contents_for_current_generation()?;
+
+                let remote_lockfile_contents =
+                    managed_environment.remote_lockfile_contents_for_current_generation()?;
+                let lockfile = Lockfile::from_str(&remote_lockfile_contents)?;
+
+                (remote_manifest_contents, lockfile)
+            },
+            (ConcreteEnvironment::Remote(remote_environment), true) => {
+                remote_environment.fetch_remote_state(&flox)?;
+
+                let remote_manifest_contents =
+                    remote_environment.remote_manifest_contents_for_current_generation()?;
+
+                let remote_lockfile_contents =
+                    remote_environment.remote_lockfile_contents_for_current_generation()?;
+                let lockfile = Lockfile::from_str(&remote_lockfile_contents)?;
+
+                (remote_manifest_contents, lockfile)
+            },
+            (env, false) => (env.manifest_contents(&flox)?, env.lockfile(&flox)?.into()),
+        };
+
         if self.list_mode == ListMode::Config {
-            Self::print_config(&flox, &env, &lockfile)?;
+            Self::print_config(&lockfile, &manifest_contents)?;
             return Ok(());
         }
 
@@ -87,14 +122,22 @@ impl List {
                 Self::print_extended(
                     stdout().lock(),
                     &packages,
-                    List::get_cached_upgrades_for_current_system(&flox, &mut env)?,
+                    if self.upstream {
+                        None
+                    } else {
+                        List::get_cached_upgrades_for_current_system(&flox, &mut env)?
+                    },
                 )?;
             },
             ListMode::All => {
                 Self::print_detail(
                     stdout().lock(),
                     &packages,
-                    List::get_cached_upgrades_for_current_system(&flox, &mut env)?,
+                    if self.upstream {
+                        None
+                    } else {
+                        List::get_cached_upgrades_for_current_system(&flox, &mut env)?
+                    },
                 )?;
             },
             ListMode::Config => unreachable!(),
@@ -108,23 +151,25 @@ impl List {
     /// configure the serializer to produce output closer to the reference
     /// style.
     fn manifest_contents_to_print(
-        flox: &Flox,
-        env: &ConcreteEnvironment,
         lockfile: &Lockfile,
+        manifest_contents: impl Into<String>,
     ) -> Result<String> {
         let is_composed = lockfile.compose.is_some();
         let manifest_contents = if is_composed {
             render_composition_manifest(&lockfile.manifest)?
         } else {
-            env.manifest_contents(flox)?
+            manifest_contents.into()
         };
 
         Ok(manifest_contents)
     }
 
     /// print the manifest contents
-    fn print_config(flox: &Flox, env: &ConcreteEnvironment, lockfile: &Lockfile) -> Result<()> {
-        println!("{}", Self::manifest_contents_to_print(flox, env, lockfile)?);
+    fn print_config(lockfile: &Lockfile, manifest_contents: impl Into<String>) -> Result<()> {
+        println!(
+            "{}",
+            Self::manifest_contents_to_print(lockfile, manifest_contents)?
+        );
         let is_composed = lockfile.compose.is_some();
         if is_composed {
             message::info("Displaying merged manifest.");
@@ -846,12 +891,8 @@ mod tests {
         let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
 
         assert_eq!(
-            List::manifest_contents_to_print(
-                &flox,
-                &ConcreteEnvironment::Path(composer),
-                &lockfile
-            )
-            .unwrap(),
+            List::manifest_contents_to_print(&lockfile, composer.manifest_contents(&flox).unwrap())
+                .unwrap(),
             indoc! {r#"
                 version = 1
 
@@ -862,5 +903,33 @@ mod tests {
                 sleep2.is-daemon = true
             "#}
         );
+    }
+
+    /// Test that --upstream errors with path environment
+    #[tokio::test]
+    async fn list_upstream_errors_with_path_environment() {
+        let (flox, tempdir) = flox_instance();
+
+        let path_manifest = indoc! {r#"
+            version = 1
+            [install]
+            hello.pkg-path = "hello"
+        "#};
+        let path_env = new_path_environment_in(&flox, path_manifest, tempdir.path());
+        let result = List {
+            environment: EnvironmentSelect::Dir(path_env.project_path().unwrap()),
+            upstream: true,
+            list_mode: ListMode::All,
+        }
+        .handle(flox)
+        .await;
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("can not be used with path environments")
+        )
     }
 }
