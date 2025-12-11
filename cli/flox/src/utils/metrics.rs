@@ -27,6 +27,7 @@ pub const METRICS_UUID_FILE_NAME: &str = "metrics-uuid";
 pub const METRICS_LOCK_FILE_NAME: &str = "metrics-lock";
 const DEFAULT_BUFFER_EXPIRY: Duration = Duration::minutes(2);
 const MAX_BUFFER_SIZE: usize = 1000;
+const BATCH_SIZE: usize = 100;
 
 pub static METRICS_EVENTS_URL: LazyLock<String> = LazyLock::new(|| {
     std::env::var("_FLOX_METRICS_URL_OVERRIDE").unwrap_or(env!("METRICS_EVENTS_URL").to_string())
@@ -285,29 +286,17 @@ impl MetricsBuffer {
             self.overwrite_file()?;
         } else {
             // Just append the new entry
-        // [MetricsBuffer::read] ensures that the file is opened with write permissions
-        // and append mode.
-        let mut buffer_json = String::new();
+            // [MetricsBuffer::read] ensures that the file is opened with write permissions
+            // and append mode.
+            let mut buffer_json = String::new();
             buffer_json.push_str(&serde_json::to_string(self.buffer.back().unwrap())?);
-        buffer_json.push('\n');
-        self.storage
-            .write_all(buffer_json.as_bytes())
-            .context("could not write new metrics entry to buffer file")?;
-        self.storage.flush()?;
+            buffer_json.push('\n');
+            self.storage
+                .write_all(buffer_json.as_bytes())
+                .context("could not write new metrics entry to buffer file")?;
+            self.storage.flush()?;
         }
 
-        Ok(())
-    }
-
-    /// Clears the buffer and the buffer file
-    ///
-    /// This is used when the buffer is pushed to the server
-    /// and we start collecting metrics in a new buffer.
-    fn clear(&mut self) -> Result<()> {
-        self.storage
-            .set_len(0)
-            .context("Could not truncate metrics buffer file")?;
-        self.buffer.clear();
         Ok(())
     }
 
@@ -600,15 +589,30 @@ impl Client {
         })
     }
 
-    /// Send the metrics to the telemetry backend and clear the buffer file.
+    /// Send the metrics to the telemetry backend and remove sent entries from the buffer.
     ///
     /// Any connection errors will bubble up and be caught by the event handler.
-    /// If the network request failed, the buffer file is _not_ cleared.
+    /// If the network request failed, the buffer file is _not_ modified.
+    ///
+    /// Sends metrics in batches of MAX_BUFFER_SIZE entries. After each successful batch,
+    /// the buffer file is overwritten to remove the sent entries.
     fn flush(&mut self, force: bool) -> Result<()> {
         let mut metrics = MetricsBuffer::read(&self.metrics_dir)?;
         if metrics.is_expired(self.max_age) || force {
-            self.connection.send(metrics.iter().collect())?;
-            metrics.clear()?;
+            // Send metrics in batches
+            while !metrics.buffer.is_empty() {
+                let batch_size = std::cmp::min(metrics.buffer.len(), BATCH_SIZE);
+                let batch: Vec<&MetricEntry> = metrics.iter().take(batch_size).collect();
+
+                // Send the batch
+                self.connection.send(batch)?;
+
+                // Remove sent entries from the buffer
+                metrics.buffer.drain(..batch_size);
+
+                // Update the file to reflect what hasn't been sent yet
+                metrics.overwrite_file()?;
+            }
         }
         Ok(())
     }
@@ -739,7 +743,7 @@ mod tests {
 
     /// Test that the [MetricsBuffer] clears entries as expected
     #[test]
-    fn test_metrics_buffer_clear() {
+    fn test_metrics_buffer_overwrite() {
         let tempdir = tempfile::tempdir().unwrap();
 
         let mut buffer = MetricsBuffer::read(tempdir.as_ref()).unwrap();
@@ -750,7 +754,10 @@ mod tests {
         buffer.push(entry_foo.clone()).unwrap();
         buffer.push(entry_bar.clone()).unwrap();
 
-        buffer.clear().unwrap();
+        buffer.buffer.pop_back();
+        buffer.buffer.pop_back();
+
+        buffer.overwrite_file().unwrap();
 
         assert_eq!(buffer.buffer.len(), 0);
         assert_eq!(buffer.oldest_timestamp(), None);
