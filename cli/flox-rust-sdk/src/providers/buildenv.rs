@@ -1115,7 +1115,7 @@ mod realise_nixpkgs_tests {
 
     use super::*;
     use crate::models::lockfile;
-    use crate::models::manifest::typed::PackageDescriptorCatalog;
+    use crate::models::manifest::typed::PackageDescriptorCatalogV1;
     use crate::providers::catalog::{GENERATED_DATA, MockClient, StoreInfo, StoreInfoResponse};
     use crate::providers::nix::test_helpers::known_store_path;
 
@@ -1156,7 +1156,7 @@ mod realise_nixpkgs_tests {
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
 
         // make a new custom manifest descriptor such that we determine this is a published package
-        let manifest_package = ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
+        let manifest_package = ManifestPackageDescriptor::CatalogV1(PackageDescriptorCatalogV1 {
             pkg_path: "custom/hello".to_string(),
             pkg_group: Some("my_group".to_string()),
             priority: None,

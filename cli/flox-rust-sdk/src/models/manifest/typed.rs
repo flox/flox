@@ -13,13 +13,15 @@ use flox_test_utils::proptest::{
     optional_btree_set,
     optional_string,
     optional_vec_of_strings,
+    vec_of_strings,
 };
 use indoc::formatdoc;
 use itertools::Itertools;
 #[cfg(test)]
 use proptest::prelude::*;
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::ser::SerializeSeq;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::skip_serializing_none;
 use systemd::unit::ServiceUnit;
 
@@ -74,11 +76,20 @@ pub(crate) trait SkipSerializing {
 /// Modifications should be made using `manifest::raw`.
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
 #[serde(untagged)]
 pub enum Manifest {
     V1(ManifestV1),
+}
+
+#[cfg(test)]
+impl Arbitrary for Manifest {
+    type Parameters = ();
+    type Strategy = BoxedStrategy<Self>;
+
+    fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+        proptest::prop_oneof![test::manifest_with_only_v1_descriptors()].boxed()
+    }
 }
 
 impl Default for Manifest {
@@ -204,7 +215,7 @@ impl Manifest {
 }
 
 impl FromStr for Manifest {
-    type Err = toml_edit::de::Error;
+    type Err = ManifestError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         RawManifest::from_str(s)?.to_typed()
@@ -264,8 +275,9 @@ pub(crate) fn pkg_descriptors_in_toplevel_group(
     descriptors
         .iter()
         .filter(|(_, desc)| {
-            let ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog { pkg_group, .. }) =
-                desc
+            let ManifestPackageDescriptor::CatalogV1(PackageDescriptorCatalogV1 {
+                pkg_group, ..
+            }) = desc
             else {
                 return false;
             };
@@ -283,8 +295,9 @@ pub(crate) fn pkg_descriptors_in_named_group(
     descriptors
         .iter()
         .filter(|(_, desc)| {
-            let ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog { pkg_group, .. }) =
-                desc
+            let ManifestPackageDescriptor::CatalogV1(PackageDescriptorCatalogV1 {
+                pkg_group, ..
+            }) = desc
             else {
                 return false;
             };
@@ -304,7 +317,7 @@ fn pkg_or_group_found_in_manifest(
     descriptors: &BTreeMap<String, ManifestPackageDescriptor>,
 ) -> bool {
     descriptors.iter().any(|(id, desc)| {
-        let group = if let ManifestPackageDescriptor::Catalog(catalog) = desc {
+        let group = if let ManifestPackageDescriptor::CatalogV1(catalog) = desc {
             catalog.pkg_group.as_deref()
         } else {
             None
@@ -325,7 +338,8 @@ fn pkg_belongs_to_non_empty_named_group(
         .get(pkg)
         .ok_or(ManifestError::PkgOrGroupNotFound(pkg.to_string()))?;
 
-    let ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog { pkg_group, .. }) = descriptor
+    let ManifestPackageDescriptor::CatalogV1(PackageDescriptorCatalogV1 { pkg_group, .. }) =
+        descriptor
     else {
         return Ok(None);
     };
@@ -385,7 +399,7 @@ impl Install {
     pub fn catalog_pkg_descriptor_with_id(
         &self,
         id: impl AsRef<str>,
-    ) -> Option<PackageDescriptorCatalog> {
+    ) -> Option<PackageDescriptorCatalogV1> {
         self.0
             .get(id.as_ref())
             .and_then(ManifestPackageDescriptor::as_catalog_descriptor_ref)
@@ -459,7 +473,7 @@ impl Install {
 
                     // If the descriptor is not a catalog descriptor, skip.
                     // flakes descriptors are only matched by install_id.
-                    let ManifestPackageDescriptor::Catalog(des) = descriptor else {
+                    let ManifestPackageDescriptor::CatalogV1(des) = descriptor else {
                         return false;
                     };
 
@@ -499,7 +513,7 @@ impl Install {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 // todo: this can make the error messages less clear and might call for a custom (de)serialize impl
 #[serde(
@@ -508,9 +522,55 @@ impl Install {
 See https://flox.dev/docs/reference/command-reference/manifest.toml/#package-descriptors for more information."
 )]
 pub enum ManifestPackageDescriptor {
-    Catalog(PackageDescriptorCatalog),
+    CatalogV1(PackageDescriptorCatalogV1),
+    CatalogV2(PackageDescriptorCatalogV2),
     FlakeRef(PackageDescriptorFlake),
     StorePath(PackageDescriptorStorePath),
+}
+
+impl PartialEq<ManifestPackageDescriptor> for ManifestPackageDescriptor {
+    fn eq(&self, other: &ManifestPackageDescriptor) -> bool {
+        use ManifestPackageDescriptor::*;
+        match (self, other) {
+            // These are the obvious ones
+            (CatalogV1(a), CatalogV1(b)) => a.eq(b),
+            (CatalogV2(a), CatalogV2(b)) => a.eq(b),
+            (FlakeRef(a), FlakeRef(b)) => a.eq(b),
+            (StorePath(a), StorePath(b)) => a.eq(b),
+            // We need to treat these as equal if all fields are equal and
+            // the v2 descriptor doesn't have an `outputs` field.
+            (CatalogV1(a), CatalogV2(b)) => a.eq(b),
+            (CatalogV2(a), CatalogV1(b)) => a.eq(b),
+            _ => false,
+        }
+    }
+}
+
+impl std::hash::Hash for ManifestPackageDescriptor {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Normalize v1 descriptors to v2 descriptors with `outputs = None`
+        // since Hash takes into account the enum discriminant. In other words,
+        // event if `v1.eq(v2) == true` you'll get different hashes because it
+        // takes into account which enum variant you're looking at. This breaks
+        // an invariant required by the Hash trait.
+        use ManifestPackageDescriptor::*;
+        match self {
+            CatalogV1(v1) => {
+                let v2 = PackageDescriptorCatalogV2 {
+                    pkg_path: v1.pkg_path.clone(),
+                    pkg_group: v1.pkg_group.clone(),
+                    priority: v1.priority,
+                    version: v1.version.clone(),
+                    systems: v1.systems.clone(),
+                    outputs: None,
+                };
+                v2.hash(state);
+            },
+            CatalogV2(v2) => v2.hash(state),
+            FlakeRef(flake_ref) => flake_ref.hash(state),
+            StorePath(store_path) => store_path.hash(state),
+        }
+    }
 }
 
 impl ManifestPackageDescriptor {
@@ -518,7 +578,9 @@ impl ManifestPackageDescriptor {
     /// Only Catalog type descriptors are considered to be from a custom catalog.
     pub(crate) fn is_from_custom_catalog(&self) -> bool {
         match self {
-            ManifestPackageDescriptor::Catalog(pkg) => super::raw::is_custom_package(&pkg.pkg_path),
+            ManifestPackageDescriptor::CatalogV1(pkg) => {
+                super::raw::is_custom_package(&pkg.pkg_path)
+            },
             _ => false,
         }
     }
@@ -535,7 +597,8 @@ impl ManifestPackageDescriptor {
     pub(crate) fn invalidates_existing_resolution(&self, other: &Self) -> bool {
         use ManifestPackageDescriptor::*;
         match (self, other) {
-            (Catalog(this), Catalog(other)) => this.invalidates_existing_resolution(other),
+            (CatalogV1(this), CatalogV1(other)) => this.invalidates_existing_resolution(other),
+            (CatalogV2(this), CatalogV2(other)) => this.invalidates_existing_resolution(other),
             (FlakeRef(this), FlakeRef(other)) => this != other,
             // different types of descriptors are always different
             _ => true,
@@ -543,17 +606,17 @@ impl ManifestPackageDescriptor {
     }
 
     #[must_use]
-    pub fn unwrap_catalog_descriptor(self) -> Option<PackageDescriptorCatalog> {
+    pub fn unwrap_catalog_descriptor(self) -> Option<PackageDescriptorCatalogV1> {
         match self {
-            ManifestPackageDescriptor::Catalog(descriptor) => Some(descriptor),
+            ManifestPackageDescriptor::CatalogV1(descriptor) => Some(descriptor),
             _ => None,
         }
     }
 
     #[must_use]
-    pub fn as_catalog_descriptor_ref(&self) -> Option<&PackageDescriptorCatalog> {
+    pub fn as_catalog_descriptor_ref(&self) -> Option<&PackageDescriptorCatalogV1> {
         match self {
-            ManifestPackageDescriptor::Catalog(descriptor) => Some(descriptor),
+            ManifestPackageDescriptor::CatalogV1(descriptor) => Some(descriptor),
             _ => None,
         }
     }
@@ -591,15 +654,27 @@ impl ManifestPackageDescriptor {
     }
 }
 
-impl From<&PackageDescriptorCatalog> for ManifestPackageDescriptor {
-    fn from(val: &PackageDescriptorCatalog) -> Self {
-        ManifestPackageDescriptor::Catalog(val.clone())
+impl From<&PackageDescriptorCatalogV1> for ManifestPackageDescriptor {
+    fn from(val: &PackageDescriptorCatalogV1) -> Self {
+        ManifestPackageDescriptor::CatalogV1(val.clone())
     }
 }
 
-impl From<PackageDescriptorCatalog> for ManifestPackageDescriptor {
-    fn from(val: PackageDescriptorCatalog) -> Self {
-        ManifestPackageDescriptor::Catalog(val)
+impl From<PackageDescriptorCatalogV1> for ManifestPackageDescriptor {
+    fn from(val: PackageDescriptorCatalogV1) -> Self {
+        ManifestPackageDescriptor::CatalogV1(val)
+    }
+}
+
+impl From<&PackageDescriptorCatalogV2> for ManifestPackageDescriptor {
+    fn from(val: &PackageDescriptorCatalogV2) -> Self {
+        ManifestPackageDescriptor::CatalogV2(val.clone())
+    }
+}
+
+impl From<PackageDescriptorCatalogV2> for ManifestPackageDescriptor {
+    fn from(val: PackageDescriptorCatalogV2) -> Self {
+        ManifestPackageDescriptor::CatalogV2(val)
     }
 }
 
@@ -632,7 +707,7 @@ impl From<PackageDescriptorStorePath> for ManifestPackageDescriptor {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
-pub struct PackageDescriptorCatalog {
+pub struct PackageDescriptorCatalogV1 {
     #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
     pub pkg_path: String,
     #[cfg_attr(test, proptest(strategy = "optional_string(5)"))]
@@ -645,7 +720,7 @@ pub struct PackageDescriptorCatalog {
     pub systems: Option<Vec<System>>,
 }
 
-impl PackageDescriptorCatalog {
+impl PackageDescriptorCatalogV1 {
     /// Check if two package descriptors should have the same resolution.
     /// This is used to determine if a package needs to be re-resolved
     /// in the presence of an existing lock.
@@ -655,7 +730,7 @@ impl PackageDescriptorCatalog {
     /// * Priority is not used in resolution, so it is ignored.
     pub(super) fn invalidates_existing_resolution(&self, other: &Self) -> bool {
         // unpack to avoid forgetting to update this method when new fields are added
-        let PackageDescriptorCatalog {
+        let PackageDescriptorCatalogV1 {
             pkg_path,
             pkg_group,
             version,
@@ -664,6 +739,199 @@ impl PackageDescriptorCatalog {
         } = self;
 
         pkg_path != &other.pkg_path || pkg_group != &other.pkg_group || version != &other.version
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct PackageDescriptorCatalogV2 {
+    #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
+    pub pkg_path: String,
+    #[cfg_attr(test, proptest(strategy = "optional_string(5)"))]
+    pub pkg_group: Option<String>,
+    #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10u64)"))]
+    pub priority: Option<u64>,
+    #[cfg_attr(test, proptest(strategy = "optional_string(5)"))]
+    pub version: Option<String>,
+    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
+    pub systems: Option<Vec<System>>,
+    #[serde(deserialize_with = "deserialize_outputs")]
+    // #[serde(serialize_with = "serialize_outputs")]
+    pub outputs: Option<SelectedOutputs>,
+}
+
+impl PackageDescriptorCatalogV2 {
+    /// Check if two package descriptors should have the same resolution.
+    /// This is used to determine if a package needs to be re-resolved
+    /// in the presence of an existing lock.
+    ///
+    /// * Descriptors are resolved per system,
+    ///   changing the supported systems does not invalidate _existing_ resolutions.
+    /// * Priority is not used in resolution, so it is ignored.
+    pub(super) fn invalidates_existing_resolution(&self, other: &Self) -> bool {
+        // unpack to avoid forgetting to update this method when new fields are added
+        let PackageDescriptorCatalogV2 {
+            pkg_path,
+            pkg_group,
+            version,
+            systems: _,
+            priority: _,
+            outputs: _,
+        } = self;
+
+        pkg_path != &other.pkg_path || pkg_group != &other.pkg_group || version != &other.version
+    }
+
+    /// Return a copy of this v2 package descriptor as a v1 package descriptor
+    /// if it doesn't contain an `outputs` field, otherwise return `None`.
+    fn as_v1(&self) -> Option<PackageDescriptorCatalogV1> {
+        match self.outputs {
+            Some(_) => None,
+            None => Some(PackageDescriptorCatalogV1 {
+                pkg_path: self.pkg_path.clone(),
+                pkg_group: self.pkg_group.clone(),
+                priority: self.priority,
+                version: self.version.clone(),
+                systems: self.systems.clone(),
+            }),
+        }
+    }
+}
+
+// NOTE: this is structural equality, not semantic equality
+impl PartialEq<PackageDescriptorCatalogV1> for PackageDescriptorCatalogV2 {
+    fn eq(&self, other: &PackageDescriptorCatalogV1) -> bool {
+        self.as_v1().is_some_and(|v1_pd| &v1_pd == other)
+    }
+}
+
+// NOTE: this is structural equality, not semantic equality
+impl PartialEq<PackageDescriptorCatalogV2> for PackageDescriptorCatalogV1 {
+    fn eq(&self, other: &PackageDescriptorCatalogV2) -> bool {
+        other.as_v1().is_some_and(|v1_pd| &v1_pd == self)
+    }
+}
+
+impl From<PackageDescriptorCatalogV1> for PackageDescriptorCatalogV2 {
+    fn from(v1: PackageDescriptorCatalogV1) -> Self {
+        PackageDescriptorCatalogV2 {
+            pkg_path: v1.pkg_path,
+            pkg_group: v1.pkg_group,
+            priority: v1.priority,
+            version: v1.version,
+            systems: v1.systems,
+            outputs: None,
+        }
+    }
+}
+
+impl From<&PackageDescriptorCatalogV1> for PackageDescriptorCatalogV2 {
+    fn from(v1: &PackageDescriptorCatalogV1) -> Self {
+        PackageDescriptorCatalogV2 {
+            pkg_path: v1.pkg_path.clone(),
+            pkg_group: v1.pkg_group.clone(),
+            priority: v1.priority,
+            version: v1.version.clone(),
+            systems: v1.systems.clone(),
+            outputs: None,
+        }
+    }
+}
+
+impl From<&mut PackageDescriptorCatalogV1> for PackageDescriptorCatalogV2 {
+    fn from(v1: &mut PackageDescriptorCatalogV1) -> Self {
+        PackageDescriptorCatalogV2 {
+            pkg_path: v1.pkg_path.clone(),
+            pkg_group: v1.pkg_group.clone(),
+            priority: v1.priority,
+            version: v1.version.clone(),
+            systems: v1.systems.clone(),
+            outputs: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, Hash, JsonSchema)]
+#[serde(untagged)]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub enum SelectedOutputs {
+    #[serde(serialize_with = "serialize_all_outputs")]
+    All,
+    #[serde(serialize_with = "serialize_specific_outputs")]
+    Specific(Vec<String>),
+}
+
+fn deserialize_outputs<'de, D>(deserializer: D) -> Result<Option<SelectedOutputs>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    // We can only deserialize once because doing so consumes the deserializer,
+    // so we deserialize into a dynamic, intermediate value that we can inspect
+    // without consuming it.
+    let json = serde_json::Value::deserialize(deserializer)?;
+    let err =
+        serde::de::Error::custom("'outputs' must be either \"all\" or a list of output names");
+    match json {
+        serde_json::Value::String(s) => {
+            if s == "all" {
+                Ok(Some(SelectedOutputs::All))
+            } else {
+                Err(err)
+            }
+        },
+        serde_json::Value::Array(values) => {
+            let output_names = values
+                .into_iter()
+                .map(|v| {
+                    v.as_str()
+                        .map(|s| s.to_string())
+                        .ok_or(serde::de::Error::custom(
+                            // lifetime bullshit makes us duplicate this here
+                            "'outputs' must be either \"all\" or a list of output names",
+                        ))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Some(SelectedOutputs::Specific(output_names)))
+        },
+        _ => Err(err),
+    }
+}
+
+// Only applied to the All variant, so we can make assumptions about the contents
+fn serialize_all_outputs<S>(serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str("all")
+}
+
+// Only applied to the All variant, so we can make assumptions about the contents
+fn serialize_specific_outputs<S>(outputs: &[String], serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let mut seq = serializer.serialize_seq(Some(outputs.len()))?;
+    for output in outputs.iter() {
+        seq.serialize_element(output)?;
+    }
+    seq.end()
+}
+
+#[cfg(test)]
+impl Arbitrary for SelectedOutputs {
+    type Parameters = ();
+    type Strategy = BoxedStrategy<SelectedOutputs>;
+
+    fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+        prop_oneof!(
+            Just(SelectedOutputs::All),
+            vec_of_strings(3, 4).prop_map(SelectedOutputs::Specific)
+        )
+        .boxed()
     }
 }
 
@@ -1116,7 +1384,7 @@ pub struct ContainerizeConfig {
     pub stop_signal: Option<String>,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, PartialEq)]
 pub enum ManifestError {
     #[error("no package or group named '{0}' in the manifest")]
     PkgOrGroupNotFound(String),
@@ -1128,6 +1396,18 @@ pub enum ManifestError {
     MultiplePackagesMatch(String, Vec<String>),
     #[error("not a valid activation mode")]
     ActivateModeInvalid,
+    #[error("failed to parse manifest: {0}")]
+    Deserialize(toml_edit::de::Error),
+    #[error("failed to parse manifest: {0}")]
+    Parse(toml_edit::TomlError),
+    #[error(
+        "package {0} specifies outputs, but 'outputs' is only valid with manifest schema version 2"
+    )]
+    V1HasOutputs(String),
+    #[error("unsupported manifest version: {0}")]
+    UnsupportedVersion(i64),
+    #[error("manifest must contain a 'version' field")]
+    MissingVersion,
 }
 
 /// The section where users can declare dependencies on other environments.
@@ -1219,6 +1499,58 @@ pub mod test {
         }))
     }
 
+    pub fn install_with_only_v1_descriptors() -> impl Strategy<Value = Install> {
+        btree_map_strategy::<PackageDescriptorCatalogV1>(10, 3).prop_map(|map| {
+            let pkgs = map
+                .into_iter()
+                .map(|(key, value)| (key, ManifestPackageDescriptor::CatalogV1(value)))
+                .collect::<BTreeMap<_, _>>();
+            Install(pkgs)
+        })
+    }
+
+    pub fn manifest_with_only_v1_descriptors() -> impl Strategy<Value = Manifest> {
+        (
+            any::<Version<1>>(),
+            any::<Include>(),
+            install_with_only_v1_descriptors(),
+            any::<Vars>(),
+            any::<Option<Hook>>(),
+            any::<Option<Profile>>(),
+            any::<Options>(),
+            any::<Services>(),
+            any::<Build>(),
+            any::<Option<Containerize>>(),
+        )
+            .prop_map(
+                |(
+                    version,
+                    include,
+                    install,
+                    vars,
+                    hook,
+                    profile,
+                    options,
+                    services,
+                    build,
+                    containerize,
+                )| {
+                    Manifest::V1(ManifestV1 {
+                        version,
+                        include,
+                        install,
+                        vars,
+                        hook,
+                        profile,
+                        options,
+                        services,
+                        build,
+                        containerize,
+                    })
+                },
+            )
+    }
+
     // Generate a Manifest that has empty install and include sections
     pub fn manifest_without_install_or_include() -> impl Strategy<Value = Manifest> {
         (
@@ -1257,12 +1589,11 @@ pub mod test {
             unknown = 'field'
         "};
 
-        let err = toml_edit::de::from_str::<Manifest>(&manifest)
-            .expect_err("manifest.toml should be invalid");
+        let err = Manifest::from_str(&manifest).expect_err("manifest.toml should be invalid");
 
         assert!(
-            err.message()
-                .starts_with("unknown field `unknown`, expected one of"),
+            err.to_string()
+                .starts_with("failed to parse manifest: unknown field `unknown`, expected one of"),
             "unexpected error message: {err}",
         );
     }
@@ -1276,12 +1607,11 @@ pub mod test {
             allow.unknown = true
         "};
 
-        let err = toml_edit::de::from_str::<Manifest>(&manifest)
-            .expect_err("manifest.toml should be invalid");
+        let err = Manifest::from_str(&manifest).expect_err("manifest.toml should be invalid");
 
         assert!(
-            err.message()
-                .starts_with("unknown field `unknown`, expected one of"),
+            err.to_string()
+                .starts_with("failed to parse manifest: unknown field `unknown`, expected one of"),
             "unexpected error message: {err}",
         );
     }
@@ -1478,7 +1808,7 @@ pub mod test {
                 { remote = "owner/repo", name = "baz" },
             ]
         "#};
-        let parsed = toml_edit::de::from_str::<Manifest>(manifest).unwrap();
+        let parsed = Manifest::from_str(manifest).unwrap();
 
         assert_eq!(parsed.include().environments, vec![
             IncludeDescriptor::Local {
@@ -1511,7 +1841,7 @@ pub mod test {
         for (test_iid, dotted_package) in entries {
             typed_manifest_mock.install_mut().inner_mut().insert(
                 test_iid.to_string(),
-                ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
+                ManifestPackageDescriptor::CatalogV1(PackageDescriptorCatalogV1 {
                     pkg_path: dotted_package.to_string(),
                     pkg_group: None,
                     priority: None,
@@ -1591,7 +1921,7 @@ pub mod test {
     fn test_get_install_ids_to_uninstall_with_version() {
         let mut manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
 
-        if let ManifestPackageDescriptor::Catalog(descriptor) = manifest_mock
+        if let ManifestPackageDescriptor::CatalogV1(descriptor) = manifest_mock
             .install_mut()
             .inner_mut()
             .get_mut("testInstallID")
@@ -1611,7 +1941,7 @@ pub mod test {
 
     /// Helper function to create a catalog descriptor for testing
     fn create_catalog_descriptor(pkg_path: &str) -> ManifestPackageDescriptor {
-        ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
+        ManifestPackageDescriptor::CatalogV1(PackageDescriptorCatalogV1 {
             pkg_path: pkg_path.to_string(),
             pkg_group: None,
             priority: None,

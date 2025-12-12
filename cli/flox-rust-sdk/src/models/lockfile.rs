@@ -36,7 +36,7 @@ use super::manifest::typed::{
     Manifest,
     ManifestError,
     ManifestPackageDescriptor,
-    PackageDescriptorCatalog,
+    PackageDescriptorCatalogV1,
     PackageDescriptorFlake,
 };
 use crate::data::{CanonicalPath, System};
@@ -256,7 +256,7 @@ impl LockedPackageCatalog {
     /// There may be more validation/parsing we could do here in the future.
     pub fn from_parts(
         package: catalog::PackageResolutionInfo,
-        descriptor: PackageDescriptorCatalog,
+        descriptor: PackageDescriptorCatalogV1,
     ) -> Self {
         // unpack package to avoid missing new fields
         let catalog::PackageResolutionInfo {
@@ -1647,7 +1647,7 @@ impl Lockfile {
 /// TODO: drop in favor of mapping to `(ManifestPackageDescriptor*, LockedPackage*)`
 #[derive(Debug, Clone, PartialEq)]
 pub enum PackageToList {
-    Catalog(PackageDescriptorCatalog, LockedPackageCatalog),
+    Catalog(PackageDescriptorCatalogV1, LockedPackageCatalog),
     Flake(PackageDescriptorFlake, LockedPackageFlake),
     StorePath(LockedPackageStorePath),
 }
@@ -1746,7 +1746,7 @@ pub mod test_helpers {
     ) -> (String, ManifestPackageDescriptor, LockedPackageCatalog) {
         let install_id = format!("{}_install_id", name);
 
-        let descriptor = PackageDescriptorCatalog {
+        let descriptor = PackageDescriptorCatalogV1 {
             pkg_path: name.to_string(),
             pkg_group: group.map(|s| s.to_string()),
             systems: Some(vec![PackageSystem::Aarch64Darwin.to_string()]),
@@ -2276,7 +2276,7 @@ pub(crate) mod tests {
         // Add a package to the manifest that is not already locked
         manifest.install_mut().inner_mut().insert(
             "unlocked".to_string(),
-            PackageDescriptorCatalog {
+            PackageDescriptorCatalogV1 {
                 pkg_path: "unlocked".to_string(),
                 pkg_group: Some("group".to_string()),
                 systems: None,
@@ -2384,7 +2384,7 @@ pub(crate) mod tests {
 
         let (foo_after_iid, mut foo_after_descriptor, _) = fake_catalog_package_lock("foo", None);
 
-        if let ManifestPackageDescriptor::Catalog(ref mut descriptor) = foo_after_descriptor {
+        if let ManifestPackageDescriptor::CatalogV1(ref mut descriptor) = foo_after_descriptor {
             descriptor.pkg_path = "bar".to_string();
         } else {
             panic!("Expected a catalog descriptor");
@@ -2431,7 +2431,7 @@ pub(crate) mod tests {
         // ---------------------------------------------------------------------
 
         let (foo_after_iid, mut foo_after_descriptor, _) = fake_catalog_package_lock("foo", None);
-        if let ManifestPackageDescriptor::Catalog(ref mut descriptor) = foo_after_descriptor {
+        if let ManifestPackageDescriptor::CatalogV1(ref mut descriptor) = foo_after_descriptor {
             descriptor.priority = Some(10);
         } else {
             panic!("Expected a catalog descriptor");
@@ -3031,7 +3031,7 @@ pub(crate) mod tests {
 
         let mut foo_descriptor_two_systems = foo_descriptor_one_system.clone();
 
-        if let ManifestPackageDescriptor::Catalog(descriptor) = &mut foo_descriptor_two_systems {
+        if let ManifestPackageDescriptor::CatalogV1(descriptor) = &mut foo_descriptor_two_systems {
             descriptor
                 .systems
                 .as_mut()
@@ -3096,7 +3096,7 @@ pub(crate) mod tests {
 
         // `fake_package` sets the system to [`Aarch64Darwin`]
         let mut foo_descriptor_two_systems = foo_descriptor_one_system.clone();
-        if let ManifestPackageDescriptor::Catalog(descriptor) = &mut foo_descriptor_two_systems {
+        if let ManifestPackageDescriptor::CatalogV1(descriptor) = &mut foo_descriptor_two_systems {
             descriptor
                 .systems
                 .as_mut()
@@ -3378,7 +3378,7 @@ pub(crate) mod tests {
         manifest.options_mut().systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
         manifest.install_mut().inner_mut().insert(
             "hello".to_string(),
-            ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
+            ManifestPackageDescriptor::CatalogV1(PackageDescriptorCatalogV1 {
                 pkg_path: "hello".to_string(),
                 pkg_group: None,
                 priority: None,
@@ -3729,7 +3729,7 @@ pub(crate) mod tests {
         let (baz_iid, mut baz_descriptor, mut baz_locked) =
             fake_catalog_package_lock("baz", Some("group2"));
 
-        if let ManifestPackageDescriptor::Catalog(ref mut descriptor) = baz_descriptor {
+        if let ManifestPackageDescriptor::CatalogV1(ref mut descriptor) = baz_descriptor {
             descriptor.systems = Some(vec![PackageSystem::Aarch64Linux.to_string()]);
         } else {
             panic!("Expected a catalog descriptor");

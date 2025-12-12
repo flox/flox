@@ -6,7 +6,6 @@ use std::str::FromStr;
 use indoc::indoc;
 use itertools::Itertools;
 use reqwest::Url;
-use serde::de::Error;
 use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Key, Table, Value};
 use tracing::{debug, trace};
 
@@ -15,6 +14,7 @@ use crate::data::System;
 use crate::flox::Features;
 use crate::models::environment::path_environment::InitCustomization;
 use crate::models::lockfile::DEFAULT_SYSTEMS_STR;
+use crate::models::manifest::typed::{Inner, ManifestError, ManifestPackageDescriptor, ManifestV1};
 
 /// Represents the `[version]` number key in manifest.toml
 pub const MANIFEST_VERSION_KEY: &str = "version";
@@ -106,14 +106,20 @@ impl RawManifest {
     ///
     /// Discussion: using a string field as the version tag `version: "1"` vs `version: 1`
     /// could work today, but is still limited by the lack of an optional tag.
-    pub fn to_typed(&self) -> Result<Manifest, toml_edit::de::Error> {
+    pub fn to_typed(&self) -> Result<Manifest, ManifestError> {
         match self.get_version() {
-            Some(1) => Ok(toml_edit::de::from_document(self.0.clone())?),
-            Some(v) => {
-                let msg = format!("unsupported manifest version: {v}");
-                Err(toml_edit::de::Error::custom(msg))
+            Some(1) => {
+                let parsed: ManifestV1 = toml_edit::de::from_document(self.0.clone())
+                    .map_err(ManifestError::Deserialize)?;
+                for (install_id, pd) in parsed.install.inner().iter() {
+                    if matches!(pd, ManifestPackageDescriptor::CatalogV2(_)) {
+                        return Err(ManifestError::V1HasOutputs(install_id.clone()));
+                    }
+                }
+                Ok(Manifest::V1(parsed))
             },
-            None => Err(toml_edit::de::Error::custom("unsupported manifest version")),
+            Some(v) => Err(ManifestError::UnsupportedVersion(v)),
+            None => Err(ManifestError::MissingVersion),
         }
     }
 
@@ -477,15 +483,14 @@ impl RawManifest {
 }
 
 impl FromStr for RawManifest {
-    type Err = toml_edit::de::Error;
+    type Err = ManifestError;
 
-    /// Parses a string to a `ManifestMut` and validates that it's a valid manifest
+    /// Parses a string to a `DocumentMut` and validates that it's a valid manifest
     /// Validation is currently only checking the structure of the manifest,
     /// not the precise contents.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let doc = s.parse::<DocumentMut>()?;
+        let doc = s.parse::<DocumentMut>().map_err(ManifestError::Parse)?;
         let manifest = RawManifest(doc);
-        let _validate = manifest.to_typed()?;
         Ok(manifest)
     }
 }
@@ -520,8 +525,8 @@ pub enum RawManifestError {
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum TomlEditError {
     /// The provided string couldn't be parsed into a valid TOML document
-    #[error("couldn't parse manifest contents: {0}")]
-    ParseManifest(toml_edit::de::Error),
+    #[error(transparent)]
+    ParseManifest(ManifestError),
     /// The provided string was a valid TOML file, but it didn't have
     /// the format that we anticipated.
     #[error("'install' must be a table, but found {0} instead")]
@@ -536,6 +541,7 @@ pub enum TomlEditError {
     #[error("'options' must be an array, but found {0} instead")]
     MalformedOptionsSystemsArray(String),
 
+    // NOTE: currently unused
     #[error("'{0}' is not a supported attribute in manifest version 1")]
     UnsupportedAttributeV1(String),
 }
@@ -945,6 +951,9 @@ pub fn insert_packages(
         .parse::<RawManifest>()
         .map_err(TomlEditError::ParseManifest)?;
 
+    // Ensure it's a valid manifest before continuing
+    manifest.to_typed().map_err(TomlEditError::ParseManifest)?;
+
     let mut toml = manifest.0;
 
     let install_table = {
@@ -1024,10 +1033,14 @@ pub fn remove_packages(
     install_ids: &[String],
 ) -> Result<DocumentMut, TomlEditError> {
     debug!("attempting to remove packages from the manifest");
-    let mut toml = manifest_contents
+    let manifest = manifest_contents
         .parse::<RawManifest>()
-        .map_err(TomlEditError::ParseManifest)?
-        .0;
+        .map_err(TomlEditError::ParseManifest)?;
+
+    // Ensure it's a valid manifest before continuing
+    manifest.to_typed().map_err(TomlEditError::ParseManifest)?;
+
+    let mut toml = manifest.0;
 
     let installs_table = {
         let installs_field = toml

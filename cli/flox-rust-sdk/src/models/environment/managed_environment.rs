@@ -2145,7 +2145,7 @@ mod test {
         Inner,
         Manifest,
         ManifestV1,
-        PackageDescriptorCatalog,
+        PackageDescriptorCatalogV1,
         Vars,
     };
     use crate::providers::catalog::test_helpers::catalog_replay_client;
@@ -2938,7 +2938,7 @@ mod test {
         let mut new_manifest = Manifest::default();
         new_manifest.install_mut().inner_mut().insert(
             "hello".to_string(),
-            PackageDescriptorCatalog {
+            PackageDescriptorCatalogV1 {
                 pkg_path: "hello".to_string(),
                 pkg_group: None,
                 priority: None,
