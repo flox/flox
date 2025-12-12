@@ -89,11 +89,11 @@ impl Containerize {
         let env_name = env.name();
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
         let manifest = lockfile.manifest;
-        let mode = manifest.options.activate.mode.unwrap_or_default();
+        let mode = manifest.options().activate.mode.clone().unwrap_or_default();
         let source = if std::env::consts::OS == "linux" {
             let container_config = manifest
-                .containerize
-                .and_then(|c| c.config)
+                .containerize()
+                .and_then(|c| c.config.clone())
                 .or_else(|| should_extend_config(&self.labels).then(Default::default))
                 .map(|mut c| {
                     extend_config(&self.labels, &mut c);

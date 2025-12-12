@@ -366,26 +366,26 @@ pub fn new_package_overrides(old_ids: &[String], new_ids: &[String]) -> Vec<Stri
 mod tests {
     use super::shallow::ShallowMerger;
     use super::*;
-    use crate::models::manifest::typed::{Inner, Profile, Vars};
+    use crate::models::manifest::typed::{Inner, ManifestV1, Profile, Vars};
 
     #[test]
     fn composite_manifest_runs_merger() {
-        let composer = Manifest {
+        let composer = Manifest::V1(ManifestV1 {
             profile: Some(Profile {
                 common: Some("composer".to_string()),
                 ..Default::default()
             }),
             ..Default::default()
-        };
+        });
         let manifest1 = {
             let mut manifest = Manifest::default();
             manifest
-                .vars
+                .vars_mut()
                 .inner_mut()
                 .insert("var1".to_string(), "manifest1".to_string());
             manifest
         };
-        let manifest2 = Manifest {
+        let manifest2 = Manifest::V1(ManifestV1 {
             vars: Vars(BTreeMap::from([(
                 "var2".to_string(),
                 "manifest2".to_string(),
@@ -395,7 +395,7 @@ mod tests {
                 ..Default::default()
             }),
             ..Default::default()
-        };
+        });
         let composite = CompositeManifest {
             composer,
             deps: vec![
@@ -406,11 +406,11 @@ mod tests {
         let (merged, _warnings) = composite
             .merge_all(ManifestMerger::Shallow(ShallowMerger))
             .unwrap();
-        assert_eq!(merged.vars.inner()["var1"], "manifest1");
-        assert_eq!(merged.vars.inner()["var2"], "manifest2");
+        assert_eq!(merged.vars().inner()["var1"], "manifest1");
+        assert_eq!(merged.vars().inner()["var2"], "manifest2");
         assert_eq!(
-            merged.profile,
-            Some(Profile {
+            merged.profile(),
+            Some(&Profile {
                 common: Some("manifest2\ncomposer".to_string()),
                 ..Default::default()
             })

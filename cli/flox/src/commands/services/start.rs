@@ -69,7 +69,7 @@ impl Start {
             debug!("starting services with existing process-compose instance");
             Self::start_with_existing_process_compose(
                 env.socket(),
-                &env.manifest.services,
+                env.manifest.services(),
                 &flox.system,
                 &self.names,
                 &mut stderr(),

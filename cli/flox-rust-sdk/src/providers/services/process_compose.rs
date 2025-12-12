@@ -329,12 +329,12 @@ pub fn maybe_make_service_config_file(
     flox: &Flox,
     lockfile: &Lockfile,
 ) -> Result<Option<PathBuf>, ServiceError> {
-    let service_config_path = if !lockfile.manifest.services.inner().is_empty() {
+    let service_config_path = if !lockfile.manifest.services().inner().is_empty() {
         let config_path = service_config_write_location(&flox.temp_dir)?;
         write_process_compose_config(
             &lockfile
                 .manifest
-                .services
+                .services()
                 .copy_for_system(&flox.system)
                 .into(),
             &config_path,

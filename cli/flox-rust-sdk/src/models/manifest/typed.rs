@@ -72,6 +72,144 @@ pub(crate) trait SkipSerializing {
 
 /// Not meant for writing manifest files, only for reading them.
 /// Modifications should be made using `manifest::raw`.
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
+#[serde(untagged)]
+pub enum Manifest {
+    V1(ManifestV1),
+}
+
+impl Default for Manifest {
+    fn default() -> Self {
+        Self::V1(ManifestV1::default())
+    }
+}
+
+impl Manifest {
+    pub fn version_matches(&self, other: &Manifest) -> bool {
+        match (self, other) {
+            (Manifest::V1(_), Manifest::V1(_)) => true,
+        }
+    }
+
+    pub fn install(&self) -> &Install {
+        match self {
+            Manifest::V1(manifest_v1) => &manifest_v1.install,
+        }
+    }
+
+    pub fn install_mut(&mut self) -> &mut Install {
+        match self {
+            Manifest::V1(manifest_v1) => &mut manifest_v1.install,
+        }
+    }
+
+    pub fn vars(&self) -> &Vars {
+        match self {
+            Manifest::V1(manifest_v1) => &manifest_v1.vars,
+        }
+    }
+
+    pub fn vars_mut(&mut self) -> &mut Vars {
+        match self {
+            Manifest::V1(manifest_v1) => &mut manifest_v1.vars,
+        }
+    }
+
+    pub fn hook(&self) -> Option<&Hook> {
+        match self {
+            Manifest::V1(manifest_v1) => manifest_v1.hook.as_ref(),
+        }
+    }
+
+    pub fn hook_mut(&mut self) -> Option<&mut Hook> {
+        match self {
+            Manifest::V1(manifest_v1) => manifest_v1.hook.as_mut(),
+        }
+    }
+
+    pub fn profile(&self) -> Option<&Profile> {
+        match self {
+            Manifest::V1(manifest_v1) => manifest_v1.profile.as_ref(),
+        }
+    }
+
+    pub fn profile_mut(&mut self) -> Option<&mut Profile> {
+        match self {
+            Manifest::V1(manifest_v1) => manifest_v1.profile.as_mut(),
+        }
+    }
+
+    pub fn options(&self) -> &Options {
+        match self {
+            Manifest::V1(manifest_v1) => &manifest_v1.options,
+        }
+    }
+
+    pub fn options_mut(&mut self) -> &mut Options {
+        match self {
+            Manifest::V1(manifest_v1) => &mut manifest_v1.options,
+        }
+    }
+
+    pub fn services(&self) -> &Services {
+        match self {
+            Manifest::V1(manifest_v1) => &manifest_v1.services,
+        }
+    }
+
+    pub fn services_mut(&mut self) -> &mut Services {
+        match self {
+            Manifest::V1(manifest_v1) => &mut manifest_v1.services,
+        }
+    }
+
+    pub fn build(&self) -> &Build {
+        match self {
+            Manifest::V1(manifest_v1) => &manifest_v1.build,
+        }
+    }
+
+    pub fn build_mut(&mut self) -> &mut Build {
+        match self {
+            Manifest::V1(manifest_v1) => &mut manifest_v1.build,
+        }
+    }
+
+    pub fn containerize(&self) -> Option<&Containerize> {
+        match self {
+            Manifest::V1(manifest_v1) => manifest_v1.containerize.as_ref(),
+        }
+    }
+
+    pub fn containerize_mut(&mut self) -> Option<&mut Containerize> {
+        match self {
+            Manifest::V1(manifest_v1) => manifest_v1.containerize.as_mut(),
+        }
+    }
+
+    pub fn include(&self) -> &Include {
+        match self {
+            Manifest::V1(manifest_v1) => &manifest_v1.include,
+        }
+    }
+
+    pub fn include_mut(&mut self) -> &mut Include {
+        match self {
+            Manifest::V1(manifest_v1) => &mut manifest_v1.include,
+        }
+    }
+}
+
+impl FromStr for Manifest {
+    type Err = toml_edit::de::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        RawManifest::from_str(s)?.to_typed()
+    }
+}
 
 // We use `skip_serializing_none` and `skip_serializing_if` throughout to reduce
 // the size of the lockfile and improve backwards compatibility when we
@@ -84,7 +222,7 @@ pub(crate) trait SkipSerializing {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
-pub struct Manifest {
+pub struct ManifestV1 {
     pub version: Version<1>,
     /// The packages to install in the form of a map from install_id
     /// to package descriptor.
@@ -118,140 +256,6 @@ pub struct Manifest {
     #[serde(default)]
     #[serde(skip_serializing_if = "Include::skip_serializing")]
     pub include: Include,
-}
-
-impl Manifest {
-    /// Get the package descriptor with the specified install_id.
-    pub fn pkg_descriptor_with_id(&self, id: impl AsRef<str>) -> Option<ManifestPackageDescriptor> {
-        self.install.0.get(id.as_ref()).cloned()
-    }
-
-    /// Get the package descriptor with the specified install_id.
-    pub fn catalog_pkg_descriptor_with_id(
-        &self,
-        id: impl AsRef<str>,
-    ) -> Option<PackageDescriptorCatalog> {
-        self.install
-            .0
-            .get(id.as_ref())
-            .and_then(ManifestPackageDescriptor::as_catalog_descriptor_ref)
-            .cloned()
-    }
-
-    /// Get the package descriptor with the specified install_id.
-    pub fn flake_pkg_descriptor_with_id(
-        &self,
-        id: impl AsRef<str>,
-    ) -> Option<ManifestPackageDescriptor> {
-        self.install.0.get(id.as_ref()).cloned()
-    }
-
-    /// Get the package descriptors in the "toplevel" group.
-    pub fn pkg_descriptors_in_toplevel_group(&self) -> Vec<(String, ManifestPackageDescriptor)> {
-        pkg_descriptors_in_toplevel_group(&self.install.0)
-    }
-
-    /// Get the package descriptors in a named group.
-    pub fn pkg_descriptors_in_named_group(
-        &self,
-        name: impl AsRef<str>,
-    ) -> Vec<(String, ManifestPackageDescriptor)> {
-        pkg_descriptors_in_named_group(name, &self.install.0)
-    }
-
-    /// Check whether the specified name is either an install_id or group name.
-    pub fn pkg_or_group_found_in_manifest(&self, name: impl AsRef<str>) -> bool {
-        pkg_or_group_found_in_manifest(name.as_ref(), &self.install.0)
-    }
-
-    /// Check whether the specified package belongs to a named group
-    /// with additional packages.
-    pub fn pkg_belongs_to_non_empty_named_group(
-        &self,
-        pkg: impl AsRef<str>,
-    ) -> Result<Option<String>, ManifestError> {
-        pkg_belongs_to_non_empty_named_group(pkg.as_ref(), &self.install.0)
-    }
-
-    /// Check whether the specified package belongs to the "toplevel" group
-    /// with additional packages.
-    pub fn pkg_belongs_to_non_empty_toplevel_group(
-        &self,
-        pkg: impl AsRef<str>,
-    ) -> Result<bool, ManifestError> {
-        pkg_belongs_to_non_empty_toplevel_group(pkg.as_ref(), &self.install.0)
-    }
-
-    /// Resolve "loose" package references (e.g. pkg-paths),
-    /// to `install_ids` if unambiguous
-    /// so that installation references remain valid for other package operations.
-    pub fn get_install_ids(&self, packages: Vec<String>) -> Result<Vec<String>, ManifestError> {
-        let mut install_ids = Vec::new();
-        for pkg in packages {
-            // User passed an install id directly
-            if self.install.inner().contains_key(&pkg) {
-                install_ids.push(pkg);
-                continue;
-            }
-
-            // User passed a package path to uninstall
-            // To support version constraints, we match the provided value against
-            // `<pkg-path>` and `<pkg-path>@<version>`.
-            let matching_iids_by_pkg_path = self
-                .install
-                .inner()
-                .iter()
-                .filter(|(_iid, descriptor)| {
-                    // Find matching pkg-paths and select for uninstall
-
-                    // If the descriptor is not a catalog descriptor, skip.
-                    // flakes descriptors are only matched by install_id.
-                    let ManifestPackageDescriptor::Catalog(des) = descriptor else {
-                        return false;
-                    };
-
-                    // Select if the descriptor's pkg_path matches the user's input
-                    if des.pkg_path == pkg {
-                        return true;
-                    }
-
-                    // Select if the descriptor matches the user's input when the version is included
-                    // Future: if we want to allow uninstalling a specific outputs as well,
-                    //         parsing of uninstall specs will need to be more sophisticated.
-                    //         For now going with a simple check for pkg-path@version.
-                    if let Some(version) = &des.version {
-                        format!("{}@{}", des.pkg_path, version) == pkg
-                    } else {
-                        false
-                    }
-                })
-                .map(|(iid, _)| iid.to_owned())
-                .collect::<Vec<String>>();
-
-            // Extend the install_ids with the matching install id from pkg-path
-            match matching_iids_by_pkg_path.len() {
-                0 => return Err(ManifestError::PackageNotFound(pkg)),
-                // if there is only one package with the given pkg-path, uninstall it
-                1 => install_ids.extend(matching_iids_by_pkg_path),
-                // if there are multiple packages with the given pkg-path, ask for a specific install id
-                _ => {
-                    return Err(ManifestError::MultiplePackagesMatch(
-                        pkg,
-                        matching_iids_by_pkg_path,
-                    ));
-                },
-            }
-        }
-        Ok(install_ids)
-    }
-}
-
-impl FromStr for Manifest {
-    type Err = toml_edit::de::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        RawManifest::from_str(s)?.to_typed()
-    }
 }
 
 pub(crate) fn pkg_descriptors_in_toplevel_group(
@@ -370,6 +374,130 @@ impl SkipSerializing for Install {
 }
 
 impl_into_inner!(Install, BTreeMap<String, ManifestPackageDescriptor>);
+
+impl Install {
+    /// Get the package descriptor with the specified install_id.
+    pub fn pkg_descriptor_with_id(&self, id: impl AsRef<str>) -> Option<ManifestPackageDescriptor> {
+        self.0.get(id.as_ref()).cloned()
+    }
+
+    /// Get the package descriptor with the specified install_id.
+    pub fn catalog_pkg_descriptor_with_id(
+        &self,
+        id: impl AsRef<str>,
+    ) -> Option<PackageDescriptorCatalog> {
+        self.0
+            .get(id.as_ref())
+            .and_then(ManifestPackageDescriptor::as_catalog_descriptor_ref)
+            .cloned()
+    }
+
+    /// Get the package descriptor with the specified install_id.
+    pub fn flake_pkg_descriptor_with_id(
+        &self,
+        id: impl AsRef<str>,
+    ) -> Option<ManifestPackageDescriptor> {
+        self.0.get(id.as_ref()).cloned()
+    }
+
+    /// Get the package descriptors in the "toplevel" group.
+    pub fn pkg_descriptors_in_toplevel_group(&self) -> Vec<(String, ManifestPackageDescriptor)> {
+        pkg_descriptors_in_toplevel_group(&self.0)
+    }
+
+    /// Get the package descriptors in a named group.
+    pub fn pkg_descriptors_in_named_group(
+        &self,
+        name: impl AsRef<str>,
+    ) -> Vec<(String, ManifestPackageDescriptor)> {
+        pkg_descriptors_in_named_group(name, &self.0)
+    }
+
+    /// Check whether the specified name is either an install_id or group name.
+    pub fn pkg_or_group_found_in_manifest(&self, name: impl AsRef<str>) -> bool {
+        pkg_or_group_found_in_manifest(name.as_ref(), &self.0)
+    }
+
+    /// Check whether the specified package belongs to a named group
+    /// with additional packages.
+    pub fn pkg_belongs_to_non_empty_named_group(
+        &self,
+        pkg: impl AsRef<str>,
+    ) -> Result<Option<String>, ManifestError> {
+        pkg_belongs_to_non_empty_named_group(pkg.as_ref(), &self.0)
+    }
+
+    /// Check whether the specified package belongs to the "toplevel" group
+    /// with additional packages.
+    pub fn pkg_belongs_to_non_empty_toplevel_group(
+        &self,
+        pkg: impl AsRef<str>,
+    ) -> Result<bool, ManifestError> {
+        pkg_belongs_to_non_empty_toplevel_group(pkg.as_ref(), &self.0)
+    }
+
+    /// Resolve "loose" package references (e.g. pkg-paths),
+    /// to `install_ids` if unambiguous
+    /// so that installation references remain valid for other package operations.
+    pub fn get_install_ids(&self, packages: Vec<String>) -> Result<Vec<String>, ManifestError> {
+        let mut install_ids = Vec::new();
+        for pkg in packages {
+            // User passed an install id directly
+            if self.inner().contains_key(&pkg) {
+                install_ids.push(pkg);
+                continue;
+            }
+
+            // User passed a package path to uninstall
+            // To support version constraints, we match the provided value against
+            // `<pkg-path>` and `<pkg-path>@<version>`.
+            let matching_iids_by_pkg_path = self
+                .0
+                .iter()
+                .filter(|(_iid, descriptor)| {
+                    // Find matching pkg-paths and select for uninstall
+
+                    // If the descriptor is not a catalog descriptor, skip.
+                    // flakes descriptors are only matched by install_id.
+                    let ManifestPackageDescriptor::Catalog(des) = descriptor else {
+                        return false;
+                    };
+
+                    // Select if the descriptor's pkg_path matches the user's input
+                    if des.pkg_path == pkg {
+                        return true;
+                    }
+
+                    // Select if the descriptor matches the user's input when the version is included
+                    // Future: if we want to allow uninstalling a specific outputs as well,
+                    //         parsing of uninstall specs will need to be more sophisticated.
+                    //         For now going with a simple check for pkg-path@version.
+                    if let Some(version) = &des.version {
+                        format!("{}@{}", des.pkg_path, version) == pkg
+                    } else {
+                        false
+                    }
+                })
+                .map(|(iid, _)| iid.to_owned())
+                .collect::<Vec<String>>();
+
+            // Extend the install_ids with the matching install id from pkg-path
+            match matching_iids_by_pkg_path.len() {
+                0 => return Err(ManifestError::PackageNotFound(pkg)),
+                // if there is only one package with the given pkg-path, uninstall it
+                1 => install_ids.extend(matching_iids_by_pkg_path),
+                // if there are multiple packages with the given pkg-path, ask for a specific install id
+                _ => {
+                    return Err(ManifestError::MultiplePackagesMatch(
+                        pkg,
+                        matching_iids_by_pkg_path,
+                    ));
+                },
+            }
+        }
+        Ok(install_ids)
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -1104,17 +1232,19 @@ pub mod test {
             any::<Option<Containerize>>(),
         )
             .prop_map(
-                |(version, vars, hook, profile, options, services, build, containerize)| Manifest {
-                    version,
-                    install: Install::default(),
-                    vars,
-                    hook,
-                    profile,
-                    options,
-                    services,
-                    build,
-                    containerize,
-                    include: Include::default(),
+                |(version, vars, hook, profile, options, services, build, containerize)| {
+                    Manifest::V1(ManifestV1 {
+                        version,
+                        install: Install::default(),
+                        vars,
+                        hook,
+                        profile,
+                        options,
+                        services,
+                        build,
+                        containerize,
+                        include: Include::default(),
+                    })
                 },
             )
     }
@@ -1228,11 +1358,11 @@ pub mod test {
     // the serialized output.
     #[test]
     fn serialize_preserves_explicitly_empty_tables() {
-        let manifest = Manifest {
+        let manifest = Manifest::V1(ManifestV1 {
             hook: Some(Hook::default()),
             profile: Some(Profile::default()),
             ..Default::default()
-        };
+        });
         let expected = indoc! {r#"
             version = 1
 
@@ -1259,8 +1389,8 @@ pub mod test {
         let parsed = toml_edit::de::from_str::<Manifest>(build_manifest).unwrap();
 
         assert_eq!(
-            parsed.build,
-            Build(
+            parsed.build(),
+            &Build(
                 [("test".to_string(), BuildDescriptor {
                     command: "hello".to_string(),
                     runtime_packages: None,
@@ -1316,15 +1446,22 @@ pub mod test {
 
         let parsed = toml_edit::de::from_str::<Manifest>(manifest).unwrap();
 
-        assert_eq!(parsed.services.inner().len(), 3, "{:?}", parsed.services);
+        assert_eq!(
+            parsed.services().inner().len(),
+            3,
+            "{:?}",
+            parsed.services()
+        );
 
-        let filtered = parsed.services.copy_for_system(&"x86_64-linux".to_string());
+        let filtered = parsed
+            .services()
+            .copy_for_system(&"x86_64-linux".to_string());
         assert_eq!(filtered.inner().len(), 2, "{:?}", filtered);
         assert!(filtered.inner().contains_key("postgres"));
         assert!(filtered.inner().contains_key("mysql"));
 
         let filtered = parsed
-            .services
+            .services()
             .copy_for_system(&"aarch64-darwin".to_string());
         assert_eq!(filtered.inner().len(), 1, "{:?}", filtered);
         assert!(filtered.inner().contains_key("postgres"));
@@ -1343,7 +1480,7 @@ pub mod test {
         "#};
         let parsed = toml_edit::de::from_str::<Manifest>(manifest).unwrap();
 
-        assert_eq!(parsed.include.environments, vec![
+        assert_eq!(parsed.include().environments, vec![
             IncludeDescriptor::Local {
                 dir: PathBuf::from("../foo"),
                 name: Some("bar".to_string()),
@@ -1372,7 +1509,7 @@ pub mod test {
         let mut typed_manifest_mock = Manifest::default();
 
         for (test_iid, dotted_package) in entries {
-            typed_manifest_mock.install.inner_mut().insert(
+            typed_manifest_mock.install_mut().inner_mut().insert(
                 test_iid.to_string(),
                 ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
                     pkg_path: dotted_package.to_string(),
@@ -1391,6 +1528,7 @@ pub mod test {
     fn test_get_install_ids_to_uninstall_by_install_id() {
         let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
         let result = manifest_mock
+            .install()
             .get_install_ids(vec!["testInstallID".to_string()])
             .unwrap();
         assert_eq!(result, vec!["testInstallID".to_string()]);
@@ -1401,6 +1539,7 @@ pub mod test {
     fn test_get_install_ids_to_uninstall_by_pkg_path() {
         let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
         let result = manifest_mock
+            .install()
             .get_install_ids(vec!["dotted.package".to_string()])
             .unwrap();
         assert_eq!(result, vec!["testInstallID".to_string()]);
@@ -1416,6 +1555,7 @@ pub mod test {
         ]);
 
         let result = manifest_mock
+            .install()
             .get_install_ids(vec!["dotted.package".to_string()])
             .unwrap();
         assert_eq!(result, vec!["dotted.package".to_string()]);
@@ -1430,6 +1570,7 @@ pub mod test {
             ("testInstallID3", "dotted.package"),
         ]);
         let result = manifest_mock
+            .install()
             .get_install_ids(vec!["dotted.package".to_string()])
             .unwrap_err();
         assert!(matches!(result, ManifestError::MultiplePackagesMatch(_, _)));
@@ -1440,6 +1581,7 @@ pub mod test {
     fn test_get_install_ids_to_uninstall_pkg_not_found() {
         let manifest_mock = generate_mock_manifest(vec![("testInstallID1", "dotted.package")]);
         let result = manifest_mock
+            .install()
             .get_install_ids(vec!["invalid.packageName".to_string()])
             .unwrap_err();
         assert!(matches!(result, ManifestError::PackageNotFound(_)));
@@ -1450,7 +1592,7 @@ pub mod test {
         let mut manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
 
         if let ManifestPackageDescriptor::Catalog(descriptor) = manifest_mock
-            .install
+            .install_mut()
             .inner_mut()
             .get_mut("testInstallID")
             .unwrap()
@@ -1459,6 +1601,7 @@ pub mod test {
         };
 
         let result = manifest_mock
+            .install()
             .get_install_ids(vec!["dotted.package@1.0".to_string()])
             .unwrap();
 

@@ -187,13 +187,13 @@ pub fn guard_service_commands_available(
     system: &System,
 ) -> Result<()> {
     if !services_environment.socket.exists()
-        && services_environment.manifest.services.inner().is_empty()
+        && services_environment.manifest.services().inner().is_empty()
     {
         return Err(ServicesCommandsError::NoDefinedServices.into());
     } else if !services_environment.socket.exists()
         && services_environment
             .manifest
-            .services
+            .services()
             .copy_for_system(system)
             .inner()
             .is_empty()
@@ -312,12 +312,12 @@ pub async fn start_services_with_new_process_compose(
         // for starting `process-compose`. This does a similar job as
         // `processes_by_name_or_default_to_all` where we don't yet have a
         // running `process-compose` instance.
-        if !lockfile.manifest.services.inner().contains_key(name) {
+        if !lockfile.manifest.services().inner().contains_key(name) {
             return Err(service_does_not_exist_error(name))?;
         }
         if !lockfile
             .manifest
-            .services
+            .services()
             .copy_for_system(&system)
             .inner()
             .contains_key(name)
@@ -352,7 +352,7 @@ pub async fn start_services_with_new_process_compose(
     let names = if names.is_empty() {
         lockfile
             .manifest
-            .services
+            .services()
             .copy_for_system(&system)
             .inner()
             .keys()

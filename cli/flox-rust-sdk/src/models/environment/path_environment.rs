@@ -739,6 +739,7 @@ pub mod tests {
         new_path_environment_in,
     };
     use crate::models::lockfile::{Lockfile, RecoverableMergeError};
+    use crate::models::manifest::typed::Inner;
     use crate::models::manifest::typed::test::manifest_without_install_or_include;
 
     /// Returns (flox, tempdir, Vec<(dir relative to tempdir, PathEnvironment)>)
@@ -962,7 +963,7 @@ pub mod tests {
             new_path_environment_in(&flox, composer_manifest_contents, composer_path);
         let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
 
-        assert_eq!(lockfile.manifest.vars.0["foo"], "v1");
+        assert_eq!(lockfile.manifest.vars().inner()["foo"], "v1");
 
         // Call include_upgrade() with a name of an included environment that does not exist
         let err = composer

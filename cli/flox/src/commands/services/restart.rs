@@ -87,7 +87,7 @@ impl Restart {
             debug!("restarting services with existing process-compose instance");
             Self::restart_with_existing_process_compose(
                 socket,
-                &env.manifest.services,
+                env.manifest.services(),
                 &flox.system,
                 &self.names,
                 existing_processes,

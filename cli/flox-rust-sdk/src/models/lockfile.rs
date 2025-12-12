@@ -424,7 +424,11 @@ impl Compose {
     ) -> Result<Option<LockedInclude>, ManifestError> {
         // Reverse of merge order so that we return the highest priority match.
         for include in includes.iter().rev() {
-            match include.manifest.get_install_ids(vec![package.to_string()]) {
+            match include
+                .manifest
+                .install()
+                .get_install_ids(vec![package.to_string()])
+            {
                 Ok(_) => return Ok(Some(include.clone())),
                 Err(ManifestError::PackageNotFound(_)) => continue,
                 Err(ManifestError::MultiplePackagesMatch(_, _)) => continue,
@@ -594,6 +598,7 @@ impl Lockfile {
                 LockedPackage::Catalog(pkg) => {
                     let descriptor = self
                         .manifest
+                        .install()
                         .pkg_descriptor_with_id(&pkg.install_id)
                         .ok_or(ResolveError::MissingPackageDescriptor(
                             pkg.install_id.clone(),
@@ -610,6 +615,7 @@ impl Lockfile {
                 LockedPackage::Flake(locked_package) => {
                     let descriptor = self
                         .manifest
+                        .install()
                         .pkg_descriptor_with_id(&locked_package.install_id)
                         .ok_or(ResolveError::MissingPackageDescriptor(
                             locked_package.install_id.clone(),
@@ -714,7 +720,7 @@ impl Lockfile {
         merger: ManifestMerger,
         mut to_upgrade: Option<Vec<String>>,
     ) -> Result<(Manifest, Option<Compose>), RecoverableMergeError> {
-        if manifest.include.environments.is_empty() {
+        if manifest.include().environments.is_empty() {
             if to_upgrade.is_some() {
                 return Err(RecoverableMergeError::Catchall(
                     "environment has no included environments".to_string(),
@@ -733,7 +739,7 @@ impl Lockfile {
             .as_ref()
             .map(|to_upgrade| to_upgrade.is_empty())
             .unwrap_or(false);
-        for include_environment in &manifest.include.environments {
+        for include_environment in &manifest.include().environments {
             debug!(
                 name = include_environment.to_string(),
                 "inspecting included environment"
@@ -938,7 +944,7 @@ impl Lockfile {
             already_locked_packages
                 .iter()
                 .filter_map(LockedPackage::as_catalog_package_ref),
-            &manifest.options.allow,
+            &manifest.options().allow,
         )?;
 
         // Update the priority of already locked packages to match the manifest.
@@ -984,7 +990,7 @@ impl Lockfile {
             locked_packages
                 .iter()
                 .filter_map(LockedPackage::as_catalog_package_ref),
-            &manifest.options.allow,
+            &manifest.options().allow,
         )?;
 
         Ok([
@@ -1073,7 +1079,7 @@ impl Lockfile {
             };
 
             let new_priority = manifest
-                .install
+                .install()
                 .inner()
                 .get(install_id)
                 .and_then(|descriptor| descriptor.as_catalog_descriptor_ref())
@@ -1094,7 +1100,7 @@ impl Lockfile {
             .filter_map(|locked| {
                 let system = locked.system().as_str();
                 let install_id = locked.install_id();
-                let descriptor = seed.manifest.install.inner().get(locked.install_id())?;
+                let descriptor = seed.manifest.install().inner().get(locked.install_id())?;
                 Some(((install_id, system), (descriptor, locked)))
             })
             .collect()
@@ -1130,10 +1136,10 @@ impl Lockfile {
         // Using a btree map to ensure consistent ordering
         let mut map = BTreeMap::new();
 
-        let manifest_systems = manifest.options.systems.as_deref();
+        let manifest_systems = manifest.options().systems.as_deref();
 
         let maybe_licenses = manifest
-            .options
+            .options()
             .allow
             .licenses
             .clone()
@@ -1145,7 +1151,7 @@ impl Lockfile {
                 }
             });
 
-        for (install_id, manifest_descriptor) in manifest.install.inner().iter() {
+        for (install_id, manifest_descriptor) in manifest.install().inner().iter() {
             // package groups are only relevant to catalog descriptors
             let Some(manifest_descriptor) = manifest_descriptor.as_catalog_descriptor_ref() else {
                 continue;
@@ -1156,11 +1162,11 @@ impl Lockfile {
                 attr_path: manifest_descriptor.pkg_path.clone(),
                 derivation: None,
                 version: manifest_descriptor.version.clone(),
-                allow_pre_releases: manifest.options.semver.allow_pre_releases,
-                allow_broken: manifest.options.allow.broken,
+                allow_pre_releases: manifest.options().semver.allow_pre_releases,
+                allow_broken: manifest.options().allow.broken,
                 // TODO: add support for insecure
                 allow_insecure: None,
-                allow_unfree: manifest.options.allow.unfree,
+                allow_unfree: manifest.options().allow.unfree,
                 allow_missing_builds: None,
                 allowed_licenses: maybe_licenses.clone(),
                 systems: vec![],
@@ -1325,6 +1331,7 @@ impl Lockfile {
             .flatten()
             .filter_map(|resolved_pkg| {
                 manifest
+                    .install()
                     .catalog_pkg_descriptor_with_id(&resolved_pkg.install_id)
                     .map(|descriptor| LockedPackageCatalog::from_parts(resolved_pkg, descriptor))
             });
@@ -1406,12 +1413,13 @@ impl Lockfile {
         let default_systems = HashSet::<_>::from_iter(DEFAULT_SYSTEMS_STR.iter());
         let valid_systems = HashSet::<_>::from_iter(&r_msg.valid_systems);
         let manifest_systems = manifest
-            .options
+            .options()
             .systems
             .as_ref()
             .map(HashSet::<_>::from_iter)
             .unwrap_or(default_systems);
         let pkg_descriptor = manifest
+            .install()
             .catalog_pkg_descriptor_with_id(&r_msg.install_id)
             .ok_or(ResolveError::InstallIdNotInManifest(
                 r_msg.install_id.clone(),
@@ -1454,7 +1462,7 @@ impl Lockfile {
         manifest: &Manifest,
     ) -> impl Iterator<Item = FlakeInstallableToLock> + '_ {
         manifest
-            .install
+            .install()
             .inner()
             .iter()
             .filter_map(|(install_id, descriptor)| {
@@ -1467,7 +1475,7 @@ impl Lockfile {
                     d_systems.as_slice()
                 } else {
                     manifest
-                        .options
+                        .options()
                         .systems
                         .as_deref()
                         .unwrap_or(&*DEFAULT_SYSTEMS_STR)
@@ -1570,7 +1578,7 @@ impl Lockfile {
     /// collection can directly map the discriptor to a locked package.
     fn collect_store_paths(manifest: &Manifest) -> Vec<LockedPackageStorePath> {
         manifest
-            .install
+            .install()
             .inner()
             .iter()
             .filter_map(|(install_id, descriptor)| {
@@ -1583,7 +1591,7 @@ impl Lockfile {
                     d_systems.as_slice()
                 } else {
                     manifest
-                        .options
+                        .options()
                         .systems
                         .as_deref()
                         .unwrap_or(&*DEFAULT_SYSTEMS_STR)
@@ -1909,7 +1917,7 @@ pub(crate) mod tests {
     use crate::models::environment::path_environment::tests::generate_path_environments_without_install_or_include;
     use crate::models::environment::remote_environment::test_helpers::mock_remote_environment;
     use crate::models::manifest::raw::RawManifest;
-    use crate::models::manifest::typed::{Include, Manifest, Vars};
+    use crate::models::manifest::typed::{Include, Manifest, ManifestV1, Vars};
     use crate::providers::catalog::test_helpers::{
         auto_recording_catalog_client,
         catalog_replay_client,
@@ -2266,7 +2274,7 @@ pub(crate) mod tests {
         let mut manifest = TEST_TYPED_MANIFEST.clone();
 
         // Add a package to the manifest that is not already locked
-        manifest.install.inner_mut().insert(
+        manifest.install_mut().inner_mut().insert(
             "unlocked".to_string(),
             PackageDescriptorCatalog {
                 pkg_path: "unlocked".to_string(),
@@ -2328,7 +2336,7 @@ pub(crate) mod tests {
             fake_catalog_package_lock("foo", None);
         let mut manifest_before = Manifest::default();
         manifest_before
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
 
@@ -2361,7 +2369,7 @@ pub(crate) mod tests {
             fake_catalog_package_lock("foo", None);
         let mut manifest_before = Manifest::default();
         manifest_before
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
 
@@ -2386,7 +2394,7 @@ pub(crate) mod tests {
 
         let mut manifest_after = Manifest::default();
         manifest_after
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_after_iid.clone(), foo_after_descriptor.clone());
 
@@ -2409,7 +2417,7 @@ pub(crate) mod tests {
             fake_catalog_package_lock("foo", None);
         let mut manifest_before = Manifest::default();
         manifest_before
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
 
@@ -2433,7 +2441,7 @@ pub(crate) mod tests {
 
         let mut manifest_after = Manifest::default();
         manifest_after
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_after_iid.clone(), foo_after_descriptor.clone());
 
@@ -2502,7 +2510,7 @@ pub(crate) mod tests {
         let (foo_install_id, foo_descriptor, _) = fake_flake_installable_lock("foo");
 
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_install_id.clone(), foo_descriptor.clone().into());
 
@@ -2526,12 +2534,12 @@ pub(crate) mod tests {
         let system = "aarch64-darwin";
 
         let mut manifest = Manifest::default();
-        manifest.options.systems = Some(vec![system.to_string()]);
+        manifest.options_mut().systems = Some(vec![system.to_string()]);
 
         let (foo_install_id, foo_descriptor, _) = fake_flake_installable_lock("foo");
 
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_install_id.clone(), foo_descriptor.clone().into());
 
@@ -2556,11 +2564,11 @@ pub(crate) mod tests {
         let (bar_install_id, bar_descriptor, _) = fake_catalog_package_lock("bar", None);
 
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_install_id.clone(), foo_descriptor.clone().into());
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(bar_install_id.clone(), bar_descriptor.clone());
 
@@ -2632,7 +2640,7 @@ pub(crate) mod tests {
             .collect::<Vec<_>>();
 
         let descriptor = manifest
-            .install
+            .install()
             .inner()
             .get(&groups[0].page.as_ref().unwrap().packages.as_ref().unwrap()[0].install_id)
             .and_then(ManifestPackageDescriptor::as_catalog_descriptor_ref)
@@ -2659,19 +2667,19 @@ pub(crate) mod tests {
         let (baz_iid, baz_descriptor, baz_locked) = fake_flake_installable_lock("baz");
         let (qux_iid, qux_descriptor, qux_locked) = fake_flake_installable_lock("qux");
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor);
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(bar_iid.clone(), bar_descriptor);
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(baz_iid.clone(), baz_descriptor.into());
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(qux_iid.clone(), qux_descriptor.into());
         let mut lockfile = Lockfile {
@@ -2701,11 +2709,11 @@ pub(crate) mod tests {
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", Some("group"));
         let (bar_iid, bar_descriptor, bar_locked) = fake_catalog_package_lock("bar", Some("group"));
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor);
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(bar_iid.clone(), bar_descriptor);
         let mut lockfile = Lockfile {
@@ -2730,11 +2738,11 @@ pub(crate) mod tests {
         let (bar_iid, bar_descriptor, bar_locked) =
             fake_catalog_package_lock("bar", Some("foo_install_id"));
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor);
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(bar_iid.clone(), bar_descriptor);
         let mut lockfile = Lockfile {
@@ -2935,15 +2943,15 @@ pub(crate) mod tests {
 
         let mut manifest = Manifest::default();
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid, foo_descriptor.clone());
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(bar_iid, bar_descriptor.clone());
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(baz_iid.clone(), baz_descriptor.clone());
 
@@ -2957,7 +2965,7 @@ pub(crate) mod tests {
         };
 
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(yeet_iid.clone(), yeet_descriptor.clone());
 
@@ -3040,7 +3048,7 @@ pub(crate) mod tests {
 
         let mut manifest = Manifest::default();
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor_two_systems.clone());
 
@@ -3055,7 +3063,7 @@ pub(crate) mod tests {
         };
 
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid, foo_descriptor_one_system.clone());
 
@@ -3100,7 +3108,7 @@ pub(crate) mod tests {
 
         let mut manifest = Manifest::default();
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor_one_system.clone());
 
@@ -3112,7 +3120,7 @@ pub(crate) mod tests {
         };
 
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid, foo_descriptor_two_systems.clone());
 
@@ -3149,14 +3157,14 @@ pub(crate) mod tests {
         let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
 
         let mut manifest = Manifest::default();
-        manifest.options.systems = Some(vec![system.to_string()]);
+        manifest.options_mut().systems = Some(vec![system.to_string()]);
 
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone().into());
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(bar_iid.clone(), bar_descriptor.clone().into());
 
@@ -3188,7 +3196,7 @@ pub(crate) mod tests {
         let (_, _, bar_locked) = fake_flake_installable_lock("bar");
 
         let mut manifest = Manifest::default();
-        manifest.options.systems = Some(vec![system.to_string()]);
+        manifest.options_mut().systems = Some(vec![system.to_string()]);
 
         let locked = Lockfile {
             version: Version::<1>,
@@ -3218,10 +3226,10 @@ pub(crate) mod tests {
         foo_locked_system_2.locked_installable.system = PackageSystem::Aarch64Linux.to_string();
 
         let mut manifest = Manifest::default();
-        manifest.options.systems = Some(vec![system.to_string()]);
+        manifest.options_mut().systems = Some(vec![system.to_string()]);
 
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone().into());
 
@@ -3253,7 +3261,7 @@ pub(crate) mod tests {
 
         let mut manifest = Manifest::default();
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone().into());
 
@@ -3266,7 +3274,7 @@ pub(crate) mod tests {
         };
 
         // system_2 is added to the manifest
-        manifest.options.systems = Some(vec![system_1.to_string(), system_2.to_string()]);
+        manifest.options_mut().systems = Some(vec![system_1.to_string(), system_2.to_string()]);
 
         let flake_installables = Lockfile::collect_flake_installables(&manifest);
 
@@ -3292,13 +3300,13 @@ pub(crate) mod tests {
         let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
 
         let mut manifest = Manifest::default();
-        manifest.options.systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
+        manifest.options_mut().systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone());
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(bar_iid.clone(), bar_descriptor.clone().into());
 
@@ -3329,7 +3337,7 @@ pub(crate) mod tests {
         /// generate resolution responses
         #[test]
         fn lock_manifest_noop_if_locked_without_install_section((flox, tempdir, environments_to_include) in generate_path_environments_without_install_or_include(3)) {
-            let manifest = Manifest {
+            let manifest = Manifest::V1(ManifestV1 {
                 version: Version,
                 include: Include {
                     environments: environments_to_include
@@ -3341,7 +3349,7 @@ pub(crate) mod tests {
                         .collect(),
                 },
                 ..Default::default()
-            };
+            });
 
             // Lock
             let lockfile = Lockfile::lock_manifest(&flox, &manifest, None, &IncludeFetcher {
@@ -3367,8 +3375,8 @@ pub(crate) mod tests {
         let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
 
         let mut manifest = Manifest::default();
-        manifest.options.systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
-        manifest.install.inner_mut().insert(
+        manifest.options_mut().systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
+        manifest.install_mut().inner_mut().insert(
             "hello".to_string(),
             ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
                 pkg_path: "hello".to_string(),
@@ -3379,7 +3387,7 @@ pub(crate) mod tests {
             }),
         );
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(bar_iid.clone(), bar_descriptor.clone().into());
 
@@ -3411,13 +3419,13 @@ pub(crate) mod tests {
         let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
 
         let mut manifest = Manifest::default();
-        manifest.options.systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
+        manifest.options_mut().systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone());
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(bar_iid.clone(), bar_descriptor.clone().into());
 
@@ -3450,9 +3458,9 @@ pub(crate) mod tests {
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
 
         let mut manifest = Manifest::default();
-        manifest.options.systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
+        manifest.options_mut().systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone());
 
@@ -3470,7 +3478,7 @@ pub(crate) mod tests {
         foo_locked_priority_after.priority = 1;
 
         let mut manifest_pririty_after = manifest.clone();
-        manifest_pririty_after.install.inner_mut().insert(
+        manifest_pririty_after.install_mut().inner_mut().insert(
             foo_iid.clone(),
             foo_descriptor_priority_after.clone().into(),
         );
@@ -3501,7 +3509,7 @@ pub(crate) mod tests {
         foo_locked.unfree = Some(true);
         let mut manifest = Manifest::default();
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor_one_system.clone());
 
@@ -3513,7 +3521,7 @@ pub(crate) mod tests {
         };
 
         // Set `options.allow.unfree = false` in the manifest, but not the lockfile
-        manifest.options.allow.unfree = Some(false);
+        manifest.options_mut().allow.unfree = Some(false);
 
         let client = catalog::MockClient::new();
         assert!(matches!(
@@ -3730,15 +3738,15 @@ pub(crate) mod tests {
 
         let mut manifest = Manifest::default();
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone());
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(bar_iid.clone(), bar_descriptor.clone());
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(baz_iid.clone(), baz_descriptor.clone());
 
@@ -3780,11 +3788,11 @@ pub(crate) mod tests {
 
         let mut manifest = Manifest::default();
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone().into());
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(baz_iid.clone(), baz_descriptor.into());
 
@@ -3814,11 +3822,11 @@ pub(crate) mod tests {
 
         let mut manifest = Manifest::default();
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone().into());
         manifest
-            .install
+            .install_mut()
             .inner_mut()
             .insert(baz_iid.clone(), baz_descriptor.into());
 
@@ -3898,11 +3906,14 @@ pub(crate) mod tests {
         )
         .unwrap();
 
-        assert_eq!(merged, Manifest {
-            version: Version,
-            vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
-            ..Default::default()
-        });
+        assert_eq!(
+            merged,
+            Manifest::V1(ManifestV1 {
+                version: Version,
+                vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
+                ..Default::default()
+            })
+        );
         assert_eq!(
             compose.unwrap().include[0].manifest,
             toml_edit::de::from_str(dep1_manifest_contents).unwrap()
@@ -3974,14 +3985,17 @@ pub(crate) mod tests {
         )
         .unwrap();
 
-        assert_eq!(merged, Manifest {
-            version: Version,
-            vars: Vars(BTreeMap::from([
-                ("foo".to_string(), "highest_precedence".to_string()),
-                ("bar".to_string(), "higher_precedence".to_string())
-            ])),
-            ..Default::default()
-        });
+        assert_eq!(
+            merged,
+            Manifest::V1(ManifestV1 {
+                version: Version,
+                vars: Vars(BTreeMap::from([
+                    ("foo".to_string(), "highest_precedence".to_string()),
+                    ("bar".to_string(), "higher_precedence".to_string())
+                ])),
+                ..Default::default()
+            })
+        );
         assert_eq!(
             compose.as_ref().unwrap().include[0].manifest,
             toml_edit::de::from_str(lowest_precedence_manifest_contents).unwrap()
@@ -4096,14 +4110,17 @@ pub(crate) mod tests {
         )
         .unwrap();
 
-        assert_eq!(merged, Manifest {
-            version: Version,
-            vars: Vars(BTreeMap::from([(
-                "foo".to_string(),
-                "highest_precedence".to_string()
-            ),])),
-            ..Default::default()
-        });
+        assert_eq!(
+            merged,
+            Manifest::V1(ManifestV1 {
+                version: Version,
+                vars: Vars(BTreeMap::from([(
+                    "foo".to_string(),
+                    "highest_precedence".to_string()
+                ),])),
+                ..Default::default()
+            })
+        );
         assert_eq!(
             compose.as_ref().unwrap().include[0].manifest,
             toml_edit::de::from_str(lowest_precedence_manifest_contents).unwrap()
@@ -4158,11 +4175,14 @@ pub(crate) mod tests {
             .await
             .unwrap();
 
-        assert_eq!(lockfile.manifest, Manifest {
-            version: Version,
-            vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
-            ..Default::default()
-        });
+        assert_eq!(
+            lockfile.manifest,
+            Manifest::V1(ManifestV1 {
+                version: Version,
+                vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
+                ..Default::default()
+            })
+        );
         assert_eq!(
             lockfile.compose.as_ref().unwrap().include[0].manifest,
             toml_edit::de::from_str(dep1_manifest_contents).unwrap()
@@ -4203,18 +4223,21 @@ pub(crate) mod tests {
         )
         .unwrap();
 
-        assert_eq!(merged, Manifest {
-            version: Version,
-            vars: Vars(BTreeMap::from([(
-                "foo".to_string(),
-                if modify_include_descriptor {
-                    "dep1 edited".to_string()
-                } else {
-                    "dep1".to_string()
-                }
-            )])),
-            ..Default::default()
-        });
+        assert_eq!(
+            merged,
+            Manifest::V1(ManifestV1 {
+                version: Version,
+                vars: Vars(BTreeMap::from([(
+                    "foo".to_string(),
+                    if modify_include_descriptor {
+                        "dep1 edited".to_string()
+                    } else {
+                        "dep1".to_string()
+                    }
+                )])),
+                ..Default::default()
+            })
+        );
         assert_eq!(
             compose.unwrap().include[0].manifest,
             if modify_include_descriptor {
@@ -4276,11 +4299,14 @@ pub(crate) mod tests {
             .await
             .unwrap();
 
-        assert_eq!(lockfile.manifest, Manifest {
-            version: Version,
-            vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
-            ..Default::default()
-        });
+        assert_eq!(
+            lockfile.manifest,
+            Manifest::V1(ManifestV1 {
+                version: Version,
+                vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
+                ..Default::default()
+            })
+        );
         assert_eq!(
             lockfile.compose.as_ref().unwrap().include[0].manifest,
             dep1_manifest,
@@ -4426,7 +4452,7 @@ pub(crate) mod tests {
         let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
         assert_eq!(
             lockfile.manifest,
-            Manifest {
+            Manifest::V1(ManifestV1 {
                 vars: Vars(BTreeMap::from([
                     ("child_local".to_string(), "hi".to_string()),
                     ("child_remote".to_string(), "hi".to_string()),
@@ -4434,7 +4460,7 @@ pub(crate) mod tests {
                     ("composer".to_string(), "hi".to_string()),
                 ])),
                 ..Default::default()
-            },
+            }),
             "composer should include fields from both indirect child includes"
         )
     }

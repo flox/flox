@@ -1603,7 +1603,7 @@ pub enum PushResult {
 fn check_for_local_includes(lockfile: &Lockfile) -> Result<(), ManagedEnvironmentError> {
     let manifest = lockfile.user_manifest();
     let has_local_include = manifest
-        .include
+        .include()
         .environments
         .iter()
         .any(|include| matches!(include, IncludeDescriptor::Local { .. }));
@@ -2141,7 +2141,13 @@ mod test {
     use crate::models::floxmeta::floxmeta_dir;
     use crate::models::lockfile::Lockfile;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
-    use crate::models::manifest::typed::{Inner, Manifest, PackageDescriptorCatalog, Vars};
+    use crate::models::manifest::typed::{
+        Inner,
+        Manifest,
+        ManifestV1,
+        PackageDescriptorCatalog,
+        Vars,
+    };
     use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::catalog::{GENERATED_DATA, MockClient};
     use crate::providers::git::tests::commit_file;
@@ -2930,7 +2936,7 @@ mod test {
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
         let mut new_manifest = Manifest::default();
-        new_manifest.install.inner_mut().insert(
+        new_manifest.install_mut().inner_mut().insert(
             "hello".to_string(),
             PackageDescriptorCatalog {
                 pkg_path: "hello".to_string(),
@@ -3007,7 +3013,7 @@ mod test {
         let env_b_generations = init_generations_from_core_env(&flox.temp_dir, "env_b", &mut env_b);
 
         let (iid, descriptor, _) = fake_catalog_package_lock("package", None);
-        manifest_a.install.inner_mut().insert(iid, descriptor);
+        manifest_a.install_mut().inner_mut().insert(iid, descriptor);
 
         fs::write(
             env_a.path().join(MANIFEST_FILENAME),
@@ -3353,11 +3359,14 @@ mod test {
         // Check lockfile
         let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
 
-        assert_eq!(lockfile.manifest, Manifest {
-            version: Version,
-            vars: Vars(BTreeMap::from([("foo".to_string(), "dep".to_string()),])),
-            ..Default::default()
-        });
+        assert_eq!(
+            lockfile.manifest,
+            Manifest::V1(ManifestV1 {
+                version: Version,
+                vars: Vars(BTreeMap::from([("foo".to_string(), "dep".to_string()),])),
+                ..Default::default()
+            })
+        );
 
         assert_eq!(
             lockfile.compose.unwrap().include[0].manifest,

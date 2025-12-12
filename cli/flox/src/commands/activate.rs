@@ -267,7 +267,7 @@ impl Activate {
         let mode = self
             .mode
             .clone()
-            .unwrap_or(manifest.options.activate.mode.clone().unwrap_or_default());
+            .unwrap_or(manifest.options().activate.mode.clone().unwrap_or_default());
         let mode_link_path = rendered_env_path.clone().for_mode(&mode);
         let store_path = fs::read_link(&mode_link_path).with_context(|| {
             format!(
@@ -396,7 +396,7 @@ impl Activate {
         let socket_path = concrete_environment.services_socket_path(&flox)?;
         exports.insert(
             "_FLOX_ENV_CUDA_DETECTION",
-            match manifest.options.cuda_detection {
+            match manifest.options().cuda_detection {
                 Some(false) => "0", // manifest opts-out
                 _ => "1",           // default to enabling CUDA
             }
@@ -406,10 +406,10 @@ impl Activate {
         if self.start_services {
             ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
 
-            if manifest.services.inner().is_empty() {
+            if manifest.services().inner().is_empty() {
                 message::warning(ServicesCommandsError::NoDefinedServices);
             } else if manifest
-                .services
+                .services()
                 .copy_for_system(&flox.system)
                 .inner()
                 .is_empty()
@@ -422,7 +422,7 @@ impl Activate {
 
         let should_have_services = self.start_services
             && !manifest
-                .services
+                .services()
                 .copy_for_system(&flox.system)
                 .inner()
                 .is_empty();

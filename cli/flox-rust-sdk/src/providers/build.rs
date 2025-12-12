@@ -712,7 +712,7 @@ impl PackageTargets {
         manifest: &Manifest,
         expression_dir: &Path,
     ) -> Result<PackageTargets, PackageTargetError> {
-        let environment_packages = &manifest.build;
+        let environment_packages = manifest.build();
 
         let nix_expression_packages = get_nix_expression_targets(expression_dir)
             .map_err(|e| PackageTargetError::new(e.to_string()))?;

@@ -21,6 +21,7 @@ use crate::models::manifest::typed::{
     Inner,
     Install,
     Manifest,
+    ManifestV1,
     Options,
     Profile,
     SemverOptions,
@@ -271,35 +272,32 @@ impl ManifestMergeTrait for ShallowMerger {
         high_priority: &Manifest,
     ) -> Result<(Manifest, Vec<Warning>), MergeError> {
         trace!(section = "versions", "merging manifest section");
-        let version = Self::merge_version(&low_priority.version, &high_priority.version)?;
+        // FIXME: make this a real merge once we have different versions
+        let version = Version::<1>;
         trace!(section = "install", "merging manifest section");
         let (install, install_warnings) =
-            Self::merge_install(&low_priority.install, &high_priority.install)?;
+            Self::merge_install(low_priority.install(), high_priority.install())?;
         trace!(section = "vars", "merging manifest section");
-        let (vars, vars_warnings) = Self::merge_vars(&low_priority.vars, &high_priority.vars)?;
+        let (vars, vars_warnings) = Self::merge_vars(low_priority.vars(), high_priority.vars())?;
         trace!(section = "hook", "merging manifest section");
-        let hook = Self::merge_hook(low_priority.hook.as_ref(), high_priority.hook.as_ref())?;
+        let hook = Self::merge_hook(low_priority.hook(), high_priority.hook())?;
         trace!(section = "profile", "merging manifest section");
-        let profile = Self::merge_profile(
-            low_priority.profile.as_ref(),
-            high_priority.profile.as_ref(),
-        )?;
+        let profile = Self::merge_profile(low_priority.profile(), high_priority.profile())?;
         trace!(section = "options", "merging manifest section");
         let (options, options_warnings) =
-            Self::merge_options(&low_priority.options, &high_priority.options)?;
+            Self::merge_options(low_priority.options(), high_priority.options())?;
         trace!(section = "services", "merging manifest section");
         let (services, services_warnings) =
-            Self::merge_services(&low_priority.services, &high_priority.services)?;
+            Self::merge_services(low_priority.services(), high_priority.services())?;
         trace!(section = "build", "merging manifest section");
-        let (build, build_warnings) = Self::merge_build(&low_priority.build, &high_priority.build)?;
+        let (build, build_warnings) =
+            Self::merge_build(low_priority.build(), high_priority.build())?;
         trace!(section = "containerize", "merging manifest section");
-        let (containerize, containerize_warnings) = Self::merge_containerize(
-            low_priority.containerize.as_ref(),
-            high_priority.containerize.as_ref(),
-        )?;
+        let (containerize, containerize_warnings) =
+            Self::merge_containerize(low_priority.containerize(), high_priority.containerize())?;
         debug!("manifest pair merged successfully");
 
-        let manifest = Manifest {
+        let manifest = Manifest::V1(ManifestV1 {
             version,
             install,
             vars,
@@ -312,7 +310,7 @@ impl ManifestMergeTrait for ShallowMerger {
             // Intentionally blank out the includes since the includes are
             // inputs to the merge operation.
             include: Include::default(),
-        };
+        });
 
         let warnings = [
             install_warnings,

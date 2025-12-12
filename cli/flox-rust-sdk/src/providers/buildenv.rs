@@ -285,6 +285,7 @@ where
             let install_id = package.install_id();
             let manifest_package = lockfile
                 .manifest
+                .install()
                 .pkg_descriptor_with_id(install_id)
                 .ok_or_else(|| {
                     BuildEnvError::Other(format!(
@@ -865,7 +866,7 @@ where
         // Without this check the lockfile would succeed to build on any system,
         // but (in the general case) contain no packages,
         // because the lockfile won't contain locks of packages for the current system.
-        if let Some(ref systems) = lockfile.manifest.options.systems
+        if let Some(ref systems) = lockfile.manifest.options().systems
             && !systems.contains(&env!("NIX_TARGET_SYSTEM").to_string())
         {
             return Err(BuildEnvError::LockfileIncompatible {
@@ -1141,6 +1142,7 @@ mod realise_nixpkgs_tests {
 
         let manifest_package = lockfile
             .manifest
+            .install()
             .pkg_descriptor_with_id(&locked_package.install_id)
             .expect("no manifest package found");
 

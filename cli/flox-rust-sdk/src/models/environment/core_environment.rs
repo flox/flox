@@ -347,7 +347,7 @@ impl CoreEnvironment<ReadOnly> {
         };
 
         let manifest = self.manifest()?;
-        let install_ids = match manifest.get_install_ids(packages) {
+        let install_ids = match manifest.install().get_install_ids(packages) {
             Ok(ids) => ids,
             Err(err) => {
                 if let ManifestError::PackageNotFound(ref package) = err
@@ -521,7 +521,7 @@ impl CoreEnvironment<ReadOnly> {
             if *id == "toplevel" {
                 continue;
             }
-            if !manifest.pkg_or_group_found_in_manifest(id) {
+            if !manifest.install().pkg_or_group_found_in_manifest(id) {
                 return Err(CoreEnvironmentError::UpgradeFailedCatalog(
                     UpgradeError::PkgNotFound(ManifestError::PkgOrGroupNotFound(id.to_string())),
                 ));
@@ -529,7 +529,7 @@ impl CoreEnvironment<ReadOnly> {
         }
         tracing::debug!("checking group membership for requested packages");
         for id in groups_or_iids {
-            if manifest.pkg_descriptor_with_id(id).is_none() {
+            if manifest.install().pkg_descriptor_with_id(id).is_none() {
                 // We've already checked that the id is a package or group,
                 // and if this is None then we know it's a group and therefore
                 // we don't need to check what other packages are in the group
@@ -537,6 +537,7 @@ impl CoreEnvironment<ReadOnly> {
                 continue;
             }
             if manifest
+                .install()
                 .pkg_belongs_to_non_empty_toplevel_group(id)
                 .expect("already checked that package exists")
             {
@@ -548,6 +549,7 @@ impl CoreEnvironment<ReadOnly> {
                 ));
             }
             if let Some(group) = manifest
+                .install()
                 .pkg_belongs_to_non_empty_named_group(id)
                 .expect("already checked that package exists")
             {
@@ -744,7 +746,7 @@ impl CoreEnvironment<ReadOnly> {
         let manifest: Manifest = toml::from_str(manifest_contents.as_ref())
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
         manifest
-            .services
+            .services()
             .validate()
             .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Services(e)))?;
 
@@ -862,21 +864,21 @@ impl EditResult {
                 let hook_changed = old_lockfile
                     .as_ref()
                     .as_ref()
-                    .and_then(|lockfile| lockfile.manifest.hook.as_ref())
-                    != new_lockfile.manifest.hook.as_ref();
+                    .and_then(|lockfile| lockfile.manifest.hook())
+                    != new_lockfile.manifest.hook();
 
                 let vars_changed = old_lockfile
                     .as_ref()
                     .as_ref()
-                    .map(|lockfile| lockfile.manifest.vars.clone())
+                    .map(|lockfile| lockfile.manifest.vars().clone())
                     .unwrap_or_default()
-                    != new_lockfile.manifest.vars;
+                    != new_lockfile.manifest.vars().clone();
 
                 let profile_changed = old_lockfile
                     .as_ref()
                     .as_ref()
-                    .and_then(|lockfile| lockfile.manifest.profile.as_ref())
-                    != new_lockfile.manifest.profile.as_ref();
+                    .and_then(|lockfile| lockfile.manifest.profile())
+                    != new_lockfile.manifest.profile();
 
                 hook_changed || vars_changed || profile_changed
             },
