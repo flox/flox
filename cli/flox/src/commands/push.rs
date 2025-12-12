@@ -68,7 +68,7 @@ enum PushMode {
     /// Push a cached remote environment
     Remote {
         /// Push a remote environment by reference (e.g., owner/name)
-        #[bpaf(long("remote"), short('r'), argument("owner>/<name"))]
+        #[bpaf(long("reference"), short('r'), argument("owner>/<name"))]
         env_ref: RemoteEnvironmentRef,
     },
 }
