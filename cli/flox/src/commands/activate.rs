@@ -161,7 +161,7 @@ impl Activate {
         {
             // Read the results of a previous upgrade check
             // and print a message if an upgrade is available.
-            notify_upgrades_if_available(&flox, &mut concrete_environment)?;
+            notify_upgrades_if_available(&flox, &mut concrete_environment, &self.environment)?;
         } else {
             debug!("Upgrade notification disabled");
         }
@@ -719,7 +719,11 @@ pub enum InvocationType {
 /// but doesn't act on it, they should see the message again next time they activate,
 /// so they are not wondering whether upgrades may have been applied automatically.
 /// To make this less annoying, we tried to make the message as unobtrusive as possible.
-fn notify_upgrades_if_available(flox: &Flox, environment: &mut ConcreteEnvironment) -> Result<()> {
+fn notify_upgrades_if_available(
+    flox: &Flox,
+    environment: &mut ConcreteEnvironment,
+    environment_select: &EnvironmentSelect,
+) -> Result<()> {
     let current_environment = UninitializedEnvironment::from_concrete_environment(environment);
     let active_environments = activated_environments();
     if active_environments.is_active(&current_environment) {
@@ -735,7 +739,11 @@ fn notify_upgrades_if_available(flox: &Flox, environment: &mut ConcreteEnvironme
     };
 
     notify_package_upgrades(flox, environment, &info.upgrade_result)?;
-    notify_environment_upgrades(environment, &info.remote_generations_metadata)?;
+    notify_environment_upgrades(
+        environment,
+        &info.remote_generations_metadata,
+        environment_select,
+    )?;
 
     Ok(())
 }
@@ -768,6 +776,7 @@ fn notify_package_upgrades(
 fn notify_environment_upgrades(
     environment: &ConcreteEnvironment,
     remote_generations_metadata: &Option<AllGenerationsMetadata>,
+    environment_select: &EnvironmentSelect,
 ) -> Result<()> {
     if let ConcreteEnvironment::Path(_) = environment {
         debug!("Not notifying user of environment upgrades for local path environments");
@@ -802,12 +811,18 @@ fn notify_environment_upgrades(
         remote: remote_generations_metadata.to_owned(),
     });
 
+    // TODO: this doesn't capture the environment chosen by the user if we prompted
+    let flags = environment_select
+        .to_flags()
+        .map(|flags| format!(" {}", flags.join(" ")))
+        .unwrap_or("".to_string());
+
     let message = formatdoc! {"
         Environment out of sync with FloxHub.
 
         {diversion_message}
 
-        Use 'flox push|pull' to fetch updates or update the environment on FloxHub.
+        Use 'flox push|pull{flags}' to fetch updates or update the environment on FloxHub.
     "};
 
     message::info(message);
@@ -973,7 +988,8 @@ mod upgrade_notification_tests {
         let mut environment = ConcreteEnvironment::Path(environment);
 
         tracing::subscriber::with_default(subscriber, || {
-            notify_upgrades_if_available(&flox, &mut environment).unwrap();
+            notify_upgrades_if_available(&flox, &mut environment, &EnvironmentSelect::Unspecified)
+                .unwrap();
         });
 
         let printed = writer.to_string();
@@ -1036,7 +1052,12 @@ mod upgrade_notification_tests {
             Some(active.to_string()),
             || {
                 tracing::subscriber::with_default(subscriber, || {
-                    notify_upgrades_if_available(&flox, &mut environment).unwrap();
+                    notify_upgrades_if_available(
+                        &flox,
+                        &mut environment,
+                        &EnvironmentSelect::Unspecified,
+                    )
+                    .unwrap();
                 });
             },
         );
@@ -1061,7 +1082,8 @@ mod upgrade_notification_tests {
         write_upgrade_available(&flox, &mut environment);
 
         tracing::subscriber::with_default(subscriber, || {
-            notify_upgrades_if_available(&flox, &mut environment).unwrap();
+            notify_upgrades_if_available(&flox, &mut environment, &EnvironmentSelect::Unspecified)
+                .unwrap();
         });
 
         let printed = writer.to_string();
@@ -1106,7 +1128,8 @@ mod upgrade_notification_tests {
         }
 
         tracing::subscriber::with_default(subscriber, || {
-            notify_upgrades_if_available(&flox, &mut environment).unwrap();
+            notify_upgrades_if_available(&flox, &mut environment, &EnvironmentSelect::Unspecified)
+                .unwrap();
         });
 
         let printed = writer.to_string();
@@ -1147,7 +1170,8 @@ mod upgrade_notification_tests {
         }
 
         tracing::subscriber::with_default(subscriber, || {
-            notify_upgrades_if_available(&flox, &mut environment).unwrap();
+            notify_upgrades_if_available(&flox, &mut environment, &EnvironmentSelect::Unspecified)
+                .unwrap();
         });
 
         let printed = writer.to_string();

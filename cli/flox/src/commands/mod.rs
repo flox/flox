@@ -996,6 +996,16 @@ impl EnvironmentSelect {
             },
         }
     }
+
+    fn to_flags(&self) -> Option<Vec<String>> {
+        match self {
+            EnvironmentSelect::Dir(path) => {
+                Some(vec!["-d".to_string(), path.display().to_string()])
+            },
+            EnvironmentSelect::Remote(env_ref) => Some(vec!["-r".to_string(), env_ref.to_string()]),
+            EnvironmentSelect::Unspecified => None,
+        }
+    }
 }
 
 impl DirEnvironmentSelect {
