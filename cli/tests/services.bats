@@ -283,8 +283,9 @@ EOF
   assert_success
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
-    "$FLOX_BIN" install hello --remote "$OWNER/$PROJECT_NAME"
-  assert_success
+   "$FLOX_BIN" install hello --reference "$OWNER/$PROJECT_NAME"
+
+  "$FLOX_BIN" push --reference "$OWNER/$PROJECT_NAME"
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     "$FLOX_BIN" pull

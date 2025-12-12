@@ -558,11 +558,17 @@ fn write_metadata_file(
 
 /// Generation related methods for environments that support generations.
 /// In practice that's [ManagedEnvironment] and [RemoteEnvironment].
-/// We use a cummon trait to ensure common and consistent functionality
+/// We use a common trait to ensure common and consistent functionality
 /// and allow static dispatch from [GenerationsEnvironment]
 /// to the concrete implementations.
 #[enum_dispatch]
 pub trait GenerationsExt {
+    /// Return all (cached) generation metadata for the environment,
+    /// that is available on FloxHub.
+    fn remote_generations_metadata(
+        &self,
+    ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError>;
+
     /// Return all generations metadata for the environment.
     fn generations_metadata(
         &self,
@@ -573,6 +579,11 @@ pub trait GenerationsExt {
         flox: &Flox,
         generation: GenerationId,
     ) -> Result<(), EnvironmentError>;
+
+    /// Return the lockfile from FloxHub stored on the sync branch.
+    fn remote_lockfile_contents_for_current_generation(&self) -> Result<String, GenerationsError>;
+    /// Return the manifest from FloxHub stored on the sync branch.
+    fn remote_manifest_contents_for_current_generation(&self) -> Result<String, GenerationsError>;
 
     fn lockfile_contents_for_generation(
         &self,
@@ -628,7 +639,7 @@ impl TryFrom<ConcreteEnvironment> for GenerationsEnvironment {
 /// Generations are defined as immutable copy-on-write folders.
 /// Rollbacks and associated [SingleGenerationMetadata] are tracked per environment
 /// in a metadata file at the root of the environment branch.
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, JsonSchema)]
 #[skip_serializing_none]
 pub struct AllGenerationsMetadata {
     /// Schema version of the metadata file
@@ -1103,9 +1114,14 @@ impl IntoIterator for History {
     }
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl History {
     pub fn iter(&self) -> <&Self as IntoIterator>::IntoIter {
         self.into_iter()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 }
 

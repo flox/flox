@@ -721,6 +721,16 @@ impl GenerationsExt for ManagedEnvironment {
         Ok(())
     }
 
+    fn remote_lockfile_contents_for_current_generation(&self) -> Result<String, GenerationsError> {
+        Generations::new(self.floxmeta.git.clone(), remote_branch_name(&self.pointer))
+            .current_gen_lockfile()
+    }
+
+    fn remote_manifest_contents_for_current_generation(&self) -> Result<String, GenerationsError> {
+        Generations::new(self.floxmeta.git.clone(), remote_branch_name(&self.pointer))
+            .current_gen_manifest()
+    }
+
     fn lockfile_contents_for_generation(
         &self,
         generation: usize,
@@ -768,6 +778,12 @@ impl GenerationsExt for ManagedEnvironment {
         CoreEnvironment::link(&rendered_env_links.runtime, &store_paths.runtime)?;
 
         Ok(rendered_env_links)
+    }
+
+    fn remote_generations_metadata(
+        &self,
+    ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
+        Generations::new(self.floxmeta.git.clone(), remote_branch_name(&self.pointer)).metadata()
     }
 }
 
@@ -1606,6 +1622,27 @@ fn check_for_local_includes(lockfile: &Lockfile) -> Result<(), ManagedEnvironmen
 
 /// FloxHub synchronization implementation (pull/push)
 impl ManagedEnvironment {
+    /// Fetch the remote branch into the local sync branch.
+    /// The sync branch is always a reset to the remote branch
+    /// and it's state should not be depended on.
+    #[instrument(skip(flox), fields(progress = "Looking up environment on FloxHub"))]
+    pub fn fetch_remote_state(&self, flox: &Flox) -> Result<(), ManagedEnvironmentError> {
+        let sync_branch = remote_branch_name(&self.pointer);
+        self.floxmeta
+            .git
+            .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}"))
+            .map_err(|err| match err {
+                GitRemoteCommandError::RefNotFound(_) => {
+                    ManagedEnvironmentError::UpstreamNotFound {
+                        env_ref: self.env_ref(),
+                        upstream: self.pointer.floxhub_base_url.to_string(),
+                        user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
+                    }
+                },
+                e => ManagedEnvironmentError::FetchUpdates(e),
+            })
+    }
+
     /// Create a new [ManagedEnvironment] from a [PathEnvironment]
     /// by pushing the contents of the original environment as a generation to floxhub.
     ///
@@ -1788,17 +1825,14 @@ impl ManagedEnvironment {
             check_for_local_includes(&lockfile)?;
         }
 
-        // Fetch the remote branch into sync branch
-        match self
-            .floxmeta
-            .git
-            .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}",))
-        {
+        // Fetch the remote branch into sync branch,
+        // we can ignore if the upstream was deleted since we are going to create it on push anyway.
+        match self.fetch_remote_state(flox) {
             Ok(_) => {},
-            Err(GitRemoteCommandError::RefNotFound(_)) => {
+            Err(ManagedEnvironmentError::UpstreamNotFound { .. }) => {
                 debug!("Upstream environment was deleted.")
             },
-            Err(e) => Err(ManagedEnvironmentError::FetchUpdates(e))?,
+            e @ Err(_) => e?,
         };
 
         // Check whether we can fast-forward merge the remote branch into the local branch
@@ -1878,24 +1912,7 @@ impl ManagedEnvironment {
         let sync_branch = remote_branch_name(&self.pointer);
         let project_branch = branch_name(&self.pointer, &self.path);
 
-        // Fetch the remote branch into the local sync branch.
-        // The sync branch is always a reset to the remote branch
-        // and it's state should not be depended on.
-        match self
-            .floxmeta
-            .git
-            .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}"))
-        {
-            Ok(_) => {},
-            Err(GitRemoteCommandError::RefNotFound(_)) => {
-                Err(ManagedEnvironmentError::UpstreamNotFound {
-                    env_ref: self.env_ref(),
-                    upstream: self.pointer.floxhub_base_url.to_string(),
-                    user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
-                })?
-            },
-            Err(e) => Err(ManagedEnvironmentError::FetchUpdates(e))?,
-        };
+        self.fetch_remote_state(flox)?;
 
         // Check whether we can fast-forward the remote branch to the local branch,
         // if not the environment has diverged.
@@ -3560,5 +3577,57 @@ mod test {
         });
 
         assert!(floxmeta_dir.exists());
+    }
+
+    /// Test that remote_lockfile_contents_for_current_generation returns remote data, not local
+    #[tokio::test(flavor = "multi_thread")]
+    async fn remote_lockfile_contents_returns_remote_not_local() {
+        use crate::models::lockfile::Lockfile;
+
+        let owner = "owner".parse().unwrap();
+        let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("empty.yaml")).await;
+        let initial_manifest = indoc! {r#"
+            version = 1
+            [install]
+        "#};
+
+        let mut environment = mock_managed_environment_in(
+            &flox,
+            initial_manifest,
+            owner.clone(),
+            &tempdir,
+            Some("test-env"),
+        );
+
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+        environment
+            .install(
+                &[PackageToInstall::parse(&flox.system, "hello").unwrap()],
+                &flox,
+            )
+            .unwrap();
+
+        // Get remote lockfile
+        environment.fetch_remote_state(&flox).unwrap();
+        let remote_lockfile_contents = environment
+            .remote_lockfile_contents_for_current_generation()
+            .unwrap();
+        let remote_lockfile: Lockfile = serde_json::from_str(&remote_lockfile_contents).unwrap();
+
+        // Verify local lockfile has a package
+        let local_lockfile: Lockfile = environment.lockfile(&flox).unwrap().into();
+        let local_packages = local_lockfile.list_packages(&flox.system).unwrap();
+        assert_eq!(local_packages.len(), 1, "Local should have hello");
+
+        // Verify remote lockfile has no packages yet
+        let packages = remote_lockfile.list_packages(&flox.system).unwrap();
+        assert_eq!(
+            packages.len(),
+            0,
+            "Remote should not yet have hello package"
+        );
     }
 }

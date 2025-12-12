@@ -10,6 +10,7 @@ use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironmentError,
     PullResult,
 };
+use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     DOT_FLOX,
@@ -37,10 +38,10 @@ use crate::utils::message;
 
 #[derive(Debug, Clone, Bpaf)]
 enum PullSelect {
-    New {
-        /// ID of the environment to pull
-        #[bpaf(long, short, argument("owner>/<name"))]
-        remote: RemoteEnvironmentRef,
+    RemoteUpdate {
+        /// Pull updates for a cached remote environment
+        #[bpaf(long("reference"), long("ref"), short('r'), argument("owner>/<name"))]
+        env_ref: RemoteEnvironmentRef,
     },
     NewAbbreviated {
         /// ID of the environment to pull
@@ -107,7 +108,7 @@ impl Pull {
         };
 
         match self.pull_select {
-            PullSelect::New { remote } | PullSelect::NewAbbreviated { remote } => {
+            PullSelect::NewAbbreviated { remote } => {
                 if self.generation.is_some() && !self.copy {
                     bail!("The --generation option can only be used when pulling with --copy");
                 };
@@ -134,6 +135,11 @@ impl Pull {
                     self.force,
                     self.generation,
                 )?;
+            },
+            PullSelect::RemoteUpdate { env_ref } => {
+                debug!("Resolved user intent: pull updates for remote environment {env_ref:?}");
+
+                Self::pull_remote_environment_updates(&flox, env_ref, self.force)?;
             },
             PullSelect::Existing {} => {
                 debug!("Resolved user intent: pull changes for environment found in {dir:?}");
@@ -212,6 +218,51 @@ impl Pull {
                 message::warning(formatdoc! {"
                             {owner}/{name} is already up to date.
                         ", owner = pointer.owner, name = pointer.name});
+            },
+        }
+
+        Ok(())
+    }
+
+    /// Pull updates for a cached remote environment
+    ///
+    /// Opens a cached remote environment and pulls the latest changes from FloxHub.
+    fn pull_remote_environment_updates(
+        flox: &Flox,
+        env_ref: RemoteEnvironmentRef,
+        force: bool,
+    ) -> Result<()> {
+        let pointer = ManagedPointer::new(
+            env_ref.owner().clone(),
+            env_ref.name().clone(),
+            &flox.floxhub,
+        );
+
+        // Open the remote environment and pull updates
+        let mut remote_env = RemoteEnvironment::new(flox, pointer.clone(), None)?;
+        let pull_result = remote_env.pull(flox, force)?;
+
+        match pull_result {
+            PullResult::Updated => {
+                // Build the updated environment
+                // Note: RemoteEnvironment::pull() already updates the out links via update_out_link()
+                let _store_paths = remote_env.build(flox)?;
+
+                message::updated(formatdoc! {"
+                    Pulled {env_ref} from {floxhub_host}{suffix}
+
+                    You can activate this environment with 'flox activate -r {env_ref}'
+                    ",
+                    floxhub_host = flox.floxhub.base_url(),
+                    suffix = if force { " (forced)" } else { "" }
+                });
+
+                warn_manifest_changes_for_services(flox, &remote_env);
+            },
+            PullResult::UpToDate => {
+                message::info(formatdoc! {"
+                    {env_ref} is already up to date.
+                "});
             },
         }
 

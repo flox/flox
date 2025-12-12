@@ -10,7 +10,12 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
-use flox_rust_sdk::models::environment::generations::GenerationId;
+use flox_rust_sdk::models::environment::generations::{
+    AllGenerationsMetadata,
+    GenerationId,
+    GenerationsExt,
+};
+use flox_rust_sdk::models::environment::managed_environment::DivergedMetadata;
 use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
     Environment,
@@ -19,6 +24,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_ENV_LOG_DIR_VAR,
     FLOX_PROMPT_ENVIRONMENTS_VAR,
     FLOX_SERVICES_SOCKET_VAR,
+    UpgradeResult,
 };
 use flox_rust_sdk::models::lockfile::LockResult;
 use flox_rust_sdk::models::manifest::typed::{ActivateMode, IncludeDescriptor, Inner};
@@ -47,6 +53,7 @@ use crate::commands::{
     uninitialized_environment_description,
 };
 use crate::config::{Config, EnvironmentPromptConfig};
+use crate::utils::errors::format_diverged_metadata;
 use crate::utils::openers::Shell;
 use crate::utils::{default_nix_env_vars, message};
 use crate::{environment_subcommand_metric, subcommand_metric, utils};
@@ -154,7 +161,7 @@ impl Activate {
         {
             // Read the results of a previous upgrade check
             // and print a message if an upgrade is available.
-            notify_upgrade_if_available(&flox, &mut concrete_environment)?;
+            notify_upgrades_if_available(&flox, &mut concrete_environment, &self.environment)?;
         } else {
             debug!("Upgrade notification disabled");
         }
@@ -712,7 +719,11 @@ pub enum InvocationType {
 /// but doesn't act on it, they should see the message again next time they activate,
 /// so they are not wondering whether upgrades may have been applied automatically.
 /// To make this less annoying, we tried to make the message as unobtrusive as possible.
-fn notify_upgrade_if_available(flox: &Flox, environment: &mut ConcreteEnvironment) -> Result<()> {
+fn notify_upgrades_if_available(
+    flox: &Flox,
+    environment: &mut ConcreteEnvironment,
+    environment_select: &EnvironmentSelect,
+) -> Result<()> {
     let current_environment = UninitializedEnvironment::from_concrete_environment(environment);
     let active_environments = activated_environments();
     if active_environments.is_active(&current_environment) {
@@ -727,26 +738,122 @@ fn notify_upgrade_if_available(flox: &Flox, environment: &mut ConcreteEnvironmen
         return Ok(());
     };
 
-    let current_lockfile = environment.lockfile(flox)?.into();
+    notify_package_upgrades(flox, environment, &info.upgrade_result)?;
+    notify_environment_upgrades(
+        environment,
+        &info.remote_generations_metadata,
+        environment_select,
+    )?;
 
-    if Some(current_lockfile) != info.result.old_lockfile {
+    Ok(())
+}
+
+fn notify_package_upgrades(
+    flox: &Flox,
+    environment: &mut ConcreteEnvironment,
+    upgrade_result: &UpgradeResult,
+) -> Result<()> {
+    let current_lockfile = environment.lockfile(flox)?.into();
+    if Some(current_lockfile) != upgrade_result.old_lockfile {
         // todo: delete the info file?
         debug!("Not notifying user of upgrade, lockfile has changed since last check");
         return Ok(());
     }
-
-    let diff = info.result.diff();
+    let diff = upgrade_result.diff();
     if diff.is_empty() {
         debug!("Not notifying user of upgrade, no changes in lockfile");
         return Ok(());
     }
-
     let description = environment_description(environment)?;
-
-    // Update this message in flox-config.md if you change it here
     let message = formatdoc! {"
         Upgrades are available for packages in {description}.
         Use 'flox upgrade --dry-run' for details.
+    "};
+    message::info(message);
+    Ok(())
+}
+
+fn notify_environment_upgrades(
+    environment: &ConcreteEnvironment,
+    remote_generations_metadata: &Option<AllGenerationsMetadata>,
+    environment_select: &EnvironmentSelect,
+) -> Result<()> {
+    if let ConcreteEnvironment::Path(_) = environment {
+        debug!("Not notifying user of environment upgrades for local path environments");
+        return Ok(());
+    }
+
+    let Some(remote_generations_metadata) = remote_generations_metadata else {
+        debug!("Not notifying user of environment upgrades, remote state not known");
+        return Ok(());
+    };
+
+    let local_generations_metadata = match environment {
+        ConcreteEnvironment::Path(_) => unreachable!(),
+        ConcreteEnvironment::Managed(managed_environment) => {
+            managed_environment.generations_metadata()
+        },
+        ConcreteEnvironment::Remote(remote_environment) => {
+            remote_environment.generations_metadata()
+        },
+    };
+
+    let local_generations_metadata = match local_generations_metadata {
+        Ok(metadata) => metadata.into_inner(),
+        Err(error) => {
+            warn!(%error, "Not notifying user of environment upgrades, could not get local state");
+            return Ok(());
+        },
+    };
+
+    // TODO: I think we should use a floxmeta git rev rather than having a
+    // separate source of truth in the upgrade notification file
+    // That would be more robust to catch force pushes
+    // It's also possible to get notifications currently that the upstream
+    // environment is at two different generations if you have one
+    // upgrade-check.json in a ManagedEnvironment and one for a
+    // RemoteEnvironment
+    // We can add a test when we do that
+    // TODO: if we drop this, we can drop History::len()
+    if local_generations_metadata.current_gen() == remote_generations_metadata.current_gen()
+        && local_generations_metadata.history().len() == remote_generations_metadata.history().len()
+    {
+        let local_timestamp = local_generations_metadata
+            .history()
+            .iter()
+            .next()
+            .map(|entry| entry.timestamp);
+        let remote_timestamp = remote_generations_metadata
+            .history()
+            .iter()
+            .next()
+            .map(|entry| entry.timestamp);
+        if local_timestamp == remote_timestamp {
+            debug!(
+                "Local state of environment at generation {:?} is the same as upstream",
+                local_generations_metadata.current_gen()
+            );
+            return Ok(());
+        }
+    }
+
+    let diversion_message = format_diverged_metadata(&DivergedMetadata {
+        local: local_generations_metadata,
+        remote: remote_generations_metadata.to_owned(),
+    });
+
+    // TODO: this doesn't capture the environment chosen by the user if we prompted
+    let flags = environment_select
+        .to_flags()
+        .map(|flags| format!(" {}", flags.join(" ")))
+        .unwrap_or("".to_string());
+
+    let message = formatdoc! {"
+        Environment out of sync with FloxHub.
+
+        {diversion_message}
+
+        Use 'flox push|pull{flags}' to fetch updates or update the environment on FloxHub.
     "};
 
     message::info(message);
@@ -912,7 +1019,8 @@ mod upgrade_notification_tests {
         let mut environment = ConcreteEnvironment::Path(environment);
 
         tracing::subscriber::with_default(subscriber, || {
-            notify_upgrade_if_available(&flox, &mut environment).unwrap();
+            notify_upgrades_if_available(&flox, &mut environment, &EnvironmentSelect::Unspecified)
+                .unwrap();
         });
 
         let printed = writer.to_string();
@@ -940,12 +1048,13 @@ mod upgrade_notification_tests {
 
         let _ = locked.info_mut().insert(UpgradeInformation {
             last_checked: OffsetDateTime::now_utc(),
-            result: UpgradeResult {
+            upgrade_result: UpgradeResult {
                 old_lockfile: Some(environment.lockfile(flox).unwrap().into()),
                 new_lockfile,
 
                 store_path: None,
             },
+            remote_generations_metadata: None,
         });
 
         locked.commit().unwrap();
@@ -974,7 +1083,12 @@ mod upgrade_notification_tests {
             Some(active.to_string()),
             || {
                 tracing::subscriber::with_default(subscriber, || {
-                    notify_upgrade_if_available(&flox, &mut environment).unwrap();
+                    notify_upgrades_if_available(
+                        &flox,
+                        &mut environment,
+                        &EnvironmentSelect::Unspecified,
+                    )
+                    .unwrap();
                 });
             },
         );
@@ -999,7 +1113,8 @@ mod upgrade_notification_tests {
         write_upgrade_available(&flox, &mut environment);
 
         tracing::subscriber::with_default(subscriber, || {
-            notify_upgrade_if_available(&flox, &mut environment).unwrap();
+            notify_upgrades_if_available(&flox, &mut environment, &EnvironmentSelect::Unspecified)
+                .unwrap();
         });
 
         let printed = writer.to_string();
@@ -1031,19 +1146,21 @@ mod upgrade_notification_tests {
 
             let _ = locked.info_mut().insert(UpgradeInformation {
                 last_checked: OffsetDateTime::now_utc(),
-                result: UpgradeResult {
+                upgrade_result: UpgradeResult {
                     old_lockfile: Some(old_lockfile),
                     new_lockfile: environment.lockfile(&flox).unwrap().into(),
 
                     store_path: None,
                 },
+                remote_generations_metadata: None,
             });
 
             locked.commit().unwrap();
         }
 
         tracing::subscriber::with_default(subscriber, || {
-            notify_upgrade_if_available(&flox, &mut environment).unwrap();
+            notify_upgrades_if_available(&flox, &mut environment, &EnvironmentSelect::Unspecified)
+                .unwrap();
         });
 
         let printed = writer.to_string();
@@ -1063,27 +1180,29 @@ mod upgrade_notification_tests {
             let upgrade_information =
                 UpgradeInformationGuard::read_in(environment.cache_path().unwrap()).unwrap();
 
-            let result = UpgradeResult {
+            let upgrade_result = UpgradeResult {
                 old_lockfile: Some(environment.lockfile(&flox).unwrap().into()),
                 new_lockfile: environment.lockfile(&flox).unwrap().into(),
 
                 store_path: None,
             };
 
-            assert!(result.diff().is_empty());
+            assert!(upgrade_result.diff().is_empty());
 
             let mut locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
 
             let _ = locked.info_mut().insert(UpgradeInformation {
                 last_checked: OffsetDateTime::now_utc(),
-                result,
+                upgrade_result,
+                remote_generations_metadata: None,
             });
 
             locked.commit().unwrap();
         }
 
         tracing::subscriber::with_default(subscriber, || {
-            notify_upgrade_if_available(&flox, &mut environment).unwrap();
+            notify_upgrades_if_available(&flox, &mut environment, &EnvironmentSelect::Unspecified)
+                .unwrap();
         });
 
         let printed = writer.to_string();
