@@ -40,7 +40,7 @@ use crate::utils::message;
 enum PullSelect {
     RemoteUpdate {
         /// Pull updates for a cached remote environment
-        #[bpaf(long("remote"), short('r'), argument("owner>/<name"))]
+        #[bpaf(long("reference"), long("ref"), short('r'), argument("owner>/<name"))]
         env_ref: RemoteEnvironmentRef,
     },
     NewAbbreviated {

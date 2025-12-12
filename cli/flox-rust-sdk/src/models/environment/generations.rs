@@ -580,6 +580,11 @@ pub trait GenerationsExt {
         generation: GenerationId,
     ) -> Result<(), EnvironmentError>;
 
+    /// Return the lockfile from FloxHub stored on the sync branch.
+    fn remote_lockfile_contents_for_current_generation(&self) -> Result<String, GenerationsError>;
+    /// Return the manifest from FloxHub stored on the sync branch.
+    fn remote_manifest_contents_for_current_generation(&self) -> Result<String, GenerationsError>;
+
     fn lockfile_contents_for_generation(
         &self,
         generation: usize,

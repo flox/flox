@@ -13,6 +13,7 @@ flox-generations-list - show all environment generations that you can switch to
 ```
 flox [<general-options>] generations list
      [-d=<path> | -r=<owner/name>]
+     [-u]
      [-t | --json]
      [--no-pager]
 ```
@@ -41,6 +42,7 @@ which generation is currently live.
 
 ```{.include}
 ./include/environment-options.md
+./include/upstream-option.md
 ./include/general-options.md
 ```
 

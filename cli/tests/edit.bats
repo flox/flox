@@ -192,7 +192,7 @@ EOF
   "$FLOX_BIN" init --name name
   "$FLOX_BIN" push --owner "owner"
 
-  run "$FLOX_BIN" edit --remote "owner/name" --name "renamed"
+  run "$FLOX_BIN" edit --reference "owner/name" --name "renamed"
   assert_failure
   assert_output --partial "Cannot rename environments on FloxHub"
 }

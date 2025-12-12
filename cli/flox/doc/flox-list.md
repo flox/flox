@@ -14,6 +14,7 @@ flox-list - list packages installed in an environment
 ```
 flox [<general-options>] list
      [-d=<path> | -r=<owner/name>]
+     [-u]
      [-e | -c | -n | -a]
 ```
 
@@ -43,6 +44,7 @@ the output.
 
 ```{.include}
 ./include/environment-options.md
+./include/upstream-option.md
 ./include/general-options.md
 ```
 

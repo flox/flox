@@ -477,6 +477,14 @@ impl GenerationsExt for RemoteEnvironment {
         Ok(())
     }
 
+    fn remote_lockfile_contents_for_current_generation(&self) -> Result<String, GenerationsError> {
+        self.inner.remote_lockfile_contents_for_current_generation()
+    }
+
+    fn remote_manifest_contents_for_current_generation(&self) -> Result<String, GenerationsError> {
+        self.inner.remote_manifest_contents_for_current_generation()
+    }
+
     fn lockfile_contents_for_generation(
         &self,
         generation: usize,

@@ -13,6 +13,7 @@ flox-generations-history - Show the change log for the current environment
 ```
 flox [<general-options>] generations history
      [-d=<path> | -r=<owner/name>]
+     [-u]
      [--json]
      [--no-pager]
 ```
@@ -41,6 +42,7 @@ generation over time.
 
 ```{.include}
 ./include/environment-options.md
+./include/upstream-option.md
 ./include/general-options.md
 ```
 

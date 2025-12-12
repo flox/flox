@@ -519,7 +519,7 @@ The fields in these include descriptors are as follows:
 
 `remote`
 : The remote name of an environment to include. This has the same semantics as
-  the `--remote` flag passed to many Flox commands.
+  the `--reference` flag passed to many Flox commands.
 
 `name`
 : An optional override to the name of the included environment. This is useful

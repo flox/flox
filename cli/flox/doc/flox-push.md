@@ -37,19 +37,19 @@ Pushing the environment moves the manifest and lock file to FloxHub,
 leaving a reference to the revision of the environment stored locally.
 
 Once the environment has been pushed, it can be used directly with the
-`--remote` option,
+`--reference` option,
 or it can be used and edited locally before syncing with `flox push`.
 See [`flox-edit(1)`](./flox-edit.md), [`flox-install(1)`](./flox-install.md),
 and [`flox-uninstall(1)`](./flox-uninstall.md) for editing the environment.
 
 
-## Pushing a remote environment (using `--remote | -r`)
+## Pushing a remote environment (using `--reference | -r`)
 
-When using the `--remote` flag, commands will operate on a
+When using the `--reference` flag, commands will operate on a
 **central persistent local copy** of the environment.
-Any changes made to an environment using the `--remote` flag,
+Any changes made to an environment using the `--reference` flag,
 affect only the local copy and must be explicitly updated on FloxHub
-using `flox push --remote`
+using `flox push --reference`
 
 ## Conflict resolution
 
@@ -66,7 +66,7 @@ FloxHub with local changes to the environment.
 `-d`, `--dir`
 :   Directory to push the environment from (default: current directory).
 
-    Cannot be used with `--remote`.
+    Cannot be used with `--reference`.
 
 `-o`, `--owner`, `--org`
 :   FloxHub owner to push environment to (default: current FloxHub user).
@@ -75,14 +75,14 @@ FloxHub with local changes to the environment.
     Use 'flox pull --copy' to copy an existing environment and push it to a new
     owner.
 
-    Cannot be used with `--remote`.
+    Cannot be used with `--reference`.
 
 
-`-r`, `--remote`
+`-r`, `--reference`
 :   Update a remote environment by reference (e.g., `owner/name`).
 
     This pushes the local changes made to a remote environment
-    using commands with the `--remote` flag.
+    using commands with the `--reference` flag.
     Referring to environments, that have never been accessed
     or explicitly pulled will cause an error.
 
