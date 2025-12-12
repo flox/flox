@@ -76,10 +76,16 @@ setup_file() {
   run "$FLOX_BIN" show hello
   assert_success
   assert_equal "${lines[0]}" "hello - Program that produces a familiar, friendly greeting"
-  assert_equal "${lines[1]}" "    hello@2.12.2"
-  assert_equal "${lines[2]}" "    hello@2.12.1"
-  assert_equal "${lines[3]}" "    hello@2.12"
-  assert_equal "${lines[4]}" "    hello@2.10"
+  assert_equal "${lines[1]}" "Catalog: nixpkgs"
+  assert_equal "${lines[2]}" "Latest:  hello@2.12.2"
+  assert_equal "${lines[3]}" "License: GPL-3.0-or-later"
+  assert_equal "${lines[4]}" "Outputs: out* (* installed by default)"
+  assert_equal "${lines[5]}" "Systems: x86_64-darwin, aarch64-linux, x86_64-linux, aarch64-darwin"
+  assert_equal "${lines[6]}" "Other versions:"
+  assert_equal "${lines[7]}" "    hello@2.12.2"
+  assert_equal "${lines[8]}" "    hello@2.12.1"
+  assert_equal "${lines[9]}" "    hello@2.12"
+  assert_equal "${lines[10]}" "    hello@2.10"
 }
 
 # bats test_tags=python
