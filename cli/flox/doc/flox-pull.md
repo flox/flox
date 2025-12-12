@@ -55,15 +55,15 @@ been pulled into the current directory, or the directory specified by the
 `-f` may be specified to forcibly update the environment locally even if
 there are local changes not reflected in the remote environment.
 
-## Updating a remote environment (`--remote <owner>/<name>`)
+## Updating a remote environment (`--reference <owner>/<name>`)
 
-When using the `--remote` flag, commands will operate on a
+When using the `--reference` flag, commands will operate on a
 copy of the environment stored in Flox's cache directory.
-Any changes made to an environment using the `--remote` flag,
+Any changes made to an environment using the `--reference` flag,
 affect only the local copy and must be explicitly updated on FloxHub
 using [`flox-push(1)`](./flox-push.md).
 
-`flox pull --remote <owner>/<name>` will create such a local copy for the
+`flox pull --reference <owner>/<name>` will create such a local copy for the
 specified environment, or update an existing copy.
 This allows you to work offline with cached environments and only sync when
 you choose to.
@@ -87,7 +87,7 @@ environments.
 :   Directory to pull an environment into, or directory that contains an
     environment that has already been pulled (default: current directory).
 
-    Cannot be used with `--remote`.
+    Cannot be used with `--reference`.
 
 `<owner>/<name>`
 :   ID of the environment to pull into a directory.
@@ -109,7 +109,7 @@ environments.
 :   Pull the specified generation instead of the live generation.
     Must be used with `--copy`.
 
-`-r <owner>/<name>`, `--remote <owner>/<name>`
+`-r <owner>/<name>`, `--reference <owner>/<name>`
 :   Pull updates for a cached remote environment by reference.
 
     This updates a remote environment that has been activated or pulled

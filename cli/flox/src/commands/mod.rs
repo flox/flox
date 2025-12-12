@@ -877,7 +877,7 @@ pub enum EnvironmentSelect {
     ),
     Remote(
         /// A remote environment on FloxHub
-        #[bpaf(long("remote"), short('r'), argument("owner>/<name"))]
+        #[bpaf(long("reference"), long("ref"), short('r'), argument("owner>/<name"))]
         environment_ref::RemoteEnvironmentRef,
     ),
     #[default]

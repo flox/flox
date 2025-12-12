@@ -7,5 +7,5 @@ or the active environment that was last activated is used.
 `-d`, `--dir`
 :   Path containing a .flox/ directory.
 
-`-r`, `--remote`
+`-r`, `--reference`
 :   A remote environment on FloxHub, specified in the form `<owner>/<name>`.

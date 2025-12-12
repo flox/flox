@@ -68,9 +68,9 @@ function update_dummy_env() {
   shift
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/gzip.yaml" \
-    "$FLOX_BIN" install gzip --remote "$OWNER/$ENV_NAME"
+    "$FLOX_BIN" install gzip --reference "$OWNER/$ENV_NAME"
 
-  "$FLOX_BIN" push --remote "$OWNER/$ENV_NAME"
+  "$FLOX_BIN" push --reference "$OWNER/$ENV_NAME"
 }
 
 # make the environment with specified owner and name incompatible with the current system
@@ -483,7 +483,7 @@ function add_incompatible_package() {
   make_incompatible "owner" "name" 1
   add_incompatible_package "owner" "name" 1
 
-  run "$FLOX_BIN" activate --remote owner/name --trust
+  run "$FLOX_BIN" activate --reference owner/name --trust
   assert_failure
   assert_output --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
 }
