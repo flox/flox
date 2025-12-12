@@ -296,6 +296,11 @@ impl RemoteEnvironment {
         Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
         Ok(result)
     }
+
+    pub fn fetch_remote_state(&self, flox: &Flox) -> Result<(), EnvironmentError> {
+        self.inner.fetch_remote_state(flox)?;
+        Ok(())
+    }
 }
 
 impl Environment for RemoteEnvironment {
@@ -488,6 +493,12 @@ impl GenerationsExt for RemoteEnvironment {
         // `~/.flox/cache/run` because the environment is treated as immutable.
         self.inner
             .rendered_env_links_for_generation(flox, generation)
+    }
+
+    fn remote_generations_metadata(
+        &self,
+    ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
+        self.inner.remote_generations_metadata()
     }
 }
 
