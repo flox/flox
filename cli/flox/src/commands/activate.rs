@@ -806,6 +806,37 @@ fn notify_environment_upgrades(
         },
     };
 
+    // TODO: I think we should use a floxmeta git rev rather than having a
+    // separate source of truth in the upgrade notification file
+    // That would be more robust to catch force pushes
+    // It's also possible to get notifications currently that the upstream
+    // environment is at two different generations if you have one
+    // upgrade-check.json in a ManagedEnvironment and one for a
+    // RemoteEnvironment
+    // We can add a test when we do that
+    // TODO: if we drop this, we can drop History::len()
+    if local_generations_metadata.current_gen() == remote_generations_metadata.current_gen()
+        && local_generations_metadata.history().len() == remote_generations_metadata.history().len()
+    {
+        let local_timestamp = local_generations_metadata
+            .history()
+            .iter()
+            .next()
+            .map(|entry| entry.timestamp);
+        let remote_timestamp = remote_generations_metadata
+            .history()
+            .iter()
+            .next()
+            .map(|entry| entry.timestamp);
+        if local_timestamp == remote_timestamp {
+            debug!(
+                "Local state of environment at generation {:?} is the same as upstream",
+                local_generations_metadata.current_gen()
+            );
+            return Ok(());
+        }
+    }
+
     let diversion_message = format_diverged_metadata(&DivergedMetadata {
         local: local_generations_metadata,
         remote: remote_generations_metadata.to_owned(),

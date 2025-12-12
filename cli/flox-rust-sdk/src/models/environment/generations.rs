@@ -1114,9 +1114,14 @@ impl IntoIterator for History {
     }
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl History {
     pub fn iter(&self) -> <&Self as IntoIterator>::IntoIter {
         self.into_iter()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 }
 
