@@ -8,4 +8,4 @@ or the active environment that was last activated is used.
 :   Path containing a .flox/ directory.
 
 `-r`, `--reference`
-:   A remote environment on FloxHub, specified in the form `<owner>/<name>`.
+:   A FloxHub environment, specified in the form `<owner>/<name>`.

@@ -553,7 +553,7 @@ enum UseCommands {
         header(indoc! {"
             When called with no arguments 'flox activate' will look for a '.flox' directory
             in the current directory. Calling 'flox activate' in your home directory will
-            activate a default environment. Environments in other directories and remote
+            activate a default environment. Environments in other directories and FloxHub
             environments are activated with the '-d' and '-r' flags respectively.
         "}),
         footer("Run 'man flox-activate' for more details.")
@@ -876,7 +876,7 @@ pub enum EnvironmentSelect {
         PathBuf,
     ),
     Remote(
-        /// A remote environment on FloxHub
+        /// A FloxHub environment
         #[bpaf(long("reference"), long("ref"), short('r'), argument("owner>/<name"))]
         environment_ref::RemoteEnvironmentRef,
     ),
@@ -1295,7 +1295,7 @@ pub fn uninitialized_environment_description(
     environment: &UninitializedEnvironment,
 ) -> Result<String> {
     if let Some(owner) = environment.owner_if_remote() {
-        Ok(format!("'{}/{}' (remote)", owner, environment.name()))
+        Ok(format!("'{}/{}' (local)", owner, environment.name()))
     } else if let Some(owner) = environment.owner_if_managed() {
         Ok(format!("'{}/{}'", owner, environment.name()))
     } else if is_current_dir(environment).context("couldn't read current directory")? {

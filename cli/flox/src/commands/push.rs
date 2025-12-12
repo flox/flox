@@ -48,7 +48,6 @@ pub struct Push {
 /// Determines the mode of push operation
 #[derive(Bpaf, Clone)]
 enum PushMode {
-    /// Push from a directory (managed or path environment)
     Directory {
         /// Directory to push the environment from (default: current directory)
         #[bpaf(
@@ -59,15 +58,14 @@ enum PushMode {
         )]
         dir: Option<PathBuf>,
 
-        /// FloxHub account to push environment to (default: current FloxHub user).
+        /// FloxHub account to push the environment to (default: current FloxHub user).
         /// Can only be specified when pushing an environment for the first time.
         /// Organizations may use either '--owner=<orgname>' or alias '--org=<orgname>'.
         #[bpaf(long("owner"), long("org"), short('o'), argument("owner"))]
         owner: Option<EnvironmentOwner>,
     },
-    /// Push a cached remote environment
     Remote {
-        /// Push a remote environment by reference (e.g., owner/name)
+        /// Push an environment to FloxHub
         #[bpaf(long("reference"), short('r'), argument("owner>/<name"))]
         env_ref: RemoteEnvironmentRef,
     },

@@ -625,7 +625,7 @@ impl UninitializedEnvironment {
     // quotes whereas we use message_description for activate errors in Rust.
     pub fn bare_description(&self) -> String {
         if let Some(owner) = self.owner_if_remote() {
-            format!("{}/{} (remote)", owner, self.name())
+            format!("{}/{} (local)", owner, self.name())
         } else if let Some(owner) = self.owner_if_managed() {
             format!("{}/{}", owner, self.name())
         } else {

@@ -55,7 +55,7 @@ been pulled into the current directory, or the directory specified by the
 `-f` may be specified to forcibly update the environment locally even if
 there are local changes not reflected in the remote environment.
 
-## Updating a remote environment (`--reference <owner>/<name>`)
+## Updating FloxHub environments (`--reference <owner>/<name>`)
 
 When using the `--reference` flag, commands will operate on a
 copy of the environment stored in Flox's cache directory.

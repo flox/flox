@@ -109,7 +109,7 @@ EOF
 
   run "$FLOX_BIN" install hello --reference "$OWNER/test"
   assert_success
-  assert_output --partial "environment '$OWNER/test' (remote)" # managed env output
+  assert_output --partial "environment '$OWNER/test' (local)"
 
   run --separate-stderr "$FLOX_BIN" list --name --reference "$OWNER/test"
   assert_success
