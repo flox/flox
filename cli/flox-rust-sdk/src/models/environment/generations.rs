@@ -1123,6 +1123,11 @@ impl History {
     pub fn len(&self) -> usize {
         self.0.len()
     }
+
+    // Return the latest history entry
+    pub fn latest(&self) -> Option<&WithOtherFields<HistorySpec>> {
+        self.0.last()
+    }
 }
 
 mod compat {
