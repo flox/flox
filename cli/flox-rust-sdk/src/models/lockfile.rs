@@ -2856,10 +2856,14 @@ pub(crate) mod tests {
                 .await;
         if let Err(ResolveError::ResolutionFailed(res_failures)) = locked_manifest {
             // A newline is added for formatting when it's a single message
-            assert_eq!(
-                res_failures.to_string(),
-                "\nThe attr_path darwin.ps is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,x86_64-darwin), (x86_64-darwin)."
-            );
+            assert_eq!(res_failures.to_string(), indoc! {"
+                package 'darwin.ps' not available for
+                    - aarch64-linux
+                  but it is available for
+                    - x86_64-darwin
+
+                For more on managing system-specific packages, visit the documentation:
+                https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages"});
         } else {
             panic!("expected resolution failure, got {:?}", locked_manifest);
         }

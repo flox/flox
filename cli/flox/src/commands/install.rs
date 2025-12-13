@@ -911,7 +911,7 @@ mod tests {
         let installed_systems = if is_linux {
             "aarch64-darwin, x86_64-darwin"
         } else {
-            "aarch64-linux, x86_64-linux"
+            "x86_64-linux, aarch64-linux"
         };
         flox.catalog_client = catalog_replay_client(response_path).await;
 
