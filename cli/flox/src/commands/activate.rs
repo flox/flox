@@ -815,26 +815,36 @@ fn notify_environment_upgrades(
     // RemoteEnvironment
     // We can add a test when we do that
     // TODO: if we drop this, we can drop History::len()
+    let local_timestamp = local_generations_metadata
+        .history()
+        .latest()
+        .map(|entry| entry.timestamp);
+    let remote_timestamp = remote_generations_metadata
+        .history()
+        .latest()
+        .map(|entry| entry.timestamp);
     if local_generations_metadata.current_gen() == remote_generations_metadata.current_gen()
         && local_generations_metadata.history().len() == remote_generations_metadata.history().len()
+        && local_timestamp == remote_timestamp
     {
-        let local_timestamp = local_generations_metadata
-            .history()
-            .iter()
-            .next()
-            .map(|entry| entry.timestamp);
-        let remote_timestamp = remote_generations_metadata
-            .history()
-            .iter()
-            .next()
-            .map(|entry| entry.timestamp);
-        if local_timestamp == remote_timestamp {
-            debug!(
-                "Local state of environment at generation {:?} is the same as upstream",
-                local_generations_metadata.current_gen()
-            );
-            return Ok(());
-        }
+        debug!(
+            "Local state of environment at generation {:?} is the same as upstream",
+            local_generations_metadata.current_gen()
+        );
+        return Ok(());
+    }
+    // TODO: currently if we push a generation, the upgrade notification file isn't necessarily
+    // updated, so without this conditional, we say the environment has diverged
+    // even though it was just synced
+    // This will lead to false negatives, but that's better than false positives
+    // We should fix this by using floxmeta, which will be updated whenever we talk to FloxHub
+    // TODO: this doesn't catch when we force push something older
+    if local_timestamp >= remote_timestamp {
+        debug!(
+            "Not notifying user of environment upgrades, local state is newer than upstream: local={:?} remote={:?}",
+            local_timestamp, remote_timestamp
+        );
+        return Ok(());
     }
 
     let diversion_message = format_diverged_metadata(&DivergedMetadata {
