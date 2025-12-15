@@ -16,8 +16,8 @@ flowchart TB
         n145["exec(userShell<br>&lt;RCFILE_options&gt;<br>-c command_script)"]
         n146["exec(cmd args)"]
         invoke["userShell"]
-        n153["set_ready(<br>PID of executive,<br>active storepath)"]
-        n158["reactivate<br>subcommand"]
+        n153["set_ready(<br>$$,<br>PID of executive,<br>active storepath)"]
+        n158["activating<br>different<br>storepath"]
         n154["do_activate()"]
         n155["wait_for_process_compose()"]
         n156@{ label: "<span style=\"background-color:\">subprocess(process-compose start)</span>" }
@@ -28,10 +28,10 @@ flowchart TB
         n98["flox-never-exit"]
   end
  subgraph s3["<br>"]
-        n111["exists?"]
+        n111["activations.json<br>exists?"]
         n112["executive alive?"]
         n113["ready to<br>attach?"]
-        n114["do_start()<br>fork()"]
+        n114["register_not_ready()<br>fork()"]
   end
  subgraph activate["activate"]
         n7[["source &lt;(flox-activations set-env-dirs)<br>source &lt;(flox-activations fix-paths)"]]
@@ -45,7 +45,7 @@ flowchart TB
         node_aqepkktvr["rust"]
         n0["bash"]
         nz["userShell"]
-        n110["registry logic<br>(in rust)"]
+        n110["activations.json<br>logic<br>(in rust)"]
         n139(["untracked<br>activation"])
   end
  subgraph executive["Executive"]
@@ -54,10 +54,10 @@ flowchart TB
         nv(["Rust Destructors<br>(Submit metrics, etc.)"])
         n66[["stop-process-compose()"]]
         n125["register SIGUSR1 signal handler<br>"]
-        n94[["initialise metrics, etc."]]
+        n94[["initialise metrics, etc.<br>export FLOX_ENV_DIRS = $FLOX_ENV"]]
         n100@{ label: "setsid()<br style=\"--tw-scale-x:\">register as subreaper" }
         n136["close(0,1,2)<br>open(2,logfile)"]
-        n148["SIGUSR1 signal handler:<br>start_process_compose()<br>using latest env"]
+        n148["SIGUSR1 signal handler:<br>start_process_compose()<br>using latest env, fix_paths, etc."]
         s2
   end
  subgraph invoke["userShell"]
