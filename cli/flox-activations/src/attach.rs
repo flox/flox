@@ -522,7 +522,7 @@ fn activate_interactive(
 fn activate_in_place(startup_ctx: StartupCtx, activation_id: String) -> Result<()> {
     let attach_command = AttachArgs {
         pid: std::process::id() as i32,
-        flox_env: (&startup_ctx.act_ctx.env).into(),
+        dot_flox_path: (&startup_ctx.act_ctx.dot_flox_path).into(),
         id: activation_id.clone(),
         exclusive: AttachExclusiveArgs {
             timeout_ms: Some(5000),
@@ -567,13 +567,13 @@ fn activate_in_place(startup_ctx: StartupCtx, activation_id: String) -> Result<(
 
     let script = formatdoc! {r#"
             {legacy_exports}
-            {flox_activations} attach --runtime-dir "{runtime_dir}" --pid {self_pid_var} --flox-env "{flox_env}" --id "{id}" --remove-pid "{pid}";
+            {flox_activations} attach --dot-flox-path "{dot_flox_path}" --runtime-dir "{runtime_dir}" --pid {self_pid_var} --id "{id}" --remove-pid "{pid}";
             {exports_for_zsh}
         "#,
         flox_activations = (*FLOX_ACTIVATIONS_BIN).to_string_lossy(),
+        dot_flox_path = startup_ctx.act_ctx.dot_flox_path.to_string_lossy(),
         runtime_dir = startup_ctx.act_ctx.flox_runtime_dir,
         self_pid_var = Shell::from(startup_ctx.act_ctx.shell.clone()).self_pid_var(),
-        flox_env = startup_ctx.act_ctx.env,
         id = activation_id,
         pid = std::process::id(),
     };

@@ -90,7 +90,7 @@ impl ActivateArgs {
 
         let start_or_attach = StartOrAttachArgs {
             pid: std::process::id() as i32,
-            flox_env: PathBuf::from(&context.env),
+            dot_flox_path: context.dot_flox_path.clone(),
             store_path: context.flox_activate_store_path.clone(),
             runtime_dir: PathBuf::from(&context.flox_runtime_dir),
         }
@@ -147,8 +147,8 @@ impl ActivateArgs {
             let mut executive = Command::new((*FLOX_ACTIVATIONS_BIN).clone());
             executive.args([
                 "executive",
-                "--env",
-                &context.env,
+                "--dot-flox-path",
+                &context.dot_flox_path.to_string_lossy(),
                 "--executive-ctx",
                 &executive_ctx_path.to_string_lossy(),
             ]);
@@ -214,7 +214,11 @@ impl ActivateArgs {
                     "Received SIGUSR2 (start failed) from child process {}",
                     child_pid
                 );
-                Self::cleanup_on_failure(activation_id, &context.flox_runtime_dir, &context.env)?;
+                Self::cleanup_on_failure(
+                    activation_id,
+                    &context.flox_runtime_dir,
+                    &context.dot_flox_path,
+                )?;
                 // Exit non-zero, but don't print anything as the executive
                 // prints an error
                 // TODO: don't exit prior to destructors

@@ -6,6 +6,9 @@ use shell_gen::ShellWithPath;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActivateCtx {
     // Command arguments (from command.arg() calls in cli/flox/src/commands/activate.rs:437-462)
+    /// The path to the environment .flox directory
+    pub dot_flox_path: PathBuf,
+
     /// The path to the environment symlink
     pub env: String,
 

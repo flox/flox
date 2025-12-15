@@ -36,7 +36,10 @@ pub static PROCESS_COMPOSE_BIN: LazyLock<String> = LazyLock::new(|| {
 
 #[derive(Debug, Clone)]
 pub struct Cli {
-    /// The path to the Flox environment
+    /// The path to the .flox directory
+    pub dot_flox_path: PathBuf,
+
+    /// The path to the Flox environment symlink
     pub flox_env: PathBuf,
 
     /// The path to the runtime directory keeping activation data
@@ -94,7 +97,7 @@ fn run_inner(
     should_clean_up: Arc<AtomicBool>,
     should_reap: Signals,
 ) -> Result<(), Error> {
-    let activations_json_path = activations_json_path(&args.runtime_dir, &args.flox_env);
+    let activations_json_path = activations_json_path(&args.runtime_dir, &args.dot_flox_path);
 
     let mut watcher = PidWatcher::new(
         activations_json_path.clone(),
@@ -119,7 +122,7 @@ fn run_inner(
     );
 
     let activation_state_dir =
-        activation_state_dir_path(&args.runtime_dir, &args.flox_env, &args.activation_id)?;
+        activation_state_dir_path(&args.runtime_dir, &args.dot_flox_path, &args.activation_id)?;
 
     match watcher.wait_for_termination() {
         Ok(WaitResult::CleanUp(locked_activations)) => {
@@ -276,14 +279,14 @@ mod test {
         let pid = proc.id() as i32;
         let start_or_attach = StartOrAttachArgs {
             pid,
-            flox_env: flox_env.clone(),
+            dot_flox_path: flox_env.clone(),
             store_path: store_path.clone(),
             runtime_dir: runtime_dir.to_path_buf(),
         };
         let activation_id = start_or_attach.handle_inner().unwrap().activation_id;
         let set_ready = SetReadyArgs {
             id: activation_id.clone(),
-            flox_env: flox_env.clone(),
+            dot_flox_path: flox_env.clone(),
             runtime_dir: runtime_dir.to_path_buf(),
         };
         set_ready.handle().unwrap();
@@ -301,6 +304,7 @@ mod test {
         stop_process(proc);
 
         let cli = Cli {
+            dot_flox_path: flox_env.clone(),
             flox_env,
             runtime_dir: runtime_dir.to_path_buf(),
             activation_id,

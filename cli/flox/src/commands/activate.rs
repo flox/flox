@@ -407,6 +407,7 @@ impl Activate {
         subcommand_metric!("activate", "shell" = shell.to_string());
 
         let activate_data = ActivateCtx {
+            dot_flox_path: concrete_environment.dot_flox_path().to_path_buf(),
             // Don't rely on FLOX_ENV in the environment when we explicitly know
             // what it should be. This is necessary for nested activations where an
             // outer export of FLOX_ENV would be inherited by the inner activation.

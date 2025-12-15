@@ -12,9 +12,9 @@ pub struct AttachArgs {
     #[arg(help = "The PID of the shell registering interest in the activation.")]
     #[arg(short, long, value_name = "PID")]
     pub pid: i32,
-    #[arg(help = "The path to the activation symlink for the environment.")]
-    #[arg(short, long, value_name = "PATH")]
-    pub flox_env: PathBuf,
+    #[arg(help = "The path to the .flox directory for the environment.")]
+    #[arg(long, value_name = "PATH")]
+    pub dot_flox_path: PathBuf,
     #[arg(help = "The ID for this particular activation of this environment.")]
     #[arg(short, long, value_name = "ID")]
     pub id: String,
@@ -43,7 +43,7 @@ impl AttachArgs {
 
     pub fn handle_inner(self, now: OffsetDateTime) -> Result<(), Error> {
         let activations_json_path =
-            activations::activations_json_path(&self.runtime_dir, &self.flox_env);
+            activations::activations_json_path(&self.runtime_dir, &self.dot_flox_path);
 
         let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
         let Some(activations) = activations else {
@@ -58,7 +58,7 @@ impl AttachArgs {
                 format!(
                     "No activation with ID {} found for environment {}",
                     self.id,
-                    self.flox_env.display()
+                    self.dot_flox_path.display()
                 )
             })?;
 
@@ -114,7 +114,7 @@ mod test {
         });
 
         let args = AttachArgs {
-            flox_env: flox_env.clone(),
+            dot_flox_path: flox_env.clone(),
             id: id.clone(),
             pid: new_pid,
             exclusive: AttachExclusiveArgs {
@@ -153,7 +153,7 @@ mod test {
         });
 
         let args = AttachArgs {
-            flox_env: flox_env.clone(),
+            dot_flox_path: flox_env.clone(),
             id: id.clone(),
             pid: new_pid,
             exclusive: AttachExclusiveArgs {

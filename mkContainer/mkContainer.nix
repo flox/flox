@@ -101,7 +101,8 @@ let
     shell = {
       bash = "${containerPkgs.bashInteractive}/bin/bash";
     };
-    env = "${environment}";
+    dot_flox_path = "${environment}"; # FIXME: Incorrect for containers.
+    env = "${environment}"; # FIXME: Incorrect for containers.
     invocation_type = null;
     remove_after_reading = false;
     env_description = "${containerName}";

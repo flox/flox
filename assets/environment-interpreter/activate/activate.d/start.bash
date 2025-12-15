@@ -254,6 +254,7 @@ LC_ALL=C $_comm -23 "$_start_env" "$_end_env" \
 "$_flox_activations" \
   set-ready \
   --runtime-dir "$FLOX_RUNTIME_DIR" \
-  --flox-env "$FLOX_ENV" --id "$_FLOX_ACTIVATION_ID"
+  --dot-flox-path "$_FLOX_DOT_FLOX_PATH" \
+  --id "$_FLOX_ACTIVATION_ID"
 
 "$_flox_activate_tracer" "$_activate_d/start.bash" END

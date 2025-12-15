@@ -328,24 +328,54 @@ fn activations_json_lock_path(activations_json_path: impl AsRef<Path>) -> PathBu
     activations_json_path.as_ref().with_extension("lock")
 }
 
-/// {flox_runtime_dir}/{path_hash(flox_env)}/activations.json
-pub fn activations_json_path(runtime_dir: impl AsRef<Path>, flox_env: impl AsRef<Path>) -> PathBuf {
+/// Base state directory for activations (plural) of the given environment.
+///
+/// `dot_flox_path` should be canonicalized before being passed to this
+/// function. We can't enforce the type here because the `executive` needs to
+/// still be able to read state if the environment has been deleted beneath it.
+///
+/// If there's a FloxHub account `activations` we'll put gcroots in this dir,
+/// but it shouldn't collide with any of the hashed directories we're storing
+///
+/// {flox_runtime_dir}/activations/{path_hash(dot_flox_path)}-{basename(dot_flox_path)}/
+fn activations_state_dir_path(
+    runtime_dir: impl AsRef<Path>,
+    dot_flox_path: impl AsRef<Path>,
+) -> PathBuf {
+    let dot_flox_path = dot_flox_path.as_ref();
+    let hash = path_hash(dot_flox_path);
+    let basename = dot_flox_path
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|name| name.to_str())
+        .unwrap_or("root");
+
     runtime_dir
         .as_ref()
-        .join(path_hash(flox_env))
-        .join("activations.json")
+        .join("activations")
+        .join(format!("{}-{}", hash, basename))
 }
 
-/// {flox_runtime_dir}/{path_hash(flox_env)}/{activation_id}
+/// State file for activations (plural) of the given environment.
+///
+/// {activations_state_dir_path}/activations.json
+pub fn activations_json_path(
+    runtime_dir: impl AsRef<Path>,
+    dot_flox_path: impl AsRef<Path>,
+) -> PathBuf {
+    activations_state_dir_path(runtime_dir, dot_flox_path).join("activations.json")
+}
+
+/// State directory for environment snapshots of a given activation (singular)
+/// for a given environment.
+///
+/// {activations_state_dir_path}/{activation_id}
 pub fn activation_state_dir_path(
     runtime_dir: impl AsRef<Path>,
-    flox_env: impl AsRef<Path>,
+    dot_flox_path: impl AsRef<Path>,
     activation_id: impl AsRef<str>,
 ) -> Result<PathBuf, Error> {
-    Ok(runtime_dir
-        .as_ref()
-        .join(path_hash(flox_env))
-        .join(activation_id.as_ref()))
+    Ok(activations_state_dir_path(runtime_dir, dot_flox_path).join(activation_id.as_ref()))
 }
 
 /// Returns the parsed `activations.json` file or `None` if it doesn't yet exist.
@@ -410,6 +440,28 @@ mod test {
     pub fn stop_process(mut child: Child) {
         child.kill().expect("failed to kill");
         child.wait().expect("failed to wait");
+    }
+
+    #[test]
+    fn test_activations_state_dir_path() {
+        let runtime_dir = PathBuf::from("/run");
+        let dot_flox_path = PathBuf::from("/myproject/.flox");
+
+        assert_eq!(
+            activations_state_dir_path(&runtime_dir, &dot_flox_path),
+            PathBuf::from("/run/activations/07652e23-myproject")
+        );
+    }
+
+    #[test]
+    fn test_activations_state_dir_path_root_fallback() {
+        let runtime_dir = PathBuf::from("/run");
+        let dot_flox_path = PathBuf::from("/.flox");
+
+        assert_eq!(
+            activations_state_dir_path(&runtime_dir, &dot_flox_path),
+            PathBuf::from("/run/activations/053088b7-root")
+        );
     }
 
     #[test]

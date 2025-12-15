@@ -25,9 +25,9 @@ pub struct StartOrAttachArgs {
     #[arg(help = "The PID of the shell registering interest in the activation.")]
     #[arg(short, long, value_name = "PID")]
     pub pid: i32,
-    #[arg(help = "The path to the activation symlink for the environment.")]
-    #[arg(short, long, value_name = "PATH")]
-    pub flox_env: PathBuf,
+    #[arg(help = "The path to the .flox directory for the environment.")]
+    #[arg(long, value_name = "PATH")]
+    pub dot_flox_path: PathBuf,
     #[arg(help = "The store path of the rendered environment for this activation.")]
     #[arg(short, long, value_name = "PATH")]
     pub store_path: String,
@@ -93,7 +93,8 @@ impl StartOrAttachArgs {
             i32,
         ) -> Result<String, Error>,
     ) -> Result<StartOrAttachResult, Error> {
-        let activations_json_path = activations::activations_json_path(runtime_dir, &self.flox_env);
+        let activations_json_path =
+            activations::activations_json_path(runtime_dir, &self.dot_flox_path);
 
         debug!("Reading activations from {:?}", activations_json_path);
         let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
@@ -113,7 +114,7 @@ impl StartOrAttachArgs {
                         activations,
                         activations_json_path,
                         runtime_dir,
-                        &self.flox_env,
+                        &self.dot_flox_path,
                         lock,
                         &self.store_path,
                         self.pid,
@@ -122,8 +123,11 @@ impl StartOrAttachArgs {
                 },
             };
 
-        let activation_state_dir =
-            activations::activation_state_dir_path(runtime_dir, &self.flox_env, &activation_id)?;
+        let activation_state_dir = activations::activation_state_dir_path(
+            runtime_dir,
+            &self.dot_flox_path,
+            &activation_id,
+        )?;
 
         Ok(StartOrAttachResult {
             attach: attaching,
@@ -166,7 +170,7 @@ fn start(
     mut activations: Activations,
     activations_json_path: PathBuf,
     runtime_dir: &Path,
-    flox_env: &PathBuf,
+    dot_flox_path: &PathBuf,
     lock: fslock::LockFile,
     store_path: &str,
     pid: i32,
@@ -175,7 +179,7 @@ fn start(
     // The activation script will assume this directory exists
     fs::create_dir_all(activations::activation_state_dir_path(
         runtime_dir,
-        flox_env,
+        dot_flox_path,
         &activation_id,
     )?)?;
 
@@ -282,19 +286,19 @@ mod tests {
     #[test]
     fn attach_if_activation_exists() {
         let runtime_dir = tempfile::tempdir().unwrap();
-        let flox_env = PathBuf::from("/path/to/floxenv");
+        let dot_flox_path = PathBuf::from("/path/to/.flox");
         let store_path = "/store/path";
 
         // The PID of the current process, guaranteed to be running
         let pid = nix::unistd::getpid().as_raw();
 
-        let id = write_activations(&runtime_dir, &flox_env, |activations| {
+        let id = write_activations(&runtime_dir, &dot_flox_path, |activations| {
             activations.create_activation(store_path, pid).unwrap().id()
         });
 
         let args = StartOrAttachArgs {
             pid,
-            flox_env: flox_env.clone(),
+            dot_flox_path: dot_flox_path.clone(),
             store_path: store_path.to_string(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
@@ -310,7 +314,7 @@ mod tests {
         assert!(result.attach);
         assert_eq!(
             result.activation_state_dir,
-            activations::activation_state_dir_path(&runtime_dir, flox_env, &id).unwrap()
+            activations::activation_state_dir_path(&runtime_dir, &dot_flox_path, &id).unwrap()
         );
         assert_eq!(result.activation_id, id);
     }
@@ -318,17 +322,17 @@ mod tests {
     #[test]
     fn start_if_activation_does_not_exist() {
         let runtime_dir = tempfile::tempdir().unwrap();
-        let flox_env = PathBuf::from("/path/to/floxenv");
+        let dot_flox_path = PathBuf::from("/path/to/.flox");
         let store_path = "/store/path";
 
         // The PID of the current process, guaranteed to be running
         let pid = nix::unistd::getpid().as_raw();
 
-        write_activations(&runtime_dir, &flox_env, |_| {});
+        write_activations(&runtime_dir, &dot_flox_path, |_| {});
 
         let args = StartOrAttachArgs {
             pid,
-            flox_env: flox_env.clone(),
+            dot_flox_path: dot_flox_path.clone(),
             store_path: store_path.to_string(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
@@ -345,7 +349,7 @@ mod tests {
         assert!(!result.attach);
         assert_eq!(
             result.activation_state_dir,
-            activations::activation_state_dir_path(&runtime_dir, flox_env, &id).unwrap()
+            activations::activation_state_dir_path(&runtime_dir, &dot_flox_path, &id).unwrap()
         );
         assert_eq!(result.activation_id, id);
     }
