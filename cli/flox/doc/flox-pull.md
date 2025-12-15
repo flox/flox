@@ -90,7 +90,7 @@ environments.
     Cannot be used with `--reference`.
 
 `<owner>/<name>`
-:   ID of the environment to pull into a directory.
+:   Reference of an environment to pull into a directory
 
     This is used when pulling a new environment for the first time.
 
@@ -110,10 +110,13 @@ environments.
     Must be used with `--copy`.
 
 `-r <owner>/<name>`, `--reference <owner>/<name>`
-:   Pull updates for a cached remote environment by reference.
+:   Pull updates for a local copy of a FloxHub environment
 
-    This updates a remote environment that has been activated or pulled
-    locally and is cached in `~/.cache/flox/remote/`.
+    The pulled environment can be used by passing '--reference' to other
+    subcommands.
+
+    This updates a FloxHub environment that has been activated or pulled
+    locally and is cached in `~/.cache`.
 
     Cannot be used with `--dir`, `--copy`, or `--generation`.
 

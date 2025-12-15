@@ -39,12 +39,17 @@ use crate::utils::message;
 #[derive(Debug, Clone, Bpaf)]
 enum PullSelect {
     RemoteUpdate {
-        /// Pull updates for a cached remote environment
+        ///
+        ///
+        /// Pull updates for local copy of a FloxHub environment.
+        ///
+        /// The pulled environment can be used by passing '--reference' to other
+        /// subcommands.
         #[bpaf(long("reference"), long("ref"), short('r'), argument("owner>/<name"))]
         env_ref: RemoteEnvironmentRef,
     },
     NewAbbreviated {
-        /// ID of the environment to pull
+        /// Reference of an environment to pull into a directory
         #[bpaf(positional("owner>/<name"))]
         remote: RemoteEnvironmentRef,
     },
@@ -60,8 +65,8 @@ impl Default for PullSelect {
 // Pull environment from FloxHub
 #[derive(Bpaf, Clone)]
 pub struct Pull {
-    /// Directory in which to create a managed environment,
-    /// or directory that already contains a managed environment
+    /// Directory to pull an environment into, or directory that contains an
+    /// environment that has already been pulled
     /// (default: current directory)
     #[bpaf(long, short, argument("path"), complete_shell(SHELL_COMPLETION_DIR))]
     dir: Option<PathBuf>,

@@ -64,9 +64,10 @@ FloxHub with local changes to the environment.
 ## Push Options
 
 `-d`, `--dir`
-:   Directory to push the environment from (default: current directory).
+:   Push an environment in a directory to FloxHub.
 
     Cannot be used with `--reference`.
+    Defaults to the current directory when `--reference` is not specified.
 
 `-o`, `--owner`, `--org`
 :   FloxHub owner to push environment to (default: current FloxHub user).
@@ -79,9 +80,9 @@ FloxHub with local changes to the environment.
 
 
 `-r`, `--reference`
-:   Update a remote environment by reference (e.g., `owner/name`).
+:   Push local copy of a FloxHub environment upstream.
 
-    This pushes the local changes made to a remote environment
+    This pushes the local changes made to a FloxHub environment
     using commands with the `--reference` flag.
     Referring to environments, that have never been accessed
     or explicitly pulled will cause an error.
