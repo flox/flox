@@ -121,6 +121,15 @@ Feel free to [file a new issue][new-issue] with a respective title and
 description on the `flox/flox` repository. If you already found a solution
 to your problem, we would love to review your pull request!
 
+## 🔒 Security
+
+We encourage responsible disclosure of potential security issues, questions, or
+concerns—even if you are unsure whether an issue constitutes a vulnerability.
+For any security-related inquiry, please contact us at:
+
+security@flox.dev
+
+
 ## ⭐️ Contribute
 
 We welcome contributions to this project. Please read the [Contributor
