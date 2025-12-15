@@ -608,6 +608,9 @@ pub trait GenerationsExt {
 ///
 /// To be created either via [ConcreteEnvironment::try_into],
 /// or the [Into] implementations for the subjects.
+// actually used via enum_dispatch and necessary to get completions for derived Environment methods
+#[allow(unused_imports)]
+use super::Environment;
 #[derive(Debug)]
 #[enum_dispatch(GenerationsExt, Environment)]
 pub enum GenerationsEnvironment {
