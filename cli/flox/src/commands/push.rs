@@ -49,7 +49,7 @@ pub struct Push {
 #[derive(Bpaf, Clone)]
 enum PushMode {
     Directory {
-        /// Directory to push the environment from (default: current directory)
+        /// Push an environment in a directory to FloxHub
         #[bpaf(
             long,
             short('d'),
@@ -65,7 +65,12 @@ enum PushMode {
         owner: Option<EnvironmentOwner>,
     },
     Remote {
-        /// Push an environment to FloxHub
+        ///
+        ///
+        /// Push local copy of a FloxHub environment upstream.
+        ///
+        /// This pushes the local changes made to a FloxHub environment using
+        /// commands with the `--reference` flag.
         #[bpaf(long("reference"), short('r'), argument("owner>/<name"))]
         env_ref: RemoteEnvironmentRef,
     },
