@@ -8,7 +8,11 @@ use anyhow::{Context, Result, bail};
 use bpaf::{Bpaf, Parser};
 use flox_core::log_file_format_upgrade_check;
 use flox_rust_sdk::flox::{FLOX_VERSION_STRING, FLOX_VERSION_VAR, Flox};
-use flox_rust_sdk::models::environment::generations::{AllGenerationsMetadata, GenerationsExt};
+use flox_rust_sdk::models::environment::generations::{
+    AllGenerationsMetadata,
+    GenerationsEnvironment,
+    GenerationsExt,
+};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, EnvironmentError};
@@ -270,6 +274,50 @@ pub fn spawn_detached_check_for_upgrades_process(
     let _child = command
         .spawn()
         .context("Failed to spawn 'check-for-upgrades' process")?;
+
+    Ok(())
+}
+
+/// Synchronously try to drop the cached remote state for FloxHub environments.
+///
+/// Since remote state is only updated asynchronously upon activation,
+/// an activation following a push,
+/// would incorrectly notify users of outstanding changes yet to be pushed,
+/// as the cached remote state from previous activations is now outdated.
+/// This function can be used to drop the cached remote state,
+/// causing updates to be fetched again on a future activation of the environment.
+pub(crate) fn invalidate_cached_remote_state(
+    environment: &mut GenerationsEnvironment,
+) -> Result<()> {
+    let upgrade_information = UpgradeInformationGuard::read_in(environment.cache_path()?)?;
+
+    let has_cached_remote_state = upgrade_information
+        .info()
+        .as_ref()
+        .map(|info| info.remote_generations_metadata.is_some())
+        .unwrap_or_default();
+
+    if !has_cached_remote_state {
+        return Ok(());
+    }
+
+    let mut locked = match upgrade_information
+        .lock_if_unlocked()
+        .context("failed to lock upgrade information cache")?
+    {
+        Ok(locked) => locked,
+        Err(_) => {
+            debug!("upgrade information is being updated by another process");
+            return Ok(());
+        },
+    };
+
+    if let Some(info) = locked.info_mut() {
+        info.remote_generations_metadata = None;
+    }
+
+    // We don't want to delay the next async fetch, thus keeping the timestamp unchanged.
+    locked.commit()?;
 
     Ok(())
 }
