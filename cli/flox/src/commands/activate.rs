@@ -833,19 +833,6 @@ fn notify_environment_upgrades(
         );
         return Ok(());
     }
-    // TODO: currently if we push a generation, the upgrade notification file isn't necessarily
-    // updated, so without this conditional, we say the environment has diverged
-    // even though it was just synced
-    // This will lead to false negatives, but that's better than false positives
-    // We should fix this by using floxmeta, which will be updated whenever we talk to FloxHub
-    // TODO: this doesn't catch when we force push something older
-    if local_timestamp >= remote_timestamp {
-        debug!(
-            "Not notifying user of environment upgrades, local state is newer than upstream: local={:?} remote={:?}",
-            local_timestamp, remote_timestamp
-        );
-        return Ok(());
-    }
 
     let diversion_message = format_diverged_metadata(&DivergedMetadata {
         local: local_generations_metadata,
