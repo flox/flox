@@ -174,7 +174,7 @@ common_file_teardown() {
 
 teardown_file() { common_file_teardown; }
 
-# Wait for all watchdogs called with `project_dir` as part of one of their
+# Wait for all executives called with `project_dir` as part of one of their
 # arguments.
 #
 # This is primarily used in `teardown()` to prevent us leaving stray
@@ -186,50 +186,45 @@ teardown_file() { common_file_teardown; }
 # NB1: It must be appended with `|| return 1` to fail the offending test and
 # preserve other output, at the expense of aborting any other cleanup.
 #
-# NB2: It cannot be reliably used inlined of tests to wait for activations or
-# services to be cleaned up because it can exit before a watchdog has started.
-wait_for_watchdogs() {
+wait_for_executives() {
   project_dir="${1?}"
   if [ -z "$project_dir" ]; then
-    echo "ERROR: cannot wait for watchdogs with empty project_dir" >&3
+    echo "ERROR: cannot wait for executives with empty project_dir" >&3
     return 1
   fi
-  # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
-  # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
-  # grep command itself doesn't get listed when we search for the data dir.
-  # The `sed` removes any leading whitespace,
-  # that is present in the output of `ps` on linux apparently?!.
-  # The `cut` just extracts the PID.
 
-  local pids
-  pids="$(
-    ps -Ao pid,args \
-    | grep flox-watchdog \
-    | grep "$project_dir" \
-    | sed 's/^[[:blank:]]*//' \
-    | cut -d' ' -f1)"
+  local -a pids
+  for log in ${project_dir}/.flox/log/executive-*.log; do
+    # Executive log entries include the executive pid on each line with format:
+    # [2025-11-06 10:20:30.123] pid=1234 message here
+    # Extract the pid from the shutdown line (last line) of the log.
+    pid="$(tail -n 1 "$log" | sed -n 's/.*pid=\([0-9]*\) shutting down executive.*/\1/p')"
 
-  # Uncomment to debug which watchdogs are running.
-  #
-  # echo "project_dir => ${project_dir}" >&3
-  # ps -Ao pid,args \
-  #  | grep flox-watchdog \
-  #  >&3
+    # If no shutdown line found yet (executive still running), try to get pid from start line
+    if [ -z "$pid" ]; then
+      pid="$(grep "starting executive" "$log" | tail -n 1 | sed -n 's/.*pid=\([0-9]*\) starting executive.*/\1/p')"
+    fi
 
-  if [ -n "${pids?}" ]; then
+    # Add to the list of pids.
+    if [ -n "$pid" ]; then
+      pids+=("$pid")
+    fi
+  done
+
+  if [ ${#pids[@]} -gt 0 ]; then
     tries=0
     while true; do
       tries=$((tries + 1))
-      if ! kill -0 $pids > /dev/null 2>&1; then
+      if ! kill -0 ${pids[*]} > /dev/null 2>&1; then
         break
       else
         if [[ $tries -gt 1000 ]]; then
-          echo "ERROR: flox-watchdog processes did not finish after 10 seconds" >&3
-          echo "Watchdog logs:" >&3
-          cat "${project_dir}"/.flox/log/watchdog.* >&3
+          echo "ERROR: flox-executive processes did not finish after 10 seconds" >&3
+          echo "executive logs:" >&3
+          cat "${project_dir}"/.flox/log/executive-*.log >&3
           echo "Bats processes:" >&3
           pstree -ws "$BATS_RUN_TMPDIR" >&3
-          # This will fail the test giving us a better idea of which watchdog
+          # This will fail the test giving us a better idea of which executive
           # didn't get cleaned up
           return 1
         fi

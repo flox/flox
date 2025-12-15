@@ -1,7 +1,6 @@
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::Result;
 
 use crate::shell_gen::Shell;
 use crate::shell_gen::capture::ExportEnvDiff;
@@ -64,9 +63,10 @@ pub fn generate_tcsh_startup_commands(
         commands.push("unset FLOX_ENV_DESCRIPTION".to_string());
     }
 
-    commands.push("true not setting _activate_d".to_string()); // DELETEME FOR DEBUGGING
+    // Export the value of $_activate_d to the environment.
+    commands.push(Shell::Tcsh.export_var("_activate_d", &args.activate_d.display().to_string()));
 
-    // Export the value of $_flox_activate_tracer from the environment.
+    // Export the value of $_flox_activate_tracer to the environment.
     commands.push(Shell::Tcsh.export_var("_flox_activate_tracer", &args.flox_activate_tracer));
 
     commands.push("true not setting _flox_activations".to_string()); // DELETEME FOR DEBUGGING
@@ -110,7 +110,7 @@ pub fn generate_tcsh_startup_commands(
     );
 
     commands.push(format!(
-        r#"eval "`'{}' profile-scripts --shell tcsh --env-dirs $FLOX_ENV_DIRS:q $_already_sourced_args:q`""#,
+        r#"if (! $?FLOX_NOPROFILE) eval "`'{}' profile-scripts --shell tcsh --env-dirs $FLOX_ENV_DIRS:q $_already_sourced_args:q`""#,
         args.flox_activations.display()
     ));
 
@@ -129,7 +129,7 @@ pub fn generate_tcsh_startup_commands(
     // the effect of removing newlines from the output, so we must ensure that
     // the output is a valid shell script fragment when represented on a single line.
     commands.push("".to_string()); // ensure there's a trailing newline
-    let mut joined = commands.join(";\n");
+    let joined = commands.join(";\n");
     Ok(joined)
 }
 

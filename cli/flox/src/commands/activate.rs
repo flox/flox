@@ -46,11 +46,10 @@ pub static INTERACTIVE_BASH_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
         env::var("INTERACTIVE_BASH_BIN").unwrap_or(env!("INTERACTIVE_BASH_BIN").to_string()),
     )
 });
+#[allow(dead_code)]
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
+#[allow(dead_code)]
 pub const FLOX_SERVICES_TO_START_VAR: &str = "_FLOX_SERVICES_TO_START";
-pub static WATCHDOG_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
-    PathBuf::from(env::var("WATCHDOG_BIN").unwrap_or(env!("WATCHDOG_BIN").to_string()))
-});
 pub static FLOX_INTERPRETER: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(env::var("FLOX_INTERPRETER").unwrap_or(env!("FLOX_INTERPRETER").to_string()))
 });
@@ -87,13 +86,22 @@ pub struct Activate {
     #[bpaf(long, short)]
     pub generation: Option<GenerationId>,
 
-    /// Command to run interactively in the context of the environment
-    #[bpaf(positional("cmd"), strict, many)]
+    /// Run a command string using the current shell in the context of the environment.
+    #[bpaf(long, short)]
+    pub command_string: Option<String>,
+
+    /// Command and args to invoke using exec() in the context of the environment.
+    #[bpaf(positional("command> <args"), strict, many)]
     pub run_args: Vec<String>,
 }
 
 impl Activate {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+        // Validate that -c and positional arguments are mutually exclusive
+        if self.command_string.is_some() && !self.run_args.is_empty() {
+            bail!("Cannot use both -c/--command-string and positional arguments");
+        }
+
         let mut concrete_environment = match self
             .environment
             .to_concrete_environment(&flox, self.generation)
@@ -200,8 +208,9 @@ impl Activate {
         let has_includes = lockfile.compose.is_some();
         subcommand_metric!("activate", "has_includes" = has_includes);
 
-        let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
-        let interactive = !in_place && self.run_args.is_empty();
+        let in_place = self.print_script
+            || (!stdout().is_tty() && self.run_args.is_empty() && self.command_string.is_none());
+        let interactive = !in_place && self.run_args.is_empty() && self.command_string.is_none();
 
         let rendered_env_path_result = concrete_environment.rendered_env_links(&flox);
         let rendered_env_path = match rendered_env_path_result {
@@ -393,7 +402,6 @@ impl Activate {
             env_cache: concrete_environment.cache_path()?.into_inner(),
             env_description: now_active.bare_description(),
             mode: mode.to_string(),
-            watchdog: (*WATCHDOG_BIN).clone(),
             shell,
             flox_active_environments: flox_active_environments.to_string(),
             flox_env_log_dir: concrete_environment
@@ -417,7 +425,9 @@ impl Activate {
             interactive,
             is_ephemeral,
             run_args: self.run_args,
+            command_string: self.command_string,
             path_to_self: flox_activations.to_string(),
+            original_argv: std::env::args().collect(),
         };
 
         let tempfile = tempfile::NamedTempFile::new_in(flox.temp_dir)?;
