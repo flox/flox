@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use shell_gen::ShellWithPath;
 
+pub use super::mode::ActivateMode;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActivateCtx {
     // Command arguments (from command.arg() calls in cli/flox/src/commands/activate.rs:437-462)
@@ -22,7 +24,7 @@ pub struct ActivateCtx {
     pub env_description: String,
 
     /// The activation mode (dev or run)
-    pub mode: String,
+    pub mode: ActivateMode,
 
     /// Path to the shell executable
     pub shell: ShellWithPath,

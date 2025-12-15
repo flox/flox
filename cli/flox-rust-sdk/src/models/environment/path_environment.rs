@@ -17,6 +17,7 @@ use std::ffi::OsStr;
 use std::fs::{self};
 use std::path::{Path, PathBuf};
 
+use flox_core::activate::mode::ActivateMode;
 use flox_core::write_atomically;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -50,7 +51,6 @@ use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME, create_dot_flo
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, LockResult, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
-use crate::models::manifest::typed::ActivateMode;
 use crate::providers::buildenv::BuildEnvOutputs;
 
 /// Struct representing a local environment

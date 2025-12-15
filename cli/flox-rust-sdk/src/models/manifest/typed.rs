@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use flox_core::Version;
+use flox_core::activate::mode::ActivateMode;
 #[cfg(test)]
 use flox_test_utils::proptest::{
     alphanum_and_whitespace_string,
@@ -725,38 +726,6 @@ impl SkipSerializing for ActivateOptions {
     }
 }
 
-#[derive(
-    Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, Ord, PartialOrd, Default, JsonSchema,
-)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[serde(rename_all = "kebab-case")]
-pub enum ActivateMode {
-    #[default]
-    Dev,
-    Run,
-}
-
-impl Display for ActivateMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ActivateMode::Dev => write!(f, "dev"),
-            ActivateMode::Run => write!(f, "run"),
-        }
-    }
-}
-
-impl FromStr for ActivateMode {
-    type Err = ManifestError;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "dev" => Ok(ActivateMode::Dev),
-            "run" => Ok(ActivateMode::Run),
-            _ => Err(ManifestError::ActivateModeInvalid),
-        }
-    }
-}
-
 /// A map of service names to service definitions
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -998,8 +967,6 @@ pub enum ManifestError {
         "multiple packages match '{0}', please specify an install id from possible matches: {1:?}"
     )]
     MultiplePackagesMatch(String, Vec<String>),
-    #[error("not a valid activation mode")]
-    ActivateModeInvalid,
 }
 
 /// The section where users can declare dependencies on other environments.

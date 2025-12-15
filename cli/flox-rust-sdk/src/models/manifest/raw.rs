@@ -1117,13 +1117,13 @@ pub fn add_system(toml: &str, system: &str) -> Result<DocumentMut, TomlEditError
 
 #[cfg(test)]
 pub(super) mod test {
+    use flox_core::activate::mode::ActivateMode;
     use pretty_assertions::assert_eq;
     use proptest::prelude::*;
     use proptest_derive::Arbitrary;
 
     use super::*;
     use crate::models::lockfile::DEFAULT_SYSTEMS_STR;
-    use crate::models::manifest::typed::ActivateMode;
 
     const DUMMY_MANIFEST: &str = indoc! {r#"
         version = 1

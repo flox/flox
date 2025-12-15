@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use enum_dispatch::enum_dispatch;
+use flox_core::activate::mode::ActivateMode;
 pub use flox_core::{Version, path_hash};
 use generations::{GenerationId, GenerationsError};
 use indoc::formatdoc;
@@ -21,7 +22,7 @@ use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::{LockResult, LockedInclude, Lockfile, RecoverableMergeError, ResolveError};
 use super::manifest::raw::PackageToInstall;
-use super::manifest::typed::{ActivateMode, ManifestError};
+use super::manifest::typed::ManifestError;
 use crate::data::{CanonicalPath, CanonicalizeError, System};
 use crate::flox::{Flox, Floxhub};
 use crate::models::environment::generations::GenerationsEnvironment;

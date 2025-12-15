@@ -133,7 +133,7 @@ fn add_old_cli_options(command: &mut Command, context: &ActivateCtx) {
         .arg(context.env_description.clone());
 
     // Pass down the activation mode
-    command.arg("--mode").arg(context.mode.clone());
+    command.arg("--mode").arg(context.mode.to_string());
 
     command.arg("--shell").arg(context.shell.exe_path());
 }
