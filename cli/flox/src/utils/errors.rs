@@ -719,7 +719,7 @@ pub fn format_diverged_metadata(diversion: &DivergedMetadata) -> String {
 
          * {local_last_entry}
 
-        Remote:
+        Upstream:
 
          * {remote_last_entry}",
         local_last_entry = indent_by(3, local_last_entry),
