@@ -245,7 +245,7 @@ Local:
    Generation:  2
    Timestamp: .*
 
-Remote:
+Upstream:
 
  \* $USER installed package 'vim \\(vim\\)' on .+
    Generation:  2
