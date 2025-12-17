@@ -89,7 +89,14 @@ impl Arbitrary for Manifest {
     type Strategy = BoxedStrategy<Self>;
 
     fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
-        proptest::prop_oneof![test::manifest_with_only_v1_descriptors()].boxed()
+        // You might question whether this reflects reality, but I'd say it
+        // does since we convert all v1 package descriptors to v2 package
+        // descriptors when converting a RawManifest into a v2 Manifest.
+        proptest::prop_oneof![
+            test::manifest_with_only_v1_descriptors(),
+            test::manifest_with_only_v2_descriptors(),
+        ]
+        .boxed()
     }
 }
 
@@ -1553,6 +1560,7 @@ impl Display for IncludeDescriptor {
 
 #[cfg(test)]
 pub mod test {
+    use expect_test::expect;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use proptest::prelude::*;
@@ -1587,6 +1595,16 @@ pub mod test {
         })
     }
 
+    pub fn install_with_only_v2_descriptors() -> impl Strategy<Value = Install> {
+        btree_map_strategy::<PackageDescriptorCatalogV2>(10, 3).prop_map(|map| {
+            let pkgs = map
+                .into_iter()
+                .map(|(key, value)| (key, ManifestPackageDescriptor::CatalogV2(value)))
+                .collect::<BTreeMap<_, _>>();
+            Install(pkgs)
+        })
+    }
+
     pub fn manifest_with_only_v1_descriptors() -> impl Strategy<Value = Manifest> {
         (
             any::<Version<1>>(),
@@ -1614,6 +1632,48 @@ pub mod test {
                     containerize,
                 )| {
                     Manifest::V1(ManifestV1 {
+                        version,
+                        include,
+                        install,
+                        vars,
+                        hook,
+                        profile,
+                        options,
+                        services,
+                        build,
+                        containerize,
+                    })
+                },
+            )
+    }
+
+    pub fn manifest_with_only_v2_descriptors() -> impl Strategy<Value = Manifest> {
+        (
+            any::<Version<2>>(),
+            any::<Include>(),
+            install_with_only_v2_descriptors(),
+            any::<Vars>(),
+            any::<Option<Hook>>(),
+            any::<Option<Profile>>(),
+            any::<Options>(),
+            any::<Services>(),
+            any::<Build>(),
+            any::<Option<Containerize>>(),
+        )
+            .prop_map(
+                |(
+                    version,
+                    include,
+                    install,
+                    vars,
+                    hook,
+                    profile,
+                    options,
+                    services,
+                    build,
+                    containerize,
+                )| {
+                    Manifest::V2(ManifestV2 {
                         version,
                         include,
                         install,
@@ -2054,5 +2114,128 @@ pub mod test {
         // Test non-catalog descriptors always return false
         assert!(!create_flake_descriptor("github:owner/repo").is_from_custom_catalog());
         assert!(!create_store_path_descriptor("/nix/store/abc123-hello").is_from_custom_catalog());
+    }
+
+    #[test]
+    fn parses_v2_manifest_with_all_outputs() {
+        let manifest_contents = r#"
+            version = 2
+
+            [install]
+            curl.pkg-path = "curl"
+            curl.outputs = "all"
+        "#;
+        let parsed = Manifest::from_str(manifest_contents).unwrap();
+        assert!(matches!(parsed, Manifest::V2(_)));
+        let Manifest::V2(manifest) = parsed else {
+            unreachable!()
+        };
+        let pd = manifest.install.inner().values().next().unwrap();
+        let ManifestPackageDescriptor::CatalogV2(curl) = pd else {
+            unreachable!()
+        };
+        assert_eq!(curl.outputs, Some(SelectedOutputs::All));
+    }
+
+    #[test]
+    fn parses_v2_manifest_with_specific_outputs() {
+        let manifest_contents = r#"
+            version = 2
+
+            [install]
+            curl.pkg-path = "curl"
+            curl.outputs = [ "lib", "bin", "man" ]
+        "#;
+        let parsed = Manifest::from_str(manifest_contents).unwrap();
+        assert!(matches!(parsed, Manifest::V2(_)));
+        let Manifest::V2(mut manifest) = parsed else {
+            unreachable!()
+        };
+        let pd = manifest.install.inner_mut().values_mut().next();
+        let Some(ManifestPackageDescriptor::CatalogV2(curl)) = pd else {
+            unreachable!()
+        };
+        assert!(matches!(curl.outputs, Some(SelectedOutputs::Specific(_))));
+        let Some(SelectedOutputs::Specific(ref outputs)) = curl.outputs else {
+            unreachable!()
+        };
+        assert_eq!(outputs[0], "lib".to_string());
+        assert_eq!(outputs[1], "bin".to_string());
+        assert_eq!(outputs[2], "man".to_string());
+    }
+
+    #[test]
+    fn serializes_v2_manifest_with_all_outputs() {
+        let pkgs = {
+            let mut map = BTreeMap::new();
+            map.insert(
+                "foo".into(),
+                ManifestPackageDescriptor::CatalogV2(PackageDescriptorCatalogV2 {
+                    pkg_path: "foo".into(),
+                    outputs: Some(SelectedOutputs::All),
+                    pkg_group: None,
+                    priority: None,
+                    version: None,
+                    systems: None,
+                }),
+            );
+            map
+        };
+        let manifest = Manifest::V2(ManifestV2 {
+            install: Install(pkgs),
+            ..Default::default()
+        });
+        let json = serde_json::to_string_pretty(&manifest).unwrap();
+        expect![[r#"
+            {
+              "version": 2,
+              "install": {
+                "foo": {
+                  "pkg-path": "foo",
+                  "outputs": "all"
+                }
+              },
+              "options": {}
+            }"#]]
+        .assert_eq(json.as_str());
+    }
+
+    #[test]
+    fn serializes_v2_manifest_with_specific_outputs() {
+        let pkgs = {
+            let mut map = BTreeMap::new();
+            map.insert(
+                "foo".into(),
+                ManifestPackageDescriptor::CatalogV2(PackageDescriptorCatalogV2 {
+                    pkg_path: "foo".into(),
+                    outputs: Some(SelectedOutputs::Specific(vec!["bin".into(), "lib".into()])),
+                    pkg_group: None,
+                    priority: None,
+                    version: None,
+                    systems: None,
+                }),
+            );
+            map
+        };
+        let manifest = Manifest::V2(ManifestV2 {
+            install: Install(pkgs),
+            ..Default::default()
+        });
+        let json = serde_json::to_string_pretty(&manifest).unwrap();
+        expect![[r#"
+            {
+              "version": 2,
+              "install": {
+                "foo": {
+                  "pkg-path": "foo",
+                  "outputs": [
+                    "bin",
+                    "lib"
+                  ]
+                }
+              },
+              "options": {}
+            }"#]]
+        .assert_eq(json.as_str());
     }
 }

@@ -749,6 +749,11 @@ impl CoreEnvironment<ReadOnly> {
             .services()
             .validate()
             .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Services(e)))?;
+        if !flox.features.outputs && manifest.version() == 2 {
+            return Err(EnvironmentError::ManifestError(ManifestError::Other(
+                "manifest schema version 2 is only available with FLOX_FEATURES_OUTPUTS=1".into(),
+            )));
+        }
 
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
             .map_err(CoreEnvironmentError::MakeSandbox)?

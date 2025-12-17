@@ -14,7 +14,14 @@ use crate::data::System;
 use crate::flox::Features;
 use crate::models::environment::path_environment::InitCustomization;
 use crate::models::lockfile::DEFAULT_SYSTEMS_STR;
-use crate::models::manifest::typed::{Inner, ManifestError, ManifestPackageDescriptor, ManifestV1};
+use crate::models::manifest::typed::{
+    Inner,
+    ManifestError,
+    ManifestPackageDescriptor,
+    ManifestV1,
+    ManifestV2,
+    PackageDescriptorCatalogV2,
+};
 
 /// Represents the `[version]` number key in manifest.toml
 pub const MANIFEST_VERSION_KEY: &str = "version";
@@ -117,6 +124,20 @@ impl RawManifest {
                     }
                 }
                 Ok(Manifest::V1(parsed))
+            },
+            Some(2) => {
+                let mut parsed: ManifestV2 = toml_edit::de::from_document(self.0.clone())
+                    .map_err(ManifestError::Deserialize)?;
+                // Now transform any v1 package descriptors to v2 to normalize
+                // them all to the same variant. This isn't strictly necessary,
+                // but it makes the contents of a manifest a little easier to understand.
+                for pd in parsed.install.inner_mut().values_mut() {
+                    if let ManifestPackageDescriptor::CatalogV1(v1) = pd {
+                        let v2: PackageDescriptorCatalogV2 = v1.into();
+                        *pd = ManifestPackageDescriptor::CatalogV2(v2);
+                    }
+                }
+                Ok(Manifest::V2(parsed))
             },
             Some(v) => Err(ManifestError::UnsupportedVersion(v)),
             None => Err(ManifestError::MissingVersion),
