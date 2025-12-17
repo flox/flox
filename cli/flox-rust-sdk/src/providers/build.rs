@@ -3482,6 +3482,37 @@ mod tests {
 
         assert_build_status(&flox, &mut env, package_name, None, true);
     }
+
+    async fn manifest_builds_handle_unwritable_subdirs(sandbox: &str) {
+        let package_name = String::from("foo");
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            sandbox = "{sandbox}"
+            command = """
+                mkdir -p $out/unwritable
+                touch $out/unwritable/file
+                chmod 555 $out/unwritable
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+        let _ = GitCommandProvider::init(&env_path, false).unwrap();
+        assert_build_status(&flox, &mut env, &package_name, None, true);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn manifest_builds_handle_unwritable_subdirs_sandbox_pure() {
+        manifest_builds_handle_unwritable_subdirs("pure").await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn manifest_builds_handle_unwritable_subdirs_sandbox_off() {
+        manifest_builds_handle_unwritable_subdirs("off").await;
+    }
 }
 
 #[cfg(test)]
