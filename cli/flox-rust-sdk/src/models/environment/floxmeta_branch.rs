@@ -217,6 +217,14 @@ impl FloxmetaBranch {
         Generations::new(self.floxmeta.git.clone(), self.branch.clone())
     }
 
+    /// Access remote generations (read-only)
+    ///
+    /// These should _not_ be made writable as they represent transitive state regularly updated from FloxHub.
+    /// Crate private since this may leak abstractions and lead to confusion regarding its transitive state.
+    pub(crate) fn remote_generations(&self) -> Generations {
+        Generations::new(self.floxmeta.git.clone(), self.remote_branch.clone())
+    }
+
     /// Compute the current GenerationLock based on branch state
     ///
     /// Returns a lock with:

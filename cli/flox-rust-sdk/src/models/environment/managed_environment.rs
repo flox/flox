@@ -650,12 +650,14 @@ impl GenerationsExt for ManagedEnvironment {
     }
 
     fn remote_lockfile_contents_for_current_generation(&self) -> Result<String, GenerationsError> {
-        Generations::new(self.floxmeta.git.clone(), remote_branch_name(&self.pointer))
+        self.floxmeta_branch
+            .remote_generations()
             .current_gen_lockfile()
     }
 
     fn remote_manifest_contents_for_current_generation(&self) -> Result<String, GenerationsError> {
-        Generations::new(self.floxmeta.git.clone(), remote_branch_name(&self.pointer))
+        self.floxmeta_branch
+            .remote_generations()
             .current_gen_manifest()
     }
 
@@ -711,7 +713,7 @@ impl GenerationsExt for ManagedEnvironment {
     fn remote_generations_metadata(
         &self,
     ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
-        Generations::new(self.floxmeta.git.clone(), remote_branch_name(&self.pointer)).metadata()
+        self.floxmeta_branch.remote_generations().metadata()
     }
 }
 
