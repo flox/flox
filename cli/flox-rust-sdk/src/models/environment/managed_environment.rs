@@ -54,7 +54,7 @@ use crate::models::floxmeta::{
 };
 use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, FlakePackage, PackageToInstall, StorePath};
-use crate::models::manifest::typed::IncludeDescriptor;
+use crate::models::manifest::typed::{IncludeDescriptor, Manifest, ManifestError};
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{
     GitCommandBranchHashError,
@@ -676,6 +676,12 @@ impl Environment for ManagedEnvironment {
     fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         services_socket_path(&self.path_hash(), flox)
     }
+
+    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError> {
+        self.local_env_or_copy_current_generation(flox)?
+            .manifest()
+            .map_err(EnvironmentError::Core)
+    }
 }
 
 impl GenerationsExt for ManagedEnvironment {
@@ -691,6 +697,21 @@ impl GenerationsExt for ManagedEnvironment {
         generation: GenerationId,
     ) -> Result<(), EnvironmentError> {
         let mut generations = self.generations();
+        if !flox.features.outputs {
+            // only attempt to parse the manifest when the flag is disabled
+            // e.g. when there's a chance that we need to bail on the manifest
+            // version
+            let manifest = generations
+                .manifest(*generation)
+                .map_err(EnvironmentError::Generations)
+                .and_then(|s| Manifest::from_str(&s).map_err(EnvironmentError::ManifestError))?;
+            if manifest.version() == 2 {
+                return Err(EnvironmentError::ManifestError(ManifestError::Other(
+                    "manifest schema version 2 is only supported with FLOX_FEATURES_OUTPUTS=1"
+                        .into(),
+                )));
+            }
+        }
 
         let local_checkout = self.local_env_or_copy_current_generation(flox)?;
         if !Self::validate_checkout(&local_checkout, &generations)? {

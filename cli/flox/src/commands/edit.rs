@@ -33,7 +33,7 @@ use super::{
 use crate::commands::{EnvironmentSelectError, SHELL_COMPLETION_FILE, ensure_floxhub_token};
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::errors::format_error;
-use crate::utils::message;
+use crate::utils::{bail_on_v2_manifest_without_feature_flag, message};
 use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Edit declarative environment configuration
@@ -91,6 +91,8 @@ impl Edit {
                 Err(e) => Err(e)?,
             };
         environment_subcommand_metric!("edit", detected_environment);
+
+        bail_on_v2_manifest_without_feature_flag(&flox, &detected_environment)?;
 
         match self.action {
             EditAction::EditManifest { file } => {

@@ -21,8 +21,8 @@ use tracing::{debug, info, instrument};
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::SHELL_COMPLETION_FILE;
 use crate::environment_subcommand_metric;
-use crate::utils::message;
 use crate::utils::openers::first_in_path;
+use crate::utils::{bail_on_v2_manifest_without_feature_flag, message};
 
 mod macos_containerize_proxy;
 
@@ -60,6 +60,7 @@ impl Containerize {
             .environment
             .detect_concrete_environment(&flox, "Containerize")?;
         environment_subcommand_metric!("containerize", env);
+        bail_on_v2_manifest_without_feature_flag(&flox, &env)?;
 
         // Check that a specified runtime exists.
         if let Some(runtime) = &self.runtime {

@@ -9,7 +9,7 @@ use super::{EnvironmentSelect, environment_select};
 use crate::commands::environment_description;
 use crate::environment_subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
-use crate::utils::message;
+use crate::utils::{bail_on_v2_manifest_without_feature_flag, message};
 
 // Delete an environment
 #[derive(Bpaf, Clone)]
@@ -28,6 +28,7 @@ impl Delete {
         let environment = self
             .environment
             .detect_concrete_environment(&flox, "Delete")?;
+        bail_on_v2_manifest_without_feature_flag(&flox, &environment)?;
 
         environment_subcommand_metric!("delete", environment);
 

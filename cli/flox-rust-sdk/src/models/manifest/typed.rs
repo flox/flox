@@ -80,6 +80,7 @@ pub(crate) trait SkipSerializing {
 #[serde(untagged)]
 pub enum Manifest {
     V1(ManifestV1),
+    V2(ManifestV2),
 }
 
 #[cfg(test)]
@@ -99,117 +100,145 @@ impl Default for Manifest {
 }
 
 impl Manifest {
+    pub fn version(&self) -> u8 {
+        match self {
+            Manifest::V1(_) => 1,
+            Manifest::V2(_) => 2,
+        }
+    }
+
     pub fn version_matches(&self, other: &Manifest) -> bool {
         match (self, other) {
             (Manifest::V1(_), Manifest::V1(_)) => true,
+            (Manifest::V1(_), Manifest::V2(_)) => false,
+            (Manifest::V2(_), Manifest::V1(_)) => false,
+            (Manifest::V2(_), Manifest::V2(_)) => true,
         }
     }
 
     pub fn install(&self) -> &Install {
         match self {
             Manifest::V1(manifest_v1) => &manifest_v1.install,
+            Manifest::V2(manifest_v2) => &manifest_v2.install,
         }
     }
 
     pub fn install_mut(&mut self) -> &mut Install {
         match self {
             Manifest::V1(manifest_v1) => &mut manifest_v1.install,
+            Manifest::V2(manifest_v2) => &mut manifest_v2.install,
         }
     }
 
     pub fn vars(&self) -> &Vars {
         match self {
             Manifest::V1(manifest_v1) => &manifest_v1.vars,
+            Manifest::V2(manifest_v2) => &manifest_v2.vars,
         }
     }
 
     pub fn vars_mut(&mut self) -> &mut Vars {
         match self {
             Manifest::V1(manifest_v1) => &mut manifest_v1.vars,
+            Manifest::V2(manifest_v2) => &mut manifest_v2.vars,
         }
     }
 
     pub fn hook(&self) -> Option<&Hook> {
         match self {
             Manifest::V1(manifest_v1) => manifest_v1.hook.as_ref(),
+            Manifest::V2(manifest_v2) => manifest_v2.hook.as_ref(),
         }
     }
 
     pub fn hook_mut(&mut self) -> Option<&mut Hook> {
         match self {
             Manifest::V1(manifest_v1) => manifest_v1.hook.as_mut(),
+            Manifest::V2(manifest_v2) => manifest_v2.hook.as_mut(),
         }
     }
 
     pub fn profile(&self) -> Option<&Profile> {
         match self {
             Manifest::V1(manifest_v1) => manifest_v1.profile.as_ref(),
+            Manifest::V2(manifest_v2) => manifest_v2.profile.as_ref(),
         }
     }
 
     pub fn profile_mut(&mut self) -> Option<&mut Profile> {
         match self {
             Manifest::V1(manifest_v1) => manifest_v1.profile.as_mut(),
+            Manifest::V2(manifest_v2) => manifest_v2.profile.as_mut(),
         }
     }
 
     pub fn options(&self) -> &Options {
         match self {
             Manifest::V1(manifest_v1) => &manifest_v1.options,
+            Manifest::V2(manifest_v2) => &manifest_v2.options,
         }
     }
 
     pub fn options_mut(&mut self) -> &mut Options {
         match self {
             Manifest::V1(manifest_v1) => &mut manifest_v1.options,
+            Manifest::V2(manifest_v2) => &mut manifest_v2.options,
         }
     }
 
     pub fn services(&self) -> &Services {
         match self {
             Manifest::V1(manifest_v1) => &manifest_v1.services,
+            Manifest::V2(manifest_v2) => &manifest_v2.services,
         }
     }
 
     pub fn services_mut(&mut self) -> &mut Services {
         match self {
             Manifest::V1(manifest_v1) => &mut manifest_v1.services,
+            Manifest::V2(manifest_v2) => &mut manifest_v2.services,
         }
     }
 
     pub fn build(&self) -> &Build {
         match self {
             Manifest::V1(manifest_v1) => &manifest_v1.build,
+            Manifest::V2(manifest_v2) => &manifest_v2.build,
         }
     }
 
     pub fn build_mut(&mut self) -> &mut Build {
         match self {
             Manifest::V1(manifest_v1) => &mut manifest_v1.build,
+            Manifest::V2(manifest_v2) => &mut manifest_v2.build,
         }
     }
 
     pub fn containerize(&self) -> Option<&Containerize> {
         match self {
             Manifest::V1(manifest_v1) => manifest_v1.containerize.as_ref(),
+            Manifest::V2(manifest_v2) => manifest_v2.containerize.as_ref(),
         }
     }
 
     pub fn containerize_mut(&mut self) -> Option<&mut Containerize> {
         match self {
             Manifest::V1(manifest_v1) => manifest_v1.containerize.as_mut(),
+            Manifest::V2(manifest_v2) => manifest_v2.containerize.as_mut(),
         }
     }
 
     pub fn include(&self) -> &Include {
         match self {
             Manifest::V1(manifest_v1) => &manifest_v1.include,
+            Manifest::V2(manifest_v2) => &manifest_v2.include,
         }
     }
 
     pub fn include_mut(&mut self) -> &mut Include {
         match self {
             Manifest::V1(manifest_v1) => &mut manifest_v1.include,
+            Manifest::V2(manifest_v2) => &mut manifest_v2.include,
         }
     }
 }
@@ -235,6 +264,53 @@ impl FromStr for Manifest {
 #[serde(deny_unknown_fields)]
 pub struct ManifestV1 {
     pub version: Version<1>,
+    /// The packages to install in the form of a map from install_id
+    /// to package descriptor.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Install::skip_serializing")]
+    pub install: Install,
+    /// Variables that are exported to the shell environment upon activation.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vars::skip_serializing")]
+    pub vars: Vars,
+    /// Hooks that are run at various times during the lifecycle of the manifest
+    /// in a known shell environment.
+    #[serde(default)]
+    pub hook: Option<Hook>,
+    /// Profile scripts that are run in the user's shell upon activation.
+    #[serde(default)]
+    pub profile: Option<Profile>,
+    /// Options that control the behavior of the manifest.
+    #[serde(default)]
+    pub options: Options,
+    /// Service definitions
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Services::skip_serializing")]
+    pub services: Services,
+    /// Package build definitions
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Build::skip_serializing")]
+    pub build: Build,
+    #[serde(default)]
+    pub containerize: Option<Containerize>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Include::skip_serializing")]
+    pub include: Include,
+}
+
+// We use `skip_serializing_none` and `skip_serializing_if` throughout to reduce
+// the size of the lockfile and improve backwards compatibility when we
+// introduce fields.
+//
+// It would be better if we could deny_unknown_fields when we're deserializing
+// the user provided manifest but allow unknown fields when deserializing the
+// lockfile, but that doesn't seem worth the effort at the moment.
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, JsonSchema)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
+pub struct ManifestV2 {
+    pub version: Version<2>,
     /// The packages to install in the form of a map from install_id
     /// to package descriptor.
     #[serde(default)]
@@ -1408,6 +1484,8 @@ pub enum ManifestError {
     UnsupportedVersion(i64),
     #[error("manifest must contain a 'version' field")]
     MissingVersion,
+    #[error("{0}")]
+    Other(String),
 }
 
 /// The section where users can declare dependencies on other environments.

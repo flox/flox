@@ -13,7 +13,7 @@ use tracing::{debug, instrument};
 
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
-use crate::utils::message;
+use crate::utils::{bail_on_v2_manifest_without_feature_flag, message};
 
 /// Arguments for the `flox generations rollback` command
 #[derive(Bpaf, Debug, Clone)]
@@ -32,6 +32,7 @@ impl Rollback {
         let env = self
             .environment
             .detect_concrete_environment(&flox, "Rollback using")?;
+        bail_on_v2_manifest_without_feature_flag(&flox, &env)?;
 
         environment_subcommand_metric!("generations::rollback", env);
         let mut env: GenerationsEnvironment = env.try_into()?;

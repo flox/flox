@@ -17,6 +17,7 @@ use tracing::instrument;
 
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
+use crate::utils::bail_on_v2_manifest_without_feature_flag;
 use crate::utils::message::{page_output, stdout_supports_color};
 
 /// Arguments for the `flox generations list` command
@@ -60,6 +61,7 @@ impl List {
             env,
             request_tree = self.output_mode == OutputMode::Tree
         );
+        bail_on_v2_manifest_without_feature_flag(&flox, &env)?;
 
         let env: GenerationsEnvironment = env.try_into()?;
         let metadata = if self.upstream {

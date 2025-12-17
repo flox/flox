@@ -55,7 +55,7 @@ use crate::commands::{
 use crate::config::{Config, EnvironmentPromptConfig};
 use crate::utils::errors::format_diverged_metadata;
 use crate::utils::openers::Shell;
-use crate::utils::{default_nix_env_vars, message};
+use crate::utils::{bail_on_v2_manifest_without_feature_flag, default_nix_env_vars, message};
 use crate::{environment_subcommand_metric, subcommand_metric, utils};
 
 pub static INTERACTIVE_BASH_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -133,6 +133,7 @@ impl Activate {
             start_services = self.start_services,
             mode = self.mode.clone().unwrap_or(ActivateMode::Dev).to_string()
         );
+        bail_on_v2_manifest_without_feature_flag(&flox, &concrete_environment)?;
 
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment
             && !self.trust

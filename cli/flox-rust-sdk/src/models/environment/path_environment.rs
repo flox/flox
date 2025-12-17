@@ -50,7 +50,7 @@ use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME, create_dot_flo
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, LockResult, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
-use crate::models::manifest::typed::ActivateMode;
+use crate::models::manifest::typed::{ActivateMode, Manifest};
 use crate::providers::buildenv::BuildEnvOutputs;
 
 /// Struct representing a local environment
@@ -404,6 +404,12 @@ impl Environment for PathEnvironment {
     /// should be created
     fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         services_socket_path(&self.path_hash(), flox)
+    }
+
+    fn manifest(&self, _: &Flox) -> Result<Manifest, EnvironmentError> {
+        self.as_core_environment()?
+            .manifest()
+            .map_err(EnvironmentError::Core)
     }
 }
 

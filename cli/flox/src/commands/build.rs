@@ -34,7 +34,7 @@ use url::Url;
 
 use super::{DirEnvironmentSelect, dir_environment_select};
 use crate::commands::activate::FLOX_INTERPRETER;
-use crate::utils::message;
+use crate::utils::{bail_on_v2_manifest_without_feature_flag, message};
 use crate::{environment_subcommand_metric, subcommand_metric};
 
 #[derive(Debug, Clone, Bpaf)]
@@ -130,6 +130,7 @@ impl Build {
                     .environment
                     .detect_concrete_environment(&flox, "Clean build files of")?;
                 environment_subcommand_metric!("build::clean", env);
+                bail_on_v2_manifest_without_feature_flag(&flox, &env)?;
 
                 Self::clean(flox, env, targets).await
             },
@@ -138,6 +139,7 @@ impl Build {
                     .environment
                     .detect_concrete_environment(&flox, "Import package definition in")?;
                 environment_subcommand_metric!("build::import-nixpkgs", env);
+                bail_on_v2_manifest_without_feature_flag(&flox, &env)?;
 
                 Self::import_nixpkgs(flox, env, installable, force).await
             },
@@ -150,6 +152,7 @@ impl Build {
                     .environment
                     .detect_concrete_environment(&flox, "Build packages of")?;
                 environment_subcommand_metric!("build", env);
+                bail_on_v2_manifest_without_feature_flag(&flox, &env)?;
 
                 Self::build(
                     flox,

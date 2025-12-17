@@ -32,7 +32,7 @@ use crate::commands::{EnvironmentSelect, environment_description, environment_se
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::{display_chain, format_core_error};
-use crate::utils::message;
+use crate::utils::{bail_on_v2_manifest_without_feature_flag, message};
 
 #[derive(Debug, Clone, Bpaf)]
 enum PullSelect {
@@ -194,6 +194,13 @@ impl Pull {
         mut env: ManagedEnvironment,
         force: bool,
     ) -> Result<(), EnvironmentError> {
+        let env = ManagedEnvironment::open(flox, pointer.clone(), dot_flox_path, None)?;
+        let concrete = ConcreteEnvironment::Managed(env);
+        bail_on_v2_manifest_without_feature_flag(flox, &concrete)?;
+        let ConcreteEnvironment::Managed(mut env) = concrete else {
+            unreachable!()
+        };
+
         let state = env.pull(flox, force)?;
 
         match state {
@@ -316,7 +323,7 @@ impl Pull {
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
         fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
 
-        let mut env = {
+        let env = {
             let result = ManagedEnvironment::open(flox, pointer, &dot_flox_path, None)
                 .map_err(Self::handle_open_error_during_pull_new);
             match result {
@@ -329,6 +336,12 @@ impl Pull {
             }
         };
         // endregion
+
+        let concrete = ConcreteEnvironment::Managed(env);
+        bail_on_v2_manifest_without_feature_flag(flox, &concrete)?;
+        let ConcreteEnvironment::Managed(mut env) = concrete else {
+            unreachable!()
+        };
 
         let result = if let Some(generation) = generation
             && env.generations_metadata()?.current_gen() != Some(generation)

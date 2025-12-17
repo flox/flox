@@ -24,7 +24,7 @@ use super::{
 use crate::commands::activate::{Activate, InvocationType};
 use crate::commands::display_help;
 use crate::config::Config;
-use crate::utils::message;
+use crate::utils::{bail_on_v2_manifest_without_feature_flag, message};
 
 mod logs;
 mod persist;
@@ -151,6 +151,7 @@ impl ServicesEnvironment {
         environment: &EnvironmentSelect,
     ) -> Result<Self> {
         let concrete_environment = environment.detect_concrete_environment(flox, "Services in")?;
+        bail_on_v2_manifest_without_feature_flag(flox, &concrete_environment)?;
         Self::from_concrete_environment(flox, concrete_environment)
     }
 

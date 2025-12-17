@@ -15,6 +15,7 @@ use tracing::instrument;
 
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
+use crate::utils::bail_on_v2_manifest_without_feature_flag;
 use crate::utils::message::{page_output, stdout_supports_color};
 
 /// Arguments for the `flox generations history` command
@@ -51,6 +52,7 @@ impl History {
             .environment
             .detect_concrete_environment(&flox, "Show history for")?;
         environment_subcommand_metric!("generations::history", env);
+        bail_on_v2_manifest_without_feature_flag(&flox, &env)?;
 
         let env: GenerationsEnvironment = env.try_into()?;
         let metadata = if self.upstream {

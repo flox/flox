@@ -4,6 +4,9 @@ use std::io::Stderr;
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
+use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
+
 pub mod active_environments;
 pub mod colors;
 pub mod dialog;
@@ -78,4 +81,22 @@ pub fn populate_default_nix_env_vars() {
     for (key, value) in env_map {
         unsafe { env::set_var(key, value) }
     }
+}
+
+pub fn bail_on_v2_manifest_without_feature_flag(
+    flox: &Flox,
+    concrete_env: &ConcreteEnvironment,
+) -> Result<(), anyhow::Error> {
+    if flox.features.outputs {
+        return Ok(());
+    }
+    let is_v1 = match concrete_env {
+        ConcreteEnvironment::Path(env) => env.manifest(flox)?.version() == 1,
+        ConcreteEnvironment::Managed(env) => env.manifest(flox)?.version() == 1,
+        ConcreteEnvironment::Remote(env) => env.manifest(flox)?.version() == 1,
+    };
+    if is_v1 {
+        return Ok(());
+    }
+    anyhow::bail!("manifest schema version 2 is only allowed with FLOX_FEATURES_OUTPUTS=1");
 }

@@ -20,8 +20,8 @@ use tracing::{debug, instrument};
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::render_composition_manifest;
 use crate::environment_subcommand_metric;
-use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
+use crate::utils::{bail_on_v2_manifest_without_feature_flag, message};
 
 // List packages installed in an environment
 #[derive(Bpaf, Clone)]
@@ -64,6 +64,7 @@ impl List {
             .environment
             .detect_concrete_environment(&flox, "List using")?;
         environment_subcommand_metric!("list", env);
+        bail_on_v2_manifest_without_feature_flag(&flox, &env)?;
 
         let (manifest_contents, lockfile) = match (&mut env, self.upstream) {
             (ConcreteEnvironment::Path(_), true) => {

@@ -25,6 +25,7 @@ use super::manifest::typed::{ActivateMode, ManifestError};
 use crate::data::{CanonicalPath, CanonicalizeError, System};
 use crate::flox::{Flox, Floxhub};
 use crate::models::environment::generations::GenerationsEnvironment;
+use crate::models::manifest::typed::Manifest;
 use crate::providers::auth::AuthError;
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{
@@ -203,6 +204,9 @@ pub trait Environment: Send {
 
     /// Path to the environment's .flox directory
     fn dot_flox_path(&self) -> CanonicalPath;
+
+    /// The environment's manifest.
+    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError>;
 
     /// Path to the environment definition file
     ///

@@ -9,8 +9,8 @@ use tracing::{debug, info_span, instrument};
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::{EnvironmentSelectError, ensure_floxhub_token, environment_description};
-use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
+use crate::utils::{bail_on_v2_manifest_without_feature_flag, message};
 use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Uninstall installed packages from an environment
@@ -68,6 +68,7 @@ impl Uninstall {
             Err(e) => Err(e)?,
         };
         environment_subcommand_metric!("uninstall", concrete_environment);
+        bail_on_v2_manifest_without_feature_flag(&flox, &concrete_environment)?;
 
         let description = environment_description(&concrete_environment)?;
 

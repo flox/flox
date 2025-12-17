@@ -8,6 +8,7 @@ use tracing::{info_span, instrument};
 use super::EnvironmentSelect;
 use crate::commands::{display_help, environment_description, environment_select};
 use crate::environment_subcommand_metric;
+use crate::utils::bail_on_v2_manifest_without_feature_flag;
 use crate::utils::message::{self, print_overridden_manifest_fields};
 
 /// Include Commands.
@@ -61,6 +62,7 @@ impl Upgrade {
         let mut environment = self
             .environment
             .detect_concrete_environment(&flox, "Get latest changes to included environments in")?;
+        bail_on_v2_manifest_without_feature_flag(&flox, &environment)?;
 
         environment_subcommand_metric!("include::upgrade", environment);
 
