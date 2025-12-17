@@ -305,14 +305,13 @@ pub struct AttachedPid {
 }
 
 /// Acquires the filesystem-based lock on activations.json
-#[allow(unused)]
 pub fn acquire_activations_json_lock(
     activations_json_path: impl AsRef<Path>,
 ) -> Result<LockFile, Error> {
     let lock_path = activations_json_lock_path(activations_json_path);
     let lock_path_parent = lock_path.parent().expect("lock path has parent");
     if !(lock_path.exists()) {
-        std::fs::create_dir_all(lock_path.parent().unwrap())?;
+        std::fs::create_dir_all(lock_path_parent)?;
     }
     let mut lock = LockFile::open(&lock_path).context("failed to open lockfile")?;
     lock.lock().context("failed to lock lockfile")?;
@@ -323,7 +322,6 @@ pub fn acquire_activations_json_lock(
 /// The presence of the lock file does not indicate an active lock because the
 /// file isn't removed after use.
 /// This is a separate file because we replace activations.json on write.
-#[allow(unused)]
 fn activations_json_lock_path(activations_json_path: impl AsRef<Path>) -> PathBuf {
     activations_json_path.as_ref().with_extension("lock")
 }
