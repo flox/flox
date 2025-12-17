@@ -195,12 +195,11 @@ EOF
   assert_success
 }
 
-@test "m10.1: 'activate --trust' isn't supported for included remote environment" {
+@test "m10.1: 'activate --trust' succeeds for included remote environment" {
   make_composer_with_remote_include
 
   run "$FLOX_BIN" activate --trust -- true
-  assert_failure
-  assert_output --partial "The included environment $OWNER/test is not trusted."
+  assert_success
 }
 
 # We can use the `config to trust a specific remote environment.
@@ -246,13 +245,16 @@ EOF
   assert_success
 }
 
-@test "m10.0: 'activate' fails if included remote environment is denied by config" {
+@test "m10.0: 'activate' fails if included remote environment is denied by config, --trust overrides" {
   make_composer_with_remote_include
 
   run "$FLOX_BIN" config --set "trusted_environments.$OWNER/test" "deny"
-  run "$FLOX_BIN" activate --trust -- true
+  run "$FLOX_BIN" activate -- true
   assert_failure
   assert_output --partial "The included environment $OWNER/test is not trusted."
+
+  run "$FLOX_BIN" activate --trust -- true
+  assert_success
 }
 
 # bats test_tags=remote,activate,trust,remote:activate:trust-current-user
