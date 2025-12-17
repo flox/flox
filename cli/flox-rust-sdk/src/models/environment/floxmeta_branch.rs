@@ -227,6 +227,27 @@ impl FloxmetaBranch {
             version: flox_core::Version::<1>,
         })
     }
+
+    /// Fetch the remote branch into the local sync branch.
+    /// The sync branch is always a reset to the remote branch
+    /// and it's state should not be depended on.
+    pub fn fetch_remote_state(
+        &self,
+        flox: &Flox,
+        pointer: &ManagedPointer,
+    ) -> Result<(), FloxmetaBranchError> {
+        let sync_branch = remote_branch_name(&pointer);
+        self.git()
+            .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}"))
+            .map_err(|err| match err {
+                GitRemoteCommandError::RefNotFound(_) => FloxmetaBranchError::UpstreamNotFound {
+                    env_ref: pointer.clone().into(),
+                    upstream: pointer.floxhub_base_url.to_string(),
+                    user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
+                },
+                e => FloxmetaBranchError::Fetch(e),
+            })
+    }
 }
 
 /// Acquire exclusive lock on floxmeta directory
