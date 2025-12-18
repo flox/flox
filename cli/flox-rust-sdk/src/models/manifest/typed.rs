@@ -1038,6 +1038,7 @@ pub enum IncludeDescriptor {
     },
     Remote {
         /// The remote environment reference in the form `owner/name`.
+        #[serde(alias = "reference")]
         remote: RemoteEnvironmentRef,
         /// A name similar to an install ID that a user could use to specify
         /// the environment on the command line e.g. for upgrades, or in an
@@ -1339,6 +1340,8 @@ pub mod test {
             environments = [
                 { dir = "../foo", name = "bar" },
                 { remote = "owner/repo", name = "baz" },
+                # reference alias for remote
+                { reference = "owner/repo", name = "bap" },
             ]
         "#};
         let parsed = toml_edit::de::from_str::<Manifest>(manifest).unwrap();
@@ -1351,6 +1354,11 @@ pub mod test {
             IncludeDescriptor::Remote {
                 remote: RemoteEnvironmentRef::new("owner", "repo").unwrap(),
                 name: Some("baz".to_string()),
+                generation: None,
+            },
+            IncludeDescriptor::Remote {
+                remote: RemoteEnvironmentRef::new("owner", "repo").unwrap(),
+                name: Some("bap".to_string()),
                 generation: None,
             },
         ]);
