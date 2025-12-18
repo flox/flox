@@ -34,11 +34,11 @@ pub struct ExecutiveCtx {
 
 #[derive(Debug, Args)]
 pub struct ExecutiveArgs {
-    /// Environment path
+    /// .flox directory path
     // This isn't consumed and serves only to identify in process listings which
     // environment the executive is responsible for.
     #[arg(long)]
-    pub env: String,
+    pub dot_flox_path: PathBuf,
 
     /// Path to JSON file containing executive context
     #[arg(long)]
@@ -112,6 +112,7 @@ impl ExecutiveArgs {
         };
 
         let watchdog = flox_watchdog::Cli {
+            dot_flox_path: context.dot_flox_path.clone(),
             flox_env: context.env.clone().into(),
             runtime_dir: context.flox_runtime_dir.clone().into(),
             activation_id: start_or_attach.activation_id.clone(),

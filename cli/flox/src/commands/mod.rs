@@ -808,7 +808,7 @@ impl InternalCommands {
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
             InternalCommands::Exit(args) => args.handle(flox)?,
-            InternalCommands::PathHash(args) => args.handle()?,
+            InternalCommands::PathHash(args) => args.handle(flox)?,
         }
         Ok(())
     }

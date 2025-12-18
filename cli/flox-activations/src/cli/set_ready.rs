@@ -8,9 +8,9 @@ type Error = anyhow::Error;
 
 #[derive(Debug, Args)]
 pub struct SetReadyArgs {
-    #[arg(help = "The path to the activation symlink for the environment.")]
-    #[arg(short, long, value_name = "PATH")]
-    pub flox_env: PathBuf,
+    #[arg(help = "The path to the .flox directory for the environment.")]
+    #[arg(long, value_name = "PATH")]
+    pub dot_flox_path: PathBuf,
     #[arg(help = "The ID for this particular activation of this environment.")]
     #[arg(short, long, value_name = "ID")]
     pub id: String,
@@ -22,7 +22,7 @@ pub struct SetReadyArgs {
 impl SetReadyArgs {
     pub fn handle(self) -> Result<(), Error> {
         let activations_json_path =
-            activations::activations_json_path(&self.runtime_dir, &self.flox_env);
+            activations::activations_json_path(&self.runtime_dir, &self.dot_flox_path);
 
         let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
         let Some(activations) = activations else {
@@ -39,7 +39,7 @@ impl SetReadyArgs {
                 format!(
                     "No activation with ID {} found for environment {}",
                     self.id,
-                    self.flox_env.display()
+                    self.dot_flox_path.display()
                 )
             })?;
 
@@ -79,7 +79,7 @@ mod tests {
         assert!(!ready);
 
         let args = SetReadyArgs {
-            flox_env: flox_env.clone(),
+            dot_flox_path: flox_env.clone(),
             id: id.clone(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };

@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 
+use flox_core::activate::mode::ActivateMode;
 use flox_core::canonical_path::CanonicalPath;
 use pollster::FutureExt as _;
 use serde::{Deserialize, Serialize};
@@ -24,7 +25,7 @@ use crate::models::lockfile::{
     LockedPackageStorePath,
     Lockfile,
 };
-use crate::models::manifest::typed::{ActivateMode, ManifestPackageDescriptor};
+use crate::models::manifest::typed::ManifestPackageDescriptor;
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::providers::auth::{catalog_auth_to_envs, store_needs_auth};
 use crate::providers::catalog::CatalogClientError;

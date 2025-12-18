@@ -133,7 +133,7 @@ fn add_old_cli_options(command: &mut Command, context: &ActivateCtx) {
         .arg(context.env_description.clone());
 
     // Pass down the activation mode
-    command.arg("--mode").arg(context.mode.clone());
+    command.arg("--mode").arg(context.mode.to_string());
 
     command.arg("--shell").arg(context.shell.exe_path());
 }
@@ -177,6 +177,10 @@ fn add_old_activate_script_exports(
             context.env_cache.to_string_lossy().to_string(),
         ),
         ("FLOX_ENV_DESCRIPTION", context.env_description.clone()),
+        (
+            "_FLOX_DOT_FLOX_PATH",
+            context.dot_flox_path.to_string_lossy().to_string(),
+        ),
         (
             "_FLOX_ACTIVATION_STATE_DIR",
             start_or_attach_result

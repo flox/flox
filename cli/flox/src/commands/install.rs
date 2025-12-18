@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use flox_core::activate::mode::ActivateMode;
 use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::{
@@ -30,7 +31,6 @@ use flox_rust_sdk::models::manifest::raw::{
     PackageToInstall,
     catalog_packages_to_install,
 };
-use flox_rust_sdk::models::manifest::typed::ActivateMode;
 use flox_rust_sdk::models::user_state::{
     lock_and_read_user_state_file,
     user_state_path,

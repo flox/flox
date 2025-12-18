@@ -237,21 +237,21 @@ pub mod test {
     #[test]
     fn terminates_when_all_pids_terminate() {
         let runtime_dir = tempfile::tempdir().unwrap();
-        let flox_env = PathBuf::from("flox_env");
+        let dot_flox_path = PathBuf::from(".flox");
         let store_path = "store_path".to_string();
 
         let proc1 = start_process();
         let pid1 = proc1.id() as i32;
         let start_or_attach_pid1 = StartOrAttachArgs {
             pid: pid1,
-            flox_env: flox_env.clone(),
+            dot_flox_path: dot_flox_path.clone(),
             store_path: store_path.clone(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
         let activation_id = start_or_attach_pid1.handle_inner().unwrap().activation_id;
         let set_ready_pid1 = SetReadyArgs {
             id: activation_id.clone(),
-            flox_env: flox_env.clone(),
+            dot_flox_path: dot_flox_path.clone(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
         set_ready_pid1.handle().unwrap();
@@ -260,14 +260,14 @@ pub mod test {
         let pid2 = proc2.id() as i32;
         let start_or_attach_pid2 = StartOrAttachArgs {
             pid: pid2,
-            flox_env: flox_env.clone(),
+            dot_flox_path: dot_flox_path.clone(),
             store_path: store_path.clone(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
         let activation_id_2 = start_or_attach_pid2.handle_inner().unwrap().activation_id;
         assert_eq!(activation_id, activation_id_2);
 
-        let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
+        let activations_json_path = activations_json_path(&runtime_dir, &dot_flox_path);
         let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
             activations_json_path,
@@ -296,21 +296,21 @@ pub mod test {
     #[test]
     fn terminated_pids_removed_from_activations_file() {
         let runtime_dir = tempfile::tempdir().unwrap();
-        let flox_env = PathBuf::from("flox_env");
+        let dot_flox_path = PathBuf::from(".flox");
         let store_path = "store_path".to_string();
 
         let proc1 = start_process();
         let pid1 = proc1.id() as i32;
         let start_or_attach_pid1 = StartOrAttachArgs {
             pid: pid1,
-            flox_env: flox_env.clone(),
+            dot_flox_path: dot_flox_path.clone(),
             store_path: store_path.clone(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
         let activation_id = start_or_attach_pid1.handle_inner().unwrap().activation_id;
         let set_ready_pid1 = SetReadyArgs {
             id: activation_id.clone(),
-            flox_env: flox_env.clone(),
+            dot_flox_path: dot_flox_path.clone(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
         set_ready_pid1.handle().unwrap();
@@ -319,14 +319,14 @@ pub mod test {
         let pid2 = proc2.id() as i32;
         let start_or_attach_pid2 = StartOrAttachArgs {
             pid: pid2,
-            flox_env: flox_env.clone(),
+            dot_flox_path: dot_flox_path.clone(),
             store_path: store_path.clone(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
         let activation_id_2 = start_or_attach_pid2.handle_inner().unwrap().activation_id;
         assert_eq!(activation_id, activation_id_2);
 
-        let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
+        let activations_json_path = activations_json_path(&runtime_dir, &dot_flox_path);
 
         // Grab the existing activations before starting the PidWatcher so we
         // can compare against the state after one of the processes has died.
@@ -396,26 +396,26 @@ pub mod test {
     #[test]
     fn terminates_on_shutdown_flag() {
         let runtime_dir = tempfile::tempdir().unwrap();
-        let flox_env = PathBuf::from("flox_env");
+        let dot_flox_path = PathBuf::from(".flox");
         let store_path = "store_path".to_string();
 
         let proc = start_process();
         let pid = proc.id() as i32;
         let start_or_attach = StartOrAttachArgs {
             pid,
-            flox_env: flox_env.clone(),
+            dot_flox_path: dot_flox_path.clone(),
             store_path: store_path.clone(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
         let activation_id = start_or_attach.handle_inner().unwrap().activation_id;
         let set_ready = SetReadyArgs {
             id: activation_id.clone(),
-            flox_env: flox_env.clone(),
+            dot_flox_path: dot_flox_path.clone(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
         set_ready.handle().unwrap();
 
-        let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
+        let activations_json_path = activations_json_path(&runtime_dir, &dot_flox_path);
         let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
             activations_json_path,
@@ -444,26 +444,26 @@ pub mod test {
     #[test]
     fn terminates_on_signal_handler_flag() {
         let runtime_dir = tempfile::tempdir().unwrap();
-        let flox_env = PathBuf::from("flox_env");
+        let dot_flox_path = PathBuf::from(".flox");
         let store_path = "store_path".to_string();
 
         let proc = start_process();
         let pid = proc.id() as i32;
         let start_or_attach = StartOrAttachArgs {
             pid,
-            flox_env: flox_env.clone(),
+            dot_flox_path: dot_flox_path.clone(),
             store_path: store_path.clone(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
         let activation_id = start_or_attach.handle_inner().unwrap().activation_id;
         let set_ready = SetReadyArgs {
             id: activation_id.clone(),
-            flox_env: flox_env.clone(),
+            dot_flox_path: dot_flox_path.clone(),
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
         set_ready.handle().unwrap();
 
-        let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
+        let activations_json_path = activations_json_path(&runtime_dir, &dot_flox_path);
         let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
             activations_json_path,

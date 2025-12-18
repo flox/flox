@@ -8,14 +8,14 @@ use std::{env, fs};
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
-use flox_core::activate::context::{ActivateCtx, InvocationType};
+use flox_core::activate::context::{ActivateCtx, ActivateMode, InvocationType};
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY_VAR};
 use flox_core::traceable_path;
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
 use flox_rust_sdk::models::environment::generations::GenerationId;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, EnvironmentError};
 use flox_rust_sdk::models::lockfile::LockResult;
-use flox_rust_sdk::models::manifest::typed::{ActivateMode, IncludeDescriptor, Inner};
+use flox_rust_sdk::models::manifest::typed::{IncludeDescriptor, Inner};
 use flox_rust_sdk::providers::services::process_compose::shutdown_process_compose_if_all_processes_stopped;
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
@@ -407,6 +407,7 @@ impl Activate {
         subcommand_metric!("activate", "shell" = shell.to_string());
 
         let activate_data = ActivateCtx {
+            dot_flox_path: concrete_environment.dot_flox_path().to_path_buf(),
             // Don't rely on FLOX_ENV in the environment when we explicitly know
             // what it should be. This is necessary for nested activations where an
             // outer export of FLOX_ENV would be inherited by the inner activation.
@@ -414,7 +415,7 @@ impl Activate {
             env_project: Some(concrete_environment.project_path()?),
             env_cache: concrete_environment.cache_path()?.into_inner(),
             env_description: now_active.bare_description(),
-            mode: mode.to_string(),
+            mode,
             shell,
             flox_active_environments: flox_active_environments.to_string(),
             flox_env_log_dir: Some(concrete_environment.log_path()?.to_path_buf()),
