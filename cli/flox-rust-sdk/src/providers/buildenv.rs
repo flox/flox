@@ -474,6 +474,18 @@ where
         Ok(())
     }
 
+    /// Tries to substitute a single custom catalog package given store info
+    /// locations that have been looked up ahead of time.
+    ///
+    /// Some store info locations will require authentication, but the store
+    /// paths for this package may be available at a different location that
+    /// doesn't require authentication, so we authenticate lazily as that may
+    /// fail.
+    ///
+    /// It's also possible that a user has simply published an unmodified
+    /// package that exists in nixpkgs. To cover that case there is a fallback
+    /// that will attempt to substitute from cache.nixos.org if substituting
+    /// from the provided store info locations fails.
     fn realise_single_custom_catalog_pkg(
         locked_pkg: &LockedPackageCatalog,
         gc_root_base_dir: &Path,
@@ -624,6 +636,9 @@ where
         }
     }
 
+    /// Tries to substitute a single base catalog package, assuming that we have
+    /// its metadata, but that the binary lives in the upstream Nix cache
+    /// (e.g cache.nixos.org).
     fn realise_single_base_catalog_pkg(
         locked_pkg: &LockedPackageCatalog,
         gc_root_base_dir: &Path,
@@ -631,7 +646,6 @@ where
         semaphore: &Semaphore,
     ) -> Result<(), BuildEnvError> {
         let _guard = semaphore.wait();
-        // Check if all store paths are valid, or can be substituted.
 
         let gc_root_path = gc_root_base_dir.join(format!("by-iid/{}", locked_pkg.install_id));
 
@@ -652,7 +666,14 @@ where
             return Ok(());
         }
 
+        // If we get here it means we need to build a package from source.
+
         let installable = {
+            // We swap out the locked URL of the package (which points at our nixpkgs
+            // fork) for a flake reference that uses our custom `flox-nixpkgs` URL
+            // scheme. This disables certain built-in evaluation checks (allowUnfree, etc).
+            // That's important because we move those checks into manifest options, and
+            // don't want conflicts or duplicates.
             let mut locked_url = locked_pkg.locked_url.to_string();
             if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
                 locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
@@ -663,7 +684,10 @@ where
                 )));
             }
 
-            // build all out paths
+            // For the attribute path we construct a real installable's attribute path
+            // by prepending `legacyPackages.<system>` to the `pkg-path`/`attr_path`.
+            //
+            // The `^*` bit builds all outputs.
             let attrpath = format!(
                 "legacyPackages.{}.{}^*",
                 locked_pkg.system, locked_pkg.attr_path
@@ -838,7 +862,6 @@ where
         cmd.arg("build");
         cmd.arg("--out-link");
         cmd.arg(gc_root_path);
-        // cmd.arg(self.new_gc_root_path(format!("by-iid/{install_id}")));
         cmd.args(paths);
 
         debug!(cmd=%cmd.display(), "checking store paths, including substituters");
