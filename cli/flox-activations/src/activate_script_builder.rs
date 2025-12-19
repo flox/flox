@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 
-use flox_core::activate::context::{ActivateCtx, InvocationType};
+use flox_core::activate::context::{ActivateCtx, AttachCtx, InvocationType};
 use flox_core::activate::vars::{FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_VAR};
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
@@ -28,12 +28,17 @@ pub(super) fn assemble_command_for_start_script(
     start_or_attach_result: &StartOrAttachResult,
     invocation_type: InvocationType,
 ) -> Command {
-    let mut command = Command::new(context.interpreter_path.join("activate.d/start.bash"));
+    let mut command = Command::new(
+        context
+            .attach_ctx
+            .interpreter_path
+            .join("activate.d/start.bash"),
+    );
     add_old_cli_options(&mut command, &context);
-    command.envs(old_cli_envs(context.clone()));
+    command.envs(old_cli_envs(context.attach_ctx.clone()));
     add_old_activate_script_exports(
         &mut command,
-        &context,
+        &context.attach_ctx,
         subsystem_verbosity,
         vars_from_env,
         start_or_attach_result,
@@ -45,7 +50,7 @@ pub(super) fn assemble_command_for_start_script(
 /// Set (and unset) environment variables needed to be activated
 pub fn apply_activation_env(
     command: &mut Command,
-    context: ActivateCtx,
+    context: AttachCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
     env_diff: &EnvDiff,
@@ -65,7 +70,7 @@ pub fn apply_activation_env(
     }
 }
 
-pub fn old_cli_envs(context: ActivateCtx) -> HashMap<&'static str, String> {
+pub fn old_cli_envs(context: AttachCtx) -> HashMap<&'static str, String> {
     let mut exports = HashMap::from([
         (
             FLOX_ACTIVE_ENVIRONMENTS_VAR,
@@ -116,17 +121,17 @@ pub fn old_cli_envs(context: ActivateCtx) -> HashMap<&'static str, String> {
 /// Prior to the refactor, these options were passed by the CLI to the activate
 /// script
 fn add_old_cli_options(command: &mut Command, context: &ActivateCtx) {
-    if let Some(env_project) = context.env_project.as_ref() {
+    if let Some(env_project) = context.attach_ctx.env_project.as_ref() {
         command
             .arg("--env-project")
             .arg(env_project.to_string_lossy().to_string());
     }
     command
         .arg("--env-cache")
-        .arg(context.env_cache.to_string_lossy().to_string());
+        .arg(context.attach_ctx.env_cache.to_string_lossy().to_string());
     command
         .arg("--env-description")
-        .arg(context.env_description.clone());
+        .arg(context.attach_ctx.env_description.clone());
 
     // Pass down the activation mode
     command.arg("--mode").arg(context.mode.to_string());
@@ -158,7 +163,7 @@ fn add_start_script_options(
 // or we should completely drop VarsFromEnvironment .
 fn add_old_activate_script_exports(
     command: &mut Command,
-    context: &ActivateCtx,
+    context: &AttachCtx,
     subsystem_verbosity: u32,
     vars_from_environment: VarsFromEnvironment,
     start_or_attach_result: &StartOrAttachResult,

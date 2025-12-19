@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use std::{env, thread};
 
 use anyhow::{Context, Error, bail};
-use flox_core::activate::context::ActivateCtx;
+use flox_core::activate::context::AttachCtx;
 use time::OffsetDateTime;
 use time::macros::format_description;
 use tracing::debug;
@@ -71,7 +71,7 @@ fn wait_for_services_socket(socket_file: &Path, timeout: Duration) -> Result<boo
 
 /// Start services using process-compose, blocking until the socket is ready.
 pub fn start_services_blocking(
-    context: &ActivateCtx,
+    context: &AttachCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
     start_or_attach: &StartOrAttachResult,

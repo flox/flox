@@ -5,8 +5,11 @@ use shell_gen::ShellWithPath;
 
 pub use super::mode::ActivateMode;
 
+/// Context needed to attach to a start of an environment
+/// Note that store path is not included, as the executive needs to attach to
+/// the latest ready store path when starting process-compose
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ActivateCtx {
+pub struct AttachCtx {
     // Command arguments (from command.arg() calls in cli/flox/src/commands/activate.rs:437-462)
     /// The path to the environment .flox directory
     pub dot_flox_path: PathBuf,
@@ -22,12 +25,6 @@ pub struct ActivateCtx {
 
     /// The environment description
     pub env_description: String,
-
-    /// The activation mode (dev or run)
-    pub mode: ActivateMode,
-
-    /// Path to the shell executable
-    pub shell: ShellWithPath,
 
     // Environment variable exports (from exports HashMap in cli/flox/src/commands/activate.rs:332-428)
     /// Active environments tracking
@@ -48,9 +45,6 @@ pub struct ActivateCtx {
     /// Whether to set prompt
     pub set_prompt: bool,
 
-    /// Store path for activation
-    pub flox_activate_store_path: String,
-
     /// Runtime directory
     pub flox_runtime_dir: String,
 
@@ -68,6 +62,21 @@ pub struct ActivateCtx {
 
     // Info needed to run the activate script
     pub interpreter_path: PathBuf,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActivateCtx {
+    /// Store path for activation
+    pub flox_activate_store_path: String,
+
+    pub attach_ctx: AttachCtx,
+
+    /// The activation mode (dev or run)
+    pub mode: ActivateMode,
+
+    /// Path to the shell executable
+    pub shell: ShellWithPath,
+
     pub invocation_type: Option<InvocationType>,
 
     /// Whether to run the monitoring loop (aka. watchdog)

@@ -8,7 +8,7 @@ use std::{env, fs};
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
-use flox_core::activate::context::{ActivateCtx, ActivateMode, InvocationType};
+use flox_core::activate::context::{ActivateCtx, ActivateMode, AttachCtx, InvocationType};
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY_VAR};
 use flox_core::traceable_path;
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
@@ -406,7 +406,7 @@ impl Activate {
         };
         subcommand_metric!("activate", "shell" = shell.to_string());
 
-        let activate_data = ActivateCtx {
+        let attach_ctx = AttachCtx {
             dot_flox_path: concrete_environment.dot_flox_path().to_path_buf(),
             // Don't rely on FLOX_ENV in the environment when we explicitly know
             // what it should be. This is necessary for nested activations where an
@@ -415,15 +415,12 @@ impl Activate {
             env_project: Some(concrete_environment.project_path()?),
             env_cache: concrete_environment.cache_path()?.into_inner(),
             env_description: now_active.bare_description(),
-            mode,
-            shell,
             flox_active_environments: flox_active_environments.to_string(),
             flox_env_log_dir: Some(concrete_environment.log_path()?.to_path_buf()),
             prompt_color_1,
             prompt_color_2,
             flox_prompt_environments,
             set_prompt,
-            flox_activate_store_path: store_path.to_string_lossy().to_string(),
             // TODO: we should probably figure out a more consistent way to
             // pass this since it's also passed for `flox build`
             flox_runtime_dir: flox.runtime_dir.to_string_lossy().to_string(),
@@ -432,6 +429,13 @@ impl Activate {
             flox_activate_start_services,
             flox_services_socket: Some(socket_path),
             interpreter_path,
+        };
+
+        let activate_data = ActivateCtx {
+            flox_activate_store_path: store_path.to_string_lossy().to_string(),
+            attach_ctx,
+            mode,
+            shell,
             invocation_type: Some(invocation_type),
             run_monitoring_loop: true,
             remove_after_reading: true,
