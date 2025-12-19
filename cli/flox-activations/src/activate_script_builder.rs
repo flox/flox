@@ -83,10 +83,6 @@ pub fn old_cli_envs(context: ActivateCtx) -> HashMap<&'static str, String> {
         ),
         ("_FLOX_SET_PROMPT", context.set_prompt.to_string()),
         (
-            "_FLOX_ACTIVATE_STORE_PATH",
-            context.flox_activate_store_path,
-        ),
-        (
             // TODO: we should probably figure out a more consistent way to
             // pass this since it's also passed for `flox build`
             FLOX_RUNTIME_DIR_VAR,
