@@ -250,6 +250,7 @@ LC_ALL=C $_comm -23 "$_start_env" "$_end_env" \
   | $_sed -e 's/^declare -x //' -e 's/=.*//' > "$_del_env"
 # TODO end remove
 
+# TODO: move to activate.rs
 # Finally mark the environment as ready to use for attachments.
 "$_flox_activations" \
   set-ready \
