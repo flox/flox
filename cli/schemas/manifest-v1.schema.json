@@ -340,15 +340,157 @@
     "ManifestPackageDescriptor": {
       "anyOf": [
         {
-          "$ref": "#/$defs/PackageDescriptorCatalog"
+          "$ref": "#/$defs/PackageDescriptorCatalogV1"
         },
         {
-          "$ref": "#/$defs/PackageDescriptorFlake"
+          "$ref": "#/$defs/PackageDescriptorCatalogV2"
+        },
+        {
+          "$ref": "#/$defs/PackageDescriptorFlakeV1"
+        },
+        {
+          "$ref": "#/$defs/PackageDescriptorFlakeV2"
         },
         {
           "$ref": "#/$defs/PackageDescriptorStorePath"
         }
       ]
+    },
+    "ManifestV1": {
+      "additionalProperties": false,
+      "properties": {
+        "build": {
+          "$ref": "#/$defs/Build",
+          "description": "Package build definitions"
+        },
+        "containerize": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Containerize"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hook": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Hook"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Hooks that are run at various times during the lifecycle of the manifest\nin a known shell environment."
+        },
+        "include": {
+          "$ref": "#/$defs/Include"
+        },
+        "install": {
+          "$ref": "#/$defs/Install",
+          "description": "The packages to install in the form of a map from install_id\nto package descriptor."
+        },
+        "options": {
+          "$ref": "#/$defs/Options",
+          "default": {},
+          "description": "Options that control the behavior of the manifest."
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Profile"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Profile scripts that are run in the user's shell upon activation."
+        },
+        "services": {
+          "$ref": "#/$defs/Services",
+          "description": "Service definitions"
+        },
+        "vars": {
+          "$ref": "#/$defs/Vars",
+          "description": "Variables that are exported to the shell environment upon activation."
+        },
+        "version": {
+          "$ref": "#/$defs/version"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "ManifestV2": {
+      "additionalProperties": false,
+      "properties": {
+        "build": {
+          "$ref": "#/$defs/Build",
+          "description": "Package build definitions"
+        },
+        "containerize": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Containerize"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hook": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Hook"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Hooks that are run at various times during the lifecycle of the manifest\nin a known shell environment."
+        },
+        "include": {
+          "$ref": "#/$defs/Include"
+        },
+        "install": {
+          "$ref": "#/$defs/Install",
+          "description": "The packages to install in the form of a map from install_id\nto package descriptor."
+        },
+        "options": {
+          "$ref": "#/$defs/Options",
+          "default": {},
+          "description": "Options that control the behavior of the manifest."
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Profile"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Profile scripts that are run in the user's shell upon activation."
+        },
+        "services": {
+          "$ref": "#/$defs/Services",
+          "description": "Service definitions"
+        },
+        "vars": {
+          "$ref": "#/$defs/Vars",
+          "description": "Variables that are exported to the shell environment upon activation."
+        },
+        "version": {
+          "$ref": "#/$defs/version"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
     },
     "Options": {
       "additionalProperties": false,
@@ -385,7 +527,7 @@
       },
       "type": "object"
     },
-    "PackageDescriptorCatalog": {
+    "PackageDescriptorCatalogV1": {
       "additionalProperties": false,
       "properties": {
         "pkg-group": {
@@ -426,11 +568,101 @@
       ],
       "type": "object"
     },
-    "PackageDescriptorFlake": {
+    "PackageDescriptorCatalogV2": {
+      "additionalProperties": false,
+      "properties": {
+        "outputs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SelectedOutputs"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pkg-group": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pkg-path": {
+          "type": "string"
+        },
+        "priority": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "systems": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "pkg-path"
+      ],
+      "type": "object"
+    },
+    "PackageDescriptorFlakeV1": {
       "additionalProperties": false,
       "properties": {
         "flake": {
           "type": "string"
+        },
+        "priority": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "systems": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "flake"
+      ],
+      "type": "object"
+    },
+    "PackageDescriptorFlakeV2": {
+      "additionalProperties": false,
+      "properties": {
+        "flake": {
+          "type": "string"
+        },
+        "outputs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SelectedOutputs"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "priority": {
           "format": "uint64",
@@ -594,6 +826,19 @@
         "Always"
       ],
       "type": "string"
+    },
+    "SelectedOutputs": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
     },
     "SemverOptions": {
       "additionalProperties": false,
@@ -1146,72 +1391,14 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": false,
-  "description": "Not meant for writing manifest files, only for reading them.\nModifications should be made using `manifest::raw`.",
-  "properties": {
-    "build": {
-      "$ref": "#/$defs/Build",
-      "description": "Package build definitions"
+  "anyOf": [
+    {
+      "$ref": "#/$defs/ManifestV1"
     },
-    "containerize": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/Containerize"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "hook": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/Hook"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "description": "Hooks that are run at various times during the lifecycle of the manifest\nin a known shell environment."
-    },
-    "include": {
-      "$ref": "#/$defs/Include"
-    },
-    "install": {
-      "$ref": "#/$defs/Install",
-      "description": "The packages to install in the form of a map from install_id\nto package descriptor."
-    },
-    "options": {
-      "$ref": "#/$defs/Options",
-      "default": {},
-      "description": "Options that control the behavior of the manifest."
-    },
-    "profile": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/Profile"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "description": "Profile scripts that are run in the user's shell upon activation."
-    },
-    "services": {
-      "$ref": "#/$defs/Services",
-      "description": "Service definitions"
-    },
-    "vars": {
-      "$ref": "#/$defs/Vars",
-      "description": "Variables that are exported to the shell environment upon activation."
-    },
-    "version": {
-      "$ref": "#/$defs/version"
+    {
+      "$ref": "#/$defs/ManifestV2"
     }
-  },
-  "required": [
-    "version"
   ],
-  "title": "Manifest",
-  "type": "object"
+  "description": "Not meant for writing manifest files, only for reading them.\nModifications should be made using `manifest::raw`.",
+  "title": "Manifest"
 }
