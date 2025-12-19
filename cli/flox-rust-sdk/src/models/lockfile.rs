@@ -37,7 +37,7 @@ use super::manifest::typed::{
     ManifestError,
     ManifestPackageDescriptor,
     PackageDescriptorCatalogV1,
-    PackageDescriptorFlake,
+    PackageDescriptorFlakeV1,
 };
 use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
@@ -357,7 +357,7 @@ impl LockedPackageFlake {
 #[derive(Debug, Clone, PartialEq)]
 struct FlakeInstallableToLock {
     install_id: String,
-    descriptor: PackageDescriptorFlake,
+    descriptor: PackageDescriptorFlakeV1,
     system: System,
 }
 
@@ -1648,7 +1648,7 @@ impl Lockfile {
 #[derive(Debug, Clone, PartialEq)]
 pub enum PackageToList {
     Catalog(PackageDescriptorCatalogV1, LockedPackageCatalog),
-    Flake(PackageDescriptorFlake, LockedPackageFlake),
+    Flake(PackageDescriptorFlakeV1, LockedPackageFlake),
     StorePath(LockedPackageStorePath),
 }
 
@@ -1787,10 +1787,10 @@ pub mod test_helpers {
 
     pub fn fake_flake_installable_lock(
         name: &str,
-    ) -> (String, PackageDescriptorFlake, LockedPackageFlake) {
+    ) -> (String, PackageDescriptorFlakeV1, LockedPackageFlake) {
         let install_id = format!("{}_install_id", name);
 
-        let descriptor = PackageDescriptorFlake {
+        let descriptor = PackageDescriptorFlakeV1 {
             flake: format!("github:nowhere/exciting#{name}"),
             priority: None,
             systems: None,
@@ -1844,8 +1844,8 @@ pub mod test_helpers {
         (install_id, descriptor, locked)
     }
 
-    pub fn nix_eval_jobs_descriptor() -> PackageDescriptorFlake {
-        PackageDescriptorFlake {
+    pub fn nix_eval_jobs_descriptor() -> PackageDescriptorFlakeV1 {
+        PackageDescriptorFlakeV1 {
             flake: "github:nix-community/nix-eval-jobs".to_string(),
             priority: None,
             systems: None,
@@ -1933,7 +1933,7 @@ pub(crate) mod tests {
         fn lock_flake_installable(
             &self,
             _: impl AsRef<str>,
-            _: &PackageDescriptorFlake,
+            _: &PackageDescriptorFlakeV1,
         ) -> Result<LockedInstallable, FlakeInstallableError> {
             panic!("this flake locker always panics")
         }
@@ -3859,7 +3859,7 @@ pub(crate) mod tests {
         [options]
         systems = ["aarch64-linux", "x86_64-linux"]
         "#};
-        let manifest = toml_edit::de::from_str(&manifest_contents).unwrap();
+        let manifest = Manifest::from_str(&manifest_contents).unwrap();
         let installables = Lockfile::collect_flake_installables(&manifest).collect::<Vec<_>>();
         assert_eq!(installables.len(), 1);
         assert_eq!(installables[0].system.as_str(), "x86_64-linux");
@@ -3878,7 +3878,7 @@ pub(crate) mod tests {
           { dir = "dep1" }
         ]
         "#};
-        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        let manifest = Manifest::from_str(manifest_contents).unwrap();
 
         // Create dep1 environment
         let dep1_path = tempdir.path().join("dep1");
@@ -3916,7 +3916,7 @@ pub(crate) mod tests {
         );
         assert_eq!(
             compose.unwrap().include[0].manifest,
-            toml_edit::de::from_str(dep1_manifest_contents).unwrap()
+            Manifest::from_str(dep1_manifest_contents).unwrap()
         )
     }
 
@@ -3936,7 +3936,7 @@ pub(crate) mod tests {
         [vars]
         foo = "highest_precedence"
         "#};
-        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        let manifest = Manifest::from_str(manifest_contents).unwrap();
 
         // Create lowest_precedence environment
         let lowest_precedence_path = tempdir.path().join("lowest_precedence");
@@ -3998,11 +3998,11 @@ pub(crate) mod tests {
         );
         assert_eq!(
             compose.as_ref().unwrap().include[0].manifest,
-            toml_edit::de::from_str(lowest_precedence_manifest_contents).unwrap()
+            Manifest::from_str(lowest_precedence_manifest_contents).unwrap()
         );
         assert_eq!(
             compose.unwrap().include[1].manifest,
-            toml_edit::de::from_str(higher_precedence_manifest_contents).unwrap()
+            Manifest::from_str(higher_precedence_manifest_contents).unwrap()
         );
     }
 
@@ -4027,7 +4027,7 @@ pub(crate) mod tests {
           { dir = "middle_precedence" }
         ]
         "#};
-        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        let manifest = Manifest::from_str(manifest_contents).unwrap();
 
         // Create middle_precedence environment
         let middle_precedence_path = tempdir.path().join("middle_precedence");
@@ -4065,7 +4065,7 @@ pub(crate) mod tests {
           { dir = "highest_precedence" },
         ]
         "#};
-        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        let manifest = Manifest::from_str(manifest_contents).unwrap();
 
         // Create lowest_precedence environment
         let lowest_precedence_path = tempdir.path().join("lowest_precedence");
@@ -4123,15 +4123,15 @@ pub(crate) mod tests {
         );
         assert_eq!(
             compose.as_ref().unwrap().include[0].manifest,
-            toml_edit::de::from_str(lowest_precedence_manifest_contents).unwrap()
+            Manifest::from_str(lowest_precedence_manifest_contents).unwrap()
         );
         assert_eq!(
             compose.as_ref().unwrap().include[1].manifest,
-            toml_edit::de::from_str(middle_precedence_manifest_contents).unwrap()
+            Manifest::from_str(middle_precedence_manifest_contents).unwrap()
         );
         assert_eq!(
             compose.as_ref().unwrap().include[2].manifest,
-            toml_edit::de::from_str(highest_precedence_manifest_contents).unwrap()
+            Manifest::from_str(highest_precedence_manifest_contents).unwrap()
         );
     }
 
@@ -4150,7 +4150,7 @@ pub(crate) mod tests {
           { dir = "dep1" }
         ]
         "#};
-        let mut manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        let mut manifest = Manifest::from_str(manifest_contents).unwrap();
 
         // Create dep1 environment
         let dep1_path = tempdir.path().join("dep1");
@@ -4160,7 +4160,7 @@ pub(crate) mod tests {
         [vars]
         foo = "dep1"
         "#};
-        let dep1_manifest = toml_edit::de::from_str(dep1_manifest_contents).unwrap();
+        let dep1_manifest = Manifest::from_str(dep1_manifest_contents).unwrap();
 
         fs::create_dir(&dep1_path).unwrap();
         let mut dep1 = new_path_environment_in(&flox, dep1_manifest_contents, &dep1_path);
@@ -4185,7 +4185,7 @@ pub(crate) mod tests {
         );
         assert_eq!(
             lockfile.compose.as_ref().unwrap().include[0].manifest,
-            toml_edit::de::from_str(dep1_manifest_contents).unwrap()
+            Manifest::from_str(dep1_manifest_contents).unwrap()
         );
 
         // Edit dep1 and then change its name in the include descriptor and re-merge
@@ -4195,7 +4195,7 @@ pub(crate) mod tests {
         [vars]
         foo = "dep1 edited"
         "#};
-        let dep1_edited_manifest = toml_edit::de::from_str(dep1_edited_manifest_contents).unwrap();
+        let dep1_edited_manifest = Manifest::from_str(dep1_edited_manifest_contents).unwrap();
 
         dep1.edit(&flox, dep1_edited_manifest_contents.to_string())
             .unwrap();
@@ -4209,7 +4209,7 @@ pub(crate) mod tests {
               { dir = "dep1", name = "dep1 edited" }
             ]
             "#};
-            manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+            manifest = Manifest::from_str(manifest_contents).unwrap();
         }
 
         // Merge
@@ -4274,7 +4274,7 @@ pub(crate) mod tests {
           { dir = "dep1" }
         ]
         "#};
-        let mut manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        let mut manifest = Manifest::from_str(manifest_contents).unwrap();
 
         // Create dep1 environment
         let dep1_path = tempdir.path().join("dep1");
@@ -4284,7 +4284,7 @@ pub(crate) mod tests {
         [vars]
         foo = "dep1"
         "#};
-        let dep1_manifest = toml_edit::de::from_str(dep1_manifest_contents).unwrap();
+        let dep1_manifest = Manifest::from_str(dep1_manifest_contents).unwrap();
 
         fs::create_dir(&dep1_path).unwrap();
         let mut dep1 = new_path_environment_in(&flox, dep1_manifest_contents, &dep1_path);
@@ -4316,7 +4316,7 @@ pub(crate) mod tests {
         manifest_contents = indoc! {r#"
         version = 1
         "#};
-        manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        manifest = Manifest::from_str(manifest_contents).unwrap();
 
         // Merge
         let (merged, compose) = Lockfile::merge_manifest(
@@ -4348,7 +4348,7 @@ pub(crate) mod tests {
           { dir = "dep2" }
         ]
         "#};
-        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        let manifest = Manifest::from_str(manifest_contents).unwrap();
 
         // Create dep1 named dep
         let dep1_path = tempdir.path().join("dep1");

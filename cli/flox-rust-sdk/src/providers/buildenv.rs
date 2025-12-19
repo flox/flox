@@ -1490,7 +1490,7 @@ mod realise_flakes_tests {
     use test_helpers::buildenv_instance;
 
     use super::*;
-    use crate::models::manifest::typed::PackageDescriptorFlake;
+    use crate::models::manifest::typed::PackageDescriptorFlakeV1;
     use crate::providers::flake_installable_locker::{InstallableLocker, InstallableLockerImpl};
 
     // region: tools to configure mock flakes for testing
@@ -1557,7 +1557,7 @@ mod realise_flakes_tests {
             };
             fs::write(tempdir.path().join("flake.nix"), flake_contents).unwrap();
             let mut locked_installable = InstallableLockerImpl::default()
-                .lock_flake_installable(env!("NIX_TARGET_SYSTEM"), &PackageDescriptorFlake {
+                .lock_flake_installable(env!("NIX_TARGET_SYSTEM"), &PackageDescriptorFlakeV1 {
                     flake: format!(
                         "path:{}#package",
                         tempdir.path().canonicalize().unwrap().display()

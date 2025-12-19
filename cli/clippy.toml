@@ -1,3 +1,6 @@
 # We have a bunch of errors above the default and some up to 160
 # Just change the threshold for now rather than doing a bunch of boxing
 large-error-threshold = 161
+disallowed-methods = [
+  { path = "toml_edit::de::from_str", reason = "Manifest::from_str does necessary v1 -> v2 conversions and checks"},
+]

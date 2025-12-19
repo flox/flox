@@ -21,6 +21,7 @@ use crate::models::manifest::typed::{
     ManifestV1,
     ManifestV2,
     PackageDescriptorCatalogV2,
+    PackageDescriptorFlakeV2,
 };
 
 /// Represents the `[version]` number key in manifest.toml
@@ -119,7 +120,10 @@ impl RawManifest {
                 let parsed: ManifestV1 = toml_edit::de::from_document(self.0.clone())
                     .map_err(ManifestError::Deserialize)?;
                 for (install_id, pd) in parsed.install.inner().iter() {
-                    if matches!(pd, ManifestPackageDescriptor::CatalogV2(_)) {
+                    let is_invalid_descriptor =
+                        matches!(pd, ManifestPackageDescriptor::CatalogV2(_))
+                            || matches!(pd, ManifestPackageDescriptor::FlakeRefV2(_));
+                    if is_invalid_descriptor {
                         return Err(ManifestError::V1HasOutputs(install_id.clone()));
                     }
                 }
@@ -135,6 +139,9 @@ impl RawManifest {
                     if let ManifestPackageDescriptor::CatalogV1(v1) = pd {
                         let v2: PackageDescriptorCatalogV2 = v1.into();
                         *pd = ManifestPackageDescriptor::CatalogV2(v2);
+                    } else if let ManifestPackageDescriptor::FlakeRefV1(v1) = pd {
+                        let v2: PackageDescriptorFlakeV2 = v1.into();
+                        *pd = ManifestPackageDescriptor::FlakeRefV2(v2);
                     }
                 }
                 Ok(Manifest::V2(parsed))

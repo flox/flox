@@ -185,7 +185,7 @@ mod test {
         let manifest_contents = indoc! {r#"
         version = 1
         "#};
-        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        let manifest = Manifest::from_str(manifest_contents).unwrap();
 
         fs::create_dir(&environment_path).unwrap();
         let mut environment = new_path_environment_in(&flox, manifest_contents, &environment_path);
@@ -217,7 +217,7 @@ mod test {
         let manifest_contents = indoc! {r#"
         version = 1
         "#};
-        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        let manifest = Manifest::from_str(manifest_contents).unwrap();
 
         fs::create_dir(&environment_path).unwrap();
         let mut environment = new_path_environment_in(&flox, manifest_contents, &environment_path);
@@ -383,7 +383,7 @@ mod test {
             [vars]
             foo = "bar"
         "#};
-        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        let manifest = Manifest::from_str(manifest_contents).unwrap();
         remote_env
             .edit(&flox, manifest_contents.to_string())
             .unwrap();

@@ -10,7 +10,7 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 
 use super::nix::nix_base_command;
-use crate::models::manifest::typed::{DEFAULT_PRIORITY, PackageDescriptorFlake};
+use crate::models::manifest::typed::{DEFAULT_PRIORITY, PackageDescriptorFlakeV1};
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::utils::CommandExt;
 
@@ -104,7 +104,7 @@ pub trait InstallableLocker {
     fn lock_flake_installable(
         &self,
         system: impl AsRef<str>,
-        descriptor: &PackageDescriptorFlake,
+        descriptor: &PackageDescriptorFlakeV1,
     ) -> Result<LockedInstallable, FlakeInstallableError>;
 }
 
@@ -127,7 +127,7 @@ impl Default for InstallableLockerImpl {
 /// - Priority set in the descriptor
 /// - `meta.priority` of the derivation
 /// - Default priority
-fn set_priority(locked: &mut LockedInstallable, descriptor: &PackageDescriptorFlake) {
+fn set_priority(locked: &mut LockedInstallable, descriptor: &PackageDescriptorFlakeV1) {
     if let Some(priority) = descriptor.priority {
         locked.priority = priority;
     }
@@ -166,7 +166,7 @@ impl InstallableLocker for InstallableLockerMock {
     fn lock_flake_installable(
         &self,
         system: impl AsRef<str>,
-        descriptor: &PackageDescriptorFlake,
+        descriptor: &PackageDescriptorFlakeV1,
     ) -> Result<LockedInstallable, FlakeInstallableError> {
         let mut mocked_result = self
             .lock_flake_installable
@@ -204,7 +204,7 @@ impl InstallableLocker for Nix {
     fn lock_flake_installable(
         &self,
         system: impl AsRef<str>,
-        descriptor: &PackageDescriptorFlake,
+        descriptor: &PackageDescriptorFlakeV1,
     ) -> Result<LockedInstallable, FlakeInstallableError> {
         let mut command = nix_base_command();
         command.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
@@ -274,7 +274,7 @@ mod tests {
         let installable = format!("{flake}#hello", flake = local_test_flake());
 
         // make sure the deserialization is not accidentally optimized away
-        Nix.lock_flake_installable(system, &PackageDescriptorFlake {
+        Nix.lock_flake_installable(system, &PackageDescriptorFlakeV1 {
             flake: installable,
             priority: None,
             systems: None,
@@ -287,7 +287,7 @@ mod tests {
         let system = env!("system");
         let installable = "github:flox/trust-this-wont-be-added#hello";
 
-        let result = Nix.lock_flake_installable(system, &PackageDescriptorFlake {
+        let result = Nix.lock_flake_installable(system, &PackageDescriptorFlakeV1 {
             flake: installable.to_string(),
             priority: None,
             systems: None,
@@ -303,7 +303,7 @@ mod tests {
         let system = env!("system");
         let installable = format!("{flake}#nonexistent", flake = local_test_flake());
 
-        let result = Nix.lock_flake_installable(system, &PackageDescriptorFlake {
+        let result = Nix.lock_flake_installable(system, &PackageDescriptorFlakeV1 {
             flake: installable,
             priority: None,
             systems: None,
@@ -377,7 +377,7 @@ mod tests {
         }
         "#;
         let mut locked: LockedInstallable = serde_json::from_str(locked_hello).unwrap();
-        let descriptor = PackageDescriptorFlake {
+        let descriptor = PackageDescriptorFlakeV1 {
             flake: "github:NixOS/nipxkgs#hello".to_string(),
             priority: Some(10),
             systems: None,
@@ -418,7 +418,7 @@ mod tests {
         }
         "#;
         let mut locked: LockedInstallable = serde_json::from_str(locked_hello).unwrap();
-        let descriptor = PackageDescriptorFlake {
+        let descriptor = PackageDescriptorFlakeV1 {
             flake: "github:NixOS/nipxkgs#hello".to_string(),
             priority: None,
             systems: None,
@@ -451,7 +451,7 @@ mod tests {
         // Lock the flake for the first time
         let installable = format!("tarball+file://{}#refreshable", tarball_path.display());
         let first_lock = Nix
-            .lock_flake_installable(system, &PackageDescriptorFlake {
+            .lock_flake_installable(system, &PackageDescriptorFlakeV1 {
                 flake: installable.clone(),
                 priority: None,
                 systems: None,
@@ -473,7 +473,7 @@ mod tests {
 
         // Lock the flake again - this should fetch the fresh copy with updated description
         let second_lock = Nix
-            .lock_flake_installable(system, &PackageDescriptorFlake {
+            .lock_flake_installable(system, &PackageDescriptorFlakeV1 {
                 flake: installable,
                 priority: None,
                 systems: None,

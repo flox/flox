@@ -3391,7 +3391,7 @@ mod test {
 
         assert_eq!(
             lockfile.compose.unwrap().include[0].manifest,
-            toml_edit::de::from_str(dep_manifest_contents).unwrap()
+            Manifest::from_str(dep_manifest_contents).unwrap()
         );
     }
 

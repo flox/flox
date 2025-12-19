@@ -607,18 +607,23 @@ See https://flox.dev/docs/reference/command-reference/manifest.toml/#package-des
 pub enum ManifestPackageDescriptor {
     CatalogV1(PackageDescriptorCatalogV1),
     CatalogV2(PackageDescriptorCatalogV2),
-    FlakeRef(PackageDescriptorFlake),
+    FlakeRefV1(PackageDescriptorFlakeV1),
+    FlakeRefV2(PackageDescriptorFlakeV2),
     StorePath(PackageDescriptorStorePath),
 }
 
 impl PartialEq<ManifestPackageDescriptor> for ManifestPackageDescriptor {
     fn eq(&self, other: &ManifestPackageDescriptor) -> bool {
         use ManifestPackageDescriptor::*;
+        // NOTE: we do this manually because the inner types of the enum variants
+        // can be equal, but by default they won't even be compared if the enum
+        // variants themselves are different.
         match (self, other) {
             // These are the obvious ones
             (CatalogV1(a), CatalogV1(b)) => a.eq(b),
             (CatalogV2(a), CatalogV2(b)) => a.eq(b),
-            (FlakeRef(a), FlakeRef(b)) => a.eq(b),
+            (FlakeRefV1(a), FlakeRefV1(b)) => a.eq(b),
+            (FlakeRefV2(a), FlakeRefV2(b)) => a.eq(b),
             (StorePath(a), StorePath(b)) => a.eq(b),
             // We need to treat these as equal if all fields are equal and
             // the v2 descriptor doesn't have an `outputs` field.
@@ -650,7 +655,16 @@ impl std::hash::Hash for ManifestPackageDescriptor {
                 v2.hash(state);
             },
             CatalogV2(v2) => v2.hash(state),
-            FlakeRef(flake_ref) => flake_ref.hash(state),
+            FlakeRefV1(v1) => {
+                let v2 = PackageDescriptorFlakeV2 {
+                    flake: v1.flake.clone(),
+                    priority: v1.priority,
+                    systems: v1.systems.clone(),
+                    outputs: None,
+                };
+                v2.hash(state);
+            },
+            FlakeRefV2(v2) => v2.hash(state),
             StorePath(store_path) => store_path.hash(state),
         }
     }
@@ -682,7 +696,7 @@ impl ManifestPackageDescriptor {
         match (self, other) {
             (CatalogV1(this), CatalogV1(other)) => this.invalidates_existing_resolution(other),
             (CatalogV2(this), CatalogV2(other)) => this.invalidates_existing_resolution(other),
-            (FlakeRef(this), FlakeRef(other)) => this != other,
+            (FlakeRefV1(this), FlakeRefV1(other)) => this != other,
             // different types of descriptors are always different
             _ => true,
         }
@@ -705,17 +719,17 @@ impl ManifestPackageDescriptor {
     }
 
     #[must_use]
-    pub fn unwrap_flake_descriptor(self) -> Option<PackageDescriptorFlake> {
+    pub fn unwrap_flake_descriptor(self) -> Option<PackageDescriptorFlakeV1> {
         match self {
-            ManifestPackageDescriptor::FlakeRef(descriptor) => Some(descriptor),
+            ManifestPackageDescriptor::FlakeRefV1(descriptor) => Some(descriptor),
             _ => None,
         }
     }
 
     #[must_use]
-    pub fn as_flake_descriptor_ref(&self) -> Option<&PackageDescriptorFlake> {
+    pub fn as_flake_descriptor_ref(&self) -> Option<&PackageDescriptorFlakeV1> {
         match self {
-            ManifestPackageDescriptor::FlakeRef(descriptor) => Some(descriptor),
+            ManifestPackageDescriptor::FlakeRefV1(descriptor) => Some(descriptor),
             _ => None,
         }
     }
@@ -761,15 +775,15 @@ impl From<PackageDescriptorCatalogV2> for ManifestPackageDescriptor {
     }
 }
 
-impl From<&PackageDescriptorFlake> for ManifestPackageDescriptor {
-    fn from(val: &PackageDescriptorFlake) -> Self {
-        ManifestPackageDescriptor::FlakeRef(val.clone())
+impl From<&PackageDescriptorFlakeV1> for ManifestPackageDescriptor {
+    fn from(val: &PackageDescriptorFlakeV1) -> Self {
+        ManifestPackageDescriptor::FlakeRefV1(val.clone())
     }
 }
 
-impl From<PackageDescriptorFlake> for ManifestPackageDescriptor {
-    fn from(val: PackageDescriptorFlake) -> Self {
-        ManifestPackageDescriptor::FlakeRef(val)
+impl From<PackageDescriptorFlakeV1> for ManifestPackageDescriptor {
+    fn from(val: PackageDescriptorFlakeV1) -> Self {
+        ManifestPackageDescriptor::FlakeRefV1(val)
     }
 }
 
@@ -842,7 +856,6 @@ pub struct PackageDescriptorCatalogV2 {
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub systems: Option<Vec<System>>,
     #[serde(deserialize_with = "deserialize_outputs")]
-    // #[serde(serialize_with = "serialize_outputs")]
     pub outputs: Option<SelectedOutputs>,
 }
 
@@ -1023,13 +1036,91 @@ impl Arbitrary for SelectedOutputs {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
-pub struct PackageDescriptorFlake {
+pub struct PackageDescriptorFlakeV1 {
     #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
     pub flake: String,
     #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10u64)"))]
     pub(crate) priority: Option<u64>,
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub(crate) systems: Option<Vec<System>>,
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct PackageDescriptorFlakeV2 {
+    #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
+    pub flake: String,
+    #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10u64)"))]
+    pub(crate) priority: Option<u64>,
+    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
+    pub(crate) systems: Option<Vec<System>>,
+    #[serde(deserialize_with = "deserialize_outputs")]
+    pub outputs: Option<SelectedOutputs>,
+}
+
+impl PackageDescriptorFlakeV2 {
+    /// Return a copy of this v2 package descriptor as a v1 package descriptor
+    /// if it doesn't contain an `outputs` field, otherwise return `None`.
+    fn as_v1(&self) -> Option<PackageDescriptorFlakeV1> {
+        match self.outputs {
+            Some(_) => None,
+            None => Some(PackageDescriptorFlakeV1 {
+                flake: self.flake.clone(),
+                priority: self.priority,
+                systems: self.systems.clone(),
+            }),
+        }
+    }
+}
+
+// NOTE: this is structural equality, not semantic equality
+impl PartialEq<PackageDescriptorFlakeV1> for PackageDescriptorFlakeV2 {
+    fn eq(&self, other: &PackageDescriptorFlakeV1) -> bool {
+        self.as_v1().is_some_and(|v1_pd| &v1_pd == other)
+    }
+}
+
+// NOTE: this is structural equality, not semantic equality
+impl PartialEq<PackageDescriptorFlakeV2> for PackageDescriptorFlakeV1 {
+    fn eq(&self, other: &PackageDescriptorFlakeV2) -> bool {
+        other.as_v1().is_some_and(|v1_pd| &v1_pd == self)
+    }
+}
+
+impl From<PackageDescriptorFlakeV1> for PackageDescriptorFlakeV2 {
+    fn from(v1: PackageDescriptorFlakeV1) -> Self {
+        PackageDescriptorFlakeV2 {
+            flake: v1.flake,
+            priority: v1.priority,
+            systems: v1.systems,
+            outputs: None,
+        }
+    }
+}
+
+impl From<&PackageDescriptorFlakeV1> for PackageDescriptorFlakeV2 {
+    fn from(v1: &PackageDescriptorFlakeV1) -> Self {
+        PackageDescriptorFlakeV2 {
+            flake: v1.flake.clone(),
+            priority: v1.priority,
+            systems: v1.systems.clone(),
+            outputs: None,
+        }
+    }
+}
+
+impl From<&mut PackageDescriptorFlakeV1> for PackageDescriptorFlakeV2 {
+    fn from(v1: &mut PackageDescriptorFlakeV1) -> Self {
+        PackageDescriptorFlakeV2 {
+            flake: v1.flake.clone(),
+            priority: v1.priority,
+            systems: v1.systems.clone(),
+            outputs: None,
+        }
+    }
 }
 
 #[skip_serializing_none]
@@ -1563,6 +1654,7 @@ pub mod test {
     use expect_test::expect;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
+    use proptest::collection::btree_map;
     use proptest::prelude::*;
 
     use super::*;
@@ -1586,23 +1678,21 @@ pub mod test {
     }
 
     pub fn install_with_only_v1_descriptors() -> impl Strategy<Value = Install> {
-        btree_map_strategy::<PackageDescriptorCatalogV1>(10, 3).prop_map(|map| {
-            let pkgs = map
-                .into_iter()
-                .map(|(key, value)| (key, ManifestPackageDescriptor::CatalogV1(value)))
-                .collect::<BTreeMap<_, _>>();
-            Install(pkgs)
-        })
+        let some_package_descriptor_strat = prop_oneof!(
+            any::<PackageDescriptorCatalogV1>().prop_map(ManifestPackageDescriptor::CatalogV1),
+            any::<PackageDescriptorFlakeV1>().prop_map(ManifestPackageDescriptor::FlakeRefV1),
+            any::<PackageDescriptorStorePath>().prop_map(ManifestPackageDescriptor::StorePath),
+        );
+        btree_map(alphanum_string(10), some_package_descriptor_strat, 0..3).prop_map(Install)
     }
 
     pub fn install_with_only_v2_descriptors() -> impl Strategy<Value = Install> {
-        btree_map_strategy::<PackageDescriptorCatalogV2>(10, 3).prop_map(|map| {
-            let pkgs = map
-                .into_iter()
-                .map(|(key, value)| (key, ManifestPackageDescriptor::CatalogV2(value)))
-                .collect::<BTreeMap<_, _>>();
-            Install(pkgs)
-        })
+        let some_package_descriptor_strat = prop_oneof!(
+            any::<PackageDescriptorCatalogV2>().prop_map(ManifestPackageDescriptor::CatalogV2),
+            any::<PackageDescriptorFlakeV2>().prop_map(ManifestPackageDescriptor::FlakeRefV2),
+            any::<PackageDescriptorStorePath>().prop_map(ManifestPackageDescriptor::StorePath),
+        );
+        btree_map(alphanum_string(10), some_package_descriptor_strat, 0..3).prop_map(Install)
     }
 
     pub fn manifest_with_only_v1_descriptors() -> impl Strategy<Value = Manifest> {
@@ -1756,14 +1846,14 @@ pub mod test {
 
     #[test]
     fn detect_catalog_manifest() {
-        assert!(toml_edit::de::from_str::<Manifest>(CATALOG_MANIFEST).is_ok());
+        assert!(Manifest::from_str(CATALOG_MANIFEST).is_ok());
     }
 
     proptest! {
         #[test]
         fn manifest_round_trip(manifest in any::<Manifest>()) {
             let toml = toml_edit::ser::to_string(&manifest).unwrap();
-            let parsed = toml_edit::de::from_str::<Manifest>(&toml).unwrap();
+            let parsed = Manifest::from_str(&toml).unwrap();
             prop_assert_eq!(manifest, parsed);
         }
 
@@ -1854,7 +1944,7 @@ pub mod test {
 
         "#};
 
-        let parsed = toml_edit::de::from_str::<Manifest>(build_manifest).unwrap();
+        let parsed = Manifest::from_str(build_manifest).unwrap();
 
         assert_eq!(
             parsed.build(),
@@ -1878,6 +1968,8 @@ pub mod test {
         struct VersionWrap {
             version: BuildVersion,
         }
+
+        #[allow(clippy::disallowed_methods)]
         let parse =
             |version| toml_edit::de::from_str::<VersionWrap>(version).map(|wrap| wrap.version);
 
@@ -1912,7 +2004,7 @@ pub mod test {
             redis.systems = ["aarch64-linux"]
         "#};
 
-        let parsed = toml_edit::de::from_str::<Manifest>(manifest).unwrap();
+        let parsed = Manifest::from_str(manifest).unwrap();
 
         assert_eq!(
             parsed.services().inner().len(),
@@ -2090,7 +2182,7 @@ pub mod test {
 
     /// Helper function to create a flake descriptor for testing
     fn create_flake_descriptor(flake: &str) -> ManifestPackageDescriptor {
-        ManifestPackageDescriptor::FlakeRef(PackageDescriptorFlake {
+        ManifestPackageDescriptor::FlakeRefV1(PackageDescriptorFlakeV1 {
             flake: flake.to_string(),
             priority: None,
             systems: None,

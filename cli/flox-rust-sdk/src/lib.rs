@@ -1,3 +1,4 @@
+#![deny(clippy::disallowed_methods)]
 pub mod data;
 pub mod flox;
 pub mod models;
