@@ -235,13 +235,9 @@ impl Push {
     ) -> Result<PushResult> {
         let mut env = ManagedEnvironment::open(flox, managed_pointer.clone(), dot_flox_dir, None)?;
 
-        let push_result = env.push(flox, force).map_err(|err| {
-            Self::convert_error(
-                EnvironmentError::ManagedEnvironment(err),
-                managed_pointer,
-                false,
-            )
-        })?;
+        let push_result = env
+            .push(flox, force)
+            .map_err(|err| Self::convert_error(err, managed_pointer, false))?;
 
         // avoid false environment upgrade notifications after referring to outdated remote state
         let _ = invalidate_cached_remote_state(&mut env.into()).inspect_err(|invalidation_error| {

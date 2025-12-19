@@ -279,9 +279,7 @@ impl RemoteEnvironment {
         flox: &Flox,
         force: bool,
     ) -> Result<super::managed_environment::PushResult, EnvironmentError> {
-        self.inner
-            .push(flox, force)
-            .map_err(EnvironmentError::ManagedEnvironment)
+        self.inner.push(flox, force)
     }
 
     /// Pull updates from FloxHub for this remote environment
