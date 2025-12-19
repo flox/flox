@@ -351,7 +351,7 @@ where
         let semaphore = if let Some(max_par) = max_parallel_downloads {
             Semaphore::new(max_par, max_par)
         } else {
-            Semaphore::new(u16::MAX, u16::MAX)
+            Semaphore::new(20, 20)
         };
 
         let gc_root_base_path = self.gc_root_base_path.as_ref();
