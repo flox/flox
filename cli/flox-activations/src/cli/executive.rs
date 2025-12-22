@@ -79,10 +79,10 @@ impl ExecutiveArgs {
             // We're still sharing stderr with `flox-activations activate`
             bail!("Running hook.on-activate failed");
         }
-        if context.flox_activate_start_services {
+        if context.attach_ctx.flox_activate_start_services {
             let diff = EnvDiff::from_files(&start_or_attach.activation_state_dir)?;
             let result = start_services_blocking(
-                &context,
+                &context.attach_ctx,
                 subsystem_verbosity,
                 vars_from_env,
                 &start_or_attach,
@@ -104,17 +104,17 @@ impl ExecutiveArgs {
             debug!("monitoring loop disabled, exiting executive");
             return Ok(());
         }
-        let Some(log_dir) = &context.flox_env_log_dir else {
+        let Some(log_dir) = &context.attach_ctx.flox_env_log_dir else {
             unreachable!("flox_env_log_dir must be set in activation context");
         };
-        let Some(socket_path) = &context.flox_services_socket else {
+        let Some(socket_path) = &context.attach_ctx.flox_services_socket else {
             unreachable!("flox_services_socket must be set in activation context");
         };
 
         let watchdog = flox_watchdog::Cli {
-            dot_flox_path: context.dot_flox_path.clone(),
-            flox_env: context.env.clone().into(),
-            runtime_dir: context.flox_runtime_dir.clone().into(),
+            dot_flox_path: context.attach_ctx.dot_flox_path.clone(),
+            flox_env: context.attach_ctx.env.clone().into(),
+            runtime_dir: context.attach_ctx.flox_runtime_dir.clone().into(),
             activation_id: start_or_attach.activation_id.clone(),
             socket_path: socket_path.into(),
             log_dir: log_dir.into(),

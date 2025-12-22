@@ -101,27 +101,29 @@ let
     shell = {
       bash = "${containerPkgs.bashInteractive}/bin/bash";
     };
-    dot_flox_path = "${environment}"; # FIXME: Incorrect for containers.
-    env = "${environment}"; # FIXME: Incorrect for containers.
     invocation_type = null;
     remove_after_reading = false;
-    env_description = "${containerName}";
-    env_cache = "/tmp";
-    flox_env_log_dir = null;
-    flox_runtime_dir = "/run/flox";
-    prompt_color_1 = "99";
-    prompt_color_2 = "141";
-    flox_activate_store_path = "${environment}";
-    interpreter_path = "${interpreterPath}";
-    flox_prompt_environments = "floxenv";
-    set_prompt = true;
-    flox_activate_start_services = false;
-    flox_services_socket = null;
-    flox_env_cuda_detection = "0";
-    flox_active_environments = "[]";
-    flox_services_to_start = null;
-    env_project = null;
     run_monitoring_loop = false;
+    flox_activate_store_path = "${environment}";
+    attach_ctx = {
+      dot_flox_path = "${environment}"; # FIXME: Incorrect for containers.
+      env = "${environment}"; # FIXME: Incorrect for containers.
+      env_description = "${containerName}";
+      env_cache = "/tmp";
+      flox_env_log_dir = null;
+      flox_runtime_dir = "/run/flox";
+      prompt_color_1 = "99";
+      prompt_color_2 = "141";
+      interpreter_path = "${interpreterPath}";
+      flox_prompt_environments = "floxenv";
+      set_prompt = true;
+      flox_activate_start_services = false;
+      flox_services_socket = null;
+      flox_env_cuda_detection = "0";
+      flox_active_environments = "[]";
+      flox_services_to_start = null;
+      env_project = null;
+    };
   };
 
   activateCtxJson = builtins.toJSON activateCtx;

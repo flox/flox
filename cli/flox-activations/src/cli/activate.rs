@@ -90,9 +90,9 @@ impl ActivateArgs {
 
         let start_or_attach = StartOrAttachArgs {
             pid: std::process::id() as i32,
-            dot_flox_path: context.dot_flox_path.clone(),
+            dot_flox_path: context.attach_ctx.dot_flox_path.clone(),
             store_path: context.flox_activate_store_path.clone(),
-            runtime_dir: PathBuf::from(&context.flox_runtime_dir),
+            runtime_dir: PathBuf::from(&context.attach_ctx.flox_runtime_dir),
         }
         .handle_inner()?;
 
@@ -103,10 +103,10 @@ impl ActivateArgs {
                 "Attaching to existing activation in state dir {:?}, id {}",
                 start_or_attach.activation_state_dir, start_or_attach.activation_id
             );
-            if context.flox_activate_start_services {
+            if context.attach_ctx.flox_activate_start_services {
                 let diff = EnvDiff::from_files(&start_or_attach.activation_state_dir)?;
                 start_services_blocking(
-                    &context,
+                    &context.attach_ctx,
                     subsystem_verbosity,
                     vars_from_env.clone(),
                     &start_or_attach,
@@ -119,7 +119,7 @@ impl ActivateArgs {
                     formatdoc! {"✅ Attached to existing activation of environment '{}'
                              To stop using this environment, type 'exit'
                             ",
-                    context.env_description,
+                    context.attach_ctx.env_description,
                     }
                 );
             }
@@ -148,7 +148,7 @@ impl ActivateArgs {
             executive.args([
                 "executive",
                 "--dot-flox-path",
-                &context.dot_flox_path.to_string_lossy(),
+                &context.attach_ctx.dot_flox_path.to_string_lossy(),
                 "--executive-ctx",
                 &executive_ctx_path.to_string_lossy(),
             ]);
@@ -216,8 +216,8 @@ impl ActivateArgs {
                 );
                 Self::cleanup_on_failure(
                     activation_id,
-                    &context.flox_runtime_dir,
-                    &context.dot_flox_path,
+                    &context.attach_ctx.flox_runtime_dir,
+                    &context.attach_ctx.dot_flox_path,
                 )?;
                 // Exit non-zero, but don't print anything as the executive
                 // prints an error
