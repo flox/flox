@@ -1,34 +1,28 @@
 use std::path::PathBuf;
 use std::{env, fs};
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use clap::Args;
-use flox_core::activate::context::{ActivateCtx, InvocationType};
+use flox_core::activate::context::ActivateCtx;
 use flox_core::traceable_path;
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 #[cfg(target_os = "linux")]
 use flox_watchdog::reaper::linux::SubreaperGuard;
 use nix::libc::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
-use nix::sys::signal::Signal::{SIGUSR1, SIGUSR2};
+use nix::sys::signal::Signal::SIGUSR1;
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use crate::activate_script_builder::assemble_command_for_start_script;
-use crate::cli::activate::{NO_REMOVE_ACTIVATION_FILES, VarsFromEnvironment};
+use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
 use crate::cli::start_or_attach::StartOrAttachResult;
-use crate::env_diff::EnvDiff;
 use crate::logger;
-use crate::process_compose::start_services_blocking;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutiveCtx {
     pub context: ActivateCtx,
-    pub subsystem_verbosity: u32,
-    pub vars_from_env: VarsFromEnvironment,
     pub start_or_attach: StartOrAttachResult,
-    pub invocation_type: InvocationType,
     pub parent_pid: i32,
 }
 
@@ -50,10 +44,7 @@ impl ExecutiveArgs {
         let contents = fs::read_to_string(&self.executive_ctx)?;
         let ExecutiveCtx {
             context,
-            subsystem_verbosity,
-            vars_from_env,
             start_or_attach,
-            invocation_type,
             parent_pid,
         } = serde_json::from_str(&contents)?;
         if !std::env::var(NO_REMOVE_ACTIVATION_FILES).is_ok_and(|val| val == "true") {
