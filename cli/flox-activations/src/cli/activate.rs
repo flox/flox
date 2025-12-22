@@ -1,17 +1,16 @@
 use std::fs::{self};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use anyhow::{Result, anyhow, bail};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
-use flox_core::activations::{self, activations_json_path};
 use indoc::formatdoc;
 use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::{Pid, getpid};
 use serde::{Deserialize, Serialize};
-use signal_hook::consts::{SIGCHLD, SIGUSR1, SIGUSR2};
+use signal_hook::consts::{SIGCHLD, SIGUSR1};
 use signal_hook::iterator::Signals;
 use tracing::debug;
 
@@ -129,10 +128,7 @@ impl ActivateArgs {
             // Serialize ExecutiveCtx before forking
             let executive_ctx = ExecutiveCtx {
                 context: context.clone(),
-                subsystem_verbosity,
-                vars_from_env: vars_from_env.clone(),
                 start_or_attach: start_or_attach.clone(),
-                invocation_type: invocation_type.clone(),
                 parent_pid: parent_pid.as_raw(),
             };
 
