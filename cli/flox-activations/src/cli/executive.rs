@@ -64,38 +64,7 @@ impl ExecutiveArgs {
         #[cfg(target_os = "linux")]
         let _subreaper_guard = SubreaperGuard::new()?;
 
-        let mut start_command = assemble_command_for_start_script(
-            context.clone(),
-            subsystem_verbosity,
-            vars_from_env.clone(),
-            &start_or_attach,
-            invocation_type.clone(),
-        );
-        debug!("spawning start.bash: {:?}", start_command);
-        let status = start_command.spawn()?.wait()?;
-        if !status.success() {
-            kill(Pid::from_raw(parent_pid), SIGUSR2)?;
-            // hook.on-activate may have already printed to stderr
-            // We're still sharing stderr with `flox-activations activate`
-            bail!("Running hook.on-activate failed");
-        }
-        if context.attach_ctx.flox_activate_start_services {
-            let diff = EnvDiff::from_files(&start_or_attach.activation_state_dir)?;
-            let result = start_services_blocking(
-                &context.attach_ctx,
-                subsystem_verbosity,
-                vars_from_env,
-                &start_or_attach,
-                diff,
-            );
-            if let Err(e) = result {
-                kill(Pid::from_raw(parent_pid), SIGUSR2)?;
-                // We're still sharing stderr with `flox-activations activate`
-                return Err(e);
-            }
-        };
-
-        // Signal the parent that activation is ready
+        // Signal the parent that the executive is ready
         debug!("sending SIGUSR1 to parent {}", parent_pid);
         kill(Pid::from_raw(parent_pid), SIGUSR1)?;
 

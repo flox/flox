@@ -1,8 +1,8 @@
 use std::fs::{self};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
@@ -16,7 +16,7 @@ use signal_hook::iterator::Signals;
 use tracing::debug;
 
 use super::StartOrAttachArgs;
-use crate::activate_script_builder::FLOX_ENV_DIRS_VAR;
+use crate::activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_command_for_start_script};
 use crate::attach::{attach, quote_run_args};
 use crate::cli::executive::ExecutiveCtx;
 use crate::env_diff::EnvDiff;
@@ -152,17 +152,42 @@ impl ActivateArgs {
                 "--executive-ctx",
                 &executive_ctx_path.to_string_lossy(),
             ]);
+            // The executive daemonizes so shouldn't need stdin/stdout/stderr
+            executive
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
             debug!(
                 "Spawning executive process to start activation: {:?}",
                 executive
             );
-            // We want stdin, stdout, and stderr inherited
             let child = executive.spawn()?;
-            Self::wait_for_start(
-                Pid::from_raw(child.id() as i32),
-                &context,
-                &start_or_attach.activation_id,
-            )?;
+            Self::wait_for_executive(Pid::from_raw(child.id() as i32))?;
+
+            let mut start_command = assemble_command_for_start_script(
+                context.clone(),
+                subsystem_verbosity,
+                vars_from_env.clone(),
+                &start_or_attach,
+                invocation_type.clone(),
+            );
+            debug!("spawning start.bash: {:?}", start_command);
+            let status = start_command.status()?;
+            if !status.success() {
+                // hook.on-activate may have already printed to stderr
+                bail!("Running hook.on-activate failed");
+            }
+            if context.attach_ctx.flox_activate_start_services {
+                // TODO: replace with signal executive
+                let diff = EnvDiff::from_files(&start_or_attach.activation_state_dir)?;
+                start_services_blocking(
+                    &context.attach_ctx,
+                    subsystem_verbosity,
+                    vars_from_env.clone(),
+                    &start_or_attach,
+                    diff,
+                )?;
+            };
         }
 
         attach(
@@ -174,24 +199,21 @@ impl ActivateArgs {
         )
     }
 
-    /// Wait for the executive to start the activation, mark it ready, and send
-    /// SIGUSR1 to signal success.
-    /// The executive sends SIGUSR2 on failure.
-    /// If the child dies, then we error.
-    fn wait_for_start(
-        child_pid: Pid,
-        context: &ActivateCtx,
-        activation_id: &str,
-    ) -> Result<(), anyhow::Error> {
+    /// Wait for the executive to signal that it has started by sending SIGUSR1.
+    /// If the executive dies, then we error.
+    fn wait_for_executive(child_pid: Pid) -> Result<(), anyhow::Error> {
         debug!(
             "Awaiting SIGUSR1 from child process with PID: {}",
             child_pid
         );
 
-        let mut signals = Signals::new([SIGCHLD, SIGUSR1, SIGUSR2])?;
+        let mut signals = Signals::new([SIGCHLD, SIGUSR1])?;
+        // I think the executive will always either successfully send SIGUSR1,
+        // or it will exit sending SIGCHLD
+        // If I'm wrong, this will loop forever
         loop {
             let pending = signals.wait();
-            // We want to handle SIGUSR1 and SIGUSR2 rather than SIGCHLD if both
+            // We want to handle SIGUSR1 rather than SIGCHLD if both
             // are received
             // I'm not 100% confident SIGCHLD couldn't be delivered prior to
             // SIGUSR1 or SIGUSR2,
@@ -204,25 +226,10 @@ impl ActivateArgs {
             // Proceed after receiving SIGUSR1
             if signals.contains(&SIGUSR1) {
                 debug!(
-                    "Received SIGUSR1 (start completed successfully) from child process {}",
+                    "Received SIGUSR1 (executive started successfully) from child process {}",
                     child_pid
                 );
                 return Ok(());
-            // Bail on SIGUSR2
-            } else if signals.contains(&SIGUSR2) {
-                debug!(
-                    "Received SIGUSR2 (start failed) from child process {}",
-                    child_pid
-                );
-                Self::cleanup_on_failure(
-                    activation_id,
-                    &context.attach_ctx.flox_runtime_dir,
-                    &context.attach_ctx.dot_flox_path,
-                )?;
-                // Exit non-zero, but don't print anything as the executive
-                // prints an error
-                // TODO: don't exit prior to destructors
-                std::process::exit(1);
             } else if signals.contains(&SIGCHLD) {
                 // SIGCHLD can come from any child process, not just ours.
                 // Use waitpid with WNOHANG to check if OUR child has exited.
@@ -239,7 +246,7 @@ impl ActivateArgs {
                         // Our child has exited
                         return Err(anyhow!(
                             // TODO: we should print the path to the log file
-                            "Activation process {} terminated unexpectedly with status: {:?}",
+                            "Executive {} terminated unexpectedly with status: {:?}",
                             child_pid,
                             status
                         ));
@@ -247,14 +254,14 @@ impl ActivateArgs {
                     Err(nix::errno::Errno::ECHILD) => {
                         // Child already reaped, this shouldn't happen but handle gracefully
                         return Err(anyhow!(
-                            "Activation process {} terminated unexpectedly (already reaped)",
+                            "Executive {} terminated unexpectedly (already reaped)",
                             child_pid
                         ));
                     },
                     Err(e) => {
                         // Unexpected error from waitpid
                         return Err(anyhow!(
-                            "Failed to check status of activation process {}: {}",
+                            "Failed to check status of executive process {}: {}",
                             child_pid,
                             e
                         ));
@@ -264,23 +271,6 @@ impl ActivateArgs {
                 unreachable!("Received unexpected signal or empty iterator over signals");
             }
         }
-    }
-
-    fn cleanup_on_failure(
-        activation_id: &str,
-        runtime_dir: impl AsRef<Path>,
-        flox_env: impl AsRef<Path>,
-    ) -> Result<()> {
-        let activations_json_path = activations_json_path(runtime_dir, flox_env);
-        let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
-        let Some(activations) = activations else {
-            anyhow::bail!("Expected an existing activations.json file");
-        };
-        let mut activations = activations.check_version()?;
-        activations.remove_activation(activation_id);
-        activations::write_activations_json(&activations, activations_json_path, lock)?;
-        // TODO: should we remove the directory or activations.json file?
-        Ok(())
     }
 }
 
