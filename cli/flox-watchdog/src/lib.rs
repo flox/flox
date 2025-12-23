@@ -5,12 +5,8 @@ use std::sync::{Arc, LazyLock};
 use std::{env, fs};
 
 use anyhow::{Context, Result, bail};
-use flox_core::activations::{
-    activation_state_dir_path_old,
-    read_activations_json,
-    state_json_path,
-    write_activations_json,
-};
+use flox_core::activations::rewrite::read_activations_json;
+use flox_core::activations::{activation_state_dir_path, state_json_path};
 use flox_core::traceable_path;
 use logger::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::libc::{SIGCHLD, SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
@@ -97,11 +93,12 @@ fn run_inner(
     should_clean_up: Arc<AtomicBool>,
     should_reap: Signals,
 ) -> Result<(), Error> {
-    let activations_json_path = state_json_path(&args.runtime_dir, &args.dot_flox_path);
+    let state_json_path = state_json_path(&args.runtime_dir, &args.dot_flox_path);
 
     let mut watcher = PidWatcher::new(
-        activations_json_path.clone(),
-        args.activation_id.clone(),
+        state_json_path.clone(),
+        args.dot_flox_path.clone(),
+        args.runtime_dir.clone(),
         should_terminate,
         should_clean_up,
         should_reap,
@@ -121,9 +118,6 @@ fn run_inner(
         "watchdog is on duty"
     );
 
-    let activation_state_dir =
-        activation_state_dir_path_old(&args.runtime_dir, &args.dot_flox_path, &args.activation_id)?;
-
     match watcher.wait_for_termination() {
         Ok(WaitResult::CleanUp(locked_activations)) => {
             // Exit
@@ -131,9 +125,7 @@ fn run_inner(
             cleanup(
                 locked_activations,
                 &args.socket_path,
-                &activations_json_path,
-                &activation_state_dir,
-                &args.activation_id,
+                activation_state_dir_path(&args.runtime_dir, &args.dot_flox_path),
             )
             .context("cleanup failed")?;
         },
@@ -145,17 +137,14 @@ fn run_inner(
         },
         Err(err) => {
             info!("running cleanup after error");
-            let (activations_json, lock) = read_activations_json(&activations_json_path)?;
-            let Some(activations_json) = activations_json else {
+            let (activations_json, lock) = read_activations_json(&state_json_path)?;
+            let Some(activations) = activations_json else {
                 bail!("watchdog shouldn't be running when activations.json doesn't exist");
             };
-            let activations = activations_json.check_version()?;
             let _ = cleanup(
                 (activations, lock),
                 &args.socket_path,
-                &activations_json_path,
-                &activation_state_dir,
-                &args.activation_id,
+                activation_state_dir_path(&args.runtime_dir, &args.dot_flox_path),
             );
             bail!(err.context("failed while waiting for termination"))
         },
@@ -170,38 +159,27 @@ fn run_inner(
 fn cleanup(
     locked_activations: LockedActivations,
     socket_path: impl AsRef<Path>,
-    activations_json_path: impl AsRef<Path>,
     activation_state_dir_path: impl AsRef<Path>,
-    activation_id: impl AsRef<str>,
 ) -> Result<()> {
     info!("running cleanup");
 
-    let (mut activations_json, lock) = locked_activations;
-    activations_json.remove_activation(activation_id);
+    let (activations_json, _hold_the_lock) = locked_activations;
 
-    // Even if this activation has no more attached PIDs, there may be other
-    // activations for a different build of the same environment
-    if activations_json.is_empty() {
-        let socket_path = socket_path.as_ref();
-        if socket_path.exists() {
-            if let Err(err) = process_compose_down(socket_path) {
-                error!(%err, "failed to run process-compose shutdown command");
-            }
-            info!("shut down process-compose");
-        } else {
-            info!(reason = "no socket", "did not shut down process-compose");
+    if !activations_json.attached_pids_is_empty() {
+        unreachable!("cleanup should only be called when there are no more attached PIDs");
+    }
+    let socket_path = socket_path.as_ref();
+    if socket_path.exists() {
+        if let Err(err) = process_compose_down(socket_path) {
+            error!(%err, "failed to run process-compose shutdown command");
         }
+        info!("shut down process-compose");
+    } else {
+        info!(reason = "no socket", "did not shut down process-compose");
     }
 
-    fs::remove_dir_all(activation_state_dir_path)
-        .context("couldn't remove activations state dir")?;
-
-    // We want to hold the lock until
-    // - services are cleaned up
-    // - activation state dir is removed, otherwise the removal could occur
-    //   after a newly started activation has already put files in activation
-    //   state dir
-    write_activations_json(&activations_json, activations_json_path, lock)?;
+    // Completely remove the activation state directory
+    fs::remove_dir_all(activation_state_dir_path).context("couldn't remove activations dir")?;
 
     info!("finished cleanup");
 
