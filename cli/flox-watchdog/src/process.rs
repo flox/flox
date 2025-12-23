@@ -33,11 +33,11 @@ type Error = anyhow::Error;
 /// A deserialized activations.json together with a lock preventing it from
 /// being modified
 /// TODO: there's probably a cleaner way to do this
-pub type LockedActivations = (ActivationState, LockFile);
+pub type LockedActivationState = (ActivationState, LockFile);
 
 #[derive(Debug)]
 pub enum WaitResult {
-    CleanUp(LockedActivations),
+    CleanUp(LockedActivationState),
     Terminate,
 }
 
