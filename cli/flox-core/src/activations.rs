@@ -747,7 +747,7 @@ pub mod rewrite {
     }
 
     #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-    pub struct Activations {
+    pub struct ActivationState {
         // TODO: How to handle upgrades
         version: Version<3>,
 
@@ -761,7 +761,7 @@ pub mod rewrite {
         attached_pids: BTreeMap<Pid, Attachment>,
     }
 
-    impl Activations {
+    impl ActivationState {
         pub fn new(mode: &ActivateMode) -> Self {
             Self {
                 version: Version,
@@ -900,7 +900,7 @@ pub mod rewrite {
 
     pub fn read_activations_json(
         path: impl AsRef<Path>,
-    ) -> Result<(Option<Activations>, LockFile), Error> {
+    ) -> Result<(Option<ActivationState>, LockFile), Error> {
         let path = path.as_ref();
         let lock_file =
             acquire_activations_json_lock(path).context("failed to acquire lockfile")?;
@@ -915,13 +915,13 @@ pub mod rewrite {
         debug!(?path, "reading activations.json");
         let contents = std::fs::read_to_string(path)
             .context(format!("failed to read file {}", path.display()))?;
-        let parsed: Activations = serde_json::from_str(&contents)
+        let parsed: ActivationState = serde_json::from_str(&contents)
             .context(format!("failed to parse JSON from {}", path.display()))?;
         Ok((Some(parsed), lock_file))
     }
 
     pub fn write_activations_json(
-        activations: &Activations,
+        activations: &ActivationState,
         path: impl AsRef<Path>,
         lock: LockFile,
     ) -> Result<(), Error> {
@@ -934,8 +934,8 @@ pub mod rewrite {
         use super::*;
         use crate::activations::test::{start_process, stop_process};
 
-        fn make_activations(ready: Ready) -> rewrite::Activations {
-            rewrite::Activations {
+        fn make_activations(ready: Ready) -> rewrite::ActivationState {
+            rewrite::ActivationState {
                 version: Version,
                 mode: ActivateMode::default(),
                 ready,
@@ -967,7 +967,7 @@ pub mod rewrite {
                 let proc_running = start_process();
                 let proc_stopped = start_process();
 
-                let mut activations = Activations::new(&ActivateMode::default());
+                let mut activations = ActivationState::new(&ActivateMode::default());
                 let store_path = PathBuf::from("/nix/store/test");
 
                 // Start activation with first PID
@@ -996,7 +996,7 @@ pub mod rewrite {
 
             #[test]
             fn test_attached_pids_by_start_id() {
-                let mut activations = Activations::new(&ActivateMode::default());
+                let mut activations = ActivationState::new(&ActivateMode::default());
                 let store_path1 = PathBuf::from("/nix/store/path1");
                 let store_path2 = PathBuf::from("/nix/store/path2");
 
@@ -1240,7 +1240,7 @@ pub mod rewrite {
 
             #[test]
             fn test_start_or_attach_replaces_existing_pid() {
-                let mut activations = Activations::new(&ActivateMode::default());
+                let mut activations = ActivationState::new(&ActivateMode::default());
                 let store_path = PathBuf::from("/nix/store/path1");
 
                 let pid = 123;
