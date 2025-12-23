@@ -165,7 +165,7 @@ pub mod test {
     use std::sync::atomic::{AtomicBool, Ordering};
 
     use flox_activations::cli::{SetReadyArgs, StartOrAttachArgs};
-    use flox_core::activations::activations_json_path;
+    use flox_core::activations::state_json_path;
     use flox_core::proc_status::{ProcStatus, pid_is_running, read_pid_status};
 
     use super::*;
@@ -267,7 +267,7 @@ pub mod test {
         let activation_id_2 = start_or_attach_pid2.handle_inner().unwrap().activation_id;
         assert_eq!(activation_id, activation_id_2);
 
-        let activations_json_path = activations_json_path(&runtime_dir, &dot_flox_path);
+        let activations_json_path = state_json_path(&runtime_dir, &dot_flox_path);
         let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
             activations_json_path,
@@ -326,7 +326,7 @@ pub mod test {
         let activation_id_2 = start_or_attach_pid2.handle_inner().unwrap().activation_id;
         assert_eq!(activation_id, activation_id_2);
 
-        let activations_json_path = activations_json_path(&runtime_dir, &dot_flox_path);
+        let activations_json_path = state_json_path(&runtime_dir, &dot_flox_path);
 
         // Grab the existing activations before starting the PidWatcher so we
         // can compare against the state after one of the processes has died.
@@ -415,7 +415,7 @@ pub mod test {
         };
         set_ready.handle().unwrap();
 
-        let activations_json_path = activations_json_path(&runtime_dir, &dot_flox_path);
+        let activations_json_path = state_json_path(&runtime_dir, &dot_flox_path);
         let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
             activations_json_path,
@@ -463,7 +463,7 @@ pub mod test {
         };
         set_ready.handle().unwrap();
 
-        let activations_json_path = activations_json_path(&runtime_dir, &dot_flox_path);
+        let activations_json_path = state_json_path(&runtime_dir, &dot_flox_path);
         let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
             activations_json_path,

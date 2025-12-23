@@ -43,7 +43,7 @@ impl AttachArgs {
 
     pub fn handle_inner(self, now: OffsetDateTime) -> Result<(), Error> {
         let activations_json_path =
-            activations::activations_json_path(&self.runtime_dir, &self.dot_flox_path);
+            activations::state_json_path(&self.runtime_dir, &self.dot_flox_path);
 
         let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
         let Some(activations) = activations else {
