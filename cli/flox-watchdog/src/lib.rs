@@ -6,9 +6,9 @@ use std::{env, fs};
 
 use anyhow::{Context, Result, bail};
 use flox_core::activations::{
-    activation_state_dir_path,
-    activations_json_path,
+    activation_state_dir_path_old,
     read_activations_json,
+    state_json_path,
     write_activations_json,
 };
 use flox_core::traceable_path;
@@ -97,7 +97,7 @@ fn run_inner(
     should_clean_up: Arc<AtomicBool>,
     should_reap: Signals,
 ) -> Result<(), Error> {
-    let activations_json_path = activations_json_path(&args.runtime_dir, &args.dot_flox_path);
+    let activations_json_path = state_json_path(&args.runtime_dir, &args.dot_flox_path);
 
     let mut watcher = PidWatcher::new(
         activations_json_path.clone(),
@@ -122,7 +122,7 @@ fn run_inner(
     );
 
     let activation_state_dir =
-        activation_state_dir_path(&args.runtime_dir, &args.dot_flox_path, &args.activation_id)?;
+        activation_state_dir_path_old(&args.runtime_dir, &args.dot_flox_path, &args.activation_id)?;
 
     match watcher.wait_for_termination() {
         Ok(WaitResult::CleanUp(locked_activations)) => {
@@ -291,7 +291,7 @@ mod test {
         };
         set_ready.handle().unwrap();
 
-        let activations_json_path = activations_json_path(runtime_dir, &flox_env);
+        let activations_json_path = state_json_path(runtime_dir, &flox_env);
 
         let activations_json = read_activations_json(&activations_json_path)
             .unwrap()

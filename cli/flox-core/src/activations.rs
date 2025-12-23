@@ -336,7 +336,7 @@ fn activations_json_lock_path(activations_json_path: impl AsRef<Path>) -> PathBu
 /// but it shouldn't collide with any of the hashed directories we're storing
 ///
 /// {flox_runtime_dir}/activations/{path_hash(dot_flox_path)}-{basename(dot_flox_path)}/
-fn activations_state_dir_path(
+fn activation_state_dir_path(
     runtime_dir: impl AsRef<Path>,
     dot_flox_path: impl AsRef<Path>,
 ) -> PathBuf {
@@ -356,24 +356,21 @@ fn activations_state_dir_path(
 
 /// State file for activations (plural) of the given environment.
 ///
-/// {activations_state_dir_path}/activations.json
-pub fn activations_json_path(
-    runtime_dir: impl AsRef<Path>,
-    dot_flox_path: impl AsRef<Path>,
-) -> PathBuf {
-    activations_state_dir_path(runtime_dir, dot_flox_path).join("activations.json")
+/// {activation_state_dir_path}/state.json
+pub fn state_json_path(runtime_dir: impl AsRef<Path>, dot_flox_path: impl AsRef<Path>) -> PathBuf {
+    activation_state_dir_path(runtime_dir, dot_flox_path).join("state.json")
 }
 
 /// State directory for environment snapshots of a given activation (singular)
 /// for a given environment.
 ///
 /// {activations_state_dir_path}/{activation_id}
-pub fn activation_state_dir_path(
+pub fn activation_state_dir_path_old(
     runtime_dir: impl AsRef<Path>,
     dot_flox_path: impl AsRef<Path>,
     activation_id: impl AsRef<str>,
 ) -> Result<PathBuf, Error> {
-    Ok(activations_state_dir_path(runtime_dir, dot_flox_path).join(activation_id.as_ref()))
+    Ok(activation_state_dir_path(runtime_dir, dot_flox_path).join(activation_id.as_ref()))
 }
 
 /// Returns the parsed `activations.json` file or `None` if it doesn't yet exist.
@@ -446,7 +443,7 @@ mod test {
         let dot_flox_path = PathBuf::from("/myproject/.flox");
 
         assert_eq!(
-            activations_state_dir_path(&runtime_dir, &dot_flox_path),
+            activation_state_dir_path(&runtime_dir, &dot_flox_path),
             PathBuf::from("/run/activations/07652e23-myproject")
         );
     }
@@ -457,7 +454,7 @@ mod test {
         let dot_flox_path = PathBuf::from("/.flox");
 
         assert_eq!(
-            activations_state_dir_path(&runtime_dir, &dot_flox_path),
+            activation_state_dir_path(&runtime_dir, &dot_flox_path),
             PathBuf::from("/run/activations/053088b7-root")
         );
     }
@@ -714,15 +711,15 @@ pub mod rewrite {
     }
 
     impl StartIdentifier {
-        /// Compute activation state directory path for this activation.
+        /// Compute start state directory path for this identifier.
         ///
         /// Format: {runtime_dir}/activations/{env_hash}-{env_name}/{storepath_basename}.{unix_epoch}/
-        pub fn activation_state_dir_path(
+        pub fn state_dir_path(
             &self,
             runtime_dir: impl AsRef<Path>,
             dot_flox_path: impl AsRef<Path>,
         ) -> Result<PathBuf, Error> {
-            let base_dir = super::activations_state_dir_path(runtime_dir, dot_flox_path);
+            let base_dir = super::activation_state_dir_path(runtime_dir, dot_flox_path);
             let storepath_basename = self
                 .store_path
                 .file_name()

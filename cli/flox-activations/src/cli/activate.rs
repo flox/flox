@@ -6,7 +6,7 @@ use anyhow::{Result, anyhow, bail};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
-use flox_core::activations::activations_json_path;
+use flox_core::activations::state_json_path;
 use indoc::formatdoc;
 use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::{Pid, getpid};
@@ -118,7 +118,7 @@ impl ActivateArgs {
             start_id.store_path.file_name().unwrap().to_string_lossy(),
             *start_id.timestamp
         );
-        let activation_state_dir = start_id.activation_state_dir_path(
+        let activation_state_dir = start_id.state_dir_path(
             &context.attach_ctx.flox_runtime_dir,
             &context.attach_ctx.dot_flox_path,
         )?;
@@ -193,7 +193,7 @@ impl ActivateArgs {
             write_activations_json,
         };
 
-        let activations_json_path = activations_json_path(
+        let activations_json_path = state_json_path(
             &context.attach_ctx.flox_runtime_dir,
             &context.attach_ctx.dot_flox_path,
         );
@@ -314,7 +314,7 @@ impl ActivateArgs {
         let parent_pid = getpid();
 
         // Get activation state directory using new format
-        let activation_state_dir = start_id.activation_state_dir_path(
+        let activation_state_dir = start_id.state_dir_path(
             &context.attach_ctx.flox_runtime_dir,
             &context.attach_ctx.dot_flox_path,
         )?;
