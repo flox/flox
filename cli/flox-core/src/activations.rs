@@ -336,7 +336,7 @@ fn activations_json_lock_path(activations_json_path: impl AsRef<Path>) -> PathBu
 /// but it shouldn't collide with any of the hashed directories we're storing
 ///
 /// {flox_runtime_dir}/activations/{path_hash(dot_flox_path)}-{basename(dot_flox_path)}/
-fn activation_state_dir_path(
+pub fn activation_state_dir_path(
     runtime_dir: impl AsRef<Path>,
     dot_flox_path: impl AsRef<Path>,
 ) -> PathBuf {
@@ -794,6 +794,10 @@ pub mod rewrite {
                 })
         }
 
+        pub fn attached_pids_is_empty(&self) -> bool {
+            self.attached_pids.is_empty()
+        }
+
         /// Returns the current activation mode
         pub fn mode(&self) -> &ActivateMode {
             &self.mode
@@ -850,9 +854,31 @@ pub mod rewrite {
         }
 
         /// Detach a PID from an activation
+        ///
+        /// update_ready_after_detach must be called after calling detach
         pub fn detach(&mut self, pid: Pid) {
             let removed = self.attached_pids.remove(&pid);
             debug!(pid, ?removed, "detaching from activation");
+        }
+
+        /// set ready to False if there are no more PIDs attached to the current start
+        /// should only be called when there are some attached PIDs
+        pub fn update_ready_after_detach(&mut self) {
+            if self.attached_pids.is_empty() {
+                unreachable!("should remove all state when there are no more attached PIDs");
+            }
+            match self.ready {
+                Ready::True(ref start_id) => {
+                    if !self.attached_pids_by_start_id().contains_key(start_id) {
+                        debug!(?start_id, "no more attached PIDs, marking as not ready");
+                        self.ready = Ready::False;
+                    }
+                },
+                // we'll let the starting process (or a subsequent start or
+                // attach) handle cleanup for a dead Starting PID
+                Ready::Starting(_, _) => {},
+                Ready::False => {}, // no-op
+            }
         }
 
         fn start(&mut self, pid: Pid, store_path: impl AsRef<Path>) -> StartIdentifier {

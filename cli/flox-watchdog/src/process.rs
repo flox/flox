@@ -13,13 +13,13 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
-use anyhow::{Result, bail};
-use flox_core::activations::{
-    Activations,
-    CheckedVersion,
+use anyhow::{Context, Result, bail};
+use flox_core::activations::rewrite::{
+    ActivationState,
     read_activations_json,
     write_activations_json,
 };
+use flox_core::proc_status::pid_is_running;
 use fslock::LockFile;
 use signal_hook::iterator::Signals;
 use tracing::trace;
@@ -33,7 +33,7 @@ type Error = anyhow::Error;
 /// A deserialized activations.json together with a lock preventing it from
 /// being modified
 /// TODO: there's probably a cleaner way to do this
-pub type LockedActivations = (Activations<CheckedVersion>, LockFile);
+pub type LockedActivations = (ActivationState, LockFile);
 
 #[derive(Debug)]
 pub enum WaitResult {
@@ -46,20 +46,21 @@ pub trait Watcher {
     fn wait_for_termination(&mut self) -> Result<WaitResult, Error>;
     /// Instructs the watcher to update the list of PIDs that it's watching
     /// by reading the environment registry (for now).
-    fn check_pids(&mut self) -> Result<Option<WaitResult>, Error>;
+    fn cleanup_pids(&mut self) -> Result<Option<WaitResult>, Error>;
     /// Writes the current activation PIDs back out to `activations.json`
     /// while holding a lock on it.
     fn update_activations_file(
         &self,
-        activations: Activations<CheckedVersion>,
+        activations: ActivationState,
         lock: LockFile,
     ) -> Result<(), Error>;
 }
 
 #[derive(Debug)]
 pub struct PidWatcher {
-    activation_id: String,
-    activations_json_path: PathBuf,
+    state_json_path: PathBuf,
+    dot_flox_path: PathBuf,
+    runtime_dir: PathBuf,
     should_terminate_flag: Arc<AtomicBool>,
     should_clean_up_flag: Arc<AtomicBool>,
     should_reap_signals: Signals,
@@ -69,15 +70,17 @@ impl PidWatcher {
     /// Creates a new watcher that uses platform-specific mechanisms to wait
     /// for activation processes to terminate.
     pub fn new(
-        activations_json_path: PathBuf,
-        activation_id: String,
+        state_json_path: PathBuf,
+        dot_flox_path: PathBuf,
+        runtime_dir: PathBuf,
         should_terminate_flag: Arc<AtomicBool>,
         should_clean_up_flag: Arc<AtomicBool>,
         should_reap_signals: Signals,
     ) -> Self {
         Self {
-            activations_json_path,
-            activation_id,
+            state_json_path,
+            dot_flox_path,
+            runtime_dir,
             should_terminate_flag,
             should_clean_up_flag,
             should_reap_signals,
@@ -88,7 +91,7 @@ impl PidWatcher {
 impl Watcher for PidWatcher {
     fn wait_for_termination(&mut self) -> Result<WaitResult, Error> {
         loop {
-            if let Some(exit) = self.check_pids()? {
+            if let Some(exit) = self.cleanup_pids()? {
                 return Ok(exit);
             }
             if self
@@ -101,12 +104,11 @@ impl Watcher for PidWatcher {
                 .should_clean_up_flag
                 .load(std::sync::atomic::Ordering::SeqCst)
             {
-                let (activations_json, lock) = read_activations_json(&self.activations_json_path)?;
+                let (activations_json, lock) = read_activations_json(&self.state_json_path)?;
                 let Some(activations_json) = activations_json else {
                     bail!("watchdog shouldn't be running when activations.json doesn't exist");
                 };
-                let activations = activations_json.check_version()?;
-                return Ok(WaitResult::CleanUp((activations, lock)));
+                return Ok(WaitResult::CleanUp((activations_json, lock)));
             }
             for _ in self.should_reap_signals.pending() {
                 reap_orphaned_children();
@@ -116,31 +118,63 @@ impl Watcher for PidWatcher {
     }
 
     /// Reload and check the list of PIDs for an activation.
-    fn check_pids(&mut self) -> Result<Option<WaitResult>, Error> {
-        let (activations_json, lock) = read_activations_json(&self.activations_json_path)?;
-        let Some(activations_json) = activations_json else {
+    fn cleanup_pids(&mut self) -> Result<Option<WaitResult>, Error> {
+        let (activations_json, lock) = read_activations_json(&self.state_json_path)?;
+        let Some(mut activations) = activations_json else {
             bail!("watchdog shouldn't be running when activations.json doesn't exist");
         };
 
-        // NOTE(zmitchell, 2025-07-28): at some point we'll have to handle migrations here
-        // if there are updates to the `activations.json` schema.
-        let mut activations = activations_json.check_version()?;
+        let mut modified = false;
+        let attachments_by_start_id = activations.attached_pids_by_start_id();
+        let mut empty_start_ids = Vec::new();
 
-        let Some(activation) = activations.activation_for_id_mut(&self.activation_id) else {
-            bail!("watchdog shouldn't be running with ID that isn't in activations.json");
-        };
+        for (start_id, pids) in attachments_by_start_id {
+            let mut all_pids_terminated = true;
+            for pid in pids {
+                if pid_is_running(pid) {
+                    // We can skip checking other start_ids when at least one PID is still running.
+                    all_pids_terminated = false;
+                    break;
+                } else {
+                    // PID exited. Detach it.
+                    // "Clean up after a StartID after there are no more attachments to that StartID"
+                    // We need to detach THIS pid.
+                    activations.detach(pid);
+                    modified = true;
+                }
+            }
 
-        let pids_modified = activation.remove_terminated_pids();
-        let pids = activation.attached_pids();
-        if pids.is_empty() {
+            if all_pids_terminated {
+                empty_start_ids.push(start_id);
+            }
+        }
+
+        // If there are no more attached PIDs for any start, return early and
+        // cleanup the entirety of the activation state directory
+        if activations.attached_pids_is_empty() {
             let res = WaitResult::CleanUp((activations, lock));
             return Ok(Some(res));
         }
 
-        trace!("still watching PIDs {:?}", pids);
-        // Only write changes after checking if we need to exit.
-        if pids_modified {
-            trace!(?activation, "writing PID changes to activation");
+        // TODO: should this and the above loop be implemented in ActivationState?
+        activations.update_ready_after_detach();
+
+        // Cleanup empty start IDs
+        //
+        // We might want to skip this if start_id is the same as that in ready,
+        // since otherwise we'll do another start of the same environment when:
+        // 1. There were still some activations of the environment
+        // and
+        // 2. The environment was not modified
+        // But I think for now it's simpler to just treat all start_ids the same.
+        for start_id in empty_start_ids {
+            let state_dir = start_id.state_dir_path(&self.runtime_dir, &self.dot_flox_path)?;
+            trace!(?state_dir, "removing empty activation state dir");
+            std::fs::remove_dir_all(state_dir).context("failed to remove start state dir")?;
+        }
+
+        if modified {
+            trace!(?activations, "writing PID changes to activation");
             self.update_activations_file(activations, lock)?;
         }
 
@@ -150,10 +184,10 @@ impl Watcher for PidWatcher {
     /// Update the `activations.json` file with the current list of running PIDs.
     fn update_activations_file(
         &self,
-        activations: Activations<CheckedVersion>,
+        activations: ActivationState,
         lock: LockFile,
     ) -> Result<(), Error> {
-        write_activations_json(&activations, &self.activations_json_path, lock)
+        write_activations_json(&activations, &self.state_json_path, lock)
     }
 }
 
