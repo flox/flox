@@ -210,7 +210,7 @@ EOF
   include.environments = [{ dir = "../included" }]
 EOF
 
-  run "$FLOX_BIN" push --dir composer --owner owner
+  run "$FLOX_BIN" push --dir composer
   assert_failure
   assert_line "❌ ERROR: cannot push environment that includes local environments"
 }

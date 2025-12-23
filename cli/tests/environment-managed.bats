@@ -185,7 +185,7 @@ EOF
   "$FLOX_BIN" pull "$OWNER/a"
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" install hello
-  "$FLOX_BIN" push --owner "$OWNER"
+  "$FLOX_BIN" push
   popd > /dev/null || return
 
   # on machine a, pull the environment
@@ -223,7 +223,7 @@ EOF
   "$FLOX_BIN" pull "$OWNER/a"
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.yaml" \
     "$FLOX_BIN" install vim
-  "$FLOX_BIN" push --owner "$OWNER"
+  "$FLOX_BIN" push
   popd > /dev/null || return
 
   # on machine a, pull the environment

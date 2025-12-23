@@ -1284,15 +1284,10 @@ impl ManagedEnvironment {
         local_checkout.lock(flox)?;
 
         // Ensure the created generation is valid
-        let store_paths = local_checkout
-            .build(flox)
-            .map_err(ManagedEnvironmentError::Build)?;
+        let store_paths = local_checkout.build(flox)?;
 
         // TODO: should use self.link but that returns an EnvironmentError
-        CoreEnvironment::link(&self.rendered_env_links.development, &store_paths.develop)
-            .map_err(ManagedEnvironmentError::Link)?;
-        CoreEnvironment::link(&self.rendered_env_links.runtime, &store_paths.runtime)
-            .map_err(ManagedEnvironmentError::Link)?;
+        self.link(&store_paths)?;
 
         let mut generations = self.generations();
         let mut generations = generations
@@ -1786,11 +1781,7 @@ impl ManagedEnvironment {
     }
 
     #[instrument(skip(self, flox), fields(progress = "Pushing updates to FloxHub"))]
-    pub fn push(
-        &mut self,
-        flox: &Flox,
-        force: bool,
-    ) -> Result<PushResult, ManagedEnvironmentError> {
+    pub fn push(&mut self, flox: &Flox, force: bool) -> Result<PushResult, EnvironmentError> {
         let project_branch = branch_name(&self.pointer, &self.path);
         let sync_branch = remote_branch_name(&self.pointer);
 
@@ -1893,11 +1884,7 @@ impl ManagedEnvironment {
     ///
     /// If `force == true`, the pull will proceed even if the environment has diverged.
     #[instrument(skip(self, flox), fields(progress = "Pulling updates from FloxHub"))]
-    pub fn pull(
-        &mut self,
-        flox: &Flox,
-        force: bool,
-    ) -> Result<PullResult, ManagedEnvironmentError> {
+    pub fn pull(&mut self, flox: &Flox, force: bool) -> Result<PullResult, EnvironmentError> {
         // Check whether the local checkout is in sync with the current generation
         // before potentially updating generations and resetting the local checkout.
         let generations = self.generations();
@@ -1958,9 +1945,11 @@ impl ManagedEnvironment {
             )
             .map_err(ManagedEnvironmentError::ApplyUpdates)?;
 
-        // update the pointer lockfile
+        // update the pointer lockfile and build
         self.lock_pointer()?;
         self.reset_local_env_to_current_generation(flox)?;
+        let store_paths = self.build(flox)?;
+        self.link(&store_paths)?;
 
         Ok(PullResult::Updated)
     }
