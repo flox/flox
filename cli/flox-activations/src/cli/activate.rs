@@ -187,7 +187,7 @@ impl ActivateArgs {
         vars_from_env: &VarsFromEnvironment,
     ) -> Result<flox_core::activations::rewrite::StartOrAttachResult, anyhow::Error> {
         use flox_core::activations::rewrite::{
-            Activations,
+            ActivationState,
             StartOrAttachResult,
             read_activations_json,
             write_activations_json,
@@ -199,7 +199,8 @@ impl ActivateArgs {
         );
 
         let (activations_opt, lock) = read_activations_json(&activations_json_path)?;
-        let mut activations = activations_opt.unwrap_or_else(|| Activations::new(&context.mode));
+        let mut activations =
+            activations_opt.unwrap_or_else(|| ActivationState::new(&context.mode));
 
         // TODO: what if attached pids are dead?
         if activations.mode() != &context.mode {
