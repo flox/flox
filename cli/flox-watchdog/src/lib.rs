@@ -11,7 +11,7 @@ use flox_core::traceable_path;
 use logger::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::libc::{SIGCHLD, SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
-use process::{LockedActivations, PidWatcher, WaitResult};
+use process::{LockedActivationState, PidWatcher, WaitResult};
 use signal_hook::iterator::Signals;
 use tracing::{debug, error, info, instrument};
 
@@ -157,7 +157,7 @@ fn run_inner(
 // multiple watchdogs could perform cleanup.
 // The following can be run multiple times without issue.
 fn cleanup(
-    locked_activations: LockedActivations,
+    locked_activations: LockedActivationState,
     socket_path: impl AsRef<Path>,
     activation_state_dir_path: impl AsRef<Path>,
 ) -> Result<()> {
