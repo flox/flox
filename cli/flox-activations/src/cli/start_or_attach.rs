@@ -93,8 +93,7 @@ impl StartOrAttachArgs {
             i32,
         ) -> Result<String, Error>,
     ) -> Result<StartOrAttachResult, Error> {
-        let activations_json_path =
-            activations::activations_json_path(runtime_dir, &self.dot_flox_path);
+        let activations_json_path = activations::state_json_path(runtime_dir, &self.dot_flox_path);
 
         debug!("Reading activations from {:?}", activations_json_path);
         let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
@@ -123,7 +122,7 @@ impl StartOrAttachArgs {
                 },
             };
 
-        let activation_state_dir = activations::activation_state_dir_path(
+        let activation_state_dir = activations::activation_state_dir_path_old(
             runtime_dir,
             &self.dot_flox_path,
             &activation_id,
@@ -177,7 +176,7 @@ fn start(
 ) -> Result<String, anyhow::Error> {
     let activation_id = activations.create_activation(store_path, pid)?.id();
     // The activation script will assume this directory exists
-    fs::create_dir_all(activations::activation_state_dir_path(
+    fs::create_dir_all(activations::activation_state_dir_path_old(
         runtime_dir,
         dot_flox_path,
         &activation_id,
@@ -314,7 +313,7 @@ mod tests {
         assert!(result.attach);
         assert_eq!(
             result.activation_state_dir,
-            activations::activation_state_dir_path(&runtime_dir, &dot_flox_path, &id).unwrap()
+            activations::activation_state_dir_path_old(&runtime_dir, &dot_flox_path, &id).unwrap()
         );
         assert_eq!(result.activation_id, id);
     }
@@ -349,7 +348,7 @@ mod tests {
         assert!(!result.attach);
         assert_eq!(
             result.activation_state_dir,
-            activations::activation_state_dir_path(&runtime_dir, &dot_flox_path, &id).unwrap()
+            activations::activation_state_dir_path_old(&runtime_dir, &dot_flox_path, &id).unwrap()
         );
         assert_eq!(result.activation_id, id);
     }
@@ -371,7 +370,7 @@ mod tests {
             activations.create_activation(store_path, pid).unwrap().id()
         });
 
-        let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
+        let activations_json_path = activations::state_json_path(&runtime_dir, &flox_env);
 
         let ready = check_for_activation_ready_and_attach_pid(
             &activations_json_path,
@@ -405,7 +404,7 @@ mod tests {
             activation.id()
         });
 
-        let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
+        let activations_json_path = activations::state_json_path(&runtime_dir, &flox_env);
 
         let ready = check_for_activation_ready_and_attach_pid(
             &activations_json_path,
@@ -450,7 +449,7 @@ mod tests {
             activation.id()
         });
 
-        let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
+        let activations_json_path = activations::state_json_path(&runtime_dir, &flox_env);
 
         let result = check_for_activation_ready_and_attach_pid(
             &activations_json_path,
@@ -499,7 +498,7 @@ mod tests {
             activation.id()
         });
 
-        let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
+        let activations_json_path = activations::state_json_path(&runtime_dir, &flox_env);
 
         let result = check_for_activation_ready_and_attach_pid(
             &activations_json_path,
