@@ -247,6 +247,9 @@ impl ActivateArgs {
 
         write_activations_json(&activations, &activations_json_path, lock)?;
 
+        // TODO: it might just be closer to what I'm currently used to, but to
+        // me it feels like it would be clearer conceptually to move everything
+        // after dropping the lock up to handle()
         if let Some(exec_pid) = new_exec_pid {
             Self::wait_for_executive(exec_pid)?;
         }

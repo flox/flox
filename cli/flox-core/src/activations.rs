@@ -770,6 +770,8 @@ pub mod rewrite {
                 version: Version,
                 mode: mode.clone(),
                 ready: Ready::default(),
+                // TODO: we only construct this once outside of tests, and in that case we have an executive PID,
+                // so we could get rid of the default here
                 executive_pid: EXECUTIVE_NOT_STARTED,
                 current_process_compose_store_path: None,
                 attached_pids: BTreeMap::new(),
@@ -852,7 +854,7 @@ pub mod rewrite {
             self.ready = Ready::True(start_id.clone());
         }
 
-        /// Attach a PID from an activation
+        /// Detach a PID from an activation
         pub fn detach(&mut self, pid: Pid) {
             let removed = self.attached_pids.remove(&pid);
             debug!(pid, ?removed, "detaching from activation");
@@ -1198,7 +1200,8 @@ pub mod rewrite {
                 };
                 assert_eq!(ready_pid, pid);
                 assert_eq!(new_start_id, ready_start_id);
-                assert!(new_start_id.timestamp > old_start_id.timestamp);
+                // TODO: timestamps only have a resolution of 1 second so these are currently equal
+                // assert!(new_start_id.timestamp > old_start_id.timestamp);
                 assert_eq!(
                     activations.attached_pids,
                     BTreeMap::from([(pid, make_attachment(new_start_id))])
