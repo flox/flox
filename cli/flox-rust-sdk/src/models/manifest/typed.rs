@@ -3,7 +3,6 @@ use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use flox_core::Version;
 #[cfg(test)]
 use flox_test_utils::proptest::{
     alphanum_and_whitespace_string,
@@ -86,7 +85,8 @@ pub(crate) trait SkipSerializing {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
 pub struct Manifest {
-    pub version: Version<1>,
+    #[cfg_attr(test, proptest(strategy = "Just(ManifestVersion(1))"))]
+    pub version: ManifestVersion,
     /// The packages to install in the form of a map from install_id
     /// to package descriptor.
     #[serde(default)]
@@ -352,6 +352,23 @@ fn pkg_belongs_to_non_empty_toplevel_group(
     let self_in_toplevel_group = pkgs.iter().any(|(id, _)| id == pkg);
     let other_toplevel_packages_exist = pkgs.iter().any(|(id, _)| id != pkg);
     Ok(self_in_toplevel_group && other_toplevel_packages_exist)
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, JsonSchema)]
+pub struct ManifestVersion(u8);
+
+impl Default for ManifestVersion {
+    fn default() -> Self {
+        Self(1)
+    }
+}
+
+impl_into_inner!(ManifestVersion, u8);
+
+impl From<u8> for ManifestVersion {
+    fn from(value: u8) -> Self {
+        ManifestVersion(value)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
@@ -1126,7 +1143,7 @@ pub mod test {
     // Generate a Manifest that has empty install and include sections
     pub fn manifest_without_install_or_include() -> impl Strategy<Value = Manifest> {
         (
-            any::<Version<1>>(),
+            Just(ManifestVersion(1)),
             any::<Vars>(),
             any::<Option<Hook>>(),
             any::<Option<Profile>>(),

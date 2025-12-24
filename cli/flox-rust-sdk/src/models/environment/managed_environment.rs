@@ -3355,7 +3355,7 @@ mod test {
         let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
 
         assert_eq!(lockfile.manifest, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([("foo".to_string(), "dep".to_string()),])),
             ..Default::default()
         });

@@ -3334,7 +3334,7 @@ pub(crate) mod tests {
         #[test]
         fn lock_manifest_noop_if_locked_without_install_section((flox, tempdir, environments_to_include) in generate_path_environments_without_install_or_include(3)) {
             let manifest = Manifest {
-                version: Version,
+                version: 1.into(),
                 include: Include {
                     environments: environments_to_include
                         .into_iter()
@@ -3904,7 +3904,7 @@ pub(crate) mod tests {
         .unwrap();
 
         assert_eq!(merged, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
             ..Default::default()
         });
@@ -3980,7 +3980,7 @@ pub(crate) mod tests {
         .unwrap();
 
         assert_eq!(merged, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([
                 ("foo".to_string(), "highest_precedence".to_string()),
                 ("bar".to_string(), "higher_precedence".to_string())
@@ -4102,7 +4102,7 @@ pub(crate) mod tests {
         .unwrap();
 
         assert_eq!(merged, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([(
                 "foo".to_string(),
                 "highest_precedence".to_string()
@@ -4164,7 +4164,7 @@ pub(crate) mod tests {
             .unwrap();
 
         assert_eq!(lockfile.manifest, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
             ..Default::default()
         });
@@ -4209,7 +4209,7 @@ pub(crate) mod tests {
         .unwrap();
 
         assert_eq!(merged, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([(
                 "foo".to_string(),
                 if modify_include_descriptor {
@@ -4282,7 +4282,7 @@ pub(crate) mod tests {
             .unwrap();
 
         assert_eq!(lockfile.manifest, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
             ..Default::default()
         });
