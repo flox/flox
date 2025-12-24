@@ -533,7 +533,7 @@ pub struct PackageDescriptorCatalog {
     pub version: Option<String>,
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub systems: Option<Vec<System>>,
-    pub(crate) outputs: Option<SelectedOutputs>,
+    pub outputs: Option<SelectedOutputs>,
 }
 
 impl PackageDescriptorCatalog {
@@ -571,7 +571,7 @@ pub struct PackageDescriptorFlake {
     pub(crate) priority: Option<u64>,
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub(crate) systems: Option<Vec<System>>,
-    pub(crate) outputs: Option<SelectedOutputs>,
+    pub outputs: Option<SelectedOutputs>,
 }
 
 #[skip_serializing_none]
