@@ -2938,6 +2938,7 @@ mod test {
                 priority: None,
                 version: None,
                 systems: None,
+                outputs: None,
             }
             .into(),
         );

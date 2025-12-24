@@ -1744,6 +1744,7 @@ pub mod test_helpers {
             systems: Some(vec![PackageSystem::Aarch64Darwin.to_string()]),
             version: None,
             priority: None,
+            outputs: None,
         }
         .into();
 
@@ -1786,6 +1787,7 @@ pub mod test_helpers {
             flake: format!("github:nowhere/exciting#{name}"),
             priority: None,
             systems: None,
+            outputs: None,
         };
 
         let locked = LockedPackageFlake {
@@ -1841,6 +1843,7 @@ pub mod test_helpers {
             flake: "github:nix-community/nix-eval-jobs".to_string(),
             priority: None,
             systems: None,
+            outputs: None,
         }
     }
 
@@ -2274,6 +2277,7 @@ pub(crate) mod tests {
                 systems: None,
                 version: None,
                 priority: None,
+                outputs: None,
             }
             .into(),
         );
@@ -3376,6 +3380,7 @@ pub(crate) mod tests {
                 priority: None,
                 version: None,
                 systems: None,
+                outputs: None,
             }),
         );
         manifest

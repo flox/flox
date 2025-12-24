@@ -13,6 +13,7 @@ use flox_test_utils::proptest::{
     optional_btree_set,
     optional_string,
     optional_vec_of_strings,
+    vec_of_strings,
 };
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -515,6 +516,7 @@ pub struct PackageDescriptorCatalog {
     pub version: Option<String>,
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub systems: Option<Vec<System>>,
+    pub(crate) outputs: Option<SelectedOutputs>,
 }
 
 impl PackageDescriptorCatalog {
@@ -533,6 +535,7 @@ impl PackageDescriptorCatalog {
             version,
             systems: _,
             priority: _,
+            outputs: _,
         } = self;
 
         pkg_path != &other.pkg_path || pkg_group != &other.pkg_group || version != &other.version
@@ -551,6 +554,7 @@ pub struct PackageDescriptorFlake {
     pub(crate) priority: Option<u64>,
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub(crate) systems: Option<Vec<System>>,
+    pub(crate) outputs: Option<SelectedOutputs>,
 }
 
 #[skip_serializing_none]
@@ -565,6 +569,34 @@ pub struct PackageDescriptorStorePath {
     pub(crate) systems: Option<Vec<System>>,
     #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10u64)"))]
     pub(crate) priority: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
+#[serde(untagged)]
+#[serde(deny_unknown_fields)]
+pub enum SelectedOutputs {
+    All(AllSentinel),
+    Specific(Vec<String>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum AllSentinel {
+    All,
+}
+
+#[cfg(test)]
+impl Arbitrary for SelectedOutputs {
+    type Parameters = ();
+    type Strategy = BoxedStrategy<SelectedOutputs>;
+
+    fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+        prop_oneof!(
+            Just(SelectedOutputs::All(AllSentinel::All)),
+            vec_of_strings(3, 4).prop_map(SelectedOutputs::Specific)
+        )
+        .boxed()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
@@ -1380,6 +1412,7 @@ pub mod test {
                     priority: None,
                     version: None,
                     systems: None,
+                    outputs: None,
                 }),
             );
         }
@@ -1474,6 +1507,7 @@ pub mod test {
             priority: None,
             version: None,
             systems: None,
+            outputs: None,
         })
     }
 
@@ -1483,6 +1517,7 @@ pub mod test {
             flake: flake.to_string(),
             priority: None,
             systems: None,
+            outputs: None,
         })
     }
 
@@ -1503,5 +1538,35 @@ pub mod test {
         // Test non-catalog descriptors always return false
         assert!(!create_flake_descriptor("github:owner/repo").is_from_custom_catalog());
         assert!(!create_store_path_descriptor("/nix/store/abc123-hello").is_from_custom_catalog());
+    }
+
+    #[test]
+    fn deserializes_manifest_with_outputs() {
+        let contents_default = r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+        "#;
+
+        let contents_all = r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+            hello.outputs = "all"
+        "#;
+
+        let contents_specific = r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+            hello.outputs = ["foo", "bar"]
+        "#;
+
+        let _ = Manifest::from_str(contents_default).unwrap();
+        let _ = Manifest::from_str(contents_all).unwrap();
+        let _ = Manifest::from_str(contents_specific).unwrap();
     }
 }
