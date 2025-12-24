@@ -85,7 +85,6 @@ pub(crate) trait SkipSerializing {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
 pub struct Manifest {
-    #[cfg_attr(test, proptest(strategy = "Just(ManifestVersion(1))"))]
     pub version: ManifestVersion,
     /// The packages to install in the form of a map from install_id
     /// to package descriptor.
@@ -360,6 +359,16 @@ pub struct ManifestVersion(u8);
 impl Default for ManifestVersion {
     fn default() -> Self {
         Self(1)
+    }
+}
+
+#[cfg(test)]
+impl Arbitrary for ManifestVersion {
+    type Parameters = ();
+    type Strategy = BoxedStrategy<Self>;
+
+    fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+        prop_oneof!(Just(ManifestVersion(1)), Just(ManifestVersion(2)),).boxed()
     }
 }
 
@@ -1143,7 +1152,7 @@ pub mod test {
     // Generate a Manifest that has empty install and include sections
     pub fn manifest_without_install_or_include() -> impl Strategy<Value = Manifest> {
         (
-            Just(ManifestVersion(1)),
+            any::<ManifestVersion>(),
             any::<Vars>(),
             any::<Option<Hook>>(),
             any::<Option<Profile>>(),
