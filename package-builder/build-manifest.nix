@@ -215,25 +215,31 @@ pkgs.runCommandNoCC name
                   ${develop-copy-env-package}/activate --env ${develop-copy-env-package} \
                     --mode build --env-project $(pwd) -- \
                       t3 --relative $log -- bash -e ${buildScript-contents} || \
-                ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
+                ( find $out -type d -exec chmod +w {} \; && rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
               ''
           }
 
-          # Rewrite references to temporary build wrapper in "out".
+          # Rewrite references to temporary build wrapper in $out, being
+          # careful to avoid kicking off an implicit copy (and subsequent
+          # removal) that would happen if moving across filesystem boundaries.
           if [ -e "$out" ]; then
-            bn="$(basename $out)"
-            mv "$out" "$TMPDIR/$bn"
-            if [ -d "$TMPDIR/$bn" ]; then
+            renamed_out="$out.renamed.tmp" # N.B. on same filesystem as $out
+            mv "$out" "$renamed_out"
+            if [ -d "$renamed_out" ]; then
               mkdir "$out"
-              ( cd "$TMPDIR/$bn" && find . -print0 | \
+              ( cd "$renamed_out" && find . -print0 | \
                 cpio --null --create --format newc ) | \
                 sed --binary "s%${develop-copy-env-package}%${build-wrapper-env-package}%g" | \
                 ( cd $out && cpio --extract --make-directories --preserve-modification-time \
                   --unconditional --no-absolute-filenames --quiet && chmod -R u+w . )
             else
-              sed --binary "s%${develop-copy-env-package}%${build-wrapper-env-package}%g" < "$TMPDIR/$bn" > "$out"
+              sed --binary "s%${develop-copy-env-package}%${build-wrapper-env-package}%g" < "$renamed_out" > "$out"
             fi
-            rm -rf "$TMPDIR/$bn"
+            # Clean up the renamed output directory, being careful to mark
+            # all directories writable first so that rm can unlink all files
+            # contained therein.
+            find "$renamed_out" -type d -exec chmod +w {} \;
+            rm -rf "$renamed_out"
           fi
         ''
     )
