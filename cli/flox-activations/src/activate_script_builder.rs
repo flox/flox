@@ -152,8 +152,6 @@ fn add_start_script_options(
             .to_string_lossy(),
         "--invocation-type",
         &invocation_type.to_string(),
-        "--activation-id",
-        &start_or_attach_result.activation_id,
     ]);
 }
 
@@ -188,10 +186,6 @@ fn add_old_activate_script_exports(
                 .activation_state_dir
                 .to_string_lossy()
                 .to_string(),
-        ),
-        (
-            "_FLOX_ACTIVATION_ID",
-            start_or_attach_result.activation_id.clone(),
         ),
         // These are used by various scripts...custom ZDOTDIR files, set-prompt,
         // .tcshrc
