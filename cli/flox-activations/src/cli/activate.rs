@@ -105,6 +105,7 @@ impl ActivateArgs {
             subsystem_verbosity,
             vars_from_env,
             start_or_attach,
+            start_id,
         )
     }
 

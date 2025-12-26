@@ -8,6 +8,7 @@ use std::process::Command;
 use anyhow::{Result, anyhow};
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
+use flox_core::activations::rewrite::StartIdentifier;
 use indoc::formatdoc;
 use itertools::Itertools;
 use nix::unistd::{close, dup2_stdin, pipe, write};
@@ -33,6 +34,7 @@ pub fn attach(
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
     start_or_attach: StartOrAttachResult,
+    start_id: StartIdentifier,
 ) -> Result<(), anyhow::Error> {
     let diff = EnvDiff::from_files(&start_or_attach.activation_state_dir)?;
 
@@ -74,7 +76,7 @@ pub fn attach(
         //
         //    eval "$(flox activate)"
         InvocationType::InPlace => {
-            activate_in_place(startup_ctx, start_or_attach.activation_id)?;
+            activate_in_place(startup_ctx, start_id)?;
             Ok(())
         },
         // All other invocation types only return if exec fails
@@ -522,11 +524,12 @@ fn activate_interactive(
 }
 
 /// Used for `eval "$(flox activate)"`
-fn activate_in_place(startup_ctx: StartupCtx, activation_id: String) -> Result<()> {
+fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Result<()> {
     let attach_command = AttachArgs {
         pid: std::process::id() as i32,
         dot_flox_path: (&startup_ctx.act_ctx.attach_ctx.dot_flox_path).into(),
-        id: activation_id.clone(),
+        store_path: start_id.store_path.clone(),
+        timestamp: start_id.timestamp.clone(),
         exclusive: AttachExclusiveArgs {
             timeout_ms: Some(5000),
             remove_pid: None,
@@ -571,14 +574,15 @@ fn activate_in_place(startup_ctx: StartupCtx, activation_id: String) -> Result<(
 
     let script = formatdoc! {r#"
             {legacy_exports}
-            {flox_activations} attach --dot-flox-path "{dot_flox_path}" --runtime-dir "{runtime_dir}" --pid {self_pid_var} --id "{id}" --remove-pid "{pid}";
+            {flox_activations} attach --dot-flox-path "{dot_flox_path}" --runtime-dir "{runtime_dir}" --pid {self_pid_var} --store-path "{store_path}" --timestamp "{timestamp}" --remove-pid "{pid}";
             {exports_for_zsh}
         "#,
         flox_activations = (*FLOX_ACTIVATIONS_BIN).to_string_lossy(),
         dot_flox_path = startup_ctx.act_ctx.attach_ctx.dot_flox_path.to_string_lossy(),
         runtime_dir = startup_ctx.act_ctx.attach_ctx.flox_runtime_dir,
         self_pid_var = Shell::from(startup_ctx.act_ctx.shell.clone()).self_pid_var(),
-        id = activation_id,
+        store_path = start_id.store_path.to_string_lossy(),
+        timestamp = start_id.timestamp,
         pid = std::process::id(),
     };
 
