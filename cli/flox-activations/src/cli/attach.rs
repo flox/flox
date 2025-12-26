@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use anyhow::Context;
 use clap::Args;
-use flox_core::activations;
+use flox_core::activations::rewrite::{self, StartIdentifier, UnixTimestamp};
+use flox_core::activations::{self};
 use time::{Duration, OffsetDateTime};
 
 use crate::Error;
@@ -15,14 +15,17 @@ pub struct AttachArgs {
     #[arg(help = "The path to the .flox directory for the environment.")]
     #[arg(long, value_name = "PATH")]
     pub dot_flox_path: PathBuf,
-    #[arg(help = "The ID for this particular activation of this environment.")]
-    #[arg(short, long, value_name = "ID")]
-    pub id: String,
     #[command(flatten)]
     pub exclusive: AttachExclusiveArgs,
     /// The path to the runtime directory keeping activation data.
     #[arg(long, value_name = "PATH")]
     pub runtime_dir: PathBuf,
+    #[arg(help = "Together with timestamp this identifies the activation to attach to.")]
+    #[arg(long, value_name = "PATH")]
+    pub store_path: PathBuf,
+    #[arg(help = "Together with store_path this identifies the activation to attach to.")]
+    #[arg(long, value_name = "TIMESTAMP")]
+    pub timestamp: UnixTimestamp,
 }
 
 #[derive(Debug, Args)]
@@ -42,25 +45,17 @@ impl AttachArgs {
     }
 
     pub fn handle_inner(self, now: OffsetDateTime) -> Result<(), Error> {
+        let start_id = StartIdentifier {
+            store_path: self.store_path,
+            timestamp: self.timestamp,
+        };
         let activations_json_path =
             activations::state_json_path(&self.runtime_dir, &self.dot_flox_path);
 
-        let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
-        let Some(activations) = activations else {
+        let (activation_state, lock) = rewrite::read_activations_json(&activations_json_path)?;
+        let Some(mut activation_state) = activation_state else {
             anyhow::bail!("Expected an existing activations.json file");
         };
-
-        let mut activations = activations.check_version()?;
-
-        let activation = activations
-            .activation_for_id_mut(&self.id)
-            .with_context(|| {
-                format!(
-                    "No activation with ID {} found for environment {}",
-                    self.id,
-                    self.dot_flox_path.display()
-                )
-            })?;
 
         match self.exclusive {
             AttachExclusiveArgs {
@@ -68,15 +63,18 @@ impl AttachArgs {
                 remove_pid: None,
             } => {
                 let expiration = now + Duration::milliseconds(timeout_ms as i64);
-                activation.remove_pid(self.pid);
-                activation.attach_pid(self.pid, Some(expiration));
+                activation_state.replace_attachment(
+                    start_id,
+                    self.pid,
+                    self.pid,
+                    Some(expiration),
+                )?;
             },
             AttachExclusiveArgs {
                 timeout_ms: None,
                 remove_pid: Some(remove_pid),
             } => {
-                activation.remove_pid(remove_pid);
-                activation.attach_pid(self.pid, None)
+                activation_state.replace_attachment(start_id, remove_pid, self.pid, None)?;
             },
             // This should be unreachable due to the group constraints when constructed by clap
             _ => {
@@ -84,7 +82,7 @@ impl AttachArgs {
             },
         }
 
-        activations::write_activations_json(&activations, &activations_json_path, lock)?;
+        rewrite::write_activations_json(&activation_state, &activations_json_path, lock)?;
 
         Ok(())
     }

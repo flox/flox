@@ -687,7 +687,9 @@ pub mod rewrite {
         AlreadyStarting { pid: Pid, start_id: StartIdentifier },
     }
 
-    #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Ord, PartialOrd)]
+    #[derive(
+        Clone, Debug, Deserialize, derive_more::Display, Eq, PartialEq, Serialize, Ord, PartialOrd,
+    )]
     pub struct UnixTimestamp(i64);
 
     impl UnixTimestamp {
@@ -701,6 +703,14 @@ pub mod rewrite {
 
         fn deref(&self) -> &Self::Target {
             &self.0
+        }
+    }
+
+    impl std::str::FromStr for UnixTimestamp {
+        type Err = std::num::ParseIntError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            s.parse::<i64>().map(UnixTimestamp)
         }
     }
 
@@ -928,6 +938,31 @@ pub mod rewrite {
 
             debug!(pid = self.executive_pid, "executive process is running");
             false
+        }
+
+        pub fn replace_attachment(
+            &mut self,
+            start_id: StartIdentifier,
+            old_pid: Pid,
+            new_pid: Pid,
+            expiration: Option<OffsetDateTime>,
+        ) -> Result<(), Error> {
+            let old_attachment = self.attached_pids.remove(&old_pid).ok_or(anyhow::anyhow!(
+                "PID {} not attached to activation",
+                old_pid
+            ))?;
+
+            if old_attachment.start_id != start_id {
+                anyhow::bail!("PID {} is not attached to the expected start", old_pid);
+            }
+
+            let new_attachment = Attachment {
+                start_id,
+                expiration,
+            };
+
+            self.attached_pids.insert(new_pid, new_attachment);
+            Ok(())
         }
     }
 
