@@ -278,6 +278,7 @@ mod tests {
             flake: installable,
             priority: None,
             systems: None,
+            outputs: None,
         })
         .expect("locking local test flake should succeed");
     }
@@ -291,6 +292,7 @@ mod tests {
             flake: installable.to_string(),
             priority: None,
             systems: None,
+            outputs: None,
         });
         assert!(
             matches!(result, Err(FlakeInstallableError::LockInstallable(_))),
@@ -307,6 +309,7 @@ mod tests {
             flake: installable,
             priority: None,
             systems: None,
+            outputs: None,
         });
 
         assert!(
@@ -381,6 +384,7 @@ mod tests {
             flake: "github:NixOS/nipxkgs#hello".to_string(),
             priority: Some(10),
             systems: None,
+            outputs: None,
         };
         set_priority(&mut locked, &descriptor);
         assert_eq!(locked.priority, 10);
@@ -422,6 +426,7 @@ mod tests {
             flake: "github:NixOS/nipxkgs#hello".to_string(),
             priority: None,
             systems: None,
+            outputs: None,
         };
         set_priority(&mut locked, &descriptor);
         assert_eq!(locked.priority, DEFAULT_PRIORITY);
@@ -455,6 +460,7 @@ mod tests {
                 flake: installable.clone(),
                 priority: None,
                 systems: None,
+                outputs: None,
             })
             .expect("First lock should succeed");
 
@@ -477,6 +483,7 @@ mod tests {
                 flake: installable,
                 priority: None,
                 systems: None,
+                outputs: None,
             })
             .expect("Second lock should succeed");
 

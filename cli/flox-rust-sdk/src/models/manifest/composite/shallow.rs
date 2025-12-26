@@ -1,4 +1,3 @@
-use flox_core::Version;
 use tracing::{debug, instrument, trace};
 
 use super::{
@@ -21,6 +20,7 @@ use crate::models::manifest::typed::{
     Inner,
     Install,
     Manifest,
+    ManifestVersion,
     Options,
     Profile,
     SemverOptions,
@@ -37,14 +37,13 @@ pub(crate) struct ShallowMerger;
 impl ShallowMerger {
     #[instrument(skip_all)]
     fn merge_version(
-        low_priority: &Version<1>,
-        high_priority: &Version<1>,
-    ) -> Result<Version<1>, MergeError> {
-        if low_priority != high_priority {
-            unreachable!("versions are hardcoded into Manifest");
-        }
-
-        Ok(high_priority.clone())
+        _low_priority: ManifestVersion,
+        high_priority: ManifestVersion,
+    ) -> Result<ManifestVersion, MergeError> {
+        // To be consistent with other "composing manfiest wins" behaviors,
+        // the higher priority manifest determines the manifest version
+        // and therefore 'outputs' behavior.
+        Ok(high_priority)
     }
 
     #[instrument(skip_all)]
@@ -271,7 +270,7 @@ impl ManifestMergeTrait for ShallowMerger {
         high_priority: &Manifest,
     ) -> Result<(Manifest, Vec<Warning>), MergeError> {
         trace!(section = "versions", "merging manifest section");
-        let version = Self::merge_version(&low_priority.version, &high_priority.version)?;
+        let version = Self::merge_version(low_priority.version, high_priority.version)?;
         trace!(section = "install", "merging manifest section");
         let (install, install_warnings) =
             Self::merge_install(&low_priority.install, &high_priority.install)?;

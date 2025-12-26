@@ -30,7 +30,12 @@ use super::{
     activated_environments,
     environment_select,
 };
-use crate::commands::{EnvironmentSelectError, SHELL_COMPLETION_FILE, ensure_floxhub_token};
+use crate::commands::{
+    EnvironmentSelectError,
+    SHELL_COMPLETION_FILE,
+    bail_on_v2_if_feature_flag_not_enabled,
+    ensure_floxhub_token,
+};
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::errors::format_error;
 use crate::utils::message;
@@ -178,7 +183,10 @@ impl Edit {
         let result = match contents {
             // If provided with the contents of a manifest file, either via a path to a file or via
             // contents piped to stdin, use those contents to try building the environment.
-            Some(new_manifest) => environment.edit(flox, new_manifest)?,
+            Some(new_manifest) => {
+                bail_on_v2_if_feature_flag_not_enabled(flox, new_manifest.as_str())?;
+                environment.edit(flox, new_manifest)?
+            },
             // If not provided with new manifest contents, let the user edit the file directly
             // via $EDITOR or $VISUAL (as long as `flox edit` was invoked interactively).
             None => Self::interactive_edit(flox, environment).await?,
@@ -266,7 +274,12 @@ impl Edit {
         // decides to stop.
         loop {
             let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor, &args)?;
-            let result = environment.edit(flox, new_manifest.clone());
+            let result = match bail_on_v2_if_feature_flag_not_enabled(flox, new_manifest.as_str()) {
+                Ok(_) => environment.edit(flox, new_manifest.clone()),
+                Err(err) => Err(EnvironmentError::EditWithUnsupportedFeature(
+                    err.to_string(),
+                )),
+            };
             match Self::make_interactively_recoverable(result)? {
                 Ok(result) => return Ok(result),
 
@@ -302,7 +315,8 @@ impl Edit {
                     ServiceError::InvalidConfig(_),
                 )),
             )
-            | Err(e @ EnvironmentError::Recoverable(_)) => Ok(Err(e)),
+            | Err(e @ EnvironmentError::Recoverable(_))
+            | Err(e @ EnvironmentError::EditWithUnsupportedFeature(_)) => Ok(Err(e)),
             Err(e) => Err(e),
             Ok(result) => Ok(Ok(result)),
         }

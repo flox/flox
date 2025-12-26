@@ -23,6 +23,12 @@
       },
       "type": "object"
     },
+    "AllSentinel": {
+      "enum": [
+        "all"
+      ],
+      "type": "string"
+    },
     "Allows": {
       "additionalProperties": false,
       "properties": {
@@ -350,6 +356,12 @@
         }
       ]
     },
+    "ManifestVersion": {
+      "format": "uint8",
+      "maximum": 255,
+      "minimum": 0,
+      "type": "integer"
+    },
     "Options": {
       "additionalProperties": false,
       "properties": {
@@ -388,6 +400,16 @@
     "PackageDescriptorCatalog": {
       "additionalProperties": false,
       "properties": {
+        "outputs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SelectedOutputs"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "pkg-group": {
           "type": [
             "string",
@@ -431,6 +453,16 @@
       "properties": {
         "flake": {
           "type": "string"
+        },
+        "outputs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SelectedOutputs"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "priority": {
           "format": "uint64",
@@ -594,6 +626,19 @@
         "Always"
       ],
       "type": "string"
+    },
+    "SelectedOutputs": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AllSentinel"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
     },
     "SemverOptions": {
       "additionalProperties": false,
@@ -1139,10 +1184,6 @@
         "type": "string"
       },
       "type": "object"
-    },
-    "version": {
-      "const": 1,
-      "type": "integer"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1206,7 +1247,7 @@
       "description": "Variables that are exported to the shell environment upon activation."
     },
     "version": {
-      "$ref": "#/$defs/version"
+      "$ref": "#/$defs/ManifestVersion"
     }
   },
   "required": [

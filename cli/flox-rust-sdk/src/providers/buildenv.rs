@@ -1160,6 +1160,7 @@ mod realise_nixpkgs_tests {
             priority: None,
             version: None,
             systems: None,
+            outputs: None,
         });
 
         locked_package.attr_path = "hello".to_string();
@@ -1562,6 +1563,7 @@ mod realise_flakes_tests {
                     ),
                     systems: None,
                     priority: None,
+                    outputs: None,
                 })
                 .unwrap();
 

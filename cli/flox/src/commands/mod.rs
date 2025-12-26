@@ -50,13 +50,14 @@ use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
     DOT_FLOX,
     DotFlox,
+    Environment,
     EnvironmentError,
     ManagedPointer,
     UninitializedEnvironment,
     find_dot_flox,
     open_path,
 };
-use flox_rust_sdk::models::manifest::typed::Manifest;
+use flox_rust_sdk::models::manifest::typed::{Inner, Manifest, ManifestPackageDescriptor};
 use flox_rust_sdk::models::{env_registry, environment_ref};
 use indoc::{formatdoc, indoc};
 use tempfile::TempDir;
@@ -925,22 +926,22 @@ impl EnvironmentSelect {
         flox: &Flox,
         generation: Option<GenerationId>,
     ) -> Result<ConcreteEnvironment, EnvironmentSelectError> {
-        match self {
+        let env = match self {
             EnvironmentSelect::Dir(path) => {
                 debug!(
                     path = %path.display(),
                     "getting concrete environment from supplied path"
                 );
-                Ok(open_path(flox, path, generation)?)
+                open_path(flox, path, generation)?
             },
             EnvironmentSelect::Unspecified => {
                 debug!("getting concrete environment without explicit args");
                 let current_dir = env::current_dir().context("could not get current directory")?;
                 let maybe_found_environment = find_dot_flox(&current_dir)?;
                 match maybe_found_environment {
-                    Some(found) => Ok(UninitializedEnvironment::DotFlox(found)
-                        .into_concrete_environment(flox, generation)?),
-                    None => Err(EnvironmentSelectError::EnvNotFoundInCurrentDirectory)?,
+                    Some(found) => UninitializedEnvironment::DotFlox(found)
+                        .into_concrete_environment(flox, generation)?,
+                    None => return Err(EnvironmentSelectError::EnvNotFoundInCurrentDirectory),
                 }
             },
             EnvironmentSelect::Remote(env_ref) => {
@@ -956,9 +957,14 @@ impl EnvironmentSelect {
 
                 let env = RemoteEnvironment::new(flox, pointer, generation)
                     .map_err(anyhow::Error::new)?;
-                Ok(ConcreteEnvironment::Remote(env))
+                ConcreteEnvironment::Remote(env)
             },
-        }
+        };
+        let manifest_contents = env
+            .manifest_contents(flox)
+            .map_err(EnvironmentSelectError::EnvironmentError)?;
+        bail_on_v2_if_feature_flag_not_enabled(flox, manifest_contents.as_str())?;
+        Ok(env)
     }
 
     /// Open a concrete environment, detecting the currently active environment.
@@ -972,12 +978,11 @@ impl EnvironmentSelect {
         flox: &Flox,
         message: &str,
     ) -> Result<ConcreteEnvironment, EnvironmentSelectError> {
-        match self {
-            EnvironmentSelect::Dir(path) => {
-                DirEnvironmentSelect::Dir(path.clone()).detect_concrete_environment(flox, message)
-            },
+        let env = match self {
+            EnvironmentSelect::Dir(path) => DirEnvironmentSelect::Dir(path.clone())
+                .detect_concrete_environment(flox, message)?,
             EnvironmentSelect::Unspecified => {
-                DirEnvironmentSelect::Unspecified.detect_concrete_environment(flox, message)
+                DirEnvironmentSelect::Unspecified.detect_concrete_environment(flox, message)?
             },
             EnvironmentSelect::Remote(env_ref) => {
                 let pointer = ManagedPointer::new(
@@ -992,9 +997,14 @@ impl EnvironmentSelect {
                 let env = RemoteEnvironment::new(flox, pointer, generation)
                     .map_err(anyhow::Error::new)?;
 
-                Ok(ConcreteEnvironment::Remote(env))
+                ConcreteEnvironment::Remote(env)
             },
-        }
+        };
+        let manifest_contents = env
+            .manifest_contents(flox)
+            .map_err(EnvironmentSelectError::EnvironmentError)?;
+        bail_on_v2_if_feature_flag_not_enabled(flox, manifest_contents.as_str())?;
+        Ok(env)
     }
 
     fn to_flags(&self) -> Option<Vec<String>> {
@@ -1006,6 +1016,44 @@ impl EnvironmentSelect {
             EnvironmentSelect::Unspecified => None,
         }
     }
+}
+
+fn bail_on_v2_if_feature_flag_not_enabled(
+    flox: &Flox,
+    manifest_contents: &str,
+) -> Result<(), EnvironmentSelectError> {
+    if flox.features.outputs {
+        return Ok(());
+    }
+    let parsed = Manifest::from_str(manifest_contents)
+        .context("failed to parse manifest")
+        .map_err(EnvironmentSelectError::Anyhow)?;
+    if parsed.version.inner() == &2 {
+        return Err(EnvironmentSelectError::Anyhow(anyhow!(
+            "manifest schema version 2 is only available with FLOX_FEATURES_OUTPUTS=1"
+        )));
+    }
+    for descriptor in parsed.install.inner().values() {
+        use ManifestPackageDescriptor::*;
+        match descriptor {
+            Catalog(catalog_pd) => {
+                if catalog_pd.outputs.is_some() {
+                    return Err(EnvironmentSelectError::Anyhow(anyhow!(
+                        "'outputs' may only be specified with FLOX_FEATURES_OUTPUTS=1"
+                    )));
+                }
+            },
+            FlakeRef(flake_pd) => {
+                if flake_pd.outputs.is_some() {
+                    return Err(EnvironmentSelectError::Anyhow(anyhow!(
+                        "'outputs' may only be specified with FLOX_FEATURES_OUTPUTS=1"
+                    )));
+                }
+            },
+            StorePath(_) => {},
+        }
+    }
+    Ok(())
 }
 
 impl DirEnvironmentSelect {
