@@ -43,8 +43,7 @@ USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
 [--noprofile] \
 [(-m|--mode) (dev|run)] \
 [--activation-state-dir <path>] \
-[--invocation-type <type>] \
-[--activation-id <id>]"
+[--invocation-type <type>]"
 
 if ! PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@"); then
   echo "Failed to parse options." >&2
@@ -146,16 +145,6 @@ while true; do
       _flox_invocation_type="$1"
       shift
       ;;
-    --activation-id)
-      shift
-      if [ -z "${1:-}" ]; then
-        echo "Option --activation-id requires an id as an argument." >&2
-        echo "$USAGE" >&2
-        exit 1
-      fi
-      _FLOX_ACTIVATION_ID="$1"
-      shift
-      ;;
     --noprofile)
       FLOX_NOPROFILE="true"
       shift
@@ -249,13 +238,5 @@ LC_ALL=C $_comm -13 "$_start_env" "$_end_env" \
 LC_ALL=C $_comm -23 "$_start_env" "$_end_env" \
   | $_sed -e 's/^declare -x //' -e 's/=.*//' > "$_del_env"
 # TODO end remove
-
-# TODO: move to activate.rs
-# Finally mark the environment as ready to use for attachments.
-"$_flox_activations" \
-  set-ready \
-  --runtime-dir "$FLOX_RUNTIME_DIR" \
-  --dot-flox-path "$_FLOX_DOT_FLOX_PATH" \
-  --id "$_FLOX_ACTIVATION_ID"
 
 "$_flox_activate_tracer" "$_activate_d/start.bash" END
