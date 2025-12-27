@@ -240,52 +240,48 @@ fn ensure_process_group_leader() -> Result<(), Error> {
 
 #[cfg(test)]
 mod test {
-    use flox_activations::cli::{SetReadyArgs, StartOrAttachArgs};
+    use flox_core::activate::mode::ActivateMode;
+    use flox_core::activations::rewrite::{ActivationState, StartOrAttachResult};
     use process::test::{shutdown_flags, start_process, stop_process};
 
     use super::*;
+    use crate::process::test::write_activation_state;
 
     #[test]
-    fn cleanup_removes_activation() {
+    fn cleanup_removes_state_directory() {
         let temp_dir = tempfile::tempdir().unwrap();
         let runtime_dir = temp_dir.path();
         let log_dir = temp_dir.path();
-        let flox_env = PathBuf::from("flox_env");
+        let dot_flox_path = PathBuf::from(".flox");
         let store_path = "store_path".to_string();
 
         let proc = start_process();
         let pid = proc.id() as i32;
-        let start_or_attach = StartOrAttachArgs {
-            pid,
-            dot_flox_path: flox_env.clone(),
-            store_path: store_path.clone(),
-            runtime_dir: runtime_dir.to_path_buf(),
-        };
-        let activation_id = start_or_attach.handle_inner().unwrap().activation_id;
-        let set_ready = SetReadyArgs {
-            id: activation_id.clone(),
-            dot_flox_path: flox_env.clone(),
-            runtime_dir: runtime_dir.to_path_buf(),
-        };
-        set_ready.handle().unwrap();
 
-        let activations_json_path = state_json_path(runtime_dir, &flox_env);
+        // Create an ActivationState with one PID attached
+        let mut state = ActivationState::new(&ActivateMode::default());
+        let result = state.start_or_attach(pid, &store_path);
+        let StartOrAttachResult::Start { start_id, .. } = result else {
+            panic!("Expected Start")
+        };
+        state.set_ready(&start_id);
 
-        let activations_json = read_activations_json(&activations_json_path)
-            .unwrap()
-            .0
-            .unwrap()
-            .check_version()
-            .unwrap();
-        assert!(!activations_json.is_empty());
+        // Write state to disk
+        write_activation_state(runtime_dir, &dot_flox_path, state);
+
+        let activation_state_directory = activation_state_dir_path(runtime_dir, &dot_flox_path);
+        assert!(
+            activation_state_directory.exists(),
+            "state directory should exist before cleanup"
+        );
 
         stop_process(proc);
 
         let cli = Cli {
-            dot_flox_path: flox_env.clone(),
-            flox_env,
+            dot_flox_path: dot_flox_path.clone(),
+            flox_env: dot_flox_path.clone(),
             runtime_dir: runtime_dir.to_path_buf(),
-            activation_id,
+            activation_id: "test".to_string(),
             socket_path: PathBuf::from("/does_not_exist"),
             log_dir: log_dir.to_path_buf(),
             disable_metrics: true,
@@ -294,12 +290,10 @@ mod test {
         let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
         run_inner(cli, terminate_flag, cleanup_flag, reap_flag).unwrap();
 
-        let activations_json = read_activations_json(&activations_json_path)
-            .unwrap()
-            .0
-            .unwrap()
-            .check_version()
-            .unwrap();
-        assert!(activations_json.is_empty());
+        // Verify state directory is completely removed after cleanup
+        assert!(
+            !activation_state_directory.exists(),
+            "state directory should be removed after cleanup"
+        );
     }
 }
