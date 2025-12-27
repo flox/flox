@@ -86,39 +86,34 @@ fn join_dir_list(dirs: Vec<PathBuf>) -> String {
 mod test {
     use std::path::Path;
 
-    use flox_core::activations::{self, Activations};
+    use flox_core::activations::rewrite::ActivationState;
+    use flox_core::activations::{self, rewrite};
 
     use super::*;
 
     pub(crate) fn write_activations<T>(
         runtime_dir: impl AsRef<Path>,
         flox_env: impl AsRef<Path>,
-        f: impl FnOnce(&mut Activations) -> T,
+        f: impl FnOnce(&mut ActivationState) -> T,
     ) -> T {
-        let activations_json_path = activations::state_json_path(runtime_dir, flox_env);
-        let (activations, lock) =
-            activations::read_activations_json(&activations_json_path).unwrap();
-        let mut activations = activations
-            .map(|a| a.check_version())
-            .transpose()
-            .unwrap()
-            .unwrap_or_default();
+        let state_json_path = activations::state_json_path(runtime_dir, flox_env);
+        let (activations, lock) = rewrite::read_activations_json(&state_json_path).unwrap();
+        let mut activations = activations.unwrap_or_default();
 
         let res = f(&mut activations);
 
-        activations::write_activations_json(&activations, &activations_json_path, lock).unwrap();
+        rewrite::write_activations_json(&activations, &state_json_path, lock).unwrap();
         res
     }
 
     pub(crate) fn read_activations<T>(
         runtime_dir: impl AsRef<Path>,
         flox_env: impl AsRef<Path>,
-        f: impl FnOnce(&Activations) -> T,
+        f: impl FnOnce(&ActivationState) -> T,
     ) -> Option<T> {
-        let activations_json_path = activations::state_json_path(runtime_dir, flox_env);
-        let (activations, _lock) =
-            activations::read_activations_json(&activations_json_path).unwrap();
-        activations.map(|activations| f(&activations.check_version().unwrap()))
+        let state_json_path = activations::state_json_path(runtime_dir, flox_env);
+        let (activations, _lock) = rewrite::read_activations_json(&state_json_path).unwrap();
+        activations.map(|activations| f(&activations))
     }
 
     #[test]
