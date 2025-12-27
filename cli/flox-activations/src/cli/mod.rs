@@ -22,7 +22,6 @@ use prepend_and_dedup::PrependAndDedupArgs;
 use profile_scripts::ProfileScriptsArgs;
 use set_env_dirs::SetEnvDirsArgs;
 pub use set_ready::SetReadyArgs;
-pub use start_or_attach::StartOrAttachArgs;
 
 const SHORT_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
 const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
@@ -43,8 +42,6 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    #[command(about = "Start a new activation or attach to an existing one.")]
-    StartOrAttach(StartOrAttachArgs),
     #[command(about = "Set that the activation is ready to be attached to.")]
     SetReady(SetReadyArgs),
     #[command(about = "Attach to an existing activation.")]

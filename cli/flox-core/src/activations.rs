@@ -934,8 +934,8 @@ pub mod rewrite {
         use super::*;
         use crate::activations::test::{start_process, stop_process};
 
-        fn make_activations(ready: Ready) -> Activations {
-            Activations {
+        fn make_activations(ready: Ready) -> rewrite::Activations {
+            rewrite::Activations {
                 version: Version,
                 mode: ActivateMode::default(),
                 ready,
