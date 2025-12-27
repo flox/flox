@@ -193,13 +193,13 @@ impl Watcher for PidWatcher {
 
 #[cfg(test)]
 pub mod test {
-    use std::path::PathBuf;
+    use std::path::Path;
     use std::process::{Child, Command};
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::Ordering;
 
-    use flox_activations::cli::{SetReadyArgs, StartOrAttachArgs};
-    use flox_core::activations::state_json_path;
+    use flox_core::activate::mode::ActivateMode;
+    use flox_core::activations::rewrite::StartOrAttachResult;
+    use flox_core::activations::{acquire_activations_json_lock, state_json_path};
     use flox_core::proc_status::{ProcStatus, pid_is_running, read_pid_status};
 
     use super::*;
@@ -268,6 +268,27 @@ pub mod test {
         proc.wait().unwrap();
     }
 
+    /// Helper to write an ActivationState to disk
+    ///
+    /// Takes ownership of state so we don't accidentally use it after e.g. a
+    /// watcher modifies state on disk
+    pub fn write_activation_state(
+        runtime_dir: &Path,
+        dot_flox_path: &Path,
+        state: ActivationState,
+    ) {
+        let state_json_path = state_json_path(runtime_dir, dot_flox_path);
+        let lock = acquire_activations_json_lock(&state_json_path).expect("failed to acquire lock");
+        write_activations_json(&state, &state_json_path, lock).expect("failed to write state");
+    }
+
+    /// Helper to read an ActivationState from disk
+    pub fn read_activation_state(runtime_dir: &Path, dot_flox_path: &Path) -> ActivationState {
+        let state_json_path = state_json_path(runtime_dir, dot_flox_path);
+        let (state, _lock) = read_activations_json(&state_json_path).expect("failed to read state");
+        state.unwrap()
+    }
+
     #[test]
     fn terminates_when_all_pids_terminate() {
         let runtime_dir = tempfile::tempdir().unwrap();
@@ -276,36 +297,28 @@ pub mod test {
 
         let proc1 = start_process();
         let pid1 = proc1.id() as i32;
-        let start_or_attach_pid1 = StartOrAttachArgs {
-            pid: pid1,
-            dot_flox_path: dot_flox_path.clone(),
-            store_path: store_path.clone(),
-            runtime_dir: runtime_dir.path().to_path_buf(),
-        };
-        let activation_id = start_or_attach_pid1.handle_inner().unwrap().activation_id;
-        let set_ready_pid1 = SetReadyArgs {
-            id: activation_id.clone(),
-            dot_flox_path: dot_flox_path.clone(),
-            runtime_dir: runtime_dir.path().to_path_buf(),
-        };
-        set_ready_pid1.handle().unwrap();
-
         let proc2 = start_process();
         let pid2 = proc2.id() as i32;
-        let start_or_attach_pid2 = StartOrAttachArgs {
-            pid: pid2,
-            dot_flox_path: dot_flox_path.clone(),
-            store_path: store_path.clone(),
-            runtime_dir: runtime_dir.path().to_path_buf(),
-        };
-        let activation_id_2 = start_or_attach_pid2.handle_inner().unwrap().activation_id;
-        assert_eq!(activation_id, activation_id_2);
 
-        let activations_json_path = state_json_path(&runtime_dir, &dot_flox_path);
+        // Create an ActivationState with two PIDs attached to the same start_id
+        let mut state = ActivationState::new(&ActivateMode::default());
+        let result = state.start_or_attach(pid1, &store_path);
+        let StartOrAttachResult::Start { start_id, .. } = result else {
+            panic!("Expected Start")
+        };
+        state.set_ready(&start_id);
+        let result = state.start_or_attach(pid2, &store_path);
+        assert!(matches!(result, StartOrAttachResult::Attach { .. }));
+
+        write_activation_state(runtime_dir.path(), &dot_flox_path, state);
+
+        let state_json_path =
+            flox_core::activations::state_json_path(runtime_dir.path(), &dot_flox_path);
         let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
-            activations_json_path,
-            activation_id,
+            state_json_path,
+            dot_flox_path.clone(),
+            runtime_dir.path().to_path_buf(),
             terminate_flag,
             cleanup_flag,
             reap_flag,
@@ -327,104 +340,156 @@ pub mod test {
         assert!(matches!(wait_result, WaitResult::CleanUp(_)));
     }
 
+    /// When an attachment to a start exits, its PID is removed if its the first
+    /// PID in the list
     #[test]
-    fn terminated_pids_removed_from_activations_file() {
+    fn terminated_pid_removed_if_first() {
         let runtime_dir = tempfile::tempdir().unwrap();
         let dot_flox_path = PathBuf::from(".flox");
         let store_path = "store_path".to_string();
 
+        // Start and set ready pid1
         let proc1 = start_process();
         let pid1 = proc1.id() as i32;
-        let start_or_attach_pid1 = StartOrAttachArgs {
-            pid: pid1,
-            dot_flox_path: dot_flox_path.clone(),
-            store_path: store_path.clone(),
-            runtime_dir: runtime_dir.path().to_path_buf(),
+        let mut state = ActivationState::new(&ActivateMode::default());
+        let result = state.start_or_attach(pid1, &store_path);
+        let StartOrAttachResult::Start { start_id, .. } = result else {
+            panic!("Expected Start")
         };
-        let activation_id = start_or_attach_pid1.handle_inner().unwrap().activation_id;
-        let set_ready_pid1 = SetReadyArgs {
-            id: activation_id.clone(),
-            dot_flox_path: dot_flox_path.clone(),
-            runtime_dir: runtime_dir.path().to_path_buf(),
-        };
-        set_ready_pid1.handle().unwrap();
 
+        state.set_ready(&start_id);
         let proc2 = start_process();
         let pid2 = proc2.id() as i32;
-        let start_or_attach_pid2 = StartOrAttachArgs {
-            pid: pid2,
-            dot_flox_path: dot_flox_path.clone(),
-            store_path: store_path.clone(),
-            runtime_dir: runtime_dir.path().to_path_buf(),
-        };
-        let activation_id_2 = start_or_attach_pid2.handle_inner().unwrap().activation_id;
-        assert_eq!(activation_id, activation_id_2);
+        state.start_or_attach(pid2, &store_path);
 
-        let activations_json_path = state_json_path(&runtime_dir, &dot_flox_path);
-
-        // Grab the existing activations before starting the PidWatcher so we
-        // can compare against the state after one of the processes has died.
-        let (maybe_initial_activations, lockfile) =
-            read_activations_json(&activations_json_path).expect("failed to read activations.json");
-        let Some(initial_activations_unchecked) = maybe_initial_activations else {
-            panic!("no activations were initially recorded")
-        };
-        let initial_activations = initial_activations_unchecked.check_version().unwrap();
-        let initial_pids = initial_activations
-            .activation_for_store_path(&store_path)
-            .expect("there was no activation for this store path")
-            .attached_pids()
-            .iter()
-            .map(|pid| pid.pid)
-            .collect::<Vec<_>>();
+        // Verify both PIDs are initially present
+        let initial_pids = state.attached_pids_running();
         assert_eq!(
             initial_pids,
             vec![pid1, pid2],
             "both pids should be running and present"
         );
-        drop(lockfile); // Prevents a deadlock
+
+        write_activation_state(runtime_dir.path(), &dot_flox_path, state);
+
+        // The cleanup logic is order sensitive,
+        // so proc2 wouldn't be cleaned up if we stopped it instead of proc1
         stop_process(proc1);
 
+        let state_json_path = state_json_path(runtime_dir.path(), &dot_flox_path);
         let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
-            activations_json_path.clone(),
-            activation_id,
+            state_json_path,
+            dot_flox_path.clone(),
+            runtime_dir.path().to_path_buf(),
             terminate_flag.clone(),
             cleanup_flag,
             reap_flag,
         );
-        let maybe_final_activations = std::thread::scope(move |s| {
+
+        std::thread::scope(move |s| {
             let watcher_thread = s.spawn(move || watcher.wait_for_termination().unwrap());
             // This wait is just to let the watcher update its watchlist
             // and realize that one of the processes has exited.
             std::thread::sleep(2 * WATCHER_SLEEP_INTERVAL);
-            let (activations, lockfile) = read_activations_json(&activations_json_path)
-                .expect("failed to read actiations.json");
-            drop(lockfile);
+
+            // Check state while proc2 is still running
+            let intermediate_state = read_activation_state(runtime_dir.path(), &dot_flox_path);
+            let intermediate_pids = intermediate_state.attached_pids();
+            assert_eq!(
+                intermediate_pids,
+                vec![pid2],
+                "only pid2 should be running and present after proc1 terminated"
+            );
+
+            // Clean up all extra processes and watcher
+            stop_process(proc2);
+            watcher_thread
+                .join()
+                .expect("watcher thread didn't exit cleanly");
+        });
+    }
+
+    /// After all attachments to a start exit, start state directory is removed
+    #[test]
+    fn cleans_up_start_state_directory() {
+        let runtime_dir = tempfile::tempdir().unwrap();
+        let dot_flox_path = PathBuf::from(".flox");
+        let store_path_1 = "store_path_1".to_string();
+        let store_path_2 = "store_path_2".to_string();
+
+        let proc1 = start_process();
+        let pid1 = proc1.id() as i32;
+        let proc2 = start_process();
+        let pid2 = proc2.id() as i32;
+
+        // Start and set ready for store_path_1
+        let mut state = ActivationState::new(&ActivateMode::default());
+        let result = state.start_or_attach(pid1, &store_path_1);
+        let StartOrAttachResult::Start {
+            start_id: start_id_1,
+            ..
+        } = result
+        else {
+            panic!("Expected Start")
+        };
+        state.set_ready(&start_id_1);
+
+        // Start and set ready for store_path_2
+        let result = state.start_or_attach(pid2, &store_path_2);
+        let StartOrAttachResult::Start {
+            start_id: start_id_2,
+            ..
+        } = result
+        else {
+            panic!("Expected Start")
+        };
+        state.set_ready(&start_id_2);
+
+        write_activation_state(runtime_dir.path(), &dot_flox_path, state);
+
+        // Create both state directories
+        let state_dir_1 = start_id_1
+            .state_dir_path(runtime_dir.path(), &dot_flox_path)
+            .unwrap();
+        let state_dir_2 = start_id_2
+            .state_dir_path(runtime_dir.path(), &dot_flox_path)
+            .unwrap();
+        std::fs::create_dir_all(&state_dir_1).unwrap();
+        std::fs::create_dir_all(&state_dir_2).unwrap();
+        assert!(state_dir_1.exists());
+        assert!(state_dir_2.exists());
+
+        let state_json_path = state_json_path(runtime_dir.path(), &dot_flox_path);
+        let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
+        let mut watcher = PidWatcher::new(
+            state_json_path,
+            dot_flox_path.clone(),
+            runtime_dir.path().to_path_buf(),
+            terminate_flag.clone(),
+            cleanup_flag,
+            reap_flag,
+        );
+
+        std::thread::scope(|s| {
+            let watcher_thread = s.spawn(move || watcher.wait_for_termination().unwrap());
+
+            stop_process(proc1);
+
+            // Wait for watcher to process the termination
+            std::thread::sleep(2 * WATCHER_SLEEP_INTERVAL);
+
+            // Verify state_dir_1 has been removed but state_dir_2 still exists
+            assert!(!state_dir_1.exists(), "state directory 1 should be removed");
+            assert!(state_dir_2.exists(), "state directory 2 should still exist");
+
+            // Clean up all extra processes and watcher
             terminate_flag.store(true, Ordering::SeqCst);
             stop_process(proc2);
             watcher_thread
                 .join()
                 .expect("watcher thread didn't exit cleanly");
-            activations
         });
-        let Some(final_activations_unchecked) = maybe_final_activations else {
-            panic!("no activations found at the end")
-        };
-        let final_pids = final_activations_unchecked
-            .check_version()
-            .unwrap()
-            .activation_for_store_path(&store_path)
-            .expect("there was no activation for this store path")
-            .attached_pids()
-            .iter()
-            .map(|pid| pid.pid)
-            .collect::<Vec<_>>();
-        assert_eq!(
-            final_pids,
-            vec![pid2],
-            "only pid2 should be running and present"
-        );
     }
 
     #[test]
@@ -435,25 +500,23 @@ pub mod test {
 
         let proc = start_process();
         let pid = proc.id() as i32;
-        let start_or_attach = StartOrAttachArgs {
-            pid,
-            dot_flox_path: dot_flox_path.clone(),
-            store_path: store_path.clone(),
-            runtime_dir: runtime_dir.path().to_path_buf(),
-        };
-        let activation_id = start_or_attach.handle_inner().unwrap().activation_id;
-        let set_ready = SetReadyArgs {
-            id: activation_id.clone(),
-            dot_flox_path: dot_flox_path.clone(),
-            runtime_dir: runtime_dir.path().to_path_buf(),
-        };
-        set_ready.handle().unwrap();
 
-        let activations_json_path = state_json_path(&runtime_dir, &dot_flox_path);
+        // Create an ActivationState with one PID attached
+        let mut state = ActivationState::new(&ActivateMode::default());
+        let result = state.start_or_attach(pid, &store_path);
+        let StartOrAttachResult::Start { start_id, .. } = result else {
+            panic!("Expected Start")
+        };
+        state.set_ready(&start_id);
+
+        write_activation_state(runtime_dir.path(), &dot_flox_path, state);
+
+        let state_json_path = state_json_path(runtime_dir.path(), &dot_flox_path);
         let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
-            activations_json_path,
-            activation_id,
+            state_json_path,
+            dot_flox_path.clone(),
+            runtime_dir.path().to_path_buf(),
             terminate_flag.clone(),
             cleanup_flag.clone(),
             reap_flag,
@@ -483,25 +546,22 @@ pub mod test {
 
         let proc = start_process();
         let pid = proc.id() as i32;
-        let start_or_attach = StartOrAttachArgs {
-            pid,
-            dot_flox_path: dot_flox_path.clone(),
-            store_path: store_path.clone(),
-            runtime_dir: runtime_dir.path().to_path_buf(),
-        };
-        let activation_id = start_or_attach.handle_inner().unwrap().activation_id;
-        let set_ready = SetReadyArgs {
-            id: activation_id.clone(),
-            dot_flox_path: dot_flox_path.clone(),
-            runtime_dir: runtime_dir.path().to_path_buf(),
-        };
-        set_ready.handle().unwrap();
 
-        let activations_json_path = state_json_path(&runtime_dir, &dot_flox_path);
+        // Create an ActivationState with one PID attached
+        let mut state = ActivationState::new(&ActivateMode::default());
+        let result = state.start_or_attach(pid, &store_path);
+        let StartOrAttachResult::Start { start_id, .. } = result else {
+            panic!("Expected Start")
+        };
+        state.set_ready(&start_id);
+        write_activation_state(runtime_dir.path(), &dot_flox_path, state);
+
+        let state_json_path = state_json_path(runtime_dir.path(), &dot_flox_path);
         let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
-            activations_json_path,
-            activation_id,
+            state_json_path,
+            dot_flox_path.clone(),
+            runtime_dir.path().to_path_buf(),
             terminate_flag.clone(),
             cleanup_flag.clone(),
             reap_flag,
