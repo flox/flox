@@ -178,15 +178,15 @@ cmd = '''
 '''
 ignore_cmd_errors = true # build will fail on linux, that's fine
 post_cmd = '''
-    yq -r '.then.body' "$RESPONSE_FILE" | \
+    yq --slurp -r '.[0].then.body' "$RESPONSE_FILE" | \
         jq -c '
             .items[0].messages[].type |= "unknown" |
             .items[0].messages[].message |= "unknown message"
         ' \
         > patched_body.json
-    yq -y \
+    yq --slurp -y \
         --arg body "$(cat patched_body.json)" \
-        'del(.then.header[] | select(.name == "content-length")) | .then.body = $body' \
+        'del(.[0].then.header[] | select(.name == "content-length")) | .[0].then.body = $body | .[]' \
         "$RESPONSE_FILE" > tmp.yaml
     mv tmp.yaml "$RESPONSE_FILE"
 '''
@@ -206,15 +206,15 @@ cmd = '''
 '''
 ignore_cmd_errors = true # build will fail on linux, that's fine
 post_cmd = '''
-    yq -r '.then.body' "$RESPONSE_FILE" | \
+    yq --slurp -r '.[0].then.body' "$RESPONSE_FILE" | \
         jq -c '
             .items[0].messages[].type |= "general" |
             .items[0].messages[].message |= "general message"
         ' \
         > patched_body.json
-    yq -y \
+    yq --slurp -y \
         --arg body "$(cat patched_body.json)" \
-        'del(.then.header[] | select(.name == "content-length")) | .then.body = $body' \
+        'del(.[0].then.header[] | select(.name == "content-length")) | .[0].then.body = $body | .[]' \
         "$RESPONSE_FILE" > tmp.yaml
     mv tmp.yaml "$RESPONSE_FILE"
 '''
