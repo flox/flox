@@ -2033,35 +2033,6 @@
           }
         ]
       }
-    },
-    "/metrics/": {
-      "get": {
-        "summary": "Handle Metrics",
-        "operationId": "handle_metrics_metrics__get",
-        "responses": {
-          "200": {
-            "description": "Service Status",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "string",
-                  "title": "Response 200 Handle Metrics Metrics  Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Unprocessable Entity",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
     }
   },
   "components": {
