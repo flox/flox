@@ -1,5 +1,4 @@
 {
-  hostPlatform,
   inputs,
   lib,
   openssl,

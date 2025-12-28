@@ -15,7 +15,7 @@
   process-compose,
   rust-external-deps,
   rust-toolchain,
-  targetPlatform,
+  stdenv,
 }:
 let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
@@ -45,7 +45,7 @@ let
     TESTING_BASE_CATALOG_URL = "https://github.com/flox/nixpkgs?rev=${inputs.nixpkgs.rev}";
 
     # Reexport of the platform flox is being built for
-    NIX_TARGET_SYSTEM = targetPlatform.system;
+    NIX_TARGET_SYSTEM = stdenv.targetPlatform.system;
   }
   # Our own tools
   # In the dev shell these will be set dynamically
