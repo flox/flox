@@ -2414,10 +2414,8 @@ mod tests {
         "#}
         } else {
             formatdoc! {r#"
-                4 packages found in {store_path_prefix_pattern}-{package_name}-0\.0\.0
+                1 packages found in {store_path_prefix_pattern}-{package_name}-0\.0\.0
                        not found in {store_path_prefix_pattern}-environment-build-{package_name}
-
-                Displaying first 3 only:
         "#}
         };
         let re = regex::Regex::new(&expected_pattern).unwrap();
