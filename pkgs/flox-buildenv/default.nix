@@ -7,7 +7,7 @@
   glibcLocalesUtf8,
   lib,
   nix,
-  runCommandNoCC,
+  runCommand,
   stdenv,
   writeText,
 }:
@@ -51,7 +51,7 @@ let
     perlScript = ../../buildenv/builder.pl;
   };
 in
-runCommandNoCC "${pname}-${version}"
+runCommand "${pname}-${version}"
   {
     inherit
       coreutils

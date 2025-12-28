@@ -72,7 +72,7 @@ let
   name = "${pname}-${version}";
 
 in
-pkgs.runCommandNoCC name
+pkgs.runCommand name
   {
     inherit
       buildInputs # required to include build wrapper environment in NIX_LDFLAGS
