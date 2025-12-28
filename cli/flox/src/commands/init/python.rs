@@ -879,8 +879,8 @@ mod tests {
     ///////////////////////////////////////////////////////////////////////////
 
     const PYTHON_310_VERSION: &str = "3.10.12";
-    const PYTHON_LATEST_VERSION: &str = "3.13.5";
-    const POETRY_LATEST_VERSION: &str = "2.1.4";
+    const PYTHON_LATEST_VERSION: &str = "3.13.9";
+    const POETRY_LATEST_VERSION: &str = "2.2.1";
 
     /// An invalid pyproject.toml should return an error
     #[tokio::test]
