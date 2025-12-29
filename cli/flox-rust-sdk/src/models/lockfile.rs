@@ -45,7 +45,6 @@ use crate::models::manifest::composite::CompositeManifest;
 use crate::providers::catalog::{
     self,
     ALL_SYSTEMS,
-    CatalogPage,
     MsgAttrPathNotFoundNotFoundForAllSystems,
     MsgAttrPathNotFoundNotInCatalog,
     MsgAttrPathNotFoundSystemsNotOnSamePage,
@@ -371,21 +370,6 @@ pub struct LockedPackageStorePath {
     pub store_path: String,
     pub system: System,
     pub priority: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct LockedGroup {
-    /// name of the group
-    name: String,
-    /// system this group provides packages for
-    system: System,
-    /// [CatalogPage] that was selected to fulfill this group
-    ///
-    /// If resolution of a group provides multiple pages,
-    /// a single page is selected based on cross group constraints.
-    /// By default this is the latest page that provides packages
-    /// for all requested systems.
-    page: CatalogPage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
@@ -1895,7 +1879,7 @@ pub(crate) mod tests {
         fake_store_path_lock,
     };
 
-    use self::catalog::PackageResolutionInfo;
+    use self::catalog::{CatalogPage, PackageResolutionInfo};
     use super::*;
     use crate::flox::RemoteEnvironmentRef;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};

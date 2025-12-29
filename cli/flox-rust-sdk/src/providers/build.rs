@@ -9,7 +9,7 @@ use itertools::Itertools;
 use serde::Deserialize;
 use tempfile::NamedTempFile;
 use thiserror::Error;
-use tracing::{debug, error};
+use tracing::debug;
 use url::Url;
 
 use super::buildenv::{BuildEnvOutputs, BuiltStorePath};
@@ -310,8 +310,8 @@ impl ManifestBuilder for FloxBuildMk<'_> {
             "EXPRESSION_BUILD_NIXPKGS_URL={expression_build_nixpkgs_url}"
         ));
 
-        if system_override.is_some() {
-            command.arg(format!("NIX_SYSTEM={}", system_override.unwrap()));
+        if let Some(system_override) = system_override {
+            command.arg(format!("NIX_SYSTEM={system_override}"));
         }
 
         command.arg(format!(
@@ -915,7 +915,7 @@ pub mod test_helpers {
         assert!(dir.is_symlink());
         assert!(dir.read_link().unwrap().starts_with("/nix/store/"));
 
-        let file = dir.join(file_name);
+        let file = Path::join(&dir, file_name);
         assert!(file.is_file());
         assert_eq!(fs::read_to_string(file).unwrap(), content);
     }
