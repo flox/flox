@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use attach::AttachArgs;
 use clap::{Parser, Subcommand};
@@ -57,7 +57,7 @@ pub enum Command {
 fn separate_dir_list(joined: &str) -> Vec<PathBuf> {
     let joined = if joined == "empty" { "" } else { joined };
     let split = std::env::split_paths(joined).collect::<Vec<_>>();
-    if (split.len() == 1) && (split[0] == PathBuf::from("")) {
+    if (split.len() == 1) && (split[0] == Path::new("")) {
         vec![]
     } else {
         split

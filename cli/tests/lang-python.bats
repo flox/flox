@@ -76,8 +76,13 @@ teardown() {
   assert_success
   assert_output --partial "'poetry' installed"
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_poetry_zlib.yaml" \
-    "$FLOX_BIN" install zlib
+  if [[ "$NIX_SYSTEM" == *-linux ]]; then
+    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_poetry_zlib_libstdc.yaml" \
+      "$FLOX_BIN" install zlib gcc-unwrapped
+  else
+    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_poetry_zlib.yaml" \
+      "$FLOX_BIN" install zlib
+  fi
 
   run "$FLOX_BIN" activate -- python -m project
   assert_success
@@ -95,8 +100,13 @@ teardown() {
     run "$FLOX_BIN" init --auto-setup
   assert_success
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_pyproject_pip_zlib.yaml" \
-    "$FLOX_BIN" install zlib
+  if [[ "$NIX_SYSTEM" == *-linux ]]; then
+    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_pyproject_pip_zlib_libstdc.yaml" \
+      "$FLOX_BIN" install zlib gcc-unwrapped
+  else
+    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_pyproject_pip_zlib.yaml" \
+      "$FLOX_BIN" install zlib
+  fi
 
   run "$FLOX_BIN" activate -- python -m project
   assert_success
@@ -114,8 +124,13 @@ teardown() {
     run "$FLOX_BIN" init --auto-setup
   assert_success
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requirements_zlib.yaml" \
-    "$FLOX_BIN" install zlib
+  if [[ "$NIX_SYSTEM" == *-linux ]]; then
+    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requirements_zlib_libstdc.yaml" \
+      "$FLOX_BIN" install zlib gcc-unwrapped
+  else
+    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requirements_zlib.yaml" \
+      "$FLOX_BIN" install zlib
+  fi
 
   run "$FLOX_BIN" activate -- python -m project
   assert_success

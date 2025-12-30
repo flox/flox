@@ -8,7 +8,6 @@
   gitMinimal,
   glibcLocalesUtf8,
   gnused,
-  hostPlatform,
   inputs,
   installShellFiles,
   lib,
@@ -18,7 +17,7 @@
   rust-internal-deps,
   rust-toolchain,
   rustfmt ? rust-toolchain.rustfmt,
-  targetPlatform,
+  stdenv,
 }:
 let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
@@ -59,12 +58,12 @@ let
       NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
       # Reexport of the platform flox is being built for
-      NIX_TARGET_SYSTEM = targetPlatform.system;
+      NIX_TARGET_SYSTEM = stdenv.targetPlatform.system;
     }
-    // lib.optionalAttrs hostPlatform.isDarwin {
+    // lib.optionalAttrs stdenv.hostPlatform.isDarwin {
       PATH_LOCALE = "${darwin.locale}/share/locale";
     }
-    // lib.optionalAttrs hostPlatform.isLinux {
+    // lib.optionalAttrs stdenv.hostPlatform.isLinux {
       LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
     }
     # Our own tools

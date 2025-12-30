@@ -1079,7 +1079,7 @@ mod tests {
         };
         let node_20 = Package {
             name: "nodejs_20".to_string(),
-            version: "20.19.4".to_string(),
+            version: "20.19.6".to_string(),
         };
 
         let test_cases = vec![

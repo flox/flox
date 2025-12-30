@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 
 use chrono::{DateTime, Utc};
 use thiserror::Error;
-use tracing::{debug, error, warn};
+use tracing::{debug, warn};
 
 use crate::utils::CommandExt;
 

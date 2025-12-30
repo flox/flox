@@ -45,7 +45,6 @@ use crate::models::manifest::composite::CompositeManifest;
 use crate::providers::catalog::{
     self,
     ALL_SYSTEMS,
-    CatalogPage,
     MsgAttrPathNotFoundNotFoundForAllSystems,
     MsgAttrPathNotFoundNotInCatalog,
     MsgAttrPathNotFoundSystemsNotOnSamePage,
@@ -371,21 +370,6 @@ pub struct LockedPackageStorePath {
     pub store_path: String,
     pub system: System,
     pub priority: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct LockedGroup {
-    /// name of the group
-    name: String,
-    /// system this group provides packages for
-    system: System,
-    /// [CatalogPage] that was selected to fulfill this group
-    ///
-    /// If resolution of a group provides multiple pages,
-    /// a single page is selected based on cross group constraints.
-    /// By default this is the latest page that provides packages
-    /// for all requested systems.
-    page: CatalogPage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
@@ -1895,7 +1879,7 @@ pub(crate) mod tests {
         fake_store_path_lock,
     };
 
-    use self::catalog::PackageResolutionInfo;
+    use self::catalog::{CatalogPage, PackageResolutionInfo};
     use super::*;
     use crate::flox::RemoteEnvironmentRef;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
@@ -2856,10 +2840,14 @@ pub(crate) mod tests {
                 .await;
         if let Err(ResolveError::ResolutionFailed(res_failures)) = locked_manifest {
             // A newline is added for formatting when it's a single message
-            assert_eq!(
-                res_failures.to_string(),
-                "\nThe attr_path darwin.ps is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,x86_64-darwin), (x86_64-darwin)."
-            );
+            assert_eq!(res_failures.to_string(), indoc! {"
+                package 'darwin.ps' not available for
+                    - aarch64-linux
+                  but it is available for
+                    - x86_64-darwin
+
+                For more on managing system-specific packages, visit the documentation:
+                https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages"});
         } else {
             panic!("expected resolution failure, got {:?}", locked_manifest);
         }
