@@ -196,26 +196,26 @@ wait_for_activations() {
   fi
 
   # Find all activations.json files in FLOX_CACHE_DIR
-  local activations_json_files=()
-  while IFS= read -r -d '' activations_json; do
-    activations_json_files+=("$activations_json")
-  done < <(find "${FLOX_CACHE_DIR}" -name "activations.json" -print0)
+  local state_json_files=()
+  while IFS= read -r -d '' state_json; do
+    state_json_files+=("$state_json")
+  done < <(find "${FLOX_CACHE_DIR}" -name "state.json" -print0)
 
-  # This could cause false-positives if there are no `activations.json` files at
+  # This could cause false-positives if there are no `state.json` files at
   # all but we have some tests in suites that use `wait_for_activations` and
   # don't perform activations.
-  if [ ${#activations_json_files[@]} -eq 0 ]; then
-    echo "wait_for_activations: no activations.json files found in FLOX_CACHE_DIR" >&2
+  if [ ${#state_json_files[@]} -eq 0 ]; then
+    echo "wait_for_activations: no state.json files found in FLOX_CACHE_DIR" >&2
     return 0
   fi
 
-  # Wait for all activations.json files to be empty
+  # Wait for all state.json files to be empty
   local tries=0
   while true; do
     local has_activations=false
 
-    for activations_json in "${activations_json_files[@]}"; do
-      if jq -e '.activations | length > 0' "$activations_json" > /dev/null; then
+    for state_json in "${state_json_files[@]}"; do
+      if [ -f "$state_json" ]; then
         has_activations=true
         break
       fi
@@ -231,10 +231,10 @@ wait_for_activations() {
       echo "ERROR: activations not get cleaned up activations after 10 seconds" >&3
 
       echo "Files still containing activations:" >&3
-      for activations_json in "${activations_json_files[@]}"; do
-        if [ -f "$activations_json" ]; then
-          echo "$activations_json:" >&3
-          jq . "$activations_json" >&3
+      for state_json in "${state_json_files[@]}"; do
+        if [ -f "$state_json" ]; then
+          echo "$state_json:" >&3
+          jq . "$state_json" >&3
         fi
       done
 
