@@ -483,3 +483,68 @@ EOF
   hello_pkg_path="$(tomlq -r -c '.install.hello."pkg-path"' < .flox/env/manifest.toml)"
   assert_equal "$hello_pkg_path" "hello"
 }
+
+# ---------------------------------------------------------------------------- #
+# bats test_tags=install:outputs
+
+@test "'flox install' with specific outputs adds to manifest" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install 'hello^bin,man'
+  assert_success
+
+  # Check that pkg-path is correct
+  hello_pkg_path="$(tomlq -r -c '.install.hello."pkg-path"' < "$MANIFEST_PATH")"
+  assert_equal "$hello_pkg_path" "hello"
+
+  # Check that outputs are in manifest as an array
+  run tomlq -r -c '.install.hello.outputs' "$MANIFEST_PATH"
+  assert_success
+  assert_output '["bin","man"]'
+}
+
+@test "'flox install' with all outputs adds to manifest" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install 'hello^..'
+  assert_success
+
+  # Check that pkg-path is correct
+  hello_pkg_path="$(tomlq -r -c '.install.hello."pkg-path"' < "$MANIFEST_PATH")"
+  assert_equal "$hello_pkg_path" "hello"
+
+  # Check that outputs field is "all"
+  run tomlq -r -c '.install.hello.outputs' "$MANIFEST_PATH"
+  assert_success
+  assert_output 'all'
+}
+
+@test "'flox install' with outputs and version" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install 'hello@1.0^bin,man'
+  assert_success
+
+  # Check all fields
+  hello_pkg_path="$(tomlq -r -c '.install.hello."pkg-path"' < "$MANIFEST_PATH")"
+  assert_equal "$hello_pkg_path" "hello"
+
+  hello_version="$(tomlq -r -c '.install.hello.version' < "$MANIFEST_PATH")"
+  assert_equal "$hello_version" "1.0"
+
+  run tomlq -r -c '.install.hello.outputs' "$MANIFEST_PATH"
+  assert_success
+  assert_output '["bin","man"]'
+}
+
+@test "'flox install' without outputs omits outputs field" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install hello
+  assert_success
+
+  # Check that outputs field is not present (null in tomlq)
+  run tomlq -r -c '.install.hello.outputs' "$MANIFEST_PATH"
+  assert_success
+  assert_output "null"
+}
