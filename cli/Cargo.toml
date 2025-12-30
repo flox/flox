@@ -84,7 +84,7 @@ sysinfo = "0.37.2"
 sys-info = "0.9"
 systemd = { path = "systemd" }
 tar = "0.4"
-tempfile = "3.23.0"
+tempfile = "3.24.0"
 textwrap = { version = "0.16.2", features = ["terminal_size"] }
 thiserror = "2"
 time = { version = "0.3", features = ["serde", "formatting"] }
@@ -109,7 +109,7 @@ temp-env = "0.3.2"
 
 # watchdog dependencies
 kqueue = "1.1.1"
-signal-hook = "0.3.18"
+signal-hook = "0.4.1"
 
 # build(.rs) dependencies
 openapiv3 = "2.2"
