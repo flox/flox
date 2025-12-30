@@ -423,6 +423,7 @@ impl From<ProvidedPackage> for CatalogPackage {
             pkg_path: value.attr_path.into(),
             version: value.version,
             systems: None,
+            outputs: None,
         }
     }
 }
@@ -641,12 +642,14 @@ mod tests {
                         pkg_path: "python311Packages.pip".to_string(),
                         version: None,
                         systems: None,
+                        outputs: None,
                     },
                     CatalogPackage {
                         id: "package2".to_string(),
                         pkg_path: "path2".to_string(),
                         version: None,
                         systems: None,
+                        outputs: None,
                     },
                 ]),
                 activate_mode: None,
@@ -664,12 +667,14 @@ mod tests {
                         pkg_path: "python311Packages.pip".to_string(),
                         version: None,
                         systems: None,
+                        outputs: None,
                     },
                     CatalogPackage {
                         id: "package1".to_string(),
                         pkg_path: "path1".to_string(),
                         version: None,
                         systems: None,
+                        outputs: None,
                     },
                 ]),
                 activate_mode: None,
@@ -758,18 +763,21 @@ mod tests {
                     pkg_path: "path1".to_string(),
                     version: None,
                     systems: None,
+                    outputs: None
                 },
                 CatalogPackage {
                     id: "package2".to_string(),
                     pkg_path: "path2".to_string(),
                     version: None,
                     systems: None,
+                    outputs: None
                 },
                 CatalogPackage {
                     id: "pip".to_string(),
                     pkg_path: "python311Packages.pip".to_string(),
                     version: None,
                     systems: None,
+                    outputs: None
                 },
             ]),
             activate_mode: None,
@@ -792,6 +800,7 @@ mod tests {
                 pkg_path: "test.package".to_string(),
                 version: Some("1.0.0".to_string()),
                 systems: None,
+                outputs: None,
             }]),
             activate_mode: None,
         };

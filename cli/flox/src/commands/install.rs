@@ -750,6 +750,7 @@ mod tests {
             pkg_path: "foo".to_string(),
             version: None,
             systems: None,
+            outputs: None,
         }];
         assert_eq!(
             Install::generate_unfree_and_broken_warnings(
@@ -781,6 +782,7 @@ mod tests {
             pkg_path: "foo".to_string(),
             version: None,
             systems: None,
+            outputs: None,
         }];
         assert_eq!(
             Install::generate_unfree_and_broken_warnings(
@@ -804,6 +806,7 @@ mod tests {
             pkg_path: "foo".to_string(),
             version: None,
             systems: None,
+            outputs: None,
         }];
         assert_eq!(
             Install::generate_unfree_and_broken_warnings(
@@ -835,6 +838,7 @@ mod tests {
             pkg_path: "foo".to_string(),
             version: None,
             systems: None,
+            outputs: None,
         }];
         assert_eq!(
             Install::generate_unfree_and_broken_warnings(
