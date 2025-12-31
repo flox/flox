@@ -28,7 +28,6 @@ fn try_main() -> Result<(), Error> {
     debug!("{args:?}");
 
     match args.command {
-        cli::Command::SetReady(args) => args.handle(),
         cli::Command::Attach(args) => args.handle(),
         cli::Command::Activate(args) => args.handle(logger_handle.subsystem_verbosity),
         cli::Command::Executive(cmd_args) => cmd_args.handle(logger_handle.reload_handle),
