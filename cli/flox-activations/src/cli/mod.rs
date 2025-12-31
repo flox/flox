@@ -11,7 +11,6 @@ pub mod fix_paths;
 mod prepend_and_dedup;
 mod profile_scripts;
 pub mod set_env_dirs;
-mod set_ready;
 pub mod start_or_attach;
 
 use activate::ActivateArgs;
@@ -21,7 +20,6 @@ use fix_paths::FixPathsArgs;
 use prepend_and_dedup::PrependAndDedupArgs;
 use profile_scripts::ProfileScriptsArgs;
 use set_env_dirs::SetEnvDirsArgs;
-pub use set_ready::SetReadyArgs;
 
 const SHORT_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
 const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
@@ -42,8 +40,6 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    #[command(about = "Set that the activation is ready to be attached to.")]
-    SetReady(SetReadyArgs),
     #[command(about = "Attach to an existing activation.")]
     Attach(AttachArgs),
     #[command(about = "Activate a Flox environment.")]
