@@ -214,7 +214,10 @@ EOF
   test_mutate_with_activate_generation uninstall foo
 }
 @test "activate --generation: can't mutate with: edit" {
-  test_mutate_with_activate_generation edit -f /dev/null
+  manifest="$(mktemp)"
+  echo "version = 1" >> "$manifest"
+  test_mutate_with_activate_generation edit -f "$manifest"
+  rm "$manifest"
 }
 @test "activate --generation: can't mutate with: upgrade" {
   test_mutate_with_activate_generation upgrade

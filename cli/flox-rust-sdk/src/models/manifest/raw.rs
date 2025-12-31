@@ -108,7 +108,7 @@ impl RawManifest {
     /// could work today, but is still limited by the lack of an optional tag.
     pub fn to_typed(&self) -> Result<Manifest, toml_edit::de::Error> {
         match self.get_version() {
-            Some(1) => Ok(toml_edit::de::from_document(self.0.clone())?),
+            Some(1) | Some(2) => Ok(toml_edit::de::from_document(self.0.clone())?),
             Some(v) => {
                 let msg = format!("unsupported manifest version: {v}");
                 Err(toml_edit::de::Error::custom(msg))

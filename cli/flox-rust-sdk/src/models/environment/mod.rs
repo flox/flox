@@ -778,6 +778,9 @@ pub enum EnvironmentError {
 
     #[error("authentication error")]
     Auth(#[source] AuthError),
+
+    #[error("{0}")]
+    EditWithUnsupportedFeature(String),
 }
 
 #[derive(Debug, thiserror::Error)]

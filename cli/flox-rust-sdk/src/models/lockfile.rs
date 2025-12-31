@@ -1728,6 +1728,7 @@ pub mod test_helpers {
             systems: Some(vec![PackageSystem::Aarch64Darwin.to_string()]),
             version: None,
             priority: None,
+            outputs: None,
         }
         .into();
 
@@ -1770,6 +1771,7 @@ pub mod test_helpers {
             flake: format!("github:nowhere/exciting#{name}"),
             priority: None,
             systems: None,
+            outputs: None,
         };
 
         let locked = LockedPackageFlake {
@@ -1825,6 +1827,7 @@ pub mod test_helpers {
             flake: "github:nix-community/nix-eval-jobs".to_string(),
             priority: None,
             systems: None,
+            outputs: None,
         }
     }
 
@@ -2258,6 +2261,7 @@ pub(crate) mod tests {
                 systems: None,
                 version: None,
                 priority: None,
+                outputs: None,
             }
             .into(),
         );
@@ -3318,7 +3322,7 @@ pub(crate) mod tests {
         #[test]
         fn lock_manifest_noop_if_locked_without_install_section((flox, tempdir, environments_to_include) in generate_path_environments_without_install_or_include(3)) {
             let manifest = Manifest {
-                version: Version,
+                version: 1.into(),
                 include: Include {
                     environments: environments_to_include
                         .into_iter()
@@ -3364,6 +3368,7 @@ pub(crate) mod tests {
                 priority: None,
                 version: None,
                 systems: None,
+                outputs: None,
             }),
         );
         manifest
@@ -3887,7 +3892,7 @@ pub(crate) mod tests {
         .unwrap();
 
         assert_eq!(merged, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
             ..Default::default()
         });
@@ -3963,7 +3968,7 @@ pub(crate) mod tests {
         .unwrap();
 
         assert_eq!(merged, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([
                 ("foo".to_string(), "highest_precedence".to_string()),
                 ("bar".to_string(), "higher_precedence".to_string())
@@ -4085,7 +4090,7 @@ pub(crate) mod tests {
         .unwrap();
 
         assert_eq!(merged, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([(
                 "foo".to_string(),
                 "highest_precedence".to_string()
@@ -4147,7 +4152,7 @@ pub(crate) mod tests {
             .unwrap();
 
         assert_eq!(lockfile.manifest, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
             ..Default::default()
         });
@@ -4192,7 +4197,7 @@ pub(crate) mod tests {
         .unwrap();
 
         assert_eq!(merged, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([(
                 "foo".to_string(),
                 if modify_include_descriptor {
@@ -4265,7 +4270,7 @@ pub(crate) mod tests {
             .unwrap();
 
         assert_eq!(lockfile.manifest, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
             ..Default::default()
         });
