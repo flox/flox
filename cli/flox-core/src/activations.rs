@@ -743,9 +743,11 @@ pub mod rewrite {
     }
 
     #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-    struct Attachment {
-        start_id: StartIdentifier,
-        expiration: Option<OffsetDateTime>,
+    pub struct Attachment {
+        // TODO: should be private
+        pub start_id: StartIdentifier,
+        // TODO: should be private
+        pub expiration: Option<OffsetDateTime>,
     }
 
     #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -768,7 +770,8 @@ pub mod rewrite {
         ready: Ready,
         executive_pid: Pid,
         current_process_compose_store_path: Option<StartIdentifier>,
-        attached_pids: BTreeMap<Pid, Attachment>,
+        // TODO: make private
+        pub attached_pids: BTreeMap<Pid, Attachment>,
     }
 
     impl ActivationState {
