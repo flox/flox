@@ -743,7 +743,7 @@ pub mod rewrite {
     }
 
     #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-    struct Attachment {
+    pub struct Attachment {
         start_id: StartIdentifier,
         expiration: Option<OffsetDateTime>,
     }
