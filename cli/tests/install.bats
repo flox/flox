@@ -520,9 +520,9 @@ EOF
 }
 
 @test "'flox install' with outputs and version" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello_with_version.yaml"
   "$FLOX_BIN" init
-  run "$FLOX_BIN" install 'hello@1.0^bin,man'
+  run "$FLOX_BIN" install 'hello@2.12.2^bin,man'
   assert_success
 
   # Check all fields
@@ -530,7 +530,7 @@ EOF
   assert_equal "$hello_pkg_path" "hello"
 
   hello_version="$(tomlq -r -c '.install.hello.version' < "$MANIFEST_PATH")"
-  assert_equal "$hello_version" "1.0"
+  assert_equal "$hello_version" "2.12.2"
 
   run tomlq -r -c '.install.hello.outputs' "$MANIFEST_PATH"
   assert_success
