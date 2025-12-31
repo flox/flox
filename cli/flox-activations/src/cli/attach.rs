@@ -31,7 +31,9 @@ pub struct AttachArgs {
 #[derive(Debug, Args)]
 #[group(required = true, multiple = false)]
 pub struct AttachExclusiveArgs {
-    #[arg(help = "How long to wait between termination of this PID and cleaning up its interest.")]
+    #[arg(
+        help = "How long to wait between termination of this PID and cleaning up its interest. The pid argument must already be attached to the activation, so this simply adds an expiration."
+    )]
     #[arg(short, long, value_name = "TIME_MS")]
     pub timeout_ms: Option<u32>,
     #[arg(help = "Remove the specified PID when attaching to this activation.")]
@@ -90,31 +92,66 @@ impl AttachArgs {
 
 #[cfg(test)]
 mod test {
-    use std::path::PathBuf;
+    use std::collections::BTreeMap;
+    use std::path::{Path, PathBuf};
 
-    use flox_core::activations::AttachedPid;
+    use flox_core::activate::mode::ActivateMode;
+    use flox_core::activations::rewrite::{
+        ActivationState,
+        StartOrAttachResult,
+        read_activations_json,
+        write_activations_json,
+    };
+    use flox_core::activations::{acquire_activations_json_lock, state_json_path};
+    use pretty_assertions::assert_eq;
     use tempfile::TempDir;
+    use time::OffsetDateTime;
 
     use super::{AttachArgs, AttachExclusiveArgs};
-    use crate::cli::test::{read_activations, write_activations};
 
+    /// Helper to write an ActivationState to disk
+    ///
+    /// Takes ownership of state so we don't accidentally use it after e.g. a
+    /// watcher modifies state on disk
+    pub fn write_activation_state(
+        runtime_dir: &Path,
+        dot_flox_path: &Path,
+        state: ActivationState,
+    ) {
+        let state_json_path = state_json_path(runtime_dir, dot_flox_path);
+        let lock = acquire_activations_json_lock(&state_json_path).expect("failed to acquire lock");
+        write_activations_json(&state, &state_json_path, lock).expect("failed to write state");
+    }
+    /// Helper to read an ActivationState from disk
+    pub fn read_activation_state(runtime_dir: &Path, dot_flox_path: &Path) -> ActivationState {
+        let state_json_path = state_json_path(runtime_dir, dot_flox_path);
+        let (state, _lock) = read_activations_json(&state_json_path).expect("failed to read state");
+        state.unwrap()
+    }
+
+    /// Attaching with a timeout adds an expiration to the (already) attached PID
     #[test]
-    fn attach_to_id_with_new_pid() {
+    fn add_timeout_to_pid() {
         let runtime_dir = TempDir::new().unwrap();
         let flox_env = PathBuf::from("/path/to/floxenv");
-        let new_pid = 5678;
+        let pid = 1234;
+        let store_path = PathBuf::from("/nix/store/test");
 
-        let id = write_activations(&runtime_dir, &flox_env, |activations| {
-            activations
-                .create_activation("/store/path", 1234)
-                .unwrap()
-                .id()
-        });
+        // Create an activation with a PID attached
+        let mut state = ActivationState::new(&ActivateMode::default());
+        let result = state.start_or_attach(pid, &store_path);
+        let StartOrAttachResult::Start { start_id, .. } = result else {
+            panic!("Expected Start")
+        };
+        state.set_ready(&start_id);
+        write_activation_state(runtime_dir.path(), &flox_env, state);
 
+        // Attach the same PID with a timeout (replaces itself with expiration)
         let args = AttachArgs {
             dot_flox_path: flox_env.clone(),
-            id: id.clone(),
-            pid: new_pid,
+            pid,
+            store_path: start_id.store_path.clone(),
+            timestamp: start_id.timestamp.clone(),
             exclusive: AttachExclusiveArgs {
                 timeout_ms: Some(1000),
                 remove_pid: None,
@@ -122,38 +159,42 @@ mod test {
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
 
-        args.handle().unwrap();
+        let now = OffsetDateTime::now_utc();
+        args.handle_inner(now).unwrap();
 
-        let activation = read_activations(&runtime_dir, &flox_env, |activations| {
-            activations.activation_for_id_ref(id).unwrap().clone()
-        })
-        .unwrap();
+        let state = read_activation_state(runtime_dir.path(), &flox_env);
 
-        activation
-            .attached_pids()
-            .iter()
-            .find(|pid| pid.pid == new_pid)
-            .expect("pid was attached");
+        let expected_attachments = BTreeMap::from([(start_id.clone(), vec![(
+            pid,
+            Some(now + time::Duration::milliseconds(1000)),
+        )])]);
+        assert_eq!(state.attachments_by_start_id(), expected_attachments);
     }
 
+    /// Attaching with remove_pid replaces the attachment for the old PID with the new one
     #[test]
-    fn attach_to_id_with_replace() {
+    fn attach_with_replace() {
         let runtime_dir = TempDir::new().unwrap();
         let flox_env = PathBuf::from("/path/to/floxenv");
         let old_pid = 1234;
         let new_pid = 5678;
+        let store_path = PathBuf::from("store_path");
 
-        let id = write_activations(&runtime_dir, &flox_env, |activations| {
-            activations
-                .create_activation("/store/path", old_pid)
-                .unwrap()
-                .id()
-        });
+        // Create an activation with the old PID attached
+        let mut state = ActivationState::new(&ActivateMode::default());
+        let result = state.start_or_attach(old_pid, &store_path);
+        let StartOrAttachResult::Start { start_id, .. } = result else {
+            panic!("Expected Start")
+        };
+        state.set_ready(&start_id);
+        write_activation_state(runtime_dir.path(), &flox_env, state);
 
+        // Replace old PID with new PID
         let args = AttachArgs {
             dot_flox_path: flox_env.clone(),
-            id: id.clone(),
             pid: new_pid,
+            store_path: start_id.store_path.clone(),
+            timestamp: start_id.timestamp.clone(),
             exclusive: AttachExclusiveArgs {
                 timeout_ms: None,
                 remove_pid: Some(old_pid),
@@ -163,14 +204,9 @@ mod test {
 
         args.handle().unwrap();
 
-        let activation = read_activations(&runtime_dir, &flox_env, |activations| {
-            activations.activation_for_id_ref(id).unwrap().clone()
-        })
-        .unwrap();
+        let activation = read_activation_state(runtime_dir.path(), &flox_env);
 
-        assert_eq!(activation.attached_pids(), &[AttachedPid {
-            pid: new_pid,
-            expiration: None
-        }]);
+        let expected_attachments = BTreeMap::from([(start_id.clone(), vec![(new_pid, None)])]);
+        assert_eq!(activation.attachments_by_start_id(), expected_attachments);
     }
 }
