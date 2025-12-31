@@ -450,12 +450,14 @@ impl Provider for PoetryPyProject {
                     pkg_path: "python3".to_string(),
                     version: python_version,
                     systems: None,
+                    outputs: None,
                 },
                 CatalogPackage {
                     id: "poetry".to_string(),
                     pkg_path: "poetry".to_string(),
                     version: None,
                     systems: None,
+                    outputs: None,
                 },
             ]),
             ..Default::default()
@@ -647,6 +649,7 @@ impl Provider for PyProject {
                 pkg_path: "python3".to_string(),
                 version: python_version,
                 systems: None,
+                outputs: None,
             }]),
             ..Default::default()
         }
@@ -799,6 +802,7 @@ impl Provider for Requirements {
                 pkg_path: "python3".to_string(),
                 version: None,
                 systems: None,
+                outputs: None,
             }]),
             ..Default::default()
         }

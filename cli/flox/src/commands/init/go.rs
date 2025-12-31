@@ -152,6 +152,7 @@ impl InitHook for Go {
                 pkg_path: "go".to_string(),
                 version: go_version,
                 systems: None,
+                outputs: None,
             }]),
             ..Default::default()
         }
