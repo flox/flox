@@ -7,7 +7,7 @@ make.pkg-path = "gnumake"
 
 # Darwin only
 [install.clang]
-pkg-path = "clang"
+pkg-path = "clang_20"
 systems = ["aarch64-darwin", "x86_64-darwin"]
 
 [install.cctools]
@@ -17,10 +17,6 @@ priority = 6
 
 [install.libcxx]
 pkg-path = "libcxx"
-systems = ["aarch64-darwin", "x86_64-darwin"]
-
-[install.libcxxabi]
-pkg-path = "libcxxabi"
 systems = ["aarch64-darwin", "x86_64-darwin"]
 
 # Linux only
