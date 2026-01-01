@@ -146,7 +146,7 @@ fn add_start_script_options(
     invocation_type: InvocationType,
 ) {
     command.args([
-        "--activation-state-dir",
+        "--start-state-dir",
         &start_or_attach_result
             .activation_state_dir
             .to_string_lossy(),
