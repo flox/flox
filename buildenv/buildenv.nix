@@ -36,24 +36,24 @@ let
   system = builtins.currentSystem;
 
   # Copy manifest file into the store for access within derivations.
-  manifestLockFile = builtins.path {
+  lockfilePath = builtins.path {
     path = manifestLock;
     name = "manifest.lock";
   };
 
   # Parse the manifest file.
-  manifestLockData = builtins.fromJSON (builtins.readFile manifestLock);
-  manifestData = manifestLockData.manifest;
+  lockfile = builtins.fromJSON (builtins.readFile manifestLock);
+  manifest = lockfile.manifest;
 
-  buildSection = if (builtins.hasAttr "build" manifestData) then manifestData.build else { };
-  hookSection = if (builtins.hasAttr "hook" manifestData) then manifestData.hook else { };
-  profileSection = if (builtins.hasAttr "profile" manifestData) then manifestData.profile else { };
+  buildSection = if (builtins.hasAttr "build" manifest) then manifest.build else { };
+  hookSection = if (builtins.hasAttr "hook" manifest) then manifest.hook else { };
+  profileSection = if (builtins.hasAttr "profile" manifest) then manifest.profile else { };
   vars =
-    if (builtins.hasAttr "vars" manifestData) then
+    if (builtins.hasAttr "vars" manifest) then
       (builtins.toFile "envrc-vars" (
         builtins.concatStringsSep "" (
-          builtins.map (n: "export ${n}=\"${builtins.getAttr n manifestData.vars}\"\n") (
-            builtins.attrNames manifestData.vars
+          builtins.map (n: "export ${n}=\"${builtins.getAttr n manifest.vars}\"\n") (
+            builtins.attrNames manifest.vars
           )
         )
         # alternative ... worth it?
@@ -71,12 +71,12 @@ let
   ]
   ++ (builtins.map (buildId: "build-${buildId}") (builtins.attrNames buildSection));
 
-  createManifestChunks = [
+  createRenderedEnvironmentChunks = [
     # static chunks
     ''
       export PATH="${coreutils}/bin''${PATH:+:}''${PATH}"
       "${coreutils}/bin/mkdir" -p $out/activate.d
-      "${coreutils}/bin/cp" --no-preserve=mode ${manifestLockFile} $out/manifest.lock
+      "${coreutils}/bin/cp" --no-preserve=mode ${lockfilePath} $out/manifest.lock
       "${coreutils}/bin/cp" --no-preserve=mode ${defaultEnvrc} $out/activate.d/envrc
     ''
     # [vars] section
@@ -168,8 +168,8 @@ let
     ) (builtins.attrNames buildSection)
   );
 
-  createManifestScript = builtins.toFile "create-manifest-script" (
-    builtins.concatStringsSep "" createManifestChunks
+  renderEnvironmentScript = builtins.toFile "render-environment-script" (
+    builtins.concatStringsSep "" createRenderedEnvironmentChunks
   );
 
   # Create manifest package as derivation which invokes above script.
@@ -179,7 +179,7 @@ let
     builder = "/bin/sh";
     args = [
       "-eux"
-      createManifestScript
+      renderEnvironmentScript
     ];
   };
 
@@ -235,12 +235,12 @@ let
       )
     else
       [ ]
-  ) manifestLockData.packages;
+  ) lockfile.packages;
 
 in
 # Throw a more meaningful error when lockfile version is < 1.
-assert (builtins.hasAttr "lockfile-version" manifestLockData);
-assert manifestLockData."lockfile-version" != "0";
+assert (builtins.hasAttr "lockfile-version" lockfile);
+assert lockfile."lockfile-version" != "0";
 builtins.derivation {
   inherit name;
   builder = "${floxBuildEnv}/lib/builder.pl";
