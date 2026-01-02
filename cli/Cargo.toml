@@ -108,7 +108,7 @@ serial_test = "3.2.0"
 temp-env = "0.3.2"
 
 # GSSAPI/Kerberos authentication
-libgssapi = "0.7"
+libgssapi = "0.9"
 base64 = "0.22"
 
 # watchdog dependencies
