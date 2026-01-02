@@ -41,6 +41,7 @@ use crate::data::CanonicalPath;
 use crate::flox::{Flox, RemoteEnvironmentRef};
 use crate::models::env_registry::{EnvRegistryError, deregister, ensure_registered};
 use crate::models::environment::floxmeta_branch::{
+    BranchOrd,
     FloxmetaBranch,
     FloxmetaBranchError,
     GenerationLock,
@@ -1415,37 +1416,37 @@ impl ManagedEnvironment {
             e @ Err(_) => e?,
         };
 
-        // Check whether we can fast-forward merge the remote branch into the local branch
-        // If "not" the environment has diverged.
-        // if `--force` flag is set we skip this check
-        if !force {
-            let consistent_history = self
-                .floxmeta_branch
-                .git()
-                .branch_contains_commit(sync_branch, project_branch)
-                .map_err(ManagedEnvironmentError::Git)?;
+        let branch_ord = self
+            .floxmeta_branch
+            .compare_remote()
+            .map_err(ManagedEnvironmentError::FloxmetaBranch)?;
 
-            if !consistent_history {
-                let local = generations
-                    .metadata()
-                    .map_err(ManagedEnvironmentError::Generations)?
-                    .into_inner();
-
-                let remote =
-                    Generations::new(self.floxmeta_branch.git().clone(), sync_branch.to_owned())
-                        .metadata()
-                        .map_err(ManagedEnvironmentError::Generations)?
-                        .into_inner();
-
-                Err(ManagedEnvironmentError::Diverged(DivergedMetadata {
-                    local,
-                    remote,
-                }))?;
-            }
+        if matches!(branch_ord, BranchOrd::Equal | BranchOrd::Behind) && !force {
+            return Ok(PushResult::UpToDate);
         }
 
-        let push_flag = self
-            .floxmeta_branch
+        // If the local branch is already ahead, or both branches have changes,
+        // we diverged and need to abort (unless we blot over local state explicitly with `force`)
+        if (matches!(branch_ord, BranchOrd::Diverged)) && !force {
+            let local = generations
+                .metadata()
+                .map_err(ManagedEnvironmentError::Generations)?
+                .into_inner();
+
+            let remote = self
+                .floxmeta_branch
+                .remote_generations()
+                .metadata()
+                .map_err(ManagedEnvironmentError::Generations)?
+                .into_inner();
+
+            Err(ManagedEnvironmentError::Diverged(DivergedMetadata {
+                local,
+                remote,
+            }))?;
+        }
+
+        self.floxmeta_branch
             .git()
             .push_ref(
                 "dynamicorigin",
@@ -1456,10 +1457,6 @@ impl ManagedEnvironment {
                 GitRemoteCommandError::AccessDenied => ManagedEnvironmentError::AccessDenied,
                 _ => ManagedEnvironmentError::Push(err),
             })?;
-
-        if push_flag == PushFlag::UptoDate {
-            return Ok(PushResult::UpToDate);
-        }
 
         // update local environment branch, should be fast-forward and a noop if the branches didn't diverge
         self.pull(flox, force)?;
@@ -1493,39 +1490,34 @@ impl ManagedEnvironment {
 
         self.fetch_remote_state(flox)?;
 
-        // Check whether we can fast-forward the remote branch to the local branch,
-        // if not the environment has diverged.
-        let consistent_history = self
+        let branch_ord = self
             .floxmeta_branch
-            .git()
-            .branch_contains_commit(project_branch, sync_branch)
-            .map_err(ManagedEnvironmentError::Git)?;
-        if !consistent_history && !force {
+            .compare_remote()
+            .map_err(ManagedEnvironmentError::FloxmetaBranch)?;
+
+        if matches!(branch_ord, BranchOrd::Equal | BranchOrd::Ahead) {
+            return Ok(PullResult::UpToDate);
+        }
+
+        // If the local branch is already ahead, or both branches have changes,
+        // we diverged and need to abort (unless we blot over local state explicitly with `force`)
+        if (matches!(branch_ord, BranchOrd::Diverged)) && !force {
             let local = generations
                 .metadata()
                 .map_err(ManagedEnvironmentError::Generations)?
                 .into_inner();
 
-            let remote =
-                Generations::new(self.floxmeta_branch.git().clone(), sync_branch.to_owned())
-                    .metadata()
-                    .map_err(ManagedEnvironmentError::Generations)?
-                    .into_inner();
+            let remote = self
+                .floxmeta_branch
+                .remote_generations()
+                .metadata()
+                .map_err(ManagedEnvironmentError::Generations)?
+                .into_inner();
 
             Err(ManagedEnvironmentError::Diverged(DivergedMetadata {
                 local,
                 remote,
             }))?;
-        }
-
-        let sync_branch_commit = self.floxmeta_branch.git().branch_hash(sync_branch).ok();
-        let project_branch_commit = self.floxmeta_branch.git().branch_hash(project_branch).ok();
-
-        // Regardless of whether `--force` is set, we want to accurately return UpToDate
-        // If the checkout is not the same as the current generation, we should
-        // instead reset_local_env_to_current_generation below
-        if checkout_valid && sync_branch_commit == project_branch_commit {
-            return Ok(PullResult::UpToDate);
         }
 
         // update the project branch to the remote branch, using `force` if specified

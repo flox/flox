@@ -283,6 +283,10 @@ impl FloxmetaBranch {
             .map_err(FloxmetaBranchError::DeleteBranch)?;
         Ok(())
     }
+
+    pub fn compare_remote(&self) -> Result<BranchOrd, FloxmetaBranchError> {
+        compare_branches(&self.floxmeta.git, self.branch(), self.remote_branch())
+    }
 }
 
 /// Acquire exclusive lock on floxmeta directory
@@ -662,7 +666,7 @@ fn prune_branches_from_floxmeta(
     Ok(())
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BranchOrd {
     Equal,
     Ahead,
