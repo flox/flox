@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::{env, fs};
+use std::{env, fs, process};
 
 use anyhow::Result;
 use clap::Args;
@@ -80,9 +80,7 @@ impl ExecutiveArgs {
             disable_metrics: env::var(FLOX_DISABLE_METRICS_VAR).is_ok(),
         };
 
-        // NB: If we rename this log file then we also need to update the globs
-        // for GC and continue to cover the old names for a period of time.
-        let log_file = format!("watchdog.{}.log", &start_or_attach.activation_id);
+        let log_file = format!("executive.{}.log", process::id());
         debug!(
             log_dir = traceable_path(&watchdog.log_dir),
             log_file, "switching to file logging"
