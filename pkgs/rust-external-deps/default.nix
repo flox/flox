@@ -2,6 +2,8 @@
   inputs,
   lib,
   openssl,
+  rustPlatform,
+  krb5,
   pkg-config,
   pkgsFor,
   rust-toolchain,
@@ -38,10 +40,14 @@ let
       buildInputs = [
         # reqwest -> hyper -> openssl-sys
         openssl.dev
+
+        # for gssapi bindings
+        krb5.dev
       ];
 
       nativeBuildInputs = [
         pkg-config
+        rustPlatform.bindgenHook
       ]
       ++ lib.optional (stdenv.hostPlatform.system == "x86_64-linux") [ llvmPackages.bintools ];
       passthru = {
