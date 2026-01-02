@@ -14,6 +14,7 @@ use crate::models::floxmeta::{BRANCH_NAME_PATH_SEPARATOR, FloxMeta, FloxMetaErro
 use crate::providers::git::{
     GitCommandBranchHashError,
     GitCommandError,
+    GitCommandProvider,
     GitProvider,
     GitRemoteCommandError,
 };
@@ -282,72 +283,10 @@ impl FloxmetaBranch {
             .map_err(FloxmetaBranchError::DeleteBranch)?;
         Ok(())
     }
-}
 
-/// Prune the local branch for a deleted environment defined in `dot_flox_dir`.
-/// If there are no more local branches, then also prune the remote branch.
-/// Already absent branches are not treated as errors.
-// Note: this is a convenience wrapper over `prune_branches_from_floxmeta`
-// to avoid exposing `*branch_name`
-pub fn prune_branches_from_floxmeta_by_pointer(
-    floxmeta: &mut FloxMeta,
-    pointer: &ManagedPointer,
-    dot_flox_dir: &CanonicalPath,
-) -> Result<(), FloxMetaError> {
-    prune_branches_from_floxmeta(
-        floxmeta,
-        &branch_name(pointer, dot_flox_dir),
-        &remote_branch_name(pointer),
-    )
-}
-
-/// Prune the local branch for a deleted environment. If there are no more
-/// local branches, then also prune the remote branch. Already absent
-/// branches are not treated as errors.
-fn prune_branches_from_floxmeta(
-    floxmeta: &mut FloxMeta,
-    local_branch: &str,
-    remote_branch: &str,
-) -> Result<(), FloxMetaError> {
-    let branch_names = floxmeta
-        .git
-        .list_branches()
-        .map_err(FloxMetaError::ListBranch)?
-        .iter()
-        .map(|branch| branch.name.clone())
-        .collect::<Vec<_>>();
-
-    if branch_names
-        .iter()
-        .any(|branch_name| branch_name == local_branch)
-    {
-        floxmeta
-            .git
-            .delete_branch(local_branch, true)
-            .map_err(FloxMetaError::DeleteBranch)?;
+    pub fn compare_remote(&self) -> Result<BranchOrd, FloxmetaBranchError> {
+        compare_branches(&self.floxmeta.git, self.branch(), self.remote_branch())
     }
-
-    if branch_names
-        .iter()
-        .any(|branch_name| branch_name == remote_branch)
-    {
-        let branches_for_other_paths =
-            branch_names
-                .iter()
-                .any(|name| match name.rsplit_once(BRANCH_NAME_PATH_SEPARATOR) {
-                    Some((prefix, _)) => prefix == remote_branch,
-                    _ => false,
-                });
-
-        if !branches_for_other_paths {
-            floxmeta
-                .git
-                .delete_branch(remote_branch, true)
-                .map_err(FloxMetaError::DeleteBranch)?;
-        }
-    }
-
-    Ok(())
 }
 
 /// Acquire exclusive lock on floxmeta directory
@@ -659,6 +598,123 @@ pub(super) fn write_generation_lock(
 
     fs::write(lock_path, lock_contents).map_err(FloxmetaBranchError::WriteLock)?;
     Ok(())
+}
+
+/// Prune the local branch for a deleted environment defined in `dot_flox_dir`.
+/// If there are no more local branches, then also prune the remote branch.
+/// Already absent branches are not treated as errors.
+// Note: this is a convenience wrapper over `prune_branches_from_floxmeta`
+// to avoid exposing `*branch_name`
+pub fn prune_branches_from_floxmeta_by_pointer(
+    floxmeta: &mut FloxMeta,
+    pointer: &ManagedPointer,
+    dot_flox_dir: &CanonicalPath,
+) -> Result<(), FloxMetaError> {
+    prune_branches_from_floxmeta(
+        floxmeta,
+        &branch_name(pointer, dot_flox_dir),
+        &remote_branch_name(pointer),
+    )
+}
+
+/// Prune the local branch for a deleted environment. If there are no more
+/// local branches, then also prune the remote branch. Already absent
+/// branches are not treated as errors.
+fn prune_branches_from_floxmeta(
+    floxmeta: &mut FloxMeta,
+    local_branch: &str,
+    remote_branch: &str,
+) -> Result<(), FloxMetaError> {
+    let branch_names = floxmeta
+        .git
+        .list_branches()
+        .map_err(FloxMetaError::ListBranch)?
+        .iter()
+        .map(|branch| branch.name.clone())
+        .collect::<Vec<_>>();
+
+    if branch_names
+        .iter()
+        .any(|branch_name| branch_name == local_branch)
+    {
+        floxmeta
+            .git
+            .delete_branch(local_branch, true)
+            .map_err(FloxMetaError::DeleteBranch)?;
+    }
+
+    if branch_names
+        .iter()
+        .any(|branch_name| branch_name == remote_branch)
+    {
+        let branches_for_other_paths =
+            branch_names
+                .iter()
+                .any(|name| match name.rsplit_once(BRANCH_NAME_PATH_SEPARATOR) {
+                    Some((prefix, _)) => prefix == remote_branch,
+                    _ => false,
+                });
+
+        if !branches_for_other_paths {
+            floxmeta
+                .git
+                .delete_branch(remote_branch, true)
+                .map_err(FloxMetaError::DeleteBranch)?;
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BranchOrd {
+    Equal,
+    Ahead,
+    Behind,
+    Diverged,
+}
+/// Compare the history of two branches in a given git repo.
+///
+/// The result is to be read as
+///
+///     <branch_a> is <equal to| ahead of | behind | diverged from> <branch_b>
+///
+/// This is primarily used via [FloxmetaBranch::compare_remote]
+/// to inform push/pull operations about whether to expect to succeed,
+/// as well as to improve informational messages.
+fn compare_branches(
+    git: &GitCommandProvider,
+    branch_a: &str,
+    branch_b: &str,
+) -> Result<BranchOrd, FloxmetaBranchError> {
+    let branch_a_rev = git
+        .branch_hash(branch_a)
+        .map_err(FloxmetaBranchError::GitBranchHash)?;
+    let branch_b_rev = git
+        .branch_hash(branch_b)
+        .map_err(FloxmetaBranchError::GitBranchHash)?;
+
+    if branch_a_rev == branch_b_rev {
+        return Ok(BranchOrd::Equal);
+    };
+
+    // branch b contained in branch a
+    if git
+        .branch_contains_commit(branch_b, branch_a)
+        .map_err(FloxmetaBranchError::CheckGitRevision)?
+    {
+        return Ok(BranchOrd::Ahead);
+    }
+
+    // branch a contained in branch b
+    if git
+        .branch_contains_commit(branch_a, branch_b)
+        .map_err(FloxmetaBranchError::CheckGitRevision)?
+    {
+        return Ok(BranchOrd::Behind);
+    }
+
+    Ok(BranchOrd::Diverged)
 }
 
 pub mod test_helpers {
@@ -1477,5 +1533,81 @@ mod tests {
         let lock2 = branch_access.generation_lock().unwrap();
         assert_eq!(lock2.rev, hash_2);
         assert_eq!(lock2.local_rev, Some(hash_1));
+    }
+
+    fn create_equal_branches(flox: &Flox) -> (GitCommandProvider, &str, &str) {
+        let branch_a = "branch_a";
+        let branch_b = "branch_b";
+        let git = GitCommandProvider::init(flox.temp_dir.as_path(), false).unwrap();
+        git.checkout(branch_a, true).unwrap();
+        commit_file(&git, "file_1");
+        git.create_branch(branch_b, branch_a).unwrap();
+
+        (git, branch_a, branch_b)
+    }
+
+    /// Branches at the same revision should compare as equal
+    #[test]
+    fn test_compare_branches_equal() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let (git, branch_a, branch_b) = create_equal_branches(&flox);
+        let result = compare_branches(&git, branch_a, branch_b).unwrap();
+        assert!(
+            matches!(result, BranchOrd::Equal),
+            "Expected Equal, got {:?}",
+            result
+        );
+    }
+
+    /// Additional commits should compare as ahead
+    #[test]
+    fn test_compare_branches_ahead() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let (git, branch_a, branch_b) = create_equal_branches(&flox);
+        commit_file(&git, "file_2");
+
+        let result = compare_branches(&git, branch_a, branch_b).unwrap();
+        assert!(
+            matches!(result, BranchOrd::Ahead),
+            "Expected Ahead, got {:?}",
+            result
+        );
+    }
+
+    /// Missing commits should compare as behind
+    #[test]
+    fn test_compare_branches_behind() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let (git, branch_a, branch_b) = create_equal_branches(&flox);
+        git.checkout(branch_b, false).unwrap();
+        commit_file(&git, "file_2");
+
+        let result = compare_branches(&git, branch_a, branch_b).unwrap();
+        assert!(
+            matches!(result, BranchOrd::Behind),
+            "Expected Behind, got {:?}",
+            result
+        );
+    }
+
+    /// Additional commits on both branches should compare as diverged
+    #[test]
+    fn test_compare_branches_diverged() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let (git, branch_a, branch_b) = create_equal_branches(&flox);
+        commit_file(&git, "file_2a");
+        git.checkout(branch_b, false).unwrap();
+        commit_file(&git, "file_2b");
+
+        let result = compare_branches(&git, branch_a, branch_b).unwrap();
+        assert!(
+            matches!(result, BranchOrd::Diverged),
+            "Expected Diverged, got {:?}",
+            result
+        );
     }
 }
