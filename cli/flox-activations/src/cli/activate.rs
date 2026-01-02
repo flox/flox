@@ -324,24 +324,9 @@ impl ActivateArgs {
         // Create the directory
         std::fs::create_dir_all(&activation_state_dir)?;
 
-        // For now, create old-style StartOrAttachResult for ExecutiveCtx compatibility
-        // (Will be replaced in Phase 2 with StartIdentifier)
-        let activation_id = format!(
-            "{}.{}",
-            start_id.store_path.file_name().unwrap().to_string_lossy(),
-            *start_id.timestamp
-        );
-
-        let old_start_or_attach = crate::cli::start_or_attach::StartOrAttachResult {
-            attach: false,
-            activation_state_dir: activation_state_dir.clone(),
-            activation_id,
-        };
-
         // Serialize ExecutiveCtx
         let executive_ctx = ExecutiveCtx {
             context: context.clone(),
-            start_or_attach: old_start_or_attach,
             parent_pid: parent_pid.as_raw(),
         };
 
