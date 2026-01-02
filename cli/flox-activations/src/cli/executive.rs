@@ -75,7 +75,6 @@ impl ExecutiveArgs {
             dot_flox_path: context.attach_ctx.dot_flox_path.clone(),
             flox_env: context.attach_ctx.env.clone().into(),
             runtime_dir: context.attach_ctx.flox_runtime_dir.clone().into(),
-            activation_id: start_or_attach.activation_id.clone(),
             socket_path: socket_path.into(),
             log_dir: log_dir.into(),
             disable_metrics: env::var(FLOX_DISABLE_METRICS_VAR).is_ok(),
@@ -83,7 +82,7 @@ impl ExecutiveArgs {
 
         // NB: If we rename this log file then we also need to update the globs
         // for GC and continue to cover the old names for a period of time.
-        let log_file = format!("watchdog.{}.log", &watchdog.activation_id);
+        let log_file = format!("watchdog.{}.log", &start_or_attach.activation_id);
         debug!(
             log_dir = traceable_path(&watchdog.log_dir),
             log_file, "switching to file logging"
