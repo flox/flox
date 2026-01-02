@@ -238,8 +238,8 @@ wait_for_activations() {
         fi
       done
 
-      echo "Watchdog logs:" >&3
-      cat "${project_dir}"/.flox/log/watchdog.* >&3
+      echo "Executive logs:" >&3
+      cat "${project_dir}"/.flox/log/executive.* >&3
 
       echo "Bats processes:" >&3
       pstree -ws "$BATS_RUN_TMPDIR" >&3
