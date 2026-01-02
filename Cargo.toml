@@ -113,7 +113,7 @@ temp-env = "0.3.2"
 expect-test = "1"
 
 # GSSAPI/Kerberos authentication
-libgssapi = "0.7"
+libgssapi = "0.9"
 base64 = "0.22"
 
 # executive/monitoring dependencies
