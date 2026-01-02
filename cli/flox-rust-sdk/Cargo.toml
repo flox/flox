@@ -48,6 +48,8 @@ proptest-derive = { workspace = true, optional = true }
 http.workspace = true
 httpmock.workspace = true
 schemars = { workspace = true, features = ["chrono04"] }
+libgssapi.workspace = true
+base64.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
