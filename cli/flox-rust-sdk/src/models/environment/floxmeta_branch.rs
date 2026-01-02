@@ -14,6 +14,7 @@ use crate::models::floxmeta::{BRANCH_NAME_PATH_SEPARATOR, FloxMeta, FloxMetaErro
 use crate::providers::git::{
     GitCommandBranchHashError,
     GitCommandError,
+    GitCommandProvider,
     GitProvider,
     GitRemoteCommandError,
 };
@@ -659,6 +660,57 @@ fn prune_branches_from_floxmeta(
     }
 
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum BranchOrd {
+    Equal,
+    Ahead,
+    Behind,
+    Diverged,
+}
+/// Compare the history of two branches in a given git repo.
+///
+/// The result is to be read as
+///
+///     <branch_a> is <equal to| ahead of | behind | diverged from> <branch_b>
+///
+/// This is primarily used via [FloxmetaBranch::compare_remote]
+/// to inform push/pull operations about whether to expect to succeed,
+/// as well as to improve informational messages.
+fn compare_branches(
+    git: &GitCommandProvider,
+    branch_a: &str,
+    branch_b: &str,
+) -> Result<BranchOrd, FloxmetaBranchError> {
+    let branch_a_rev = git
+        .branch_hash(branch_a)
+        .map_err(FloxmetaBranchError::GitBranchHash)?;
+    let branch_b_rev = git
+        .branch_hash(branch_b)
+        .map_err(FloxmetaBranchError::GitBranchHash)?;
+
+    if branch_a_rev == branch_b_rev {
+        return Ok(BranchOrd::Equal);
+    };
+
+    // branch b contained in branch a
+    if git
+        .branch_contains_commit(branch_b, branch_a)
+        .map_err(FloxmetaBranchError::CheckGitRevision)?
+    {
+        return Ok(BranchOrd::Ahead);
+    }
+
+    // branch a contained in branch b
+    if git
+        .branch_contains_commit(branch_a, branch_b)
+        .map_err(FloxmetaBranchError::CheckGitRevision)?
+    {
+        return Ok(BranchOrd::Behind);
+    }
+
+    Ok(BranchOrd::Diverged)
 }
 
 pub mod test_helpers {
@@ -1477,5 +1529,81 @@ mod tests {
         let lock2 = branch_access.generation_lock().unwrap();
         assert_eq!(lock2.rev, hash_2);
         assert_eq!(lock2.local_rev, Some(hash_1));
+    }
+
+    fn create_equal_branches(flox: &Flox) -> (GitCommandProvider, &str, &str) {
+        let branch_a = "branch_a";
+        let branch_b = "branch_b";
+        let git = GitCommandProvider::init(flox.temp_dir.as_path(), false).unwrap();
+        git.checkout(branch_a, true).unwrap();
+        commit_file(&git, "file_1");
+        git.create_branch(branch_b, branch_a).unwrap();
+
+        (git, branch_a, branch_b)
+    }
+
+    /// Branches at the same revision should compare as equal
+    #[test]
+    fn test_compare_branches_equal() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let (git, branch_a, branch_b) = create_equal_branches(&flox);
+        let result = compare_branches(&git, branch_a, branch_b).unwrap();
+        assert!(
+            matches!(result, BranchOrd::Equal),
+            "Expected Equal, got {:?}",
+            result
+        );
+    }
+
+    /// Additional commits should compare as ahead
+    #[test]
+    fn test_compare_branches_ahead() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let (git, branch_a, branch_b) = create_equal_branches(&flox);
+        commit_file(&git, "file_2");
+
+        let result = compare_branches(&git, branch_a, branch_b).unwrap();
+        assert!(
+            matches!(result, BranchOrd::Ahead),
+            "Expected Ahead, got {:?}",
+            result
+        );
+    }
+
+    /// Missing commits should compare as behind
+    #[test]
+    fn test_compare_branches_behind() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let (git, branch_a, branch_b) = create_equal_branches(&flox);
+        git.checkout(branch_b, false).unwrap();
+        commit_file(&git, "file_2");
+
+        let result = compare_branches(&git, branch_a, branch_b).unwrap();
+        assert!(
+            matches!(result, BranchOrd::Behind),
+            "Expected Behind, got {:?}",
+            result
+        );
+    }
+
+    /// Additional commits on both branches should compare as diverged
+    #[test]
+    fn test_compare_branches_diverged() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let (git, branch_a, branch_b) = create_equal_branches(&flox);
+        commit_file(&git, "file_2a");
+        git.checkout(branch_b, false).unwrap();
+        commit_file(&git, "file_2b");
+
+        let result = compare_branches(&git, branch_a, branch_b).unwrap();
+        assert!(
+            matches!(result, BranchOrd::Diverged),
+            "Expected Diverged, got {:?}",
+            result
+        );
     }
 }
