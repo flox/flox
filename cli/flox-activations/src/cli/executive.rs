@@ -16,13 +16,11 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
-use crate::cli::start_or_attach::StartOrAttachResult;
 use crate::logger;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutiveCtx {
     pub context: ActivateCtx,
-    pub start_or_attach: StartOrAttachResult,
     pub parent_pid: i32,
 }
 
@@ -44,7 +42,6 @@ impl ExecutiveArgs {
         let contents = fs::read_to_string(&self.executive_ctx)?;
         let ExecutiveCtx {
             context,
-            start_or_attach,
             parent_pid,
         } = serde_json::from_str(&contents)?;
         if !std::env::var(NO_REMOVE_ACTIVATION_FILES).is_ok_and(|val| val == "true") {
