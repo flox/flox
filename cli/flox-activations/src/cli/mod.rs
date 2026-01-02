@@ -11,7 +11,6 @@ pub mod fix_paths;
 mod prepend_and_dedup;
 mod profile_scripts;
 pub mod set_env_dirs;
-pub mod start_or_attach;
 
 use activate::ActivateArgs;
 use executive::ExecutiveArgs;

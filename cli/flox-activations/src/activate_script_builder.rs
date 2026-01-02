@@ -4,13 +4,13 @@ use std::process::Command;
 
 use flox_core::activate::context::{ActivateCtx, AttachCtx, InvocationType};
 use flox_core::activate::vars::{FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_VAR};
+use flox_core::activations::rewrite::StartIdentifier;
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
 
 use crate::cli::activate::VarsFromEnvironment;
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
-use crate::cli::start_or_attach::StartOrAttachResult;
 use crate::env_diff::EnvDiff;
 pub const FLOX_ENV_LOG_DIR_VAR: &str = "_FLOX_ENV_LOG_DIR";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
@@ -25,7 +25,7 @@ pub(super) fn assemble_command_for_start_script(
     context: ActivateCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
-    start_or_attach_result: &StartOrAttachResult,
+    start_id: &StartIdentifier,
     invocation_type: InvocationType,
 ) -> Command {
     let mut command = Command::new(
@@ -41,9 +41,9 @@ pub(super) fn assemble_command_for_start_script(
         &context.attach_ctx,
         subsystem_verbosity,
         vars_from_env,
-        start_or_attach_result,
+        start_id,
     );
-    add_start_script_options(&mut command, start_or_attach_result, invocation_type);
+    add_start_script_options(&mut command, &context.attach_ctx, start_id, invocation_type);
     command
 }
 
@@ -54,7 +54,7 @@ pub fn apply_activation_env(
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
     env_diff: &EnvDiff,
-    start_or_attach_result: &StartOrAttachResult,
+    start_id: &StartIdentifier,
 ) {
     command.envs(old_cli_envs(context.clone()));
     add_old_activate_script_exports(
@@ -62,7 +62,7 @@ pub fn apply_activation_env(
         &context,
         subsystem_verbosity,
         vars_from_env,
-        start_or_attach_result,
+        start_id,
     );
     command.envs(&env_diff.additions);
     for var in &env_diff.deletions {
@@ -142,14 +142,17 @@ fn add_old_cli_options(command: &mut Command, context: &ActivateCtx) {
 /// Options parsed by getopt that are only used by start.bash
 fn add_start_script_options(
     command: &mut Command,
-    start_or_attach_result: &StartOrAttachResult,
+    context: &AttachCtx,
+    start_id: &StartIdentifier,
     invocation_type: InvocationType,
 ) {
+    let state_dir_path = start_id
+        .state_dir_path(&context.flox_runtime_dir, &context.dot_flox_path)
+        .expect("Failed to compute state dir path");
+
     command.args([
         "--start-state-dir",
-        &start_or_attach_result
-            .activation_state_dir
-            .to_string_lossy(),
+        &state_dir_path.to_string_lossy(),
         "--invocation-type",
         &invocation_type.to_string(),
     ]);
@@ -164,7 +167,7 @@ fn add_old_activate_script_exports(
     context: &AttachCtx,
     subsystem_verbosity: u32,
     vars_from_environment: VarsFromEnvironment,
-    start_or_attach_result: &StartOrAttachResult,
+    start_id: &StartIdentifier,
 ) {
     let mut removals = Vec::new();
     let mut exports = HashMap::from([
@@ -181,9 +184,10 @@ fn add_old_activate_script_exports(
             context.dot_flox_path.to_string_lossy().to_string(),
         ),
         (
-            "_FLOX_ACTIVATION_STATE_DIR",
-            start_or_attach_result
-                .activation_state_dir
+            "_FLOX_START_STATE_DIR",
+            start_id
+                .state_dir_path(&context.flox_runtime_dir, &context.dot_flox_path)
+                .expect("Failed to compute state dir path")
                 .to_string_lossy()
                 .to_string(),
         ),

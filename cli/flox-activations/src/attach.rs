@@ -18,7 +18,6 @@ use tracing::debug;
 use crate::activate_script_builder::{activate_tracer, apply_activation_env, old_cli_envs};
 use crate::cli::activate::{NO_REMOVE_ACTIVATION_FILES, VarsFromEnvironment};
 use crate::cli::attach::{AttachArgs, AttachExclusiveArgs};
-use crate::cli::start_or_attach::StartOrAttachResult;
 use crate::env_diff::EnvDiff;
 use crate::gen_rc::bash::{BashStartupArgs, generate_bash_startup_commands};
 use crate::gen_rc::fish::{FishStartupArgs, generate_fish_startup_commands};
@@ -33,10 +32,13 @@ pub fn attach(
     invocation_type: InvocationType,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
-    start_or_attach: StartOrAttachResult,
     start_id: StartIdentifier,
 ) -> Result<(), anyhow::Error> {
-    let diff = EnvDiff::from_files(&start_or_attach.activation_state_dir)?;
+    let start_state_dir = start_id.state_dir_path(
+        &context.attach_ctx.flox_runtime_dir,
+        &context.attach_ctx.dot_flox_path,
+    )?;
+    let diff = EnvDiff::from_files(&start_state_dir)?;
 
     // Create the path if we're going to need it (we won't for in-place).
     // We're doing this ahead of time here because it's shell-agnostic and the `match`
@@ -47,10 +49,7 @@ pub fn attach(
             PathBuf::from(rc_path_str)
         } else {
             let prefix = format!("flox_rc_{}_", context.shell.name());
-            let tmp = tempfile::NamedTempFile::with_prefix_in(
-                prefix,
-                &start_or_attach.activation_state_dir,
-            )?;
+            let tmp = tempfile::NamedTempFile::with_prefix_in(prefix, &start_state_dir)?;
             let rc_path = tmp.path().to_path_buf();
             tmp.keep()?;
             rc_path
@@ -62,7 +61,7 @@ pub fn attach(
         invocation_type.clone(),
         rc_path,
         diff.clone(),
-        &start_or_attach.activation_state_dir,
+        &start_state_dir,
         &activate_tracer(&context.attach_ctx.interpreter_path),
         subsystem_verbosity,
     )?;
@@ -80,25 +79,22 @@ pub fn attach(
             Ok(())
         },
         // All other invocation types only return if exec fails
-        InvocationType::Interactive => activate_interactive(
-            startup_ctx,
-            subsystem_verbosity,
-            vars_from_env,
-            &start_or_attach,
-        ),
+        InvocationType::Interactive => {
+            activate_interactive(startup_ctx, subsystem_verbosity, vars_from_env, &start_id)
+        },
         InvocationType::ShellCommand(shell_command) => activate_shell_command(
             shell_command,
             startup_ctx,
             subsystem_verbosity,
             vars_from_env,
-            &start_or_attach,
+            &start_id,
         ),
         InvocationType::ExecCommand(exec_command) => activate_exec_command(
             exec_command,
             startup_ctx,
             subsystem_verbosity,
             vars_from_env,
-            &start_or_attach,
+            &start_id,
         ),
     }
 }
@@ -268,7 +264,7 @@ fn activate_exec_command(
     startup_ctx: StartupCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
-    start_or_attach_result: &StartOrAttachResult,
+    start_id: &StartIdentifier,
 ) -> Result<()> {
     if exec_command.is_empty() {
         return Err(anyhow!("empty command provided"));
@@ -283,7 +279,7 @@ fn activate_exec_command(
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
-        start_or_attach_result,
+        start_id,
     );
 
     debug!("executing command directly: {:?}", command);
@@ -302,7 +298,7 @@ fn activate_shell_command(
     startup_ctx: StartupCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
-    start_or_attach_result: &StartOrAttachResult,
+    start_id: &StartIdentifier,
 ) -> Result<()> {
     let mut command = Command::new(startup_ctx.act_ctx.shell.exe_path());
     apply_activation_env(
@@ -311,7 +307,7 @@ fn activate_shell_command(
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
-        start_or_attach_result,
+        start_id,
     );
 
     let rcfile = startup_ctx
@@ -426,7 +422,7 @@ fn activate_interactive(
     startup_ctx: StartupCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
-    start_or_attach_result: &StartOrAttachResult,
+    start_id: &StartIdentifier,
 ) -> Result<()> {
     let mut command = Command::new(startup_ctx.act_ctx.shell.exe_path());
     apply_activation_env(
@@ -435,7 +431,7 @@ fn activate_interactive(
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
-        start_or_attach_result,
+        start_id,
     );
 
     let rcfile = startup_ctx
