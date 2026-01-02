@@ -41,9 +41,6 @@ pub struct Cli {
     /// The path to the runtime directory keeping activation data
     pub runtime_dir: PathBuf,
 
-    /// The activation ID to monitor
-    pub activation_id: String,
-
     /// The path to the process-compose socket
     pub socket_path: PathBuf,
 
@@ -59,7 +56,6 @@ pub fn run(args: Cli) -> Result<(), Error> {
     let span = tracing::Span::current();
     span.record("flox_env", traceable_path(&args.flox_env));
     span.record("runtime_dir", traceable_path(&args.runtime_dir));
-    span.record("id", &args.activation_id);
     span.record("socket", traceable_path(&args.socket_path));
     span.record("log_dir", traceable_path(&args.log_dir));
     debug!("starting");
@@ -114,7 +110,6 @@ fn run_inner(
     spawn_logs_gc_threads(args.log_dir);
     info!(
         this_pid = nix::unistd::getpid().as_raw(),
-        target_activation_id = args.activation_id,
         "watchdog is on duty"
     );
 
@@ -281,7 +276,6 @@ mod test {
             dot_flox_path: dot_flox_path.clone(),
             flox_env: dot_flox_path.clone(),
             runtime_dir: runtime_dir.to_path_buf(),
-            activation_id: "test".to_string(),
             socket_path: PathBuf::from("/does_not_exist"),
             log_dir: log_dir.to_path_buf(),
             disable_metrics: true,
