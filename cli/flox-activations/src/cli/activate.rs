@@ -96,38 +96,13 @@ impl ActivateArgs {
             &vars_from_env,
         )?;
 
-        // Create legacy StartOrAttachResult for attach() compatibility
-        let start_or_attach = Self::start_identifier_to_legacy_result(&start_id, &context)?;
-
         attach(
             context,
             invocation_type,
             subsystem_verbosity,
             vars_from_env,
-            start_or_attach,
             start_id,
         )
-    }
-
-    /// Temporary helper to convert StartIdentifier to legacy StartOrAttachResult.
-    fn start_identifier_to_legacy_result(
-        start_id: &flox_core::activations::rewrite::StartIdentifier,
-        context: &ActivateCtx,
-    ) -> Result<crate::cli::start_or_attach::StartOrAttachResult, anyhow::Error> {
-        let activation_id = format!(
-            "{}.{}",
-            start_id.store_path.file_name().unwrap().to_string_lossy(),
-            *start_id.timestamp
-        );
-        let activation_state_dir = start_id.state_dir_path(
-            &context.attach_ctx.flox_runtime_dir,
-            &context.attach_ctx.dot_flox_path,
-        )?;
-        Ok(crate::cli::start_or_attach::StartOrAttachResult {
-            attach: false,
-            activation_state_dir,
-            activation_id,
-        })
     }
 
     fn start_or_attach(
@@ -236,9 +211,6 @@ impl ActivateArgs {
             _ => unreachable!(),
         };
 
-        // Create legacy StartOrAttachResult
-        let start_or_attach = Self::start_identifier_to_legacy_result(start_id, context)?;
-
         let new_exec_pid = if needs_new_executive {
             let exec_pid = self.spawn_executive(context, start_id)?;
             activations.set_executive_pid(exec_pid.as_raw());
@@ -259,7 +231,7 @@ impl ActivateArgs {
                     context.clone(),
                     subsystem_verbosity,
                     vars_from_env.clone(),
-                    &start_or_attach,
+                    start_id,
                     invocation_type.clone(),
                 );
                 debug!("spawning start.bash: {:?}", start_command);
@@ -292,12 +264,16 @@ impl ActivateArgs {
         }
 
         if context.attach_ctx.flox_activate_start_services {
-            let diff = EnvDiff::from_files(&start_or_attach.activation_state_dir)?;
+            let start_state_dir = start_id.state_dir_path(
+                &context.attach_ctx.flox_runtime_dir,
+                &context.attach_ctx.dot_flox_path,
+            )?;
+            let diff = EnvDiff::from_files(&start_state_dir)?;
             start_services_blocking(
                 &context.attach_ctx,
                 subsystem_verbosity,
                 vars_from_env.clone(),
-                &start_or_attach,
+                start_id,
                 diff,
             )?;
         };
@@ -312,14 +288,13 @@ impl ActivateArgs {
     ) -> Result<Pid, anyhow::Error> {
         let parent_pid = getpid();
 
-        // Get activation state directory using new format
-        let activation_state_dir = start_id.state_dir_path(
+        let start_state_dir = start_id.state_dir_path(
             &context.attach_ctx.flox_runtime_dir,
             &context.attach_ctx.dot_flox_path,
         )?;
 
         // Create the directory
-        std::fs::create_dir_all(&activation_state_dir)?;
+        std::fs::create_dir_all(&start_state_dir)?;
 
         // Serialize ExecutiveCtx
         let executive_ctx = ExecutiveCtx {
@@ -328,7 +303,7 @@ impl ActivateArgs {
         };
 
         let temp_file =
-            tempfile::NamedTempFile::with_prefix_in("executive_ctx_", &activation_state_dir)?;
+            tempfile::NamedTempFile::with_prefix_in("executive_ctx_", &start_state_dir)?;
         serde_json::to_writer(&temp_file, &executive_ctx)?;
         let executive_ctx_path = temp_file.path().to_path_buf();
         temp_file.keep()?;
