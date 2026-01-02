@@ -284,72 +284,6 @@ impl FloxmetaBranch {
     }
 }
 
-/// Prune the local branch for a deleted environment defined in `dot_flox_dir`.
-/// If there are no more local branches, then also prune the remote branch.
-/// Already absent branches are not treated as errors.
-// Note: this is a convenience wrapper over `prune_branches_from_floxmeta`
-// to avoid exposing `*branch_name`
-pub fn prune_branches_from_floxmeta_by_pointer(
-    floxmeta: &mut FloxMeta,
-    pointer: &ManagedPointer,
-    dot_flox_dir: &CanonicalPath,
-) -> Result<(), FloxMetaError> {
-    prune_branches_from_floxmeta(
-        floxmeta,
-        &branch_name(pointer, dot_flox_dir),
-        &remote_branch_name(pointer),
-    )
-}
-
-/// Prune the local branch for a deleted environment. If there are no more
-/// local branches, then also prune the remote branch. Already absent
-/// branches are not treated as errors.
-fn prune_branches_from_floxmeta(
-    floxmeta: &mut FloxMeta,
-    local_branch: &str,
-    remote_branch: &str,
-) -> Result<(), FloxMetaError> {
-    let branch_names = floxmeta
-        .git
-        .list_branches()
-        .map_err(FloxMetaError::ListBranch)?
-        .iter()
-        .map(|branch| branch.name.clone())
-        .collect::<Vec<_>>();
-
-    if branch_names
-        .iter()
-        .any(|branch_name| branch_name == local_branch)
-    {
-        floxmeta
-            .git
-            .delete_branch(local_branch, true)
-            .map_err(FloxMetaError::DeleteBranch)?;
-    }
-
-    if branch_names
-        .iter()
-        .any(|branch_name| branch_name == remote_branch)
-    {
-        let branches_for_other_paths =
-            branch_names
-                .iter()
-                .any(|name| match name.rsplit_once(BRANCH_NAME_PATH_SEPARATOR) {
-                    Some((prefix, _)) => prefix == remote_branch,
-                    _ => false,
-                });
-
-        if !branches_for_other_paths {
-            floxmeta
-                .git
-                .delete_branch(remote_branch, true)
-                .map_err(FloxMetaError::DeleteBranch)?;
-        }
-    }
-
-    Ok(())
-}
-
 /// Acquire exclusive lock on floxmeta directory
 #[tracing::instrument(fields(
     progress = "Waiting for lock to open or create Flox remote metadata"
@@ -658,6 +592,72 @@ pub(super) fn write_generation_lock(
         serde_json::to_string_pretty(&lock).map_err(FloxmetaBranchError::SerializeLock)?;
 
     fs::write(lock_path, lock_contents).map_err(FloxmetaBranchError::WriteLock)?;
+    Ok(())
+}
+
+/// Prune the local branch for a deleted environment defined in `dot_flox_dir`.
+/// If there are no more local branches, then also prune the remote branch.
+/// Already absent branches are not treated as errors.
+// Note: this is a convenience wrapper over `prune_branches_from_floxmeta`
+// to avoid exposing `*branch_name`
+pub fn prune_branches_from_floxmeta_by_pointer(
+    floxmeta: &mut FloxMeta,
+    pointer: &ManagedPointer,
+    dot_flox_dir: &CanonicalPath,
+) -> Result<(), FloxMetaError> {
+    prune_branches_from_floxmeta(
+        floxmeta,
+        &branch_name(pointer, dot_flox_dir),
+        &remote_branch_name(pointer),
+    )
+}
+
+/// Prune the local branch for a deleted environment. If there are no more
+/// local branches, then also prune the remote branch. Already absent
+/// branches are not treated as errors.
+fn prune_branches_from_floxmeta(
+    floxmeta: &mut FloxMeta,
+    local_branch: &str,
+    remote_branch: &str,
+) -> Result<(), FloxMetaError> {
+    let branch_names = floxmeta
+        .git
+        .list_branches()
+        .map_err(FloxMetaError::ListBranch)?
+        .iter()
+        .map(|branch| branch.name.clone())
+        .collect::<Vec<_>>();
+
+    if branch_names
+        .iter()
+        .any(|branch_name| branch_name == local_branch)
+    {
+        floxmeta
+            .git
+            .delete_branch(local_branch, true)
+            .map_err(FloxMetaError::DeleteBranch)?;
+    }
+
+    if branch_names
+        .iter()
+        .any(|branch_name| branch_name == remote_branch)
+    {
+        let branches_for_other_paths =
+            branch_names
+                .iter()
+                .any(|name| match name.rsplit_once(BRANCH_NAME_PATH_SEPARATOR) {
+                    Some((prefix, _)) => prefix == remote_branch,
+                    _ => false,
+                });
+
+        if !branches_for_other_paths {
+            floxmeta
+                .git
+                .delete_branch(remote_branch, true)
+                .map_err(FloxMetaError::DeleteBranch)?;
+        }
+    }
+
     Ok(())
 }
 
