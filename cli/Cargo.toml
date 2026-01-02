@@ -108,6 +108,10 @@ pretty_assertions = "1.4"
 serial_test = "3.3.1"
 temp-env = "0.3.2"
 
+# GSSAPI/Kerberos authentication
+libgssapi = "0.7"
+base64 = "0.22"
+
 # watchdog dependencies
 kqueue = "1.1.1"
 signal-hook = "0.4.1"
