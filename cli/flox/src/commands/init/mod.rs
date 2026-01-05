@@ -5,8 +5,10 @@ use std::str::FromStr;
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::AttrPath;
-use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox};
+use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox, RemoteEnvironmentRef};
+use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
+use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
 use flox_rust_sdk::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
 use flox_rust_sdk::models::manifest::typed::ActivateMode;
@@ -22,7 +24,7 @@ use indoc::{formatdoc, indoc};
 use path_dedot::ParseDot;
 use tracing::{debug, info_span, instrument};
 
-use crate::commands::{SHELL_COMPLETION_DIR, environment_description};
+use crate::commands::{SHELL_COMPLETION_DIR, ensure_floxhub_token, environment_description};
 use crate::subcommand_metric;
 use crate::utils::dialog::Dialog;
 use crate::utils::message;
@@ -64,28 +66,41 @@ impl InitHook for InitHookType {
     }
 }
 
+#[derive(Bpaf, Clone)]
+enum InitEnvironmentTypeSelect {
+    Path {
+        /// Directory to create the environment in (default: current directory)
+        #[bpaf(long, short, argument("path"), complete_shell(SHELL_COMPLETION_DIR))]
+        dir: Option<PathBuf>,
+
+        /// Name of the environment
+        ///
+        /// "$(basename $PWD)" or "default" if in $HOME
+        #[bpaf(long("name"), short('n'), argument("name"))]
+        env_name: Option<String>,
+
+        /// Apply Flox recommendations for the environment based on what languages
+        /// are being used in the containing directory
+        #[bpaf(long)]
+        auto_setup: bool,
+
+        /// Don't auto-detect language support for a project or
+        /// make suggestions.
+        #[bpaf(long)]
+        no_auto_setup: bool,
+    },
+    FloxHub {
+        /// A FloxHub environment
+        #[bpaf(long("reference"), long("ref"), short('r'), argument("owner>/<name"))]
+        environment_ref: RemoteEnvironmentRef,
+    },
+}
+
 // Create an environment in the current directory
 #[derive(Bpaf, Clone)]
 pub struct Init {
-    /// Directory to create the environment in (default: current directory)
-    #[bpaf(long, short, argument("path"), complete_shell(SHELL_COMPLETION_DIR))]
-    dir: Option<PathBuf>,
-
-    /// Name of the environment
-    ///
-    /// "$(basename $PWD)" or "default" if in $HOME
-    #[bpaf(long("name"), short('n'), argument("name"))]
-    env_name: Option<String>,
-
-    /// Apply Flox recommendations for the environment based on what languages
-    /// are being used in the containing directory
-    #[bpaf(long)]
-    auto_setup: bool,
-
-    /// Don't auto-detect language support for a project or
-    /// make suggestions.
-    #[bpaf(long)]
-    no_auto_setup: bool,
+    #[bpaf(external(init_environment_type_select))]
+    type_select: InitEnvironmentTypeSelect,
 
     /// Set up the environment with the emptiest possible manifest.
     #[bpaf(short, long)]
@@ -97,38 +112,54 @@ impl Init {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("init");
 
-        let dir = match &self.dir {
-            Some(dir) => dir.clone(),
-            None => std::env::current_dir().context("Couldn't determine current directory")?,
-        };
+        match self.type_select {
+            InitEnvironmentTypeSelect::Path {
+                dir,
+                env_name,
+                auto_setup,
+                no_auto_setup,
+            } => {
+                let dir = match dir {
+                    Some(dir) => dir.clone(),
+                    None => {
+                        std::env::current_dir().context("Couldn't determine current directory")?
+                    },
+                };
 
-        let Some(home_dir) = dirs::home_dir() else {
-            bail!("Couldn't determine home directory");
-        };
+                let Some(home_dir) = dirs::home_dir() else {
+                    bail!("Couldn't determine home directory");
+                };
 
-        let default_environment = dir == home_dir;
+                let default_environment = dir == home_dir;
 
-        let env_name = if let Some(ref name) = self.env_name {
-            EnvironmentName::from_str(name)?
-        } else if default_environment {
-            EnvironmentName::from_str(DEFAULT_NAME)?
-        } else {
-            let name = dir
-                .parse_dot()?
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .context("Can't init in root")?;
-            EnvironmentName::from_str(&slug::slugify(name))?
-        };
+                let env_name = if let Some(ref name) = env_name {
+                    EnvironmentName::from_str(name)?
+                } else if default_environment {
+                    EnvironmentName::from_str(DEFAULT_NAME)?
+                } else {
+                    let name = dir
+                        .parse_dot()?
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .context("Can't init in root")?;
+                    EnvironmentName::from_str(&slug::slugify(name))?
+                };
 
-        let auto_setup = AutoSetupBehavior::from_arguments(
-            self.auto_setup,
-            self.no_auto_setup,
-            default_environment,
-            self.bare,
-        );
-        // we skip auto setup for default environments
-        init_local_environment(&flox, &dir, &env_name, self.bare, auto_setup).await?;
+                let do_auto_setup = AutoSetupBehavior::from_arguments(
+                    auto_setup,
+                    no_auto_setup,
+                    default_environment,
+                    self.bare,
+                );
+
+                init_local_environment(&flox, &dir, &env_name, self.bare, do_auto_setup).await?;
+            },
+            InitEnvironmentTypeSelect::FloxHub { environment_ref } => {
+                let mut flox = flox;
+                ensure_floxhub_token(&mut flox).await?;
+                init_floxhub_environment(&flox, environment_ref, self.bare)?;
+            },
+        }
         Ok(())
     }
 }
@@ -250,6 +281,44 @@ async fn init_local_environment(
     }
 
     message::plain("");
+    Ok(())
+}
+
+fn init_floxhub_environment(flox: &Flox, env_ref: RemoteEnvironmentRef, bare: bool) -> Result<()> {
+    let temp_env_dir = tempfile::TempDir::new_in(&flox.temp_dir)?;
+    let path_pointer = PathPointer::new(env_ref.name().clone());
+
+    let path_environment = if bare {
+        PathEnvironment::init_bare(path_pointer, temp_env_dir.path(), flox)?
+    } else {
+        let customization = InitCustomization {
+            activate_mode: Some(ActivateMode::Run),
+            ..Default::default()
+        };
+
+        PathEnvironment::init(path_pointer, temp_env_dir.path(), &customization, flox)?
+    };
+
+    let managed =
+        ManagedEnvironment::push_new(flox, path_environment, env_ref.owner().clone(), false)?;
+    let pointer = managed.pointer();
+
+    // validate that the environment exists
+    let validated = RemoteEnvironment::new(flox, pointer.clone(), None)
+        .context("Could not validate that new environment exists on FloxHub")?;
+    let env_ref = validated.env_ref();
+
+    message::created(format!("Created environment '{env_ref}'"));
+
+    message::plain(formatdoc! {"
+
+        Next:
+          Search for a package                      -> $ flox search <package>
+          Install a package into an environment     -> $ flox install -r {env_ref} <package>
+          Enter the environment                     -> $ flox activate -r {env_ref}
+          Add environment variables and shell hooks -> $ flox edit -r {env_ref}"
+    });
+
     Ok(())
 }
 
