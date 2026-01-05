@@ -121,80 +121,49 @@ impl Init {
             EnvironmentName::from_str(&slug::slugify(name))?
         };
 
-        // Don't run language hooks for "default" environment
-        let should_customize = !default_environment || self.auto_setup;
-        let skip_customize = self.bare || self.no_auto_setup;
-        let customization = if skip_customize {
-            debug!("user asked to skip auto-setup");
-            InitCustomization::default()
-        } else if should_customize {
-            debug!("attempting auto-setup");
-            run_language_hooks(&flox, &dir, self.auto_setup)
-                .await
-                .unwrap_or_else(|e| {
-                    message::warning(format!("Failed to generate init suggestions: {e}"));
-                    InitCustomization::default()
-                })
-        } else {
-            debug!("skipping auto-setup in home directory");
-            InitCustomization {
-                activate_mode: Some(ActivateMode::Run),
-                ..Default::default()
-            }
-        };
-
-        let path_pointer = PathPointer::new(env_name);
-        let env = if customization.packages.is_some() {
-            info_span!(
-                "init_with_suggested_packages",
-                progress = "Installing Flox suggested packages"
-            )
-            .in_scope(|| PathEnvironment::init(path_pointer, &dir, &customization, &flox))?
-        } else if self.bare {
-            debug!("creating environment with bare manifest");
-            PathEnvironment::init_bare(path_pointer, &dir, &flox)?
-        } else {
-            debug!("creating environment");
-            PathEnvironment::init(path_pointer, &dir, &customization, &flox)?
-        };
-
-        let env_in_git_repo = GitCommandProvider::discover(&dir).is_ok();
-
-        message::created(format!(
-            "Created environment '{name}' ({system})",
-            name = env.name(),
-            system = flox.system
-        ));
-        if let Some(packages) = customization.packages {
-            let description = environment_description(&ConcreteEnvironment::Path(env))?;
-            for package in packages {
-                message::package_installed(&PackageToInstall::Catalog(package), &description);
-            }
-        }
-
-        message::plain(indoc! {"
-
-            Next:
-              $ flox search <package>    <- Search for a package
-              $ flox install <package>   <- Install a package into an environment
-              $ flox activate            <- Enter the environment
-              $ flox edit                <- Add environment variables and shell hooks"
-        });
-
-        // Don't recommend `flox push` if the env is in a git repo because they
-        // can already git track it and there's a higher likelihood of using
-        // build+publish, subsets of which require a git repo, and don't work
-        // with remote environments.
-        if !env_in_git_repo {
-            let hint_indentation = "  ";
-            message::plain(formatdoc! {"
-                {}$ flox push                <- Use the environment from other machines or
-                                                share it with someone on FloxHub"
-            , hint_indentation});
-        }
-
-        message::plain("");
+        let auto_setup = AutoSetupBehavior::from_arguments(
+            self.auto_setup,
+            self.no_auto_setup,
+            default_environment,
+            self.bare,
+        );
+        // we skip auto setup for default environments
+        init_local_environment(&flox, &dir, &env_name, self.bare, auto_setup).await?;
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AutoSetupBehavior {
+    Skip,
+    RunAndPrompt,
+    RunAndForce,
+}
+
+impl AutoSetupBehavior {
+    /// Derive the setup behavior from the three overlapping flags
+    /// and runtime working dir.
+    ///
+    /// By default we run setup hooks and prompt users for confirmation.
+    /// With `--auto-setup` we always run hooks and apply them without further input.
+    /// Unless `--auto-setup` is present, providing `--no-auto-setup`, or `--bare`,
+    /// or operating in the home directory/creating a local default environment,
+    /// will skip running init hooks.
+    fn from_arguments(
+        auto_setup: bool,
+        no_auto_setup: bool,
+        is_default_environment: bool,
+        is_bare: bool,
+    ) -> Self {
+        if auto_setup {
+            return AutoSetupBehavior::RunAndForce;
+        }
+
+        if no_auto_setup || is_bare || is_default_environment {
+            return AutoSetupBehavior::Skip;
+        }
+
+        AutoSetupBehavior::RunAndPrompt
     }
 }
 
@@ -203,6 +172,85 @@ trait InitHook {
     async fn prompt_user(&mut self, flox: &Flox, path: &Path) -> Result<bool>;
 
     fn get_init_customization(&self) -> InitCustomization;
+}
+
+async fn init_local_environment(
+    flox: &Flox,
+    dir: &Path,
+    name: &EnvironmentName,
+    bare: bool,
+    auto_setup: AutoSetupBehavior,
+) -> Result<()> {
+    let mut customization = if auto_setup != AutoSetupBehavior::Skip {
+        debug!("attempting auto-setup");
+        run_language_hooks(flox, dir, auto_setup == AutoSetupBehavior::RunAndForce)
+            .await
+            .unwrap_or_else(|e| {
+                message::warning(format!("Failed to generate init suggestions: {e}"));
+                InitCustomization::default()
+            })
+    } else {
+        debug!("skipping auto-setup");
+        InitCustomization::default()
+    };
+
+    if Some(dir) == std::env::home_dir().as_deref() {
+        debug!("environment in home-dir initialized in runtime mode");
+        customization.activate_mode = Some(ActivateMode::Run);
+    }
+
+    let path_pointer = PathPointer::new(name.clone());
+    let env = if customization.packages.is_some() {
+        info_span!(
+            "init_with_suggested_packages",
+            progress = "Installing Flox suggested packages"
+        )
+        .in_scope(|| PathEnvironment::init(path_pointer, dir, &customization, flox))?
+    } else if bare {
+        debug!("creating environment with bare manifest");
+        PathEnvironment::init_bare(path_pointer, dir, flox)?
+    } else {
+        debug!("creating environment");
+        PathEnvironment::init(path_pointer, dir, &customization, flox)?
+    };
+
+    let env_in_git_repo = GitCommandProvider::discover(dir).is_ok();
+
+    message::created(format!(
+        "Created environment '{name}' ({system})",
+        name = env.name(),
+        system = flox.system
+    ));
+    if let Some(packages) = customization.packages {
+        let description = environment_description(&ConcreteEnvironment::Path(env))?;
+        for package in packages {
+            message::package_installed(&PackageToInstall::Catalog(package), &description);
+        }
+    }
+
+    message::plain(indoc! {"
+
+        Next:
+          $ flox search <package>    <- Search for a package
+          $ flox install <package>   <- Install a package into an environment
+          $ flox activate            <- Enter the environment
+          $ flox edit                <- Add environment variables and shell hooks"
+    });
+
+    // Don't recommend `flox push` if the env is in a git repo because they
+    // can already git track it and there's a higher likelihood of using
+    // build+publish, subsets of which require a git repo, and don't work
+    // with remote environments.
+    if !env_in_git_repo {
+        let hint_indentation = "  ";
+        message::plain(formatdoc! {"
+            {}$ flox push                <- Use the environment from other machines or
+                                            share it with someone on FloxHub"
+        , hint_indentation});
+    }
+
+    message::plain("");
+    Ok(())
 }
 
 /// Run all language hooks and return a single combined customization
