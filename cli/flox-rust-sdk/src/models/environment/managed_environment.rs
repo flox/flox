@@ -716,6 +716,13 @@ impl GenerationsExt for ManagedEnvironment {
     ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
         self.floxmeta_branch.remote_generations().metadata()
     }
+
+    fn compare_remote(&self) -> Result<BranchOrd, EnvironmentError> {
+        Ok(self
+            .floxmeta_branch
+            .compare_remote()
+            .map_err(ManagedEnvironmentError::FloxmetaBranch)?)
+    }
 }
 
 /// Constructors and related functions
