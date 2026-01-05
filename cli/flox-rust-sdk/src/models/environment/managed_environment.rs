@@ -1488,7 +1488,7 @@ impl ManagedEnvironment {
         let checkout_valid = Self::validate_checkout(&local_checkout, &generations)?;
 
         // With `force` we pull even if the local checkout is out of sync.
-        if !force && !checkout_valid {
+        if !checkout_valid && !force {
             Err(ManagedEnvironmentError::CheckoutOutOfSync)?
         }
 
@@ -1502,7 +1502,15 @@ impl ManagedEnvironment {
             .compare_remote()
             .map_err(ManagedEnvironmentError::FloxmetaBranch)?;
 
-        if matches!(branch_ord, BranchOrd::Equal | BranchOrd::Ahead) {
+        let is_uptodate = matches!(branch_ord, BranchOrd::Equal | BranchOrd::Ahead);
+
+        if is_uptodate && !checkout_valid && force {
+            self.reset_local_env_to_current_generation(flox)?;
+            let store_paths = self.build(flox)?;
+            self.link(&store_paths)?;
+
+            return Ok(PullResult::Updated);
+        } else if is_uptodate {
             return Ok(PullResult::UpToDate);
         }
 
