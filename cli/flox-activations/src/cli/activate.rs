@@ -1,5 +1,5 @@
 use std::fs::{self};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Result, anyhow, bail};
@@ -211,8 +211,16 @@ impl ActivateArgs {
             _ => unreachable!(),
         };
 
+        let start_state_dir = start_id.state_dir_path(
+            &context.attach_ctx.flox_runtime_dir,
+            &context.attach_ctx.dot_flox_path,
+        )?;
+        if matches!(result, StartOrAttachResult::Start { .. }) {
+            std::fs::create_dir_all(&start_state_dir)?;
+        }
+
         let new_exec_pid = if needs_new_executive {
-            let exec_pid = self.spawn_executive(context, start_id)?;
+            let exec_pid = self.spawn_executive(context, &start_state_dir)?;
             activations.set_executive_pid(exec_pid.as_raw());
             Some(exec_pid)
         } else {
@@ -284,17 +292,9 @@ impl ActivateArgs {
     fn spawn_executive(
         &self,
         context: &ActivateCtx,
-        start_id: &flox_core::activations::rewrite::StartIdentifier,
+        start_state_dir: &Path,
     ) -> Result<Pid, anyhow::Error> {
         let parent_pid = getpid();
-
-        let start_state_dir = start_id.state_dir_path(
-            &context.attach_ctx.flox_runtime_dir,
-            &context.attach_ctx.dot_flox_path,
-        )?;
-
-        // Create the directory
-        std::fs::create_dir_all(&start_state_dir)?;
 
         // Serialize ExecutiveCtx
         let executive_ctx = ExecutiveCtx {
@@ -302,8 +302,7 @@ impl ActivateArgs {
             parent_pid: parent_pid.as_raw(),
         };
 
-        let temp_file =
-            tempfile::NamedTempFile::with_prefix_in("executive_ctx_", &start_state_dir)?;
+        let temp_file = tempfile::NamedTempFile::with_prefix_in("executive_ctx_", start_state_dir)?;
         serde_json::to_writer(&temp_file, &executive_ctx)?;
         let executive_ctx_path = temp_file.path().to_path_buf();
         temp_file.keep()?;
