@@ -8,7 +8,6 @@ use time::OffsetDateTime;
 use tracing::debug;
 
 use crate::models::environment::UpgradeResult;
-use crate::models::environment::generations::AllGenerationsMetadata;
 
 #[derive(Debug, Error)]
 pub enum UpgradeChecksError {
@@ -31,7 +30,6 @@ pub struct UpgradeInformation {
     pub last_checked: OffsetDateTime,
     /// The result of the last upgrade check
     pub upgrade_result: UpgradeResult,
-    pub remote_generations_metadata: Option<AllGenerationsMetadata>,
 }
 
 /// A guard for a file containing upgrade information,
@@ -290,7 +288,6 @@ mod tests {
                 new_lockfile: Lockfile::default(),
                 store_path: None,
             },
-            remote_generations_metadata: None,
         });
 
         drop(locked);
@@ -312,7 +309,6 @@ mod tests {
                 new_lockfile: Lockfile::default(),
                 store_path: None,
             },
-            remote_generations_metadata: None,
         };
         let _ = locked.info_mut().insert(info.clone());
         locked.commit().unwrap();

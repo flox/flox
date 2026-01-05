@@ -11,11 +11,7 @@ use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
 use flox_rust_sdk::models::environment::floxmeta_branch::BranchOrd;
-use flox_rust_sdk::models::environment::generations::{
-    AllGenerationsMetadata,
-    GenerationId,
-    GenerationsExt,
-};
+use flox_rust_sdk::models::environment::generations::{GenerationId, GenerationsExt};
 use flox_rust_sdk::models::environment::managed_environment::DivergedMetadata;
 use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
@@ -734,6 +730,10 @@ fn notify_upgrades_if_available(
         return Ok(());
     }
 
+    // print a possible notification about environment upgrades first
+    // (and avoid being skipped below because upgrade information is unavailable)
+    notify_environment_upgrades(environment, environment_select)?;
+
     let upgrade_guard = UpgradeInformationGuard::read_in(environment.cache_path()?)?;
 
     let Some(info) = upgrade_guard.info() else {
@@ -742,11 +742,6 @@ fn notify_upgrades_if_available(
     };
 
     notify_package_upgrades(flox, environment, &info.upgrade_result)?;
-    notify_environment_upgrades(
-        environment,
-        &info.remote_generations_metadata,
-        environment_select,
-    )?;
 
     Ok(())
 }
@@ -784,7 +779,6 @@ fn notify_package_upgrades(
 /// or failures due to network disruptions.
 fn notify_environment_upgrades(
     environment: &ConcreteEnvironment,
-    remote_generations_metadata: &Option<AllGenerationsMetadata>,
     environment_select: &EnvironmentSelect,
 ) -> Result<()> {
     if let ConcreteEnvironment::Path(_) = environment {
@@ -1070,7 +1064,6 @@ mod upgrade_notification_tests {
 
                 store_path: None,
             },
-            remote_generations_metadata: None,
         });
 
         locked.commit().unwrap();
@@ -1168,7 +1161,6 @@ mod upgrade_notification_tests {
 
                     store_path: None,
                 },
-                remote_generations_metadata: None,
             });
 
             locked.commit().unwrap();
@@ -1210,7 +1202,6 @@ mod upgrade_notification_tests {
             let _ = locked.info_mut().insert(UpgradeInformation {
                 last_checked: OffsetDateTime::now_utc(),
                 upgrade_result,
-                remote_generations_metadata: None,
             });
 
             locked.commit().unwrap();
