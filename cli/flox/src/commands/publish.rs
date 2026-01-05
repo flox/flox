@@ -159,6 +159,7 @@ impl Publish {
                 bail!("Cannot publish from an environment on FloxHub.")
             },
             ConcreteEnvironment::Remote(_) => {
+                // guarded by DirEnvironmentSelect
                 unreachable!("Cannot publish from a remote environment")
             },
         };

@@ -909,6 +909,8 @@ pub enum EnvironmentSelectError {
     EnvironmentError(#[from] EnvironmentError),
     #[error("Did not find an environment in the current directory.")]
     EnvNotFoundInCurrentDirectory,
+    #[error("Remote environments not supported for this operation")]
+    RemoteNotSupported,
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
 }
@@ -1068,6 +1070,9 @@ impl DirEnvironmentSelect {
             // already activated environment or an environment in the current
             // directory.
             DirEnvironmentSelect::Unspecified => match detect_environment(message)? {
+                Some(UninitializedEnvironment::Remote(_)) => {
+                    Err(EnvironmentSelectError::RemoteNotSupported)
+                },
                 Some(env) => {
                     let generation = activated_environments().is_active_with_generation(&env);
                     Ok(env.into_concrete_environment(flox, generation)?)
