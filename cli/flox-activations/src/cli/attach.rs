@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::Args;
-use flox_core::activations::rewrite::{self, StartIdentifier, UnixTimestamp};
+use flox_core::activations::rewrite::{self, StartIdentifier, UnixTimestampMillis};
 use flox_core::activations::{self};
 use time::{Duration, OffsetDateTime};
 
@@ -25,7 +25,7 @@ pub struct AttachArgs {
     pub store_path: PathBuf,
     #[arg(help = "Together with store_path this identifies the activation to attach to.")]
     #[arg(long, value_name = "TIMESTAMP")]
-    pub timestamp: UnixTimestamp,
+    pub timestamp: UnixTimestampMillis,
 }
 
 #[derive(Debug, Args)]
