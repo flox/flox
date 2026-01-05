@@ -147,15 +147,17 @@ pub mod rewrite {
     #[derive(
         Clone, Debug, Deserialize, derive_more::Display, Eq, PartialEq, Serialize, Ord, PartialOrd,
     )]
-    pub struct UnixTimestamp(i64);
+    pub struct UnixTimestampMillis(i64);
 
-    impl UnixTimestamp {
+    impl UnixTimestampMillis {
         pub fn now() -> Self {
-            Self(OffsetDateTime::now_utc().unix_timestamp())
+            let now = OffsetDateTime::now_utc();
+            let millis = (now.unix_timestamp_nanos() / 1_000_000) as i64;
+            Self(millis)
         }
     }
 
-    impl Deref for UnixTimestamp {
+    impl Deref for UnixTimestampMillis {
         type Target = i64;
 
         fn deref(&self) -> &Self::Target {
@@ -163,18 +165,18 @@ pub mod rewrite {
         }
     }
 
-    impl std::str::FromStr for UnixTimestamp {
+    impl std::str::FromStr for UnixTimestampMillis {
         type Err = std::num::ParseIntError;
 
         fn from_str(s: &str) -> Result<Self, Self::Err> {
-            s.parse::<i64>().map(UnixTimestamp)
+            s.parse::<i64>().map(UnixTimestampMillis)
         }
     }
 
     #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Ord, PartialOrd)]
     pub struct StartIdentifier {
         pub store_path: PathBuf,
-        pub timestamp: UnixTimestamp,
+        pub timestamp: UnixTimestampMillis,
     }
 
     impl StartIdentifier {
@@ -358,7 +360,7 @@ pub mod rewrite {
         fn start(&mut self, pid: Pid, store_path: impl AsRef<Path>) -> StartIdentifier {
             let start_id = StartIdentifier {
                 store_path: store_path.as_ref().to_path_buf(),
-                timestamp: UnixTimestamp::now(),
+                timestamp: UnixTimestampMillis::now(),
             };
             let attachment = Attachment {
                 start_id: start_id.clone(),
@@ -492,7 +494,7 @@ pub mod rewrite {
         fn make_start_id(path: &str) -> StartIdentifier {
             StartIdentifier {
                 store_path: PathBuf::from(path),
-                timestamp: UnixTimestamp::now(),
+                timestamp: UnixTimestampMillis::now(),
             }
         }
 
@@ -739,8 +741,7 @@ pub mod rewrite {
                 };
                 assert_eq!(ready_pid, pid);
                 assert_eq!(new_start_id, ready_start_id);
-                // TODO: timestamps only have a resolution of 1 second so these are currently equal
-                // assert!(new_start_id.timestamp > old_start_id.timestamp);
+                assert!(new_start_id.timestamp >= old_start_id.timestamp);
                 assert_eq!(
                     activations.attached_pids,
                     BTreeMap::from([(pid, make_attachment(new_start_id))])
