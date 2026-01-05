@@ -201,6 +201,11 @@ let
             # the updated string context populates `inputSrcs` for the
             # resulting derivation.
             let
+              descriptor =
+                if (builtins.hasAttr package.install_id manifest.install) then
+                  (builtins.getAttr package.install_id manifest.install)
+                else
+                  throw "manifest does not contain a package with install ID '${package.install_id}'";
               outputsToInstall =
                 if (builtins.hasAttr "outputs_to_install" package) then
                   (builtins.getAttr "outputs_to_install" package)
@@ -211,24 +216,53 @@ let
                   )
                 else
                   null;
-              # Unfortunately, due to pkgdb limitations in the 1.0 release we
-              # adopted the convention of installing all outputs for every
-              # package, so for the _short_ term while we migrate to the new
-              # buildenv we will continue this practice to keep the experience
-              # consistent for users. However, it won't be long before we
-              # switch over to the more correct strategy of honoring
-              # outputs_to_install, and when we do we can remove "true ||"
-              # from the following conditional.
-              filteredOutputs =
-                if (true || outputsToInstall == null) then
-                  # Filter out outputs named `stubs` because they're needed at build time,
-                  # but break things at run time. This may be unnecessary once we do
-                  # "outputs to install".
-                  (builtins.attrValues (builtins.removeAttrs package.outputs [ "stubs" ]))
+              getValidAttrs = (
+                selected: pkg:
+                builtins.map (
+                  output:
+                  if (builtins.elem output (builtins.attrNames pkg.outputs)) then
+                    output
+                  else
+                    throw "${pkg.attr_path} has no output named '${output}'"
+                ) selected
+              );
+              getV1Outputs = (
+                pkg:
+                # Filter out outputs named `stubs` because they're needed at build time,
+                # but break things at run time. This may be unnecessary once we do
+                # "outputs to install". The `stubs` outputs became a problem when adding
+                # CUDA support.
+                (builtins.attrNames (builtins.removeAttrs package.outputs [ "stubs" ]))
+              );
+              getV2Outputs = (
+                pd: pkg:
+                if (builtins.hasAttr "outputs" pd) then
+                  if (builtins.isString pd.outputs) then
+                    # Handle outputs = "all"
+                    if (pd.outputs == "all") then
+                      builtins.attrNames package.outputs
+                    else
+                      throw "outputs must either be 'all' or a list of output names"
+                  # Handle outputs = [ "foo", "bar" ]
+                  else if (builtins.isList pd.outputs) then
+                    getValidAttrs pd.outputs pkg
+                  else
+                    throw "outputs must either be 'all' or a list of output names"
                 else
-                  (builtins.map (x: builtins.getAttr x package.outputs) outputsToInstall);
+                  # The problematic `stubs` outputs from CUDA packages aren't included
+                  # in outputs_to_install as far as I can tell, so we don't need to
+                  # filter it out here.
+                  outputsToInstall
+              );
+              outputs =
+                if (manifest.version == 1) then
+                  getV1Outputs package
+                else if (manifest.version == 2) then
+                  getV2Outputs descriptor package
+                else
+                  throw "unsupported manifest version: '${manifest.version}'";
             in
-            map (p: builtins.storePath p) filteredOutputs
+            builtins.map (output: builtins.storePath (builtins.getAttr output package.outputs)) outputs
           )
         else
           [ ]
