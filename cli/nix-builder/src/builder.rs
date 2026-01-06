@@ -35,6 +35,7 @@ struct ManifestData {
 
 #[derive(Debug, Deserialize)]
 struct Manifest {
+    version: u32,
     install: HashMap<String, InstallEntry>,
     build: Option<HashMap<String, BuildEntry>>,
 }
@@ -44,6 +45,7 @@ struct InstallEntry {
     #[serde(rename = "pkg-path")]
     pkg_path: String,
     systems: Option<Vec<String>>,
+    outputs: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -221,23 +223,30 @@ fn parse_store_path(path: &str) -> Result<StorePath> {
 
     // Split package name from version by finding first "-" followed by a digit
     // This mimics the Perl regex: split /-(?=\d)/, $pkgName
-    let (name, version) = if let Some(pos) = pkg_name.find('-') {
-        // Check if the character after the '-' is a digit
-        let after_dash = &pkg_name[pos + 1..];
-        if after_dash
-            .chars()
-            .next()
-            .map(|c| c.is_ascii_digit())
-            .unwrap_or(false)
-        {
+    let (name, version) = {
+        // Find the first dash followed by a digit
+        let mut found_pos = None;
+        for (i, c) in pkg_name.chars().enumerate() {
+            if c == '-' && i + 1 < pkg_name.len() {
+                // Check if next character is a digit
+                if let Some(next_char) = pkg_name.chars().nth(i + 1) {
+                    if next_char.is_ascii_digit() {
+                        // Convert character position to byte position
+                        found_pos =
+                            Some(pkg_name.char_indices().nth(i).map(|(pos, _)| pos).unwrap());
+                        break;
+                    }
+                }
+            }
+        }
+
+        if let Some(pos) = found_pos {
+            let after_dash = &pkg_name[pos + 1..];
             (pkg_name[..pos].to_string(), after_dash.to_string())
         } else {
             // No version found, entire thing is the name
             (pkg_name.to_string(), String::new())
         }
-    } else {
-        // No dash found, entire thing is the name
-        (pkg_name.to_string(), String::new())
     };
 
     let basename = components[4..].join("/");
@@ -717,68 +726,243 @@ fn build_single_env(
     Ok(())
 }
 
-/// Convert package objects to builder format
-fn packages_to_pkgs(packages: &[PackageEntry]) -> Vec<PkgEntry> {
-    let mut result = Vec::new();
-    let mut other_output_priority_counter = 1u32;
-
-    for package in packages {
-        // Handle store paths directly
-        if let Some(store_path) = &package.store_path {
-            result.push(PkgEntry {
-                paths: vec![store_path.clone()],
-                priority: package.priority * 1000,
-            });
-            continue;
-        }
-
-        let mut outputs_to_install_vec = Vec::new();
-        let mut other_outputs_vec = Vec::new();
-
-        // Get outputs_to_install list
-        let outputs_to_install = if let Some(ref oti) = package.outputs_to_install {
-            oti.clone()
-        } else if let Some(ref oti_hyphen) = package.outputs_to_install_hyphen {
-            oti_hyphen.clone()
-        } else {
-            package
-                .outputs
-                .keys()
-                .filter(|k| k.as_str() != "log")
-                .cloned()
-                .collect()
-        };
-
-        for (output, path) in &package.outputs {
+/// Helper: Get V1 outputs, filtering stubs and log files
+/// This is equivalent to Perl's getV1Outputs function
+fn get_v1_outputs(package_outputs: &HashMap<String, String>) -> Vec<String> {
+    package_outputs
+        .iter()
+        .filter_map(|(output, path)| {
             // Skip log outputs if they're files
             if output == "log" && Path::new(path).is_file() {
-                continue;
+                return None;
             }
-            // Skip stubs outputs
+            // Skip stubs outputs (CUDA stubs are special libraries needed at build time but not runtime)
             if output == "stubs" {
+                return None;
+            }
+            Some(output.clone())
+        })
+        .collect()
+}
+
+/// Helper: Get V2 outputs based on descriptor's outputs field
+fn get_v2_outputs(
+    package_outputs: &HashMap<String, String>,
+    descriptor_outputs: Option<&serde_json::Value>,
+    outputs_to_install: Option<&Vec<String>>,
+) -> Vec<String> {
+    match descriptor_outputs {
+        Some(serde_json::Value::String(s)) if s == "all" => {
+            // Return all outputs
+            package_outputs.keys().cloned().collect()
+        },
+        Some(serde_json::Value::Array(arr)) => {
+            // Return specified outputs
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        },
+        _ => {
+            // Default: use outputs_to_install from package if available, otherwise all outputs
+            if let Some(oti) = outputs_to_install {
+                oti.clone()
+            } else {
+                package_outputs.keys().cloned().collect()
+            }
+        },
+    }
+}
+
+/// Helper: Validate that requested outputs exist in package
+fn get_valid_attrs(
+    package_outputs: &HashMap<String, String>,
+    requested_outputs: &[String],
+) -> Result<Vec<String>> {
+    let mut valid = Vec::new();
+    for output in requested_outputs {
+        if !package_outputs.contains_key(output.as_str()) {
+            bail!(
+                "output '{}' is not available in package (available outputs: {})",
+                output,
+                package_outputs
+                    .keys()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+        valid.push(output.clone());
+    }
+    Ok(valid)
+}
+
+/// Convert package objects to builder format
+fn packages_to_pkgs(
+    packages: &[PackageEntry],
+    manifest_version: u32,
+    install: &HashMap<String, InstallEntry>,
+) -> Vec<PkgEntry> {
+    let mut result = Vec::new();
+
+    if manifest_version == 1 {
+        // V1 logic: group outputs_to_install together, global counter for others
+        let mut global_counter = 1u32;
+
+        for package in packages {
+            // Handle store paths directly
+            if let Some(store_path) = &package.store_path {
+                result.push(PkgEntry {
+                    paths: vec![store_path.clone()],
+                    priority: package.priority * 1000,
+                });
                 continue;
             }
 
-            if outputs_to_install.contains(output) {
-                outputs_to_install_vec.push(path.clone());
+            // Handle synthetic packages without attr_path:
+            // Install all outputs with base priority
+            if package.attr_path.is_none() {
+                let valid_outputs = get_v1_outputs(&package.outputs);
+                let mut paths = Vec::new();
+                for output in valid_outputs {
+                    if let Some(path) = package.outputs.get(&output) {
+                        paths.push(path.clone());
+                    }
+                }
+                if !paths.is_empty() {
+                    result.push(PkgEntry {
+                        paths,
+                        priority: package.priority * 1000,
+                    });
+                }
+                continue;
+            }
+
+            let mut outputs_to_install_vec = Vec::new();
+            let mut other_outputs_vec = Vec::new();
+
+            // Get valid outputs from package using get_v1_outputs helper
+            let valid_outputs = get_v1_outputs(&package.outputs);
+
+            // Get outputs_to_install list
+            let outputs_to_install = if let Some(ref oti) = package.outputs_to_install {
+                oti.clone()
+            } else if let Some(ref oti_hyphen) = package.outputs_to_install_hyphen {
+                oti_hyphen.clone()
             } else {
-                other_outputs_vec.push(path.clone());
+                // Default: use all valid outputs (already filtered by get_v1_outputs)
+                valid_outputs.clone()
+            };
+
+            for output in &valid_outputs {
+                if let Some(path) = package.outputs.get(output) {
+                    if outputs_to_install.contains(output) {
+                        outputs_to_install_vec.push(path.clone());
+                    } else {
+                        other_outputs_vec.push(path.clone());
+                    }
+                }
+            }
+
+            // Group outputs_to_install together with base priority
+            if !outputs_to_install_vec.is_empty() {
+                result.push(PkgEntry {
+                    paths: outputs_to_install_vec,
+                    priority: package.priority * 1000,
+                });
+            }
+
+            // Each other output gets separate entry with incrementing priority (global counter)
+            for other_output in other_outputs_vec {
+                result.push(PkgEntry {
+                    paths: vec![other_output],
+                    priority: package.priority * 1000 + global_counter,
+                });
+                global_counter += 1;
             }
         }
+    } else {
+        // V2 logic: each output gets separate entry, per-package counter
+        for package in packages {
+            // Handle store paths directly
+            if let Some(store_path) = &package.store_path {
+                result.push(PkgEntry {
+                    paths: vec![store_path.clone()],
+                    priority: package.priority * 1000,
+                });
+                continue;
+            }
 
-        if !outputs_to_install_vec.is_empty() {
-            result.push(PkgEntry {
-                paths: outputs_to_install_vec,
-                priority: package.priority * 1000,
-            });
-        }
+            // Handle synthetic packages without attr_path:
+            // Install all outputs with incrementing priority
+            if package.attr_path.is_none() {
+                let mut per_package_counter = 0u32;
+                let valid_outputs = get_v1_outputs(&package.outputs);
+                for output in valid_outputs {
+                    if let Some(path) = package.outputs.get(&output) {
+                        result.push(PkgEntry {
+                            paths: vec![path.clone()],
+                            priority: package.priority * 1000 + per_package_counter,
+                        });
+                        per_package_counter += 1;
+                    }
+                }
+                continue;
+            }
 
-        for other_output in other_outputs_vec {
-            result.push(PkgEntry {
-                paths: vec![other_output],
-                priority: package.priority * 1000 + other_output_priority_counter,
+            let mut per_package_counter = 0u32;
+
+            // Find the descriptor outputs if package has an attr_path
+            let descriptor_outputs = package.attr_path.as_ref().and_then(|attr_path| {
+                // Find the install entry with matching pkg-path
+                install
+                    .values()
+                    .find(|entry| &entry.pkg_path == attr_path)
+                    .and_then(|entry| entry.outputs.as_ref())
             });
-            other_output_priority_counter += 1;
+
+            // Determine outputs_to_install fallback
+            let outputs_to_install = package
+                .outputs_to_install
+                .as_ref()
+                .or(package.outputs_to_install_hyphen.as_ref());
+
+            // Get the outputs based on V2 rules (now includes outputs_to_install fallback)
+            let requested_outputs =
+                get_v2_outputs(&package.outputs, descriptor_outputs, outputs_to_install);
+
+            // Validate that requested outputs exist
+            let valid_outputs = match get_valid_attrs(&package.outputs, &requested_outputs) {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("WARNING: {}", e);
+                    continue;
+                },
+            };
+
+            // Each output gets a separate entry with incrementing priority
+            for output in valid_outputs {
+                // Skip log outputs if they're files
+                if output == "log" {
+                    if let Some(path) = package.outputs.get(&output) {
+                        if Path::new(path).is_file() {
+                            continue;
+                        }
+                    }
+                }
+
+                // Skip stubs outputs (CUDA stubs are special libraries needed at build time but not runtime)
+                if output == "stubs" {
+                    continue;
+                }
+
+                if let Some(path) = package.outputs.get(&output) {
+                    result.push(PkgEntry {
+                        paths: vec![path.clone()],
+                        priority: package.priority * 1000 + per_package_counter,
+                    });
+                    per_package_counter += 1;
+                }
+            }
         }
     }
 
@@ -885,12 +1069,12 @@ fn output_data(nix_attrs: &NixAttrs, manifest_data: &ManifestData) -> Result<Vec
     let mut output_specs = vec![
         OutputSpec {
             name: "runtime".to_string(),
-            pkgs: packages_to_pkgs(&develop_packages),
+            pkgs: packages_to_pkgs(&develop_packages, manifest.version, install),
             recurse: false,
         },
         OutputSpec {
             name: "develop".to_string(),
-            pkgs: packages_to_pkgs(&develop_packages),
+            pkgs: packages_to_pkgs(&develop_packages, manifest.version, install),
             recurse: true,
         },
     ];
@@ -953,7 +1137,7 @@ fn output_data(nix_attrs: &NixAttrs, manifest_data: &ManifestData) -> Result<Vec
 
             output_specs.push(OutputSpec {
                 name: format!("build-{}", build_name),
-                pkgs: packages_to_pkgs(&build_packages),
+                pkgs: packages_to_pkgs(&build_packages, manifest.version, install),
                 recurse: true,
             });
         }
@@ -1091,12 +1275,11 @@ mod tests {
         let path = "/nix/store/abc123def456ghi789jkl012mno345pq-bash-interactive-5.0/bin/bash";
         let result = parse_store_path(path).unwrap();
 
-        // The parser uses find('-') which finds the FIRST dash in the string
-        // For "bash-interactive-5.0", the first dash is after "bash"
-        // The character after that dash is 'i' (not a digit), so no split occurs
-        // The entire string "bash-interactive-5.0" becomes the name with empty version
-        assert_eq!(result.name, "bash-interactive-5.0");
-        assert_eq!(result.version, "");
+        // The parser finds the first dash followed by a digit
+        // For "bash-interactive-5.0", that's the dash before "5.0"
+        // So the name is "bash-interactive" and version is "5.0"
+        assert_eq!(result.name, "bash-interactive");
+        assert_eq!(result.version, "5.0");
         assert_eq!(result.basename, "bin/bash");
     }
 
@@ -1361,7 +1544,7 @@ mod tests {
     }
 
     #[test]
-    fn test_packages_to_pkgs_simple() {
+    fn test_packages_to_pkgs_v1_simple() {
         let packages = vec![PackageEntry {
             attr_path: Some("hello".to_string()),
             outputs: {
@@ -1375,7 +1558,8 @@ mod tests {
             store_path: None,
         }];
 
-        let pkgs = packages_to_pkgs(&packages);
+        let install = HashMap::new();
+        let pkgs = packages_to_pkgs(&packages, 1, &install);
 
         assert_eq!(pkgs.len(), 1);
         assert_eq!(pkgs[0].paths.len(), 1);
@@ -1384,7 +1568,7 @@ mod tests {
     }
 
     #[test]
-    fn test_packages_to_pkgs_multiple_outputs() {
+    fn test_packages_to_pkgs_v1_multiple_outputs() {
         let packages = vec![PackageEntry {
             attr_path: Some("bash".to_string()),
             outputs: {
@@ -1400,9 +1584,10 @@ mod tests {
             store_path: None,
         }];
 
-        let pkgs = packages_to_pkgs(&packages);
+        let install = HashMap::new();
+        let pkgs = packages_to_pkgs(&packages, 1, &install);
 
-        // Should have two PkgEntry: one for outputs_to_install, one for other outputs
+        // V1: Should have two PkgEntry: one for outputs_to_install, one for other outputs
         assert_eq!(pkgs.len(), 2);
 
         // First entry should have the installed outputs
@@ -1413,14 +1598,14 @@ mod tests {
             .contains(&"/nix/store/def-bash-man".to_string()));
         assert_eq!(pkgs[0].priority, 5000);
 
-        // Second entry should have the other outputs with higher priority
+        // Second entry should have the other outputs with higher priority (global counter)
         assert_eq!(pkgs[1].paths.len(), 1);
         assert_eq!(pkgs[1].paths[0], "/nix/store/ghi-bash-doc");
         assert_eq!(pkgs[1].priority, 5001);
     }
 
     #[test]
-    fn test_packages_to_pkgs_skip_log() {
+    fn test_packages_to_pkgs_v1_skip_log() {
         let tempdir = TempDir::new().unwrap();
         let log_file = tempdir.path().join("log");
         fs::write(&log_file, b"build log").unwrap();
@@ -1439,7 +1624,8 @@ mod tests {
             store_path: None,
         }];
 
-        let pkgs = packages_to_pkgs(&packages);
+        let install = HashMap::new();
+        let pkgs = packages_to_pkgs(&packages, 1, &install);
 
         // Log output should be skipped if it's a file
         assert_eq!(pkgs.len(), 1);
@@ -1448,7 +1634,7 @@ mod tests {
     }
 
     #[test]
-    fn test_packages_to_pkgs_skip_stubs() {
+    fn test_packages_to_pkgs_v1_skip_stubs() {
         let packages = vec![PackageEntry {
             attr_path: Some("hello".to_string()),
             outputs: {
@@ -1466,7 +1652,8 @@ mod tests {
             store_path: None,
         }];
 
-        let pkgs = packages_to_pkgs(&packages);
+        let install = HashMap::new();
+        let pkgs = packages_to_pkgs(&packages, 1, &install);
 
         // Stubs output should be skipped
         assert_eq!(pkgs.len(), 1);
@@ -1475,7 +1662,7 @@ mod tests {
     }
 
     #[test]
-    fn test_packages_to_pkgs_store_path() {
+    fn test_packages_to_pkgs_v1_store_path() {
         let packages = vec![PackageEntry {
             attr_path: None,
             outputs: HashMap::new(),
@@ -1485,7 +1672,8 @@ mod tests {
             store_path: Some("/nix/store/abc-direct-path".to_string()),
         }];
 
-        let pkgs = packages_to_pkgs(&packages);
+        let install = HashMap::new();
+        let pkgs = packages_to_pkgs(&packages, 1, &install);
 
         assert_eq!(pkgs.len(), 1);
         assert_eq!(pkgs[0].paths.len(), 1);
@@ -1494,7 +1682,7 @@ mod tests {
     }
 
     #[test]
-    fn test_packages_to_pkgs_outputs_to_install_hyphen() {
+    fn test_packages_to_pkgs_v1_outputs_to_install_hyphen() {
         let packages = vec![PackageEntry {
             attr_path: Some("hello".to_string()),
             outputs: {
@@ -1509,7 +1697,8 @@ mod tests {
             store_path: None,
         }];
 
-        let pkgs = packages_to_pkgs(&packages);
+        let install = HashMap::new();
+        let pkgs = packages_to_pkgs(&packages, 1, &install);
 
         assert_eq!(pkgs.len(), 2);
         assert_eq!(pkgs[0].paths.len(), 1);
@@ -1517,7 +1706,7 @@ mod tests {
     }
 
     #[test]
-    fn test_packages_to_pkgs_default_outputs() {
+    fn test_packages_to_pkgs_v1_default_outputs() {
         let packages = vec![PackageEntry {
             attr_path: Some("hello".to_string()),
             outputs: {
@@ -1533,14 +1722,391 @@ mod tests {
             store_path: None,
         }];
 
-        let pkgs = packages_to_pkgs(&packages);
+        let install = HashMap::new();
+        let pkgs = packages_to_pkgs(&packages, 1, &install);
 
-        // Without outputs_to_install, should use all outputs except log
-        assert_eq!(pkgs.len(), 2);
-        assert_eq!(pkgs[0].paths.len(), 2);
+        // V1: Without outputs_to_install, should use all valid outputs (from get_v1_outputs)
+        // Since log is not a file in this test, it's included
+        assert_eq!(pkgs.len(), 1);
+        assert_eq!(pkgs[0].paths.len(), 3);
         assert!(pkgs[0].paths.contains(&"/nix/store/abc-hello".to_string()));
         assert!(pkgs[0]
             .paths
             .contains(&"/nix/store/def-hello-man".to_string()));
+        assert!(pkgs[0]
+            .paths
+            .contains(&"/nix/store/ghi-hello-log".to_string()));
+    }
+
+    #[test]
+    fn test_packages_to_pkgs_v1_global_counter() {
+        // Test that V1 uses a global counter across packages
+        let packages = vec![
+            PackageEntry {
+                attr_path: Some("bash".to_string()),
+                outputs: {
+                    let mut map = HashMap::new();
+                    map.insert("out".to_string(), "/nix/store/abc-bash".to_string());
+                    map.insert("man".to_string(), "/nix/store/def-bash-man".to_string());
+                    map
+                },
+                outputs_to_install: Some(vec!["out".to_string()]),
+                outputs_to_install_hyphen: None,
+                priority: 5,
+                store_path: None,
+            },
+            PackageEntry {
+                attr_path: Some("hello".to_string()),
+                outputs: {
+                    let mut map = HashMap::new();
+                    map.insert("out".to_string(), "/nix/store/ghi-hello".to_string());
+                    map.insert("doc".to_string(), "/nix/store/jkl-hello-doc".to_string());
+                    map
+                },
+                outputs_to_install: Some(vec!["out".to_string()]),
+                outputs_to_install_hyphen: None,
+                priority: 5,
+                store_path: None,
+            },
+        ];
+
+        let install = HashMap::new();
+        let pkgs = packages_to_pkgs(&packages, 1, &install);
+
+        // Should have 4 entries: 2 for outputs_to_install, 2 for other outputs
+        assert_eq!(pkgs.len(), 4);
+
+        // First package outputs_to_install
+        assert_eq!(pkgs[0].priority, 5000);
+
+        // First package other output (global counter = 1)
+        assert_eq!(pkgs[1].priority, 5001);
+        assert_eq!(pkgs[1].paths[0], "/nix/store/def-bash-man");
+
+        // Second package outputs_to_install
+        assert_eq!(pkgs[2].priority, 5000);
+
+        // Second package other output (global counter = 2)
+        assert_eq!(pkgs[3].priority, 5002);
+        assert_eq!(pkgs[3].paths[0], "/nix/store/jkl-hello-doc");
+    }
+
+    #[test]
+    fn test_packages_to_pkgs_v2_simple() {
+        let packages = vec![PackageEntry {
+            attr_path: Some("hello".to_string()),
+            outputs: {
+                let mut map = HashMap::new();
+                map.insert("out".to_string(), "/nix/store/abc-hello".to_string());
+                map
+            },
+            outputs_to_install: Some(vec!["out".to_string()]),
+            outputs_to_install_hyphen: None,
+            priority: 5,
+            store_path: None,
+        }];
+
+        let mut install = HashMap::new();
+        install.insert("hello".to_string(), InstallEntry {
+            pkg_path: "hello".to_string(),
+            systems: None,
+            outputs: None,
+        });
+
+        let pkgs = packages_to_pkgs(&packages, 2, &install);
+
+        // V2: Each output gets separate entry
+        assert_eq!(pkgs.len(), 1);
+        assert_eq!(pkgs[0].paths.len(), 1);
+        assert_eq!(pkgs[0].paths[0], "/nix/store/abc-hello");
+        assert_eq!(pkgs[0].priority, 5000);
+    }
+
+    #[test]
+    fn test_packages_to_pkgs_v2_multiple_outputs() {
+        let packages = vec![PackageEntry {
+            attr_path: Some("bash".to_string()),
+            outputs: {
+                let mut map = HashMap::new();
+                map.insert("out".to_string(), "/nix/store/abc-bash".to_string());
+                map.insert("man".to_string(), "/nix/store/def-bash-man".to_string());
+                map.insert("doc".to_string(), "/nix/store/ghi-bash-doc".to_string());
+                map
+            },
+            outputs_to_install: Some(vec!["out".to_string(), "man".to_string()]),
+            outputs_to_install_hyphen: None,
+            priority: 5,
+            store_path: None,
+        }];
+
+        let mut install = HashMap::new();
+        install.insert("bash".to_string(), InstallEntry {
+            pkg_path: "bash".to_string(),
+            systems: None,
+            outputs: Some(serde_json::Value::String("all".to_string())),
+        });
+
+        let pkgs = packages_to_pkgs(&packages, 2, &install);
+
+        // V2: Each output gets separate entry with per-package counter
+        assert_eq!(pkgs.len(), 3);
+
+        // All outputs included (except stubs)
+        assert_eq!(pkgs[0].priority, 5000);
+        assert_eq!(pkgs[1].priority, 5001);
+        assert_eq!(pkgs[2].priority, 5002);
+    }
+
+    #[test]
+    fn test_packages_to_pkgs_v2_per_package_counter() {
+        // Test that V2 uses per-package counter (resets for each package)
+        let packages = vec![
+            PackageEntry {
+                attr_path: Some("bash".to_string()),
+                outputs: {
+                    let mut map = HashMap::new();
+                    map.insert("out".to_string(), "/nix/store/abc-bash".to_string());
+                    map.insert("man".to_string(), "/nix/store/def-bash-man".to_string());
+                    map
+                },
+                outputs_to_install: Some(vec!["out".to_string()]),
+                outputs_to_install_hyphen: None,
+                priority: 5,
+                store_path: None,
+            },
+            PackageEntry {
+                attr_path: Some("hello".to_string()),
+                outputs: {
+                    let mut map = HashMap::new();
+                    map.insert("out".to_string(), "/nix/store/ghi-hello".to_string());
+                    map.insert("doc".to_string(), "/nix/store/jkl-hello-doc".to_string());
+                    map
+                },
+                outputs_to_install: Some(vec!["out".to_string()]),
+                outputs_to_install_hyphen: None,
+                priority: 5,
+                store_path: None,
+            },
+        ];
+
+        let mut install = HashMap::new();
+        install.insert("bash".to_string(), InstallEntry {
+            pkg_path: "bash".to_string(),
+            systems: None,
+            outputs: Some(serde_json::Value::String("all".to_string())),
+        });
+        install.insert("hello".to_string(), InstallEntry {
+            pkg_path: "hello".to_string(),
+            systems: None,
+            outputs: Some(serde_json::Value::String("all".to_string())),
+        });
+
+        let pkgs = packages_to_pkgs(&packages, 2, &install);
+
+        // Should have 4 entries: 2 for each package
+        assert_eq!(pkgs.len(), 4);
+
+        // First package outputs (counter starts at 0)
+        assert_eq!(pkgs[0].priority, 5000);
+        assert_eq!(pkgs[1].priority, 5001);
+
+        // Second package outputs (counter resets to 0)
+        assert_eq!(pkgs[2].priority, 5000);
+        assert_eq!(pkgs[3].priority, 5001);
+    }
+
+    #[test]
+    fn test_packages_to_pkgs_v2_outputs_array() {
+        let packages = vec![PackageEntry {
+            attr_path: Some("bash".to_string()),
+            outputs: {
+                let mut map = HashMap::new();
+                map.insert("out".to_string(), "/nix/store/abc-bash".to_string());
+                map.insert("man".to_string(), "/nix/store/def-bash-man".to_string());
+                map.insert("doc".to_string(), "/nix/store/ghi-bash-doc".to_string());
+                map
+            },
+            outputs_to_install: Some(vec!["out".to_string()]),
+            outputs_to_install_hyphen: None,
+            priority: 5,
+            store_path: None,
+        }];
+
+        let mut install = HashMap::new();
+        install.insert("bash".to_string(), InstallEntry {
+            pkg_path: "bash".to_string(),
+            systems: None,
+            outputs: Some(serde_json::json!(["out", "man"])),
+        });
+
+        let pkgs = packages_to_pkgs(&packages, 2, &install);
+
+        // V2: Only outputs specified in array should be included
+        assert_eq!(pkgs.len(), 2);
+
+        // Check that only out and man are included
+        let paths: Vec<&str> = pkgs
+            .iter()
+            .flat_map(|p| p.paths.iter())
+            .map(|s| s.as_str())
+            .collect();
+        assert!(paths.contains(&"/nix/store/abc-bash"));
+        assert!(paths.contains(&"/nix/store/def-bash-man"));
+        assert!(!paths.iter().any(|p| p.contains("doc")));
+    }
+
+    #[test]
+    fn test_packages_to_pkgs_v2_skip_stubs() {
+        let packages = vec![PackageEntry {
+            attr_path: Some("hello".to_string()),
+            outputs: {
+                let mut map = HashMap::new();
+                map.insert("out".to_string(), "/nix/store/abc-hello".to_string());
+                map.insert(
+                    "stubs".to_string(),
+                    "/nix/store/def-hello-stubs".to_string(),
+                );
+                map
+            },
+            outputs_to_install: None,
+            outputs_to_install_hyphen: None,
+            priority: 5,
+            store_path: None,
+        }];
+
+        let mut install = HashMap::new();
+        install.insert("hello".to_string(), InstallEntry {
+            pkg_path: "hello".to_string(),
+            systems: None,
+            outputs: Some(serde_json::Value::String("all".to_string())),
+        });
+
+        let pkgs = packages_to_pkgs(&packages, 2, &install);
+
+        // Stubs output should be skipped even in V2
+        assert_eq!(pkgs.len(), 1);
+        assert_eq!(pkgs[0].paths[0], "/nix/store/abc-hello");
+    }
+
+    #[test]
+    fn test_packages_to_pkgs_v1_synthetic_package_without_attr_path() {
+        // Test V1 handling of synthetic packages (without attr_path)
+        let packages = vec![PackageEntry {
+            attr_path: None,
+            outputs: {
+                let mut map = HashMap::new();
+                map.insert("out".to_string(), "/nix/store/abc-synthetic".to_string());
+                map.insert(
+                    "man".to_string(),
+                    "/nix/store/def-synthetic-man".to_string(),
+                );
+                map
+            },
+            outputs_to_install: None,
+            outputs_to_install_hyphen: None,
+            priority: 1,
+            store_path: None,
+        }];
+
+        let install = HashMap::new();
+        let pkgs = packages_to_pkgs(&packages, 1, &install);
+
+        // All outputs should be grouped together with base priority
+        assert_eq!(pkgs.len(), 1);
+        assert_eq!(pkgs[0].paths.len(), 2);
+        assert!(pkgs[0]
+            .paths
+            .contains(&"/nix/store/abc-synthetic".to_string()));
+        assert!(pkgs[0]
+            .paths
+            .contains(&"/nix/store/def-synthetic-man".to_string()));
+        assert_eq!(pkgs[0].priority, 1000);
+    }
+
+    #[test]
+    fn test_packages_to_pkgs_v2_synthetic_package_without_attr_path() {
+        // Test V2 handling of synthetic packages (without attr_path)
+        let packages = vec![PackageEntry {
+            attr_path: None,
+            outputs: {
+                let mut map = HashMap::new();
+                map.insert("out".to_string(), "/nix/store/abc-synthetic".to_string());
+                map.insert(
+                    "man".to_string(),
+                    "/nix/store/def-synthetic-man".to_string(),
+                );
+                map
+            },
+            outputs_to_install: None,
+            outputs_to_install_hyphen: None,
+            priority: 1,
+            store_path: None,
+        }];
+
+        let install = HashMap::new();
+        let pkgs = packages_to_pkgs(&packages, 2, &install);
+
+        // Each output gets a separate entry with incrementing priority
+        assert_eq!(pkgs.len(), 2);
+        assert_eq!(pkgs[0].paths.len(), 1);
+        assert_eq!(pkgs[1].paths.len(), 1);
+        assert_eq!(pkgs[0].priority, 1000);
+        assert_eq!(pkgs[1].priority, 1001);
+    }
+
+    #[test]
+    fn test_packages_to_pkgs_v2_outputs_to_install_fallback() {
+        // Test V2 fallback to outputs_to_install when descriptor.outputs is missing
+        let packages = vec![PackageEntry {
+            attr_path: Some("hello".to_string()),
+            outputs: {
+                let mut map = HashMap::new();
+                map.insert("out".to_string(), "/nix/store/abc-hello".to_string());
+                map.insert("man".to_string(), "/nix/store/def-hello-man".to_string());
+                map.insert("doc".to_string(), "/nix/store/ghi-hello-doc".to_string());
+                map
+            },
+            outputs_to_install: Some(vec!["out".to_string(), "man".to_string()]),
+            outputs_to_install_hyphen: None,
+            priority: 5,
+            store_path: None,
+        }];
+
+        let mut install = HashMap::new();
+        install.insert("hello".to_string(), InstallEntry {
+            pkg_path: "hello".to_string(),
+            systems: None,
+            outputs: None, // No outputs specified in descriptor
+        });
+
+        let pkgs = packages_to_pkgs(&packages, 2, &install);
+
+        // Should fallback to outputs_to_install and include only out and man
+        assert_eq!(pkgs.len(), 2);
+        let paths: Vec<&str> = pkgs
+            .iter()
+            .flat_map(|p| p.paths.iter())
+            .map(|s| s.as_str())
+            .collect();
+        assert!(paths.contains(&"/nix/store/abc-hello"));
+        assert!(paths.contains(&"/nix/store/def-hello-man"));
+        assert!(!paths.iter().any(|p| p.contains("doc")));
+    }
+
+    #[test]
+    fn test_get_valid_attrs_error_on_missing_output() {
+        // Test that get_valid_attrs errors when an output doesn't exist
+        let mut package_outputs = HashMap::new();
+        package_outputs.insert("out".to_string(), "/nix/store/abc-hello".to_string());
+        package_outputs.insert("man".to_string(), "/nix/store/def-hello-man".to_string());
+
+        let requested_outputs = vec!["out".to_string(), "doc".to_string()];
+
+        let result = get_valid_attrs(&package_outputs, &requested_outputs);
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("output 'doc' is not available"));
+        assert!(err_msg.contains("available outputs:"));
     }
 }
