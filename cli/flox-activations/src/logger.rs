@@ -2,7 +2,6 @@ use std::io;
 use std::io::IsTerminal;
 use std::path::Path;
 
-use anyhow::Context;
 use flox_core::activate::vars::FLOX_ACTIVATIONS_VERBOSITY_VAR;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -57,7 +56,7 @@ pub struct LoggerHandle {
 }
 
 /// Initialize logging to STDERR.
-pub fn init_logger(verbosity_arg: Option<u32>) -> Result<LoggerHandle, anyhow::Error> {
+pub fn init_stderr_logger(verbosity_arg: Option<u32>) -> Result<u32, anyhow::Error> {
     let (subsystem_verbosity, filter) = Verbosity::verbosity_from_env_and_arg(verbosity_arg);
     let env_filter = EnvFilter::try_new(filter)?;
 
@@ -66,25 +65,24 @@ pub fn init_logger(verbosity_arg: Option<u32>) -> Result<LoggerHandle, anyhow::E
         .with_ansi(io::stderr().is_terminal())
         .with_target(true)
         .boxed();
-    let (reloadable, reload_handle) = reload::Layer::new(stderr_layer);
 
     tracing_subscriber::registry()
-        .with(reloadable)
+        .with(stderr_layer)
         .with(env_filter)
         .init();
 
-    Ok(LoggerHandle {
-        subsystem_verbosity,
-        reload_handle,
-    })
+    Ok(subsystem_verbosity)
 }
 
 /// Replace existing logging with a file. Used by long-living child processes.
-pub fn switch_to_file_logging(
-    reload_handle: ReloadHandle,
+pub fn init_file_logger(
+    verbosity_arg: Option<u32>,
     log_file: impl AsRef<str>,
     log_dir: impl AsRef<Path>,
-) -> Result<(), anyhow::Error> {
+) -> Result<u32, anyhow::Error> {
+    let (subsystem_verbosity, filter) = Verbosity::verbosity_from_env_and_arg(verbosity_arg);
+    let env_filter = EnvFilter::try_new(filter)?;
+
     let file_appender = tracing_appender::rolling::daily(log_dir, log_file.as_ref());
 
     let file_layer = fmt::layer()
@@ -93,9 +91,10 @@ pub fn switch_to_file_logging(
         .with_target(true)
         .boxed();
 
-    reload_handle
-        .reload(file_layer)
-        .context("failed to reload logger with file output")?;
+    tracing_subscriber::registry()
+        .with(file_layer)
+        .with(env_filter)
+        .init();
 
-    Ok(())
+    Ok(subsystem_verbosity)
 }
