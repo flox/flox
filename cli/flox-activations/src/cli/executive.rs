@@ -8,7 +8,6 @@ use flox_core::traceable_path;
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 #[cfg(target_os = "linux")]
 use flox_watchdog::reaper::linux::SubreaperGuard;
-use nix::libc::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use nix::sys::signal::Signal::SIGUSR1;
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
@@ -83,11 +82,6 @@ impl ExecutiveArgs {
             log_file, "switching to file logging"
         );
         logger::switch_to_file_logging(reload_handle, log_file, log_dir)?;
-
-        // Close stdin, stdout, stderr to detach from terminal
-        for fd in &[STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO] {
-            let _ = nix::unistd::close(*fd);
-        }
 
         // TODO: Enable earlier in `flox-activations` rather than just when detached?
         // TODO: Re-enable sentry after fixing OpenSSL dependency issues
