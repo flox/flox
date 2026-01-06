@@ -56,7 +56,10 @@ impl AttachArgs {
 
         let (activation_state, lock) = rewrite::read_activations_json(&activations_json_path)?;
         let Some(mut activation_state) = activation_state else {
-            anyhow::bail!("Expected an existing activations.json file");
+            anyhow::bail!(
+                "Expected an existing state file at {}",
+                activations_json_path.display()
+            );
         };
 
         match self.exclusive {
