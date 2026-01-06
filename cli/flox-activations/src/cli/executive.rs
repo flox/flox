@@ -37,7 +37,7 @@ pub struct ExecutiveArgs {
 }
 
 impl ExecutiveArgs {
-    pub fn handle(self, reload_handle: logger::ReloadHandle) -> Result<(), anyhow::Error> {
+    pub fn handle(self) -> Result<(), anyhow::Error> {
         let contents = fs::read_to_string(&self.executive_ctx)?;
         let ExecutiveCtx {
             context,
@@ -75,13 +75,6 @@ impl ExecutiveArgs {
             log_dir: log_dir.into(),
             disable_metrics: env::var(FLOX_DISABLE_METRICS_VAR).is_ok(),
         };
-
-        let log_file = format!("executive.{}.log", process::id());
-        debug!(
-            log_dir = traceable_path(&watchdog.log_dir),
-            log_file, "switching to file logging"
-        );
-        logger::switch_to_file_logging(reload_handle, log_file, log_dir)?;
 
         // TODO: Enable earlier in `flox-activations` rather than just when detached?
         // TODO: Re-enable sentry after fixing OpenSSL dependency issues

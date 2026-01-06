@@ -15,8 +15,18 @@ fn main() {
 fn try_main() -> Result<(), Error> {
     let args = Cli::parse();
 
-    let logger_handle =
-        logger::init_logger(args.verbosity).context("failed to initialize logger")?;
+    let subsystem_verbosity = match args.command {
+        cli::Command::Executive(_) => {
+            // Executive handles its own logging initialization
+            let log_file = format!("executive.{}.log", std::process::id());
+            logger::init_file_logger(args.verbosity, log_file, watchdog.log_dir)
+                .context("failed to initialize logger")?
+        },
+        _ => {
+            logger::init_stderr_logger(args.verbosity)
+                .context("failed to initialize logger")?
+        },
+    };
 
     // Propagate PID field to all spans.
     // We can set this eagerly because the PID doesn't change after this entry
@@ -29,8 +39,8 @@ fn try_main() -> Result<(), Error> {
 
     match args.command {
         cli::Command::Attach(args) => args.handle(),
-        cli::Command::Activate(args) => args.handle(logger_handle.subsystem_verbosity),
-        cli::Command::Executive(cmd_args) => cmd_args.handle(logger_handle.reload_handle),
+        cli::Command::Activate(args) => args.handle(subsystem_verbosity),
+        cli::Command::Executive(cmd_args) => cmd_args.handle(),
         cli::Command::FixPaths(args) => args.handle(),
         cli::Command::SetEnvDirs(args) => args.handle(),
         cli::Command::ProfileScripts(args) => args.handle(),
