@@ -219,18 +219,21 @@ impl ActivateArgs {
             std::fs::create_dir_all(&start_state_dir)?;
         }
 
-        let new_exec_pid = if needs_new_executive {
+        let new_executive = if needs_new_executive {
+            // Register signal handler BEFORE spawning executive to avoid race condition
+            // where SIGUSR1 arrives before handler is registered
+            let signals = Signals::new([SIGCHLD, SIGUSR1])?;
             let exec_pid = self.spawn_executive(context, &start_state_dir)?;
             activations.set_executive_pid(exec_pid.as_raw());
-            Some(exec_pid)
+            Some((exec_pid, signals))
         } else {
             None
         };
 
         write_activations_json(&activations, &activations_json_path, lock)?;
 
-        if let Some(exec_pid) = new_exec_pid {
-            Self::wait_for_executive(exec_pid)?;
+        if let Some((exec_pid, signals)) = new_executive {
+            Self::wait_for_executive(exec_pid, signals)?;
         }
 
         match &result {
@@ -331,13 +334,13 @@ impl ActivateArgs {
 
     /// Wait for the executive to signal that it has started by sending SIGUSR1.
     /// If the executive dies, then we error.
-    fn wait_for_executive(child_pid: Pid) -> Result<(), anyhow::Error> {
+    /// Signals should have been registered for SIGCHLD and SIGUSR1
+    fn wait_for_executive(child_pid: Pid, mut signals: Signals) -> Result<(), anyhow::Error> {
         debug!(
             "Awaiting SIGUSR1 from child process with PID: {}",
             child_pid
         );
 
-        let mut signals = Signals::new([SIGCHLD, SIGUSR1])?;
         // I think the executive will always either successfully send SIGUSR1,
         // or it will exit sending SIGCHLD
         // If I'm wrong, this will loop forever
