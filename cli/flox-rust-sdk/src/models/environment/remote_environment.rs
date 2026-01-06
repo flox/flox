@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
-use tracing::{debug, instrument};
+use tracing::debug;
 
 use super::core_environment::UpgradeResult;
 use super::fetcher::IncludeFetcher;
@@ -35,6 +35,7 @@ use crate::models::environment::floxmeta_branch::{
     FloxmetaBranch,
     FloxmetaBranchError,
     GenerationLock,
+    write_generation_lock,
 };
 use crate::models::environment::managed_environment::GENERATION_LOCK_FILENAME;
 use crate::models::environment_ref::EnvironmentName;
@@ -124,7 +125,6 @@ impl RemoteEnvironment {
     /// Pull a remote environment into a provided (temporary) managed environment.
     /// Constructing a [RemoteEnvironment] _does not_ create a gc-root
     /// or guarantee that the environment is valid.
-    #[instrument(skip_all, fields(progress = "Pulling remote environment"))]
     pub fn new_in(
         flox: &Flox,
         path: impl AsRef<Path>,
@@ -143,9 +143,13 @@ impl RemoteEnvironment {
             .map_err(ManagedEnvironmentError::from)
             .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
 
-        let (floxmeta_branch, _lock) =
+        let (floxmeta_branch, lock) =
             FloxmetaBranch::new(flox, &pointer, &dot_flox_path, maybe_lock)
                 .map_err(RemoteEnvironmentError::GetLatestVersion)?;
+
+        write_generation_lock(lock_path, &lock)
+            .map_err(ManagedEnvironmentError::from)
+            .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
 
         let pointer_content = serde_json::to_string_pretty(&pointer).unwrap();
 
