@@ -1548,8 +1548,8 @@ EOF
 
   # Check that services and executive are both running
   "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
-  executive_1_log="$(echo $PROJECT_DIR/.flox/log/executive.*.log.*)"
-  run cat "$executive_1_log"
+  executive_log="$(echo $PROJECT_DIR/.flox/log/executive.*.log.*)"
+  run cat "$executive_log"
   assert_success
   assert_output --partial "woof"
 
@@ -1580,25 +1580,14 @@ EOF
   run cat output
   assert_output --partial "⚠️  Skipped starting services, services are already running"
 
-  # Check that executive 1 has finished cleanup
-  run cat "$executive_1_log"
-  assert_output --partial "woof"
-  wait_for_partial_file_content "$executive_1_log" "finished cleanup"
-  rm "$executive_1_log"
-
-  # Check that executive 2 is running
-  executive_2_log="$(echo $PROJECT_DIR/.flox/log/executive.*.log.*)"
-  run cat "$executive_2_log"
-  assert_output --partial "woof"
-  refute_output "finished cleanup"
-
-  # Even though executive 1 cleaned up, services should still be running
+  # Services should still be running after the 1st activation exited.
+  wait_for_partial_file_content "$executive_log" "detaching terminated PID"
   "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
 
   # Teardown 2nd activation and wait for executive to cleanup
   cat finished_2
   unset TEARDOWN_FIFO
-  wait_for_partial_file_content "$executive_2_log" "finished cleanup"
+  wait_for_partial_file_content "$executive_log" "finished cleanup"
 
   # Make sure services have stopped
   timeout 1s bash -c '
