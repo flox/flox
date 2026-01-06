@@ -22,6 +22,7 @@ use flox_core::activations::rewrite::{
 use flox_core::proc_status::pid_is_running;
 use fslock::LockFile;
 use signal_hook::iterator::Signals;
+use time::OffsetDateTime;
 use tracing::{info, trace};
 
 use crate::reaper::reap_orphaned_children;
@@ -130,15 +131,22 @@ impl Watcher for PidWatcher {
 
         for (start_id, attachments) in attachments_by_start_id {
             let mut all_pids_terminated = true;
-            for (pid, _) in attachments {
-                if pid_is_running(pid) {
-                    // We can skip checking other start_ids when at least one PID is still running.
+            for (pid, expiration) in attachments {
+                let keep_attachment = if let Some(expiration) = expiration {
+                    let now = OffsetDateTime::now_utc();
+                    // If the PID has an unreached expiration, retain it even if it
+                    // isn't running
+                    now < expiration || pid_is_running(pid)
+                } else {
+                    pid_is_running(pid)
+                };
+
+                if keep_attachment {
+                    // We can skip checking other PIDs for this start_id because
+                    // it still has attachments.
                     all_pids_terminated = false;
                     break;
                 } else {
-                    // PID exited. Detach it.
-                    // "Clean up after a StartID after there are no more attachments to that StartID"
-                    // We need to detach THIS pid.
                     info!(?pid, ?start_id, "detaching terminated PID");
                     activations.detach(pid);
                     modified = true;
