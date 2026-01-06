@@ -1581,7 +1581,7 @@ EOF
   assert_output --partial "⚠️  Skipped starting services, services are already running"
 
   # Services should still be running after the 1st activation exited.
-  wait_for_partial_file_content "$executive_log" "detected terminated PID"
+  wait_for_partial_file_content "$executive_log" "detaching terminated PID"
   "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
 
   # Teardown 2nd activation and wait for executive to cleanup
