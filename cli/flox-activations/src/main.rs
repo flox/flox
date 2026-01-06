@@ -15,8 +15,12 @@ fn main() {
 fn try_main() -> Result<(), Error> {
     let args = Cli::parse();
 
-    let logger_handle =
-        logger::init_logger(args.verbosity).context("failed to initialize logger")?;
+    if let cli::Command::Executive(executive_args) = args.command {
+        return executive_args.handle(args.verbosity);
+    };
+
+    let subsystem_verbosity =
+        logger::init_stderr_logger(args.verbosity).context("failed to initialize logger")?;
 
     // Propagate PID field to all spans.
     // We can set this eagerly because the PID doesn't change after this entry
@@ -29,8 +33,10 @@ fn try_main() -> Result<(), Error> {
 
     match args.command {
         cli::Command::Attach(args) => args.handle(),
-        cli::Command::Activate(args) => args.handle(logger_handle.subsystem_verbosity),
-        cli::Command::Executive(cmd_args) => cmd_args.handle(logger_handle.reload_handle),
+        cli::Command::Activate(args) => args.handle(subsystem_verbosity),
+        cli::Command::Executive(_) => {
+            unreachable!("executive already handled above")
+        },
         cli::Command::FixPaths(args) => args.handle(),
         cli::Command::SetEnvDirs(args) => args.handle(),
         cli::Command::ProfileScripts(args) => args.handle(),
