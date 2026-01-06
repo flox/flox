@@ -22,7 +22,7 @@ blake3 = "1.8.2"
 bpaf = { version = "0.9.20", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
 chrono = { version = "0.4.42", features = ["serde"] }
-clap = { version = "4.5.53", features = ["derive"] }
+clap = { version = "4.5.54", features = ["derive"] }
 close_fds = "0.3"
 config = { version = "0.15", default-features = false, features = ["toml"] }
 crossterm = "0.29"
@@ -104,7 +104,7 @@ xdg = "3.0"
 
 # dev dependencies
 pretty_assertions = "1.4"
-serial_test = "3.2.0"
+serial_test = "3.3.1"
 temp-env = "0.3.2"
 
 # watchdog dependencies
