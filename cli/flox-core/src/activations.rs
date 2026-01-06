@@ -253,14 +253,20 @@ pub mod rewrite {
                 .collect()
         }
 
-        /// Returns a mapping of StartIdentifier to the list of PIDs attached to it.
-        pub fn attached_pids_by_start_id(&self) -> BTreeMap<StartIdentifier, Vec<Pid>> {
+        /// Returns a mapping of StartIdentifier to info for each attachment to that StartIdentifier
+        pub fn attachments_by_start_id(
+            &self,
+        ) -> BTreeMap<StartIdentifier, Vec<(Pid, Option<OffsetDateTime>)>> {
             self.attached_pids
                 .iter()
                 .fold(BTreeMap::new(), |mut acc, (pid, attachment)| {
-                    acc.entry(attachment.start_id.clone())
+                    let Attachment {
+                        expiration,
+                        start_id,
+                    } = attachment;
+                    acc.entry(start_id.clone())
                         .or_default()
-                        .push(*pid);
+                        .push((*pid, *expiration));
                     acc
                 })
         }
@@ -345,7 +351,7 @@ pub mod rewrite {
             }
             match self.ready {
                 Ready::True(ref start_id) => {
-                    if !self.attached_pids_by_start_id().contains_key(start_id) {
+                    if !self.attachments_by_start_id().contains_key(start_id) {
                         debug!(?start_id, "no more attached PIDs, marking as not ready");
                         self.ready = Ready::False;
                     }
@@ -566,10 +572,12 @@ pub mod rewrite {
                     _ => panic!("Expected Start"),
                 };
 
-                let expected =
-                    BTreeMap::from([(start_id1, vec![100, 200]), (start_id2, vec![300])]);
+                let expected = BTreeMap::from([
+                    (start_id1, vec![(100, None), (200, None)]),
+                    (start_id2, vec![(300, None)]),
+                ]);
                 assert_eq!(
-                    activations.attached_pids_by_start_id(),
+                    activations.attachments_by_start_id(),
                     expected,
                     "should return attached PIDs grouped by StartIdentifier"
                 );
