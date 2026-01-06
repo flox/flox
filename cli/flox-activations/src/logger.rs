@@ -24,7 +24,7 @@ impl Verbosity {
         // watchdog is more conservative because it backgrounds and writes to a file
         match self.inner {
             0 => "flox_activations=error,flox_watchdog=info",
-            1 => "flox_activations=debug,flox_watchdog=error",
+            1 => "flox_activations=debug,flox_watchdog=info",
             2 => "flox_activations=trace,flox_watchdog=debug",
             _ => "flox_activations=trace,flox_watchdog=trace",
         }
