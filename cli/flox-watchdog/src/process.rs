@@ -22,7 +22,7 @@ use flox_core::activations::rewrite::{
 use flox_core::proc_status::pid_is_running;
 use fslock::LockFile;
 use signal_hook::iterator::Signals;
-use tracing::trace;
+use tracing::{info, trace};
 
 use crate::reaper::reap_orphaned_children;
 /// How long to wait between watcher updates.
@@ -139,6 +139,7 @@ impl Watcher for PidWatcher {
                     // PID exited. Detach it.
                     // "Clean up after a StartID after there are no more attachments to that StartID"
                     // We need to detach THIS pid.
+                    info!(?pid, ?start_id, "detaching terminated PID");
                     activations.detach(pid);
                     modified = true;
                 }
