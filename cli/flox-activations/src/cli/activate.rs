@@ -1,6 +1,6 @@
 use std::fs::{self};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use anyhow::{Result, anyhow, bail};
 use clap::Args;
@@ -319,6 +319,10 @@ impl ActivateArgs {
             "--executive-ctx",
             &executive_ctx_path.to_string_lossy(),
         ]);
+        executive
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
 
         debug!(
             "Spawning executive process to start activation: {:?}",
