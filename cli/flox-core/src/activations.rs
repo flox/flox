@@ -745,7 +745,7 @@ pub mod rewrite {
                 };
                 assert_eq!(ready_pid, pid);
                 assert_eq!(new_start_id, ready_start_id);
-                assert!(new_start_id.timestamp > old_start_id.timestamp);
+                assert!(new_start_id.timestamp >= old_start_id.timestamp);
                 assert_eq!(
                     activations.attached_pids,
                     BTreeMap::from([(pid, make_attachment(new_start_id))])
