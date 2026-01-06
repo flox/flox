@@ -454,7 +454,7 @@ define BUILD_local_template =
 	  --argstr pname "$(_pname)" \
 	  --argstr version "$(_version)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
-	  --argstr nixpkgs-url $(BUILDTIME_NIXPKGS_URL) \
+	  --argstr nixpkgs-url '$(BUILDTIME_NIXPKGS_URL)' \
 	  --argstr build-wrapper-env "$$($(_pvarname)_build_wrapper_env)" \
 	  --argstr install-prefix "$($(_pvarname)_out)" \
 	  $$(if $$($(_pvarname)_buildDeps),--arg buildDeps '[$$($(_pvarname)_buildDeps)]') \
@@ -546,7 +546,7 @@ define BUILD_nix_sandbox_template =
 	  --argstr version "$(_version)" \
 	  --argstr srcTarball "$($(_pvarname)_src_tar)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
-	  --argstr nixpkgs-url $(BUILDTIME_NIXPKGS_URL) \
+	  --argstr nixpkgs-url '$(BUILDTIME_NIXPKGS_URL)' \
 	  --argstr build-wrapper-env "$$($(_pvarname)_build_wrapper_env)" \
 	  $$(if $$($(_pvarname)_buildDeps),--arg buildDeps '[$$($(_pvarname)_buildDeps)]') \
 	  --argstr buildScript "$($(_pvarname)_buildScript)" \
@@ -744,7 +744,7 @@ define NIX_EXPRESSION_BUILD_template =
   $($(_pvarname)_evalJSON): $(PROJECT_TMPDIR)/check-build-prerequisites
 	$(_V_) $(_mkdir) -p $$(@D)
 	$(_V_) $(_nix) eval -L --file $(_nef) \
-	  --argstr nixpkgs-url "$(EXPRESSION_BUILD_NIXPKGS_URL)" \
+	  --argstr nixpkgs-url '$(EXPRESSION_BUILD_NIXPKGS_URL)' \
 	  --argstr system $(NIX_SYSTEM) \
 	  $(NIX_EXPRESSION_DIR_ARGS) \
 	  --json \
