@@ -125,12 +125,12 @@ impl Watcher for PidWatcher {
         };
 
         let mut modified = false;
-        let attachments_by_start_id = activations.attached_pids_by_start_id();
+        let attachments_by_start_id = activations.attachments_by_start_id();
         let mut empty_start_ids = Vec::new();
 
-        for (start_id, pids) in attachments_by_start_id {
+        for (start_id, attachments) in attachments_by_start_id {
             let mut all_pids_terminated = true;
-            for pid in pids {
+            for (pid, _) in attachments {
                 if pid_is_running(pid) {
                     // We can skip checking other start_ids when at least one PID is still running.
                     all_pids_terminated = false;
