@@ -341,9 +341,56 @@ pub mod rewrite {
             debug!(pid, ?removed, "detaching from activation");
         }
 
+        /// Clean up terminated PIDs
+        ///
+        /// Returns a list of start IDs that have no more attached PIDs, and a boolean
+        /// indicating if any PIDs were detached.
+        pub fn cleanup_pids(
+            &mut self,
+            pid_is_running: impl Fn(Pid) -> bool,
+            now: OffsetDateTime,
+        ) -> (Vec<StartIdentifier>, bool) {
+            let mut modified = false;
+            let attachments_by_start_id = self.attachments_by_start_id();
+            let mut empty_start_ids = Vec::new();
+
+            for (start_id, attachments) in attachments_by_start_id {
+                let mut all_pids_terminated = true;
+                for (pid, expiration) in attachments {
+                    let keep_attachment = if let Some(expiration) = expiration {
+                        // If the PID has an unreached expiration, retain it even if it
+                        // isn't running
+                        now < expiration || pid_is_running(pid)
+                    } else {
+                        pid_is_running(pid)
+                    };
+
+                    if keep_attachment {
+                        // We can skip checking other PIDs for this start_id because
+                        // it still has attachments.
+                        all_pids_terminated = false;
+                        break;
+                    } else {
+                        tracing::info!(?pid, ?start_id, "detaching terminated PID");
+                        self.detach(pid);
+                        modified = true;
+                    }
+                }
+
+                if all_pids_terminated {
+                    empty_start_ids.push(start_id);
+                }
+            }
+            // Only update ready state if there are still attached PIDs
+            if !self.attached_pids.is_empty() {
+                self.update_ready_after_detach();
+            }
+            (empty_start_ids, modified)
+        }
+
         /// set ready to False if there are no more PIDs attached to the current start
         /// should only be called when there are some attached PIDs
-        pub fn update_ready_after_detach(&mut self) {
+        fn update_ready_after_detach(&mut self) {
             if self.attached_pids.is_empty() {
                 unreachable!("should remove all state when there are no more attached PIDs");
             }
@@ -463,6 +510,7 @@ pub mod rewrite {
     #[cfg(test)]
     mod tests {
         use std::process::{Child, Command};
+        use std::time::Duration;
 
         use super::*;
         // NOTE: these two functions are copied from flox-rust-sdk since you can't
@@ -830,6 +878,48 @@ pub mod rewrite {
                     "should have only one attachment",
                 );
             }
+        }
+
+        #[test]
+        fn test_cleanup_pids_keeps_expired_but_running_pids() {
+            // Create an attachment with an expiration in the past
+            let mut activations = ActivationState::new(&ActivateMode::default());
+            let start_id = make_start_id("/nix/store/test");
+            let pid = 0;
+            let now = OffsetDateTime::now_utc();
+            let expiration = now - Duration::from_secs(10);
+            let attachment = Attachment {
+                start_id: start_id.clone(),
+                expiration: Some(expiration),
+            };
+            activations.attach(pid, attachment);
+
+            // Cleanup with PID still running
+            let (empty_starts, modified) = activations.cleanup_pids(|_| true, now);
+            assert!(activations.attached_pids.contains_key(&pid));
+            assert!(!modified);
+            assert!(empty_starts.is_empty());
+        }
+
+        #[test]
+        fn test_cleanup_pids_keeps_not_running_but_not_expired_pids() {
+            // Create an attachment with an expiration in the future
+            let mut activations = ActivationState::new(&ActivateMode::default());
+            let start_id = make_start_id("/nix/store/test");
+            let pid = 0;
+            let now = OffsetDateTime::now_utc();
+            let expiration = now + Duration::from_secs(10);
+            let attachment = Attachment {
+                start_id: start_id.clone(),
+                expiration: Some(expiration),
+            };
+            activations.attach(pid, attachment);
+
+            // Cleanup with PID not running
+            let (empty_starts, modified) = activations.cleanup_pids(|_| false, now);
+            assert!(activations.attached_pids.contains_key(&pid));
+            assert!(!modified);
+            assert!(empty_starts.is_empty());
         }
     }
 }

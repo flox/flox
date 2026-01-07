@@ -23,7 +23,7 @@ use flox_core::proc_status::pid_is_running;
 use fslock::LockFile;
 use signal_hook::iterator::Signals;
 use time::OffsetDateTime;
-use tracing::{info, trace};
+use tracing::trace;
 
 use crate::reaper::reap_orphaned_children;
 /// How long to wait between watcher updates.
@@ -125,38 +125,8 @@ impl Watcher for PidWatcher {
             bail!("watchdog shouldn't be running when activations.json doesn't exist");
         };
 
-        let mut modified = false;
-        let attachments_by_start_id = activations.attachments_by_start_id();
-        let mut empty_start_ids = Vec::new();
-
-        for (start_id, attachments) in attachments_by_start_id {
-            let mut all_pids_terminated = true;
-            for (pid, expiration) in attachments {
-                let keep_attachment = if let Some(expiration) = expiration {
-                    let now = OffsetDateTime::now_utc();
-                    // If the PID has an unreached expiration, retain it even if it
-                    // isn't running
-                    now < expiration || pid_is_running(pid)
-                } else {
-                    pid_is_running(pid)
-                };
-
-                if keep_attachment {
-                    // We can skip checking other PIDs for this start_id because
-                    // it still has attachments.
-                    all_pids_terminated = false;
-                    break;
-                } else {
-                    info!(?pid, ?start_id, "detaching terminated PID");
-                    activations.detach(pid);
-                    modified = true;
-                }
-            }
-
-            if all_pids_terminated {
-                empty_start_ids.push(start_id);
-            }
-        }
+        let now = OffsetDateTime::now_utc();
+        let (empty_start_ids, modified) = activations.cleanup_pids(pid_is_running, now);
 
         // If there are no more attached PIDs for any start, return early and
         // cleanup the entirety of the activation state directory
@@ -164,9 +134,6 @@ impl Watcher for PidWatcher {
             let res = WaitResult::CleanUp((activations, lock));
             return Ok(Some(res));
         }
-
-        // TODO: should this and the above loop be implemented in ActivationState?
-        activations.update_ready_after_detach();
 
         // Cleanup empty start IDs
         //
