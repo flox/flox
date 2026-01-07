@@ -2054,4 +2054,219 @@ mod buildenv_tests {
             expected: {expected}"
         );
     }
+
+    #[test]
+    fn v2_manifest_default_outputs_includes_man() {
+        let buildenv = buildenv_instance();
+        let client = MockClient::new();
+
+        // Get a v2 lockfile with no outputs specified (should use outputs_to_install)
+        let lockfile_path = GENERATED_DATA.join("envs/bash_v2_default/manifest.lock");
+
+        let result = buildenv.build(&client, &lockfile_path, None);
+        assert!(
+            result.is_ok(),
+            "environment should build successfully: {}",
+            result.as_ref().unwrap_err()
+        );
+
+        let outputs = result.unwrap();
+        let runtime = outputs.runtime.as_ref();
+        let develop = outputs.develop.as_ref();
+
+        // For the `bash` package the full list of outputs is:
+        //
+        // - out (bin/bash)
+        // - man (share/man)
+        // - info (share/info)
+        // - doc (share/doc)
+        // - dev (include)
+        //
+        // and `outputs_to_install` is:
+        //
+        // - out
+        // - man
+        //
+        // So we expect "out" and "man" to be included by default
+        assert!(
+            runtime.join("bin/bash").exists(),
+            "bin/bash should exist in runtime closure"
+        );
+        assert!(
+            develop.join("bin/bash").exists(),
+            "bin/bash should exist in develop closure"
+        );
+        assert!(
+            runtime.join("share/man").exists(),
+            "share/man should exist in runtime closure"
+        );
+        assert!(
+            develop.join("share/man").exists(),
+            "share/man should exist in develop closure"
+        );
+        // Directories from other outputs shouldn't exist
+        assert!(
+            !runtime.join("share/info").exists(),
+            "share/info should not exist in runtime environment with default outputs"
+        );
+        assert!(
+            !develop.join("share/info").exists(),
+            "share/info should not exist in develop environment with default outputs"
+        );
+        assert!(
+            !runtime.join("share/doc").exists(),
+            "share/doc should not exist in runtime environment with default outputs"
+        );
+        assert!(
+            !develop.join("share/doc").exists(),
+            "share/doc should not exist in develop environment with default outputs"
+        );
+        assert!(
+            !runtime.join("include").exists(),
+            "include should not exist in runtime environment with default outputs"
+        );
+        assert!(
+            !develop.join("include").exists(),
+            "include should not exist in develop environment with default outputs"
+        );
+    }
+
+    #[test]
+    fn v2_manifest_outputs_all_includes_info() {
+        let buildenv = buildenv_instance();
+        let client = MockClient::new();
+
+        // Get a v2 lockfile with outputs = "all"
+        let lockfile_path = GENERATED_DATA.join("envs/bash_v2_all/manifest.lock");
+
+        let result = buildenv.build(&client, &lockfile_path, None);
+        assert!(
+            result.is_ok(),
+            "environment should build successfully: {}",
+            result.as_ref().unwrap_err()
+        );
+
+        let outputs = result.unwrap();
+        let runtime = outputs.runtime.as_ref();
+        let develop = outputs.develop.as_ref();
+
+        // For the `bash` package the full list of outputs is:
+        //
+        // - out (bin/bash)
+        // - man (share/man)
+        // - info (share/info)
+        // - doc (share/doc)
+        // - dev (include)
+        assert!(
+            runtime.join("bin/bash").exists(),
+            "bin/bash should exist in runtime environment with outputs='all'"
+        );
+        assert!(
+            develop.join("bin/bash").exists(),
+            "bin/bash should exist in develop environment with outputs='all'"
+        );
+        assert!(
+            runtime.join("share/man").exists(),
+            "share/man should exist in runtime environment with outputs='all'"
+        );
+        assert!(
+            develop.join("share/man").exists(),
+            "share/man should exist in develop environment with outputs='all'"
+        );
+        assert!(
+            runtime.join("share/info").exists(),
+            "share/info should exist in runtime environment with outputs='all'"
+        );
+        assert!(
+            develop.join("share/info").exists(),
+            "share/info should exist in develop environment with outputs='all'"
+        );
+        assert!(
+            runtime.join("share/doc").exists(),
+            "share/doc should exist in runtime environment with outputs='all'"
+        );
+        assert!(
+            develop.join("share/doc").exists(),
+            "share/doc should exist in develop environment with outputs='all'"
+        );
+        assert!(
+            runtime.join("include").exists(),
+            "include should exist in runtime environment with outputs='all'"
+        );
+        assert!(
+            develop.join("include").exists(),
+            "include should exist in develop environment with outputs='all'"
+        );
+    }
+
+    #[test]
+    fn v2_manifest_outputs_out_only_excludes_others() {
+        let buildenv = buildenv_instance();
+        let client = MockClient::new();
+
+        // Get a v2 lockfile with outputs = ["out"]
+        let lockfile_path = GENERATED_DATA.join("envs/bash_v2_out/manifest.lock");
+
+        let result = buildenv.build(&client, &lockfile_path, None);
+        assert!(
+            result.is_ok(),
+            "environment should build successfully: {}",
+            result.as_ref().unwrap_err()
+        );
+
+        let outputs = result.unwrap();
+        let runtime = outputs.runtime.as_ref();
+        let develop = outputs.develop.as_ref();
+
+        // For the `bash` package the full list of outputs is:
+        //
+        // - out (bin/bash)
+        // - man (share/man)
+        // - info (share/info)
+        // - doc (share/doc)
+        // - dev (include)
+        //
+        // Since we're only including "out", none of the other directories
+        // should exist
+        assert!(
+            runtime.join("bin/bash").exists(),
+            "bin/bash should exist in runtime environment with outputs=['out']"
+        );
+        assert!(
+            develop.join("bin/bash").exists(),
+            "bin/bash should exist in develop environment with outputs=['out']"
+        );
+        assert!(
+            !runtime.join("share/man").exists(),
+            "share/man should not exist in runtime environment with outputs=['out']"
+        );
+        assert!(
+            !develop.join("share/man").exists(),
+            "share/man should not exist in develop environment with outputs=['out']"
+        );
+        assert!(
+            !runtime.join("share/info").exists(),
+            "share/info should not exist in runtime environment with outputs=['out']"
+        );
+        assert!(
+            !develop.join("share/info").exists(),
+            "share/info should not exist in develop environment with outputs=['out']"
+        );
+        assert!(
+            !runtime.join("share/doc").exists(),
+            "share/doc should not exist in runtime environment with outputs=['out']"
+        );
+        assert!(
+            !develop.join("share/doc").exists(),
+            "share/doc should not exist in develop environment with outputs=['out']"
+        );
+        assert!(
+            !runtime.join("include").exists(),
+            "include should not exist in runtime environment with outputs=['out']"
+        );
+        assert!(
+            !develop.join("include").exists(),
+            "include should not exist in develop environment with outputs=['out']"
+        );
+    }
 }
