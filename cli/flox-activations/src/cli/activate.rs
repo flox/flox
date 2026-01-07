@@ -1,4 +1,5 @@
-use std::fs::{self};
+use std::fs::{self, DirBuilder};
+use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -216,7 +217,10 @@ impl ActivateArgs {
             &context.attach_ctx.dot_flox_path,
         )?;
         if matches!(result, StartOrAttachResult::Start { .. }) {
-            std::fs::create_dir_all(&start_state_dir)?;
+            DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(&start_state_dir)?;
         }
 
         let new_executive = if needs_new_executive {

@@ -17,6 +17,9 @@ _profile_d="__OUT__/etc/profile.d"
 
 set -euo pipefail
 
+# Set umask to ensure files are created with 0600 (may contain secrets)
+umask 077
+
 # shellcheck source-path=SCRIPTDIR/activate.d
 source "${_activate_d}/helpers.bash"
 
