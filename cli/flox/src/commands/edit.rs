@@ -20,6 +20,7 @@ use flox_rust_sdk::models::environment::{
 };
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use flox_rust_sdk::providers::services::process_compose::ServiceError;
+use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{debug, instrument};
 
@@ -118,8 +119,36 @@ impl Edit {
                     environment.rename(name.clone())?;
                     message::updated(format!("renamed environment '{old_name}' to '{name}'"));
                 } else {
-                    // todo: handle remote environments in the future
-                    bail!("Cannot rename environments on FloxHub");
+                    // TODO: hit the endpoint to rename
+
+                    // Extract pointer from either Managed or Remote environment
+                    let pointer = match &detected_environment {
+                        ConcreteEnvironment::Managed(env) => env.pointer(),
+                        ConcreteEnvironment::Remote(env) => env.pointer(),
+                        ConcreteEnvironment::Path(_) => unreachable!("Path case handled above"),
+                    };
+
+                    // Construct settings URL: {floxhub_url}/{owner}/{name}/settings
+                    let settings_url = pointer.floxhub_url().ok().and_then(|mut url| {
+                        // join() would treat last element of floxhub_url() as a file,
+                        // so the last element would get removed
+                        url.path_segments_mut()
+                            .map(|mut segments| {
+                                segments.push("settings");
+                            })
+                            .map(|_| url)
+                            .ok()
+                    });
+
+                    if let Some(settings_url) = settings_url {
+                        bail!(
+                            formatdoc! {"FloxHub environments must currently be renamed on FloxHub.
+                                         Rename this environment at {}
+                                         Then pull the renamed environment.", settings_url}
+                        );
+                    } else {
+                        bail!("FloxHub environments must currently be renamed on FloxHub.");
+                    }
                 }
             },
 
