@@ -717,6 +717,11 @@ fn group_for_single_package(attr_path: &str, version: Option<&str>) -> PackageGr
 #[cfg(test)]
 mod tests {
 
+    use flox_rust_sdk::flox::EnvironmentOwner;
+    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub;
+    use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
+    use flox_rust_sdk::models::environment::{EnvironmentError, ManagedPointer};
+    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
@@ -957,5 +962,77 @@ mod tests {
         let customization = InitCustomization::default();
         let toml_str = format_customization(&customization).unwrap();
         assert_eq!(toml_str, "");
+    }
+
+    #[test]
+    fn init_floxhub_environment_initializes_and_prints_message() {
+        let owner = EnvironmentOwner::from_str("test").unwrap();
+        let name = EnvironmentName::from_str("foo").unwrap();
+        let env_ref = RemoteEnvironmentRef::new_from_parts(owner.clone(), name.clone());
+
+        let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+        let (subscriber, written) = test_subscriber_message_only();
+
+        tracing::subscriber::with_default(subscriber, || {
+            init_floxhub_environment(&flox, env_ref.clone(), false)
+        })
+        .unwrap();
+
+        assert!(
+            written
+                .to_string()
+                .contains(&format!("Created environment '{env_ref}'"))
+        );
+
+        assert!(
+            written
+                .to_string()
+                .contains("Add environment variables and shell hooks")
+        );
+
+        RemoteEnvironment::new(&flox, ManagedPointer::new(owner, name, &flox.floxhub), None)
+            .expect("find initialized remote environment");
+    }
+
+    #[test]
+    fn init_floxhub_environment_can_create_bare_env() {
+        let owner = EnvironmentOwner::from_str("test").unwrap();
+        let name = EnvironmentName::from_str("foo").unwrap();
+        let env_ref = RemoteEnvironmentRef::new_from_parts(owner.clone(), name.clone());
+
+        let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+        init_floxhub_environment(&flox, env_ref.clone(), true).unwrap();
+
+        let env =
+            RemoteEnvironment::new(&flox, ManagedPointer::new(owner, name, &flox.floxhub), None)
+                .expect("find initialized remote environment");
+
+        // TODO: should be changed to version 2 once released!
+        assert_eq!(env.manifest_contents(&flox).unwrap(), "version = 1\n");
+    }
+
+    #[test]
+    fn init_existing_floxhub_environment_fails() {
+        let owner = EnvironmentOwner::from_str("test").unwrap();
+        let name = EnvironmentName::from_str("foo").unwrap();
+        let env_ref = RemoteEnvironmentRef::new_from_parts(owner.clone(), name.clone());
+
+        let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        init_floxhub_environment(&flox, env_ref.clone(), false).expect("first init succeeds");
+
+        let err = init_floxhub_environment(&flox, env_ref.clone(), false)
+            .expect_err("second init should fail")
+            .downcast::<EnvironmentError>();
+
+        assert!(
+            matches!(
+                err,
+                Ok(EnvironmentError::ManagedEnvironment(
+                    ManagedEnvironmentError::UpstreamAlreadyExists { .. }
+                )),
+            ),
+            "{err:?}"
+        );
     }
 }
