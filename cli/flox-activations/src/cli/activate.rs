@@ -219,7 +219,7 @@ impl ActivateArgs {
             std::fs::create_dir_all(&start_state_dir)?;
         }
 
-        let new_exec_pid = if needs_new_executive {
+        let new_executive = if needs_new_executive {
             // Register signal handler BEFORE spawning executive to avoid race condition
             // where SIGUSR1 arrives before handler is registered
             let signals = Signals::new([SIGCHLD, SIGUSR1])?;
@@ -235,7 +235,7 @@ impl ActivateArgs {
         // TODO: it might just be closer to what I'm currently used to, but to
         // me it feels like it would be clearer conceptually to move everything
         // after dropping the lock up to handle()
-        if let Some((exec_pid, signals)) = new_exec_pid {
+        if let Some((exec_pid, signals)) = new_executive {
             Self::wait_for_executive(exec_pid, signals)?;
         }
 
