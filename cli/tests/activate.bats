@@ -5081,3 +5081,35 @@ EOF
 )"
   assert_equal "$stderr" "$expected_stderr"
 }
+
+@test "start state directory and files are not world-readable (may contain secrets)" {
+  project_setup
+
+  FLOX_SHELL="bash" run "$FLOX_BIN" activate -c '
+    [ -n "$_FLOX_START_STATE_DIR" ] || exit 1
+    [ -d "$_FLOX_START_STATE_DIR" ] || exit 2
+
+    bad_dirs=$(find "$_FLOX_START_STATE_DIR" -type d ! -perm 700)
+    bad_files=$(find "$_FLOX_START_STATE_DIR" -type f ! -perm 600)
+
+    if [ -n "$bad_dirs" ]; then
+      echo "ERROR: Directories with incorrect permissions (expected 700):" >&2
+      echo "$bad_dirs" >&2
+      exit 3
+    fi
+
+    if [ -n "$bad_files" ]; then
+      echo "ERROR: Files with incorrect permissions (expected 600):" >&2
+      echo "$bad_files" >&2
+      exit 4
+    fi
+
+    echo "Completed successfully"
+  '
+  assert_success
+  assert_output - <<'EOF'
+Sourcing .bashrc
+Setting PATH from .bashrc
+Completed successfully
+EOF
+}
