@@ -1417,6 +1417,7 @@ dependencies = [
  "blake3",
  "derive_more",
  "fslock",
+ "indoc",
  "log",
  "proptest",
  "proptest-derive",
