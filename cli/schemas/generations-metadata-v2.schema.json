@@ -26,6 +26,19 @@
         },
         {
           "properties": {
+            "kind": {
+              "const": "initialize",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "title": "Initialize",
+          "type": "object"
+        },
+        {
+          "properties": {
             "description": {
               "type": "string"
             },
