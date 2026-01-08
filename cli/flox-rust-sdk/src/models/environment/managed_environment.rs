@@ -179,6 +179,9 @@ pub enum ManagedEnvironmentError {
 
     #[error(transparent)]
     Core(#[from] CoreEnvironmentError),
+
+    #[error("failed to rename environment")]
+    Rename(#[source] crate::providers::floxhub_client::FloxhubClientError),
 }
 
 #[derive(Debug)]
@@ -1517,6 +1520,67 @@ impl ManagedEnvironment {
         self.link(&store_paths)?;
 
         Ok(PullResult::Updated)
+    }
+
+    /// Rename this managed environment on FloxHub
+    #[instrument(skip(self, flox), fields(progress = "Renaming environment on FloxHub"))]
+    pub async fn rename(
+        &mut self,
+        flox: &Flox,
+        new_name: EnvironmentName,
+    ) -> Result<(), EnvironmentError> {
+        // Check if already has that name - if so, no-op
+        if self.name() == new_name {
+            return Ok(());
+        }
+
+        // Ensure user is authenticated
+        let token = flox.floxhub_token.as_ref().ok_or_else(|| {
+            EnvironmentError::ManagedEnvironment(ManagedEnvironmentError::AccessDenied)
+        })?;
+
+        // Derive API base URL from the pointer's configuration
+        // If there's a git URL override, derive the API URL from it
+        // e.g., https://api.local.flox.dev:8000/floxem-gitolite -> https://api.local.flox.dev:8000/floxem/
+        let api_base_url = match &self.pointer.floxhub_git_url_override {
+            Some(git_url) => {
+                let mut api_url = git_url.clone();
+                api_url.set_path("floxem/");
+                api_url
+            },
+            None => self.pointer.floxhub_base_url.clone(),
+        };
+
+        // Create HTTP client and call rename API
+        let client =
+            crate::providers::floxhub_client::FloxhubClient::new(&api_base_url, token.secret());
+        let _response = client
+            .rename_environment(
+                self.pointer.owner.as_ref(),
+                self.pointer.name.as_ref(),
+                new_name.as_ref(),
+            )
+            .await
+            .map_err(|e| match e {
+                crate::providers::floxhub_client::FloxhubClientError::AccessDenied => {
+                    EnvironmentError::ManagedEnvironment(ManagedEnvironmentError::AccessDenied)
+                },
+                _ => EnvironmentError::ManagedEnvironment(ManagedEnvironmentError::Rename(e)),
+            })?;
+
+        // Update local pointer file
+        self.pointer.name = new_name;
+        let mut pointer_content = serde_json::to_string_pretty(&self.pointer)
+            .map_err(ManagedEnvironmentError::SerializePointer)?;
+        pointer_content.push('\n');
+
+        fs::write(
+            self.path.join(ENVIRONMENT_POINTER_FILENAME),
+            pointer_content,
+        )
+        .map_err(ManagedEnvironmentError::WritePointer)?;
+
+        Ok(())
     }
 
     /// Detach the environment from the remote repository.

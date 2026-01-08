@@ -110,17 +110,25 @@ impl Edit {
             EditAction::Rename { name } => {
                 let span = tracing::info_span!("rename");
                 let _guard = span.enter();
-                if let ConcreteEnvironment::Path(ref mut environment) = detected_environment {
-                    let old_name = environment.name();
-                    if name == old_name {
-                        bail!("environment already named '{name}'");
-                    }
-                    environment.rename(name.clone())?;
-                    message::updated(format!("renamed environment '{old_name}' to '{name}'"));
-                } else {
-                    // todo: handle remote environments in the future
-                    bail!("Cannot rename environments on FloxHub");
+
+                let old_name = detected_environment.name();
+                if name == old_name {
+                    bail!("environment already named '{name}'");
                 }
+
+                match detected_environment {
+                    ConcreteEnvironment::Path(ref mut environment) => {
+                        environment.rename(name.clone())?;
+                    },
+                    ConcreteEnvironment::Managed(ref mut environment) => {
+                        environment.rename(&flox, name.clone()).await?;
+                    },
+                    ConcreteEnvironment::Remote(ref mut environment) => {
+                        environment.rename(&flox, name.clone()).await?;
+                    },
+                }
+
+                message::updated(format!("renamed environment '{old_name}' to '{name}'"));
             },
 
             EditAction::Sync => {

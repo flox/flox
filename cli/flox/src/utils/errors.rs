@@ -447,6 +447,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
         },
 
         ManagedEnvironmentError::UpstreamAlreadyExists { .. } => display_chain(err),
+        ManagedEnvironmentError::Rename(_) => display_chain(err),
         // access denied is caught early as ManagedEnvironmentError::AccessDenied
         ManagedEnvironmentError::Push(_) => display_chain(err),
         ManagedEnvironmentError::PushWithLocalIncludes => display_chain(err),

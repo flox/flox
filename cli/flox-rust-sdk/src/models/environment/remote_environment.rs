@@ -310,6 +310,15 @@ impl RemoteEnvironment {
         self.inner.fetch_remote_state(flox)?;
         Ok(())
     }
+
+    /// Rename this remote environment on FloxHub
+    pub async fn rename(
+        &mut self,
+        flox: &Flox,
+        new_name: EnvironmentName,
+    ) -> Result<(), EnvironmentError> {
+        self.inner.rename(flox, new_name).await
+    }
 }
 
 impl Environment for RemoteEnvironment {
