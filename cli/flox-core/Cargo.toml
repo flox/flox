@@ -25,6 +25,8 @@ time.workspace = true
 thiserror.workspace = true
 schemars.workspace = true
 
+[dev-dependencies]
+indoc.workspace = true
 
 [features]
 default = ["proc_status"]

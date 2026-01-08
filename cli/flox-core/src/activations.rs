@@ -12,33 +12,41 @@ use crate::proc_status::pid_is_running;
 
 type Error = anyhow::Error;
 
-/// Latest supported version for compatibility between:
-/// - `flox` and `flox-interpreter`
-/// - `flox-activations` and `flox-watchdog`
-///
-/// Incrementing this will require existing activations to exit.
-const LATEST_VERSION: u8 = 2;
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct UncheckedVersion(u8);
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct CheckedVersion(u8);
-impl Default for CheckedVersion {
-    fn default() -> Self {
-        Self(LATEST_VERSION)
-    }
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
+pub enum UnsupportedVersion {
+    /// ActivationState of unsupported version with running activations.
+    WithRunningAttachments { pids: Vec<i32> },
+    /// ActivationState of unsupported version with no running activations but a running executive.
+    WithRunningExecutive { pid: i32 },
 }
 
-#[derive(Debug, Eq, PartialEq, thiserror::Error)]
-#[error(
-    "This environment has already been activated with an incompatible version of 'flox'.\n\
-     \n\
-     Exit all activations of the environment and try again.\n\
-     PIDs of the running activations: {pid_list}",
-    pid_list = .pids.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", "))]
-pub struct Unsupported {
-    pub version: UncheckedVersion,
-    pub pids: Vec<i32>,
+impl std::fmt::Display for UnsupportedVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnsupportedVersion::WithRunningAttachments { pids } => {
+                let pid_list = pids
+                    .iter()
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                write!(
+                    f,
+                    "This environment has already been activated with an incompatible version of 'flox'.\n\n\
+                     Exit all activations of the environment and try again.\n\
+                     PIDs of the running activations: {pid_list}",
+                )
+            },
+            UnsupportedVersion::WithRunningExecutive { pid: executive_pid } => {
+                write!(
+                    f,
+                    "This environment has already been activated with an incompatible version of 'flox'.\n\n\
+                     The executive process is still running.\n\
+                     Wait for it to finish, or stop it with: 'kill {executive_pid}'",
+                )
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
@@ -118,6 +126,8 @@ pub fn state_json_path(runtime_dir: impl AsRef<Path>, dot_flox_path: impl AsRef<
 pub mod rewrite {
     use std::collections::BTreeMap;
     use std::ops::Deref;
+
+    use serde_json::Value;
 
     use super::*;
     use crate::Version;
@@ -217,7 +227,6 @@ pub mod rewrite {
 
     #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
     pub struct ActivationState {
-        // TODO: How to handle upgrades
         version: Version<3>,
 
         // TODO: Group in "info", but restricts how we might use them in future?
@@ -478,6 +487,86 @@ pub mod rewrite {
         }
     }
 
+    /// Best-effort extraction of PIDs from unknown version JSON.
+    /// Returns (attached_pids, executive_pid).
+    fn extract_running_pids_from_json(content: &str) -> Result<(Vec<Pid>, Option<Pid>), Error> {
+        #[derive(Debug, Deserialize)]
+        struct PidExtractor {
+            #[serde(default)]
+            executive_pid: Pid,
+            #[serde(default)]
+            attached_pids: BTreeMap<Pid, Value>,
+        }
+
+        let extractor: PidExtractor =
+            serde_json::from_str(content).context("Failed to extract PIDs from state.json")?;
+
+        let mut running_attached = Vec::new();
+        for pid in extractor.attached_pids.keys() {
+            if pid_is_running(*pid) {
+                running_attached.push(*pid);
+            }
+        }
+
+        let executive_pid = if extractor.executive_pid != EXECUTIVE_NOT_STARTED
+            && pid_is_running(extractor.executive_pid)
+        {
+            Some(extractor.executive_pid)
+        } else {
+            None
+        };
+
+        Ok((running_attached, executive_pid))
+    }
+
+    /// Parse activation state with version checking.
+    /// Returns None if state should be discarded (different version and no running PIDs).
+    fn parse_versioned_activation_state(content: &str) -> Result<Option<ActivationState>, Error> {
+        #[derive(Debug, Deserialize)]
+        struct VersionOnly {
+            version: Value,
+        }
+
+        let version_check: VersionOnly =
+            serde_json::from_str(content).context("Failed to parse state.json")?;
+
+        match version_check.version.as_u64() {
+            // Current version.
+            Some(3) => {
+                let state: ActivationState =
+                    serde_json::from_str(content).context("Failed to parse state.json")?;
+                Ok(Some(state))
+            },
+            // Versions 1 and 2 were stored in a different path so we don't need to handle migrations.
+            // This also handles the case where someone upgrades and then downgrades Flox.
+            _ => {
+                let (running_attached, executive_pid) = extract_running_pids_from_json(content)?;
+
+                if !running_attached.is_empty() {
+                    Err(UnsupportedVersion::WithRunningAttachments {
+                        pids: running_attached,
+                    }
+                    .into())
+                } else if let Some(exec_pid) = executive_pid {
+                    Err(UnsupportedVersion::WithRunningExecutive { pid: exec_pid }.into())
+                } else {
+                    debug!(
+                        "discarding state.json due to unsupported version with no running attachments or executive"
+                    );
+                    Ok(None)
+                }
+            },
+        }
+    }
+
+    /// Returns the parsed `activations.json` file or `None` if:
+    ///
+    /// - the file does not exist
+    /// - the version is different but there are no running processes
+    ///
+    /// The file can be written with [write_activations_json].
+    /// This function acquires a lock on the file,
+    /// which should be reused for writing, to avoid TOCTOU issues.
     pub fn read_activations_json(
         path: impl AsRef<Path>,
     ) -> Result<(Option<ActivationState>, LockFile), Error> {
@@ -490,16 +579,21 @@ pub mod rewrite {
             return Ok((None, lock_file));
         }
 
-        // TODO: version check
-
         debug!(?path, "reading activations.json");
         let contents = std::fs::read_to_string(path)
             .context(format!("failed to read file {}", path.display()))?;
-        let parsed: ActivationState = serde_json::from_str(&contents)
-            .context(format!("failed to parse JSON from {}", path.display()))?;
-        Ok((Some(parsed), lock_file))
-    }
 
+        let parsed = parse_versioned_activation_state(&contents)?;
+
+        Ok((parsed, lock_file))
+    }
+    /// Writes the environment `activations.json` file.
+    /// The file is written atomically.
+    /// The lock is released after the write.
+    ///
+    /// This uses [flox_core::serialize_atomically] to write the file, and inherits its requirements.
+    /// * `path` must have a parent directory.
+    /// * The lock must correspond to the file being written.
     pub fn write_activations_json(
         activations: &ActivationState,
         path: impl AsRef<Path>,
@@ -513,6 +607,8 @@ pub mod rewrite {
     mod tests {
         use std::process::{Child, Command};
         use std::time::Duration;
+
+        use indoc::formatdoc;
 
         use super::*;
         // NOTE: these two functions are copied from flox-rust-sdk since you can't
@@ -922,6 +1018,129 @@ pub mod rewrite {
             assert!(activations.attached_pids.contains_key(&pid));
             assert!(!modified);
             assert!(empty_starts.is_empty());
+        }
+
+        mod version_handling {
+            use super::*;
+
+            // Technically we'd never encounter this exact Version because we
+            // changed the path of the state file during the 2025-12/2026-01
+            // activation rewrite.
+            const OLD_VERSION: Version<2> = Version;
+
+            #[test]
+            fn parse_versioned_activation_state_roundtrip() {
+                let start_id = make_start_id("/nix/store/path");
+                let mut state = make_activations(Ready::True(start_id.clone()));
+                state.attached_pids = BTreeMap::from([(123, make_attachment(start_id))]);
+                let json = serde_json::to_string(&state).unwrap();
+
+                let parsed = parse_versioned_activation_state(&json).unwrap();
+                assert!(parsed.is_some());
+                assert_eq!(parsed.unwrap().version, Version);
+            }
+
+            #[test]
+            fn parse_versioned_activation_state_malformed() {
+                let json = "{not valid json}";
+
+                let err = parse_versioned_activation_state(json).unwrap_err();
+                assert_eq!(err.to_string(), "Failed to parse state.json");
+            }
+
+            #[test]
+            fn parse_versioned_activation_state_different_version_incompatible_structure() {
+                let json = json!({
+                    "version": OLD_VERSION,
+                    "mode": "dev",
+                    "ready": false,
+                    "executive_pid": EXECUTIVE_NOT_STARTED,
+                    "attached_pids": [123, 456], // hypothetical change of structure
+                })
+                .to_string();
+
+                let err = parse_versioned_activation_state(&json).unwrap_err();
+                assert_eq!(err.to_string(), "Failed to extract PIDs from state.json",);
+            }
+
+            #[test]
+            fn parse_versioned_activation_state_different_version_pids_not_running() {
+                let proc_stopped = start_process();
+                let pid_stopped = proc_stopped.id().to_string();
+                stop_process(proc_stopped);
+
+                let json = json!({
+                    "version": OLD_VERSION,
+                    "mode": "dev",
+                    "ready": false,
+                    "executive_pid": EXECUTIVE_NOT_STARTED,
+                    "attached_pids": {
+                        pid_stopped.to_string(): {},
+                    }
+                })
+                .to_string();
+
+                let result = parse_versioned_activation_state(&json).unwrap();
+                assert_eq!(result, None, "should discard existing state");
+            }
+
+            #[test]
+            fn parse_versioned_activation_state_different_version_pids_running() {
+                let proc1 = start_process();
+                let proc2 = start_process();
+                let pid1 = proc1.id() as i32;
+                let pid2 = proc2.id() as i32;
+
+                let json = json!({
+                    "version": OLD_VERSION,
+                    "mode": "dev",
+                    "ready": false,
+                    "executive_pid": EXECUTIVE_NOT_STARTED,
+                    "attached_pids": {
+                        pid1.to_string(): {},
+                        pid2.to_string(): {},
+                    },
+                })
+                .to_string();
+
+                let err = parse_versioned_activation_state(&json).unwrap_err();
+                let expected_msg = formatdoc! {"
+                    This environment has already been activated with an incompatible version of 'flox'.
+
+                    Exit all activations of the environment and try again.
+                    PIDs of the running activations: {pid1}, {pid2}",
+                };
+                assert_eq!(err.to_string(), expected_msg);
+
+                stop_process(proc1);
+                stop_process(proc2);
+            }
+
+            #[test]
+            fn parse_versioned_activation_state_different_version_only_executive() {
+                let exec_proc = start_process();
+                let exec_pid = exec_proc.id() as i32;
+
+                let json = json!({
+                    "version": OLD_VERSION,
+                    "mode": "dev",
+                    "ready": false,
+                    "executive_pid": exec_pid,
+                    "attached_pids": {},
+                })
+                .to_string();
+
+                let err = parse_versioned_activation_state(&json).unwrap_err();
+                let expected_msg = formatdoc! {"
+                    This environment has already been activated with an incompatible version of 'flox'.
+
+                    The executive process is still running.
+                    Wait for it to finish, or stop it with: 'kill {exec_pid}'",
+                };
+                assert_eq!(err.to_string(), expected_msg);
+
+                stop_process(exec_proc);
+            }
         }
     }
 }

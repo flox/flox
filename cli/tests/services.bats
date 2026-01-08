@@ -606,8 +606,7 @@ EOF
 }
 
 # NB: There is a corresponding test in `activate.bats`.
-@test "start, restart: refuses to attach to an older activations.json version" {
-  skip "FIXME: Temporarily disabled whilst 'activations.json' path changes"
+@test "start, restart: handles differences in state.json version" {
   setup_sleeping_services
 
   # Prevent backtraces from `flox-activations` leaking into output.
@@ -619,21 +618,23 @@ EOF
     echo "Testing: flox services $command"
     command="$command" run "$FLOX_BIN" activate -- bash <(
       cat << 'EOF'
+        echo "Started outer activation.."
         echo "$$" > activation_pid
 
-        ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
-        ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
-        ACTIVATIONS_VERSION="$(jq -r '.version' ${ACTIVATIONS_JSON})"
+        ACTIVATIONS_DIR=$(dirname "$_FLOX_START_STATE_DIR")
+        STATE_PATH="${ACTIVATIONS_DIR}/state.json"
 
-        jq_edit "$ACTIVATIONS_JSON" '.version = 0'
+        # Stop the executive before making changes to state.json which will
+        # cause it to exit with an error on the next polling loop.
+        EXECUTIVE_PID=$(jq --exit-status --raw-output '.executive_pid' "$STATE_PATH")
+        kill -9 "$EXECUTIVE_PID"
+
+        # Fake an older version.
+        jq_edit "$STATE_PATH" '.version = 0'
+
+        # This should fail because the outer activation is still attached and running.
+        echo "Attempting inner activation.."
         "$FLOX_BIN" services "$command"
-        EXIT_CODE=$?
-
-        # Force cleanup because the executive will exit early on a version mismatch.
-        jq_edit "$ACTIVATIONS_JSON" ".version = ${ACTIVATIONS_VERSION}"
-        jq_edit "$ACTIVATIONS_JSON" '.activations |= []'
-
-        exit $EXIT_CODE
 EOF
     )
 
@@ -641,14 +642,20 @@ EOF
     ACTIVATION_PID=$(cat activation_pid)
 
     assert_failure
-    assert_output "❌ ERROR: This environment has already been activated with an incompatible version of 'flox'.
+    assert_output "Started outer activation..
+Attempting inner activation..
+❌ ERROR: This environment has already been activated with an incompatible version of 'flox'.
 
 Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"
 
-    # In case the executive managed to survive this far.
-    wait_for_activations "$PROJECT_DIR"
+    # Verify that a subsequent activation succeeds because the state is ignored
+    # and reset when the attached pid and executive are no longer running.
+    # This also ensures that wait_for_activations will succeed.
+    FLOX_SHELL=bash run "$FLOX_BIN" activate -- true
+    assert_success
   done
+
 }
 
 # bats test_tags=services:stop
