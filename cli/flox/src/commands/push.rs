@@ -123,8 +123,9 @@ fn handle_path_environment_push(
 
     let pointer = ManagedPointer::new(owner.clone(), path_environment.name(), &flox.floxhub);
 
-    let managed_environment = ManagedEnvironment::push_new(flox, path_environment, owner, force)
-        .map_err(|err| convert_error(err, pointer, true))?;
+    let managed_environment =
+        ManagedEnvironment::push_new(flox, path_environment, owner, force, false)
+            .map_err(|err| convert_error(err, pointer, true))?;
 
     message::updated(push_message(managed_environment.pointer(), force, true)?);
     Ok(())
