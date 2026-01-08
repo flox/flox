@@ -1756,6 +1756,20 @@ mod tests {
                     .expect_err(&format!("{value} should fail to parse"));
             }
         }
+
+        /// FloxHub unilaterally added an `initialize` kind,
+        /// which has not been added to the CLI and will be parsed as `Unknown`
+        #[test]
+        fn initialize_is_unknown() {
+            let payload = json! {{ "kind": "initialize" }};
+            let value = make_value(&payload);
+            let spec = serde_json::from_value::<WithOtherFields<HistorySpec>>(value.clone())
+                .unwrap_or_else(|_| panic!("{value} should succeed to parse"));
+
+            assert_eq!(spec.kind, HistoryKind::Unknown {
+                kind: "initialize".to_string()
+            });
+        }
     }
 
     mod compat {
