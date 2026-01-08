@@ -59,7 +59,7 @@ runs:
         } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
     - name: "Setup Tailscale"
-      uses: "tailscale/github-action@v3"
+      uses: "tailscale/github-action@v4"
       if: ${{ inputs.TAILSCALE_AUTH_KEY }}
       with:
         oauth-secret: "${{ inputs.TAILSCALE_AUTH_KEY }}"
