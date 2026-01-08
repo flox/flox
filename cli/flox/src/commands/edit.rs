@@ -126,7 +126,20 @@ impl Edit {
                         );
                     },
                     ConcreteEnvironment::Remote(ref mut environment) => {
+                        // Check if environment is active before renaming
+                        let uninit_env =
+                            UninitializedEnvironment::Remote(environment.pointer().clone());
+                        let was_active = activated_environments().is_active(&uninit_env);
+
                         environment.rename(&flox, name.clone()).await?;
+
+                        if was_active {
+                            message::warning(format!(
+                                "Environment is active. Exit and re-activate with: flox activate -r {}/{}",
+                                environment.pointer().owner,
+                                name
+                            ));
+                        }
                     },
                 }
 

@@ -192,11 +192,22 @@ EOF
   "$FLOX_BIN" init --name name
   "$FLOX_BIN" push --owner "owner"
 
+  # Access the remote environment to create the cache
+  run "$FLOX_BIN" list --reference "owner/name"
+  assert_success
+
+  # Verify old cache exists before rename
+  assert [ -d "$FLOX_CACHE_DIR/remote/owner/name" ]
+
   run "$FLOX_BIN" edit --reference "owner/name" --name "renamed"
   assert_success
   assert_output --partial "renamed environment 'name' to 'renamed'"
 
-  # Verify the rename worked
+  # Verify the cache directory was renamed
+  assert [ ! -d "$FLOX_CACHE_DIR/remote/owner/name" ]
+  assert [ -d "$FLOX_CACHE_DIR/remote/owner/renamed" ]
+
+  # Verify the rename worked on FloxHub
   run "$FLOX_BIN" list --reference "owner/renamed"
   assert_success
 }

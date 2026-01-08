@@ -694,6 +694,8 @@ pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
         RemoteEnvironmentError::WriteNewOutlink(_) => display_chain(err),
         RemoteEnvironmentError::CreateGcRootDir(_) => display_chain(err),
         RemoteEnvironmentError::Generations(_) => display_chain(err),
+        RemoteEnvironmentError::RemoveExistingCache(_) => display_chain(err),
+        RemoteEnvironmentError::RenameCacheDir(_) => display_chain(err),
     }
 }
 

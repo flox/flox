@@ -79,6 +79,12 @@ pub enum RemoteEnvironmentError {
 
     #[error("generations error")]
     Generations(#[source] GenerationsError),
+
+    #[error("could not remove existing cache directory")]
+    RemoveExistingCache(#[source] std::io::Error),
+
+    #[error("could not rename cache directory")]
+    RenameCacheDir(#[source] std::io::Error),
 }
 
 #[derive(Debug)]
@@ -312,12 +318,57 @@ impl RemoteEnvironment {
     }
 
     /// Rename this remote environment on FloxHub
+    ///
+    /// This renames the environment on FloxHub and updates the local cache directory.
+    /// If the cache directory rename fails, the operation still succeeds since
+    /// FloxHub is the source of truth - the next activation will pull fresh.
     pub async fn rename(
         &mut self,
         flox: &Flox,
         new_name: EnvironmentName,
     ) -> Result<(), EnvironmentError> {
-        self.inner.rename(flox, new_name).await
+        // Get the current cache directory path (parent of .flox)
+        let old_cache_dir = self.inner.project_path()?;
+
+        // Rename on FloxHub and update pointer file
+        self.inner.rename(flox, new_name.clone()).await?;
+
+        // Compute new cache directory path
+        let new_cache_dir = flox
+            .cache_dir
+            .join(REMOTE_ENVIRONMENT_BASE_DIR)
+            .join(self.pointer().owner.as_ref())
+            .join(new_name.as_ref());
+
+        // Rename cache directory if paths differ
+        if old_cache_dir != new_cache_dir {
+            // If new directory exists, remove it first (orphaned cache from deleted environment)
+            if new_cache_dir.exists()
+                && let Err(e) = fs::remove_dir_all(&new_cache_dir)
+            {
+                debug!(
+                    "Could not remove existing cache directory at {}: {}",
+                    new_cache_dir.display(),
+                    e
+                );
+            }
+
+            // Rename old cache to new location
+            if let Err(e) = fs::rename(&old_cache_dir, &new_cache_dir) {
+                // Log but don't fail - FloxHub is source of truth, next activation will pull fresh
+                debug!(
+                    "Could not rename cache directory from {} to {}: {}. \
+                     Run 'flox activate -r {}/{}' to fetch the renamed environment.",
+                    old_cache_dir.display(),
+                    new_cache_dir.display(),
+                    e,
+                    self.pointer().owner,
+                    new_name
+                );
+            }
+        }
+
+        Ok(())
     }
 }
 
