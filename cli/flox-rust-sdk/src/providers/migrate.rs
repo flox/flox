@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 
 use crate::flox::Flox;
 use crate::models::environment::{ConcreteEnvironment, Environment, EnvironmentError};
+use crate::models::lockfile::Lockfile;
+use crate::models::manifest::typed::Manifest;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MigrationError {
@@ -39,6 +41,15 @@ pub fn try_migrate_v1_to_v2(
             if !local_env_is_writable(inner.manifest_path(flox)?.as_path())? {
                 return Err(MigrationError::NotWritable(inner.name().to_string()));
             }
+            // We need to make sure that there's a lockfile present so that we
+            // can inspect the outputs of each package. We want to avoid this
+            // sequence, which could give surprising behavior:
+            // - v1 manifest, v1 lockfile exist
+            // - delete v1 lockfile for some reason
+            // - activate, which locks, which is a write operation
+            // - triggers migration
+            // - v2 manifest, v2 lockfile _without_ migrated package outputs
+            inner.as_core_environment_mut()?.ensure_locked(flox)?;
             todo!()
         },
         // You can't check write permissions ahead of time for FloxHub envs
@@ -49,11 +60,23 @@ pub fn try_migrate_v1_to_v2(
     }
 }
 
+fn migrate_manifest_v1_to_v2(
+    manifest: &Manifest,
+    lockfile: &Lockfile,
+) -> Result<Manifest, MigrationError> {
+    todo!()
+}
+
 #[cfg(test)]
 mod tests {
+    use pollster::FutureExt;
     use tempfile::TempDir;
 
     use super::*;
+    use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
+    use crate::providers::catalog::GENERATED_DATA;
+    use crate::providers::catalog::test_helpers::catalog_replay_client;
 
     #[test]
     fn detects_readonly_and_writable_local_envs() {
@@ -87,6 +110,21 @@ mod tests {
 
         // Nonexistent file should return an error
         assert!(local_env_is_writable(&nonexistent_path).is_err());
+    }
+
+    #[test]
+    fn v1_with_missing_lockfile_is_locked_before_migration() {
+        let (mut flox, _tmpdir) = flox_instance();
+        let env = new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        flox.features.outputs = true;
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("envs/hello/hello.yaml")).block_on();
+
+        std::fs::remove_file(env.lockfile_path(&flox).unwrap()).unwrap();
+
+        let mut concrete = ConcreteEnvironment::Path(env);
+        try_migrate_v1_to_v2(&flox, &mut concrete).unwrap();
+        assert!(concrete.lockfile_path(&flox).unwrap().exists());
     }
 
     #[test]

@@ -153,14 +153,14 @@ impl PathEnvironment {
         self.as_core_environment()
     }
 
-    fn as_core_environment(&self) -> Result<CoreEnvironment, EnvironmentError> {
+    pub(crate) fn as_core_environment(&self) -> Result<CoreEnvironment, EnvironmentError> {
         Ok(CoreEnvironment::new(
             self.path.join(ENV_DIR_NAME),
             self.include_fetcher()?,
         ))
     }
 
-    fn as_core_environment_mut(&mut self) -> Result<CoreEnvironment, EnvironmentError> {
+    pub(crate) fn as_core_environment_mut(&mut self) -> Result<CoreEnvironment, EnvironmentError> {
         self.as_core_environment()
     }
 
