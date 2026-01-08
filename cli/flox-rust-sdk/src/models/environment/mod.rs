@@ -25,6 +25,7 @@ use super::manifest::typed::{ActivateMode, ManifestError};
 use crate::data::{CanonicalPath, CanonicalizeError, System};
 use crate::flox::{Flox, Floxhub};
 use crate::models::environment::generations::GenerationsEnvironment;
+use crate::models::manifest::typed::Manifest;
 use crate::providers::auth::AuthError;
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{
@@ -159,6 +160,9 @@ pub trait Environment: Send {
     /// Implementations may use process context from [Flox]
     /// to determine the current content of the manifest.
     fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError>;
+
+    /// Find and parse the manifest
+    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError>;
 
     /// Return the path to rendered environment in the Nix store.
     ///

@@ -52,7 +52,7 @@ use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmeta::{FloxMetaError, floxmeta_git_options};
 use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, FlakePackage, PackageToInstall, StorePath};
-use crate::models::manifest::typed::IncludeDescriptor;
+use crate::models::manifest::typed::{IncludeDescriptor, Manifest, ManifestError};
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{GitCommandError, GitProvider, GitRemoteCommandError, PushFlag};
 
@@ -603,6 +603,14 @@ impl Environment for ManagedEnvironment {
     /// should be created
     fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         services_socket_path(&self.path_hash(), flox)
+    }
+
+    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError> {
+        self.manifest_contents(flox).and_then(|contents| {
+            Manifest::from_str(contents.as_str())
+                .map_err(ManifestError::Parse)
+                .map_err(EnvironmentError::ManifestError)
+        })
     }
 }
 

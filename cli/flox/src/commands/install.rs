@@ -40,6 +40,7 @@ use flox_rust_sdk::providers::catalog::{
     MsgAttrPathNotFoundNotFoundForAllSystems,
     MsgAttrPathNotFoundNotInCatalog,
 };
+use flox_rust_sdk::providers::migrate::try_migrate_v1_to_v2;
 use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{debug, info_span, instrument, span, warn};
@@ -222,6 +223,8 @@ impl Install {
             Err(e) => Err(e)?,
         };
         environment_subcommand_metric!("install", concrete_environment);
+
+        try_migrate_v1_to_v2(&flox, &mut concrete_environment)?;
 
         let description = environment_description(&concrete_environment)?;
 

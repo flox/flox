@@ -41,6 +41,7 @@ use crate::models::environment::managed_environment::GENERATION_LOCK_FILENAME;
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::PackageToInstall;
+use crate::models::manifest::typed::Manifest;
 
 const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
 
@@ -466,6 +467,10 @@ impl Environment for RemoteEnvironment {
 
     fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         self.inner.services_socket_path(flox)
+    }
+
+    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError> {
+        self.inner.manifest(flox)
     }
 }
 

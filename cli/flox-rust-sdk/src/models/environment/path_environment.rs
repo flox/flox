@@ -16,6 +16,7 @@
 use std::ffi::OsStr;
 use std::fs::{self};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use flox_core::write_atomically;
 use indoc::formatdoc;
@@ -50,7 +51,7 @@ use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME, create_dot_flo
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, LockResult, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
-use crate::models::manifest::typed::ActivateMode;
+use crate::models::manifest::typed::{ActivateMode, Manifest, ManifestError};
 use crate::providers::buildenv::BuildEnvOutputs;
 
 /// Struct representing a local environment
@@ -153,14 +154,14 @@ impl PathEnvironment {
         self.as_core_environment()
     }
 
-    fn as_core_environment(&self) -> Result<CoreEnvironment, EnvironmentError> {
+    pub(crate) fn as_core_environment(&self) -> Result<CoreEnvironment, EnvironmentError> {
         Ok(CoreEnvironment::new(
             self.path.join(ENV_DIR_NAME),
             self.include_fetcher()?,
         ))
     }
 
-    fn as_core_environment_mut(&mut self) -> Result<CoreEnvironment, EnvironmentError> {
+    pub(crate) fn as_core_environment_mut(&mut self) -> Result<CoreEnvironment, EnvironmentError> {
         self.as_core_environment()
     }
 
@@ -404,6 +405,14 @@ impl Environment for PathEnvironment {
     /// should be created
     fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         services_socket_path(&self.path_hash(), flox)
+    }
+
+    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError> {
+        self.manifest_contents(flox).and_then(|contents| {
+            Manifest::from_str(contents.as_str())
+                .map_err(ManifestError::Parse)
+                .map_err(EnvironmentError::ManifestError)
+        })
     }
 }
 
