@@ -599,7 +599,7 @@ pub trait GenerationsExt {
 }
 
 /// Combined type for environments supporting generations,
-/// i.e. local or remote managed environemnts.
+/// i.e. local or remote managed environments.
 /// We use this in addition to the [GenerationsExt] trait,
 /// to avoid forcing `dyn compatibility` on [GenerationsExt],
 /// and repeated deconstruction of [ConcreteEnvironment]s,
@@ -771,7 +771,7 @@ impl AllGenerationsMetadata {
 
     /// Parse ARGV to store in a `HistorySpec`.
     ///
-    /// If empty, as invokved from a unit test, return `None`.
+    /// If empty, as invoked from a unit test, return `None`.
     ///
     /// If non-empty, replace the first index with `flox` because we don't need
     /// to print the full path if `flox` was invoked with `/usr/local/bin/flox`.
@@ -1355,7 +1355,7 @@ mod tests {
             WithOtherFields,
         };
 
-        /// Adding a generation adds consisten metadata, ie.
+        /// Adding a generation adds consistent metadata, ie.
         ///
         /// * adds new [SingleGenerationMetadata]
         /// * updates the current generation
@@ -1408,7 +1408,7 @@ mod tests {
         /// Switching generations
         ///
         /// * updates the current generation
-        /// * updares the "last_live" timestamp of the switched to generation
+        /// * updates the "last_live" timestamp of the switched to generation
         /// * adds a history entry for the switch
         #[test]
         fn switch_generation_updates_metadata() {
