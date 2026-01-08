@@ -918,6 +918,8 @@ impl FromStr for GenerationId {
 pub enum HistoryKind {
     #[schemars(title = "Import")]
     Import,
+    #[schemars(title = "Initialize")]
+    Initialize,
     #[schemars(title = "MigrateV1")]
     MigrateV1 { description: String },
 
@@ -1068,6 +1070,7 @@ impl HistorySpec {
 
         match &self.kind {
             HistoryKind::Import => "imported environment".to_string(),
+            HistoryKind::Initialize => "initialized new environment".to_string(),
             HistoryKind::MigrateV1 { description } => {
                 format!("{description} [metadata migrated]")
             },
@@ -1594,6 +1597,7 @@ mod tests {
                     },
                     "upgraded packages 'a', 'b'",
                 ),
+                (HistoryKind::Initialize, "initialized new environment"),
             ];
 
             for (change_kind, message) in change_message_pairs {
@@ -1638,6 +1642,7 @@ mod tests {
             let payloads = [
                 json! {{"kind": "migrate_v1", "description": "v1 description"}},
                 json! {{"kind": "import"}},
+                json! {{"kind": "initialize"}},
                 json! {{"kind": "edit"}},
                 json! {{"kind": "install", "targets": []}},
                 json! {{"kind": "uninstall", "targets": []}},
@@ -1758,7 +1763,7 @@ mod tests {
         }
 
         /// FloxHub unilaterally added an `initialize` kind,
-        /// which has not been added to the CLI and will be parsed as `Unknown`
+        /// which has been added to the CLI retrospectively.
         #[test]
         fn initialize_is_unknown() {
             let payload = json! {{ "kind": "initialize" }};
@@ -1766,9 +1771,7 @@ mod tests {
             let spec = serde_json::from_value::<WithOtherFields<HistorySpec>>(value.clone())
                 .unwrap_or_else(|_| panic!("{value} should succeed to parse"));
 
-            assert_eq!(spec.kind, HistoryKind::Unknown {
-                kind: "initialize".to_string()
-            });
+            assert_eq!(spec.kind, HistoryKind::Initialize);
         }
     }
 
