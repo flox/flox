@@ -182,6 +182,9 @@ pub enum ManagedEnvironmentError {
 
     #[error("failed to rename environment")]
     Rename(#[source] crate::providers::floxhub_client::FloxhubClientError),
+
+    #[error("rename response mismatch: expected '{expected}', got '{actual}'")]
+    RenameResponseMismatch { expected: String, actual: String },
 }
 
 #[derive(Debug)]
@@ -1554,7 +1557,7 @@ impl ManagedEnvironment {
         // Create HTTP client and call rename API
         let client =
             crate::providers::floxhub_client::FloxhubClient::new(&api_base_url, token.secret());
-        let _response = client
+        let response = client
             .rename_environment(
                 self.pointer.owner.as_ref(),
                 self.pointer.name.as_ref(),
@@ -1567,6 +1570,16 @@ impl ManagedEnvironment {
                 },
                 _ => EnvironmentError::ManagedEnvironment(ManagedEnvironmentError::Rename(e)),
             })?;
+
+        // Validate response matches what we requested
+        if response.name.as_str() != new_name.as_ref() {
+            return Err(EnvironmentError::ManagedEnvironment(
+                ManagedEnvironmentError::RenameResponseMismatch {
+                    expected: new_name.to_string(),
+                    actual: response.name,
+                },
+            ));
+        }
 
         // Update local pointer file
         self.pointer.name = new_name;
