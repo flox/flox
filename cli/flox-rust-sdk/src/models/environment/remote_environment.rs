@@ -79,12 +79,6 @@ pub enum RemoteEnvironmentError {
 
     #[error("generations error")]
     Generations(#[source] GenerationsError),
-
-    #[error("could not remove existing cache directory")]
-    RemoveExistingCache(#[source] std::io::Error),
-
-    #[error("could not rename cache directory")]
-    RenameCacheDir(#[source] std::io::Error),
 }
 
 #[derive(Debug)]
