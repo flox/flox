@@ -120,8 +120,10 @@ impl Edit {
                     ConcreteEnvironment::Path(ref mut environment) => {
                         environment.rename(name.clone())?;
                     },
-                    ConcreteEnvironment::Managed(ref mut environment) => {
-                        environment.rename(&flox, name.clone()).await?;
+                    ConcreteEnvironment::Managed(_) => {
+                        bail!(
+                            "Use 'flox edit -r <owner>/<name> -n <new_name>' to rename environments on FloxHub"
+                        );
                     },
                     ConcreteEnvironment::Remote(ref mut environment) => {
                         environment.rename(&flox, name.clone()).await?;

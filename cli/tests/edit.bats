@@ -202,19 +202,15 @@ EOF
 }
 
 # bats test_tags=edit:rename-managed
-@test "'flox edit --name' renames a managed environment" {
+@test "'flox edit --name' fails with a managed environment" {
   floxhub_setup "owner"
 
   "$FLOX_BIN" init --name name
   "$FLOX_BIN" push --owner "owner"
 
   run "$FLOX_BIN" edit --name "renamed"
-  assert_success
-  assert_output --partial "renamed environment 'name' to 'renamed'"
-
-  # Verify local pointer was updated
-  run cat .flox/env.json
-  assert_output --partial '"name": "renamed"'
+  assert_failure
+  assert_output --partial "Use 'flox edit -r <owner>/<name> -n <new_name>' to rename environments on FloxHub"
 }
 
 # ---------------------------------------------------------------------------- #
