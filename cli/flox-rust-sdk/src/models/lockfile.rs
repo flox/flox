@@ -86,6 +86,15 @@ pub enum LockResult {
     Unchanged(Lockfile),
 }
 
+impl LockResult {
+    pub fn lockfile(&self) -> Lockfile {
+        match self {
+            LockResult::Changed(inner) => inner.clone(),
+            LockResult::Unchanged(inner) => inner.clone(),
+        }
+    }
+}
+
 impl From<LockResult> for Lockfile {
     fn from(result: LockResult) -> Self {
         match result {

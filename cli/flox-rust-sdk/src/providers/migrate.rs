@@ -2,7 +2,7 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use crate::flox::Flox;
-use crate::models::environment::{ConcreteEnvironment, Environment, EnvironmentError};
+use crate::models::environment::{ConcreteEnvironment, EditResult, Environment, EnvironmentError};
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::typed::Manifest;
 
@@ -12,6 +12,12 @@ pub enum MigrationError {
     OpenManifest(PathBuf),
     #[error("environment {0} is not writable")]
     NotWritable(String),
+    #[error("failed to serialize manifest")]
+    SerializeManifest(#[from] toml_edit::ser::Error),
+    #[error("migration unexpectedly left manifest unchanged")]
+    Unchanged,
+    #[error("environment was previously migrated to manifest version 2")]
+    PreviouslyMigrated,
     #[error(transparent)]
     EnvironmentError(#[from] EnvironmentError),
 }
@@ -49,8 +55,19 @@ pub fn try_migrate_v1_to_v2(
             // - activate, which locks, which is a write operation
             // - triggers migration
             // - v2 manifest, v2 lockfile _without_ migrated package outputs
-            inner.as_core_environment_mut()?.ensure_locked(flox)?;
-            todo!()
+            let lockfile = inner
+                .as_core_environment_mut()?
+                .ensure_locked(flox)?
+                .lockfile();
+            let existing_manifest = inner.manifest(flox)?;
+            let migrated_manifest = migrate_manifest_v1_to_v2(&existing_manifest, &lockfile)?;
+            let migrated_contents = toml_edit::ser::to_string(&migrated_manifest)
+                .map_err(MigrationError::SerializeManifest)?;
+            let edit_result = inner.edit(flox, migrated_contents)?;
+            if let EditResult::Unchanged = edit_result {
+                return Err(MigrationError::Unchanged);
+            }
+            Ok(())
         },
         // You can't check write permissions ahead of time for FloxHub envs
         // because that information is stored server side and a local cache
@@ -134,11 +151,6 @@ mod tests {
 
     #[test]
     fn detects_writable_managed_env() {
-        todo!()
-    }
-
-    #[test]
-    fn error_when_manifest_is_v1_but_lockfile_contains_v2() {
         todo!()
     }
 

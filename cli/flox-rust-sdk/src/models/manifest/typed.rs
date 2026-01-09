@@ -1058,6 +1058,8 @@ pub enum ManifestError {
     MultiplePackagesMatch(String, Vec<String>),
     #[error("not a valid activation mode")]
     ActivateModeInvalid,
+    #[error(transparent)]
+    Parse(#[from] toml_edit::de::Error),
 }
 
 /// The section where users can declare dependencies on other environments.
