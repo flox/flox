@@ -11,6 +11,7 @@ use flox_rust_sdk::models::environment::{
     SingleSystemUpgradeDiff,
 };
 use flox_rust_sdk::models::lockfile::{LockedPackageFlake, Lockfile, PackageToList};
+use flox_rust_sdk::providers::buildenv::get_installed_outputs;
 use flox_rust_sdk::providers::flake_installable_locker::LockedInstallable;
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use indoc::formatdoc;
@@ -279,29 +280,23 @@ impl List {
 
             let message = match package {
                 PackageToList::Catalog(descriptor, locked) => {
-                    let mut sorted_outputs = locked
-                        .outputs
-                        .keys()
-                        .map(|s| format!("\"{s}\""))
-                        .collect::<Vec<_>>();
-                    sorted_outputs.sort();
-                    let outputs = if sorted_outputs.is_empty() {
-                        "[ ]".to_string()
-                    } else {
-                        format!("[ {} ]", sorted_outputs.join(", "))
-                    };
+                    let available_outputs =
+                        format_as_sorted_list(&locked.outputs.keys().collect::<Vec<_>>());
+                    let installed_outputs_or_error_message = get_installed_outputs(package)
+                        .map_or_else(|e| format!("Error: {}", e), |a| format_as_sorted_list(&a));
 
                     formatdoc! {"
                         {name}:{upgrade_available}
-                          Description:  {description}
-                          Package Path: {attr_path}
-                          Package Name: {pname}
-                          Priority:     {priority}
-                          Version:      {version}
-                          License:      {license}
-                          Unfree:       {unfree}
-                          Broken:       {broken}
-                          Outputs:      {outputs}
+                          Description:          {description}
+                          Package Path:         {attr_path}
+                          Package Name:         {pname}
+                          Priority:             {priority}
+                          Version:              {version}
+                          License:              {license}
+                          Unfree:               {unfree}
+                          Broken:               {broken}
+                          Available Outputs:    {available_outputs}
+                          Installed Outputs:    {installed_outputs_or_error_message}
                         ",
                         name = &locked.install_id,
                         pname = &locked.pname,
@@ -314,20 +309,12 @@ impl List {
                         broken = locked.broken.map(|b| b.to_string()).as_deref().unwrap_or("N/A"),
                     }
                 },
-                PackageToList::Flake(_, package) => {
-                    let mut sorted_outputs = package
-                        .locked_installable
-                        .output_names
-                        .as_slice()
-                        .iter()
-                        .map(|s| format!("\"{s}\""))
-                        .collect::<Vec<_>>();
-                    sorted_outputs.sort();
-                    let outputs = if sorted_outputs.is_empty() {
-                        "[ ]".to_string()
-                    } else {
-                        format!("[ {} ]", sorted_outputs.join(", "))
-                    };
+                PackageToList::Flake(_, locked) => {
+                    let available_outputs =
+                        format_as_sorted_list(&locked.locked_installable.output_names);
+                    let installed_outputs_or_error_message = get_installed_outputs(package)
+                        .map_or_else(|e| format!("Error: {}", e), |a| format_as_sorted_list(&a));
+
                     let LockedPackageFlake {
                         install_id,
                         locked_installable:
@@ -343,28 +330,29 @@ impl List {
                                 priority,
                                 ..
                             },
-                    } = package;
+                    } = locked;
 
                     let formatted_licenses = licenses.as_ref().map(|licenses| {
                         if licenses.len() == 1 {
-                            format!("License:         {}", licenses[0])
+                            format!("License:              {}", licenses[0])
                         } else {
-                            format!("Licenses:        {}", licenses.join(", "))
+                            format!("Licenses:             {}", licenses.join(", "))
                         }
                     });
 
                     formatdoc! {"
                     {install_id}:{upgrade_available}
-                      Description:     {description}
-                      Locked URL:      {locked_url}
-                      Flake attribute: {locked_flake_attr_path}
-                      Package Name:    {formatted_pname}
-                      Priority:        {priority}
-                      Version:         {version}
+                      Description:          {description}
+                      Locked URL:           {locked_url}
+                      Flake attribute:      {locked_flake_attr_path}
+                      Package Name:         {formatted_pname}
+                      Priority:             {priority}
+                      Version:              {version}
                       {formatted_licenses}
-                      Unfree:          {unfree}
-                      Broken:          {broken}
-                      Outputs:         {outputs}
+                      Unfree:               {unfree}
+                      Broken:               {broken}
+                      Available Outputs:    {available_outputs}
+                      Installed Outputs:    {installed_outputs_or_error_message}
                     ",
                         formatted_pname = pname.as_deref().unwrap_or("N/A"),
                         description = description.as_deref().unwrap_or("N/A"),
@@ -376,8 +364,8 @@ impl List {
                 },
                 PackageToList::StorePath(locked_package_store_path) => formatdoc! {"
                     {install_id}:
-                    Store Path: {store_path}
-                    Priority:   {priority}
+                    Store Path:           {store_path}
+                    Priority:             {priority}
                     ",
                     install_id = locked_package_store_path.install_id,
                     store_path = locked_package_store_path.store_path,
@@ -414,6 +402,21 @@ impl List {
 
         Ok(Some(info.upgrade_result.diff_for_system(&flox.system)))
     }
+}
+
+fn format_as_sorted_list<S>(arr: &[S]) -> String
+where
+    S: ToString,
+{
+    let mut sorted_items = arr
+        .iter()
+        .map(|s| format!("\"{}\"", s.to_string()))
+        .collect::<Vec<_>>();
+    sorted_items.sort();
+    if sorted_items.is_empty() {
+        return "[ ]".to_string();
+    }
+    format!("[ {} ]", sorted_items.join(", "))
 }
 
 #[cfg(test)]
@@ -579,26 +582,28 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             pip_install_id:
-              Description:  Python package installer
-              Package Path: python3Packages.pip
-              Package Name: pip
-              Priority:     100
-              Version:      20.3.4
-              License:      MIT
-              Unfree:       true
-              Broken:       false
-              Outputs:      [ ]
+              Description:          Python package installer
+              Package Path:         python3Packages.pip
+              Package Name:         pip
+              Priority:             100
+              Version:              20.3.4
+              License:              MIT
+              Unfree:               true
+              Broken:               false
+              Available Outputs:    [ ]
+              Installed Outputs:    [ ]
 
             python_install_id:
-              Description:  Python interpreter
-              Package Path: python3Packages.python
-              Package Name: python
-              Priority:     200
-              Version:      3.9.5
-              License:      PSF
-              Unfree:       false
-              Broken:       false
-              Outputs:      [ ]
+              Description:          Python interpreter
+              Package Path:         python3Packages.python
+              Package Name:         python
+              Priority:             200
+              Version:              3.9.5
+              License:              PSF
+              Unfree:               false
+              Broken:               false
+              Available Outputs:    [ ]
+              Installed Outputs:    [ ]
         "})
     }
 
@@ -610,16 +615,17 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             nix-eval-jobs:
-              Description:     Hydra's builtin hydra-eval-jobs as a standalone
-              Locked URL:      github:nix-community/nix-eval-jobs/c132534bc68eb48479a59a3116ee7ce0f16ce12b
-              Flake attribute: packages.aarch64-darwin.default
-              Package Name:    nix-eval-jobs
-              Priority:        5
-              Version:         2.23.0
-              License:         GPL-3.0
-              Unfree:          false
-              Broken:          false
-              Outputs:         [ \"out\" ]
+              Description:          Hydra's builtin hydra-eval-jobs as a standalone
+              Locked URL:           github:nix-community/nix-eval-jobs/c132534bc68eb48479a59a3116ee7ce0f16ce12b
+              Flake attribute:      packages.aarch64-darwin.default
+              Package Name:         nix-eval-jobs
+              Priority:             5
+              Version:              2.23.0
+              License:              GPL-3.0
+              Unfree:               false
+              Broken:               false
+              Available Outputs:    [ \"out\" ]
+              Installed Outputs:    [ \"out\" ]
         "});
     }
 
@@ -636,16 +642,17 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             nix-eval-jobs:
-              Description:     Hydra's builtin hydra-eval-jobs as a standalone
-              Locked URL:      github:nix-community/nix-eval-jobs/c132534bc68eb48479a59a3116ee7ce0f16ce12b
-              Flake attribute: packages.aarch64-darwin.default
-              Package Name:    N/A
-              Priority:        5
-              Version:         2.23.0
-              License:         GPL-3.0
-              Unfree:          false
-              Broken:          false
-              Outputs:         [ \"out\" ]
+              Description:          Hydra's builtin hydra-eval-jobs as a standalone
+              Locked URL:           github:nix-community/nix-eval-jobs/c132534bc68eb48479a59a3116ee7ce0f16ce12b
+              Flake attribute:      packages.aarch64-darwin.default
+              Package Name:         N/A
+              Priority:             5
+              Version:              2.23.0
+              License:              GPL-3.0
+              Unfree:               false
+              Broken:               false
+              Available Outputs:    [ \"out\" ]
+              Installed Outputs:    [ \"out\" ]
         "});
     }
 
@@ -663,16 +670,17 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             nix-eval-jobs:
-              Description:     Hydra's builtin hydra-eval-jobs as a standalone
-              Locked URL:      github:nix-community/nix-eval-jobs/c132534bc68eb48479a59a3116ee7ce0f16ce12b
-              Flake attribute: packages.aarch64-darwin.default
-              Package Name:    nix-eval-jobs
-              Priority:        5
-              Version:         2.23.0
-              Licenses:        GPL-3.0, license 2
-              Unfree:          false
-              Broken:          false
-              Outputs:         [ \"out\" ]
+              Description:          Hydra's builtin hydra-eval-jobs as a standalone
+              Locked URL:           github:nix-community/nix-eval-jobs/c132534bc68eb48479a59a3116ee7ce0f16ce12b
+              Flake attribute:      packages.aarch64-darwin.default
+              Package Name:         nix-eval-jobs
+              Priority:             5
+              Version:              2.23.0
+              Licenses:             GPL-3.0, license 2
+              Unfree:               false
+              Broken:               false
+              Available Outputs:    [ \"out\" ]
+              Installed Outputs:    [ \"out\" ]
         "});
     }
 
@@ -689,26 +697,28 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             python_install_id:
-              Description:  Python interpreter
-              Package Path: python3Packages.python
-              Package Name: python
-              Priority:     5
-              Version:      3.9.5
-              License:      PSF
-              Unfree:       false
-              Broken:       false
-              Outputs:      [ ]
+              Description:          Python interpreter
+              Package Path:         python3Packages.python
+              Package Name:         python
+              Priority:             5
+              Version:              3.9.5
+              License:              PSF
+              Unfree:               false
+              Broken:               false
+              Available Outputs:    [ ]
+              Installed Outputs:    [ ]
 
             pip_install_id:
-              Description:  Python package installer
-              Package Path: python3Packages.pip
-              Package Name: pip
-              Priority:     100
-              Version:      20.3.4
-              License:      MIT
-              Unfree:       true
-              Broken:       false
-              Outputs:      [ ]
+              Description:          Python package installer
+              Package Path:         python3Packages.pip
+              Package Name:         pip
+              Priority:             100
+              Version:              20.3.4
+              License:              MIT
+              Unfree:               true
+              Broken:               false
+              Available Outputs:    [ ]
+              Installed Outputs:    [ ]
         "})
     }
 
@@ -725,26 +735,28 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             python_install_id:
-              Description:  Python interpreter
-              Package Path: python3Packages.python
-              Package Name: python
-              Priority:     10
-              Version:      3.9.5
-              License:      PSF
-              Unfree:       false
-              Broken:       false
-              Outputs:      [ ]
+              Description:          Python interpreter
+              Package Path:         python3Packages.python
+              Package Name:         python
+              Priority:             10
+              Version:              3.9.5
+              License:              PSF
+              Unfree:               false
+              Broken:               false
+              Available Outputs:    [ ]
+              Installed Outputs:    [ ]
 
             pip_install_id:
-              Description:  Python package installer
-              Package Path: python3Packages.pip
-              Package Name: pip
-              Priority:     100
-              Version:      20.3.4
-              License:      MIT
-              Unfree:       true
-              Broken:       false
-              Outputs:      [ ]
+              Description:          Python package installer
+              Package Path:         python3Packages.pip
+              Package Name:         pip
+              Priority:             100
+              Version:              20.3.4
+              License:              MIT
+              Unfree:               true
+              Broken:               false
+              Available Outputs:    [ ]
+              Installed Outputs:    [ ]
         "})
     }
 
@@ -756,15 +768,16 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, formatdoc! {"
             pip_install_id:
-              Description:  N/A
-              Package Path: python3Packages.pip
-              Package Name: pip
-              Priority:     {DEFAULT_PRIORITY}
-              Version:      N/A
-              License:      N/A
-              Unfree:       N/A
-              Broken:       N/A
-              Outputs:      [ ]
+              Description:          N/A
+              Package Path:         python3Packages.pip
+              Package Name:         pip
+              Priority:             {DEFAULT_PRIORITY}
+              Version:              N/A
+              License:              N/A
+              Unfree:               N/A
+              Broken:               N/A
+              Available Outputs:    [ ]
+              Installed Outputs:    [ ]
         "})
     }
 
@@ -792,26 +805,28 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             pip_install_id: (upgrade available)
-              Description:  Python package installer
-              Package Path: python3Packages.pip
-              Package Name: pip
-              Priority:     100
-              Version:      20.3.4
-              License:      MIT
-              Unfree:       true
-              Broken:       false
-              Outputs:      [ ]
+              Description:          Python package installer
+              Package Path:         python3Packages.pip
+              Package Name:         pip
+              Priority:             100
+              Version:              20.3.4
+              License:              MIT
+              Unfree:               true
+              Broken:               false
+              Available Outputs:    [ ]
+              Installed Outputs:    [ ]
 
             python_install_id:
-              Description:  Python interpreter
-              Package Path: python3Packages.python
-              Package Name: python
-              Priority:     200
-              Version:      3.9.5
-              License:      PSF
-              Unfree:       false
-              Broken:       false
-              Outputs:      [ ]
+              Description:          Python interpreter
+              Package Path:         python3Packages.python
+              Package Name:         python
+              Priority:             200
+              Version:              3.9.5
+              License:              PSF
+              Unfree:               false
+              Broken:               false
+              Available Outputs:    [ ]
+              Installed Outputs:    [ ]
         "});
     }
 
