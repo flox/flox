@@ -105,6 +105,7 @@
 
           # Package Database Utilities: scrape, search, and resolve.
           flox-nix-plugins = callPackage ./pkgs/flox-nix-plugins { };
+          flox-nix-builder = callPackage ./pkgs/flox-nix-builder { };
           flox-buildenv = callPackage ./pkgs/flox-buildenv { };
           flox-watchdog = callPackage ./pkgs/flox-watchdog { }; # Flox Command Line Interface ( development build ).
           flox-activations = callPackage ./pkgs/flox-activations { };
@@ -134,12 +135,14 @@
             rust-internal-deps = self.rust-internal-deps;
           };
           flox-activations = prev.flox-activations.override { };
+          flox-nix-builder = prev.flox-nix-builder.override { };
           flox-interpreter = prev.flox-interpreter.override {
             flox-activations = null;
           };
           flox-package-builder = prev.flox-package-builder.override { };
           flox-buildenv = prev.flox-buildenv.override {
             flox-interpreter = null;
+            flox-nix-builder = null;
           };
           checksFor = checks.${prev.system};
 
@@ -174,6 +177,7 @@
         inherit (pkgs)
           flox-interpreter
           flox-nix-plugins
+          flox-nix-builder
           flox-buildenv
           flox-package-builder
           flox-watchdog

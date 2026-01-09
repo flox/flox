@@ -277,7 +277,7 @@ assert (builtins.hasAttr "lockfile-version" lockfile);
 assert lockfile."lockfile-version" != "0";
 builtins.derivation {
   inherit name;
-  builder = "${floxBuildEnv}/lib/builder.pl";
+  builder = "${floxBuildEnv}/bin/nix-builder";
   outputs = environmentOutputs;
 
   # Pull in external attributes and those calculated above.
@@ -347,7 +347,7 @@ builtins.derivation {
   #   ...
   # ]
   #
-  # The `builder.pl` script is responsible for parsing this when computing
+  # The `nix-builder` binary is responsible for parsing this when computing
   # the contents of requisites.txt for each output.
   exportReferencesGraph.graph = inputSrcs ++ [
     interpreter_out

@@ -1,9 +1,9 @@
 {
   cacert,
-  callPackage,
   coreutils,
   darwin,
   flox-interpreter,
+  flox-nix-builder,
   glibcLocalesUtf8,
   lib,
   nix,
@@ -11,17 +11,18 @@
   stdenv,
   writeText,
 }:
-# We need to ensure that the flox-interpreter package is available.
-# If it's not, we'll use the binary from the environment.
+# We need to ensure that the flox-interpreter and flox-nix-builder packages are available.
+# If they're not, we'll use the binaries from the environment.
 # Build or evaluate this package with `--option pure-eval false`.
 assert (flox-interpreter == null) -> builtins.getEnv "FLOX_INTERPRETER" != null;
+assert (flox-nix-builder == null) -> builtins.getEnv "FLOX_NIX_BUILDER" != null;
 let
   pname = "flox-buildenv";
   version = "0.0.1";
   buildenvLib = ../../buildenv/buildenvLib;
   buildenv_nix = ../../buildenv/buildenv.nix;
-  builder_pl = ../../buildenv/builder.pl;
   activationScripts_fallback = builtins.getEnv "FLOX_INTERPRETER";
+  nix_builder_fallback = builtins.getEnv "FLOX_NIX_BUILDER";
   interpreter_out =
     if flox-interpreter != null then flox-interpreter.out else "${activationScripts_fallback}";
   interpreter_wrapper =
@@ -29,6 +30,8 @@ let
       flox-interpreter.build_executable_wrapper
     else
       "${activationScripts_fallback}-build_executable_wrapper";
+  nix_builder =
+    if flox-nix-builder != null then flox-nix-builder else "${nix_builder_fallback}";
 
   defaultEnvrc = writeText "default.envrc" (
     ''
@@ -46,10 +49,6 @@ let
       # Static environment variables
     ''
   );
-  perl = callPackage ./flox-perl.nix {
-    # Script which determines the modules to keep.
-    perlScript = ../../buildenv/builder.pl;
-  };
 in
 runCommand "${pname}-${version}"
   {
@@ -61,17 +60,15 @@ runCommand "${pname}-${version}"
       interpreter_out
       interpreter_wrapper
       defaultEnvrc
+      nix_builder
       ;
-    # Substitutions for builder.pl.
-    inherit (builtins) storeDir;
-    perl = perl + "/bin/perl";
   }
   ''
+    mkdir -p "$out/bin"
     mkdir -p "$out/lib"
 
-    cp ${builder_pl} "$out/lib/builder.pl"
-    chmod +x "$out/lib/builder.pl"
-    substituteAllInPlace "$out/lib/builder.pl"
+    cp "$nix_builder/bin/nix-builder" "$out/bin/nix-builder"
+    chmod +x "$out/bin/nix-builder"
 
     cp ${buildenv_nix} "$out/lib/buildenv.nix"
     substituteAllInPlace "$out/lib/buildenv.nix"

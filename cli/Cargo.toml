@@ -9,7 +9,7 @@ members = [
     "flox-test-utils",
     "mk_data",
     "systemd",
-    "xtask",
+    "xtask", "nix-builder",
 ]
 default-members = ["flox", "flox-watchdog", "flox-activations"]
 
