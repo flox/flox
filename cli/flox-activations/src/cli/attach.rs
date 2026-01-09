@@ -1,8 +1,13 @@
 use std::path::PathBuf;
 
 use clap::Args;
-use flox_core::activations::rewrite::{self, StartIdentifier, UnixTimestampMillis};
-use flox_core::activations::{self};
+use flox_core::activations::{
+    self,
+    StartIdentifier,
+    UnixTimestampMillis,
+    read_activations_json,
+    write_activations_json,
+};
 use time::{Duration, OffsetDateTime};
 
 use crate::Error;
@@ -54,7 +59,7 @@ impl AttachArgs {
         let activations_json_path =
             activations::state_json_path(&self.runtime_dir, &self.dot_flox_path);
 
-        let (activation_state, lock) = rewrite::read_activations_json(&activations_json_path)?;
+        let (activation_state, lock) = read_activations_json(&activations_json_path)?;
         let Some(mut activation_state) = activation_state else {
             anyhow::bail!(
                 "Expected an existing state file at {}",
@@ -87,7 +92,7 @@ impl AttachArgs {
             },
         }
 
-        rewrite::write_activations_json(&activation_state, &activations_json_path, lock)?;
+        write_activations_json(&activation_state, &activations_json_path, lock)?;
 
         Ok(())
     }
@@ -99,13 +104,14 @@ mod test {
     use std::path::{Path, PathBuf};
 
     use flox_core::activate::mode::ActivateMode;
-    use flox_core::activations::rewrite::{
+    use flox_core::activations::{
         ActivationState,
         StartOrAttachResult,
+        acquire_activations_json_lock,
         read_activations_json,
+        state_json_path,
         write_activations_json,
     };
-    use flox_core::activations::{acquire_activations_json_lock, state_json_path};
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
     use time::OffsetDateTime;

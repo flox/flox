@@ -5,8 +5,7 @@ use std::sync::{Arc, LazyLock};
 use std::{env, fs};
 
 use anyhow::{Context, Result, bail};
-use flox_core::activations::rewrite::read_activations_json;
-use flox_core::activations::{activation_state_dir_path, state_json_path};
+use flox_core::activations::{activation_state_dir_path, read_activations_json, state_json_path};
 use flox_core::traceable_path;
 use logger::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::libc::{SIGCHLD, SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
@@ -236,7 +235,7 @@ fn ensure_process_group_leader() -> Result<(), Error> {
 #[cfg(test)]
 mod test {
     use flox_core::activate::mode::ActivateMode;
-    use flox_core::activations::rewrite::{ActivationState, StartOrAttachResult};
+    use flox_core::activations::{ActivationState, StartOrAttachResult};
     use process::test::{shutdown_flags, start_process, stop_process};
 
     use super::*;
