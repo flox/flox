@@ -3310,6 +3310,38 @@ PIDs of the running activations: ${ACTIVATION_PID}"
   assert_success
 }
 
+# bats test_tags=activate,activate:attach
+@test "activate: handles differences in mode" {
+  project_setup
+
+  # TODO: Workaround for https://github.com/flox/flox/issues/2164
+  rm "${HOME}/.bashrc"
+
+  # Prevent backtraces from `flox-activations` leaking into output.
+  unset RUST_BACKTRACE
+
+  SCRIPT="$(cat <<'EOF'
+      echo "Started outer activation.."
+      echo "$$" > activation_pid
+
+      echo "Attempting inner activation.."
+      "$FLOX_BIN" activate -m dev -- true
+EOF
+  )"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -m run -c "$SCRIPT"
+
+  # Capture from the previous activation.
+  ACTIVATION_PID=$(cat activation_pid)
+
+  assert_failure
+  assert_output "Started outer activation..
+Attempting inner activation..
+❌ ERROR: Environment can't be activated in 'dev' mode whilst there are existing activations in 'run' mode
+
+Exit all activations of the environment and try again.
+PIDs of the running activations: ${ACTIVATION_PID}"
+}
+
 # ---------------------------------------------------------------------------- #
 
 # Sub-commands like `flox-activations` and `flox-watchdog` depend on this.
