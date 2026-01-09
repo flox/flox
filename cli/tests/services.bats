@@ -624,13 +624,15 @@ EOF
         ACTIVATIONS_DIR=$(dirname "$_FLOX_START_STATE_DIR")
         STATE_PATH="${ACTIVATIONS_DIR}/state.json"
 
-        # This will cause the executive to exit with an error on the next poll
-        # loop. In normal circumstances we would never replace the file with a
-        # different version underneath a running executive.
+        # Stop the executive before making changes to state.json which will
+        # cause it to exit with an error on the next polling loop.
+        EXECUTIVE_PID=$(jq --exit-status --raw-output '.executive_pid' "$STATE_PATH")
+        kill -9 "$EXECUTIVE_PID"
+
+        # Fake an older version.
         jq_edit "$STATE_PATH" '.version = 0'
 
-        # This should fail, irrespective of whether the executive has exited yet,
-        # because the outer activation is still attached and running.
+        # This should fail because the outer activation is still attached and running.
         echo "Attempting inner activation.."
         "$FLOX_BIN" services "$command"
 EOF
@@ -646,13 +648,14 @@ Attempting inner activation..
 
 Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"
+
+    # Verify that a subsequent activation succeeds because the state is ignored
+    # and reset when the attached pid and executive are no longer running.
+    # This also ensures that wait_for_activations will succeed.
+    FLOX_SHELL=bash run "$FLOX_BIN" activate -- true
+    assert_success
   done
 
-  # Verify that a subsequent activation succeeds because the state is ignored
-  # and reset when the attached pid and executive are no longer running.
-  # This also ensures that wait_for_activations will succeed.
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -- true
-  assert_success
 }
 
 # bats test_tags=services:stop
