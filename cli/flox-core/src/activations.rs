@@ -431,7 +431,7 @@ pub mod rewrite {
                 Ready::True(start_id) if start_id.store_path == store_path.as_ref() => {
                     self.attach(pid, Attachment {
                         start_id: start_id.clone(),
-                        expiration: None, // TODO
+                        expiration: None,
                     });
                     StartOrAttachResult::Attach {
                         start_id,
@@ -543,7 +543,7 @@ pub mod rewrite {
             };
             let attachment = Attachment {
                 start_id: start_id.clone(),
-                expiration: None, // TODO
+                expiration: None,
             };
 
             debug!(pid, ?start_id, "starting new activation");
