@@ -342,7 +342,6 @@ pub mod rewrite {
 
     #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
     pub struct ActivationState {
-        // TODO: How to handle upgrades
         version: Version<3>,
 
         // TODO: Group in "info", but restricts how we might use them in future?
