@@ -213,10 +213,8 @@ pub mod rewrite {
 
     #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
     pub struct Attachment {
-        // TODO: should be private
-        pub start_id: StartIdentifier,
-        // TODO: should be private
-        pub expiration: Option<OffsetDateTime>,
+        start_id: StartIdentifier,
+        expiration: Option<OffsetDateTime>,
     }
 
     #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
