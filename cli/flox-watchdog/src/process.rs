@@ -169,6 +169,7 @@ impl Watcher for PidWatcher {
 
 #[cfg(test)]
 pub mod test {
+    use std::collections::BTreeMap;
     use std::path::Path;
     use std::process::{Child, Command};
     use std::sync::atomic::Ordering;
@@ -371,10 +372,10 @@ pub mod test {
 
             // Check state while proc2 is still running
             let intermediate_state = read_activation_state(runtime_dir.path(), &dot_flox_path);
-            let intermediate_pids = intermediate_state.attached_pids();
+            let intermediate_attachments = intermediate_state.attachments_by_start_id();
             assert_eq!(
-                intermediate_pids,
-                vec![pid2],
+                BTreeMap::from([(start_id.clone(), vec![(pid2, None)])]),
+                intermediate_attachments,
                 "only pid2 should be running and present after proc1 terminated"
             );
 

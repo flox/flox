@@ -284,11 +284,6 @@ pub mod rewrite {
             self.attached_pids.is_empty()
         }
 
-        // TODO: used in tests only
-        pub fn attached_pids(&self) -> Vec<Pid> {
-            self.attached_pids.keys().copied().collect()
-        }
-
         /// Returns the current activation mode
         pub fn mode(&self) -> &ActivateMode {
             &self.mode
