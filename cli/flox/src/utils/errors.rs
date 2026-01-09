@@ -470,6 +470,13 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
 
             Please ensure that you have write permissions to '.flox/{ENVIRONMENT_POINTER_FILENAME}'.
         "},
+        ManagedEnvironmentError::WritePointerAfterRemoteRename { new_name, .. } => formatdoc! {"
+            The environment was renamed to '{new_name}' on FloxHub, but the local
+            pointer file could not be updated.
+
+            To complete the rename locally, update the 'name' field in
+            '.flox/{ENVIRONMENT_POINTER_FILENAME}' to '{new_name}'.
+        "},
         ManagedEnvironmentError::CreateFloxmetaDir(_) => display_chain(err),
         ManagedEnvironmentError::CreateGenerationFiles(_) => display_chain(err),
         ManagedEnvironmentError::CommitGeneration(

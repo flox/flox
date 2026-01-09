@@ -147,6 +147,12 @@ pub enum ManagedEnvironmentError {
     SerializePointer(#[source] serde_json::Error),
     #[error("couldn't write environment pointer")]
     WritePointer(#[source] std::io::Error),
+    #[error("failed to update local pointer after remote rename to '{new_name}'")]
+    WritePointerAfterRemoteRename {
+        new_name: String,
+        #[source]
+        err: std::io::Error,
+    },
 
     // todo: improve description
     #[error("could not create floxmeta directory")]
@@ -1591,7 +1597,10 @@ impl ManagedEnvironment {
             self.path.join(ENVIRONMENT_POINTER_FILENAME),
             pointer_content,
         )
-        .map_err(ManagedEnvironmentError::WritePointer)?;
+        .map_err(|e| ManagedEnvironmentError::WritePointerAfterRemoteRename {
+            new_name: self.pointer.name.to_string(),
+            err: e,
+        })?;
 
         Ok(())
     }
