@@ -102,7 +102,6 @@ mod test {
     use flox_core::activate::mode::ActivateMode;
     use flox_core::activations::rewrite::{
         ActivationState,
-        Attachment,
         StartOrAttachResult,
         read_activations_json,
         write_activations_json,
@@ -169,13 +168,11 @@ mod test {
 
         let state = read_activation_state(runtime_dir.path(), &flox_env);
 
-        assert_eq!(
-            state.attached_pids,
-            BTreeMap::from([(pid, Attachment {
-                start_id: start_id.clone(),
-                expiration: Some(now + time::Duration::milliseconds(1000)),
-            })])
-        );
+        let expected_attachments = BTreeMap::from([(start_id.clone(), vec![(
+            pid,
+            Some(now + time::Duration::milliseconds(1000)),
+        )])]);
+        assert_eq!(state.attachments_by_start_id(), expected_attachments);
     }
 
     /// Attaching with remove_pid replaces the attachment for the old PID with the new one
@@ -213,12 +210,7 @@ mod test {
 
         let activation = read_activation_state(runtime_dir.path(), &flox_env);
 
-        assert_eq!(
-            activation.attached_pids,
-            BTreeMap::from([(new_pid, Attachment {
-                start_id,
-                expiration: None
-            })])
-        );
+        let expected_attachments = BTreeMap::from([(start_id.clone(), vec![(new_pid, None)])]);
+        assert_eq!(activation.attachments_by_start_id(), expected_attachments);
     }
 }

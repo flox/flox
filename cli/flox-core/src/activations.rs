@@ -239,8 +239,7 @@ pub mod rewrite {
         ready: Ready,
         executive_pid: Pid,
         current_process_compose_store_path: Option<StartIdentifier>,
-        // TODO: make private
-        pub attached_pids: BTreeMap<Pid, Attachment>,
+        attached_pids: BTreeMap<Pid, Attachment>,
     }
 
     impl ActivationState {
