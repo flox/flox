@@ -8,7 +8,7 @@ use std::process::Command;
 use anyhow::{Result, anyhow};
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
-use flox_core::activations::rewrite::StartIdentifier;
+use flox_core::activations::StartIdentifier;
 use indoc::formatdoc;
 use itertools::Itertools;
 use nix::unistd::{close, dup2_stdin, pipe, write};

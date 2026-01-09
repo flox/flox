@@ -7,7 +7,15 @@ use anyhow::{Result, anyhow, bail};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
-use flox_core::activations::{ModeMismatch, state_json_path};
+use flox_core::activations::{
+    ActivationState,
+    ModeMismatch,
+    StartIdentifier,
+    StartOrAttachResult,
+    read_activations_json,
+    state_json_path,
+    write_activations_json,
+};
 use indoc::formatdoc;
 use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::{Pid, getpid};
@@ -112,9 +120,7 @@ impl ActivateArgs {
         invocation_type: &InvocationType,
         subsystem_verbosity: u32,
         vars_from_env: &VarsFromEnvironment,
-    ) -> Result<flox_core::activations::rewrite::StartIdentifier, anyhow::Error> {
-        use flox_core::activations::rewrite::StartOrAttachResult;
-
+    ) -> Result<StartIdentifier, anyhow::Error> {
         let mut retries = 30; // 30 * 200ms = 6 seconds for concurrent start blocking
 
         loop {
@@ -162,14 +168,7 @@ impl ActivateArgs {
         invocation_type: &InvocationType,
         subsystem_verbosity: u32,
         vars_from_env: &VarsFromEnvironment,
-    ) -> Result<flox_core::activations::rewrite::StartOrAttachResult, anyhow::Error> {
-        use flox_core::activations::rewrite::{
-            ActivationState,
-            StartOrAttachResult,
-            read_activations_json,
-            write_activations_json,
-        };
-
+    ) -> Result<StartOrAttachResult, anyhow::Error> {
         let activations_json_path = state_json_path(
             &context.attach_ctx.flox_runtime_dir,
             &context.attach_ctx.dot_flox_path,

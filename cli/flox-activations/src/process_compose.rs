@@ -6,7 +6,7 @@ use std::{env, thread};
 
 use anyhow::{Context, Error, bail};
 use flox_core::activate::context::AttachCtx;
-use flox_core::activations::rewrite::StartIdentifier;
+use flox_core::activations::StartIdentifier;
 use time::OffsetDateTime;
 use time::macros::format_description;
 use tracing::debug;

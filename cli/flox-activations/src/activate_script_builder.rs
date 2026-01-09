@@ -4,7 +4,7 @@ use std::process::Command;
 
 use flox_core::activate::context::{ActivateCtx, AttachCtx, InvocationType};
 use flox_core::activate::vars::{FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_VAR};
-use flox_core::activations::rewrite::StartIdentifier;
+use flox_core::activations::StartIdentifier;
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
 
