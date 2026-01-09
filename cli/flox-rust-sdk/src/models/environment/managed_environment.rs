@@ -1562,7 +1562,7 @@ impl ManagedEnvironment {
 
         // Create HTTP client and call rename API
         let client =
-            crate::providers::floxhub_client::FloxhubClient::new(&api_base_url, token.secret());
+            crate::providers::floxhub_client::FloxhubClient::new(&api_base_url, token.clone());
         let response = client
             .rename_environment(
                 self.pointer.owner.as_ref(),

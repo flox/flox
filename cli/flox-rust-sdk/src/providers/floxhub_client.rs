@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
+use crate::flox::FloxhubToken;
+
 #[derive(Serialize)]
 struct RenameRequest {
     name: String,
@@ -17,15 +19,15 @@ pub struct RenameResponse {
 pub struct FloxhubClient {
     client: Client,
     base_url: Url,
-    token: String,
+    token: FloxhubToken,
 }
 
 impl FloxhubClient {
-    pub fn new(base_url: &Url, token: &str) -> Self {
+    pub fn new(base_url: &Url, token: FloxhubToken) -> Self {
         Self {
             client: Client::new(),
             base_url: base_url.clone(),
-            token: token.to_string(),
+            token,
         }
     }
 
@@ -43,7 +45,7 @@ impl FloxhubClient {
         let response = self
             .client
             .post(url)
-            .header("X-Flox-Github-Token", &self.token)
+            .header("X-Flox-Github-Token", self.token.secret())
             .json(&RenameRequest {
                 name: new_name.to_string(),
             })

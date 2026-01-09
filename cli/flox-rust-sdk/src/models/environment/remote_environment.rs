@@ -336,29 +336,50 @@ impl RemoteEnvironment {
 
         // Rename cache directory if paths differ
         if old_cache_dir != new_cache_dir {
-            // If new directory exists, remove it first (orphaned cache from deleted environment)
-            if new_cache_dir.exists()
-                && let Err(e) = fs::remove_dir_all(&new_cache_dir)
-            {
-                debug!(
-                    "Could not remove existing cache directory at {}: {}",
-                    new_cache_dir.display(),
-                    e
-                );
-            }
+            // Use a transaction pattern: move to backup first, then to final location.
+            // This allows rollback if the final rename fails.
+            let backup_dir = old_cache_dir.with_extension("rename-backup");
 
-            // Rename old cache to new location
-            if let Err(e) = fs::rename(&old_cache_dir, &new_cache_dir) {
-                // Log but don't fail - FloxHub is source of truth, next activation will pull fresh
-                debug!(
-                    "Could not rename cache directory from {} to {}: {}. \
-                     Run 'flox activate -r {}/{}' to fetch the renamed environment.",
-                    old_cache_dir.display(),
-                    new_cache_dir.display(),
-                    e,
-                    self.pointer().owner,
-                    new_name
-                );
+            // Step 1: Move old cache to backup location (guaranteed unique target)
+            match fs::rename(&old_cache_dir, &backup_dir) {
+                Ok(()) => {
+                    // Step 2: Remove target if it exists (orphaned cache from deleted environment)
+                    if new_cache_dir.exists() {
+                        let _ = fs::remove_dir_all(&new_cache_dir);
+                    }
+
+                    // Step 3: Move backup to final location
+                    if let Err(e) = fs::rename(&backup_dir, &new_cache_dir) {
+                        // Step 4: Rollback - restore backup to original location
+                        debug!(
+                            "Could not rename cache directory to {}: {}. Restoring to original location.",
+                            new_cache_dir.display(),
+                            e
+                        );
+                        if let Err(restore_err) = fs::rename(&backup_dir, &old_cache_dir) {
+                            debug!(
+                                "Could not restore cache directory to {}: {}. \
+                                 Run 'flox activate -r {}/{}' to fetch the renamed environment.",
+                                old_cache_dir.display(),
+                                restore_err,
+                                self.pointer().owner,
+                                new_name
+                            );
+                        }
+                    }
+                },
+                Err(e) => {
+                    // Could not create backup - log and continue, cache stays at old location
+                    debug!(
+                        "Could not backup cache directory from {} to {}: {}. \
+                         Run 'flox activate -r {}/{}' to fetch the renamed environment.",
+                        old_cache_dir.display(),
+                        backup_dir.display(),
+                        e,
+                        self.pointer().owner,
+                        new_name
+                    );
+                },
             }
         }
 
