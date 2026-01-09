@@ -1218,12 +1218,17 @@ impl ManagedEnvironment {
     /// If access to a remote repository requires authentication,
     /// the FloxHub token must be set in the flox instance.
     /// The caller is responsible for ensuring that the token is present and valid.
+    ///
+    /// `initializing` controls whether the initial history entry is
+    /// [HistoryKind::Import] for pushing existing environments or
+    /// [HistoryKind::Initialize] for environments that are (virtually) created on FloxHub.
     #[instrument(skip(flox), fields(progress = "Pushing new environment to FloxHub"))]
     pub fn push_new(
         flox: &Flox,
         path_environment: PathEnvironment,
         owner: EnvironmentOwner,
         force: bool,
+        initializing: bool,
     ) -> Result<Self, EnvironmentError> {
         // path of the original .flox directory
         let dot_flox_path = path_environment.path.clone();
@@ -1246,7 +1251,15 @@ impl ManagedEnvironment {
         // Ensure that the environment does not include other local ennvironments
         check_for_local_includes(&lockfile)?;
 
-        Self::push_new_without_building(flox, owner, name, force, dot_flox_path, core_environment)
+        Self::push_new_without_building(
+            flox,
+            owner,
+            name,
+            force,
+            initializing,
+            dot_flox_path,
+            core_environment,
+        )
     }
 
     /// Push an environment and open the resulting [ManagedEnvironment],
@@ -1254,11 +1267,16 @@ impl ManagedEnvironment {
     ///
     /// This is split out for the purposes of testing -
     /// some tests need an environment that has build errors.
+    ///
+    /// `initializing` controls whether the initial history entry is
+    /// [HistoryKind::Import] for pushing existing environments or
+    /// [HistoryKind::Initialize] for environments that are (virtually) created on FloxHub.
     fn push_new_without_building(
         flox: &Flox,
         owner: EnvironmentOwner,
         name: EnvironmentName,
         force: bool,
+        initializing: bool,
         dot_flox_path: CanonicalPath,
         mut core_environment: CoreEnvironment,
     ) -> Result<Self, EnvironmentError> {
@@ -1302,8 +1320,13 @@ impl ManagedEnvironment {
 
         // Add this environment as a new generation, which involves pushing to
         // the fake remote.
+        let kind = if initializing {
+            HistoryKind::Initialize
+        } else {
+            HistoryKind::Import
+        };
         generations
-            .add_generation(&mut core_environment, HistoryKind::Import)
+            .add_generation(&mut core_environment, kind)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
         temp_floxmeta_git
@@ -1316,7 +1339,12 @@ impl ManagedEnvironment {
         // Push the branch for this environment to FloxHub
         match temp_floxmeta_git.push_ref("upstream", "HEAD", force) {
             Err(GitRemoteCommandError::AccessDenied) => Err(ManagedEnvironmentError::AccessDenied)?,
-            Err(GitRemoteCommandError::Diverged) => {
+            // If run in close succession, given equal data,
+            // git may produce two identical commits despite different repos.
+            // Therefore the push to "FloxHub" will succeed with [PushFlag::UpToDate].
+            // Since we want to signal that the upstream repo already exists
+            // we need to also catch this success.
+            Err(GitRemoteCommandError::Diverged) | Ok(PushFlag::UptoDate) => {
                 Err(ManagedEnvironmentError::UpstreamAlreadyExists {
                     env_ref: RemoteEnvironmentRef::new_from_parts(owner, name),
                     upstream: flox.floxhub.base_url().to_string(),
@@ -1632,6 +1660,7 @@ pub mod test_helpers {
             owner,
             "name".parse().unwrap(),
             false,
+            false,
             CanonicalPath::new(tempdir_in(&flox.temp_dir).unwrap().keep()).unwrap(),
             new_core_environment(flox, contents),
         )
@@ -1656,7 +1685,7 @@ pub mod test_helpers {
         let path_environment =
             new_named_path_environment_in(flox, contents, path, name.unwrap_or("name"));
 
-        ManagedEnvironment::push_new(flox, path_environment, owner, false).unwrap()
+        ManagedEnvironment::push_new(flox, path_environment, owner, false, false).unwrap()
     }
 
     /// Get a [ManagedEnvironment] that has been pushed to (a mock) FloxHub and
@@ -1675,7 +1704,7 @@ pub mod test_helpers {
         let path_environment =
             new_named_path_environment_from_env_files(flox, env_files_dir, "name");
 
-        ManagedEnvironment::push_new(flox, path_environment, owner, false).unwrap()
+        ManagedEnvironment::push_new(flox, path_environment, owner, false, false).unwrap()
     }
 }
 
