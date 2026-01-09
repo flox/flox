@@ -14,11 +14,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use flox_core::activations::rewrite::{
-    ActivationState,
-    read_activations_json,
-    write_activations_json,
-};
+use flox_core::activations::{ActivationState, read_activations_json, write_activations_json};
 use flox_core::proc_status::pid_is_running;
 use fslock::LockFile;
 use signal_hook::iterator::Signals;
@@ -175,8 +171,11 @@ pub mod test {
     use std::sync::atomic::Ordering;
 
     use flox_core::activate::mode::ActivateMode;
-    use flox_core::activations::rewrite::StartOrAttachResult;
-    use flox_core::activations::{acquire_activations_json_lock, state_json_path};
+    use flox_core::activations::{
+        StartOrAttachResult,
+        acquire_activations_json_lock,
+        state_json_path,
+    };
     use flox_core::proc_status::{ProcStatus, pid_is_running, read_pid_status};
 
     use super::*;
