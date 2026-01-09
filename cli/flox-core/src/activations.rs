@@ -10,14 +10,59 @@ use tracing::debug;
 use crate::path_hash;
 use crate::proc_status::pid_is_running;
 
+const EXECUTIVE_NOT_STARTED: Pid = 0;
+
 type Error = anyhow::Error;
+type Pid = i32;
+
+/// Represents running processes attached to an activation.
+/// Attachments take precedence over executive in this representation.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum RunningProcesses {
+    /// One or more shell processes are attached to the activation
+    Attachments(Vec<Pid>),
+    /// No attachments, but the executive/watchdog process is running
+    Executive(Pid),
+}
+
+impl RunningProcesses {
+    /// Construct a RunningProcesses enum from separate PID lists.
+    /// Filters to running PIDs and applies precedence (attachments > executive).
+    fn from_pids(attached_pids: Vec<Pid>, executive_pid: Pid) -> Option<Self> {
+        let running_attached: Vec<Pid> = attached_pids
+            .into_iter()
+            .filter(|pid| pid_is_running(*pid))
+            .collect();
+
+        let running_executive = Some(executive_pid)
+            .filter(|&pid| pid != EXECUTIVE_NOT_STARTED)
+            .filter(|&pid| pid_is_running(pid));
+
+        if !running_attached.is_empty() {
+            Some(RunningProcesses::Attachments(running_attached))
+        } else {
+            running_executive.map(RunningProcesses::Executive)
+        }
+    }
+}
 
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum UnsupportedVersion {
     /// ActivationState of unsupported version with running activations.
-    WithRunningAttachments { pids: Vec<i32> },
+    WithRunningAttachments { pids: Vec<Pid> },
     /// ActivationState of unsupported version with no running activations but a running executive.
-    WithRunningExecutive { pid: i32 },
+    WithRunningExecutive { pid: Pid },
+}
+
+impl UnsupportedVersion {
+    pub fn from_running_processes(running: RunningProcesses) -> Self {
+        match running {
+            RunningProcesses::Attachments(pids) => {
+                UnsupportedVersion::WithRunningAttachments { pids }
+            },
+            RunningProcesses::Executive(pid) => UnsupportedVersion::WithRunningExecutive { pid },
+        }
+    }
 }
 
 impl std::fmt::Display for UnsupportedVersion {
@@ -43,6 +88,80 @@ impl std::fmt::Display for UnsupportedVersion {
                     "This environment has already been activated with an incompatible version of 'flox'.\n\n\
                      The executive process is still running.\n\
                      Wait for it to finish, or stop it with: 'kill {executive_pid}'",
+                )
+            },
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
+pub enum ModeMismatch {
+    /// Mode mismatch with running attachments.
+    WithRunningAttachments {
+        current_mode: crate::activate::mode::ActivateMode,
+        requested_mode: crate::activate::mode::ActivateMode,
+        pids: Vec<Pid>,
+    },
+    /// Mode mismatch with no running attachments but a running executive.
+    WithRunningExecutive {
+        current_mode: crate::activate::mode::ActivateMode,
+        requested_mode: crate::activate::mode::ActivateMode,
+        pid: Pid,
+    },
+}
+
+impl ModeMismatch {
+    pub fn from_running_processes(
+        current_mode: crate::activate::mode::ActivateMode,
+        requested_mode: crate::activate::mode::ActivateMode,
+        running: RunningProcesses,
+    ) -> Self {
+        match running {
+            RunningProcesses::Attachments(pids) => ModeMismatch::WithRunningAttachments {
+                current_mode,
+                requested_mode,
+                pids,
+            },
+            RunningProcesses::Executive(pid) => ModeMismatch::WithRunningExecutive {
+                current_mode,
+                requested_mode,
+                pid,
+            },
+        }
+    }
+}
+
+impl std::fmt::Display for ModeMismatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ModeMismatch::WithRunningAttachments {
+                current_mode,
+                requested_mode,
+                pids,
+            } => {
+                let pid_list = pids
+                    .iter()
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                write!(
+                    f,
+                    "Environment can't be activated in '{requested_mode}' mode whilst there are existing activations in '{current_mode}' mode\n\n\
+                     Exit all activations of the environment and try again.\n\
+                     PIDs of the running activations: {pid_list}",
+                )
+            },
+            ModeMismatch::WithRunningExecutive {
+                current_mode,
+                requested_mode,
+                pid,
+            } => {
+                write!(
+                    f,
+                    "Environment can't be activated in '{requested_mode}' mode whilst there are existing activations in '{current_mode}' mode\n\n\
+                     The executive process is still running.\n\
+                     Wait for it to finish, or stop it with: 'kill {pid}'",
                 )
             },
         }
@@ -132,10 +251,6 @@ pub mod rewrite {
     use super::*;
     use crate::Version;
     use crate::activate::mode::ActivateMode;
-
-    type Pid = i32;
-
-    const EXECUTIVE_NOT_STARTED: Pid = 0;
 
     #[derive(Clone, Debug, Eq, PartialEq)]
     pub enum StartOrAttachResult {
@@ -287,6 +402,12 @@ pub mod rewrite {
         /// Returns the current activation mode
         pub fn mode(&self) -> &ActivateMode {
             &self.mode
+        }
+
+        /// Check if the activation state has running processes.
+        pub fn running_processes(&self) -> Option<super::RunningProcesses> {
+            let attached_pids: Vec<Pid> = self.attached_pids.keys().copied().collect();
+            super::RunningProcesses::from_pids(attached_pids, self.executive_pid)
         }
 
         /// Start or attach to an activation for the given store path.
@@ -482,9 +603,9 @@ pub mod rewrite {
         }
     }
 
-    /// Best-effort extraction of PIDs from unknown version JSON.
-    /// Returns (attached_pids, executive_pid).
-    fn extract_running_pids_from_json(content: &str) -> Result<(Vec<Pid>, Option<Pid>), Error> {
+    /// Best-effort extraction of running PIDs from unknown version JSON.
+    /// Returns RunningProcesses if any processes are still running.
+    fn extract_running_pids_from_json(content: &str) -> Result<Option<RunningProcesses>, Error> {
         #[derive(Debug, Deserialize)]
         struct PidExtractor {
             #[serde(default)]
@@ -496,22 +617,12 @@ pub mod rewrite {
         let extractor: PidExtractor =
             serde_json::from_str(content).context("Failed to extract PIDs from state.json")?;
 
-        let mut running_attached = Vec::new();
-        for pid in extractor.attached_pids.keys() {
-            if pid_is_running(*pid) {
-                running_attached.push(*pid);
-            }
-        }
+        let attached_pids: Vec<Pid> = extractor.attached_pids.keys().copied().collect();
 
-        let executive_pid = if extractor.executive_pid != EXECUTIVE_NOT_STARTED
-            && pid_is_running(extractor.executive_pid)
-        {
-            Some(extractor.executive_pid)
-        } else {
-            None
-        };
-
-        Ok((running_attached, executive_pid))
+        Ok(RunningProcesses::from_pids(
+            attached_pids,
+            extractor.executive_pid,
+        ))
     }
 
     /// Parse activation state with version checking.
@@ -535,15 +646,10 @@ pub mod rewrite {
             // Versions 1 and 2 were stored in a different path so we don't need to handle migrations.
             // This also handles the case where someone upgrades and then downgrades Flox.
             _ => {
-                let (running_attached, executive_pid) = extract_running_pids_from_json(content)?;
+                let running = extract_running_pids_from_json(content)?;
 
-                if !running_attached.is_empty() {
-                    Err(UnsupportedVersion::WithRunningAttachments {
-                        pids: running_attached,
-                    }
-                    .into())
-                } else if let Some(exec_pid) = executive_pid {
-                    Err(UnsupportedVersion::WithRunningExecutive { pid: exec_pid }.into())
+                if let Some(running) = running {
+                    Err(UnsupportedVersion::from_running_processes(running).into())
                 } else {
                     debug!(
                         "discarding state.json due to unsupported version with no running attachments or executive"
@@ -600,7 +706,7 @@ pub mod rewrite {
 
     #[cfg(test)]
     mod tests {
-        use std::process::{Child, Command};
+        use std::process::{self, Child, Command};
         use std::time::Duration;
 
         use indoc::formatdoc;
@@ -1013,6 +1119,48 @@ pub mod rewrite {
             assert!(activations.attached_pids.contains_key(&pid));
             assert!(!modified);
             assert!(empty_starts.is_empty());
+        }
+
+        mod running_processes {
+            use super::*;
+
+            #[test]
+            fn running_processes_none() {
+                let stopped_proc = start_process();
+                let stopped_pid = stopped_proc.id() as Pid;
+                stop_process(stopped_proc);
+                let running = RunningProcesses::from_pids(vec![stopped_pid], stopped_pid);
+                assert_eq!(
+                    running, None,
+                    "should return none when no attachments or executive are running"
+                );
+            }
+
+            #[test]
+            fn running_processes_attachments() {
+                let pid_self = process::id() as Pid;
+                let running = RunningProcesses::from_pids(vec![pid_self, pid_self], pid_self);
+                assert_eq!(
+                    running,
+                    Some(RunningProcesses::Attachments(vec![pid_self, pid_self])),
+                    "should return attachments when any are running",
+                );
+            }
+
+            #[test]
+            fn running_processes_executive() {
+                let pid_self = process::id() as Pid;
+                let stopped_proc = start_process();
+                let stopped_pid = stopped_proc.id() as Pid;
+                stop_process(stopped_proc);
+
+                let running = RunningProcesses::from_pids(vec![stopped_pid], pid_self);
+                assert_eq!(
+                    running,
+                    Some(RunningProcesses::Executive(pid_self)),
+                    "should return executive when no attachments are running and executive is"
+                );
+            }
         }
 
         mod version_handling {

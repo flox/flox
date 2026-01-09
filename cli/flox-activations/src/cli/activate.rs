@@ -7,7 +7,7 @@ use anyhow::{Result, anyhow, bail};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
-use flox_core::activations::state_json_path;
+use flox_core::activations::{ModeMismatch, state_json_path};
 use indoc::formatdoc;
 use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::{Pid, getpid};
@@ -179,16 +179,24 @@ impl ActivateArgs {
         let mut activations =
             activations_opt.unwrap_or_else(|| ActivationState::new(&context.mode));
 
-        // TODO: what if attached pids are dead?
         if activations.mode() != &context.mode {
-            let pids = activations.attached_pids_running();
-            anyhow::bail!(
-                "Environment already activated in {} mode. \
-                 Exit activations with PIDs {:?} to activate in {} mode.",
-                activations.mode(),
-                pids,
-                context.mode
+            if let Some(running) = activations.running_processes() {
+                return Err(ModeMismatch::from_running_processes(
+                    activations.mode().clone(),
+                    context.mode.clone(),
+                    running,
+                )
+                .into());
+            }
+
+            // Prevent a deadlock if modes mismatch but nothing has cleaned up old state.
+            // TODO: What if process-compose is still running with a different mode?
+            debug!(
+                old_mode = ?activations.mode(),
+                new_mode = ?context.mode,
+                "discarding activation state due to change of mode and no running processes"
             );
+            activations = ActivationState::new(&context.mode);
         }
 
         let pid = std::process::id() as i32;
