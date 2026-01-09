@@ -517,7 +517,7 @@ pub mod rewrite {
     }
 
     /// Parse activation state with version checking.
-    /// Returns None if state should be discarded (old version, no running PIDs).
+    /// Returns None if state should be discarded (different version and no running PIDs).
     fn parse_versioned_activation_state(content: &str) -> Result<Option<ActivationState>, Error> {
         #[derive(Debug, Deserialize)]
         struct VersionOnly {
@@ -528,13 +528,14 @@ pub mod rewrite {
             serde_json::from_str(content).context("Failed to parse state.json")?;
 
         match version_check.version.as_u64() {
-            // Versions 1 and 2 were stored in a different path so we don't need to handle migrations.
+            // Current version.
             Some(3) => {
                 let state: ActivationState =
                     serde_json::from_str(content).context("Failed to parse state.json")?;
                 Ok(Some(state))
             },
-            // Future versions that aren't compatible.
+            // Versions 1 and 2 were stored in a different path so we don't need to handle migrations.
+            // This also handles the case where someone upgrades and then downgrades Flox.
             _ => {
                 let (running_attached, executive_pid) = extract_running_pids_from_json(content)?;
 
@@ -555,6 +556,14 @@ pub mod rewrite {
         }
     }
 
+    /// Returns the parsed `activations.json` file or `None` if:
+    ///
+    /// - the file does not exist
+    /// - the version is different but there are no running processes
+    ///
+    /// The file can be written with [write_activations_json].
+    /// This function acquires a lock on the file,
+    /// which should be reused for writing, to avoid TOCTOU issues.
     pub fn read_activations_json(
         path: impl AsRef<Path>,
     ) -> Result<(Option<ActivationState>, LockFile), Error> {
@@ -571,12 +580,17 @@ pub mod rewrite {
         let contents = std::fs::read_to_string(path)
             .context(format!("failed to read file {}", path.display()))?;
 
-        // Parse with version checking - may return None if old version with no running PIDs
         let parsed = parse_versioned_activation_state(&contents)?;
 
         Ok((parsed, lock_file))
     }
-
+    /// Writes the environment `activations.json` file.
+    /// The file is written atomically.
+    /// The lock is released after the write.
+    ///
+    /// This uses [flox_core::serialize_atomically] to write the file, and inherits its requirements.
+    /// * `path` must have a parent directory.
+    /// * The lock must correspond to the file being written.
     pub fn write_activations_json(
         activations: &ActivationState,
         path: impl AsRef<Path>,
@@ -590,6 +604,8 @@ pub mod rewrite {
     mod tests {
         use std::process::{Child, Command};
         use std::time::Duration;
+
+        use indoc::formatdoc;
 
         use super::*;
         // NOTE: these two functions are copied from flox-rust-sdk since you can't
@@ -1002,11 +1018,12 @@ pub mod rewrite {
         }
 
         mod version_handling {
-            use indoc::formatdoc;
-
             use super::*;
 
-            const FUTURE_VERSION: i32 = 99;
+            // Technically we'd never encounter this exact Version because we
+            // changed the path of the state file during the 2025-12/2026-01
+            // activation rewrite.
+            const OLD_VERSION: Version<2> = Version;
 
             #[test]
             fn parse_versioned_activation_state_roundtrip() {
@@ -1029,9 +1046,9 @@ pub mod rewrite {
             }
 
             #[test]
-            fn parse_versioned_activation_state_future_version_incompatible_structure() {
+            fn parse_versioned_activation_state_different_version_incompatible_structure() {
                 let json = json!({
-                    "version": FUTURE_VERSION,
+                    "version": OLD_VERSION,
                     "mode": "dev",
                     "ready": false,
                     "executive_pid": EXECUTIVE_NOT_STARTED,
@@ -1044,13 +1061,13 @@ pub mod rewrite {
             }
 
             #[test]
-            fn parse_versioned_activation_state_future_version_pids_not_running() {
+            fn parse_versioned_activation_state_different_version_pids_not_running() {
                 let proc_stopped = start_process();
                 let pid_stopped = proc_stopped.id().to_string();
                 stop_process(proc_stopped);
 
                 let json = json!({
-                    "version": FUTURE_VERSION,
+                    "version": OLD_VERSION,
                     "mode": "dev",
                     "ready": false,
                     "executive_pid": EXECUTIVE_NOT_STARTED,
@@ -1065,14 +1082,14 @@ pub mod rewrite {
             }
 
             #[test]
-            fn parse_versioned_activation_state_future_version_pids_running() {
+            fn parse_versioned_activation_state_different_version_pids_running() {
                 let proc1 = start_process();
                 let proc2 = start_process();
                 let pid1 = proc1.id() as i32;
                 let pid2 = proc2.id() as i32;
 
                 let json = json!({
-                    "version": FUTURE_VERSION,
+                    "version": OLD_VERSION,
                     "mode": "dev",
                     "ready": false,
                     "executive_pid": EXECUTIVE_NOT_STARTED,
@@ -1097,12 +1114,12 @@ pub mod rewrite {
             }
 
             #[test]
-            fn parse_versioned_activation_state_future_version_only_executive() {
+            fn parse_versioned_activation_state_different_version_only_executive() {
                 let exec_proc = start_process();
                 let exec_pid = exec_proc.id() as i32;
 
                 let json = json!({
-                    "version": FUTURE_VERSION,
+                    "version": OLD_VERSION,
                     "mode": "dev",
                     "ready": false,
                     "executive_pid": exec_pid,
