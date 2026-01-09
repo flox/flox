@@ -10,11 +10,8 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
-use flox_rust_sdk::models::environment::generations::{
-    AllGenerationsMetadata,
-    GenerationId,
-    GenerationsExt,
-};
+use flox_rust_sdk::models::environment::floxmeta_branch::BranchOrd;
+use flox_rust_sdk::models::environment::generations::{GenerationId, GenerationsExt};
 use flox_rust_sdk::models::environment::managed_environment::DivergedMetadata;
 use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
@@ -733,6 +730,10 @@ fn notify_upgrades_if_available(
         return Ok(());
     }
 
+    // print a possible notification about environment upgrades first
+    // (and avoid being skipped below because upgrade information is unavailable)
+    notify_environment_upgrades(environment, environment_select)?;
+
     let upgrade_guard = UpgradeInformationGuard::read_in(environment.cache_path()?)?;
 
     let Some(info) = upgrade_guard.info() else {
@@ -741,11 +742,6 @@ fn notify_upgrades_if_available(
     };
 
     notify_package_upgrades(flox, environment, &info.upgrade_result)?;
-    notify_environment_upgrades(
-        environment,
-        &info.remote_generations_metadata,
-        environment_select,
-    )?;
 
     Ok(())
 }
@@ -775,9 +771,14 @@ fn notify_package_upgrades(
     Ok(())
 }
 
+/// For remote environments only; check whether the environment state is equal
+/// to our most recent view of the remote state on FloxHub.
+/// This method itself **won't** query FloxHub but depends on side effects
+/// of other operations (e.g. push, pull, * --upstream,
+/// the async fetch of a previous activation) to avoid delays of activations,
+/// or failures due to network disruptions.
 fn notify_environment_upgrades(
     environment: &ConcreteEnvironment,
-    remote_generations_metadata: &Option<AllGenerationsMetadata>,
     environment_select: &EnvironmentSelect,
 ) -> Result<()> {
     if let ConcreteEnvironment::Path(_) = environment {
@@ -785,19 +786,29 @@ fn notify_environment_upgrades(
         return Ok(());
     }
 
-    let Some(remote_generations_metadata) = remote_generations_metadata else {
-        debug!("Not notifying user of environment upgrades, remote state not known");
-        return Ok(());
-    };
-
-    let local_generations_metadata = match environment {
+    let branch_ord = match environment {
         ConcreteEnvironment::Path(_) => unreachable!(),
         ConcreteEnvironment::Managed(managed_environment) => {
-            managed_environment.generations_metadata()
+            managed_environment.compare_remote()?
         },
-        ConcreteEnvironment::Remote(remote_environment) => {
-            remote_environment.generations_metadata()
-        },
+        ConcreteEnvironment::Remote(remote_environment) => remote_environment.compare_remote()?,
+    };
+
+    if branch_ord == BranchOrd::Equal {
+        debug!("Not notifying user of environment upgrades, equal branches");
+        return Ok(());
+    }
+
+    let (local_generations_metadata, remote_generations_metadata) = match environment {
+        ConcreteEnvironment::Path(_) => unreachable!(),
+        ConcreteEnvironment::Managed(managed_environment) => (
+            managed_environment.generations_metadata(),
+            managed_environment.remote_generations_metadata(),
+        ),
+        ConcreteEnvironment::Remote(remote_environment) => (
+            remote_environment.generations_metadata(),
+            remote_environment.remote_generations_metadata(),
+        ),
     };
 
     let local_generations_metadata = match local_generations_metadata {
@@ -808,35 +819,22 @@ fn notify_environment_upgrades(
         },
     };
 
-    // TODO: I think we should use a floxmeta git rev rather than having a
-    // separate source of truth in the upgrade notification file
-    // That would be more robust to catch force pushes
-    // It's also possible to get notifications currently that the upstream
-    // environment is at two different generations if you have one
-    // upgrade-check.json in a ManagedEnvironment and one for a
-    // RemoteEnvironment
-    // We can add a test when we do that
-    // TODO: if we drop this, we can drop History::len()
-    let local_timestamp = local_generations_metadata
-        .history()
-        .latest()
-        .map(|entry| entry.timestamp);
-    let remote_timestamp = remote_generations_metadata
-        .history()
-        .latest()
-        .map(|entry| entry.timestamp);
-    if local_generations_metadata.current_gen() == remote_generations_metadata.current_gen()
-        && local_generations_metadata.history().len() == remote_generations_metadata.history().len()
-        && local_timestamp == remote_timestamp
-    {
-        debug!(
-            "Local state of environment at generation {:?} is the same as upstream",
-            local_generations_metadata.current_gen()
-        );
-        return Ok(());
-    }
+    let remote_generations_metadata = match remote_generations_metadata {
+        Ok(metadata) => metadata.into_inner(),
+        Err(error) => {
+            warn!(%error, "Not notifying user of environment upgrades, could not get remote state");
+            return Ok(());
+        },
+    };
 
-    let diversion_message = format_diverged_metadata(&DivergedMetadata {
+    let branch_ord_description = match branch_ord {
+        BranchOrd::Equal => unreachable!(),
+        BranchOrd::Ahead => "ahead of",
+        BranchOrd::Behind => "behind",
+        BranchOrd::Diverged => "diverged from",
+    };
+
+    let history_peek = format_diverged_metadata(&DivergedMetadata {
         local: local_generations_metadata,
         remote: remote_generations_metadata.to_owned(),
     });
@@ -847,12 +845,25 @@ fn notify_environment_upgrades(
         .map(|flags| format!(" {}", flags.join(" ")))
         .unwrap_or("".to_string());
 
+    let compensation_description = match branch_ord {
+        BranchOrd::Equal => unreachable!(),
+        BranchOrd::Ahead => format!("Use 'flox push{flags}' to update the environment on FloxHub."),
+        BranchOrd::Behind => {
+            format!("Use 'flox pull{flags}' to fetch updates from FloxHub.")
+        },
+        BranchOrd::Diverged => {
+            format!(
+                "Use 'flox pull|push --force{flags}' to fetch updates or update the environment on FloxHub."
+            )
+        },
+    };
+
     let message = formatdoc! {"
-        Environment out of sync with FloxHub.
+        Local environment state is {branch_ord_description} FloxHub.
 
-        {diversion_message}
+        {history_peek}
 
-        Use 'flox push|pull{flags}' to fetch updates or update the environment on FloxHub.
+        {compensation_description}
     "};
 
     message::info(message);
@@ -1053,7 +1064,6 @@ mod upgrade_notification_tests {
 
                 store_path: None,
             },
-            remote_generations_metadata: None,
         });
 
         locked.commit().unwrap();
@@ -1151,7 +1161,6 @@ mod upgrade_notification_tests {
 
                     store_path: None,
                 },
-                remote_generations_metadata: None,
             });
 
             locked.commit().unwrap();
@@ -1193,7 +1202,6 @@ mod upgrade_notification_tests {
             let _ = locked.info_mut().insert(UpgradeInformation {
                 last_checked: OffsetDateTime::now_utc(),
                 upgrade_result,
-                remote_generations_metadata: None,
             });
 
             locked.commit().unwrap();
