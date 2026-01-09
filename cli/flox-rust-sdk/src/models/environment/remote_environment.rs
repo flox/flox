@@ -310,6 +310,81 @@ impl RemoteEnvironment {
         self.inner.fetch_remote_state(flox)?;
         Ok(())
     }
+
+    /// Rename this remote environment on FloxHub
+    ///
+    /// This renames the environment on FloxHub and updates the local cache directory.
+    /// If the cache directory rename fails, the operation still succeeds since
+    /// FloxHub is the source of truth - the next activation will pull fresh.
+    pub async fn rename(
+        &mut self,
+        flox: &Flox,
+        new_name: EnvironmentName,
+    ) -> Result<(), EnvironmentError> {
+        // Get the current cache directory path (parent of .flox)
+        let old_cache_dir = self.inner.project_path()?;
+
+        // Rename on FloxHub and update pointer file
+        self.inner.rename(flox, new_name.clone()).await?;
+
+        // Compute new cache directory path
+        let new_cache_dir = flox
+            .cache_dir
+            .join(REMOTE_ENVIRONMENT_BASE_DIR)
+            .join(self.pointer().owner.as_ref())
+            .join(new_name.as_ref());
+
+        // Rename cache directory if paths differ
+        if old_cache_dir != new_cache_dir {
+            // Use a transaction pattern: move to backup first, then to final location.
+            // This allows rollback if the final rename fails.
+            let backup_dir = old_cache_dir.with_extension("rename-backup");
+
+            // Step 1: Move old cache to backup location (guaranteed unique target)
+            match fs::rename(&old_cache_dir, &backup_dir) {
+                Ok(()) => {
+                    // Step 2: Remove target if it exists (orphaned cache from deleted environment)
+                    if new_cache_dir.exists() {
+                        let _ = fs::remove_dir_all(&new_cache_dir);
+                    }
+
+                    // Step 3: Move backup to final location
+                    if let Err(e) = fs::rename(&backup_dir, &new_cache_dir) {
+                        // Step 4: Rollback - restore backup to original location
+                        debug!(
+                            "Could not rename cache directory to {}: {}. Restoring to original location.",
+                            new_cache_dir.display(),
+                            e
+                        );
+                        if let Err(restore_err) = fs::rename(&backup_dir, &old_cache_dir) {
+                            debug!(
+                                "Could not restore cache directory to {}: {}. \
+                                 Run 'flox activate -r {}/{}' to fetch the renamed environment.",
+                                old_cache_dir.display(),
+                                restore_err,
+                                self.pointer().owner,
+                                new_name
+                            );
+                        }
+                    }
+                },
+                Err(e) => {
+                    // Could not create backup - log and continue, cache stays at old location
+                    debug!(
+                        "Could not backup cache directory from {} to {}: {}. \
+                         Run 'flox activate -r {}/{}' to fetch the renamed environment.",
+                        old_cache_dir.display(),
+                        backup_dir.display(),
+                        e,
+                        self.pointer().owner,
+                        new_name
+                    );
+                },
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl Environment for RemoteEnvironment {

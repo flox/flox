@@ -110,17 +110,40 @@ impl Edit {
             EditAction::Rename { name } => {
                 let span = tracing::info_span!("rename");
                 let _guard = span.enter();
-                if let ConcreteEnvironment::Path(ref mut environment) = detected_environment {
-                    let old_name = environment.name();
-                    if name == old_name {
-                        bail!("environment already named '{name}'");
-                    }
-                    environment.rename(name.clone())?;
-                    message::updated(format!("renamed environment '{old_name}' to '{name}'"));
-                } else {
-                    // todo: handle remote environments in the future
-                    bail!("Cannot rename environments on FloxHub");
+
+                let old_name = detected_environment.name();
+                if name == old_name {
+                    bail!("environment already named '{name}'");
                 }
+
+                match detected_environment {
+                    ConcreteEnvironment::Path(ref mut environment) => {
+                        environment.rename(name.clone())?;
+                    },
+                    ConcreteEnvironment::Managed(_) => {
+                        bail!(
+                            "Use 'flox edit -r <owner>/<name> -n <new_name>' to rename environments on FloxHub"
+                        );
+                    },
+                    ConcreteEnvironment::Remote(ref mut environment) => {
+                        // Check if environment is active before renaming
+                        let uninit_env =
+                            UninitializedEnvironment::Remote(environment.pointer().clone());
+                        let was_active = activated_environments().is_active(&uninit_env);
+
+                        environment.rename(&flox, name.clone()).await?;
+
+                        if was_active {
+                            message::warning(format!(
+                                "Environment is active. Exit and re-activate with: flox activate -r {}/{}",
+                                environment.pointer().owner,
+                                name
+                            ));
+                        }
+                    },
+                }
+
+                message::updated(format!("renamed environment '{old_name}' to '{name}'"));
             },
 
             EditAction::Sync => {
