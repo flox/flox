@@ -11,8 +11,6 @@ pub mod fix_paths;
 mod prepend_and_dedup;
 mod profile_scripts;
 pub mod set_env_dirs;
-mod set_ready;
-pub mod start_or_attach;
 
 use activate::ActivateArgs;
 use executive::ExecutiveArgs;
@@ -21,8 +19,6 @@ use fix_paths::FixPathsArgs;
 use prepend_and_dedup::PrependAndDedupArgs;
 use profile_scripts::ProfileScriptsArgs;
 use set_env_dirs::SetEnvDirsArgs;
-pub use set_ready::SetReadyArgs;
-pub use start_or_attach::StartOrAttachArgs;
 
 const SHORT_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
 const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
@@ -43,10 +39,6 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    #[command(about = "Start a new activation or attach to an existing one.")]
-    StartOrAttach(StartOrAttachArgs),
-    #[command(about = "Set that the activation is ready to be attached to.")]
-    SetReady(SetReadyArgs),
     #[command(about = "Attach to an existing activation.")]
     Attach(AttachArgs),
     #[command(about = "Activate a Flox environment.")]
@@ -87,42 +79,7 @@ fn join_dir_list(dirs: Vec<PathBuf>) -> String {
 
 #[cfg(test)]
 mod test {
-    use std::path::Path;
-
-    use flox_core::activations::{self, Activations};
-
     use super::*;
-
-    pub(crate) fn write_activations<T>(
-        runtime_dir: impl AsRef<Path>,
-        flox_env: impl AsRef<Path>,
-        f: impl FnOnce(&mut Activations) -> T,
-    ) -> T {
-        let activations_json_path = activations::activations_json_path(runtime_dir, flox_env);
-        let (activations, lock) =
-            activations::read_activations_json(&activations_json_path).unwrap();
-        let mut activations = activations
-            .map(|a| a.check_version())
-            .transpose()
-            .unwrap()
-            .unwrap_or_default();
-
-        let res = f(&mut activations);
-
-        activations::write_activations_json(&activations, &activations_json_path, lock).unwrap();
-        res
-    }
-
-    pub(crate) fn read_activations<T>(
-        runtime_dir: impl AsRef<Path>,
-        flox_env: impl AsRef<Path>,
-        f: impl FnOnce(&Activations) -> T,
-    ) -> Option<T> {
-        let activations_json_path = activations::activations_json_path(runtime_dir, flox_env);
-        let (activations, _lock) =
-            activations::read_activations_json(&activations_json_path).unwrap();
-        activations.map(|activations| f(&activations.check_version().unwrap()))
-    }
 
     #[test]
     fn cli_works() {

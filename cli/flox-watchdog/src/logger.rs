@@ -10,17 +10,17 @@ use tracing::{debug, error, info};
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(3600);
 const WATCHDOG_GC_INTERVAL: Duration = Duration::from_secs(3600);
-const KEEP_WATCHDOG_DAYS: u64 = 3;
+const KEEP_EXECUTIVE_DAYS: u64 = 3;
 const KEEP_LAST_N_PROCESSES: usize = 5;
 
 /// Starts a background thread which emits a log entry at an interval. This is
 /// used as an indication of whether a watchdog's log file can be garbage
 /// collected. The thread will run until the watchdog exits.
 pub(crate) fn spawn_heartbeat_log() {
-    /// Assert that HEARTBEAT_INTERVAL falls in the range of KEEP_WATCHDOG_DAYS at compile time.
+    /// Assert that HEARTBEAT_INTERVAL falls in the range of KEEP_EXECUTIVE_DAYS at compile time.
     const _: () = assert!(
-        HEARTBEAT_INTERVAL.as_secs() < duration_from_days(KEEP_WATCHDOG_DAYS).as_secs(),
-        "`HEARTBEAT_INTERVAL` must be less than `KEEP_WATCHDOG_DAYS` days"
+        HEARTBEAT_INTERVAL.as_secs() < duration_from_days(KEEP_EXECUTIVE_DAYS).as_secs(),
+        "`HEARTBEAT_INTERVAL` must be less than `KEEP_EXECUTIVE_DAYS` days"
     );
 
     spawn(|| {
@@ -41,7 +41,7 @@ pub(crate) fn spawn_logs_gc_threads(dir: impl AsRef<Path>) {
     let dir = dir.as_ref().to_path_buf();
     spawn(move || {
         loop {
-            gc_logs_watchdog(&dir, KEEP_WATCHDOG_DAYS)
+            gc_logs_executive(&dir, KEEP_EXECUTIVE_DAYS)
                 .unwrap_or_else(|err| error!(%err, "failed to delete watchdog logs"));
             gc_logs_per_process(&dir, "services.*.log", KEEP_LAST_N_PROCESSES)
                 .unwrap_or_else(|err| error!(%err, "failed to delete services logs"));
@@ -57,13 +57,12 @@ pub(crate) fn spawn_logs_gc_threads(dir: impl AsRef<Path>) {
     });
 }
 
-/// Garbage collects watchdog log files. There may be multiple watchdog
-/// processes running, each performing its own log rotation, so we keep the last
-/// N days by modified time. This relies on the watchdog emitting a heartbeat
-/// log file from `log_heartbeat`.
-fn gc_logs_watchdog(dir: impl AsRef<Path>, keep_days: u64) -> Result<()> {
-    let dir = dir.as_ref().to_path_buf();
-    let files = watchdog_logs_to_gc(&dir, keep_days)?;
+/// Garbage collects executive log files.
+/// We keep the last N days by modified time.
+/// This relies on the executive emitting a heartbeat log file from
+/// `log_heartbeat`.
+fn gc_logs_executive(dir: impl AsRef<Path>, keep_days: u64) -> Result<()> {
+    let files = executive_logs_to_gc(&dir, keep_days)?;
 
     for file in files {
         try_delete_log(file);
@@ -72,16 +71,18 @@ fn gc_logs_watchdog(dir: impl AsRef<Path>, keep_days: u64) -> Result<()> {
     Ok(())
 }
 
-/// Returns a list of watchdog logs ready to be garbage collected
-fn watchdog_logs_to_gc(dir: impl AsRef<Path>, keep_days: u64) -> Result<Vec<PathBuf>> {
-    let mut files = glob_log_files(&dir, "watchdog.*.log.*")?;
-    // Clean up old <= v1.3.4 pattern.
-    files.extend(glob_log_files(&dir, "watchdog.*.log")?);
+/// Returns a list of executive logs ready to be garbage collected
+fn executive_logs_to_gc(dir: impl AsRef<Path>, keep_days: u64) -> Result<Vec<PathBuf>> {
+    let mut files = glob_log_files(&dir, "executive.*.log.*")?;
     let threshold = duration_from_days(keep_days);
     let now = SystemTime::now();
 
     // Defaults to keeping if mtime is not supported by platform or filesystem.
     files.retain(|file| file_older_than(file, now, threshold).unwrap_or(false));
+
+    // Garbage collect watchdog files from before introducing the executive
+    // We can drop this after a few releases.
+    files.extend(glob_log_files(&dir, "watchdog.*.log.*")?);
     Ok(files)
 }
 
@@ -163,27 +164,31 @@ mod tests {
     }
 
     #[test]
-    fn identifies_watchdog_logs_to_gc() {
+    fn identifies_executive_logs_to_gc() {
         let days_old_to_keep = 2;
         let dir = tempdir().unwrap();
-        let _file_now = create_log_file(dir.path(), "watchdog.now.log.1234-12-12", None);
+        let _file_now = create_log_file(dir.path(), "executive.now.log.1234-12-12", None);
         let _file_one = create_log_file(
             dir.path(),
-            "watchdog.one.log.1234-12-12",
+            "executive.one.log.1234-12-12",
             Some(days_old_to_keep - 1),
         );
         let file_two = create_log_file(
             dir.path(),
-            "watchdog.two.log.1234-12-12",
+            "executive.two.log.1234-12-12",
             Some(days_old_to_keep),
         );
         let file_three = create_log_file(
             dir.path(),
-            "watchdog.three.log.1234-12-12",
+            "executive.three.log.1234-12-12",
             Some(days_old_to_keep + 1),
         );
-        // Old <= v1.3.4 pattern.
-        let file_old = create_log_file(dir.path(), "watchdog.old.log", Some(days_old_to_keep + 1));
+        // Legacy pattern for compatibility
+        let file_old = create_log_file(
+            dir.path(),
+            "watchdog.one.log.1234-12-12",
+            Some(days_old_to_keep - 1),
+        );
         let should_be_gced = {
             let mut paths = vec![file_two.clone(), file_three.clone(), file_old.clone()];
             paths.sort();
@@ -191,7 +196,7 @@ mod tests {
         };
 
         // Ensure that the old files are selected for GC
-        let mut to_gc = watchdog_logs_to_gc(dir.path(), days_old_to_keep).unwrap();
+        let mut to_gc = executive_logs_to_gc(dir.path(), days_old_to_keep).unwrap();
         to_gc.sort();
         assert_eq!(to_gc, should_be_gced);
 
@@ -202,17 +207,17 @@ mod tests {
 
         // Ensure that the younger files aren't selected for GC after the old
         // files are deleted.
-        let to_gc = watchdog_logs_to_gc(dir.path(), days_old_to_keep).unwrap();
+        let to_gc = executive_logs_to_gc(dir.path(), days_old_to_keep).unwrap();
         assert_eq!(to_gc, vec![] as Vec<PathBuf>);
     }
 
     #[test]
-    fn test_gc_logs_watchdog_ignores_other_files() {
+    fn test_gc_logs_executive_ignores_other_files() {
         let keep_last = 2;
         let dir = tempdir().unwrap();
         let filenames = vec![
-            "watchdog",
-            "watchdog.log",
+            "executive",
+            "executive.log",
             "services.log",
             "services.123.log",
         ];
@@ -224,7 +229,7 @@ mod tests {
         assert_eq!(files.len(), filenames.len());
 
         assert!(
-            watchdog_logs_to_gc(dir.path(), keep_last)
+            executive_logs_to_gc(dir.path(), keep_last)
                 .unwrap()
                 .is_empty()
         );

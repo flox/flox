@@ -3260,7 +3260,7 @@ EOF
 
 # bats test_tags=activate,activate:attach
 # NB: There is a corresponding test in `services.bats`.
-@test "version: refuses to attach to an older activations.json version" {
+@test "activate: handles differences in state.json version" {
   project_setup
 
   # TODO: Workaround for https://github.com/flox/flox/issues/2164
@@ -3271,21 +3271,23 @@ EOF
 
   export -f jq_edit
   SCRIPT="$(cat <<'EOF'
+      echo "Started outer activation.."
       echo "$$" > activation_pid
 
-      ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
-      ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
-      ACTIVATIONS_VERSION="$(jq -r '.version' ${ACTIVATIONS_JSON})"
+      ACTIVATIONS_DIR=$(dirname "$_FLOX_START_STATE_DIR")
+      STATE_PATH="${ACTIVATIONS_DIR}/state.json"
 
-      jq_edit "$ACTIVATIONS_JSON" '.version = 0'
-      "$FLOX_BIN" activate -c 'echo "should fail"'
-      EXIT_CODE=$?
+      # Stop the executive before making changes to state.json which will
+      # cause it to exit with an error on the next polling loop.
+      EXECUTIVE_PID=$(jq --exit-status --raw-output '.executive_pid' "$STATE_PATH")
+      kill -9 "$EXECUTIVE_PID"
 
-      # Force cleanup because the watchdog will exit early on a version mismatch.
-      jq_edit "$ACTIVATIONS_JSON" ".version = ${ACTIVATIONS_VERSION}"
-      jq_edit "$ACTIVATIONS_JSON" '.activations |= []'
+      # Fake an older version.
+      jq_edit "$STATE_PATH" '.version = 0'
 
-      exit $EXIT_CODE
+      # This should fail because the outer activation is still attached and running.
+      echo "Attempting inner activation.."
+      "$FLOX_BIN" activate -- true
 EOF
   )"
   FLOX_SHELL=bash run "$FLOX_BIN" activate -c "$SCRIPT"
@@ -3294,46 +3296,50 @@ EOF
   ACTIVATION_PID=$(cat activation_pid)
 
   assert_failure
-  refute_line "should fail"
-  assert_output "❌ ERROR: This environment has already been activated with an incompatible version of 'flox'.
+  assert_output "Started outer activation..
+Attempting inner activation..
+❌ ERROR: This environment has already been activated with an incompatible version of 'flox'.
 
 Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"
+
+  # Verify that a subsequent activation succeeds because the state is ignored
+  # and reset when the attached pid and executive are no longer running.
+  # This also ensures that wait_for_activations will succeed.
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -- true
+  assert_success
 }
 
 # bats test_tags=activate,activate:attach
-@test "version: upgrades the activations.json version" {
+@test "activate: handles differences in mode" {
   project_setup
 
-  # This has to be updated with [flox_core::activations::LATEST_VERSION].
-  LATEST_VERSION=2
+  # TODO: Workaround for https://github.com/flox/flox/issues/2164
+  rm "${HOME}/.bashrc"
+
+  # Prevent backtraces from `flox-activations` leaking into output.
+  unset RUST_BACKTRACE
 
   SCRIPT="$(cat <<'EOF'
-      ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
-      ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
-      echo "$ACTIVATIONS_JSON" > activations_json
+      echo "Started outer activation.."
+      echo "$$" > activation_pid
+
+      echo "Attempting inner activation.."
+      "$FLOX_BIN" activate -m dev -- true
 EOF
   )"
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -c "$SCRIPT"
-  assert_success
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -m run -c "$SCRIPT"
 
-  # Wait for the "start" to exit.
-  # Add some output to the buffer to debug later assertion failures.
-  echo "$(date -u +'%FT%T.%6NZ'): Initial activation finished."
-  wait_for_activations "$PROJECT_DIR"
-  cat "${PROJECT_DIR}"/.flox/log/watchdog.*
+  # Capture from the previous activation.
+  ACTIVATION_PID=$(cat activation_pid)
 
-  # Capture and modify from the previous activation.
-  ACTIVATIONS_JSON=$(cat activations_json)
-  jq_edit "$ACTIVATIONS_JSON" '.version = 0'
+  assert_failure
+  assert_output "Started outer activation..
+Attempting inner activation..
+❌ ERROR: Environment can't be activated in 'dev' mode whilst there are existing activations in 'run' mode
 
-  # New "start" with old version should succeed.
-  run "$FLOX_BIN" activate -c 'echo "should succeed"'
-  assert_success
-  assert_line "should succeed"
-
-  # Version should be upgraded by "start" when there are no other activations.
-  jq --exit-status ".version == ${LATEST_VERSION}" "$ACTIVATIONS_JSON"
+Exit all activations of the environment and try again.
+PIDs of the running activations: ${ACTIVATION_PID}"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -5078,4 +5084,36 @@ on-activate stderr message
 EOF
 )"
   assert_equal "$stderr" "$expected_stderr"
+}
+
+@test "start state directory and files are not world-readable (may contain secrets)" {
+  project_setup
+
+  FLOX_SHELL="bash" run "$FLOX_BIN" activate -c '
+    [ -n "$_FLOX_START_STATE_DIR" ] || exit 1
+    [ -d "$_FLOX_START_STATE_DIR" ] || exit 2
+
+    bad_dirs=$(find "$_FLOX_START_STATE_DIR" -type d ! -perm 700)
+    bad_files=$(find "$_FLOX_START_STATE_DIR" -type f ! -perm 600)
+
+    if [ -n "$bad_dirs" ]; then
+      echo "ERROR: Directories with incorrect permissions (expected 700):" >&2
+      echo "$bad_dirs" >&2
+      exit 3
+    fi
+
+    if [ -n "$bad_files" ]; then
+      echo "ERROR: Files with incorrect permissions (expected 600):" >&2
+      echo "$bad_files" >&2
+      exit 4
+    fi
+
+    echo "Completed successfully"
+  '
+  assert_success
+  assert_output - <<'EOF'
+Sourcing .bashrc
+Setting PATH from .bashrc
+Completed successfully
+EOF
 }
