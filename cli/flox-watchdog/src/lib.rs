@@ -172,8 +172,17 @@ fn cleanup(
         info!(reason = "no socket", "did not shut down process-compose");
     }
 
-    // Completely remove the activation state directory
-    fs::remove_dir_all(activation_state_dir_path).context("couldn't remove activations dir")?;
+    // Atomically remove the activation state directory
+    // We want to avoid a race where remove_dir_all removes the lock before
+    // removing activation state dir,
+    // and then another activation creates a lock and causes remove_dir_all to
+    // fail.
+    let activation_state_dir_path = activation_state_dir_path.as_ref();
+    let cleanup_path =
+        activation_state_dir_path.with_extension(format!("cleanup.{}", std::process::id()));
+    fs::rename(activation_state_dir_path, &cleanup_path)
+        .context("couldn't rename activations dir for cleanup")?;
+    fs::remove_dir_all(&cleanup_path).context("couldn't remove activations dir")?;
 
     info!("finished cleanup");
 
