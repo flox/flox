@@ -466,7 +466,6 @@ pub mod rewrite {
         pub fn detach(&mut self, pid: Pid) {
             let removed = self.attached_pids.remove(&pid);
             debug!(pid, ?removed, "detaching from activation");
-            // TODO: cleanup state dir?
         }
 
         /// Clean up terminated PIDs
