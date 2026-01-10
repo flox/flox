@@ -25,7 +25,6 @@ pub struct AttachArgs {
     /// The path to the runtime directory keeping activation data.
     #[arg(long, value_name = "PATH")]
     pub runtime_dir: PathBuf,
-    // TODO: share this better with flox-core
     #[arg(help = "Together with timestamp this identifies the activation to attach to.")]
     #[arg(long, value_name = "PATH")]
     pub store_path: PathBuf,
