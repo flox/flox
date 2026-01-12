@@ -15,7 +15,7 @@ mod init;
 mod install;
 mod list;
 mod lock_manifest;
-mod path_hash;
+mod activation_state;
 mod publish;
 mod pull;
 mod push;
@@ -794,10 +794,10 @@ enum InternalCommands {
     #[bpaf(command, long("exit"), long("deactivate"), hide)]
     Exit(#[bpaf(external(exit::exit))] exit::Exit),
 
-    /// Print the hash of a filesystem path. Useful for determining which
-    /// activation state directory to look at while debugging.
-    #[bpaf(command, long("path-hash"), hide)]
-    PathHash(#[bpaf(external(path_hash::path_hash))] path_hash::PathHash),
+    /// Print the activation state directory path for an environment.
+    /// Useful for debugging activation state.
+    #[bpaf(command, long("activation-state"), hide)]
+    ActivationState(#[bpaf(external(activation_state::activation_state))] activation_state::ActivationState),
 }
 
 impl InternalCommands {
@@ -808,7 +808,7 @@ impl InternalCommands {
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
             InternalCommands::Exit(args) => args.handle(flox)?,
-            InternalCommands::PathHash(args) => args.handle(flox)?,
+            InternalCommands::ActivationState(args) => args.handle(flox)?,
         }
         Ok(())
     }
