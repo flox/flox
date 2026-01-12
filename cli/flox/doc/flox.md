@@ -103,6 +103,13 @@ sharing environments, and administration.
     If set to `true`, prevents Flox from submitting basic metrics information
     such as a unique token and the subcommand issued.
 
+`$FLOX_MAX_PARALLEL_DOWNLOADS`
+:   Variable for controlling parallel downloads when building an environment.
+    By default, every package for an environment is downloaded in parallel, but
+    on poor connections this can cause packages to download slower and in some
+    cases time out. Setting this to a number greater than or equal to 1 will
+    limit the number of active downloads to the specified number.
+
 `$EDITOR`, `$VISUAL`
 :   Override the default editor used for editing environment manifests and commit messages.
 
