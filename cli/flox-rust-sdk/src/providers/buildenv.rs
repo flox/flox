@@ -122,18 +122,14 @@ pub enum BuildEnvError {
     #[error("couldn't download package:\n{0}")]
     NixCopyError(String),
 
-    // You will 99.9999% never see this in real life.
-    #[error("internal error downloadng packages")]
-    ThreadPanicked,
-
-    // You will 99.9999% never see this in real life.
-    #[error("internal error: mutex was poisoned")]
-    PoisonedMutex,
-
     /// An unhandled condition was encountered in the lockfile.  One example is
     /// a package that is expected to be a base catalog package but the
     /// lockfile appears to be a custom package or vice versa.
     #[error("encountered an error interpreting the lockfile: {0}")]
+    LockfileContents(String),
+
+    /// A catch-all error variant for rare situations
+    #[error("{0}")]
     Other(String),
 }
 
@@ -191,7 +187,9 @@ where
             let path = self
                 .auth
                 .lock()
-                .map_err(|_| BuildEnvError::PoisonedMutex)?
+                .map_err(|_| {
+                    BuildEnvError::Other("internal error: mutex was poisoned".to_string())
+                })?
                 .create_netrc()
                 .map_err(BuildEnvError::Auth)?;
             self.netrc_path = Some(path);
@@ -327,7 +325,7 @@ where
                 .manifest
                 .pkg_descriptor_with_id(install_id)
                 .ok_or_else(|| {
-                    BuildEnvError::Other(format!(
+                    BuildEnvError::LockfileContents(format!(
                         "Could not find package with install_id '{install_id}' in manifest"
                     ))
                 })?;
@@ -457,11 +455,15 @@ where
                 thread_panicked |= h.join().is_err();
             }
             if thread_panicked {
-                return Err(BuildEnvError::ThreadPanicked);
+                return Err(BuildEnvError::Other(
+                    "internal error: download thread panicked".to_string(),
+                ));
             }
             Ok::<(), BuildEnvError>(())
         })
-        .map_err(|_| BuildEnvError::ThreadPanicked)?;
+        .map_err(|_| {
+            BuildEnvError::Other("internal error: download thread panicked".to_string())
+        })?;
 
         // Intentionally build flakes one at a time. We're not worried about
         // slowing down the build by oversubscribing the CPU so much as we're
@@ -678,7 +680,7 @@ where
             if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
                 locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
             } else {
-                return Err(BuildEnvError::Other(format!(
+                return Err(BuildEnvError::LockfileContents(format!(
                     "Locked package '{}' is a base catalog package, but the locked url '{}' does not start with the expected prefix '{}'",
                     locked_pkg.install_id, locked_pkg.locked_url, NIXPKGS_CATALOG_URL_PREFIX
                 )));
