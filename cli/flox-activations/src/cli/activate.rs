@@ -175,8 +175,13 @@ impl ActivateArgs {
         );
 
         let (activations_opt, lock) = read_activations_json(&activations_json_path)?;
-        let mut activations =
-            activations_opt.unwrap_or_else(|| ActivationState::new(&context.mode));
+        let mut activations = activations_opt.unwrap_or_else(|| {
+            ActivationState::new(
+                &context.mode,
+                &context.attach_ctx.dot_flox_path,
+                &context.attach_ctx.env,
+            )
+        });
 
         if activations.mode() != &context.mode {
             if let Some(running) = activations.running_processes() {
@@ -195,7 +200,11 @@ impl ActivateArgs {
                 new_mode = ?context.mode,
                 "discarding activation state due to change of mode and no running processes"
             );
-            activations = ActivationState::new(&context.mode);
+            activations = ActivationState::new(
+                &context.mode,
+                &context.attach_ctx.dot_flox_path,
+                &context.attach_ctx.env,
+            );
         }
 
         let pid = std::process::id() as i32;

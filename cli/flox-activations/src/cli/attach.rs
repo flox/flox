@@ -142,22 +142,23 @@ mod test {
     #[test]
     fn add_timeout_to_pid() {
         let runtime_dir = TempDir::new().unwrap();
-        let flox_env = PathBuf::from("/path/to/floxenv");
+        let dot_flox_path = PathBuf::from("/path/to/.flox");
+        let flox_env = dot_flox_path.join("run/test");
         let pid = 1234;
         let store_path = PathBuf::from("/nix/store/test");
 
         // Create an activation with a PID attached
-        let mut state = ActivationState::new(&ActivateMode::default());
+        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
         let result = state.start_or_attach(pid, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
         };
         state.set_ready(&start_id);
-        write_activation_state(runtime_dir.path(), &flox_env, state);
+        write_activation_state(runtime_dir.path(), &dot_flox_path, state);
 
         // Attach the same PID with a timeout (replaces itself with expiration)
         let args = AttachArgs {
-            dot_flox_path: flox_env.clone(),
+            dot_flox_path: dot_flox_path.clone(),
             pid,
             store_path: start_id.store_path.clone(),
             timestamp: start_id.timestamp.clone(),
@@ -171,7 +172,7 @@ mod test {
         let now = OffsetDateTime::now_utc();
         args.handle_inner(now).unwrap();
 
-        let state = read_activation_state(runtime_dir.path(), &flox_env);
+        let state = read_activation_state(runtime_dir.path(), &dot_flox_path);
 
         let expected_attachments = BTreeMap::from([(start_id.clone(), vec![(
             pid,
@@ -184,23 +185,24 @@ mod test {
     #[test]
     fn attach_with_replace() {
         let runtime_dir = TempDir::new().unwrap();
-        let flox_env = PathBuf::from("/path/to/floxenv");
+        let dot_flox_path = PathBuf::from("/path/to/.flox");
+        let flox_env = dot_flox_path.join("run/test");
         let old_pid = 1234;
         let new_pid = 5678;
         let store_path = PathBuf::from("store_path");
 
         // Create an activation with the old PID attached
-        let mut state = ActivationState::new(&ActivateMode::default());
+        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
         let result = state.start_or_attach(old_pid, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
         };
         state.set_ready(&start_id);
-        write_activation_state(runtime_dir.path(), &flox_env, state);
+        write_activation_state(runtime_dir.path(), &dot_flox_path, state);
 
         // Replace old PID with new PID
         let args = AttachArgs {
-            dot_flox_path: flox_env.clone(),
+            dot_flox_path: dot_flox_path.clone(),
             pid: new_pid,
             store_path: start_id.store_path.clone(),
             timestamp: start_id.timestamp.clone(),
@@ -213,7 +215,7 @@ mod test {
 
         args.handle().unwrap();
 
-        let activation = read_activation_state(runtime_dir.path(), &flox_env);
+        let activation = read_activation_state(runtime_dir.path(), &dot_flox_path);
 
         let expected_attachments = BTreeMap::from([(start_id.clone(), vec![(new_pid, None)])]);
         assert_eq!(activation.attachments_by_start_id(), expected_attachments);

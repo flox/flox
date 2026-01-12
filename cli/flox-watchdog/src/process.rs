@@ -269,6 +269,7 @@ pub mod test {
     fn terminates_when_all_pids_terminate() {
         let runtime_dir = tempfile::tempdir().unwrap();
         let dot_flox_path = PathBuf::from(".flox");
+        let flox_env = dot_flox_path.join("run/test");
         let store_path = "store_path".to_string();
 
         let proc1 = start_process();
@@ -277,7 +278,7 @@ pub mod test {
         let pid2 = proc2.id() as i32;
 
         // Create an ActivationState with two PIDs attached to the same start_id
-        let mut state = ActivationState::new(&ActivateMode::default());
+        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
         let result = state.start_or_attach(pid1, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
@@ -322,12 +323,13 @@ pub mod test {
     fn terminated_pid_removed_if_first() {
         let runtime_dir = tempfile::tempdir().unwrap();
         let dot_flox_path = PathBuf::from(".flox");
+        let flox_env = dot_flox_path.join("run/test");
         let store_path = "store_path".to_string();
 
         // Start and set ready pid1
         let proc1 = start_process();
         let pid1 = proc1.id() as i32;
-        let mut state = ActivationState::new(&ActivateMode::default());
+        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
         let result = state.start_or_attach(pid1, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
@@ -391,6 +393,7 @@ pub mod test {
     fn cleans_up_start_state_directory() {
         let runtime_dir = tempfile::tempdir().unwrap();
         let dot_flox_path = PathBuf::from(".flox");
+        let flox_env = dot_flox_path.join("run/test");
         let store_path_1 = "store_path_1".to_string();
         let store_path_2 = "store_path_2".to_string();
 
@@ -400,7 +403,7 @@ pub mod test {
         let pid2 = proc2.id() as i32;
 
         // Start and set ready for store_path_1
-        let mut state = ActivationState::new(&ActivateMode::default());
+        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
         let result = state.start_or_attach(pid1, &store_path_1);
         let StartOrAttachResult::Start {
             start_id: start_id_1,
@@ -472,13 +475,14 @@ pub mod test {
     fn terminates_on_shutdown_flag() {
         let runtime_dir = tempfile::tempdir().unwrap();
         let dot_flox_path = PathBuf::from(".flox");
+        let flox_env = dot_flox_path.join("run/test");
         let store_path = "store_path".to_string();
 
         let proc = start_process();
         let pid = proc.id() as i32;
 
         // Create an ActivationState with one PID attached
-        let mut state = ActivationState::new(&ActivateMode::default());
+        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
         let result = state.start_or_attach(pid, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
@@ -518,13 +522,14 @@ pub mod test {
     fn terminates_on_signal_handler_flag() {
         let runtime_dir = tempfile::tempdir().unwrap();
         let dot_flox_path = PathBuf::from(".flox");
+        let flox_env = dot_flox_path.join("run/test");
         let store_path = "store_path".to_string();
 
         let proc = start_process();
         let pid = proc.id() as i32;
 
         // Create an ActivationState with one PID attached
-        let mut state = ActivationState::new(&ActivateMode::default());
+        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
         let result = state.start_or_attach(pid, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
