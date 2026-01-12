@@ -332,13 +332,23 @@ enum Ready {
     Starting(Pid, StartIdentifier),
 }
 
+/// Information about the activated environment.
+///
+/// This is only intended for humans to debug the serialized state.
+/// Fields should be promoted to the top-level if they are later needed
+/// programmatically.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct EnvironmentInfo {
+    /// Path to the activated environment's .flox directory
+    dot_flox_path: PathBuf,
+    /// Path to the activated environment's .flox/run/{symlink} which encapsulates mode and platform
+    flox_env: PathBuf,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ActivationState {
     version: Version<3>,
-
-    // TODO: Group in "info", but restricts how we might use them in future?
-    // dot_flox_path: PathBuf,
-    // flox_env: PathBuf,
+    info: EnvironmentInfo,
     mode: ActivateMode,
     ready: Ready,
     executive_pid: Pid,
@@ -347,9 +357,17 @@ pub struct ActivationState {
 }
 
 impl ActivationState {
-    pub fn new(mode: &ActivateMode) -> Self {
+    pub fn new(
+        mode: &ActivateMode,
+        dot_flox_path: impl AsRef<Path>,
+        flox_env: impl AsRef<Path>,
+    ) -> Self {
         Self {
             version: Version,
+            info: EnvironmentInfo {
+                dot_flox_path: dot_flox_path.as_ref().to_path_buf(),
+                flox_env: flox_env.as_ref().to_path_buf(),
+            },
             mode: mode.clone(),
             ready: Ready::default(),
             // TODO: we only construct this once outside of tests, and in that case we have an executive PID,
@@ -723,8 +741,13 @@ mod tests {
     }
 
     fn make_activations(ready: Ready) -> ActivationState {
+        let dot_flox_path = PathBuf::from("/test/.flox");
         ActivationState {
             version: Version,
+            info: EnvironmentInfo {
+                flox_env: dot_flox_path.join("run/test"),
+                dot_flox_path,
+            },
             mode: ActivateMode::default(),
             ready,
             executive_pid: 1, // Not used, but will be running.
@@ -755,7 +778,8 @@ mod tests {
             let proc_running = start_process();
             let proc_stopped = start_process();
 
-            let mut activations = ActivationState::new(&ActivateMode::default());
+            let mut activations =
+                ActivationState::new(&ActivateMode::default(), "/test/.flox", "/test/env");
             let store_path = PathBuf::from("/nix/store/test");
 
             // Start activation with first PID
@@ -784,7 +808,8 @@ mod tests {
 
         #[test]
         fn test_attached_pids_by_start_id() {
-            let mut activations = ActivationState::new(&ActivateMode::default());
+            let mut activations =
+                ActivationState::new(&ActivateMode::default(), "/test/.flox", "/test/env");
             let store_path1 = PathBuf::from("/nix/store/path1");
             let store_path2 = PathBuf::from("/nix/store/path2");
 
@@ -1029,7 +1054,8 @@ mod tests {
 
         #[test]
         fn test_start_or_attach_replaces_existing_pid() {
-            let mut activations = ActivationState::new(&ActivateMode::default());
+            let mut activations =
+                ActivationState::new(&ActivateMode::default(), "/test/.flox", "/test/env");
             let store_path = PathBuf::from("/nix/store/path1");
 
             let pid = 123;
@@ -1073,7 +1099,8 @@ mod tests {
     #[test]
     fn test_cleanup_pids_keeps_expired_but_running_pids() {
         // Create an attachment with an expiration in the past
-        let mut activations = ActivationState::new(&ActivateMode::default());
+        let mut activations =
+            ActivationState::new(&ActivateMode::default(), "/test/.flox", "/test/env");
         let start_id = make_start_id("/nix/store/test");
         let pid = 0;
         let now = OffsetDateTime::now_utc();
@@ -1094,7 +1121,8 @@ mod tests {
     #[test]
     fn test_cleanup_pids_keeps_not_running_but_not_expired_pids() {
         // Create an attachment with an expiration in the future
-        let mut activations = ActivationState::new(&ActivateMode::default());
+        let mut activations =
+            ActivationState::new(&ActivateMode::default(), "/test/.flox", "/test/env");
         let start_id = make_start_id("/nix/store/test");
         let pid = 0;
         let now = OffsetDateTime::now_utc();

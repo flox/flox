@@ -256,13 +256,14 @@ mod test {
         let runtime_dir = temp_dir.path();
         let log_dir = temp_dir.path();
         let dot_flox_path = PathBuf::from(".flox");
+        let flox_env = dot_flox_path.join("run/test");
         let store_path = "store_path".to_string();
 
         let proc = start_process();
         let pid = proc.id() as i32;
 
         // Create an ActivationState with one PID attached
-        let mut state = ActivationState::new(&ActivateMode::default());
+        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
         let result = state.start_or_attach(pid, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
