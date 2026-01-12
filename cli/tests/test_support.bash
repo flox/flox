@@ -123,6 +123,7 @@ floxhub_setup() {
 #   + git concurrency
 #
 # nix caches and pkgdb caches remain shared, since they are effectively read-only.
+# XDG_RUNTIME_DIR is also shared since everything in there should be unique
 setup_isolated_flox() {
   export FLOX_CONFIG_DIR="${BATS_TEST_TMPDIR?}/flox-config"
   export FLOX_DATA_DIR="${BATS_TEST_TMPDIR?}/flox-data"

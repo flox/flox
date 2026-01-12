@@ -273,6 +273,7 @@ xdg_vars_setup() {
   export XDG_CACHE_HOME="$FLOX_TEST_HOME/.cache"
   export XDG_DATA_HOME="$FLOX_TEST_HOME/.local/share"
   export XDG_STATE_HOME="$FLOX_TEST_HOME/.local/state"
+  export XDG_RUNTIME_DIR="$FLOX_TEST_HOME/run"
 }
 
 # Copy user's real caches into temporary cache to speed up eval and fetching.
@@ -326,6 +327,9 @@ xdg_tmp_setup() {
   chmod u+w "$XDG_STATE_HOME"
   mkdir -p "$XDG_STATE_HOME/flox"
   chmod u+w "$XDG_STATE_HOME/flox"
+
+  # Runtime Dir
+  mkdir -p "${XDG_RUNTIME_DIR:?}"
 
   export __FT_RAN_XDG_TMP_SETUP="$XDG_CACHE_HOME"
 }
