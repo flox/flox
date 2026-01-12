@@ -370,8 +370,6 @@ impl ActivationState {
             },
             mode: mode.clone(),
             ready: Ready::default(),
-            // TODO: we only construct this once outside of tests, and in that case we have an executive PID,
-            // so we could get rid of the default here
             executive_pid: EXECUTIVE_NOT_STARTED,
             current_process_compose_store_path: None,
             attached_pids: BTreeMap::new(),
