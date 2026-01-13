@@ -11,6 +11,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::models::lockfile::Lockfile;
+use flox_rust_sdk::models::manifest::typed::ContainerizeConfig;
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, MkContainerNix};
 use flox_rust_sdk::utils::{ReaderExt, WireTap};
 use indoc::indoc;
@@ -47,6 +48,10 @@ pub struct Containerize {
     /// Tag to apply to the container, defaults to 'latest'
     #[bpaf(short, long, argument("tag"))]
     tag: Option<String>,
+
+    /// Set metadata for an image
+    #[bpaf(long("label"), argument("key=value"))]
+    labels: Vec<String>,
 }
 impl Containerize {
     #[instrument(name = "containerize", skip_all)]
@@ -85,12 +90,15 @@ impl Containerize {
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
         let manifest = lockfile.manifest;
         let mode = manifest.options.activate.mode.unwrap_or_default();
-
         let source = if std::env::consts::OS == "linux" {
             let container_config = manifest
                 .containerize
                 .and_then(|c| c.config)
-                .map(|c| c.into());
+                .or_else(|| should_extend_config(&self.labels).then(Default::default))
+                .map(|mut c| {
+                    extend_config(&self.labels, &mut c);
+                    c.into()
+                });
             // this method is only executed on linux
             #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
             let builder =
@@ -106,7 +114,7 @@ impl Containerize {
                     Exporting a container on macOS requires Docker or Podman to be installed.
                 "#});
             };
-            let builder = ContainerizeProxy::new(env_path, proxy_runtime);
+            let builder = ContainerizeProxy::new(env_path, proxy_runtime, self.labels);
             builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
         };
 
@@ -116,6 +124,26 @@ impl Containerize {
 
         message::created(format!("'{env_name}:{output_tag}' written to {output}"));
         Ok(())
+    }
+}
+
+fn should_extend_config(labels: &[String]) -> bool {
+    labels.is_empty()
+}
+
+fn extend_config(labels: &[String], config: &mut ContainerizeConfig) {
+    if !labels.is_empty() {
+        let mut label_map = config.labels.take().unwrap_or_default();
+
+        label_map.extend(labels.iter().map(|label| {
+            if let Some((key, value)) = label.split_once('=') {
+                (key.to_string(), value.to_string())
+            } else {
+                (label.to_string(), String::new())
+            }
+        }));
+
+        config.labels = Some(label_map);
     }
 }
 

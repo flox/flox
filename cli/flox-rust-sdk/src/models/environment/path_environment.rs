@@ -572,23 +572,22 @@ impl PathEnvironment {
     /// the environment will be rebuilt.
     fn needs_rebuild(&self) -> Result<bool, EnvironmentError> {
         let env_view = self.as_core_environment()?;
-        let Some(lockfile_contents) = env_view.existing_lockfile_contents()? else {
+        let Some(lockfile) = env_view.existing_lockfile()? else {
             return Ok(true);
         };
 
         let rendered_env_lockfile_path =
             self.rendered_env_links.development.join(LOCKFILE_FILENAME);
 
-        if !rendered_env_lockfile_path.exists() {
-            return Ok(true);
-        }
-
-        let Ok(rendered_env_lockfile_contents) = fs::read_to_string(&rendered_env_lockfile_path)
-        else {
+        let Ok(rendered_env_lockfile_path) = CanonicalPath::new(rendered_env_lockfile_path) else {
             return Ok(true);
         };
 
-        if lockfile_contents != rendered_env_lockfile_contents {
+        let Ok(rendered_lockfile) = Lockfile::read_from_file(&rendered_env_lockfile_path) else {
+            return Ok(true);
+        };
+
+        if lockfile != rendered_lockfile {
             return Ok(true);
         }
 
@@ -724,6 +723,9 @@ pub mod test_helpers {
 #[cfg(test)]
 pub mod tests {
 
+    use std::fs::OpenOptions;
+    use std::io::Write;
+
     use flox_test_utils::proptest::{alphanum_string, lowercase_alphanum_string};
     use indoc::indoc;
     use itertools::izip;
@@ -740,6 +742,7 @@ pub mod tests {
     };
     use crate::models::lockfile::{Lockfile, RecoverableMergeError};
     use crate::models::manifest::typed::test::manifest_without_install_or_include;
+    use crate::utils::serialize_json_with_newline;
 
     /// Returns (flox, tempdir, Vec<(dir relative to tempdir, PathEnvironment)>)
     /// This is a list of relative paths to environments that can be included in
@@ -836,10 +839,11 @@ pub mod tests {
 
         assert!(!env.needs_rebuild().unwrap());
 
-        // "modify" the lockfile by changing its formatting -> rebuild necessary
-        let lockfile: Lockfile = env.lockfile(&flox).unwrap().into();
-        let file = fs::write(env.lockfile_path(&flox).unwrap(), lockfile.to_string());
-        drop(file);
+        // modify the lockfile  -> rebuild necessary
+        let mut lockfile = env.existing_lockfile(&flox).unwrap().unwrap();
+        lockfile.manifest.options.activate.mode = Some(ActivateMode::Dev);
+        let lockfile_contents = serialize_json_with_newline(&lockfile).unwrap();
+        fs::write(env.lockfile_path(&flox).unwrap(), lockfile_contents).unwrap();
         assert!(env.needs_rebuild().unwrap());
     }
 
@@ -977,5 +981,28 @@ pub mod tests {
             message,
             "unknown included environment to check for changes 'does_not_exist'"
         );
+    }
+
+    #[test]
+    fn no_rebuild_on_lockfile_formatting_change() {
+        let (flox, _temp_dir) = flox_instance();
+
+        let mut environment = new_path_environment(&flox, "version = 1");
+
+        assert!(environment.needs_rebuild().unwrap());
+
+        environment.rendered_env_links(&flox).unwrap();
+
+        assert!(!environment.needs_rebuild().unwrap());
+
+        let mut lockfile = OpenOptions::new()
+            .read(true)
+            .append(true)
+            .open(environment.lockfile_path(&flox).unwrap())
+            .unwrap();
+
+        writeln!(lockfile, "\n\n\n",).unwrap();
+
+        assert!(!environment.needs_rebuild().unwrap());
     }
 }

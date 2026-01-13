@@ -383,7 +383,7 @@ EOF
 
   TAG="config-set"
 
-  bash -c "$FLOX_BIN containerize --tag $TAG --runtime podman" 3>&- # TODO: why close FD 3?
+  bash -c "$FLOX_BIN containerize --tag $TAG --runtime podman --label cli.label=from-cli --label app=myapp" 3>&- # TODO: why close FD 3?
 
   run bash -c "podman inspect test:$TAG | jq '.[0].Config | .User, .ExposedPorts, .Cmd, .Volumes, .WorkingDir, .Labels, .StopSignal'"
   assert_success
@@ -401,6 +401,8 @@ EOF
 }
 "/working/dir"
 {
+  "app": "myapp",
+  "cli.label": "from-cli",
   "dev.flox.key": "value"
 }
 "SIGKILL"

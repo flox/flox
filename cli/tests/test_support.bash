@@ -119,7 +119,7 @@ floxhub_setup() {
 #   + same _owner_ and project name being reused
 #   + environments are created/deleted/edited concurrently
 #     -> git errors, and just plain data corruption
-# * local ephemeral environments by `--remote` commands.
+# * local ephemeral environments by `--reference` commands.
 #   + git concurrency
 #
 # nix caches and pkgdb caches remain shared, since they are effectively read-only.

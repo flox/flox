@@ -237,6 +237,7 @@ define COMMON_BUILD_VARS_template =
   # Create a target for cleaning up the temporary directory.
   .PHONY: clean/$(_pname)
   clean/$(_pname):
+	-$(_V_) $(_find) $($(_pvarname)_tmpBasename) -type d -exec $(_chmod) +w {} \;
 	-$(_V_) $(_rm) -rf $($(_pvarname)_tmpBasename)
 
   clean_targets += clean/$(_pname)
@@ -421,7 +422,8 @@ define BUILD_local_template =
 	@# Actually perform the build using the temporary build wrapper.
 	@#
 	@echo "Building $(_name) in local mode"
-	$(_VV_) $(_rm) -rf $($(_pvarname)_out)
+	-$(_VV_) $(_find) $($(_pvarname)_out) -type d -exec $(_chmod) +w {} \;
+	-$(_VV_) $(_rm) -rf $($(_pvarname)_out)
 	$(_V_) $(_env) $$(QUOTED_ENV_DISALLOW_ARGS) out=$($(_pvarname)_out) \
 	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$(PWD) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
 	  $(FLOX_INTERPRETER)/activate --env $$($(_pvarname)_develop_copy_env) \
@@ -440,6 +442,7 @@ define BUILD_local_template =
 	    $(_sed) --binary "s%$$($(_pvarname)_develop_copy_env)%$$($(_pvarname)_build_wrapper_env)%g" | \
 	    ( cd $($(_pvarname)_out).new && $(_cpio) --extract --make-directories --preserve-modification-time \
 	      --unconditional --no-absolute-filenames --quiet && $(_chmod) -R u+w . ) && \
+	  $(_find) $($(_pvarname)_out) -type d -exec $(_chmod) +w {} \; && \
 	  $(_rm) -rf $($(_pvarname)_out) && \
 	  $(_mv) $($(_pvarname)_out).new $($(_pvarname)_out); \
 	fi
@@ -451,7 +454,7 @@ define BUILD_local_template =
 	  --argstr pname "$(_pname)" \
 	  --argstr version "$(_version)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
-	  --argstr nixpkgs-url $(BUILDTIME_NIXPKGS_URL) \
+	  --argstr nixpkgs-url '$(BUILDTIME_NIXPKGS_URL)' \
 	  --argstr build-wrapper-env "$$($(_pvarname)_build_wrapper_env)" \
 	  --argstr install-prefix "$($(_pvarname)_out)" \
 	  $$(if $$($(_pvarname)_buildDeps),--arg buildDeps '[$$($(_pvarname)_buildDeps)]') \
@@ -521,6 +524,7 @@ define BUILD_nix_sandbox_template =
 	  tmpdir=$$$$($(_mktemp) -d); \
 	  echo "Build cache initialized on $$$$(date)" > $$$$tmpdir/.buildCache.init; \
 	  $(_tar) -cf $$@ -C $$$$tmpdir .buildCache.init; \
+	  $(_find) $$$$tmpdir -type d -exec $(_chmod) +w {} \; && \
 	  $(_rm) -rf $$$$tmpdir; \
 	fi
 
@@ -542,7 +546,7 @@ define BUILD_nix_sandbox_template =
 	  --argstr version "$(_version)" \
 	  --argstr srcTarball "$($(_pvarname)_src_tar)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
-	  --argstr nixpkgs-url $(BUILDTIME_NIXPKGS_URL) \
+	  --argstr nixpkgs-url '$(BUILDTIME_NIXPKGS_URL)' \
 	  --argstr build-wrapper-env "$$($(_pvarname)_build_wrapper_env)" \
 	  $$(if $$($(_pvarname)_buildDeps),--arg buildDeps '[$$($(_pvarname)_buildDeps)]') \
 	  --argstr buildScript "$($(_pvarname)_buildScript)" \
@@ -740,7 +744,7 @@ define NIX_EXPRESSION_BUILD_template =
   $($(_pvarname)_evalJSON): $(PROJECT_TMPDIR)/check-build-prerequisites
 	$(_V_) $(_mkdir) -p $$(@D)
 	$(_V_) $(_nix) eval -L --file $(_nef) \
-	  --argstr nixpkgs-url "$(EXPRESSION_BUILD_NIXPKGS_URL)" \
+	  --argstr nixpkgs-url '$(EXPRESSION_BUILD_NIXPKGS_URL)' \
 	  --argstr system $(NIX_SYSTEM) \
 	  $(NIX_EXPRESSION_DIR_ARGS) \
 	  --json \

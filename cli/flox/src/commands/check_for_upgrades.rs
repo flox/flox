@@ -9,13 +9,20 @@ use bpaf::{Bpaf, Parser};
 use flox_core::log_file_format_upgrade_check;
 use flox_core::vars::{FLOX_VERSION_STRING, FLOX_VERSION_VAR};
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::models::environment::generations::{
+    AllGenerationsMetadata,
+    GenerationsEnvironment,
+    GenerationsExt,
+};
+use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
+use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
+use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, EnvironmentError};
 use flox_rust_sdk::providers::catalog::{self, CatalogQoS};
 use flox_rust_sdk::providers::upgrade_checks::{UpgradeInformation, UpgradeInformationGuard};
 use flox_rust_sdk::utils::CommandExt;
 use serde::de::DeserializeOwned;
 use time::{Duration, OffsetDateTime};
-use tracing::{debug, info_span, instrument};
+use tracing::{debug, error, info_span, instrument};
 
 use super::UninitializedEnvironment;
 use crate::subcommand_metric;
@@ -83,12 +90,12 @@ impl CheckForUpgrades {
         // - exists &&
         // - targets the current lockfile &&
         // - has recently been fetched
-        // Otherwise, run a dry-upgrade tof he environment and store the new information
+        // Otherwise, run a dry-upgrade of the environment and store the new information
         if let Some(info) = upgrade_information.info() {
             let environment_lockfile = environment.lockfile(flox)?.into();
 
             let is_information_for_current_lockfile =
-                info.result.old_lockfile == Some(environment_lockfile);
+                info.upgrade_result.old_lockfile == Some(environment_lockfile);
             let is_checked_recently = (OffsetDateTime::now_utc() - info.last_checked)
                 < Duration::seconds(self.check_timeout);
 
@@ -103,33 +110,59 @@ impl CheckForUpgrades {
             return Ok(ExitBranch::LockTaken);
         };
 
-        let result = info_span!("check-upgrade", progress = "Performing dry upgrade")
+        let upgrade_result = info_span!("check-upgrade", progress = "Performing dry upgrade")
             .entered()
             .in_scope(|| environment.dry_upgrade(flox, &[]))?;
 
-        let info = locked.info_mut();
+        let remote_generations_metadata = check_remote_generations_metadata(flox, environment)
+            .and_then(|generation_check_result| {
+                generation_check_result
+                    .inspect_err(|err| error!(%err,"failed to check generation state"))
+                    .ok()
+            });
 
-        match info.as_mut() {
-            // Check if the resolution didn't change,
-            // only update the last checked timestamp
-            Some(old_info) if old_info.result.new_lockfile == result.new_lockfile => {
-                debug!("Resolution didn't change. Updating last checked timestamp.");
-                old_info.last_checked = OffsetDateTime::now_utc();
-            },
-            Some(_) | None => {
-                debug!(diff = ?result.diff(), "Upgrading information with new result.");
-
-                let new_info = UpgradeInformation {
-                    last_checked: OffsetDateTime::now_utc(),
-                    result,
-                };
-                let _ = info.insert(new_info);
-            },
+        let new_info = UpgradeInformation {
+            last_checked: OffsetDateTime::now_utc(),
+            upgrade_result,
+            remote_generations_metadata,
         };
+
+        let _ = locked.info_mut().insert(new_info);
 
         locked.commit()?;
 
         Ok(ExitBranch::Checked)
+    }
+}
+
+fn check_remote_generations_metadata(
+    flox: &Flox,
+    environment: ConcreteEnvironment,
+) -> Option<Result<AllGenerationsMetadata, EnvironmentError>> {
+    match environment {
+        ConcreteEnvironment::Path(_) => None,
+        ConcreteEnvironment::Managed(managed_environment) => {
+            fn check(
+                flox: &Flox,
+                managed_environment: &ManagedEnvironment,
+            ) -> Result<AllGenerationsMetadata, EnvironmentError> {
+                managed_environment.fetch_remote_state(flox)?;
+                let remote_metadata = managed_environment.remote_generations_metadata()?;
+                Ok(remote_metadata.into_inner())
+            }
+            Some(check(flox, &managed_environment))
+        },
+        ConcreteEnvironment::Remote(remote_environment) => {
+            fn check(
+                flox: &Flox,
+                remote_environment: &RemoteEnvironment,
+            ) -> Result<AllGenerationsMetadata, EnvironmentError> {
+                remote_environment.fetch_remote_state(flox)?;
+                let remote_metadata = remote_environment.remote_generations_metadata()?;
+                Ok(remote_metadata.into_inner())
+            }
+            Some(check(flox, &remote_environment))
+        },
     }
 }
 
@@ -246,6 +279,50 @@ pub fn spawn_detached_check_for_upgrades_process(
     Ok(())
 }
 
+/// Synchronously try to drop the cached remote state for FloxHub environments.
+///
+/// Since remote state is only updated asynchronously upon activation,
+/// an activation following a push,
+/// would incorrectly notify users of outstanding changes yet to be pushed,
+/// as the cached remote state from previous activations is now outdated.
+/// This function can be used to drop the cached remote state,
+/// causing updates to be fetched again on a future activation of the environment.
+pub(crate) fn invalidate_cached_remote_state(
+    environment: &mut GenerationsEnvironment,
+) -> Result<()> {
+    let upgrade_information = UpgradeInformationGuard::read_in(environment.cache_path()?)?;
+
+    let has_cached_remote_state = upgrade_information
+        .info()
+        .as_ref()
+        .map(|info| info.remote_generations_metadata.is_some())
+        .unwrap_or_default();
+
+    if !has_cached_remote_state {
+        return Ok(());
+    }
+
+    let mut locked = match upgrade_information
+        .lock_if_unlocked()
+        .context("failed to lock upgrade information cache")?
+    {
+        Ok(locked) => locked,
+        Err(_) => {
+            debug!("upgrade information is being updated by another process");
+            return Ok(());
+        },
+    };
+
+    if let Some(info) = locked.info_mut() {
+        info.remote_generations_metadata = None;
+    }
+
+    // We don't want to delay the next async fetch, thus keeping the timestamp unchanged.
+    locked.commit()?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -272,11 +349,12 @@ mod tests {
         let mut locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
         let _ = locked.info_mut().insert(UpgradeInformation {
             last_checked: OffsetDateTime::now_utc(),
-            result: UpgradeResult {
+            upgrade_result: UpgradeResult {
                 old_lockfile: Some(environment.lockfile(&flox).unwrap().into()),
                 new_lockfile: environment.lockfile(&flox).unwrap().into(),
                 store_path: None,
             },
+            remote_generations_metadata: None,
         });
         locked.commit().unwrap();
 
@@ -358,10 +436,10 @@ mod tests {
 
         assert!(upgrade_information.info().is_some());
         let info = upgrade_information.info().as_ref().unwrap();
-        assert!(info.result.old_lockfile.is_some());
+        assert!(info.upgrade_result.old_lockfile.is_some());
         assert_ne!(
-            &info.result.new_lockfile,
-            info.result.old_lockfile.as_ref().unwrap()
+            &info.upgrade_result.new_lockfile,
+            info.upgrade_result.old_lockfile.as_ref().unwrap()
         );
     }
 }

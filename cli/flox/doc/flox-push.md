@@ -16,14 +16,20 @@ flox [<general-options>] push
      [-d=<path>]
      [-o=<owner>]
      [-f]
+
+flox [<general-options>] push
+     -r=<owner>/<name>
+     [-f]
 ```
 
 # DESCRIPTION
 
-Move an environment's manifest to FloxHub or sync local changes to an
-environment to FloxHub.
+Push an environment to FloxHub to share and centrally manage it with flox,
+or sync changes made locally to a remote environment.
 
 After pushing, the remote environment can be referred to as `<owner>/<name>`.
+
+## Pushing from a directory (using `--dir | -d`)
 
 A path environment contains a manifest file and lock file which are stored
 locally and possibly committed to version control.
@@ -31,10 +37,21 @@ Pushing the environment moves the manifest and lock file to FloxHub,
 leaving a reference to the revision of the environment stored locally.
 
 Once the environment has been pushed, it can be used directly with the
-`--remote` option,
+`--reference` option,
 or it can be used and edited locally before syncing with `flox push`.
 See [`flox-edit(1)`](./flox-edit.md), [`flox-install(1)`](./flox-install.md),
 and [`flox-uninstall(1)`](./flox-uninstall.md) for editing the environment.
+
+
+## Pushing a remote environment (using `--reference | -r`)
+
+When using the `--reference` flag, commands will operate on a
+**central persistent local copy** of the environment.
+Any changes made to an environment using the `--reference` flag,
+affect only the local copy and must be explicitly updated on FloxHub
+using `flox push --reference`
+
+## Conflict resolution
 
 In the same way as a git repo, local changes to an environment that has been
 pushed may diverge from the environment on FloxHub if `flox push` is run from a
@@ -47,7 +64,10 @@ FloxHub with local changes to the environment.
 ## Push Options
 
 `-d`, `--dir`
-:   Directory to push the environment from (default: current directory).
+:   Push an environment in a directory to FloxHub.
+
+    Cannot be used with `--reference`.
+    Defaults to the current directory when `--reference` is not specified.
 
 `-o`, `--owner`, `--org`
 :   FloxHub owner to push environment to (default: current FloxHub user).
@@ -55,6 +75,20 @@ FloxHub with local changes to the environment.
     Can only be specified when pushing an environment for the first time.
     Use 'flox pull --copy' to copy an existing environment and push it to a new
     owner.
+
+    Cannot be used with `--reference`.
+
+
+`-r`, `--reference`
+:   Push local copy of a FloxHub environment upstream.
+
+    This pushes the local changes made to a FloxHub environment
+    using commands with the `--reference` flag.
+    Referring to environments, that have never been accessed
+    or explicitly pulled will cause an error.
+
+    Cannot be used with `--dir` or `--owner`.
+
 
 `-f`, `--force`
 :   Forcibly overwrite the remote copy of the environment.

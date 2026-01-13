@@ -1056,6 +1056,96 @@ pub mod types {
             Self(value)
         }
     }
+    ///Comma-separated list of output names (e.g., 'out,bin,dev')
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "Outputs",
+    ///  "description": "Comma-separated list of output names (e.g., 'out,bin,dev')",
+    ///  "examples": [
+    ///    "out"
+    ///  ],
+    ///  "type": "string",
+    ///  "maxLength": 100,
+    ///  "pattern": "^[a-zA-Z0-9_]+(?:,[a-zA-Z0-9_]+)*$"
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    #[serde(transparent)]
+    pub struct Outputs(::std::string::String);
+    impl ::std::ops::Deref for Outputs {
+        type Target = ::std::string::String;
+        fn deref(&self) -> &::std::string::String {
+            &self.0
+        }
+    }
+    impl ::std::convert::From<Outputs> for ::std::string::String {
+        fn from(value: Outputs) -> Self {
+            value.0
+        }
+    }
+    impl ::std::convert::From<&Outputs> for Outputs {
+        fn from(value: &Outputs) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::str::FromStr for Outputs {
+        type Err = self::error::ConversionError;
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            if value.chars().count() > 100usize {
+                return Err("longer than 100 characters".into());
+            }
+            static PATTERN: ::std::sync::LazyLock<::regress::Regex> = ::std::sync::LazyLock::new(||
+            { ::regress::Regex::new("^[a-zA-Z0-9_]+(?:,[a-zA-Z0-9_]+)*$").unwrap() });
+            if PATTERN.find(value).is_none() {
+                return Err(
+                    "doesn't match pattern \"^[a-zA-Z0-9_]+(?:,[a-zA-Z0-9_]+)*$\"".into(),
+                );
+            }
+            Ok(Self(value.to_string()))
+        }
+    }
+    impl ::std::convert::TryFrom<&str> for Outputs {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<&::std::string::String> for Outputs {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<::std::string::String> for Outputs {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl<'de> ::serde::Deserialize<'de> for Outputs {
+        fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+        where
+            D: ::serde::Deserializer<'de>,
+        {
+            ::std::string::String::deserialize(deserializer)?
+                .parse()
+                .map_err(|e: self::error::ConversionError| {
+                    <D::Error as ::serde::de::Error>::custom(e.to_string())
+                })
+        }
+    }
     ///`PackageBuild`
     ///
     /// <details><summary>JSON schema</summary>
@@ -2352,6 +2442,51 @@ pub mod types {
             value.clone()
         }
     }
+    ///Request body for package SBOM endpoint (reserved for future extension).
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageSbomRequest",
+    ///  "description": "Request body for package SBOM endpoint (reserved for future extension).",
+    ///  "type": "object"
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    #[serde(transparent)]
+    pub struct PackageSbomRequest(
+        pub ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+    );
+    impl ::std::ops::Deref for PackageSbomRequest {
+        type Target = ::serde_json::Map<::std::string::String, ::serde_json::Value>;
+        fn deref(
+            &self,
+        ) -> &::serde_json::Map<::std::string::String, ::serde_json::Value> {
+            &self.0
+        }
+    }
+    impl ::std::convert::From<PackageSbomRequest>
+    for ::serde_json::Map<::std::string::String, ::serde_json::Value> {
+        fn from(value: PackageSbomRequest) -> Self {
+            value.0
+        }
+    }
+    impl ::std::convert::From<&PackageSbomRequest> for PackageSbomRequest {
+        fn from(value: &PackageSbomRequest) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::convert::From<
+        ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+    > for PackageSbomRequest {
+        fn from(
+            value: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+        ) -> Self {
+            Self(value)
+        }
+    }
     ///`PackageSearchResult`
     ///
     /// <details><summary>JSON schema</summary>
@@ -3300,6 +3435,84 @@ pub mod types {
     impl ::std::convert::From<&ResolvedPackageGroups> for ResolvedPackageGroups {
         fn from(value: &ResolvedPackageGroups) -> Self {
             value.clone()
+        }
+    }
+    ///Supported SBOM format types.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "SbomFormat",
+    ///  "description": "Supported SBOM format types.",
+    ///  "type": "string",
+    ///  "enum": [
+    ///    "spdx-2.3-json"
+    ///  ]
+    ///}
+    /// ```
+    /// </details>
+    #[derive(
+        ::serde::Deserialize,
+        ::serde::Serialize,
+        Clone,
+        Copy,
+        Debug,
+        Eq,
+        Hash,
+        Ord,
+        PartialEq,
+        PartialOrd
+    )]
+    pub enum SbomFormat {
+        #[serde(rename = "spdx-2.3-json")]
+        Spdx23Json,
+    }
+    impl ::std::convert::From<&Self> for SbomFormat {
+        fn from(value: &SbomFormat) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::fmt::Display for SbomFormat {
+        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+            match *self {
+                Self::Spdx23Json => f.write_str("spdx-2.3-json"),
+            }
+        }
+    }
+    impl ::std::str::FromStr for SbomFormat {
+        type Err = self::error::ConversionError;
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            match value {
+                "spdx-2.3-json" => Ok(Self::Spdx23Json),
+                _ => Err("invalid value".into()),
+            }
+        }
+    }
+    impl ::std::convert::TryFrom<&str> for SbomFormat {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<&::std::string::String> for SbomFormat {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<::std::string::String> for SbomFormat {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
         }
     }
     ///`SearchTerm`
@@ -5327,6 +5540,95 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
             .build()?;
         let info = OperationInfo {
             operation_id: "resolve_api_v1_catalog_resolve_post",
+        };
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::Custom(e.to_string())),
+        }
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Get SBOM for a package derivation
+
+Get SBOM (Software Bill of Materials) for a package derivation.
+
+Args:
+    derivation: The derivation filename without /nix/store/ prefix
+                (e.g., "abc123def-foo-1.0.drv")
+    outputs: Optional comma-separated list of outputs (e.g., "out,bin,dev").
+             If omitted, includes the package's default outputs from derivation metadata.
+             Must be alphanumeric with underscores only, max 100 chars total.
+    format: SBOM format (defaults to SbomFormat.SPDX_2_3_JSON)
+    body: Request body (reserved for future extension)
+    auth_result: Authentication payload
+    cache: Request-scoped dependency cache (injected)
+
+Returns:
+    SBOM document in the requested format
+
+Sends a `POST` request to `/api/v1/catalog/sbom/package/{derivation}`
+
+Arguments:
+- `derivation`
+- `format`
+- `outputs`: Comma-separated list of output names (e.g., 'out,bin,dev')
+- `body`
+*/
+    pub async fn package_sbom_api_v1_catalog_sbom_package_derivation_post<'a>(
+        &'a self,
+        derivation: &'a str,
+        format: Option<types::SbomFormat>,
+        outputs: Option<&'a types::Outputs>,
+        body: &'a types::PackageSbomRequest,
+    ) -> Result<
+        ResponseValue<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+        Error<types::ErrorResponse>,
+    > {
+        let url = format!(
+            "{}/api/v1/catalog/sbom/package/{}", self.baseurl, encode_path(& derivation
+            .to_string()),
+        );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .json(&body)
+            .query(&progenitor_client::QueryParam::new("format", &format))
+            .query(&progenitor_client::QueryParam::new("outputs", &outputs))
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "package_sbom_api_v1_catalog_sbom_package_derivation_post",
         };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {

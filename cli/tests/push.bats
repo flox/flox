@@ -95,7 +95,7 @@ teardown() {
   popd >/dev/null || return
 
   pushd "machine_b" >/dev/null || return
-  run "$FLOX_BIN" pull --remote owner/test
+  run "$FLOX_BIN" pull owner/test
   assert_success
 
   run "$FLOX_BIN" list --name
@@ -164,7 +164,7 @@ teardown() {
   # Pull the environment owner/test on machine_c and check that it has the emacs package
   pushd "machine_c" > /dev/null || return
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
-  "$FLOX_BIN" pull --remote owner/test
+  "$FLOX_BIN" pull owner/test
   run "$FLOX_BIN" list --name
   assert_success
   assert_line "emacs"
@@ -210,7 +210,7 @@ EOF
   include.environments = [{ dir = "../included" }]
 EOF
 
-  run "$FLOX_BIN" push --dir composer --owner owner
+  run "$FLOX_BIN" push --dir composer
   assert_failure
   assert_line "❌ ERROR: cannot push environment that includes local environments"
 }

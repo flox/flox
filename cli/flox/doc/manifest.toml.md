@@ -498,13 +498,22 @@ of tables in the `include.environments` array. The schema for these "include
 descriptors" is shown below:
 
 ```
-IncludeDescriptor ::= LocalIncludeDescriptor | RemoteIncludeDescriptor
+IncludeDescriptor ::= LocalIncludeDescriptor
+                    | FloxHubIncludeDescriptor
+                    | RemoteIncludeDescriptor (deprecated)
+
 
 LocalIncludeDescriptor :: = {
   dir  = STRING
 , name = null | STRING
 }
 
+FloxHubIncludeDescriptor :: = {
+  remote = STRING
+, name   = null | STRING
+}
+
+# Deprecated, will be removed in a future release
 RemoteIncludeDescriptor :: = {
   remote = STRING
 , name   = null | STRING
@@ -517,9 +526,11 @@ The fields in these include descriptors are as follows:
 : The local path to the environment to include. This has the same semantics as
   the `--dir` flag passed to many Flox commands.
 
-`remote`
-: The remote name of an environment to include. This has the same semantics as
-  the `--remote` flag passed to many Flox commands.
+`reference`
+: The FloxHub reference of an environment to include. This has the same
+  semantics as the `--reference <env-ref> --upstream` flag passed to
+  many Flox commands. That is, Flox will include the referenced environment
+  as it is stored on FloxHub.
 
 `name`
 : An optional override to the name of the included environment. This is useful

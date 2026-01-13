@@ -125,7 +125,7 @@ setup_start_counter_services() {
 @test "can call process-compose" {
   run "$PROCESS_COMPOSE_BIN" version
   assert_success
-  assert_output --partial "v1.75.2"
+  assert_output --partial "v1.85.0"
 }
 
 @test "process-compose can run generated config file" {
@@ -283,8 +283,9 @@ EOF
   assert_success
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
-    "$FLOX_BIN" install hello --remote "$OWNER/$PROJECT_NAME"
-  assert_success
+   "$FLOX_BIN" install hello --reference "$OWNER/$PROJECT_NAME"
+
+  "$FLOX_BIN" push --reference "$OWNER/$PROJECT_NAME"
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     "$FLOX_BIN" pull

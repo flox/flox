@@ -27,6 +27,7 @@ pub enum Error {
 /// Represents a systemd service configuration
 #[skip_serializing_none]
 #[derive(Debug, Clone, Default, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(deny_unknown_fields)]
 pub struct ServiceUnit {
     pub unit: Option<Unit>,
     pub service: Option<Service>,
@@ -35,6 +36,7 @@ pub struct ServiceUnit {
 /// Unit section configuration
 #[skip_serializing_none]
 #[derive(Debug, Clone, Default, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(deny_unknown_fields)]
 pub struct Unit {
     pub description: Option<String>,
     pub documentation: Option<Vec<String>>,
@@ -47,6 +49,7 @@ pub struct Unit {
 /// Service section configuration with resource limits
 #[skip_serializing_none]
 #[derive(Debug, Clone, Default, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(deny_unknown_fields)]
 pub struct Service {
     // Basic service configuration
     pub type_: Option<ServiceType>,
@@ -535,5 +538,65 @@ mod tests {
 
         "};
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_deny_unknown_fields_service_unit() {
+        let json = r#"{
+            "bad_field": "value",
+            "service": {
+                "cpu_quota": "50%"
+            }
+        }"#;
+
+        let result: Result<ServiceUnit, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        let err_msg = err.to_string();
+        let expected = "unknown field `bad_field`";
+        assert!(
+            err_msg.contains(expected),
+            "Expected error to contain '{expected}', but got: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn test_deny_unknown_fields_unit() {
+        let json = r#"{
+            "unit": {
+                "description": "test",
+                "bad_field": "value"
+            }
+        }"#;
+
+        let result: Result<ServiceUnit, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        let err_msg = err.to_string();
+        let expected = "unknown field `bad_field`";
+        assert!(
+            err_msg.contains(expected),
+            "Expected error to contain '{expected}', but got: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn test_deny_unknown_fields_service() {
+        let json = r#"{
+            "service": {
+                "cpu_quota": "50%",
+                "bad_field": "value"
+            }
+        }"#;
+
+        let result: Result<ServiceUnit, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        let err_msg = err.to_string();
+        let expected = "unknown field `bad_field`";
+        assert!(
+            err_msg.contains(expected),
+            "Expected error to contain '{expected}', but got: {err_msg}"
+        );
     }
 }

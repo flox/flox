@@ -5,14 +5,16 @@ use std::hash::Hash;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock, Mutex};
 
 use flox_core::activate::mode::ActivateMode;
 use flox_core::canonical_path::CanonicalPath;
 use pollster::FutureExt as _;
+use rsevents_extra::Semaphore;
 use serde::{Deserialize, Serialize};
+use tempfile::TempPath;
 use thiserror::Error;
-use tracing::{debug, info_span, instrument, trace};
+use tracing::{Span, debug, info_span, instrument, trace};
 
 use super::auth::{AuthError, AuthProvider};
 use super::catalog::ClientTrait;
@@ -25,10 +27,9 @@ use crate::models::lockfile::{
     LockedPackageStorePath,
     Lockfile,
 };
-use crate::models::manifest::typed::ManifestPackageDescriptor;
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::providers::auth::{catalog_auth_to_envs, store_needs_auth};
-use crate::providers::catalog::CatalogClientError;
+use crate::providers::catalog::{CatalogClientError, StoreInfo};
 use crate::utils::CommandExt;
 
 static BUILDENV_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -125,6 +126,10 @@ pub enum BuildEnvError {
     /// a package that is expected to be a base catalog package but the
     /// lockfile appears to be a custom package or vice versa.
     #[error("encountered an error interpreting the lockfile: {0}")]
+    LockfileContents(String),
+
+    /// A catch-all error variant for rare situations
+    #[error("{0}")]
     Other(String),
 }
 
@@ -164,6 +169,35 @@ pub trait BuildEnv {
     ) -> Result<BuildEnvOutputs, BuildEnvError>;
 }
 
+#[derive(Debug)]
+pub struct NetRcAndAuth<A> {
+    netrc_path: Option<TempPath>,
+    auth: Arc<Mutex<A>>,
+}
+
+impl<A> NetRcAndAuth<A>
+where
+    A: AuthProvider,
+{
+    /// Returns the path to a populated netrc file, creating one if necessary.
+    pub fn get_netrc_path(&mut self) -> Result<&TempPath, BuildEnvError> {
+        if let Some(ref path) = self.netrc_path {
+            Ok(path)
+        } else {
+            let path = self
+                .auth
+                .lock()
+                .map_err(|_| {
+                    BuildEnvError::Other("internal error: mutex was poisoned".to_string())
+                })?
+                .create_netrc()
+                .map_err(BuildEnvError::Auth)?;
+            self.netrc_path = Some(path);
+            self.get_netrc_path()
+        }
+    }
+}
+
 pub struct BuildEnvNix<P, A> {
     gc_root_base_path: P,
     auth: A,
@@ -187,7 +221,7 @@ where
         self.gc_root_base_path.as_ref().join(prefix.as_ref())
     }
 
-    fn base_command(&self) -> Command {
+    fn base_command() -> Command {
         let mut nix_build_command = nix_base_command();
         // allow impure language features such as `builtins.storePath`,
         // and use the auto store (which is used by the preceding `realise` command)
@@ -268,8 +302,6 @@ where
     /// the appropriate method for the package type.
     ///
     /// See the individual realisation functions for more details.
-    // todo: return actual store paths built,
-    // necessary when building manifest builds.
     fn realise_lockfile(
         &self,
         client: &impl ClientTrait,
@@ -277,6 +309,11 @@ where
         system: &System,
         pre_checked_store_paths: &CheckedStorePaths,
     ) -> Result<(), BuildEnvError> {
+        let mut base_catalog_pkgs = vec![];
+        let mut custom_catalog_pkgs = vec![];
+        let mut flake_pkgs = vec![];
+        let mut store_path_pkgs = vec![];
+
         for package in lockfile.packages.iter() {
             if package.system() != system {
                 continue;
@@ -288,226 +325,341 @@ where
                 .manifest
                 .pkg_descriptor_with_id(install_id)
                 .ok_or_else(|| {
-                    BuildEnvError::Other(format!(
+                    BuildEnvError::LockfileContents(format!(
                         "Could not find package with install_id '{install_id}' in manifest"
                     ))
                 })?;
 
-            // ManifestPackageDescriptor
-
             match package {
-                LockedPackage::Catalog(locked) => self.realise_nixpkgs(
-                    client,
-                    &manifest_package,
-                    locked,
-                    pre_checked_store_paths,
-                )?,
-                LockedPackage::Flake(locked) => {
-                    self.realise_flakes(locked, pre_checked_store_paths)?
+                LockedPackage::Catalog(pkg) => {
+                    if manifest_package.is_from_custom_catalog() {
+                        custom_catalog_pkgs.push(pkg);
+                    } else {
+                        base_catalog_pkgs.push(pkg);
+                    }
                 },
-                LockedPackage::StorePath(locked) => {
-                    self.realise_store_path(locked, pre_checked_store_paths)?
-                },
+                LockedPackage::Flake(pkg) => flake_pkgs.push(pkg),
+                LockedPackage::StorePath(pkg) => store_path_pkgs.push(pkg),
             }
         }
+
+        let max_parallel_downloads: Option<u16> = std::env::var("FLOX_MAX_PARALLEL_DOWNLOADS")
+            .ok()
+            .and_then(|value| value.parse::<u16>().ok());
+        let semaphore = if let Some(max_par) = max_parallel_downloads {
+            Semaphore::new(max_par, max_par)
+        } else {
+            Semaphore::new(20, 20)
+        };
+
+        let gc_root_base_path = self.gc_root_base_path.as_ref();
+        let span = Span::current();
+
+        // Only query store info if we have custom catalog packages and they
+        // aren't already on the system.
+        let all_custom_pkg_store_paths = custom_catalog_pkgs
+            .iter()
+            .flat_map(|pkg| pkg.outputs.values().map(|sp| sp.to_string()))
+            .collect::<Vec<_>>();
+        let all_custom_catalog_packages_valid = {
+            all_custom_pkg_store_paths
+                .iter()
+                .all(|sp| pre_checked_store_paths.valid(sp).unwrap_or(false))
+        };
+        let store_locations = if all_custom_catalog_packages_valid {
+            None
+        } else {
+            let store_locations = client
+                .get_store_info(all_custom_pkg_store_paths)
+                .block_on()
+                .map_err(BuildEnvError::CatalogError)?;
+            Some(store_locations)
+        };
+
+        // We optimistically try to create a netrc file but don't bail on error
+        // in case the user doesn't need it. The `no_netrc_is_error` indicates
+        // that there was an authentication error. We're doing this weird dance
+        // because the thread-safety (specifically, the lack of it) of the auth
+        // provider makes it a real pain to pass it into other threads. It makes
+        // life *much* easier to do some of this ahead of time.
+        let no_netrc_is_error = self.auth.token().is_none();
+        let netrc_path = self.auth.try_create_netrc();
+        let borrowed_netrc_path = netrc_path.as_ref();
+
+        std::thread::scope(|s| {
+            let mut thread_handles = vec![];
+            // Spawn threads for base catalog packages
+            for pkg in base_catalog_pkgs.iter() {
+                // Check if we already have the store paths for this package.
+                let all_valid_in_pre_checked = pkg
+                    .outputs
+                    .values()
+                    .all(|store_path| pre_checked_store_paths.valid(store_path).unwrap_or(false));
+                if all_valid_in_pre_checked {
+                    continue;
+                }
+                let handle = s.spawn(|| {
+                    Self::realise_single_base_catalog_pkg(
+                        pkg,
+                        gc_root_base_path,
+                        span.clone(),
+                        &semaphore,
+                    )
+                });
+                thread_handles.push(handle);
+            }
+            // Spawn threads for custom catalog packages if there were any
+            if let Some(ref store_locations) = store_locations {
+                for pkg in custom_catalog_pkgs.iter() {
+                    // Check if we already have the store paths for this package.
+                    let all_valid_in_pre_checked = pkg.outputs.values().all(|store_path| {
+                        pre_checked_store_paths.valid(store_path).unwrap_or(false)
+                    });
+                    if all_valid_in_pre_checked {
+                        continue;
+                    }
+                    let handle = s.spawn(|| {
+                        Self::realise_single_custom_catalog_pkg(
+                            pkg,
+                            gc_root_base_path,
+                            store_locations,
+                            no_netrc_is_error,
+                            borrowed_netrc_path,
+                            span.clone(),
+                            &semaphore,
+                        )
+                    });
+                    thread_handles.push(handle);
+                }
+            }
+            for pkg in store_path_pkgs.iter() {
+                if pre_checked_store_paths
+                    .valid(&pkg.store_path)
+                    .unwrap_or(false)
+                {
+                    continue;
+                }
+                let handle = s.spawn(|| {
+                    Self::realise_single_store_path(
+                        pkg,
+                        gc_root_base_path,
+                        pre_checked_store_paths,
+                        span.clone(),
+                        &semaphore,
+                    )
+                });
+                thread_handles.push(handle);
+            }
+            let mut thread_panicked = false;
+            for h in thread_handles {
+                thread_panicked |= h.join().is_err();
+            }
+            if thread_panicked {
+                return Err(BuildEnvError::Other(
+                    "internal error: download thread panicked".to_string(),
+                ));
+            }
+            Ok::<(), BuildEnvError>(())
+        })
+        .map_err(|_| {
+            BuildEnvError::Other("internal error: download thread panicked".to_string())
+        })?;
+
+        // Intentionally build flakes one at a time. We're not worried about
+        // slowing down the build by oversubscribing the CPU so much as we're
+        // worried about potentially running out of memory if we end up building
+        // multiple things from source at a single time.
+        for flake in flake_pkgs.iter() {
+            self.realise_flake(flake, pre_checked_store_paths)?;
+        }
+
         Ok(())
     }
 
-    /// Try to substitute a published package by copying it from an associated store.
+    /// Tries to substitute a single custom catalog package given store info
+    /// locations that have been looked up ahead of time.
     ///
-    /// Query the associated store(s) that contain the package from the catalog.
-    /// Then attempt to download the package closure from each store in order,
-    /// until successful.
-    /// Returns `true` if all outputs were found and downloaded, `false` otherwise.
+    /// Some store info locations will require authentication, but the store
+    /// paths for this package may be available at a different location that
+    /// doesn't require authentication, so we authenticate lazily as that may
+    /// fail.
     ///
-    /// If a path is found, we attempt to create a temproot for it in [Self::gc_root_base_path].
-    fn try_substitute_published_pkg(
-        &self,
-        client: &impl ClientTrait,
-        locked: &LockedPackageCatalog,
-    ) -> Result<bool, BuildEnvError> {
-        debug!(
-            install_id = locked.install_id,
-            "trying to substitute published package"
+    /// It's also possible that a user has simply published an unmodified
+    /// package that exists in nixpkgs. To cover that case there is a fallback
+    /// that will attempt to substitute from cache.nixos.org if substituting
+    /// from the provided store info locations fails.
+    fn realise_single_custom_catalog_pkg(
+        locked_pkg: &LockedPackageCatalog,
+        gc_root_base_dir: &Path,
+        store_locations: &HashMap<String, Vec<StoreInfo>>,
+        no_netrc_is_error: bool,
+        maybe_netrc_path: Option<&PathBuf>,
+        parent_span: Span,
+        semaphore: &Semaphore,
+    ) -> Result<(), BuildEnvError> {
+        let _sem_guard = semaphore.wait();
+
+        let mut auth_error = None;
+        // The way the data structures are written it's possible to have
+        // different package outputs come from different store locations. That's
+        // not *really* possible though, so we're going to grab the store
+        // locations for an arbitrary output and ASSUME that they're
+        // representative for all outputs.
+        let locations = store_locations
+            .get(locked_pkg.outputs.values().next().unwrap())
+            .ok_or(BuildEnvError::NoPackageStoreLocation(
+                locked_pkg.install_id.to_string(),
+            ))?;
+        let span = info_span!(
+            parent: parent_span.clone(),
+            "substitute custom catalog package",
+            progress = format!("Downloading '{}'", locked_pkg.attr_path)
         );
-        // TODO - The API call accepts multiple, so an optimization is to
-        // collect these for the whole lockfile ahead of time and ask for them
-        // all at once.
-        let paths: Vec<String> = locked.outputs.values().map(|s| s.to_string()).collect();
-        let store_locations = client
-            .get_store_info(paths)
-            .block_on()
-            .map_err(BuildEnvError::CatalogError)?;
-
-        // Try downloading each output from the store location provided.  If we
-        // are missing store info for any, we should return false.
-        // TODO - It is possible not _all_ are missing. For now, we'll just
-        // assume they are all missing, noting published packages only have one
-        // output currently.  Also to note: if all the outputs were valid
-        // locally, we would not get here as that check happens before this is
-        // called within `realise_nixpkgs`.
-        let mut netrc_path = None;
-        'path_loop: for (path, locations) in store_locations.iter() {
-            let mut auth_error = None;
-            // If there are no locations
-            if locations.is_empty() {
-                return Err(BuildEnvError::NoPackageStoreLocation(
-                    locked.install_id.clone(),
-                ));
-            }
-            for location in locations {
-                // nix copy
-                let mut copy_command = nix_base_command();
-                let location_url = match &location.url {
-                    Some(url) => url,
-                    None => {
-                        return Err(BuildEnvError::NixCopyError(format!(
-                            "Missing store location URL for package '{}'",
-                            locked.install_id
-                        )));
-                    },
-                };
-                copy_command.arg("copy");
-                // auth.is_some() corresponds to Publisher store type
-                // auth.is_none() corresponds to NixCopy
-                // TODO: this is turning into spaghetti and would be good to refactor,
-                // but this code isn't very stable so hold off for now.
-                if let Some(auth) = &location.auth {
-                    copy_command.envs(catalog_auth_to_envs(auth).map_err(BuildEnvError::Auth)?);
-                } else {
-                    // We don't need a floxhub token for the NixOS public cache
-                    if store_needs_auth(location_url) {
-                        // Don't attempt to get the token until we need it,
-                        // and cache the netrc path so that we don't make the same
-                        // file over and over again.
-                        match netrc_path {
-                            Some(Ok(ref path)) => {
-                                copy_command.arg("--netrc-file").arg(path);
-                            },
-                            Some(Err(_)) => {
-                                // Do nothing and hope that a later `location` doesn't
-                                // need a token since at some point in the past we
-                                // needed one, looked for it, and didn't get one.
-                                // Note that we don't continue because
-                                // store_needs_auth isn't necessarily correct.
-                            },
-                            None => {
-                                let maybe_path =
-                                    self.auth.create_netrc().map_err(BuildEnvError::Auth);
-                                if let Ok(ref path) = maybe_path {
-                                    copy_command.arg("--netrc-file").arg(path);
-                                }
-                                netrc_path = Some(maybe_path);
-                            },
-                        }
+        let _span_guard = span.enter();
+        let mut location_succeeded = vec![];
+        for location in locations {
+            // nix copy
+            let mut copy_command = nix_base_command();
+            let location_url = match &location.url {
+                Some(url) => url,
+                None => {
+                    return Err(BuildEnvError::NixCopyError(format!(
+                        "Missing store location URL for package '{}'",
+                        locked_pkg.install_id
+                    )));
+                },
+            };
+            copy_command.arg("copy");
+            // auth.is_some() corresponds to Publisher store type
+            // auth.is_none() corresponds to NixCopy
+            // TODO: this is turning into spaghetti and would be good to refactor,
+            // but this code isn't very stable so hold off for now.
+            if let Some(auth) = &location.auth {
+                copy_command.envs(catalog_auth_to_envs(auth).map_err(BuildEnvError::Auth)?);
+            } else {
+                // We don't need a floxhub token for the NixOS public cache
+                if store_needs_auth(location_url) {
+                    if let Some(ref netrc_path) = maybe_netrc_path {
+                        copy_command.arg("--netrc-file").arg(netrc_path);
+                    } else if no_netrc_is_error {
+                        return Err(BuildEnvError::Auth(AuthError::NoToken));
                     }
                 }
-                copy_command.arg("--from").arg(location_url).arg(path);
-                debug!(cmd=%copy_command.display(), "trying to copy published package");
-                let output = copy_command
-                    .output()
-                    .map_err(|e| BuildEnvError::CacheError(e.to_string()))?;
-                if !output.status.success() {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    if stderr.contains("because it lacks a signature by a trusted key") {
-                        return Err(BuildEnvError::UntrustedPackage(locked.install_id.clone()));
-                    }
-                    // We're expecting errors for netrc type auth, but not for
-                    // catalog provided auth.
-                    if location.auth.is_some() {
-                        auth_error = Some(BuildEnvError::NixCopyError(stderr.to_string()));
-                    }
-                    // If we failed, log the error and try the next location.
-                    debug!(%path, %location_url, %stderr, "Failed to copy package from store");
-                } else {
-                    // If we succeeded, then we can continue with the next path
-                    debug!(%path, %location_url, "Succesfully copied package from store");
+            }
+            copy_command.arg("--from").arg(location_url);
+            for store_path in locked_pkg.outputs.values() {
+                copy_command.arg(store_path);
+            }
+            debug!(cmd=%copy_command.display(), "trying to copy published package");
+            let output = copy_command
+                .output()
+                .map_err(|e| BuildEnvError::CacheError(e.to_string()))?;
 
-                    // TODO: there is a real but very short period between the successful copy
-                    // and setting the gc root in which the path _could_ be collected as garbage,
-                    // which we could guard against by wrapping the copy/link/check in a loop.
-                    // At this point its not clear whether that is worth the additional complexity.
-                    let filename = Path::new(path)
-                        .file_name()
-                        .ok_or_else(|| BuildEnvError::Link(format!("Invalid store path {path}")))?
-                        .to_string_lossy();
-                    create_gc_root_in(
-                        [path],
-                        self.new_gc_root_path(format!("by-store-path/{filename}")),
-                    )?;
+            // Only used for logging purposes
+            let attr_path = locked_pkg.attr_path.clone();
+            let drv = locked_pkg.derivation.clone();
 
-                    continue 'path_loop;
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if stderr.contains("because it lacks a signature by a trusted key") {
+                    return Err(BuildEnvError::UntrustedPackage(
+                        locked_pkg.install_id.to_string(),
+                    ));
                 }
-            }
-            // If we get here, we could not download the current path from anywhere
-            debug!(%path, "Failed to copy path from any provided location");
-            // At some point we needed an authentication token
-            // and didn't find one.
-            if let Some(Err(e)) = netrc_path {
-                return Err(e);
-            }
+                // We're expecting errors for netrc type auth, but not for
+                // catalog provided auth.
+                if location.auth.is_some() {
+                    auth_error = Some(BuildEnvError::NixCopyError(stderr.to_string()));
+                }
 
-            // At some point we tried to authenticate using catalog provided
-            // credentials and there was an error
-            if let Some(e) = auth_error {
-                return Err(e);
-            }
+                location_succeeded.push(false);
 
-            return Ok(false);
+                // If we failed, log the error and try the next location.
+                debug!(%attr_path, %drv, %location_url, %stderr, "Failed to copy custom package from store");
+            } else {
+                debug!(%attr_path, %drv, %location_url, "Succesfully copied custom package from store");
+
+                // TODO: there is a real but very short period between the successful copy
+                // and setting the gc root in which the path _could_ be collected as garbage,
+                // which we could guard against by wrapping the copy/link/check in a loop.
+                // At this point its not clear whether that is worth the additional complexity.
+                create_gc_root_in(
+                    locked_pkg.outputs.values(),
+                    gc_root_base_dir.join(format!("by-iid/{}", locked_pkg.install_id)),
+                )?;
+
+                location_succeeded.push(true);
+
+                break;
+            }
         }
-        Ok(true)
+
+        // Consider the package not found if (1) we never had any locations to
+        // download from in the first place, or (2) we did have locations to
+        // download from and we failed to find the package in any of them.
+        let not_found_in_custom_catalogs =
+            locations.is_empty() || !location_succeeded.iter().all(|&b| b);
+
+        // Some custom packages are just re-uploads of stuff in nixpkgs with
+        // no modifications, so the package may be found in `cache.nixos.org`.
+        // Fall back to attempting to download from the NixOS cache.
+        if not_found_in_custom_catalogs {
+            drop(_sem_guard);
+            drop(_span_guard);
+            let res = Self::realise_single_base_catalog_pkg(
+                locked_pkg,
+                gc_root_base_dir,
+                span,
+                semaphore,
+            );
+            if res.is_err() {
+                // We want to differentiate between these two cases:
+                // - Catalog server knows where we *should* be able to find
+                //   this package, and we failed to download it for some reason.
+                // - Catalog server didn't know where to download this from
+                //   and our fallback to `cache.nixos.org` failed.
+                if locations.is_empty() {
+                    return Err(BuildEnvError::NoPackageStoreLocation(
+                        locked_pkg.install_id.clone(),
+                    ));
+                }
+                return Err(BuildEnvError::BuildPublishedPackage(
+                    locked_pkg.install_id.clone(),
+                ));
+            } else {
+                return Ok(());
+            }
+        }
+
+        if let Some(err) = auth_error {
+            Err(err)
+        } else {
+            Ok(())
+        }
     }
 
-    /// Realise a package from the (nixpkgs) catalog.
-    /// [LockedPackageCatalog] is a locked package from the catalog.
-    /// The package is realised by checking if the store paths are valid,
-    /// and otherwise building the package to create valid store paths.
-    /// Packages are built by
-    /// 1. translating the locked url to a `flox-nixpkgs` url,
-    ///    which is a bridge to the Flox hosted mirror of nixpkgs flake
-    ///    <https://github.com/flox/nixpkgs>, which enables building packages
-    ///    without common evaluation checks, such as unfree and broken.
-    /// 2. constructing the attribute path to build the package,
-    ///    i.e. `legacyPackages.<locked system>.<attr_path>`,
-    ///    as [LockedPackageCatalog::attr_path] is incomplete.
-    /// 3. building the package with essentially
-    ///    `nix build <flox-nixpkgs-url>#<resolved attr path>^*`,
-    ///    which will realise the locked output paths.
-    ///    We set `--option pure-eval true` to improve reproducibility
-    ///    of the locked outputs, and allow the use of the eval-cache
-    ///    to avoid costly re-evaluations.
-    ///    When building or substituting sets GC temp roots for the _new_ paths.
-    ///
-    /// IMPORTANT/TODO: As custom catalogs, with non-nixpkgs packages are in development,
-    /// this function is currently assumes that the package is from the nixpkgs base-catalog.
-    /// Currently the type is distinguished by the [LockedPackageCatalog::locked_url].
-    /// If this does not indicate a nixpkgs package, the function will currently panic!
-    fn realise_nixpkgs(
-        &self,
-        client: &impl ClientTrait,
-        manifest_package: &ManifestPackageDescriptor,
-        locked: &LockedPackageCatalog,
-        pre_checked_store_paths: &CheckedStorePaths,
+    /// Tries to substitute a single base catalog package, assuming that we have
+    /// its metadata, but that the binary lives in the upstream Nix cache
+    /// (e.g cache.nixos.org).
+    fn realise_single_base_catalog_pkg(
+        locked_pkg: &LockedPackageCatalog,
+        gc_root_base_dir: &Path,
+        span: Span,
+        semaphore: &Semaphore,
     ) -> Result<(), BuildEnvError> {
-        // Check if all store paths are valid, or can be substituted.
-        let all_valid_in_pre_checked = locked
-            .outputs
-            .values()
-            .all(|path| pre_checked_store_paths.valid(path).unwrap_or_default());
+        let _guard = semaphore.wait();
 
-        // If all store paths are already valid, we can return early.
-        if all_valid_in_pre_checked {
-            return Ok(());
-        }
+        let gc_root_path = gc_root_base_dir.join(format!("by-iid/{}", locked_pkg.install_id));
 
-        // Check if store paths have _become_ valid in the meantime or can be substituted.
+        // Attempt to download the store paths associated with the package outputs.
         let all_valid_after_build_or_substitution = {
             let span = info_span!(
+                parent: span.clone(),
                 "substitute catalog package",
-                progress = format!("Downloading '{}'", locked.attr_path)
+                progress = format!("Downloading '{}'", locked_pkg.attr_path)
             );
             span.in_scope(|| {
-                self.check_store_path_with_substituters(&locked.install_id, locked.outputs.values())
+                Self::check_store_path_with_substituters(&gc_root_path, locked_pkg.outputs.values())
             })?
         };
 
@@ -516,54 +668,44 @@ where
             return Ok(());
         }
 
-        // TODO: less flimsy handling of building published packages
-        // 1. custom catalogs are distinguished from nixpkgs catalog
-        //    only by the prefix of the url field.
-        // 2. custom packages cannot be referred to by nix installable
-        // 3. from this point onward the whole buildprocess diverges between both types of packages
-        let installable = {
-            let mut locked_url = locked.locked_url.to_string();
+        // If we get here it means we need to build a package from source.
 
-            if !manifest_package.is_from_custom_catalog() {
-                if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
-                    locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
-                } else {
-                    return Err(BuildEnvError::Other(format!(
-                        "Locked package '{}' is a base catalog package, but the locked url '{}' does not start with the expected prefix '{}'",
-                        locked.install_id, locked.locked_url, NIXPKGS_CATALOG_URL_PREFIX
-                    )));
-                }
+        let installable = {
+            // We swap out the locked URL of the package (which points at our nixpkgs
+            // fork) for a flake reference that uses our custom `flox-nixpkgs` URL
+            // scheme. This disables certain built-in evaluation checks (allowUnfree, etc).
+            // That's important because we move those checks into manifest options, and
+            // don't want conflicts or duplicates.
+            let mut locked_url = locked_pkg.locked_url.to_string();
+            if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
+                locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
             } else {
-                debug!(?locked.attr_path, "Trying to substitute published package");
-                let span = info_span!(
-                    "substitute custom catalog package",
-                    progress = format!("Downloading '{}'", locked.attr_path)
-                );
-                let all_found =
-                    span.in_scope(|| self.try_substitute_published_pkg(client, locked))?;
-                // We asked for all the outputs for the package, got store info for
-                // each, and were able to substitute them all.  If so, then we're done here.
-                if all_found {
-                    return Ok(());
-                };
-                return Err(BuildEnvError::BuildPublishedPackage(
-                    locked.install_id.clone(),
-                ));
+                return Err(BuildEnvError::LockfileContents(format!(
+                    "Locked package '{}' is a base catalog package, but the locked url '{}' does not start with the expected prefix '{}'",
+                    locked_pkg.install_id, locked_pkg.locked_url, NIXPKGS_CATALOG_URL_PREFIX
+                )));
             }
 
-            // build all out paths
-            let attrpath = format!("legacyPackages.{}.{}^*", locked.system, locked.attr_path);
+            // For the attribute path we construct a real installable's attribute path
+            // by prepending `legacyPackages.<system>` to the `pkg-path`/`attr_path`.
+            //
+            // The `^*` bit builds all outputs.
+            let attrpath = format!(
+                "legacyPackages.{}.{}^*",
+                locked_pkg.system, locked_pkg.attr_path
+            );
 
             format!("{}#{}", locked_url, attrpath)
         };
 
         let _span = info_span!(
+            parent: span,
             "build from catalog",
-            progress = format!("Building '{}' from source", locked.attr_path)
+            progress = format!("Building '{}' from source", locked_pkg.attr_path)
         )
         .entered();
 
-        let mut nix_build_command = self.base_command();
+        let mut nix_build_command = Self::base_command();
 
         nix_build_command.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
 
@@ -572,7 +714,7 @@ where
         nix_build_command.arg("--no-update-lock-file");
         nix_build_command.args(["--option", "pure-eval", "true"]);
         nix_build_command.arg("--out-link");
-        nix_build_command.arg(self.new_gc_root_path(format!("by-iid/{}", locked.install_id)));
+        nix_build_command.arg(&gc_root_path);
         nix_build_command.arg(&installable);
 
         debug!(%installable, cmd=%nix_build_command.display(), "building catalog package");
@@ -583,7 +725,7 @@ where
 
         if !output.status.success() {
             return Err(BuildEnvError::Realise2 {
-                install_id: locked.install_id.clone(),
+                install_id: locked_pkg.install_id.clone(),
                 message: String::from_utf8_lossy(&output.stderr).to_string(),
             });
         }
@@ -602,7 +744,7 @@ where
     /// and allow the use of the eval-cache to avoid costly re-evaluations.
     /// When building or substituting sets GC temp roots for the _new_ paths.
     #[instrument(skip(self), fields(progress = format!("Realising flake package '{}'", locked.install_id)))]
-    fn realise_flakes(
+    fn realise_flake(
         &self,
         locked: &LockedPackageFlake,
         pre_checked_store_paths: &CheckedStorePaths,
@@ -624,7 +766,7 @@ where
             return Ok(());
         }
 
-        let mut nix_build_command = self.base_command();
+        let mut nix_build_command = Self::base_command();
 
         // naïve url construction
         let installable = {
@@ -669,23 +811,29 @@ where
     /// The package is realised by checking if the store paths are valid,
     /// if the store path is not valid (and the store lacks the ability to reproduce it),
     /// This function will return an error.
-    #[instrument(skip(self), fields(progress = format!("Realising store path for '{}'", locked.install_id)))]
-    fn realise_store_path(
-        &self,
+    fn realise_single_store_path(
         locked: &LockedPackageStorePath,
+        gc_root_base_path: &Path,
         pre_checked_store_paths: &CheckedStorePaths,
+        parent_span: Span,
+        semaphore: &Semaphore,
     ) -> Result<(), BuildEnvError> {
+        let _guard = semaphore.wait();
         let pre_valid = pre_checked_store_paths
             .valid(&locked.store_path)
             .unwrap_or_default();
 
         let valid = pre_valid || {
             let span = info_span!(
+                parent: parent_span,
                 "substitute store path",
                 progress = format!("Downloading '{}'", locked.store_path)
             );
             span.in_scope(|| {
-                self.check_store_path_with_substituters(&locked.install_id, [&locked.store_path])
+                Self::check_store_path_with_substituters(
+                    &gc_root_base_path.join(format!("by-store-path/{}", &locked.store_path)),
+                    [&locked.store_path],
+                )
             })?
         };
 
@@ -709,14 +857,13 @@ where
     /// To avoid GC of substituted paths, pass an `--out-links` argument,
     /// to create "temproots".
     fn check_store_path_with_substituters(
-        &self,
-        install_id: &str,
+        gc_root_path: &Path,
         paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
     ) -> Result<bool, BuildEnvError> {
-        let mut cmd = self.base_command();
+        let mut cmd = Self::base_command();
         cmd.arg("build");
         cmd.arg("--out-link");
-        cmd.arg(self.new_gc_root_path(format!("by-store-path/{install_id}")));
+        cmd.arg(gc_root_path);
         cmd.args(paths);
 
         debug!(cmd=%cmd.display(), "checking store paths, including substituters");
@@ -770,7 +917,7 @@ where
         lockfile_path: &Path,
         service_config_path: Option<PathBuf>,
     ) -> Result<BuildEnvOutputs, BuildEnvError> {
-        let mut nix_build_command = self.base_command();
+        let mut nix_build_command = Self::base_command();
         nix_build_command.args(["build", "--no-link", "--offline", "--json"]);
         nix_build_command.arg("--file").arg(&*BUILDENV_NIX);
         nix_build_command
@@ -1115,8 +1262,9 @@ mod realise_nixpkgs_tests {
 
     use super::*;
     use crate::models::lockfile;
-    use crate::models::manifest::typed::PackageDescriptorCatalog;
-    use crate::providers::catalog::{GENERATED_DATA, MockClient, StoreInfo, StoreInfoResponse};
+    use crate::models::manifest::typed::{ManifestPackageDescriptor, PackageDescriptorCatalog};
+    use crate::providers::auth::Auth;
+    use crate::providers::catalog::{GENERATED_DATA, StoreInfo};
     use crate::providers::nix::test_helpers::known_store_path;
 
     /// Read a single locked package for the current system from a mock lockfile.
@@ -1161,6 +1309,7 @@ mod realise_nixpkgs_tests {
             priority: None,
             version: None,
             systems: None,
+            outputs: None,
         });
 
         locked_package.attr_path = "hello".to_string();
@@ -1182,9 +1331,8 @@ mod realise_nixpkgs_tests {
     /// this test is only indicative that we _actually_ build the package.
     #[test]
     fn nixpkgs_build_reproduce_if_invalid() {
-        let (mut locked_package, manifest_package) =
+        let (mut locked_package, _) =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
-        let client = MockClient::new();
 
         // replace the store path with a known invalid one, to trigger a rebuild
         let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
@@ -1199,11 +1347,11 @@ mod realise_nixpkgs_tests {
 
         let buildenv = buildenv_instance();
 
-        let result = buildenv.realise_nixpkgs(
-            &client,
-            &manifest_package,
+        let result = BuildEnvNix::<PathBuf, Auth>::realise_single_base_catalog_pkg(
             &locked_package,
-            &Default::default(),
+            buildenv.gc_root_base_path.path(),
+            Span::current(),
+            &Semaphore::new(1, 1),
         );
         assert!(result.is_ok());
 
@@ -1216,31 +1364,28 @@ mod realise_nixpkgs_tests {
     /// to ensure that the build will fail if buildenv attempts to evaluate the package.
     #[test]
     fn nixpkgs_skip_eval_if_valid() {
-        let (mut locked_package, manifest_package) =
+        let (mut locked_package, _) =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
-        let client = MockClient::new();
 
         // build the package to ensure it is in the store
         let buildenv = buildenv_instance();
-        buildenv
-            .realise_nixpkgs(
-                &client,
-                &manifest_package,
-                &locked_package,
-                &Default::default(),
-            )
-            .expect("'hello' package should build");
+        BuildEnvNix::<PathBuf, Auth>::realise_single_base_catalog_pkg(
+            &locked_package,
+            buildenv.gc_root_base_path.path(),
+            Span::current(),
+            &Semaphore::new(1, 1),
+        )
+        .expect("'hello' package should build");
 
         // replace the attr_path with one that is known to fail to evaluate
         locked_package.attr_path = "AAAAAASomeThingsFailToEvaluate".to_string();
-        buildenv
-            .realise_nixpkgs(
-                &client,
-                &manifest_package,
-                &locked_package,
-                &Default::default(),
-            )
-            .expect("'hello' package should be realised without eval/build");
+        BuildEnvNix::<PathBuf, Auth>::realise_single_base_catalog_pkg(
+            &locked_package,
+            buildenv.gc_root_base_path.path(),
+            Span::current(),
+            &Semaphore::new(1, 1),
+        )
+        .expect("'hello' package should be realised without eval/build");
     }
 
     /// Realising a nixpkgs package should fail if the output is not valid
@@ -1253,9 +1398,8 @@ mod realise_nixpkgs_tests {
     /// which is tested in the tests below.
     #[test]
     fn nixpkgs_eval_failure() {
-        let (mut locked_package, manifest_package) =
+        let (mut locked_package, _) =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
-        let client = MockClient::new();
 
         // replace the store path with a known invalid one, to trigger a rebuild
         let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
@@ -1268,11 +1412,11 @@ mod realise_nixpkgs_tests {
         locked_package.attr_path = "AAAAAASomeThingsFailToEvaluate".to_string();
 
         let buildenv = buildenv_instance();
-        let result = buildenv.realise_nixpkgs(
-            &client,
-            &manifest_package,
+        let result = BuildEnvNix::<PathBuf, Auth>::realise_single_base_catalog_pkg(
             &locked_package,
-            &Default::default(),
+            buildenv.gc_root_base_path.path(),
+            Span::current(),
+            &Semaphore::new(1, 1),
         );
         let err = result.expect_err("realising nixpkgs#AAAAAASomeThingsFailToEvaluate should fail");
         assert!(matches!(err, BuildEnvError::Realise2 { .. }));
@@ -1289,9 +1433,8 @@ mod realise_nixpkgs_tests {
     /// to successfully evaluate the package and build it.
     #[test]
     fn nixpkgs_build_unfree() {
-        let (mut locked_package, manifest_package) =
+        let (mut locked_package, _) =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello-unfree-lock.yaml"));
-        let client = MockClient::new();
 
         // replace the store path with a known invalid one, to trigger a rebuild
         let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
@@ -1301,11 +1444,11 @@ mod realise_nixpkgs_tests {
         );
 
         let buildenv = buildenv_instance();
-        let result = buildenv.realise_nixpkgs(
-            &client,
-            &manifest_package,
+        let result = BuildEnvNix::<PathBuf, Auth>::realise_single_base_catalog_pkg(
             &locked_package,
-            &Default::default(),
+            buildenv.gc_root_base_path.path(),
+            Span::current(),
+            &Semaphore::new(1, 1),
         );
         assert!(result.is_ok(), "{}", result.unwrap_err());
     }
@@ -1322,9 +1465,8 @@ mod realise_nixpkgs_tests {
     /// to (at least) successfully evaluate the package, and attempt to build it.
     #[test]
     fn nixpkgs_build_broken() {
-        let (mut locked_package, manifest_package) =
+        let (mut locked_package, _) =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/tabula-lock.yaml"));
-        let client = MockClient::new();
 
         // replace the store path with a known invalid one, to trigger a rebuild
         let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
@@ -1334,11 +1476,11 @@ mod realise_nixpkgs_tests {
         );
 
         let buildenv = buildenv_instance();
-        let result = buildenv.realise_nixpkgs(
-            &client,
-            &manifest_package,
+        let result = BuildEnvNix::<PathBuf, Auth>::realise_single_base_catalog_pkg(
             &locked_package,
-            &Default::default(),
+            buildenv.gc_root_base_path.path(),
+            Span::current(),
+            &Semaphore::new(1, 1),
         );
         assert!(result.is_ok(), "{}", result.unwrap_err());
     }
@@ -1371,16 +1513,24 @@ mod realise_nixpkgs_tests {
     #[test]
     fn nixpkgs_published_pkg_no_cache_info() {
         let (locked_package, _) = locked_published_package(None);
-        let mut client = MockClient::new();
-        let mut resp = StoreInfoResponse {
-            items: std::collections::HashMap::new(),
-        };
         let fake_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
-        resp.items.insert(fake_store_path.clone(), vec![]);
-        client.push_store_info_response(resp);
+        let store_locations = {
+            let mut map = HashMap::new();
+            map.insert(fake_store_path, vec![]);
+            map
+        };
 
         let buildenv = buildenv_instance();
-        let subst_resp = buildenv.try_substitute_published_pkg(&client, &locked_package);
+        let subst_resp = BuildEnvNix::<PathBuf, Auth>::realise_single_custom_catalog_pkg(
+            &locked_package,
+            buildenv.gc_root_base_path.path(),
+            &store_locations,
+            true,
+            None,
+            Span::current(),
+            &Semaphore::new(1, 1),
+        );
+        eprintln!("RESULT: {subst_resp:?}");
         assert!(matches!(
             subst_resp,
             Err(BuildEnvError::NoPackageStoreLocation(_))
@@ -1392,49 +1542,51 @@ mod realise_nixpkgs_tests {
         let real_storepath = known_store_path();
         let real_storepath_str = real_storepath.to_string_lossy();
         let (locked_package, _) = locked_published_package(Some(&real_storepath_str));
-        let mut client = MockClient::new();
-        let mut resp = StoreInfoResponse {
-            items: std::collections::HashMap::new(),
+        let store_locations = {
+            let mut map = HashMap::new();
+            // This is a trick for a known storepath
+            map.insert(real_storepath_str.to_string(), vec![
+                // Put something invalid first, to test that we try all locations
+                StoreInfo {
+                    url: Some("blasphemy*".to_string()),
+                    auth: None,
+                    catalog: None,
+                    package: None,
+                    public_keys: None,
+                },
+                StoreInfo {
+                    url: Some("daemon".to_string()),
+                    auth: None,
+                    catalog: None,
+                    package: None,
+                    public_keys: None,
+                },
+            ]);
+            map
         };
 
-        // This is a trick for a known storepath
-        resp.items.insert(real_storepath_str.to_string(), vec![
-            // Put something invalid first, to test that we try all locations
-            StoreInfo {
-                url: Some("blasphemy*".to_string()),
-                auth: None,
-                catalog: None,
-                package: None,
-                public_keys: None,
-            },
-            StoreInfo {
-                url: Some("daemon".to_string()),
-                auth: None,
-                catalog: None,
-                package: None,
-                public_keys: None,
-            },
-        ]);
-        client.push_store_info_response(resp);
-
         let buildenv = buildenv_instance();
-        let subst_resp = buildenv
-            .try_substitute_published_pkg(&client, &locked_package)
-            .unwrap();
-        assert!(subst_resp);
+        let dummy_netrc = Some(&PathBuf::from("/netrc"));
+        let subst_resp = BuildEnvNix::<PathBuf, Auth>::realise_single_custom_catalog_pkg(
+            &locked_package,
+            buildenv.gc_root_base_path.path(),
+            &store_locations,
+            true,
+            dummy_netrc,
+            Span::current(),
+            &Semaphore::new(1, 1),
+        );
+        eprintln!("RESULT: {subst_resp:?}");
+        assert!(subst_resp.is_ok());
     }
 
     #[test]
     fn nixpkgs_published_pkg_cache_download_failure() {
-        let (locked_package, manifest_package) = locked_published_package(None);
-        let mut client = MockClient::new();
-        let mut resp = StoreInfoResponse {
-            items: std::collections::HashMap::new(),
-        };
-
-        // This is a trick for a known storepath
-        resp.items
-            .insert(locked_package.outputs["out"].clone(), vec![
+        let (locked_package, _) = locked_published_package(None);
+        let store_locations = {
+            let mut map = HashMap::new();
+            // This is a trick for a known storepath
+            map.insert(locked_package.outputs["out"].clone(), vec![
                 // Put something invalid first, to test that we try all locations
                 // FIXME: uncomment this once the catalog can tell us which stores
                 //        require auth and which ones don't
@@ -1449,14 +1601,18 @@ mod realise_nixpkgs_tests {
                     public_keys: None,
                 },
             ]);
-        client.push_store_info_response(resp);
+            map
+        };
 
         let buildenv = buildenv_instance();
-        let result = buildenv.realise_nixpkgs(
-            &client,
-            &manifest_package,
+        let result = BuildEnvNix::<PathBuf, Auth>::realise_single_custom_catalog_pkg(
             &locked_package,
-            &Default::default(),
+            buildenv.gc_root_base_path.path(),
+            &store_locations,
+            true,
+            None,
+            Span::current(),
+            &Semaphore::new(1, 1),
         );
         assert!(matches!(
             result,
@@ -1563,6 +1719,7 @@ mod realise_flakes_tests {
                     ),
                     systems: None,
                     priority: None,
+                    outputs: None,
                 })
                 .unwrap();
 
@@ -1620,7 +1777,7 @@ mod realise_flakes_tests {
             "store path should be invalid before building"
         );
 
-        let result = buildenv.realise_flakes(&locked_package, &Default::default());
+        let result = buildenv.realise_flake(&locked_package, &Default::default());
         assert!(
             result.is_ok(),
             "failed to build flake: {}",
@@ -1640,7 +1797,7 @@ mod realise_flakes_tests {
             .succeed_build(false)
             .build();
         let buildenv = buildenv_instance();
-        let result = buildenv.realise_flakes(&locked_package, &Default::default());
+        let result = buildenv.realise_flake(&locked_package, &Default::default());
         let err = result.expect_err("realising flake should fail");
         assert!(matches!(err, BuildEnvError::Realise2 { .. }));
     }
@@ -1661,7 +1818,7 @@ mod realise_flakes_tests {
             "store path should be invalid before building"
         );
 
-        let result = buildenv.realise_flakes(&locked_package, &Default::default());
+        let result = buildenv.realise_flake(&locked_package, &Default::default());
         let err = result.expect_err("realising flake should fail");
         assert!(matches!(err, BuildEnvError::Realise2 { .. }));
     }
@@ -1685,7 +1842,7 @@ mod realise_flakes_tests {
             "store path should be valid before building"
         );
 
-        let result = buildenv.realise_flakes(&locked_package, &Default::default());
+        let result = buildenv.realise_flake(&locked_package, &Default::default());
         assert!(result.is_ok(), "failed to skip building flake");
     }
 }
@@ -1696,6 +1853,7 @@ mod realise_store_path_tests {
 
     use super::*;
     use crate::models::manifest::typed::DEFAULT_PRIORITY;
+    use crate::providers::auth::Auth;
 
     fn mock_store_path(valid: bool) -> LockedPackageStorePath {
         LockedPackageStorePath {
@@ -1717,10 +1875,16 @@ mod realise_store_path_tests {
 
         // show that the store path is valid
         assert!(buildenv.check_store_path([&locked.store_path]).unwrap());
+        let span = info_span!("dummy");
 
-        buildenv
-            .realise_store_path(&locked, &Default::default())
-            .expect("an existing store path should realise");
+        BuildEnvNix::<PathBuf, Auth>::realise_single_store_path(
+            &locked,
+            buildenv.gc_root_base_path.path(),
+            &Default::default(),
+            span,
+            &Semaphore::new(1, 1),
+        )
+        .expect("an existing store path should realise");
     }
 
     #[test]
@@ -1730,10 +1894,16 @@ mod realise_store_path_tests {
 
         // show that the store path is invalid
         assert!(!buildenv.check_store_path([&locked.store_path]).unwrap());
+        let span = info_span!("dummy");
 
-        let result = buildenv
-            .realise_store_path(&locked, &Default::default())
-            .expect_err("invalid store path should fail to realise");
+        let result = BuildEnvNix::<PathBuf, Auth>::realise_single_store_path(
+            &locked,
+            buildenv.gc_root_base_path.path(),
+            &Default::default(),
+            span,
+            &Semaphore::new(1, 1),
+        )
+        .expect_err("invalid store path should fail to realise");
         assert!(matches!(result, BuildEnvError::Realise2 { .. }));
     }
 }
@@ -2051,6 +2221,221 @@ mod buildenv_tests {
             "expected output to contain an error message\n\
             actual: {output}\n\
             expected: {expected}"
+        );
+    }
+
+    #[test]
+    fn v2_manifest_default_outputs_includes_man() {
+        let buildenv = buildenv_instance();
+        let client = MockClient::new();
+
+        // Get a v2 lockfile with no outputs specified (should use outputs_to_install)
+        let lockfile_path = GENERATED_DATA.join("envs/bash_v2_default/manifest.lock");
+
+        let result = buildenv.build(&client, &lockfile_path, None);
+        assert!(
+            result.is_ok(),
+            "environment should build successfully: {}",
+            result.as_ref().unwrap_err()
+        );
+
+        let outputs = result.unwrap();
+        let runtime = outputs.runtime.as_ref();
+        let develop = outputs.develop.as_ref();
+
+        // For the `bash` package the full list of outputs is:
+        //
+        // - out (bin/bash)
+        // - man (share/man)
+        // - info (share/info)
+        // - doc (share/doc)
+        // - dev (include)
+        //
+        // and `outputs_to_install` is:
+        //
+        // - out
+        // - man
+        //
+        // So we expect "out" and "man" to be included by default
+        assert!(
+            runtime.join("bin/bash").exists(),
+            "bin/bash should exist in runtime closure"
+        );
+        assert!(
+            develop.join("bin/bash").exists(),
+            "bin/bash should exist in develop closure"
+        );
+        assert!(
+            runtime.join("share/man").exists(),
+            "share/man should exist in runtime closure"
+        );
+        assert!(
+            develop.join("share/man").exists(),
+            "share/man should exist in develop closure"
+        );
+        // Directories from other outputs shouldn't exist
+        assert!(
+            !runtime.join("share/info").exists(),
+            "share/info should not exist in runtime environment with default outputs"
+        );
+        assert!(
+            !develop.join("share/info").exists(),
+            "share/info should not exist in develop environment with default outputs"
+        );
+        assert!(
+            !runtime.join("share/doc").exists(),
+            "share/doc should not exist in runtime environment with default outputs"
+        );
+        assert!(
+            !develop.join("share/doc").exists(),
+            "share/doc should not exist in develop environment with default outputs"
+        );
+        assert!(
+            !runtime.join("include").exists(),
+            "include should not exist in runtime environment with default outputs"
+        );
+        assert!(
+            !develop.join("include").exists(),
+            "include should not exist in develop environment with default outputs"
+        );
+    }
+
+    #[test]
+    fn v2_manifest_outputs_all_includes_info() {
+        let buildenv = buildenv_instance();
+        let client = MockClient::new();
+
+        // Get a v2 lockfile with outputs = "all"
+        let lockfile_path = GENERATED_DATA.join("envs/bash_v2_all/manifest.lock");
+
+        let result = buildenv.build(&client, &lockfile_path, None);
+        assert!(
+            result.is_ok(),
+            "environment should build successfully: {}",
+            result.as_ref().unwrap_err()
+        );
+
+        let outputs = result.unwrap();
+        let runtime = outputs.runtime.as_ref();
+        let develop = outputs.develop.as_ref();
+
+        // For the `bash` package the full list of outputs is:
+        //
+        // - out (bin/bash)
+        // - man (share/man)
+        // - info (share/info)
+        // - doc (share/doc)
+        // - dev (include)
+        assert!(
+            runtime.join("bin/bash").exists(),
+            "bin/bash should exist in runtime environment with outputs='all'"
+        );
+        assert!(
+            develop.join("bin/bash").exists(),
+            "bin/bash should exist in develop environment with outputs='all'"
+        );
+        assert!(
+            runtime.join("share/man").exists(),
+            "share/man should exist in runtime environment with outputs='all'"
+        );
+        assert!(
+            develop.join("share/man").exists(),
+            "share/man should exist in develop environment with outputs='all'"
+        );
+        assert!(
+            runtime.join("share/info").exists(),
+            "share/info should exist in runtime environment with outputs='all'"
+        );
+        assert!(
+            develop.join("share/info").exists(),
+            "share/info should exist in develop environment with outputs='all'"
+        );
+        assert!(
+            runtime.join("share/doc").exists(),
+            "share/doc should exist in runtime environment with outputs='all'"
+        );
+        assert!(
+            develop.join("share/doc").exists(),
+            "share/doc should exist in develop environment with outputs='all'"
+        );
+        assert!(
+            runtime.join("include").exists(),
+            "include should exist in runtime environment with outputs='all'"
+        );
+        assert!(
+            develop.join("include").exists(),
+            "include should exist in develop environment with outputs='all'"
+        );
+    }
+
+    #[test]
+    fn v2_manifest_outputs_out_only_excludes_others() {
+        let buildenv = buildenv_instance();
+        let client = MockClient::new();
+
+        // Get a v2 lockfile with outputs = ["out"]
+        let lockfile_path = GENERATED_DATA.join("envs/bash_v2_out/manifest.lock");
+
+        let result = buildenv.build(&client, &lockfile_path, None);
+        assert!(
+            result.is_ok(),
+            "environment should build successfully: {}",
+            result.as_ref().unwrap_err()
+        );
+
+        let outputs = result.unwrap();
+        let runtime = outputs.runtime.as_ref();
+        let develop = outputs.develop.as_ref();
+
+        // For the `bash` package the full list of outputs is:
+        //
+        // - out (bin/bash)
+        // - man (share/man)
+        // - info (share/info)
+        // - doc (share/doc)
+        // - dev (include)
+        //
+        // Since we're only including "out", none of the other directories
+        // should exist
+        assert!(
+            runtime.join("bin/bash").exists(),
+            "bin/bash should exist in runtime environment with outputs=['out']"
+        );
+        assert!(
+            develop.join("bin/bash").exists(),
+            "bin/bash should exist in develop environment with outputs=['out']"
+        );
+        assert!(
+            !runtime.join("share/man").exists(),
+            "share/man should not exist in runtime environment with outputs=['out']"
+        );
+        assert!(
+            !develop.join("share/man").exists(),
+            "share/man should not exist in develop environment with outputs=['out']"
+        );
+        assert!(
+            !runtime.join("share/info").exists(),
+            "share/info should not exist in runtime environment with outputs=['out']"
+        );
+        assert!(
+            !develop.join("share/info").exists(),
+            "share/info should not exist in develop environment with outputs=['out']"
+        );
+        assert!(
+            !runtime.join("share/doc").exists(),
+            "share/doc should not exist in runtime environment with outputs=['out']"
+        );
+        assert!(
+            !develop.join("share/doc").exists(),
+            "share/doc should not exist in develop environment with outputs=['out']"
+        );
+        assert!(
+            !runtime.join("include").exists(),
+            "include should not exist in runtime environment with outputs=['out']"
+        );
+        assert!(
+            !develop.join("include").exists(),
+            "include should not exist in develop environment with outputs=['out']"
         );
     }
 }

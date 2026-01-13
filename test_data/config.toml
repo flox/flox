@@ -178,15 +178,15 @@ cmd = '''
 '''
 ignore_cmd_errors = true # build will fail on linux, that's fine
 post_cmd = '''
-    yq -r '.then.body' "$RESPONSE_FILE" | \
+    yq --slurp -r '.[0].then.body' "$RESPONSE_FILE" | \
         jq -c '
             .items[0].messages[].type |= "unknown" |
             .items[0].messages[].message |= "unknown message"
         ' \
         > patched_body.json
-    yq -y \
+    yq --slurp -y \
         --arg body "$(cat patched_body.json)" \
-        'del(.then.header[] | select(.name == "content-length")) | .then.body = $body' \
+        'del(.[0].then.header[] | select(.name == "content-length")) | .[0].then.body = $body | .[]' \
         "$RESPONSE_FILE" > tmp.yaml
     mv tmp.yaml "$RESPONSE_FILE"
 '''
@@ -206,15 +206,15 @@ cmd = '''
 '''
 ignore_cmd_errors = true # build will fail on linux, that's fine
 post_cmd = '''
-    yq -r '.then.body' "$RESPONSE_FILE" | \
+    yq --slurp -r '.[0].then.body' "$RESPONSE_FILE" | \
         jq -c '
             .items[0].messages[].type |= "general" |
             .items[0].messages[].message |= "general message"
         ' \
         > patched_body.json
-    yq -y \
+    yq --slurp -y \
         --arg body "$(cat patched_body.json)" \
-        'del(.then.header[] | select(.name == "content-length")) | .then.body = $body' \
+        'del(.[0].then.header[] | select(.name == "content-length")) | .[0].then.body = $body | .[]' \
         "$RESPONSE_FILE" > tmp.yaml
     mv tmp.yaml "$RESPONSE_FILE"
 '''
@@ -518,6 +518,14 @@ pre_cmd = '''
 '''
 cmd = "flox install zlib"
 
+[init.python_poetry_zlib_libstdc]
+files = ["init/python/common", "init/python/poetry"]
+pre_cmd = '''
+    cp -r {common,poetry}/* .
+    flox init --auto-setup
+'''
+cmd = "flox install zlib gcc-unwrapped"
+
 [init.python_pyproject_pip]
 files = ["init/python/common", "init/python/pyproject-pip"]
 pre_cmd = '''
@@ -532,6 +540,14 @@ pre_cmd = '''
     flox init --auto-setup
 '''
 cmd = "flox install zlib"
+
+[init.python_pyproject_pip_zlib_libstdc]
+files = ["init/python/common", "init/python/pyproject-pip"]
+pre_cmd = '''
+    cp -r {common,pyproject-pip}/* .
+    flox init --auto-setup
+'''
+cmd = "flox install zlib gcc-unwrapped"
 
 [init.python_requirements]
 files = ["init/python/common", "init/python/requirements"]
@@ -548,6 +564,14 @@ pre_cmd = '''
 '''
 cmd = "flox install zlib"
 
+[init.python_requirements_zlib_libstdc]
+files = ["init/python/common", "init/python/requirements"]
+pre_cmd = '''
+    cp -r {common,requirements}/* .
+    flox init --auto-setup
+'''
+cmd = "flox install zlib gcc-unwrapped"
+
 [init.python_requests]
 pre_cmd = '''
     echo requests > requirements.txt
@@ -562,6 +586,45 @@ cmd = "flox edit -f manifest.toml"
 post_cmd = '''
     envs_output_dir="$(dirname $RESPONSE_FILE)"
     env_dir="$envs_output_dir/bash"
+    mkdir -p "$env_dir"
+    cp .flox/env/manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+'''
+
+[envs.bash_v2_default]
+skip_if_output_exists = "envs/bash_v2_default"
+files = ["envs/bash_v2_default/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/bash_v2_default"
+    mkdir -p "$env_dir"
+    cp .flox/env/manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+'''
+
+[envs.bash_v2_all]
+skip_if_output_exists = "envs/bash_v2_all"
+files = ["envs/bash_v2_all/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/bash_v2_all"
+    mkdir -p "$env_dir"
+    cp .flox/env/manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+'''
+
+[envs.bash_v2_out]
+skip_if_output_exists = "envs/bash_v2_out"
+files = ["envs/bash_v2_out/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/bash_v2_out"
     mkdir -p "$env_dir"
     cp .flox/env/manifest.toml "$env_dir/manifest.toml"
     cp .flox/env/manifest.lock "$env_dir/manifest.lock"

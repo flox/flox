@@ -10,14 +10,13 @@ use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironmentError,
     PullResult,
 };
+use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     DOT_FLOX,
-    DotFlox,
     ENVIRONMENT_POINTER_FILENAME,
     Environment,
     EnvironmentError,
-    EnvironmentPointer,
     ManagedPointer,
     create_dot_flox_gitignore,
 };
@@ -29,7 +28,7 @@ use tracing::{debug, info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{ConcreteEnvironment, open_path};
-use crate::commands::SHELL_COMPLETION_DIR;
+use crate::commands::{EnvironmentSelect, environment_description, environment_select};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::{display_chain, format_core_error};
@@ -37,34 +36,35 @@ use crate::utils::message;
 
 #[derive(Debug, Clone, Bpaf)]
 enum PullSelect {
-    New {
-        /// ID of the environment to pull
-        #[bpaf(long, short, argument("owner>/<name"))]
-        remote: RemoteEnvironmentRef,
+    RemoteUpdate {
+        /// Create a copy of the upstream environment.
+        #[bpaf(short, long)]
+        copy: bool,
+
+        #[bpaf(external(environment_select), fallback(Default::default()))]
+        environment: EnvironmentSelect,
     },
     NewAbbreviated {
-        /// ID of the environment to pull
+        #[bpaf(short, long, argument("path"))]
+        dir: Option<PathBuf>,
+
+        /// Create a copy of the upstream environment.
+        #[bpaf(short, long)]
+        copy: bool,
+
+        /// Pull the specified generation instead of the live generation. Must be used with --copy
+        #[bpaf(short, long)]
+        generation: Option<GenerationId>,
+
+        /// Reference of an environment to pull into a directory
         #[bpaf(positional("owner>/<name"))]
         remote: RemoteEnvironmentRef,
     },
-    Existing {},
-}
-
-impl Default for PullSelect {
-    fn default() -> Self {
-        PullSelect::Existing {}
-    }
 }
 
 // Pull environment from FloxHub
 #[derive(Bpaf, Clone)]
 pub struct Pull {
-    /// Directory in which to create a managed environment,
-    /// or directory that already contains a managed environment
-    /// (default: current directory)
-    #[bpaf(long, short, argument("path"), complete_shell(SHELL_COMPLETION_DIR))]
-    dir: Option<PathBuf>,
-
     /// Forcibly pull the environment
     /// When pulling a new environment, adds the system to the manifest if the lockfile is incompatible
     /// and ignores eval and build errors.
@@ -72,15 +72,7 @@ pub struct Pull {
     #[bpaf(long, short)]
     force: bool,
 
-    /// Create a copy of the upstream environment.
-    #[bpaf(short, long)]
-    copy: bool,
-
-    /// Pull the specified generation instead of the live generation. Must be used with --copy
-    #[bpaf(short, long)]
-    generation: Option<GenerationId>,
-
-    #[bpaf(external(pull_select), fallback(Default::default()))]
+    #[bpaf(external(pull_select))]
     pull_select: PullSelect,
 }
 
@@ -97,20 +89,25 @@ impl Pull {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("pull");
 
-        let dir_message = match &self.dir {
-            Some(dir) => format!("{}", dir.display()),
-            None => "the current directory".to_string(),
-        };
-        let dir = match self.dir {
-            Some(dir) => dir,
-            None => std::env::current_dir().context("could not get current directory")?,
-        };
-
         match self.pull_select {
-            PullSelect::New { remote } | PullSelect::NewAbbreviated { remote } => {
-                if self.generation.is_some() && !self.copy {
+            PullSelect::NewAbbreviated {
+                remote,
+                dir,
+                copy,
+                generation,
+            } => {
+                let (dir_message, dir) = match dir {
+                    Some(dir) => (format!("{}", dir.display()), dir),
+                    None => (
+                        "the current directory".to_string(),
+                        std::env::current_dir().context("could not get current directory")?,
+                    ),
+                };
+
+                if generation.is_some() && !copy {
                     bail!("The --generation option can only be used when pulling with --copy");
                 };
+
                 let start_message = format!(
                     "Pulling {env_ref} from {host} into {into_dir}",
                     env_ref = &remote,
@@ -126,44 +123,62 @@ impl Pull {
                         progress = start_message.as_str());
                 let _guard = span.entered();
 
-                Self::pull_new_environment(
-                    &flox,
-                    dir,
-                    remote,
-                    self.copy,
-                    self.force,
-                    self.generation,
-                )?;
+                Self::pull_new_environment(&flox, dir, remote, copy, self.force, generation)?;
             },
-            PullSelect::Existing {} => {
-                debug!("Resolved user intent: pull changes for environment found in {dir:?}");
+            PullSelect::RemoteUpdate { environment, copy } => {
+                let environment = environment.detect_concrete_environment(&flox, "Pull")?;
 
-                let pointer = {
-                    let p = DotFlox::open_in(&dir)?.pointer;
-                    match p {
-                        EnvironmentPointer::Managed(managed_pointer) => managed_pointer,
-                        EnvironmentPointer::Path(_) => bail!("Cannot pull into a path environment"),
-                    }
-                };
+                if let ConcreteEnvironment::Path(environment) = environment {
+                    bail!(
+                        "Environment in {} is not connected to FloxHub",
+                        environment
+                            .parent_path()
+                            .expect(".flox is not '/'")
+                            .display()
+                    );
+                }
 
-                if self.copy {
+                debug!(
+                    "Resolved user intent: pull updates for existing environment {env_ref:?}",
+                    env_ref = environment_description(&environment)
+                );
+
+                if copy {
                     debug!("`--copy` provided. converting to path environment, skipping pull");
-                    let env =
-                        ManagedEnvironment::open(&flox, pointer.clone(), dir.join(DOT_FLOX), None)?;
-                    env.into_path_environment(&flox)?;
+
+                    let ConcreteEnvironment::Managed(managed_environment) = environment else {
+                        bail!("Can only convert FloxHub environments in local directories");
+                    };
+
+                    let pointer = managed_environment.pointer().clone();
+                    managed_environment.into_path_environment(&flox)?;
 
                     message::created(formatdoc! {"
                         Created path environment from {owner}/{name}.
                     ", owner = pointer.owner, name = pointer.name});
-                    return Ok(());
-                }
 
-                Self::pull_existing_environment(
-                    &flox,
-                    dir.join(DOT_FLOX),
-                    pointer.clone(),
-                    self.force,
-                )?;
+                    return Ok(());
+                };
+
+                match environment {
+                    ConcreteEnvironment::Path(_) => {
+                        unreachable!("patch environments should be filtered out")
+                    },
+                    ConcreteEnvironment::Managed(managed_environment) => {
+                        Self::pull_managed_environment_updates(
+                            &flox,
+                            managed_environment,
+                            self.force,
+                        )?
+                    },
+                    ConcreteEnvironment::Remote(remote_environment) => {
+                        Self::pull_remote_environment_updates(
+                            &flox,
+                            remote_environment,
+                            self.force,
+                        )?
+                    },
+                }
             },
         }
 
@@ -174,34 +189,21 @@ impl Pull {
     ///
     /// Opens the environment and calls [ManagedEnvironment::pull] on it,
     /// which will update the lockfile.
-    fn pull_existing_environment(
+    fn pull_managed_environment_updates(
         flox: &Flox,
-        dot_flox_path: PathBuf,
-        pointer: ManagedPointer,
+        mut env: ManagedEnvironment,
         force: bool,
     ) -> Result<(), EnvironmentError> {
-        let mut env = ManagedEnvironment::open(flox, pointer.clone(), dot_flox_path, None)?;
-
         let state = env.pull(flox, force)?;
 
         match state {
             PullResult::Updated => {
-                // Only build if the environment was updated
-                //
-                // Build errors are _not_ handled here
-                // as it is assumed that environments were validated during push.
-
-                // The pulled generation already has a lock,
-                // so we can skip locking.
-                let store_paths = env.build(flox)?;
-                env.link(&store_paths)?;
-
                 message::updated(formatdoc! {"
-                    Pulled {owner}/{name} from {floxhub_host}{suffix}
+                    Pulled {env_ref} from {floxhub_host}{suffix}
 
                     You can activate this environment with 'flox activate'
                     ",
-                    owner = pointer.owner, name = pointer.name,
+                    env_ref = env.env_ref(),
                     floxhub_host = flox.floxhub.base_url(),
                     suffix = if force { " (forced)" } else { "" }
                 });
@@ -210,8 +212,46 @@ impl Pull {
             },
             PullResult::UpToDate => {
                 message::warning(formatdoc! {"
-                            {owner}/{name} is already up to date.
-                        ", owner = pointer.owner, name = pointer.name});
+                    {env_ref} is already up to date.
+                ", env_ref=env.env_ref()});
+            },
+        }
+
+        Ok(())
+    }
+
+    /// Pull updates for a cached remote environment
+    ///
+    /// Opens a cached remote environment and pulls the latest changes from FloxHub.
+    fn pull_remote_environment_updates(
+        flox: &Flox,
+        mut env: RemoteEnvironment,
+        force: bool,
+    ) -> Result<()> {
+        // Open the remote environment and pull updates
+        let env_ref = env.env_ref();
+
+        let pull_result = env.pull(flox, force)?;
+
+        match pull_result {
+            PullResult::Updated => {
+                // Note: RemoteEnvironment::pull() already updates the out links via update_out_link()
+
+                message::updated(formatdoc! {"
+                    Pulled {env_ref} from {floxhub_host}{suffix}
+
+                    You can activate this environment with 'flox activate -r {env_ref}'
+                    ",
+                    floxhub_host = flox.floxhub.base_url(),
+                    suffix = if force { " (forced)" } else { "" }
+                });
+
+                warn_manifest_changes_for_services(flox, &env);
+            },
+            PullResult::UpToDate => {
+                message::info(formatdoc! {"
+                    {env_ref} is already up to date.
+                "});
             },
         }
 

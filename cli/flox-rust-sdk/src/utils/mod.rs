@@ -12,6 +12,7 @@ use std::time::SystemTime;
 use std::{env, fs, io};
 
 pub use flox_core::traceable_path;
+use serde::Serialize;
 use thiserror::Error;
 use tracing::{debug, trace};
 use walkdir;
@@ -246,6 +247,16 @@ where
     {
         WireTap::tap_lines(self, tap_fn)
     }
+}
+
+/// Call serde_json::to_string_pretty and append a newline
+pub fn serialize_json_with_newline<T>(value: &T) -> Result<String, serde_json::Error>
+where
+    T: ?Sized + Serialize,
+{
+    let mut serialized = serde_json::to_string_pretty(value)?;
+    serialized.push('\n');
+    Ok(serialized)
 }
 
 #[cfg(test)]

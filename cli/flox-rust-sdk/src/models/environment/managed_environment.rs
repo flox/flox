@@ -2,9 +2,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{fs, io};
 
-use flox_core::Version;
-use fslock::LockFile;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, instrument};
 
@@ -43,26 +40,21 @@ use super::{
 use crate::data::CanonicalPath;
 use crate::flox::{Flox, RemoteEnvironmentRef};
 use crate::models::env_registry::{EnvRegistryError, deregister, ensure_registered};
+use crate::models::environment::floxmeta_branch::{
+    FloxmetaBranch,
+    FloxmetaBranchError,
+    GenerationLock,
+    remote_branch_name,
+    write_generation_lock,
+};
 use crate::models::environment::{LOCKFILE_FILENAME, copy_dir_recursive};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
-use crate::models::floxmeta::{
-    BRANCH_NAME_PATH_SEPARATOR,
-    FloxMeta,
-    FloxMetaError,
-    floxmeta_dir,
-    floxmeta_git_options,
-};
+use crate::models::floxmeta::{FloxMetaError, floxmeta_git_options};
 use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, FlakePackage, PackageToInstall, StorePath};
 use crate::models::manifest::typed::IncludeDescriptor;
 use crate::providers::buildenv::BuildEnvOutputs;
-use crate::providers::git::{
-    GitCommandBranchHashError,
-    GitCommandError,
-    GitProvider,
-    GitRemoteCommandError,
-    PushFlag,
-};
+use crate::providers::git::{GitCommandError, GitProvider, GitRemoteCommandError, PushFlag};
 
 pub const GENERATION_LOCK_FILENAME: &str = "env.lock";
 
@@ -72,7 +64,7 @@ pub struct ManagedEnvironment {
     path: CanonicalPath,
     rendered_env_links: RenderedEnvironmentLinks,
     pointer: ManagedPointer,
-    floxmeta: FloxMeta,
+    floxmeta_branch: FloxmetaBranch,
     include_fetcher: IncludeFetcher,
     /// Specific generation to use, i.e. from `flox activate`
     /// This doesn't represent the live generation.
@@ -81,38 +73,15 @@ pub struct ManagedEnvironment {
 
 #[derive(Debug, Error)]
 pub enum ManagedEnvironmentError {
-    #[error("failed to lock floxmeta git repo")]
-    LockFloxmeta(fslock::Error),
-    #[error("failed to open floxmeta git repo: {0}")]
-    OpenFloxmeta(FloxMetaError),
+    #[error(transparent)]
+    FloxmetaBranch(#[from] FloxmetaBranchError),
+
     #[error("failed to update floxmeta git repo: {0}")]
     UpdateFloxmeta(FloxMetaError),
-    #[error("failed to fetch environment: {0}")]
-    Fetch(GitRemoteCommandError),
-    #[error("failed to check for git revision: {0}")]
-    CheckGitRevision(GitCommandError),
-    #[error("failed to check for branch existence")]
-    CheckBranchExists(#[source] GitCommandBranchHashError),
-    #[error(
-        "can't find local_rev specified in lockfile; local_rev could have been mistakenly committed on another machine"
-    )]
-    LocalRevDoesNotExist,
-    #[error(
-        "can't find environment at revision specified in lockfile; this could have been caused by force pushing"
-    )]
-    RevDoesNotExist,
-    #[error("invalid {0} file: {filename}", filename = GENERATION_LOCK_FILENAME)]
-    InvalidLock(serde_json::Error),
-    #[error("failed to read pointer lockfile")]
-    ReadPointerLock(#[source] io::Error),
     #[error("internal error: {0}")]
     Git(GitCommandError),
-    #[error("internal error: {0}")]
-    GitBranchHash(GitCommandBranchHashError),
     #[error("couldn't write environment lockfile: {0}")]
     WriteLock(io::Error),
-    #[error("couldn't serialize environment lockfile: {0}")]
-    SerializeLock(serde_json::Error),
     #[error("couldn't create symlink to project: {0}")]
     ReverseLink(std::io::Error),
     #[error("couldn't create links directory: {0}")]
@@ -216,37 +185,6 @@ pub enum ManagedEnvironmentError {
 pub struct DivergedMetadata {
     pub local: AllGenerationsMetadata,
     pub remote: AllGenerationsMetadata,
-}
-
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
-pub struct GenerationLock {
-    /// Revision of the environment on FloxHub.
-    /// This could be stale if the environment has since been changed.
-    rev: String,
-    /// Revision of the environment in local floxmeta repository.
-    /// Since an environment can be pulled into multiple different directories
-    /// locally, each could have its own local_rev if the environments are
-    /// modified.
-    /// This is changed when the environment is modified locally,
-    /// so it can diverge from both the remote environment and other copies of
-    /// the environment pulled into other directories.
-    local_rev: Option<String>,
-    version: Version<1>,
-}
-
-impl GenerationLock {
-    fn read_maybe(path: impl AsRef<Path>) -> Result<Option<Self>, ManagedEnvironmentError> {
-        let lock_contents = match fs::read(path) {
-            Ok(contents) => contents,
-            Err(err) => match err.kind() {
-                io::ErrorKind::NotFound => return Ok(None),
-                _ => Err(ManagedEnvironmentError::ReadPointerLock(err))?,
-            },
-        };
-        serde_json::from_slice(&lock_contents)
-            .map(Some)
-            .map_err(ManagedEnvironmentError::InvalidLock)
-    }
 }
 
 impl Environment for ManagedEnvironment {
@@ -470,12 +408,7 @@ impl Environment for ManagedEnvironment {
                 .add_generation(&mut local_checkout, change)
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
-            write_pointer_lockfile(
-                self.path.join(GENERATION_LOCK_FILENAME),
-                &self.floxmeta,
-                remote_branch_name(&self.pointer),
-                branch_name(&self.pointer, &self.path).into(),
-            )?;
+            self.lock_pointer()?;
         }
         Ok(result)
     }
@@ -515,12 +448,7 @@ impl Environment for ManagedEnvironment {
                 .add_generation(&mut local_checkout, change)
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
-            write_pointer_lockfile(
-                self.path.join(GENERATION_LOCK_FILENAME),
-                &self.floxmeta,
-                remote_branch_name(&self.pointer),
-                branch_name(&self.pointer, &self.path).into(),
-            )?;
+            self.lock_pointer()?;
         }
 
         Ok(result)
@@ -662,9 +590,9 @@ impl Environment for ManagedEnvironment {
         fs::remove_dir_all(&self.path)
             .map_err(|e| ManagedEnvironmentError::DeleteEnvironment(self.path.to_path_buf(), e))?;
 
-        self.floxmeta
-            .prune_branches(&self.pointer, &self.path)
-            .map_err(ManagedEnvironmentError::UpdateFloxmeta)?;
+        self.floxmeta_branch
+            .delete()
+            .map_err(ManagedEnvironmentError::FloxmetaBranch)?;
 
         deregister(flox, &self.path, &EnvironmentPointer::Managed(self.pointer))?;
 
@@ -721,6 +649,18 @@ impl GenerationsExt for ManagedEnvironment {
         Ok(())
     }
 
+    fn remote_lockfile_contents_for_current_generation(&self) -> Result<String, GenerationsError> {
+        self.floxmeta_branch
+            .remote_generations()
+            .current_gen_lockfile()
+    }
+
+    fn remote_manifest_contents_for_current_generation(&self) -> Result<String, GenerationsError> {
+        self.floxmeta_branch
+            .remote_generations()
+            .current_gen_manifest()
+    }
+
     fn lockfile_contents_for_generation(
         &self,
         generation: usize,
@@ -768,6 +708,12 @@ impl GenerationsExt for ManagedEnvironment {
         CoreEnvironment::link(&rendered_env_links.runtime, &store_paths.runtime)?;
 
         Ok(rendered_env_links)
+    }
+
+    fn remote_generations_metadata(
+        &self,
+    ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
+        self.floxmeta_branch.remote_generations().metadata()
     }
 }
 
@@ -822,34 +768,6 @@ impl ManagedEnvironment {
         path_hash(&self.path)
     }
 
-    /// Ensure sequential writing access to the underlying floxmeta.
-    /// Currently used in [ManagedEnvironment::open] to avoid race conditions,
-    /// when multiple processes try to initialize a user's floxmeta.
-    ///
-    /// Git has limited safeguards for this situation,
-    /// most of which are to detect concurrent usage via file locks,
-    /// fail fast and clean up intermediate state if possible.
-    /// It is unclear to which extend flox should inherit or prevent this behavior.
-    /// Short term this is used during environment opening of environments only,
-    /// a broader solution (e.g. on a per environment/command level)
-    /// might follow later when requirements are clearer
-    #[instrument(fields(progress = "Waiting for lock to open or create Flox remote metadata"))]
-    fn require_floxmeta_lock(repo_path: &Path) -> Result<LockFile, ManagedEnvironmentError> {
-        let mut lock = LockFile::open(
-            &repo_path.with_file_name(
-                repo_path
-                    .file_name()
-                    .expect("path is non-empty")
-                    .to_string_lossy()
-                    .into_owned()
-                    + ".lock",
-            ),
-        )
-        .map_err(ManagedEnvironmentError::LockFloxmeta)?;
-        lock.lock().map_err(ManagedEnvironmentError::LockFloxmeta)?;
-        Ok(lock)
-    }
-
     /// Open a managed environment by reading its lockfile and ensuring there is
     /// a unique branch to track its state in floxmeta.
     ///
@@ -880,56 +798,24 @@ impl ManagedEnvironment {
         dot_flox_path: impl AsRef<Path>,
         generation: Option<GenerationId>,
     ) -> Result<Self, EnvironmentError> {
-        let _lock = Self::require_floxmeta_lock(&floxmeta_dir(flox, &pointer.owner));
-
-        let existing_floxmeta = match FloxMeta::open(flox, &pointer) {
-            Ok(floxmeta) => Some(floxmeta),
-            Err(FloxMetaError::NotFound(_)) => None,
-            Err(FloxMetaError::FetchBranch(GitRemoteCommandError::AccessDenied)) => {
-                return Err(EnvironmentError::ManagedEnvironment(
-                    ManagedEnvironmentError::AccessDenied,
-                ))?;
-            },
-            Err(FloxMetaError::FetchBranch(GitRemoteCommandError::RefNotFound(_))) => {
-                return Err(EnvironmentError::ManagedEnvironment(
-                    ManagedEnvironmentError::UpstreamNotFound {
-                        env_ref: pointer.into(),
-                        upstream: flox.floxhub.base_url().to_string(),
-                        user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
-                    },
-                ))?;
-            },
-            Err(e) => return Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
-        };
-
-        let floxmeta = match existing_floxmeta {
-            Some(floxmeta) => floxmeta,
-            None => {
-                debug!("cloning floxmeta for {}", &pointer.owner);
-                match FloxMeta::clone(flox, &pointer) {
-                    Ok(floxmeta) => floxmeta,
-                    Err(FloxMetaError::CloneBranch(GitRemoteCommandError::AccessDenied)) => {
-                        return Err(EnvironmentError::ManagedEnvironment(
-                            ManagedEnvironmentError::AccessDenied,
-                        ))?;
-                    },
-                    Err(FloxMetaError::CloneBranch(GitRemoteCommandError::RefNotFound(_))) => {
-                        return Err(EnvironmentError::ManagedEnvironment(
-                            ManagedEnvironmentError::UpstreamNotFound {
-                                env_ref: pointer.into(),
-                                upstream: flox.floxhub.base_url().to_string(),
-                                user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
-                            },
-                        ))?;
-                    },
-                    Err(e) => Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
-                }
-            },
-        };
-
         let dot_flox_path =
             CanonicalPath::new(dot_flox_path).map_err(ManagedEnvironmentError::CanonicalizePath)?;
 
+        // Read existing lockfile
+        let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
+        let maybe_lock =
+            GenerationLock::read_maybe(&lock_path).map_err(ManagedEnvironmentError::from)?;
+
+        // ALL git validation in ONE call - errors bubble up through ManagedEnvironmentError
+        let (floxmeta_branch, validated_lock) =
+            FloxmetaBranch::new(flox, &pointer, &dot_flox_path, maybe_lock)
+                .map_err(ManagedEnvironmentError::from)?;
+
+        // Write validated lock
+        write_generation_lock(&lock_path, &validated_lock)
+            .map_err(ManagedEnvironmentError::from)?;
+
+        // Setup rendered_env_links
         let rendered_env_links = {
             let run_dir = dot_flox_path.join(GCROOTS_DIR_NAME);
             if !run_dir.exists() {
@@ -961,9 +847,10 @@ impl ManagedEnvironment {
         let include_fetcher = IncludeFetcher {
             base_directory: Some(parent_directory.to_path_buf()),
         };
+
         Self::open_with(
-            floxmeta,
             flox,
+            floxmeta_branch,
             pointer,
             dot_flox_path,
             rendered_env_links,
@@ -973,25 +860,19 @@ impl ManagedEnvironment {
         .map_err(EnvironmentError::ManagedEnvironment)
     }
 
-    /// Open a managed environment backed by a provided floxmeta clone.
-    /// Ensure a branch for the environment exists in floxmeta and that there is
-    /// a _unique_ branch to track its state.
+    /// Open a managed environment backed by a provided floxmeta_branch.
     ///
     /// This method is primarily useful for testing.
     /// In most cases, you want to use [`ManagedEnvironment::open`] instead which provides the flox defaults.
     pub fn open_with(
-        floxmeta: FloxMeta,
         flox: &Flox,
+        floxmeta_branch: FloxmetaBranch,
         pointer: ManagedPointer,
         dot_flox_path: CanonicalPath,
         rendered_env_links: RenderedEnvironmentLinks,
         include_fetcher: IncludeFetcher,
         generation: Option<GenerationId>,
     ) -> Result<Self, ManagedEnvironmentError> {
-        let lock = Self::ensure_generation_locked(&pointer, &dot_flox_path, &floxmeta)?;
-
-        Self::ensure_branch(&branch_name(&pointer, &dot_flox_path), &lock, &floxmeta)?;
-
         ensure_registered(
             flox,
             &dot_flox_path,
@@ -1002,179 +883,12 @@ impl ManagedEnvironment {
             path: dot_flox_path,
             rendered_env_links,
             pointer,
-            floxmeta,
+            floxmeta_branch,
             include_fetcher,
             generation,
         };
 
         Ok(env)
-    }
-
-    /// Ensure:
-    /// - a lockfile exists, creating one if necessary
-    /// - the commit in the lockfile (`local_rev` or `rev`) exists in floxmeta
-    ///
-    /// This may perform a fetch to update the sync branch if
-    /// * the lockfile contains a `rev` that is not in the floxmeta clone on the local machine
-    /// * no lockfile exists
-    ///
-    /// Committing a lockfile with a local revision
-    /// will evoke an error on any but the original machine.
-    ///
-    /// Currently we can only recommend to not commit lockfiles with a local revision.
-    /// This behavior may change in the future.
-    fn ensure_generation_locked(
-        pointer: &ManagedPointer,
-        dot_flox_path: &CanonicalPath,
-        floxmeta: &FloxMeta,
-    ) -> Result<GenerationLock, ManagedEnvironmentError> {
-        let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
-        let maybe_lock = GenerationLock::read_maybe(&lock_path)?;
-
-        Ok(match maybe_lock {
-            // Use local_rev if we have it
-            Some(lock) if lock.local_rev.is_some() => {
-                // Because a single floxmeta clone contains multiple
-                // environments, `local_rev` might refer to a commit on a
-                // branch for another environment. We protect against this
-                // for `rev` below, but it doesn't seem worth doing so for
-                // `local_rev`, because the environment directory may have
-                // been moved. This means we can't require the commit is on
-                // the {system}.{name}.{encode(project dir)} branch. We
-                // could require the commit to be on some {system}.{name}.*
-                // branch, but that doesn't seem worth the effort.
-                if !floxmeta
-                    .git
-                    // we know local_rev is Some because of the above match
-                    .contains_commit(lock.local_rev.as_ref().unwrap())
-                    .map_err(ManagedEnvironmentError::CheckGitRevision)?
-                {
-                    Err(ManagedEnvironmentError::LocalRevDoesNotExist)?;
-                }
-                lock
-            },
-            // We have rev but not local_rev
-            Some(lock) => {
-                let span = tracing::info_span!(
-                    "ensure_generation_locked::restore_locked",
-                    rev = %lock.rev,
-                    progress = "Fetching locked generation"
-                );
-                let _guard = span.enter();
-
-                let remote_branch = remote_branch_name(pointer);
-                // Check that the commit not only exists but is on the
-                // correct branch - we don't want to allow grabbing commits
-                // from other environments.
-                if !floxmeta
-                    .git
-                    .branch_contains_commit(&lock.rev, &remote_branch)
-                    .map_err(ManagedEnvironmentError::Git)?
-                {
-                    // Maybe the lock refers to a new generation that has
-                    // been pushed, so fetch. We fetch the branch rather
-                    // than the rev because we don't want to grab a commit
-                    // from another environment.
-                    floxmeta
-                        .git
-                        .fetch_ref("dynamicorigin", &format!("+{0}:{0}", remote_branch))
-                        .map_err(|err| match err {
-                            GitRemoteCommandError::Command(e @ GitCommandError::Command(_)) => {
-                                ManagedEnvironmentError::Git(e)
-                            },
-                            _ => ManagedEnvironmentError::Fetch(err),
-                        })?;
-                }
-                // If it still doesn't exist after fetching,
-                // the upstream branch has diverged from the local branch.
-                let in_remote = floxmeta
-                    .git
-                    .branch_contains_commit(&lock.rev, &remote_branch)
-                    .map_err(ManagedEnvironmentError::Git)?;
-
-                if in_remote {
-                    return Ok(lock);
-                }
-
-                // locked reference not found in remote/sync branch
-                // check if it's in the project's branch.
-                // If the project's branch doesn't exist, or the project was moved,
-                // this will still fail to resolve.
-
-                let local_branch = branch_name(pointer, dot_flox_path);
-
-                let has_branch = floxmeta
-                    .git
-                    .has_branch(&local_branch)
-                    .map_err(ManagedEnvironmentError::CheckBranchExists)?;
-
-                let in_local = has_branch
-                    && floxmeta
-                        .git
-                        .branch_contains_commit(&lock.rev, &local_branch)
-                        .map_err(ManagedEnvironmentError::Git)?;
-
-                if !in_remote && !in_local {
-                    Err(ManagedEnvironmentError::RevDoesNotExist)?;
-                };
-
-                lock
-            },
-            // There's no lockfile, so write a new one with whatever remote
-            // branch is after fetching.
-            None => {
-                let span = tracing::info_span!(
-                    "ensure_generation_locked::lock_latest",
-                    progress = "Fetching latest generation"
-                );
-                let _guard = span.enter();
-                let remote_branch = remote_branch_name(pointer);
-
-                floxmeta
-                    .git
-                    .fetch_ref("dynamicorigin", &format!("+{0}:{0}", remote_branch))
-                    .map_err(ManagedEnvironmentError::Fetch)?;
-
-                // Fresh lockfile, so we don't want to set local_rev
-                write_pointer_lockfile(lock_path, floxmeta, remote_branch, None)?
-            },
-        })
-    }
-
-    /// Ensure the branch exists and points at rev or local_rev
-    fn ensure_branch(
-        branch: &str,
-        lock: &GenerationLock,
-        floxmeta: &FloxMeta,
-    ) -> Result<(), ManagedEnvironmentError> {
-        let current_rev = lock.local_rev.as_ref().unwrap_or(&lock.rev);
-        match floxmeta.git.branch_hash(branch) {
-            Ok(ref branch_rev) => {
-                if branch_rev != current_rev {
-                    // Maybe the user pulled a new lockfile or there was a race with
-                    // another `flox` process and the ManagedLock has now been
-                    // updated.
-                    // TODO need to clarify the meaning of the branch name and what
-                    // guarantees it represents
-                    // For now just point the branch at current_rev.
-                    // We're not discarding work, just allowing it to possibly be
-                    // garbage collected.
-                    floxmeta
-                        .git
-                        .reset_branch(branch, current_rev)
-                        .map_err(ManagedEnvironmentError::Git)?;
-                }
-            },
-            // create branch if it doesn't exist
-            Err(GitCommandBranchHashError::DoesNotExist) => {
-                floxmeta
-                    .git
-                    .create_branch(branch, current_rev)
-                    .map_err(ManagedEnvironmentError::Git)?;
-            },
-            Err(err) => Err(ManagedEnvironmentError::GitBranchHash(err))?,
-        }
-        Ok(())
     }
 
     pub fn env_ref(&self) -> RemoteEnvironmentRef {
@@ -1268,15 +982,10 @@ impl ManagedEnvironment {
         local_checkout.lock(flox)?;
 
         // Ensure the created generation is valid
-        let store_paths = local_checkout
-            .build(flox)
-            .map_err(ManagedEnvironmentError::Build)?;
+        let store_paths = local_checkout.build(flox)?;
 
         // TODO: should use self.link but that returns an EnvironmentError
-        CoreEnvironment::link(&self.rendered_env_links.development, &store_paths.develop)
-            .map_err(ManagedEnvironmentError::Link)?;
-        CoreEnvironment::link(&self.rendered_env_links.runtime, &store_paths.runtime)
-            .map_err(ManagedEnvironmentError::Link)?;
+        self.link(&store_paths)?;
 
         let mut generations = self.generations();
         let mut generations = generations
@@ -1415,13 +1124,9 @@ impl ManagedEnvironment {
     /// Lock the environment to the current revision
     fn lock_pointer(&self) -> Result<(), ManagedEnvironmentError> {
         let lock_path = self.path.join(GENERATION_LOCK_FILENAME);
+        let lock = self.floxmeta_branch.generation_lock()?;
 
-        write_pointer_lockfile(
-            lock_path,
-            &self.floxmeta,
-            remote_branch_name(&self.pointer),
-            branch_name(&self.pointer, &self.path).into(),
-        )?;
+        write_generation_lock(lock_path, &lock)?;
         Ok(())
     }
 
@@ -1437,10 +1142,7 @@ impl ManagedEnvironment {
     }
 
     pub(crate) fn generations(&self) -> Generations {
-        Generations::new(
-            self.floxmeta.git.clone(),
-            branch_name(&self.pointer, &self.path),
-        )
+        self.floxmeta_branch.generations()
     }
 
     fn get_current_generation(
@@ -1458,118 +1160,6 @@ impl ManagedEnvironment {
             .get_current_generation(self.include_fetcher.clone())
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)
     }
-}
-
-/// Write a pointer lockfile to the specified `lock_path`.
-///
-/// The lockfile stores the current git revision of the tracked upstream repository.
-/// When a local revision is specified,
-/// and the local revision is different from the remote revision,
-/// the local revision is also stored in the lockfile.
-///
-/// When committed to a project,
-/// guarantees that the same version of the linked environment
-/// is used by all instances across different machines.
-/// When a local revision is specified,
-/// flox will **try to** use the local revision
-/// rather than the remote revision **failing if it can't**.
-///
-/// Committing a lockfile with a local revision will thus cause flox to fail
-/// if the local revision is not available on the machine,
-/// i.e. any machine other than the one that committed the lockfile.
-/// See [`ManagedEnvironment::ensure_locked`] for more details.
-///
-/// todo: allow updating only the local revision
-/// avoid race conditions where the remote revision is unintentionally updated.
-/// If I pull an environment at rev A,
-/// -> somebody pushes rev B,
-/// -> I do an operation with -r that fetches the environment,
-/// -> and then I make a change that takes me from rev A to rev C,
-/// my lock will set rev to B.
-/// That's undesirable, and rev should always be in local_rev's history.
-fn write_pointer_lockfile(
-    lock_path: PathBuf,
-    floxmeta: &FloxMeta,
-    remote_ref: String,
-    local_ref: Option<String>,
-) -> Result<GenerationLock, ManagedEnvironmentError> {
-    let rev = floxmeta
-        .git
-        .branch_hash(&remote_ref)
-        .map_err(ManagedEnvironmentError::GitBranchHash)?;
-
-    let local_rev = if let Some(ref local_ref) = local_ref {
-        match floxmeta.git.branch_hash(local_ref) {
-            Ok(local_rev) if local_rev == rev => None,
-            Ok(local_rev) => Some(local_rev),
-            Err(err) => Err(ManagedEnvironmentError::GitBranchHash(err))?,
-        }
-    } else {
-        None
-    };
-
-    if let Some(ref local_rev) = local_rev {
-        debug!(
-            "writing pointer lockfile: remote_rev='{rev}', local_rev='{local_rev}', lockfile={lock_path:?}"
-        );
-    } else {
-        debug!(
-            "writing pointer lockfile: remote_rev='{rev}', local_rev=<unset>, ,lockfile={lock_path:?}"
-        );
-    }
-
-    let lock = GenerationLock {
-        rev,
-        local_rev,
-        version: Version::<1> {},
-    };
-
-    {
-        let existing_lock = GenerationLock::read_maybe(&lock_path);
-
-        if matches!(existing_lock, Ok(Some(ref existing_lock)) if existing_lock == &lock) {
-            debug!("skip writing unchanged generation lock");
-            return Ok(lock);
-        }
-    }
-
-    let lock_contents =
-        serde_json::to_string_pretty(&lock).map_err(ManagedEnvironmentError::SerializeLock)?;
-
-    fs::write(lock_path, lock_contents).map_err(ManagedEnvironmentError::WriteLock)?;
-    Ok(lock)
-}
-
-/// Unique branch name for a specific link.
-///
-/// Use this function over [`remote_branch_name`] within the context of an instance of [ManagedEnvironment]
-///
-/// When pulling the same remote environment in multiple directories,
-/// unique copies of the environment are created.
-/// I.e. `install`ing a package in one directory does not affect the other
-/// until synchronized through FloxHub.
-///
-/// `dot_flox_path` is expected to point to the `.flox/` directory
-/// that link to an environment identified by `pointer`.
-pub fn branch_name(pointer: &ManagedPointer, dot_flox_path: &CanonicalPath) -> String {
-    format!(
-        "{}{}{}",
-        pointer.name,
-        BRANCH_NAME_PATH_SEPARATOR,
-        path_hash(dot_flox_path)
-    )
-}
-
-/// The original branch name of an environment that is used to sync an environment with the hub
-///
-/// In most cases [`branch_name`] should be used over this,
-/// within the context of an instance of [ManagedEnvironment].
-///
-/// [`remote_branch_name`] is primarily used when talking to upstream on FloxHub,
-/// during opening to reconciliate with the upstream repo
-/// as well as during [`ManagedEnvironment::pull`].
-pub fn remote_branch_name(pointer: &ManagedPointer) -> String {
-    format!("{}", pointer.name)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1606,6 +1196,16 @@ fn check_for_local_includes(lockfile: &Lockfile) -> Result<(), ManagedEnvironmen
 
 /// FloxHub synchronization implementation (pull/push)
 impl ManagedEnvironment {
+    /// Fetch the remote branch into the local sync branch.
+    /// The sync branch is always a reset to the remote branch
+    /// and it's state should not be depended on.
+    #[instrument(skip(flox), fields(progress = "Looking up environment on FloxHub"))]
+    pub fn fetch_remote_state(&self, flox: &Flox) -> Result<(), ManagedEnvironmentError> {
+        self.floxmeta_branch
+            .fetch_remote_state(flox, &self.pointer)
+            .map_err(ManagedEnvironmentError::FloxmetaBranch)
+    }
+
     /// Create a new [ManagedEnvironment] from a [PathEnvironment]
     /// by pushing the contents of the original environment as a generation to floxhub.
     ///
@@ -1734,28 +1334,17 @@ impl ManagedEnvironment {
         )
         .map_err(ManagedEnvironmentError::WritePointer)?;
 
-        write_pointer_lockfile(
-            dot_flox_path.join(GENERATION_LOCK_FILENAME),
-            &FloxMeta {
-                git: temp_floxmeta_git,
-            },
-            remote_branch_name(&pointer),
-            None,
-        )?;
-
         let env = ManagedEnvironment::open(flox, pointer, dot_flox_path, None)?;
 
         Ok(env)
     }
 
     #[instrument(skip(self, flox), fields(progress = "Pushing updates to FloxHub"))]
-    pub fn push(
-        &mut self,
-        flox: &Flox,
-        force: bool,
-    ) -> Result<PushResult, ManagedEnvironmentError> {
-        let project_branch = branch_name(&self.pointer, &self.path);
-        let sync_branch = remote_branch_name(&self.pointer);
+    pub fn push(&mut self, flox: &Flox, force: bool) -> Result<PushResult, EnvironmentError> {
+        // TODO: move git pushing logic into floxmeta_branch module
+
+        let project_branch = self.floxmeta_branch.branch();
+        let sync_branch = self.floxmeta_branch.remote_branch();
 
         // Ensure the environment builds before we push it,
         // and that it does not include local environments.
@@ -1788,17 +1377,14 @@ impl ManagedEnvironment {
             check_for_local_includes(&lockfile)?;
         }
 
-        // Fetch the remote branch into sync branch
-        match self
-            .floxmeta
-            .git
-            .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}",))
-        {
+        // Fetch the remote branch into sync branch,
+        // we can ignore if the upstream was deleted since we are going to create it on push anyway.
+        match self.fetch_remote_state(flox) {
             Ok(_) => {},
-            Err(GitRemoteCommandError::RefNotFound(_)) => {
+            Err(ManagedEnvironmentError::UpstreamNotFound { .. }) => {
                 debug!("Upstream environment was deleted.")
             },
-            Err(e) => Err(ManagedEnvironmentError::FetchUpdates(e))?,
+            e @ Err(_) => e?,
         };
 
         // Check whether we can fast-forward merge the remote branch into the local branch
@@ -1806,9 +1392,9 @@ impl ManagedEnvironment {
         // if `--force` flag is set we skip this check
         if !force {
             let consistent_history = self
-                .floxmeta
-                .git
-                .branch_contains_commit(&sync_branch, &project_branch)
+                .floxmeta_branch
+                .git()
+                .branch_contains_commit(sync_branch, project_branch)
                 .map_err(ManagedEnvironmentError::Git)?;
 
             if !consistent_history {
@@ -1817,10 +1403,11 @@ impl ManagedEnvironment {
                     .map_err(ManagedEnvironmentError::Generations)?
                     .into_inner();
 
-                let remote = Generations::new(self.floxmeta.git.clone(), sync_branch.clone())
-                    .metadata()
-                    .map_err(ManagedEnvironmentError::Generations)?
-                    .into_inner();
+                let remote =
+                    Generations::new(self.floxmeta_branch.git().clone(), sync_branch.to_owned())
+                        .metadata()
+                        .map_err(ManagedEnvironmentError::Generations)?
+                        .into_inner();
 
                 Err(ManagedEnvironmentError::Diverged(DivergedMetadata {
                     local,
@@ -1830,8 +1417,8 @@ impl ManagedEnvironment {
         }
 
         let push_flag = self
-            .floxmeta
-            .git
+            .floxmeta_branch
+            .git()
             .push_ref(
                 "dynamicorigin",
                 format!("{}:{}", project_branch, sync_branch),
@@ -1859,11 +1446,9 @@ impl ManagedEnvironment {
     ///
     /// If `force == true`, the pull will proceed even if the environment has diverged.
     #[instrument(skip(self, flox), fields(progress = "Pulling updates from FloxHub"))]
-    pub fn pull(
-        &mut self,
-        flox: &Flox,
-        force: bool,
-    ) -> Result<PullResult, ManagedEnvironmentError> {
+    pub fn pull(&mut self, flox: &Flox, force: bool) -> Result<PullResult, EnvironmentError> {
+        // TODO: move git pull logic into floxmeta_branch module
+
         // Check whether the local checkout is in sync with the current generation
         // before potentially updating generations and resetting the local checkout.
         let generations = self.generations();
@@ -1875,34 +1460,17 @@ impl ManagedEnvironment {
             Err(ManagedEnvironmentError::CheckoutOutOfSync)?
         }
 
-        let sync_branch = remote_branch_name(&self.pointer);
-        let project_branch = branch_name(&self.pointer, &self.path);
+        let sync_branch = self.floxmeta_branch.remote_branch();
+        let project_branch = self.floxmeta_branch.branch();
 
-        // Fetch the remote branch into the local sync branch.
-        // The sync branch is always a reset to the remote branch
-        // and it's state should not be depended on.
-        match self
-            .floxmeta
-            .git
-            .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}"))
-        {
-            Ok(_) => {},
-            Err(GitRemoteCommandError::RefNotFound(_)) => {
-                Err(ManagedEnvironmentError::UpstreamNotFound {
-                    env_ref: self.env_ref(),
-                    upstream: self.pointer.floxhub_base_url.to_string(),
-                    user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
-                })?
-            },
-            Err(e) => Err(ManagedEnvironmentError::FetchUpdates(e))?,
-        };
+        self.fetch_remote_state(flox)?;
 
         // Check whether we can fast-forward the remote branch to the local branch,
         // if not the environment has diverged.
         let consistent_history = self
-            .floxmeta
-            .git
-            .branch_contains_commit(&project_branch, &sync_branch)
+            .floxmeta_branch
+            .git()
+            .branch_contains_commit(project_branch, sync_branch)
             .map_err(ManagedEnvironmentError::Git)?;
         if !consistent_history && !force {
             let local = generations
@@ -1910,10 +1478,11 @@ impl ManagedEnvironment {
                 .map_err(ManagedEnvironmentError::Generations)?
                 .into_inner();
 
-            let remote = Generations::new(self.floxmeta.git.clone(), sync_branch.clone())
-                .metadata()
-                .map_err(ManagedEnvironmentError::Generations)?
-                .into_inner();
+            let remote =
+                Generations::new(self.floxmeta_branch.git().clone(), sync_branch.to_owned())
+                    .metadata()
+                    .map_err(ManagedEnvironmentError::Generations)?
+                    .into_inner();
 
             Err(ManagedEnvironmentError::Diverged(DivergedMetadata {
                 local,
@@ -1921,8 +1490,8 @@ impl ManagedEnvironment {
             }))?;
         }
 
-        let sync_branch_commit = self.floxmeta.git.branch_hash(&sync_branch).ok();
-        let project_branch_commit = self.floxmeta.git.branch_hash(&project_branch).ok();
+        let sync_branch_commit = self.floxmeta_branch.git().branch_hash(sync_branch).ok();
+        let project_branch_commit = self.floxmeta_branch.git().branch_hash(project_branch).ok();
 
         // Regardless of whether `--force` is set, we want to accurately return UpToDate
         // If the checkout is not the same as the current generation, we should
@@ -1932,8 +1501,8 @@ impl ManagedEnvironment {
         }
 
         // update the project branch to the remote branch, using `force` if specified
-        self.floxmeta
-            .git
+        self.floxmeta_branch
+            .git()
             .push_ref(
                 ".",
                 format!("refs/heads/{sync_branch}:refs/heads/{project_branch}",),
@@ -1941,9 +1510,11 @@ impl ManagedEnvironment {
             )
             .map_err(ManagedEnvironmentError::ApplyUpdates)?;
 
-        // update the pointer lockfile
+        // update the pointer lockfile and build
         self.lock_pointer()?;
         self.reset_local_env_to_current_generation(flox)?;
+        let store_paths = self.build(flox)?;
+        self.link(&store_paths)?;
 
         Ok(PullResult::Updated)
     }
@@ -1966,9 +1537,9 @@ impl ManagedEnvironment {
 
         // remove the environment branch
         // this can be recovered from the generation lock
-        self.floxmeta
-            .prune_branches(&self.pointer, &self.path)
-            .unwrap();
+        self.floxmeta_branch
+            .delete()
+            .map_err(ManagedEnvironmentError::FloxmetaBranch)?;
 
         fs::remove_file(self.path.join(GENERATION_LOCK_FILENAME))
             .map_err(ManagedEnvironmentError::WriteLock)?;
@@ -1981,7 +1552,7 @@ impl ManagedEnvironment {
         )?;
 
         // create the metadata for a path environment
-        let path_pointer = PathPointer::new(self.name());
+        let path_pointer = PathPointer::new(self.pointer.name);
         fs::write(
             self.path.join(ENVIRONMENT_POINTER_FILENAME),
             serde_json::to_string(&path_pointer)
@@ -2007,12 +1578,12 @@ pub mod test_helpers {
     use super::*;
     use crate::flox::{DEFAULT_FLOXHUB_URL, Floxhub};
     use crate::models::environment::fetcher::test_helpers::mock_include_fetcher;
+    use crate::models::environment::floxmeta_branch::test_helpers::unusable_mock_floxmeta_branch;
     use crate::models::environment::path_environment::test_helpers::{
         new_named_path_environment_from_env_files,
         new_named_path_environment_in,
     };
     use crate::models::environment::test_helpers::new_core_environment;
-    use crate::models::floxmeta::test_helpers::unusable_mock_floxmeta;
 
     /// Get a [ManagedEnvironment] that is invalid but can be used in tests
     /// where methods on [ManagedEnvironment] will never be called.
@@ -2021,6 +1592,7 @@ pub mod test_helpers {
     /// [mock_managed_environment].
     pub fn unusable_mock_managed_environment() -> ManagedEnvironment {
         let floxhub = Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None).unwrap();
+        let floxmeta_branch = unusable_mock_floxmeta_branch();
         ManagedEnvironment {
             path: CanonicalPath::new(PathBuf::from("/")).unwrap(),
             rendered_env_links: RenderedEnvironmentLinks::new_unchecked(
@@ -2032,7 +1604,7 @@ pub mod test_helpers {
                 "test".parse().unwrap(),
                 &floxhub,
             ),
-            floxmeta: unusable_mock_floxmeta(),
+            floxmeta_branch,
             include_fetcher: mock_include_fetcher(),
             generation: None,
         }
@@ -2112,6 +1684,7 @@ mod test {
     use std::collections::BTreeMap;
     use std::str::FromStr;
 
+    use flox_core::Version;
     use indoc::{formatdoc, indoc};
     use test_helpers::{
         mock_managed_environment_from_env_files,
@@ -2156,35 +1729,6 @@ mod test {
         }
     }
 
-    /// Create a .flox directory at dot_flox_path with a pointer
-    /// and optional generation lock.
-    ///
-    /// Mimics the state of a managed environment
-    /// without an existing view of the current generation.
-    fn create_dot_flox(
-        dot_flox_path: &Path,
-        pointer: &ManagedPointer,
-        lock: Option<&GenerationLock>,
-    ) -> CanonicalPath {
-        if !dot_flox_path.exists() {
-            fs::create_dir(dot_flox_path).unwrap();
-        }
-
-        let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
-        fs::write(
-            pointer_path,
-            serde_json::to_string_pretty(&pointer).unwrap(),
-        )
-        .unwrap();
-
-        if let Some(lock) = lock {
-            let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
-            fs::write(lock_path, serde_json::to_string_pretty(lock).unwrap()).unwrap();
-        }
-
-        CanonicalPath::new(dot_flox_path).unwrap()
-    }
-
     /// Create an empty mock remote repository
     fn create_mock_remote(path: impl AsRef<Path>) -> (ManagedPointer, PathBuf, GitCommandProvider) {
         let test_pointer = make_test_pointer(path.as_ref());
@@ -2195,31 +1739,6 @@ mod test {
         fs::create_dir_all(&remote_path).unwrap();
         let remote = GitCommandProvider::init(&remote_path, false).unwrap();
         (test_pointer, remote_path, remote)
-    }
-
-    /// Clone a git repo specified by remote_path into the floxmeta dir
-    /// corresponding to test_pointer,
-    /// and open that as a FloxmetaV2
-    ///
-    /// TODO: creating the remote repo should probably be pulled into this
-    /// function
-    fn create_floxmeta(
-        flox: &Flox,
-        remote_path: &Path,
-        test_pointer: &ManagedPointer,
-        branch: &str,
-    ) -> FloxMeta {
-        let user_floxmeta_dir = floxmeta_dir(flox, &test_pointer.owner);
-        fs::create_dir_all(&user_floxmeta_dir).unwrap();
-        GitCommandProvider::clone_branch(
-            format!("file://{}", remote_path.to_string_lossy()),
-            user_floxmeta_dir,
-            branch,
-            true,
-        )
-        .unwrap();
-
-        FloxMeta::open(flox, test_pointer).unwrap()
     }
 
     fn init_generations_from_core_env(
@@ -2248,472 +1767,6 @@ mod test {
         writable.add_generation(env, HistoryKind::Import).unwrap();
 
         generations
-    }
-
-    /// Test that when ensure_locked has input state of:
-    /// - no lock
-    /// - floxmeta at commit 1
-    /// - remote at commit 2
-    ///
-    /// It results in output state of:
-    /// - lock at commit 2
-    /// - floxmeta at commit 2
-    #[test]
-    fn test_ensure_locked_case_1() {
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        // create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
-
-        let branch = remote_branch_name(&test_pointer);
-        remote.checkout(&branch, true).unwrap();
-        commit_file(&remote, "file 1");
-
-        // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
-
-        // add a second commit to the remote
-        commit_file(&remote, "file 2");
-        let hash_2 = remote.branch_hash(&branch).unwrap();
-
-        // create a .flox directory
-        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
-        let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, None);
-
-        ManagedEnvironment::ensure_generation_locked(&test_pointer, &dot_flox_path, &floxmeta)
-            .unwrap();
-
-        let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
-        let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
-        assert_eq!(lock, GenerationLock {
-            rev: hash_2.clone(),
-            local_rev: None,
-            version: Version::<1> {},
-        });
-
-        assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_2);
-    }
-
-    /// Test that when ensure_locked has input state of:
-    /// - lock at commit 1
-    /// - floxmeta at commit 1
-    /// - remote at commit 1
-    ///
-    /// It results in output state of:
-    /// - lock at commit 1
-    /// - floxmeta at commit 1
-    #[test]
-    fn test_ensure_locked_case_2() {
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        // create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
-
-        let branch = remote_branch_name(&test_pointer);
-        remote.checkout(&branch, true).unwrap();
-        commit_file(&remote, "file 1");
-        let hash_1 = remote.branch_hash(&branch).unwrap();
-
-        // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
-
-        // create a .flox directory
-        let lock = GenerationLock {
-            rev: hash_1.clone(),
-            local_rev: None,
-            version: Version::<1> {},
-        };
-        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
-        let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
-
-        ManagedEnvironment::ensure_generation_locked(&test_pointer, &dot_flox_path, &floxmeta)
-            .unwrap();
-
-        let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
-        let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
-        assert_eq!(lock, GenerationLock {
-            rev: hash_1.clone(),
-            local_rev: None,
-            version: Version::<1> {},
-        });
-
-        assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_1);
-    }
-
-    /// Test that when ensure_locked has input state of:
-    /// - lock at commit 2
-    /// - floxmeta at commit 1
-    /// - remote at commit 3
-    ///
-    /// It results in output state of:
-    /// - lock at commit 2
-    /// - floxmeta at commit 3
-    #[test]
-    fn test_ensure_locked_case_3() {
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        // create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
-
-        let branch = remote_branch_name(&test_pointer);
-        remote.checkout(&branch, true).unwrap();
-        commit_file(&remote, "file 1");
-
-        // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
-
-        // add a second commit to the remote
-        commit_file(&remote, "file 2");
-        let hash_2 = remote.branch_hash(&branch).unwrap();
-
-        // add a third commit to the remote
-        commit_file(&remote, "file 3");
-        let hash_3 = remote.branch_hash(&branch).unwrap();
-
-        // create a .flox directory
-        let lock = GenerationLock {
-            rev: hash_2.clone(),
-            local_rev: None,
-            version: Version::<1> {},
-        };
-        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
-        let dot_flox_path = create_dot_flox(
-            &dot_flox_path,
-            &make_test_pointer(&remote_path),
-            Some(&lock),
-        );
-
-        ManagedEnvironment::ensure_generation_locked(
-            &make_test_pointer(&remote_path),
-            &dot_flox_path,
-            &floxmeta,
-        )
-        .unwrap();
-
-        let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
-        let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
-        assert_eq!(lock, GenerationLock {
-            rev: hash_2,
-            local_rev: None,
-            version: Version::<1> {},
-        });
-
-        assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_3);
-    }
-
-    /// Test that when ensure_locked has input state of:
-    /// - lock at branch_2
-    /// - floxmeta at branch_1
-    /// - remote at branch_1
-    /// - branch_2 present on remote
-    ///
-    /// It results in output state of:
-    /// - error
-    #[test]
-    fn test_ensure_locked_case_4() {
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        // create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
-
-        let branch = remote_branch_name(&test_pointer);
-        remote.checkout(&branch, true).unwrap();
-        commit_file(&remote, "file 1");
-
-        // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
-
-        // add a second branch to the remote
-        remote.checkout("branch_2", true).unwrap();
-        commit_file(&remote, "file 2");
-        let hash_2 = remote.branch_hash("branch_2").unwrap();
-
-        // create a .flox directory
-        let lock = GenerationLock {
-            rev: hash_2,
-            local_rev: None,
-            version: Version::<1> {},
-        };
-        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
-        let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
-
-        assert!(matches!(
-            ManagedEnvironment::ensure_generation_locked(&test_pointer, &dot_flox_path, &floxmeta),
-            Err(ManagedEnvironmentError::RevDoesNotExist)
-        ));
-    }
-
-    /// Test that when ensure_locked has input state of:
-    /// - lock at nonexistent commit
-    /// - floxmeta at commit 1
-    /// - remote at commit 2
-    ///
-    /// It results in output state of:
-    /// - error
-    #[test]
-    fn test_ensure_locked_case_5() {
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        // create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
-
-        let branch = remote_branch_name(&test_pointer);
-        remote.checkout(&branch, true).unwrap();
-        commit_file(&remote, "file 1");
-
-        // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
-
-        // add a second commit to the remote
-        commit_file(&remote, "file 2");
-        let hash_2 = remote.branch_hash(&branch).unwrap();
-
-        // create a .flox directory
-        let lock = GenerationLock {
-            rev: "does not exist".to_string(),
-            local_rev: None,
-            version: Version::<1> {},
-        };
-        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
-        let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
-
-        assert!(matches!(
-            ManagedEnvironment::ensure_generation_locked(&test_pointer, &dot_flox_path, &floxmeta),
-            Err(ManagedEnvironmentError::RevDoesNotExist)
-        ));
-
-        assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_2);
-    }
-
-    /// Test that when ensure_locked has input state of:
-    /// - lock at {rev: commit 1, local_rev: commit 1}
-    /// - floxmeta at commit 1
-    /// - remote at commit 1
-    ///
-    /// It results in output state of:
-    /// - no change
-    #[test]
-    fn test_ensure_locked_case_6() {
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        // create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
-
-        let branch = remote_branch_name(&test_pointer);
-        remote.checkout(&branch, true).unwrap();
-        commit_file(&remote, "file 1");
-        let hash_1 = remote.branch_hash(&branch).unwrap();
-
-        // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
-
-        // create a .flox directory
-        let lock = GenerationLock {
-            rev: hash_1.clone(),
-            local_rev: Some(hash_1.clone()),
-            version: Version::<1> {},
-        };
-        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
-        let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
-
-        ManagedEnvironment::ensure_generation_locked(&test_pointer, &dot_flox_path, &floxmeta)
-            .unwrap();
-
-        let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
-
-        assert_eq!(
-            lock,
-            serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap()
-        );
-
-        assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_1);
-    }
-
-    /// Test that when ensure_locked has input state of:
-    /// - lock at {rev: commit 1, local_rev: does not exist}
-    /// - floxmeta at commit 1
-    /// - remote at commit 1
-    ///
-    /// It results in output state of:
-    /// - error
-    #[test]
-    fn test_ensure_locked_case_7() {
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        // create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
-
-        let branch = remote_branch_name(&test_pointer);
-        remote.checkout(&branch, true).unwrap();
-        commit_file(&remote, "file 1");
-        let hash_1 = remote.branch_hash(&branch).unwrap();
-
-        // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
-
-        // create a .flox directory
-        let lock = GenerationLock {
-            rev: hash_1,
-            local_rev: Some("does not exist".to_string()),
-            version: Version::<1> {},
-        };
-        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
-        let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
-
-        assert!(matches!(
-            ManagedEnvironment::ensure_generation_locked(&test_pointer, &dot_flox_path, &floxmeta),
-            Err(ManagedEnvironmentError::LocalRevDoesNotExist)
-        ));
-    }
-
-    /// Test that when ensure_locked has input state of:
-    /// - lock at { rev: commit A1, local_rev: commit A1 }
-    /// - floxmeta
-    ///   (project) at commit A1
-    ///   (sync) at commit B1
-    /// - remote at commit B1
-    ///
-    /// It results in output state of:
-    /// - lock at { rev: commit A1, local_rev: commit A1 }
-    #[test]
-    fn test_ensure_locked_case_9() {
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        fs::create_dir(flox.temp_dir.join(DOT_FLOX)).unwrap();
-        let dot_flox_path = CanonicalPath::new(flox.temp_dir.join(DOT_FLOX)).unwrap();
-
-        // create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
-
-        let diverged_remote_branch = remote_branch_name(&test_pointer);
-        remote.checkout(&diverged_remote_branch, true).unwrap();
-        commit_file(&remote, "file 1");
-
-        let locked_branch = branch_name(&test_pointer, &dot_flox_path);
-        remote.checkout(&locked_branch, true).unwrap();
-        commit_file(&remote, "file 2");
-        let hash_1 = remote.branch_hash(&locked_branch).unwrap();
-
-        // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &diverged_remote_branch);
-        floxmeta.git.fetch_branch("origin", &locked_branch).unwrap();
-
-        // create a .flox directory
-        let lock = GenerationLock {
-            rev: hash_1,
-            local_rev: None,
-            version: Version::<1> {},
-        };
-        let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
-
-        assert_eq!(
-            ManagedEnvironment::ensure_generation_locked(&test_pointer, &dot_flox_path, &floxmeta)
-                .unwrap(),
-            lock
-        );
-    }
-
-    /// Test that ensure_branch is a no-op with input state:
-    /// - branch at commit 1
-    /// - rev at commit 1
-    /// - local_rev at commit 1
-    #[test]
-    fn test_ensure_branch_noop() {
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        // create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
-
-        let branch = remote_branch_name(&test_pointer);
-        remote.checkout(&branch, true).unwrap();
-        commit_file(&remote, "file 1");
-        let hash_1 = remote.branch_hash(&branch).unwrap();
-
-        // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
-
-        let lock = GenerationLock {
-            rev: hash_1.clone(),
-            local_rev: Some(hash_1.clone()),
-            version: Version::<1> {},
-        };
-        ManagedEnvironment::ensure_branch(&branch, &lock, &floxmeta).unwrap();
-        assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_1);
-    }
-
-    /// Test that with input state:
-    /// - branch at commit 1
-    /// - rev at commit 1
-    /// - local_rev at commit 2
-    ///
-    /// ensure_branch resets the branch to commit 2
-    #[test]
-    fn test_ensure_branch_resets_branch() {
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        // create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
-
-        let branch = remote_branch_name(&test_pointer);
-        remote.checkout(&branch, true).unwrap();
-        commit_file(&remote, "file 1");
-        let hash_1 = remote.branch_hash(&branch).unwrap();
-
-        // add a second branch to the remote
-        remote.checkout("branch_2", true).unwrap();
-        commit_file(&remote, "file 2");
-        let hash_2 = remote.branch_hash("branch_2").unwrap();
-
-        // Create a mock floxmeta (note clone is used instead of clone_branch,
-        // which is used in create_floxmeta, because we need both branches)
-        let user_floxmeta_dir = floxmeta_dir(&flox, &test_pointer.owner);
-        fs::create_dir_all(&user_floxmeta_dir).unwrap();
-        <GitCommandProvider as GitProvider>::clone(
-            format!("file://{}", remote_path.to_string_lossy()),
-            user_floxmeta_dir,
-            true,
-        )
-        .unwrap();
-
-        let floxmeta = FloxMeta::open(&flox, &test_pointer).unwrap();
-
-        let lock = GenerationLock {
-            rev: hash_1,
-            local_rev: Some(hash_2.clone()),
-            version: Version::<1> {},
-        };
-        ManagedEnvironment::ensure_branch(&branch, &lock, &floxmeta).unwrap();
-        assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_2);
-    }
-
-    /// Test that with input state:
-    /// - branch_2 does not exist
-    /// - rev at commit 1
-    /// - local_rev at commit 1
-    ///
-    /// ensure_branch creates branch_2 at commit 1
-    #[test]
-    fn test_ensure_branch_creates_branch() {
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        // create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
-
-        let branch = remote_branch_name(&test_pointer);
-        remote.checkout(&branch, true).unwrap();
-        commit_file(&remote, "file 1");
-        let hash_1 = remote.branch_hash(&branch).unwrap();
-
-        // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
-
-        let lock = GenerationLock {
-            rev: hash_1.clone(),
-            local_rev: Some(hash_1.clone()),
-            version: Version::<1> {},
-        };
-        ManagedEnvironment::ensure_branch("branch_2", &lock, &floxmeta).unwrap();
-        assert_eq!(floxmeta.git.branch_hash("branch_2").unwrap(), hash_1);
     }
 
     /// Test that the manifest content is reset to the current generation
@@ -2932,6 +1985,7 @@ mod test {
                 priority: None,
                 version: None,
                 systems: None,
+                outputs: None,
             }
             .into(),
         );
@@ -3053,26 +2107,28 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         std::fs::create_dir_all(&dot_flox_path).unwrap();
+        let dot_flox_path = CanonicalPath::new(&dot_flox_path).unwrap();
 
         // dummy paths since we are not rendering the environment
         let rendered_env_links =
             RenderedEnvironmentLinks::new_unchecked(PathBuf::new(), PathBuf::new());
 
         // create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let (test_pointer, _remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
         commit_file(&remote, "file 1");
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
+        let (floxmeta_branch, _lock) =
+            FloxmetaBranch::new(&flox, &test_pointer, &dot_flox_path, None).unwrap();
 
         let _env = ManagedEnvironment::open_with(
-            floxmeta,
             &flox,
+            floxmeta_branch,
             test_pointer,
-            CanonicalPath::new(&dot_flox_path).unwrap(),
+            dot_flox_path.clone(),
             rendered_env_links,
             IncludeFetcher {
                 base_directory: Some(dot_flox_path.parent().unwrap().to_path_buf()),
@@ -3094,25 +2150,26 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         std::fs::create_dir_all(&dot_flox_path).unwrap();
+        let dot_flox_path = CanonicalPath::new(&dot_flox_path).unwrap();
 
         // dummy paths since we are not rendering the environment
         let rendered_env_links =
             RenderedEnvironmentLinks::new_unchecked(PathBuf::new(), PathBuf::new());
 
         // create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let (test_pointer, _remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
         commit_file(&remote, "file 1");
 
         // create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
-
+        let (floxmeta_branch, _lock) =
+            FloxmetaBranch::new(&flox, &test_pointer, &dot_flox_path, None).unwrap();
         // Create the registry
         let env = ManagedEnvironment::open_with(
-            floxmeta,
             &flox,
+            floxmeta_branch,
             test_pointer,
             CanonicalPath::new(&dot_flox_path).unwrap(),
             rendered_env_links,
@@ -3148,22 +2205,29 @@ mod test {
             RenderedEnvironmentLinks::new_unchecked(PathBuf::new(), PathBuf::new());
 
         // create a mock remote
-        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        let (test_pointer, _remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let remote_branch = remote_branch_name(&test_pointer);
         remote.checkout(&remote_branch, true).unwrap();
         commit_file(&remote, "file 1");
 
-        let env1_branch = branch_name(&test_pointer, &env1_dir);
-        let env2_branch = branch_name(&test_pointer, &env2_dir);
+        // create a mock floxmeta
+        let (floxmeta_branch_1, _lock) =
+            FloxmetaBranch::new(&flox, &test_pointer, &env1_dir, None).unwrap();
+        let env1_branch = floxmeta_branch_1.branch().to_owned();
 
-        // Create a mock floxmeta
-        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+        let (floxmeta_branch_2, _lock) =
+            FloxmetaBranch::new(&flox, &test_pointer, &env2_dir, None).unwrap();
+        let env2_branch = floxmeta_branch_2.branch().to_owned();
+
+        // both environments refer to the same git repo,
+        // so lets extract a reference to perform assertions against the git state
+        let common_git_repo = floxmeta_branch_1.git().clone();
 
         // Create two environments that use the same pointer.
         let env1 = ManagedEnvironment::open_with(
-            floxmeta.clone(),
             &flox,
+            floxmeta_branch_1,
             test_pointer.clone(),
             env1_dir.clone(),
             rendered_env_links.clone(),
@@ -3174,8 +2238,8 @@ mod test {
         )
         .unwrap();
         let env2 = ManagedEnvironment::open_with(
-            floxmeta.clone(),
             &flox,
+            floxmeta_branch_2,
             test_pointer.clone(),
             env2_dir.clone(),
             rendered_env_links.clone(),
@@ -3187,27 +2251,27 @@ mod test {
         .unwrap();
 
         // All branches should exist.
-        assert!(floxmeta.git.has_branch(&remote_branch).unwrap());
-        assert!(floxmeta.git.has_branch(&env1_branch).unwrap());
-        assert!(floxmeta.git.has_branch(&env2_branch).unwrap());
+        assert!(common_git_repo.has_branch(&remote_branch).unwrap());
+        assert!(common_git_repo.has_branch(&env1_branch).unwrap());
+        assert!(common_git_repo.has_branch(&env2_branch).unwrap());
 
         // env2 is pruned when no longer on disk.
         fs::remove_dir_all(&env2.path).unwrap();
         garbage_collect(&flox).unwrap();
-        assert!(floxmeta.git.has_branch(&remote_branch).unwrap());
-        assert!(floxmeta.git.has_branch(&env1_branch).unwrap());
-        assert!(!floxmeta.git.has_branch(&env2_branch).unwrap());
+        assert!(common_git_repo.has_branch(&remote_branch).unwrap());
+        assert!(common_git_repo.has_branch(&env1_branch).unwrap());
+        assert!(!common_git_repo.has_branch(&env2_branch).unwrap());
 
         // env1 is pruned when no longer on disk, remote is pruned when there
         // are no local branches, and is resilient to the branch not existing,
         // e.g. if the floxmeta repo has been manually deleted or the hashing
         // algorithm has changed in the past.
         fs::remove_dir_all(&env1.path).unwrap();
-        floxmeta.git.delete_branch(&env1_branch, true).unwrap();
+        common_git_repo.delete_branch(&env1_branch, true).unwrap();
         garbage_collect(&flox).unwrap();
-        assert!(!floxmeta.git.has_branch(&remote_branch).unwrap());
-        assert!(!floxmeta.git.has_branch(&env1_branch).unwrap());
-        assert!(!floxmeta.git.has_branch(&env2_branch).unwrap());
+        assert!(!common_git_repo.has_branch(&remote_branch).unwrap());
+        assert!(!common_git_repo.has_branch(&env1_branch).unwrap());
+        assert!(!common_git_repo.has_branch(&env2_branch).unwrap());
     }
 
     #[test]
@@ -3225,7 +2289,7 @@ mod test {
         // - it has a ManagedPointer
         // - it has a generation lock
         // - it has a branch in the git repo
-        let pointer: ManagedPointer = serde_json::from_str(
+        let _pointer: ManagedPointer = serde_json::from_str(
             &fs::read_to_string(environment.path.join(ENVIRONMENT_POINTER_FILENAME)).unwrap(),
         )
         .expect("env pointer should be a managed pointer");
@@ -3235,9 +2299,9 @@ mod test {
         );
         assert!(
             environment
-                .floxmeta
-                .git
-                .has_branch(&branch_name(&pointer, &environment.path))
+                .floxmeta_branch
+                .git()
+                .has_branch(environment.floxmeta_branch.branch())
                 .unwrap()
         );
 
@@ -3245,9 +2309,11 @@ mod test {
         // due to risk of corrupting the state of the git repo.
         // Since the original will be dropped however,
         // its safe to do so in this instance.
-        let git = environment.floxmeta.git.clone();
+        let git = environment.floxmeta_branch.git().clone();
         let path_before = environment.path.clone();
         let out_links_before = environment.rendered_env_links.clone();
+
+        let branch_name = environment.floxmeta_branch.branch().to_owned();
 
         // Convert the environment to a path environment
         let mut path_env = environment.into_path_environment(&flox).unwrap();
@@ -3270,8 +2336,7 @@ mod test {
             "generation lock should be deleted"
         );
         assert!(
-            !git.has_branch(&branch_name(&pointer, &path_env.path))
-                .unwrap(),
+            !git.has_branch(&branch_name).unwrap(),
             "branch should be deleted"
         );
 
@@ -3348,7 +2413,7 @@ mod test {
         let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
 
         assert_eq!(lockfile.manifest, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([("foo".to_string(), "dep".to_string()),])),
             ..Default::default()
         });
@@ -3560,5 +2625,57 @@ mod test {
         });
 
         assert!(floxmeta_dir.exists());
+    }
+
+    /// Test that remote_lockfile_contents_for_current_generation returns remote data, not local
+    #[tokio::test(flavor = "multi_thread")]
+    async fn remote_lockfile_contents_returns_remote_not_local() {
+        use crate::models::lockfile::Lockfile;
+
+        let owner = "owner".parse().unwrap();
+        let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("empty.yaml")).await;
+        let initial_manifest = indoc! {r#"
+            version = 1
+            [install]
+        "#};
+
+        let mut environment = mock_managed_environment_in(
+            &flox,
+            initial_manifest,
+            owner.clone(),
+            &tempdir,
+            Some("test-env"),
+        );
+
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+        environment
+            .install(
+                &[PackageToInstall::parse(&flox.system, "hello").unwrap()],
+                &flox,
+            )
+            .unwrap();
+
+        // Get remote lockfile
+        environment.fetch_remote_state(&flox).unwrap();
+        let remote_lockfile_contents = environment
+            .remote_lockfile_contents_for_current_generation()
+            .unwrap();
+        let remote_lockfile: Lockfile = serde_json::from_str(&remote_lockfile_contents).unwrap();
+
+        // Verify local lockfile has a package
+        let local_lockfile: Lockfile = environment.lockfile(&flox).unwrap().into();
+        let local_packages = local_lockfile.list_packages(&flox.system).unwrap();
+        assert_eq!(local_packages.len(), 1, "Local should have hello");
+
+        // Verify remote lockfile has no packages yet
+        let packages = remote_lockfile.list_packages(&flox.system).unwrap();
+        assert_eq!(
+            packages.len(),
+            0,
+            "Remote should not yet have hello package"
+        );
     }
 }

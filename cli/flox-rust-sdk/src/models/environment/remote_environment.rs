@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
-use tracing::{debug, instrument};
+use tracing::debug;
 
 use super::core_environment::UpgradeResult;
 use super::fetcher::IncludeFetcher;
@@ -31,8 +31,14 @@ use super::{
 };
 use crate::flox::{EnvironmentOwner, Flox, RemoteEnvironmentRef};
 use crate::models::environment::RenderedEnvironmentLink;
+use crate::models::environment::floxmeta_branch::{
+    FloxmetaBranch,
+    FloxmetaBranchError,
+    GenerationLock,
+    write_generation_lock,
+};
+use crate::models::environment::managed_environment::GENERATION_LOCK_FILENAME;
 use crate::models::environment_ref::EnvironmentName;
-use crate::models::floxmeta::{FloxMeta, FloxMetaError};
 use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::PackageToInstall;
 
@@ -47,7 +53,7 @@ pub enum RemoteEnvironmentError {
     CreateGcRootDir(#[source] std::io::Error),
 
     #[error("could not get latest version of environment")]
-    GetLatestVersion(#[source] FloxMetaError),
+    GetLatestVersion(#[source] FloxmetaBranchError),
 
     #[error("could not reset managed environment")]
     ResetManagedEnvironment(#[source] ManagedEnvironmentError),
@@ -85,6 +91,18 @@ pub struct RemoteEnvironment {
 }
 
 impl RemoteEnvironment {
+    /// Check if a remote environment is already cached locally.
+    /// I.e. whether there is a backing managed environment in the cache.
+    pub fn is_cached(flox: &Flox, pointer: &ManagedPointer) -> bool {
+        let path = flox
+            .cache_dir
+            .join(REMOTE_ENVIRONMENT_BASE_DIR)
+            .join(pointer.owner.as_ref())
+            .join(pointer.name.as_ref())
+            .join(DOT_FLOX);
+        path.exists()
+    }
+
     /// Pull a remote environment into a flox-provided managed environment
     /// in `<FLOX_CACHE_DIR>/remote/<owner>/<name>`
     ///
@@ -107,29 +125,34 @@ impl RemoteEnvironment {
     /// Pull a remote environment into a provided (temporary) managed environment.
     /// Constructing a [RemoteEnvironment] _does not_ create a gc-root
     /// or guarantee that the environment is valid.
-    #[instrument(skip_all, fields(progress = "Pulling remote environment"))]
     pub fn new_in(
         flox: &Flox,
         path: impl AsRef<Path>,
         pointer: ManagedPointer,
         generation: Option<GenerationId>,
     ) -> Result<Self, RemoteEnvironmentError> {
-        let floxmeta = match FloxMeta::open(flox, &pointer) {
-            Ok(floxmeta) => floxmeta,
-            Err(FloxMetaError::NotFound(_)) => {
-                debug!("cloning floxmeta for {}", pointer.owner);
-                FloxMeta::clone(flox, &pointer).map_err(RemoteEnvironmentError::GetLatestVersion)?
-            },
-            Err(e) => Err(RemoteEnvironmentError::GetLatestVersion(e))?,
-        };
-
         let path = path.as_ref().join(DOT_FLOX);
         fs::create_dir_all(&path).map_err(RemoteEnvironmentError::CreateTempDotFlox)?;
 
         let dot_flox_path =
             CanonicalPath::new(&path).map_err(RemoteEnvironmentError::InvalidTempPath)?;
 
+        // Read existing lockfile
+        let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
+        let maybe_lock = GenerationLock::read_maybe(&lock_path)
+            .map_err(ManagedEnvironmentError::from)
+            .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
+
+        let (floxmeta_branch, lock) =
+            FloxmetaBranch::new(flox, &pointer, &dot_flox_path, maybe_lock)
+                .map_err(RemoteEnvironmentError::GetLatestVersion)?;
+
+        write_generation_lock(lock_path, &lock)
+            .map_err(ManagedEnvironmentError::from)
+            .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
+
         let pointer_content = serde_json::to_string_pretty(&pointer).unwrap();
+
         fs::write(
             dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME),
             pointer_content,
@@ -164,9 +187,9 @@ impl RemoteEnvironment {
             )
         };
 
-        let mut inner = ManagedEnvironment::open_with(
-            floxmeta,
+        let inner = ManagedEnvironment::open_with(
             flox,
+            floxmeta_branch,
             pointer.clone(),
             dot_flox_path,
             inner_rendered_env_links,
@@ -179,11 +202,8 @@ impl RemoteEnvironment {
         )
         .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
 
-        // (force) Pull latest changes of the environment from upstream.
-        // remote environments stay in sync with upstream without providing a local staging state.
-        inner
-            .pull(flox, true)
-            .map_err(RemoteEnvironmentError::ResetManagedEnvironment)?;
+        // Note: Remote environments used to get reset to the latest upstream here.
+        // Now they require explicit `pull`s to refresh upstream state.
 
         let rendered_env_links = {
             let gcroots_dir = gcroots_dir(flox, &pointer.owner);
@@ -261,6 +281,35 @@ impl RemoteEnvironment {
 
         Ok(())
     }
+
+    /// Push local changes to FloxHub for this remote environment
+    ///
+    /// This pushes any local changes made to the cached remote environment back to FloxHub.
+    pub fn push(
+        &mut self,
+        flox: &Flox,
+        force: bool,
+    ) -> Result<super::managed_environment::PushResult, EnvironmentError> {
+        self.inner.push(flox, force)
+    }
+
+    /// Pull updates from FloxHub for this remote environment
+    ///
+    /// This updates the cached remote environment with the latest changes from FloxHub.
+    pub fn pull(
+        &mut self,
+        flox: &Flox,
+        force: bool,
+    ) -> Result<super::managed_environment::PullResult, EnvironmentError> {
+        let result = self.inner.pull(flox, force)?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
+        Ok(result)
+    }
+
+    pub fn fetch_remote_state(&self, flox: &Flox) -> Result<(), EnvironmentError> {
+        self.inner.fetch_remote_state(flox)?;
+        Ok(())
+    }
 }
 
 impl Environment for RemoteEnvironment {
@@ -282,10 +331,7 @@ impl Environment for RemoteEnvironment {
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError> {
         let result = self.inner.install(packages, flox)?;
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
         // TODO: clean up git branch for temporary environment
         Ok(result)
     }
@@ -297,10 +343,7 @@ impl Environment for RemoteEnvironment {
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         let result = self.inner.uninstall(packages, flox)?;
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
 
         Ok(result)
     }
@@ -311,10 +354,7 @@ impl Environment for RemoteEnvironment {
         if result == EditResult::Unchanged {
             return Ok(result);
         }
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
 
         Ok(result)
     }
@@ -334,10 +374,7 @@ impl Environment for RemoteEnvironment {
         groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError> {
         let result = self.inner.upgrade(flox, groups_or_iids)?;
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
 
         Ok(result)
     }
@@ -349,10 +386,7 @@ impl Environment for RemoteEnvironment {
         to_upgrade: Vec<String>,
     ) -> Result<UpgradeResult, EnvironmentError> {
         let result = self.inner.include_upgrade(flox, to_upgrade)?;
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
 
         Ok(result)
     }
@@ -448,11 +482,16 @@ impl GenerationsExt for RemoteEnvironment {
         generation: GenerationId,
     ) -> Result<(), EnvironmentError> {
         self.inner.switch_generation(flox, generation)?;
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
         Ok(())
+    }
+
+    fn remote_lockfile_contents_for_current_generation(&self) -> Result<String, GenerationsError> {
+        self.inner.remote_lockfile_contents_for_current_generation()
+    }
+
+    fn remote_manifest_contents_for_current_generation(&self) -> Result<String, GenerationsError> {
+        self.inner.remote_manifest_contents_for_current_generation()
     }
 
     fn lockfile_contents_for_generation(
@@ -471,6 +510,12 @@ impl GenerationsExt for RemoteEnvironment {
         // `~/.flox/cache/run` because the environment is treated as immutable.
         self.inner
             .rendered_env_links_for_generation(flox, generation)
+    }
+
+    fn remote_generations_metadata(
+        &self,
+    ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
+        self.inner.remote_generations_metadata()
     }
 }
 

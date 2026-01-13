@@ -962,6 +962,7 @@ impl InitHook for Node {
                     // providing the default
                     version: yarn_install.yarn.version.clone(),
                     systems: None,
+                    outputs: None,
                 });
                 packages.push(CatalogPackage {
                     id: "node".to_string(),
@@ -970,6 +971,7 @@ impl InitHook for Node {
                     // providing the default
                     version: yarn_install.node.version.clone(),
                     systems: None,
+                    outputs: None,
                 });
                 Some(YARN_HOOK.to_string())
             },
@@ -980,12 +982,14 @@ impl InitHook for Node {
                         pkg_path: result.attr_path.clone().into(),
                         version: result.version.clone(),
                         systems: None,
+                        outputs: None,
                     },
                     None => CatalogPackage {
                         id: "nodejs".to_string(),
                         pkg_path: "nodejs".to_string(),
                         version: None,
                         systems: None,
+                        outputs: None,
                     },
                 };
                 packages.push(nodejs_to_install);
@@ -1003,6 +1007,7 @@ impl InitHook for Node {
                     // providing the default
                     version: yarn_install.pkg.version.clone(),
                     systems: None,
+                    outputs: None,
                 });
                 Some(YARN_HOOK.to_string())
             },
@@ -1079,7 +1084,7 @@ mod tests {
         };
         let node_20 = Package {
             name: "nodejs_20".to_string(),
-            version: "20.19.4".to_string(),
+            version: "20.19.6".to_string(),
         };
 
         let test_cases = vec![
@@ -1350,12 +1355,14 @@ mod tests {
                         pkg_path: "yarn.path".to_string(),
                         version: Some("1".to_string()),
                         systems: None,
+                        outputs: None,
                     },
                     CatalogPackage {
                         id: "node".to_string(),
                         pkg_path: "nodejs".to_string(),
                         version: None,
-                        systems: None
+                        systems: None,
+                        outputs: None,
                     }
                 ]),
                 hook_on_activate: Some(YARN_HOOK.to_string()),
@@ -1388,6 +1395,7 @@ mod tests {
                     pkg_path: "nodejs.path".to_string(),
                     version: Some("1".to_string()),
                     systems: None,
+                    outputs: None,
                 }]),
                 ..Default::default()
             }

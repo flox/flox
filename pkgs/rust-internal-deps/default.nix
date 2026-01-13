@@ -20,7 +20,7 @@
   process-compose,
   rust-external-deps,
   rust-toolchain,
-  targetPlatform,
+  stdenv,
 }:
 let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
@@ -29,53 +29,55 @@ let
   craneLib = (inputs.crane.mkLib pkgsFor).overrideToolchain rust-toolchain.toolchain;
 
   # build time environment variables
-  envs = {
-    # 3rd party CLIs
-    # we want to use our own binaries by absolute path
-    # rather than relying on or modifying the user's `PATH` variable
-    GIT_PKG = gitMinimal;
-    NIX_BIN = "${nix}/bin/nix";
-    NIX_VERSION = nix.version;
-    GNUMAKE_BIN = "${gnumake}/bin/make";
-    SLEEP_BIN = "${coreutils}/bin/sleep";
-    PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
-    FLOX_ACTIVATIONS_BIN = "${flox-activations}/libexec/flox-activations";
-    # used internally to ensure CA certificates are available
-    NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
+  envs =
+    rust-external-deps.envs
+    // {
+      # 3rd party CLIs
+      # we want to use our own binaries by absolute path
+      # rather than relying on or modifying the user's `PATH` variable
+      GIT_PKG = gitMinimal;
+      NIX_BIN = "${nix}/bin/nix";
+      NIX_VERSION = nix.version;
+      GNUMAKE_BIN = "${gnumake}/bin/make";
+      SLEEP_BIN = "${coreutils}/bin/sleep";
+      PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
+      FLOX_ACTIVATIONS_BIN = "${flox-activations}/libexec/flox-activations";
+      # used internally to ensure CA certificates are available
+      NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
-    # Used by `flox build' to access `stdenv` at a known version
-    # When utilities from nixpkgs are used by flox at runtime,
-    # they should be
-    # a) bundled at buildtime if possible (binaries/packages)
-    # b) use this version of nixpkgs i.e. (nix library utils such as `lib` and `runCommand`)
-    COMMON_NIXPKGS_URL = nixpkgsInputLockedURL inputs.nixpkgs;
-    # Some tests need a URL in https format
-    TESTING_BASE_CATALOG_URL = "https://github.com/flox/nixpkgs?rev=${inputs.nixpkgs.rev}";
+      # Used by `flox build' to access `stdenv` at a known version
+      # When utilities from nixpkgs are used by flox at runtime,
+      # they should be
+      # a) bundled at buildtime if possible (binaries/packages)
+      # b) use this version of nixpkgs i.e. (nix library utils such as `lib` and `runCommand`)
+      COMMON_NIXPKGS_URL = nixpkgsInputLockedURL inputs.nixpkgs;
+      # Some tests need a URL in https format
+      TESTING_BASE_CATALOG_URL = "https://github.com/flox/nixpkgs?rev=${inputs.nixpkgs.rev}";
 
-    # Reexport of the platform flox is being built for
-    NIX_TARGET_SYSTEM = targetPlatform.system;
-  }
-  // lib.optionalAttrs hostPlatform.isLinux {
-    LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
-  }
-  # Our own tools
-  # In the dev shell these will be set dynamically
-  // lib.optionalAttrs (flox-buildenv != null) {
-    FLOX_BUILDENV_NIX = "${flox-buildenv}/lib/buildenv.nix";
-  }
-  // lib.optionalAttrs (flox-package-builder != null) {
-    FLOX_BUILD_MK = "${flox-package-builder}/libexec/flox-build.mk";
-    FLOX_EXPRESSION_BUILD_NIX = "${flox-package-builder}/libexec/nef/default.nix";
-  }
-  // lib.optionalAttrs (flox-nix-plugins != null) {
-    NIX_PLUGINS = "${flox-nix-plugins}/bin/flox-nix-plugins";
-  }
-  // lib.optionalAttrs (flox-mk-container != null) {
-    FLOX_MK_CONTAINER_NIX = "${flox-mk-container}/mkContainer.nix";
-  }
-  // lib.optionalAttrs (flox-interpreter != null) {
-    FLOX_INTERPRETER = flox-interpreter;
-  };
+      # Reexport of the platform flox is being built for
+      NIX_TARGET_SYSTEM = stdenv.targetPlatform.system;
+    }
+    // lib.optionalAttrs hostPlatform.isLinux {
+      LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
+    }
+    # Our own tools
+    # In the dev shell these will be set dynamically
+    // lib.optionalAttrs (flox-buildenv != null) {
+      FLOX_BUILDENV_NIX = "${flox-buildenv}/lib/buildenv.nix";
+    }
+    // lib.optionalAttrs (flox-package-builder != null) {
+      FLOX_BUILD_MK = "${flox-package-builder}/libexec/flox-build.mk";
+      FLOX_EXPRESSION_BUILD_NIX = "${flox-package-builder}/libexec/nef/default.nix";
+    }
+    // lib.optionalAttrs (flox-nix-plugins != null) {
+      NIX_PLUGINS = "${flox-nix-plugins}/bin/flox-nix-plugins";
+    }
+    // lib.optionalAttrs (flox-mk-container != null) {
+      FLOX_MK_CONTAINER_NIX = "${flox-mk-container}/mkContainer.nix";
+    }
+    // lib.optionalAttrs (flox-interpreter != null) {
+      FLOX_INTERPRETER = flox-interpreter;
+    };
 
 in
 (craneLib.buildDepsOnly (

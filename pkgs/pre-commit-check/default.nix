@@ -2,7 +2,7 @@
   lib,
   pre-commit-hooks,
   symlinkJoin,
-  system,
+  stdenv,
   rustfmt,
   fenix,
   rust-toolchain,
@@ -10,7 +10,7 @@
   makeWrapper,
   bash,
 }:
-pre-commit-hooks.lib.${system}.run {
+pre-commit-hooks.lib.${stdenv.hostPlatform.system}.run {
   src = builtins.path { path = ./.; };
   default_stages = [
     "manual"

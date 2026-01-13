@@ -52,7 +52,8 @@ version:
 
 # Clean the nix-plugins build cache
 @clean-nix-plugins:
-   meson compile -C nix-plugins/builddir --clean
+   meson compile -C nix-plugins/builddir --clean; \
+   rm -rf build/nix-plugins
 
 
 # ---------------------------------------------------------------------------- #
@@ -132,12 +133,12 @@ version:
     # `force`. As far as I can tell, there's not a way to conditionally run
     # recipes within `just`, so we just run the correct recipe via a script.
     if [ "{{mk_data_args}}" = "-f" ]; then
-        just gen-unit-data "{{floxhub_path}}" force
+        just gen-unit-data "{{floxhub_path}}" true
     else
         just gen-unit-data "{{floxhub_path}}"
     fi
 
-@mk-data +mk_data_args="": build-data-gen build-cli md
+@mk-data +mk_data_args="": build-data-gen build-cli (md mk_data_args)
 
 # The same as mk-data, but faster to type, and doesn't rebuild stuff
 @md +mk_data_args="":
@@ -196,7 +197,7 @@ gen-unit-data-for-publish floxhub_repo_path force="":
     # Run the tests that will regenerate the mocks
     {{cargo_test_invocation}} --no-fail-fast --filterset 'test(providers::publish) | test(commands::publish) | test(providers::catalog::tests::creates_new_catalog)'
 
-@gen-unit-data floxhub_path: gen-unit-data-no-publish (gen-unit-data-for-publish floxhub_path)
+@gen-unit-data floxhub_path force="false": (gen-unit-data-no-publish force) (gen-unit-data-for-publish floxhub_path force)
 
 # ---------------------------------------------------------------------------- #
 

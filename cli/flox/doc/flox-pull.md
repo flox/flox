@@ -11,11 +11,21 @@ flox-pull - pull environment from FloxHub
 # SYNOPSIS
 
 ```
-flox [<general-options>] pull
+# Pull a new environment into a directory
+flox [<general-options>] pull <owner>/<name>
      [-d=<path>]
-     [-r=<owner>/<name> | <owner>/<name> | [-f]]
      [-f]
      [-c]
+     [-g=<generation>]
+
+# Update an existing environment in a directory
+flox [<general-options>] pull
+     [-d=<path>]
+     [-f]
+
+# Fetch updates for a remote environment
+flox [<general-options>] pull -r <owner>/<name>
+     [-f]
 ```
 
 # DESCRIPTION
@@ -23,21 +33,42 @@ flox [<general-options>] pull
 Pull an environment from FloxHub and create a local reference to it,
 or, if an environment has already been pulled, retrieve any updates.
 
-When pulling an environment for the first time, `-d` specifies the directory
-in which to create that environment.
-The remote environment is specified in the form `<owner>/<name>`.
-It may optionally be preceded by `-r`,
-but `-r` is not necessary and is accepted simply for consistency with other
-environment commands.
+## Pulling a new environment (`<owner>/<name> [--dir <dir>]`)
 
-When pulling an environment that has already been pulled, `-d` specifies which
-environment to sync.
-If `-d` is not specified and the current directory contains an environment, that
-environment is synced.
-`-f` may be specified in this case, forcibly updating the environment
-locally even if there are local changes not reflected in the remote environment.
-`<owner>/<name>` may be specified in this case and will replace the environment
-with the specified environment.
+Create an environment in the current directory or the directory specified by
+the `--dir` flag, that is linked to the centrally managed environemnt
+`<owner>/<name>` on FloxHub.
+You can make changes locally and push them back with
+[`flox-push(1)`](./flox-push.md).
+
+Alternatively, the `--copy` flag allows you to create an environment,
+but does not link it to its upstream on FloxHub.
+Optionally, the `--generation <generation>` can be used to select a specific
+generation to create a copy of.
+
+## Updating an existing environment in a directory (`[--dir]`)
+
+Without a `<owner>/<name>` argument, updates an environment that has already
+been pulled into the current directory, or the directory specified by the
+`--dir` flag .
+
+`-f` may be specified to forcibly update the environment locally even if
+there are local changes not reflected in the remote environment.
+
+## Updating FloxHub environments (`--reference <owner>/<name>`)
+
+When using the `--reference` flag, commands will operate on a
+copy of the environment stored in Flox's cache directory.
+Any changes made to an environment using the `--reference` flag,
+affect only the local copy and must be explicitly updated on FloxHub
+using [`flox-push(1)`](./flox-push.md).
+
+`flox pull --reference <owner>/<name>` will create such a local copy for the
+specified environment, or update an existing copy.
+This allows you to work offline with cached environments and only sync when
+you choose to.
+
+## Platform Support
 
 A remote environment may not support the architecture or operating system of the
 local system pulling the environment,
@@ -56,11 +87,12 @@ environments.
 :   Directory to pull an environment into, or directory that contains an
     environment that has already been pulled (default: current directory).
 
-`-r <owner>/<name>`, `--remote <owner>/<name>`
-:   ID of the environment to pull.
+    Cannot be used with `--reference`.
 
 `<owner>/<name>`
-:   ID of the environment to pull.
+:   Reference of an environment to pull into a directory
+
+    This is used when pulling a new environment for the first time.
 
 `-f`, `--force`
 :   Forcefully overwrite the local copy of the environment,
@@ -76,6 +108,17 @@ environments.
 `-g <generation>`, `--generation <generation>`
 :   Pull the specified generation instead of the live generation.
     Must be used with `--copy`.
+
+`-r <owner>/<name>`, `--reference <owner>/<name>`
+:   Pull updates for a local copy of a FloxHub environment
+
+    The pulled environment can be used by passing '--reference' to other
+    subcommands.
+
+    This updates a FloxHub environment that has been activated or pulled
+    locally and is cached in `~/.cache`.
+
+    Cannot be used with `--dir`, `--copy`, or `--generation`.
 
 ```{.include}
 ./include/general-options.md

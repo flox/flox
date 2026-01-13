@@ -156,7 +156,7 @@ EOF
   # on another b machine, pull the environment
   export FLOX_DATA_DIR="$(pwd)/b_data"
   pushd b > /dev/null || return
-  "$FLOX_BIN" pull --remote "$OWNER/a"
+  "$FLOX_BIN" pull "$OWNER/a"
   run --separate-stderr "$FLOX_BIN" list --name
 
   # assert that the environment contains the installed package
@@ -182,10 +182,10 @@ EOF
   #  - push the environment
   export FLOX_DATA_DIR="$(pwd)/b_data"
   pushd b > /dev/null || return
-  "$FLOX_BIN" pull --remote "$OWNER/a"
+  "$FLOX_BIN" pull "$OWNER/a"
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" install hello
-  "$FLOX_BIN" push --owner "$OWNER"
+  "$FLOX_BIN" push
   popd > /dev/null || return
 
   # on machine a, pull the environment
@@ -220,10 +220,10 @@ EOF
   #  - push the environment
   export FLOX_DATA_DIR="$(pwd)/b_data"
   pushd b > /dev/null || return
-  "$FLOX_BIN" pull --remote "$OWNER/a"
+  "$FLOX_BIN" pull "$OWNER/a"
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.yaml" \
     "$FLOX_BIN" install vim
-  "$FLOX_BIN" push --owner "$OWNER"
+  "$FLOX_BIN" push
   popd > /dev/null || return
 
   # on machine a, pull the environment
@@ -245,7 +245,7 @@ Local:
    Generation:  2
    Timestamp: .*
 
-Remote:
+Upstream:
 
  \* $USER installed package 'vim \\(vim\\)' on .+
    Generation:  2
@@ -273,7 +273,7 @@ Remote:
   popd > /dev/null || return
 
   pushd b > /dev/null || return
-  FLOX_DATA_DIR="$(pwd)/b_data" "$FLOX_BIN" pull --remote "$OWNER/a"
+  FLOX_DATA_DIR="$(pwd)/b_data" "$FLOX_BIN" pull "$OWNER/a"
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.yaml" \
     FLOX_DATA_DIR="$(pwd)/b_data" "$FLOX_BIN" install vim
   popd > /dev/null || return
@@ -365,7 +365,7 @@ Remote:
   assert_failure
 
   # when recreating an environment, a new branch should be used
-  run "$FLOX_BIN" pull --remote "$OWNER/project-managed-${BATS_TEST_NUMBER}"
+  run "$FLOX_BIN" pull "$OWNER/project-managed-${BATS_TEST_NUMBER}"
   assert_success
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs.yaml" \

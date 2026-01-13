@@ -32,7 +32,7 @@ impl LockManifest {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("lock");
 
-        let manifest_path = if self.manifest == PathBuf::from("-") {
+        let manifest_path = if self.manifest == Path::new("-") {
             Path::new("/dev/stdin")
         } else {
             &self.manifest
