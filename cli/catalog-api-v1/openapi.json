@@ -16,7 +16,7 @@
           "catalog"
         ],
         "summary": "Search for packages",
-        "description": "Search the catalog(s) under the given criteria for matching packages.\n\nRequired Query Parameters:\n- **search_term**: The search term to search on.\n- **system**: This is returned but does not affect results\n\nOptional Query Parameters:\n- **catalogs**: Comma separated list of catalog names to search; defaults to all catalogs\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackageSearchResult**: A list of PackageInfo and the total result count",
+        "description": "Search the catalog(s) under the given criteria for matching packages.\n\nRequired Query Parameters:\n- **system**: The system architecture to search for (e.g., x86_64-linux)\n\nOptional Query Parameters:\n- **search_term**: The search term to filter packages by\n- **catalogs**: Comma separated list of catalog names to search; defaults to\n  all catalogs. Note: when searching base catalog, search_term is required.\n- **page**: Page number for pagination (default: 0)\n- **pageSize**: Page size for pagination (default: 10)\n\nReturns:\n- **PackageSearchResult**: A list of PackageInfoSearch items and total count",
         "operationId": "search_api_v1_catalog_search_get",
         "security": [
           {
@@ -188,7 +188,7 @@
           "catalog"
         ],
         "summary": "Resolve a list of Package Groups",
-        "description": "Resolves a list of package groups, each being a list of package descriptors.\n\nRequired Body:\n- **groups**: An object with an `items` array of PackageGroups to resolve.\n\nOptional Query Parameters:\n- **none**\n\nReturns:\n- **ResolvedPackageGroups**: A object with an `items` array of\n    `ResolvedPackageGroup` items.\n\nResolution Rules:\n- Each `PackageGroup` is resolved independently.\n- Each page that has a package that meets each of the descriptors in that group is returned in the results\n- The latest page will include details for each package in the group from that page\n- The remainder pages are returned without details (to get those details... TBD)\n\nA Package Descriptor match:\n- **name**: [required] - is not used in matching, only for reference (TBD is\n            there a uniqueness constraint?)\n- **attr_path**: [required] - this must match the nix attribute path exactly and in full\n- **version**: [optional] - Either a literal version to match or a **semver** constraint.\n    This will be treated as a **semver** IFF TBD, otherwise it will be treated as\n    a literal string match to the nix `version` field.  If this is detected as a **semver**,\n    packages whose `version` field cannot be parsed as a **semver** will be excluded.\n- **allow_pre_release**: [optional] - Defaults to False.  Only applies\n    when a **semver** constraint is given.  If true, a `version` that can\n    be parsed as a valid semver, that includes a pre-release suffix will\n    be included as a candidate.  Otherwise, they will be excluded.\n- **allow_broken**: [optional] - Defaults to False.  A package\n    marked as broken = True will be excluded unless this is set to True.\n- **allow_unfree**: [optional] - Defaults to True.  A package\n    marked as unfree = True will be excluded unless this is set to True.\n- **allow_insecure**: [optional] - Defaults to False.  A package\n    marked as insecure = True will be excluded unless this is set to True.\n- **allow_missing_builds**: [optional] - Defaults to\n    False.  A package is expected to have been built if it\n    is not marked as broken, unfree, or insecure.  A package\n    that is expected to have been built, but none of it's outputs have been\n    observed to build, will attempt to be excluded unless this is set to\n    True.  This constraint may be softened if the group can not be resolved\n    with it enforced.  If this occurs, the ressponse will note this by\n    including a warning level message.",
+        "description": "Resolves a list of package groups, each being a list of package descriptors.\n\nRequired Body:\n- **groups**: An object with an `items` array of PackageGroups to resolve.\n\nOptional Query Parameters:\n- **candidate_pages**: Number of additional candidate pages to return\n  (default: 0)\n\nReturns:\n- **ResolvedPackageGroups**: An object with an `items` array of\n  `ResolvedPackageGroup` items.\n\nResolution Rules:\n- Each `PackageGroup` is resolved independently.\n- Each page that has packages meeting all descriptors in the group is\n  returned.\n- The latest complete page includes full package details.\n- Additional candidate pages are returned without full details.\n\nPackageDescriptor Fields:\n- **install_id**: [required] Reference identifier for the package in the\n  manifest. Used for error messages and result correlation.\n- **attr_path**: [required] The nix attribute path to match exactly.\n- **systems**: [required] List of systems to resolve for (e.g.,\n  x86_64-linux).\n- **version**: [optional] Version constraint. Can be a literal version or\n  semver constraint. Packages whose version cannot be parsed as semver are\n  excluded when using semver constraints.\n- **derivation**: [optional] Specific derivation path to match.\n- **allow_pre_releases**: [optional] Include pre-release versions when using\n  semver constraints (default: False).\n- **allow_broken**: [optional] Include packages marked as broken\n  (default: False).\n- **allow_unfree**: [optional] Include packages with unfree licenses\n  (default: True).\n- **allow_insecure**: [optional] Include packages marked as insecure\n  (default: False).\n- **allowed_licenses**: [optional] List of acceptable license identifiers.\n- **allow_missing_builds**: [optional] Include packages without confirmed\n  build artifacts (default: False). If resolution fails with this\n  constraint, it may be relaxed with a warning message.",
         "operationId": "resolve_api_v1_catalog_resolve_post",
         "security": [
           {
@@ -479,7 +479,7 @@
           "catalogs"
         ],
         "summary": "Get user catalog metadata",
-        "description": "Get user catalog metadata\n\nRequired Query Parameters:\n- **catalog_name**: The name of the catalog\n\n\nReturns:\n- **UserCatalog**: The user catalog",
+        "description": "Get user catalog metadata.\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nReturns:\n- **UserCatalog**: The user catalog metadata including id, name, created_at,\n  and owner_handle.",
         "operationId": "get_catalog_api_v1_catalog_catalogs__catalog_name__get",
         "security": [
           {
@@ -541,7 +541,7 @@
           "catalogs"
         ],
         "summary": "Delete a user catalog",
-        "description": "Delete a user catalog\n\nRequired Query Parameters:\n- **catalog_name**: The name of catalog to delete\n\n\nReturns:\n- **None**",
+        "description": "Delete a user catalog.\n\nPath Parameters:\n- **catalog_name**: The name of catalog to delete\n\nReturns:\n- **None**\n\nNote: This endpoint is not yet implemented and returns 501.",
         "operationId": "delete_catalog_api_v1_catalog_catalogs__catalog_name__delete",
         "security": [
           {
@@ -771,7 +771,7 @@
           "catalogs"
         ],
         "summary": "Get package info",
-        "description": "Get package info\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nReturns:\n- **UserPackage**",
+        "description": "Get package info\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nReturns:\n- **UserPackage**\n\nNote: Authentication is optional. Unauthenticated users can access\npackages in public catalogs (flox, base). Private catalogs require\nauthentication.",
         "operationId": "get_catalog_package_api_v1_catalog_catalogs__catalog_name__packages__package_name__get",
         "security": [
           {
@@ -1439,7 +1439,7 @@
           "catalogs"
         ],
         "summary": "Get store config",
-        "description": "Get store configuration",
+        "description": "Get store configuration for a catalog.\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nReturns:\n- **CatalogStoreConfig**: The store configuration (null, meta-only,\n  nix-copy, or publisher type) with associated URIs if applicable.",
         "operationId": "get_catalog_store_config_api_v1_catalog_catalogs__catalog_name__store_config_get",
         "security": [
           {
@@ -1501,7 +1501,7 @@
           "catalogs"
         ],
         "summary": "Set store config",
-        "description": "Update store configuration",
+        "description": "Update store configuration for a catalog.\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nBody Parameters:\n- **CatalogStoreConfig**: The new store configuration to set\n\nReturns:\n- **CatalogStoreConfig**: The updated store configuration.",
         "operationId": "set_catalog_store_config_api_v1_catalog_catalogs__catalog_name__store_config_put",
         "security": [
           {
@@ -1698,8 +1698,8 @@
         "tags": [
           "info"
         ],
-        "summary": "Get related information for a NAR file",
-        "description": "Get the attr_path for a package based on its NAR file name.",
+        "summary": "Look up derivation info by NAR file name",
+        "description": "Look up derivation information by NAR file name.\n\nPath Parameters:\n- **nar_file**: The NAR file name to look up\n\nReturns:\n- **NarFileLookup**: Derivation info including attr_path, system, and\n  outputs for the package associated with this NAR file.\n\nNote: Requires authentication and flox organization membership.",
         "operationId": "nar_file_lookup_api_v1_catalog_info_nar__nar_file__get",
         "security": [
           {
@@ -1722,11 +1722,21 @@
         ],
         "responses": {
           "200": {
-            "description": "Information about the derivation(s) related to the NAR file",
+            "description": "Derivation information for the NAR file",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PackageDerivation-Output"
+                  "$ref": "#/components/schemas/NarFileLookup"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NAR file not found in catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1750,7 +1760,7 @@
           "info"
         ],
         "summary": "Get a raw dependency report for a storepath (excluding /nix/store/ prefix)",
-        "description": "Get the attr_path for a package based on its NAR file name.",
+        "description": "Get a raw dependency report for a store path.\n\nPath Parameters:\n- **storepath**: The store path to analyze (excluding /nix/store/ prefix)\n\nReturns:\n- **RawDependencyReport**: Dependency graph with all transitive dependencies,\n  including store paths, derivation info, and dependency relationships.\n\nNote: Requires authentication and flox organization membership.",
         "operationId": "raw_dependency_report_api_v1_catalog_info_dependencies__storepath__raw_get",
         "security": [
           {
@@ -1800,7 +1810,8 @@
         "tags": [
           "info"
         ],
-        "summary": "Get a SPDX report for a storepath (excluding /nix/store/ prefix)",
+        "summary": "Get an SPDX report for a storepath (excluding /nix/store/ prefix)",
+        "description": "Get an SPDX 2.3 format dependency report for a store path.\n\nPath Parameters:\n- **storepath**: The store path to analyze (excluding /nix/store/ prefix)\n\nReturns:\n- **dict**: SPDX 2.3 JSON document containing package information and\n  dependency relationships in standard SBOM format.\n\nNote: Requires authentication and flox organization membership.",
         "operationId": "spdx_report_api_v1_catalog_info_dependencies__storepath__spdx_get",
         "security": [
           {
@@ -1940,7 +1951,7 @@
           "store"
         ],
         "summary": "Get store info for a list of derivations",
-        "description": "Get store info for a list of derivations\n\nBody Parameters:\n- **StoreInfoRequest**: A list of derivation paths\n\nReturns:\n- **StoreInfoResponse**: a map of derivation path to a list of store info objects",
+        "description": "Get store info for a list of output paths.\n\nBody Parameters:\n- **StoreInfoRequest**: Object containing an `outpaths` list of output paths\n\nReturns:\n- **StoreInfoResponse**: A map of output path to a list of StoreInfo objects,\n  each containing catalog, package, URL, and optional authentication info\n  for downloading the binary artifacts.",
         "operationId": "get_store_info_api_v1_catalog_store_post",
         "requestBody": {
           "content": {
@@ -1990,7 +2001,7 @@
           "store"
         ],
         "summary": "Get status for a list of storepaths",
-        "description": "Get status for a list of storepaths\nBody Parameters:\n- **StoreInfoRequest**: A list of derivation paths\nReturns:\n- **StoreInfoResponse**: a map of derivation path to a list of store info objects",
+        "description": "Get status for a list of store paths.\n\nBody Parameters:\n- **StorepathRequest**: Object containing an `outpaths` list of store paths\n\nReturns:\n- **StorepathStatusResponse**: A map of store path to a list of\n  StorepathStatus objects indicating catalog, package, and narinfo status.",
         "operationId": "get_storepath_status_api_v1_catalog_store_status_post",
         "requestBody": {
           "content": {
@@ -2105,24 +2116,41 @@
         ],
         "title": "CatalogPage",
         "example": {
-          "attr_path": "foo.bar.curl",
-          "description": "A very nice Item",
-          "license": "foo",
-          "locked_url": "git:git?rev=xyz",
-          "name": "curl",
-          "outputs": "{}",
-          "outputs_to_install": "{}",
-          "pkg_path": "foo.bar.curl",
+          "attr_path": "curl",
+          "broken": false,
+          "catalog": "nixpkgs",
+          "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+          "description": "A command line tool for transferring files with URL syntax",
+          "insecure": false,
+          "license": "curl",
+          "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
+          "missing_builds": false,
+          "name": "curl-8.5.0",
+          "outputs": [
+            {
+              "name": "out",
+              "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+            },
+            {
+              "name": "man",
+              "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+            }
+          ],
+          "outputs_to_install": [
+            "out",
+            "man"
+          ],
+          "pkg_path": "curl",
           "pname": "curl",
-          "rev": "xyz",
-          "rev_count": 4,
-          "rev_date": 0,
+          "rev": "abc123def456",
+          "rev_count": 12345,
+          "rev_date": "2024-01-15T00:00:00Z",
           "stabilities": [
-            "stable",
-            "unstable"
+            "stable"
           ],
           "system": "x86_64-linux",
-          "version": "1.0"
+          "unfree": false,
+          "version": "8.5.0"
         }
       },
       "CatalogShareInfo": {
@@ -2565,21 +2593,23 @@
         "title": "PackageBuild",
         "example": {
           "derivation": {
-            "description": "A very nice derivation",
-            "drv_path": "foo.bar.curl",
-            "license": "GnuFoo",
-            "name": "mydrv",
+            "broken": false,
+            "description": "A command line tool for transferring files with URL syntax",
+            "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+            "license": "curl",
+            "name": "curl-8.5.0",
             "outputs": {
-              "bin": "/nix/store/foo",
-              "man": "/nix/store/bar"
+              "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
+              "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
             },
             "outputs_to_install": [
-              "bin",
+              "out",
               "man"
             ],
-            "pname": "mydrv",
+            "pname": "curl",
             "system": "x86_64-linux",
-            "version": "1.0"
+            "unfree": false,
+            "version": "8.5.0"
           },
           "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
           "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
@@ -2667,21 +2697,23 @@
         "title": "PackageBuildWithNarInfo",
         "example": {
           "derivation": {
-            "description": "A very nice derivation",
-            "drv_path": "foo.bar.curl",
-            "license": "GnuFoo",
-            "name": "mydrv",
+            "broken": false,
+            "description": "A command line tool for transferring files with URL syntax",
+            "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+            "license": "curl",
+            "name": "curl-8.5.0",
             "outputs": {
-              "bin": "/nix/store/foo",
-              "man": "/nix/store/bar"
+              "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
+              "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
             },
             "outputs_to_install": [
-              "bin",
+              "out",
               "man"
             ],
-            "pname": "mydrv",
+            "pname": "curl",
             "system": "x86_64-linux",
-            "version": "1.0"
+            "unfree": false,
+            "version": "8.5.0"
           },
           "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
           "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
@@ -2754,21 +2786,23 @@
         ],
         "title": "PackageDerivation",
         "example": {
-          "description": "A very nice derivation",
-          "drv_path": "foo.bar.curl",
-          "license": "GnuFoo",
-          "name": "mydrv",
+          "broken": false,
+          "description": "A command line tool for transferring files with URL syntax",
+          "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+          "license": "curl",
+          "name": "curl-8.5.0",
           "outputs": {
-            "bin": "/nix/store/foo",
-            "man": "/nix/store/bar"
+            "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
+            "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
           },
           "outputs_to_install": [
-            "bin",
+            "out",
             "man"
           ],
-          "pname": "mydrv",
+          "pname": "curl",
           "system": "x86_64-linux",
-          "version": "1.0"
+          "unfree": false,
+          "version": "8.5.0"
         }
       },
       "PackageDerivation-Output": {
@@ -2835,21 +2869,23 @@
         ],
         "title": "PackageDerivation",
         "example": {
-          "description": "A very nice derivation",
-          "drv_path": "foo.bar.curl",
-          "license": "GnuFoo",
-          "name": "mydrv",
+          "broken": false,
+          "description": "A command line tool for transferring files with URL syntax",
+          "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+          "license": "curl",
+          "name": "curl-8.5.0",
           "outputs": {
-            "bin": "/nix/store/foo",
-            "man": "/nix/store/bar"
+            "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
+            "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
           },
           "outputs_to_install": [
-            "bin",
+            "out",
             "man"
           ],
-          "pname": "mydrv",
+          "pname": "curl",
           "system": "x86_64-linux",
-          "version": "1.0"
+          "unfree": false,
+          "version": "8.5.0"
         }
       },
       "PackageDescriptor": {
@@ -3704,24 +3740,41 @@
         ],
         "title": "ResolvedPackageGroup",
         "example": {
-          "attr_path": "foo.bar.curl",
-          "description": "A very nice Item",
-          "license": "foo",
-          "locked_url": "git:git?rev=xyz",
-          "name": "curl",
-          "outputs": "{}",
-          "outputs_to_install": "{}",
-          "pkg_path": "foo.bar.curl",
+          "attr_path": "curl",
+          "broken": false,
+          "catalog": "nixpkgs",
+          "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+          "description": "A command line tool for transferring files with URL syntax",
+          "insecure": false,
+          "license": "curl",
+          "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
+          "missing_builds": false,
+          "name": "curl-8.5.0",
+          "outputs": [
+            {
+              "name": "out",
+              "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+            },
+            {
+              "name": "man",
+              "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+            }
+          ],
+          "outputs_to_install": [
+            "out",
+            "man"
+          ],
+          "pkg_path": "curl",
           "pname": "curl",
-          "rev": "xyz",
-          "rev_count": 4,
-          "rev_date": 0,
+          "rev": "abc123def456",
+          "rev_count": 12345,
+          "rev_date": "2024-01-15T00:00:00Z",
           "stabilities": [
-            "stable",
-            "unstable"
+            "stable"
           ],
           "system": "x86_64-linux",
-          "version": "1.0"
+          "unfree": false,
+          "version": "8.5.0"
         }
       },
       "ResolvedPackageGroups": {
