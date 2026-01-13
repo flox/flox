@@ -247,15 +247,9 @@ pub fn state_json_path(runtime_dir: impl AsRef<Path>, dot_flox_path: impl AsRef<
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum StartOrAttachResult {
     /// A new activation was started for the given StartIdentifier
-    Start {
-        start_id: StartIdentifier,
-        needs_new_executive: bool,
-    },
+    Start { start_id: StartIdentifier },
     /// Attached to an existing ready activation with the given StartIdentifier
-    Attach {
-        start_id: StartIdentifier,
-        needs_new_executive: bool,
-    },
+    Attach { start_id: StartIdentifier },
     /// Another process is currently starting an activation.
     /// The caller should wait and retry.
     AlreadyStarting { pid: Pid, start_id: StartIdentifier },
@@ -433,7 +427,6 @@ impl ActivationState {
             };
         }
 
-        let needs_new_executive = self.needs_new_executive();
         let ready = self.ready.clone();
         match ready {
             Ready::True(start_id) if start_id.store_path == store_path.as_ref() => {
@@ -441,17 +434,11 @@ impl ActivationState {
                     start_id: start_id.clone(),
                     expiration: None,
                 });
-                StartOrAttachResult::Attach {
-                    start_id,
-                    needs_new_executive,
-                }
+                StartOrAttachResult::Attach { start_id }
             },
             Ready::False | Ready::True(_) | Ready::Starting(_, _) => {
                 let start_id = self.start(pid, &store_path);
-                StartOrAttachResult::Start {
-                    start_id,
-                    needs_new_executive,
-                }
+                StartOrAttachResult::Start { start_id }
             },
         }
     }
@@ -569,20 +556,14 @@ impl ActivationState {
         );
     }
 
-    /// Check if the executive needs to be spawned.
-    fn needs_new_executive(&self) -> bool {
-        if self.executive_pid == EXECUTIVE_NOT_STARTED {
-            debug!("executive has not been spawned yet");
-            return true;
-        }
+    /// Check if executive has been started.
+    pub fn executive_started(&self) -> bool {
+        self.executive_pid != EXECUTIVE_NOT_STARTED
+    }
 
-        if !pid_is_running(self.executive_pid) {
-            debug!(pid = self.executive_pid, "executive process is not running");
-            return true;
-        }
-
-        debug!(pid = self.executive_pid, "executive process is running");
-        false
+    /// Check if executive was started and is running.
+    pub fn executive_running(&self) -> bool {
+        self.executive_started() && pid_is_running(self.executive_pid)
     }
 
     pub fn replace_attachment(
@@ -855,16 +836,7 @@ mod tests {
             let result = activations.start_or_attach(pid, &store_path);
 
             let start_id = match result {
-                StartOrAttachResult::Start {
-                    start_id,
-                    needs_new_executive: needs_executive_spawn,
-                } => {
-                    assert!(
-                        !needs_executive_spawn,
-                        "Executive should not need spawning (PID 1 always runs)"
-                    );
-                    start_id
-                },
+                StartOrAttachResult::Start { start_id } => start_id,
                 _ => panic!("Expected StartOrAttachResult::Start, got {:?}", result),
             };
 
@@ -890,15 +862,8 @@ mod tests {
             let result = activations.start_or_attach(pid, &start_id.store_path);
 
             match result {
-                StartOrAttachResult::Attach {
-                    start_id: id,
-                    needs_new_executive: needs_executive_spawn,
-                } => {
+                StartOrAttachResult::Attach { start_id: id } => {
                     assert_eq!(id, start_id);
-                    assert!(
-                        !needs_executive_spawn,
-                        "Executive should already be running"
-                    );
                 },
                 _ => panic!("Expected StartOrAttachResult::Attach, got {:?}", result),
             }
@@ -920,16 +885,7 @@ mod tests {
             let result = activations.start_or_attach(pid, &new_path);
 
             let start_id = match result {
-                StartOrAttachResult::Start {
-                    start_id,
-                    needs_new_executive: needs_executive_spawn,
-                } => {
-                    assert!(
-                        !needs_executive_spawn,
-                        "Executive should already be running"
-                    );
-                    start_id
-                },
+                StartOrAttachResult::Start { start_id } => start_id,
                 _ => panic!("Expected StartOrAttachResult::Start, got {:?}", result),
             };
 
@@ -989,16 +945,7 @@ mod tests {
             let result = activations.start_or_attach(pid, &old_start_id.store_path);
 
             let new_start_id = match result {
-                StartOrAttachResult::Start {
-                    start_id,
-                    needs_new_executive: needs_executive_spawn,
-                } => {
-                    assert!(
-                        !needs_executive_spawn,
-                        "Executive should not need spawning (PID 1 always runs)"
-                    );
-                    start_id
-                },
+                StartOrAttachResult::Start { start_id } => start_id,
                 _ => panic!("Expected StartOrAttachResult::Start, got {:?}", result),
             };
 
@@ -1023,15 +970,8 @@ mod tests {
             for pid in [100, 200, 300].iter() {
                 let result = activations.start_or_attach(*pid, &start_id.store_path);
                 match result {
-                    StartOrAttachResult::Attach {
-                        start_id: id,
-                        needs_new_executive: needs_executive_spawn,
-                    } => {
+                    StartOrAttachResult::Attach { start_id: id } => {
                         assert_eq!(id, start_id);
-                        assert!(
-                            !needs_executive_spawn,
-                            "Executive should already be running"
-                        );
                     },
                     _ => panic!(
                         "Expected StartOrAttachResult::Attach for PID {}, got {:?}",
@@ -1073,15 +1013,8 @@ mod tests {
             let result = activations.start_or_attach(pid, &start_id.store_path);
 
             match result {
-                StartOrAttachResult::Attach {
-                    start_id: id,
-                    needs_new_executive: needs_executive_spawn,
-                } => {
+                StartOrAttachResult::Attach { start_id: id } => {
                     assert_eq!(id, start_id);
-                    assert!(
-                        !needs_executive_spawn,
-                        "Executive should already be running"
-                    );
                 },
                 _ => panic!("Expected StartOrAttachResult::Attach, got {:?}", result),
             }

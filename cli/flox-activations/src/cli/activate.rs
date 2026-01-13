@@ -176,6 +176,7 @@ impl ActivateArgs {
 
         let (activations_opt, lock) = read_activations_json(&activations_json_path)?;
         let mut activations = activations_opt.unwrap_or_else(|| {
+            debug!("no existing activation state, creating new one");
             ActivationState::new(
                 &context.mode,
                 &context.attach_ctx.dot_flox_path,
@@ -183,28 +184,28 @@ impl ActivateArgs {
             )
         });
 
-        if activations.mode() != &context.mode {
-            if let Some(running) = activations.running_processes() {
-                return Err(ModeMismatch::from_running_processes(
-                    activations.mode().clone(),
-                    context.mode.clone(),
-                    running,
-                )
-                .into());
-            }
-
-            // Prevent a deadlock if modes mismatch but nothing has cleaned up old state.
-            // TODO: What if process-compose is still running with a different mode?
-            debug!(
-                old_mode = ?activations.mode(),
-                new_mode = ?context.mode,
-                "discarding activation state due to change of mode and no running processes"
-            );
+        // Reset state (but leave start state dirs) if executive is not running.
+        if !activations.executive_running() {
+            debug!("discarding activation state due to executive not running");
             activations = ActivationState::new(
                 &context.mode,
                 &context.attach_ctx.dot_flox_path,
                 &context.attach_ctx.env,
             );
+        }
+
+        if activations.mode() != &context.mode {
+            let running = activations
+                .running_processes()
+                // State (and thus mode) would have been reset if there was no executive.
+                .expect("mode mismatch implies running processes (executive or attachments)");
+
+            return Err(ModeMismatch::from_running_processes(
+                activations.mode().clone(),
+                context.mode.clone(),
+                running,
+            )
+            .into());
         }
 
         let pid = std::process::id() as i32;
@@ -216,15 +217,10 @@ impl ActivateArgs {
             return Ok(result);
         }
 
-        let (needs_new_executive, start_id) = match &result {
-            StartOrAttachResult::Start {
-                needs_new_executive,
-                start_id,
-            }
-            | StartOrAttachResult::Attach {
-                needs_new_executive,
-                start_id,
-            } => (*needs_new_executive, start_id),
+        let start_id = match &result {
+            StartOrAttachResult::Start { start_id } | StartOrAttachResult::Attach { start_id } => {
+                start_id
+            },
             _ => unreachable!(),
         };
 
@@ -239,7 +235,7 @@ impl ActivateArgs {
                 .create(&start_state_dir)?;
         }
 
-        let new_executive = if needs_new_executive {
+        let new_executive = if !activations.executive_started() {
             // Register signal handler BEFORE spawning executive to avoid race condition
             // where SIGUSR1 arrives before handler is registered
             let signals = Signals::new([SIGCHLD, SIGUSR1])?;
