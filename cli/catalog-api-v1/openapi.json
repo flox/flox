@@ -771,7 +771,7 @@
           "catalogs"
         ],
         "summary": "Get package info",
-        "description": "Get package info\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nReturns:\n- **UserPackage**",
+        "description": "Get package info\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nReturns:\n- **UserPackage**\n\nNote: Authentication is optional. Unauthenticated users can access\npackages in public catalogs (flox, base). Private catalogs require\nauthentication.",
         "operationId": "get_catalog_package_api_v1_catalog_catalogs__catalog_name__packages__package_name__get",
         "security": [
           {

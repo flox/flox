@@ -4567,6 +4567,10 @@ Path Parameters:
 Returns:
 - **UserPackage**
 
+Note: Authentication is optional. Unauthenticated users can access
+packages in public catalogs (flox, base). Private catalogs require
+authentication.
+
 Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}`
 
 */
