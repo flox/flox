@@ -253,7 +253,7 @@ mod tests {
         assert_eq!(
             run_upgrade_with_upgrades_on_other_system(false).await,
             indoc! {"
-            ✅  Upgraded 'name'.
+            ✔ Upgraded 'name'.
             Upgrades were not available for this system, but upgrades were applied for other
             systems supported by this environment.
             "}

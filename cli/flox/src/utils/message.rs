@@ -325,7 +325,7 @@ mod tests {
         // - composer environment is listed last
         // - environment `dep_one` doesn't appear because its fields are overridden later
         assert_eq!(writer.to_string(), indoc! {"
-            ℹ️  The following manifest fields were overridden during merging:
+            ℹ The following manifest fields were overridden during merging:
             - Environment 'dep_two' set:
               - vars.overridden_by_dep2
             - This environment set:

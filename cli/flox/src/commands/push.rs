@@ -323,7 +323,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(writer.to_string(), indoc! {"
-            ✅ my-env successfully pushed to FloxHub as public
+            ✔ my-env successfully pushed to FloxHub as public
 
             View the environment at: https://hub.flox.dev/owner/my-env
             Use this environment from another machine: 'flox activate -r owner/my-env'
@@ -368,7 +368,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(writer.to_string(), indoc! {"
-            ✅ Updates to my-env successfully pushed to FloxHub
+            ✔ Updates to my-env successfully pushed to FloxHub
 
             View the environment at: https://hub.flox.dev/owner/my-env
             Use this environment from another machine: 'flox activate -r owner/my-env'
@@ -407,7 +407,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(writer.to_string(), indoc! {"
-            ℹ️  No changes to push for my-env.
+            ℹ No changes to push for my-env.
             The environment on FloxHub is already up to date.
 
         "});
@@ -534,7 +534,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(writer.to_string(), indoc! {"
-            ℹ️  No changes to push for my-env.
+            ℹ No changes to push for my-env.
             The environment on FloxHub is already up to date.
 
         "});
