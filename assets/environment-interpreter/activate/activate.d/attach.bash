@@ -1,4 +1,5 @@
 _sed="@gnused@/bin/sed"
+source "${_activate_d}/style.bash"
 
 attach() {
   _flox_activation_state_dir="${1?}"
@@ -7,12 +8,18 @@ attach() {
   shift
 
   "$_flox_activate_tracer" "$_activate_d/attach.bash" START
+  if allows_color; then
+    COLOR_ENABLED=1
+  else
+    COLOR_ENABLED=0
+  fi
 
+  icon="$(green_check $COLOR_ENABLED)"
   # Don't clobber STDERR or recommend 'exit' for non-interactive shells.
   # If inside a container, FLOX_ENV_DESCRIPTION won't be set, and we don't need to
   # print a message (although attach isn't reachable anyways)
   if [ "${_flox_invocation_type}" = "interactive" ] && [ -n "${FLOX_ENV_DESCRIPTION:-}" ]; then
-    echo "✔ Attached to existing activation of environment '$FLOX_ENV_DESCRIPTION'" >&2
+    echo -e "$icon Attached to existing activation of environment '$FLOX_ENV_DESCRIPTION'" >&2
     echo "To stop using this environment, type 'exit'" >&2
     echo >&2
   fi
