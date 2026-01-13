@@ -240,7 +240,7 @@ EOF
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
-  assert_output --partial "✅ 'hello' installed to environment"
+  assert_output --partial "✔ 'hello' installed to environment"
   FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
   assert_output --regexp "bin/hello"
   refute_output "not found"
@@ -263,7 +263,7 @@ EOF
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
-  assert_output --partial "✅ 'hello' installed to environment"
+  assert_output --partial "✔ 'hello' installed to environment"
   FLOX_SHELL="tcsh" run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
   assert_output --regexp "bin/hello"
   refute_output "not found"
@@ -275,7 +275,7 @@ EOF
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
-  assert_output --partial "✅ 'hello' installed to environment"
+  assert_output --partial "✔ 'hello' installed to environment"
 
   FLOX_SHELL="zsh" run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
   assert_output --regexp "bin/hello"
@@ -3539,7 +3539,7 @@ EOF
     eval "$(${FLOX_BIN} activate -d ${PROJECT_DIR})"
   '
   # There should be no errors from the in-place activations.
-  assert_output "✅ 'hello' installed to environment '${PROJECT_NAME}'"
+  assert_output "✔ 'hello' installed to environment '${PROJECT_NAME}'"
   assert_success
 
   # Additional activations of the modified environment should still work.
@@ -4311,7 +4311,7 @@ EOF
       run tr -d '\r' < expect.log
       assert_output - << EOF
 spawn ${FLOX_BIN} activate --dir ${PROJECT_DIR}
-✅ Attached to existing activation of environment '${PROJECT_NAME}'
+✔ Attached to existing activation of environment '${PROJECT_NAME}'
 To stop using this environment, type 'exit'
 
 ${expected_content}
@@ -4831,7 +4831,7 @@ EOF
 
   run --separate-stderr "$FLOX_BIN" activate -d composer -- echo "locking"
   assert_success
-  assert_equal "$stderr" "ℹ️  The following manifest fields were overridden during merging:
+  assert_equal "$stderr" "ℹ The following manifest fields were overridden during merging:
 - This environment set:
   - vars.foo
 Sourcing .bashrc

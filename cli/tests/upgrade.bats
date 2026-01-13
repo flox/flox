@@ -84,7 +84,7 @@ function old_hello_response_version() {
     run "$FLOX_BIN" upgrade
   assert_success
   assert_output \
-"✅  Upgraded 1 package(s) in 'test':
+"✔ Upgraded 1 package(s) in 'test':
 - hello: $(old_hello_response_version) -> $(hello_response_version)"
 
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -104,7 +104,7 @@ function old_hello_response_version() {
     run "$FLOX_BIN" upgrade toplevel
   assert_success
   assert_output \
-"✅  Upgraded 1 package(s) in 'test':
+"✔ Upgraded 1 package(s) in 'test':
 - hello: $(old_hello_response_version) -> $(hello_response_version)"
 
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -124,7 +124,7 @@ function old_hello_response_version() {
     run "$FLOX_BIN" upgrade hello
   assert_success
   assert_output \
-"✅  Upgraded 1 package(s) in 'test':
+"✔ Upgraded 1 package(s) in 'test':
 - hello: $(old_hello_response_version) -> $(hello_response_version)"
 
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -140,7 +140,7 @@ function old_hello_response_version() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml" \
     run "$FLOX_BIN" upgrade hello
   assert_failure
-  assert_line "❌ ERROR: 'hello' is a package in the group 'toplevel' with multiple packages."
+  assert_line "✘ ERROR: 'hello' is a package in the group 'toplevel' with multiple packages."
 }
 
 # bats test_tags=upgrade:page-not-upgraded
@@ -202,7 +202,7 @@ To apply these changes, run upgrade without the '--dry-run' flag."
   assert_success
 
   assert_output \
-"✅  Upgraded 1 package(s) in 'test':
+"✔ Upgraded 1 package(s) in 'test':
 - hello: $old_version -> $new_version"
 }
 

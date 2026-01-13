@@ -183,7 +183,7 @@ EOF
 
 [install]
 hello.pkg-path = "hello"'
-  assert_equal "$stderr" 'ℹ️  Displaying merged manifest.'
+  assert_equal "$stderr" 'ℹ Displaying merged manifest.'
 }
 
 # bats test_tags=list,list:config
@@ -211,8 +211,8 @@ EOF
 
   run --separate-stderr "$FLOX_BIN" list -c -d composer
   assert_success
-  assert_equal "$stderr" "ℹ️  Displaying merged manifest.
-ℹ️  The following manifest fields were overridden during merging:
+  assert_equal "$stderr" "ℹ Displaying merged manifest.
+ℹ The following manifest fields were overridden during merging:
 - This environment set:
   - vars.foo"
 }

@@ -50,7 +50,7 @@ teardown() {
 
   run "$FLOX_BIN" activate -m invalid -- true
   assert_failure
-  assert_output "❌ ERROR: couldn't parse \`invalid\`: not a valid activation mode"
+  assert_output "✘ ERROR: couldn't parse \`invalid\`: not a valid activation mode"
 }
 
 function set_manifest_mode() {

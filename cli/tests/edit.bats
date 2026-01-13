@@ -91,7 +91,7 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
-  assert_output "✅ Environment successfully updated."
+  assert_output "✔ Environment successfully updated."
 }
 
 # ---------------------------------------------------------------------------- #
@@ -211,7 +211,7 @@ EOF
   # (simulates quitting the editor without saving)
   run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
   assert_success
-  assert_output "⚠️  No changes made to environment."
+  assert_output "! No changes made to environment."
 }
 
 # bats test_tags=edit:unlocked
@@ -226,7 +226,7 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
   assert_success
-  assert_output "✅ Environment successfully updated."
+  assert_output "✔ Environment successfully updated."
 }
 
 # ---------------------------------------------------------------------------- #

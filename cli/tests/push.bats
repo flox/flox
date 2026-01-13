@@ -189,7 +189,7 @@ EOF
 
   run "$FLOX_BIN" push --dir composer --owner owner
   assert_failure
-  assert_line "❌ ERROR: cannot push environment that includes local environments"
+  assert_line "✘ ERROR: cannot push environment that includes local environments"
 }
 
 
@@ -212,5 +212,5 @@ EOF
 
   run "$FLOX_BIN" push --dir composer
   assert_failure
-  assert_line "❌ ERROR: cannot push environment that includes local environments"
+  assert_line "✘ ERROR: cannot push environment that includes local environments"
 }
