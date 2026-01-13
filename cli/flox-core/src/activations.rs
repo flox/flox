@@ -187,7 +187,7 @@ pub struct AttachedPid {
     pub expiration: Option<OffsetDateTime>,
 }
 
-/// Acquires the filesystem-based lock on activations.json
+/// Acquires the filesystem-based lock on state.json
 pub fn acquire_activations_json_lock(
     activations_json_path: impl AsRef<Path>,
 ) -> Result<LockFile, Error> {
@@ -201,10 +201,10 @@ pub fn acquire_activations_json_lock(
     Ok(lock)
 }
 
-/// Returns the path to the lock file for activations.json.
+/// Returns the path to the lock file for state.json.
 /// The presence of the lock file does not indicate an active lock because the
 /// file isn't removed after use.
-/// This is a separate file because we replace activations.json on write.
+/// This is a separate file because we replace state.json on write.
 fn activations_json_lock_path(activations_json_path: impl AsRef<Path>) -> PathBuf {
     activations_json_path.as_ref().with_extension("lock")
 }
@@ -668,7 +668,7 @@ fn parse_versioned_activation_state(content: &str) -> Result<Option<ActivationSt
     }
 }
 
-/// Returns the parsed `activations.json` file or `None` if:
+/// Returns the parsed `state.json` file or `None` if:
 ///
 /// - the file does not exist
 /// - the version is different but there are no running processes
@@ -687,7 +687,7 @@ pub fn read_activations_json(
         return Ok((None, lock_file));
     }
 
-    debug!(?path, "reading activations.json");
+    debug!(?path, "reading state.json");
     let contents =
         std::fs::read_to_string(path).context(format!("failed to read file {}", path.display()))?;
 
@@ -695,7 +695,7 @@ pub fn read_activations_json(
 
     Ok((parsed, lock_file))
 }
-/// Writes the environment `activations.json` file.
+/// Writes the environment `state.json` file.
 /// The file is written atomically.
 /// The lock is released after the write.
 ///
