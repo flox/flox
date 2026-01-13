@@ -1,5 +1,6 @@
 use anyhow::Result;
 use bpaf::Bpaf;
+use crossterm::style::Stylize;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{Environment, SingleSystemUpgradeDiff};
 use indoc::formatdoc;
@@ -9,7 +10,7 @@ use tracing::{info_span, instrument};
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::{ensure_floxhub_token, environment_description};
-use crate::utils::message;
+use crate::utils::message::{self, stderr_supports_color};
 use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Upgrade packages in an environment
@@ -123,14 +124,19 @@ impl Upgrade {
             return Ok(());
         }
 
+        let icon = if stderr_supports_color() {
+            "✔".green().to_string()
+        } else {
+            "✔".to_string()
+        };
         if diff_for_system.is_empty() {
             message::plain(formatdoc! {"
-            ✅  Upgraded {description}.
+            {icon} Upgraded {description}.
             Upgrades were not available for this system, but upgrades were applied for other
             systems supported by this environment."});
         } else {
             message::plain(formatdoc! {"
-            ✅  Upgraded {num_changes_for_system} package(s) in {description}:
+            {icon} Upgraded {num_changes_for_system} package(s) in {description}:
             {rendered_diff}
             "});
         }
