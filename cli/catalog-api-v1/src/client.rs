@@ -176,24 +176,41 @@ pub mod types {
     ///  "title": "CatalogPage",
     ///  "examples": [
     ///    {
-    ///      "attr_path": "foo.bar.curl",
-    ///      "description": "A very nice Item",
-    ///      "license": "foo",
-    ///      "locked_url": "git:git?rev=xyz",
-    ///      "name": "curl",
-    ///      "outputs": "{}",
-    ///      "outputs_to_install": "{}",
-    ///      "pkg_path": "foo.bar.curl",
+    ///      "attr_path": "curl",
+    ///      "broken": false,
+    ///      "catalog": "nixpkgs",
+    ///      "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+    ///      "description": "A command line tool for transferring files with URL syntax",
+    ///      "insecure": false,
+    ///      "license": "curl",
+    ///      "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
+    ///      "missing_builds": false,
+    ///      "name": "curl-8.5.0",
+    ///      "outputs": [
+    ///        {
+    ///          "name": "out",
+    ///          "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///        },
+    ///        {
+    ///          "name": "man",
+    ///          "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///        }
+    ///      ],
+    ///      "outputs_to_install": [
+    ///        "out",
+    ///        "man"
+    ///      ],
+    ///      "pkg_path": "curl",
     ///      "pname": "curl",
-    ///      "rev": "xyz",
-    ///      "rev_count": 4,
-    ///      "rev_date": 0,
+    ///      "rev": "abc123def456",
+    ///      "rev_count": 12345,
+    ///      "rev_date": "2024-01-15T00:00:00Z",
     ///      "stabilities": [
-    ///        "stable",
-    ///        "unstable"
+    ///        "stable"
     ///      ],
     ///      "system": "x86_64-linux",
-    ///      "version": "1.0"
+    ///      "unfree": false,
+    ///      "version": "8.5.0"
     ///    }
     ///  ],
     ///  "type": "object",
@@ -1156,21 +1173,23 @@ pub mod types {
     ///  "examples": [
     ///    {
     ///      "derivation": {
-    ///        "description": "A very nice derivation",
-    ///        "drv_path": "foo.bar.curl",
-    ///        "license": "GnuFoo",
-    ///        "name": "mydrv",
+    ///        "broken": false,
+    ///        "description": "A command line tool for transferring files with URL syntax",
+    ///        "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+    ///        "license": "curl",
+    ///        "name": "curl-8.5.0",
     ///        "outputs": {
-    ///          "bin": "/nix/store/foo",
-    ///          "man": "/nix/store/bar"
+    ///          "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
+    ///          "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
     ///        },
     ///        "outputs_to_install": [
-    ///          "bin",
+    ///          "out",
     ///          "man"
     ///        ],
-    ///        "pname": "mydrv",
+    ///        "pname": "curl",
     ///        "system": "x86_64-linux",
-    ///        "version": "1.0"
+    ///        "unfree": false,
+    ///        "version": "8.5.0"
     ///      },
     ///      "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
     ///      "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
@@ -1329,21 +1348,23 @@ pub mod types {
     ///  "examples": [
     ///    {
     ///      "derivation": {
-    ///        "description": "A very nice derivation",
-    ///        "drv_path": "foo.bar.curl",
-    ///        "license": "GnuFoo",
-    ///        "name": "mydrv",
+    ///        "broken": false,
+    ///        "description": "A command line tool for transferring files with URL syntax",
+    ///        "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+    ///        "license": "curl",
+    ///        "name": "curl-8.5.0",
     ///        "outputs": {
-    ///          "bin": "/nix/store/foo",
-    ///          "man": "/nix/store/bar"
+    ///          "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
+    ///          "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
     ///        },
     ///        "outputs_to_install": [
-    ///          "bin",
+    ///          "out",
     ///          "man"
     ///        ],
-    ///        "pname": "mydrv",
+    ///        "pname": "curl",
     ///        "system": "x86_64-linux",
-    ///        "version": "1.0"
+    ///        "unfree": false,
+    ///        "version": "8.5.0"
     ///      },
     ///      "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
     ///      "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
@@ -1448,21 +1469,23 @@ pub mod types {
     ///  "title": "PackageDerivation",
     ///  "examples": [
     ///    {
-    ///      "description": "A very nice derivation",
-    ///      "drv_path": "foo.bar.curl",
-    ///      "license": "GnuFoo",
-    ///      "name": "mydrv",
+    ///      "broken": false,
+    ///      "description": "A command line tool for transferring files with URL syntax",
+    ///      "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+    ///      "license": "curl",
+    ///      "name": "curl-8.5.0",
     ///      "outputs": {
-    ///        "bin": "/nix/store/foo",
-    ///        "man": "/nix/store/bar"
+    ///        "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
+    ///        "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
     ///      },
     ///      "outputs_to_install": [
-    ///        "bin",
+    ///        "out",
     ///        "man"
     ///      ],
-    ///      "pname": "mydrv",
+    ///      "pname": "curl",
     ///      "system": "x86_64-linux",
-    ///      "version": "1.0"
+    ///      "unfree": false,
+    ///      "version": "8.5.0"
     ///    }
     ///  ],
     ///  "type": "object",
@@ -1580,21 +1603,23 @@ pub mod types {
     ///  "title": "PackageDerivation",
     ///  "examples": [
     ///    {
-    ///      "description": "A very nice derivation",
-    ///      "drv_path": "foo.bar.curl",
-    ///      "license": "GnuFoo",
-    ///      "name": "mydrv",
+    ///      "broken": false,
+    ///      "description": "A command line tool for transferring files with URL syntax",
+    ///      "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+    ///      "license": "curl",
+    ///      "name": "curl-8.5.0",
     ///      "outputs": {
-    ///        "bin": "/nix/store/foo",
-    ///        "man": "/nix/store/bar"
+    ///        "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
+    ///        "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
     ///      },
     ///      "outputs_to_install": [
-    ///        "bin",
+    ///        "out",
     ///        "man"
     ///      ],
-    ///      "pname": "mydrv",
+    ///      "pname": "curl",
     ///      "system": "x86_64-linux",
-    ///      "version": "1.0"
+    ///      "unfree": false,
+    ///      "version": "8.5.0"
     ///    }
     ///  ],
     ///  "type": "object",
@@ -3337,24 +3362,41 @@ pub mod types {
     ///  "title": "ResolvedPackageGroup",
     ///  "examples": [
     ///    {
-    ///      "attr_path": "foo.bar.curl",
-    ///      "description": "A very nice Item",
-    ///      "license": "foo",
-    ///      "locked_url": "git:git?rev=xyz",
-    ///      "name": "curl",
-    ///      "outputs": "{}",
-    ///      "outputs_to_install": "{}",
-    ///      "pkg_path": "foo.bar.curl",
+    ///      "attr_path": "curl",
+    ///      "broken": false,
+    ///      "catalog": "nixpkgs",
+    ///      "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+    ///      "description": "A command line tool for transferring files with URL syntax",
+    ///      "insecure": false,
+    ///      "license": "curl",
+    ///      "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
+    ///      "missing_builds": false,
+    ///      "name": "curl-8.5.0",
+    ///      "outputs": [
+    ///        {
+    ///          "name": "out",
+    ///          "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///        },
+    ///        {
+    ///          "name": "man",
+    ///          "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///        }
+    ///      ],
+    ///      "outputs_to_install": [
+    ///        "out",
+    ///        "man"
+    ///      ],
+    ///      "pkg_path": "curl",
     ///      "pname": "curl",
-    ///      "rev": "xyz",
-    ///      "rev_count": 4,
-    ///      "rev_date": 0,
+    ///      "rev": "abc123def456",
+    ///      "rev_count": 12345,
+    ///      "rev_date": "2024-01-15T00:00:00Z",
     ///      "stabilities": [
-    ///        "stable",
-    ///        "unstable"
+    ///        "stable"
     ///      ],
     ///      "system": "x86_64-linux",
-    ///      "version": "1.0"
+    ///      "unfree": false,
+    ///      "version": "8.5.0"
     ///    }
     ///  ],
     ///  "type": "object",
@@ -4566,6 +4608,10 @@ Path Parameters:
 
 Returns:
 - **UserPackage**
+
+Note: Authentication is optional. Unauthenticated users can access
+packages in public catalogs (flox, base). Private catalogs require
+authentication.
 
 Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}`
 
