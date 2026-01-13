@@ -1,14 +1,13 @@
 use std::path::{Path, PathBuf};
 
-use flox_core::canonical_path::CanonicalPath;
 use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
 
 use super::environment::ManagedPointer;
-use super::environment::managed_environment::{branch_name, remote_branch_name};
 use super::environment_ref::EnvironmentOwner;
 use crate::flox::{Flox, Floxhub, FloxhubError, FloxhubToken};
+use crate::models::environment::floxmeta_branch::remote_branch_name;
 use crate::providers::git::{
     GitCommandBranchHashError,
     GitCommandError,
@@ -179,49 +178,6 @@ impl FloxMeta {
 
         Ok(FloxMeta { git })
     }
-
-    /// Prune the local branch for a deleted environment. If there are no more
-    /// local branches, then also prune the remote branch. Already absent
-    /// branches are not treated as errors.
-    pub fn prune_branches(
-        &self,
-        pointer: &ManagedPointer,
-        dot_flox_path: &CanonicalPath,
-    ) -> Result<(), FloxMetaError> {
-        let branch_names = self
-            .git
-            .list_branches()
-            .map_err(FloxMetaError::ListBranch)?
-            .iter()
-            .map(|branch| branch.name.clone())
-            .collect::<Vec<_>>();
-
-        let local_branch = branch_name(pointer, dot_flox_path);
-        if branch_names.contains(&local_branch) {
-            self.git
-                .delete_branch(&local_branch, true)
-                .map_err(FloxMetaError::DeleteBranch)?;
-        }
-
-        let remote_branch = remote_branch_name(pointer);
-        if branch_names.contains(&remote_branch) {
-            let branch_prefix = pointer.name.to_string();
-            let branches_for_other_paths = branch_names.iter().any(|name| {
-                match name.rsplit_once(BRANCH_NAME_PATH_SEPARATOR) {
-                    Some((prefix, _)) => prefix == branch_prefix,
-                    _ => false,
-                }
-            });
-
-            if !branches_for_other_paths {
-                self.git
-                    .delete_branch(&remote_branch_name(pointer), true)
-                    .map_err(FloxMetaError::DeleteBranch)?;
-            }
-        }
-
-        Ok(())
-    }
 }
 
 /// Returns the git options for interacting with floxmeta repositories
@@ -289,17 +245,6 @@ pub(super) fn floxmeta_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
     flox.data_dir
         .join(FLOXMETA_DIR_NAME)
         .join(owner.to_string())
-}
-
-pub mod test_helpers {
-    use super::*;
-    use crate::providers::git::test_helpers::mock_provider;
-
-    pub fn unusable_mock_floxmeta() -> FloxMeta {
-        FloxMeta {
-            git: mock_provider(),
-        }
-    }
 }
 
 #[cfg(test)]

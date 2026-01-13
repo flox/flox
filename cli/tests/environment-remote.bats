@@ -80,7 +80,7 @@ EOF
 @test "r0: listing a remote environment does not create (visible) local files" {
   make_empty_remote_env
 
-  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
+  run --separate-stderr "$FLOX_BIN" list --name --reference "$OWNER/test"
   assert_success
   assert_output ""
 
@@ -94,7 +94,7 @@ EOF
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   make_empty_remote_env
 
-  run --separate-stderr "$FLOX_BIN" install hello --remote "$OWNER/test"
+  run --separate-stderr "$FLOX_BIN" install hello --reference "$OWNER/test"
   assert_success
 
   assert [ -h "$FLOX_CACHE_DIR/run/$OWNER/$NIX_SYSTEM.test.dev" ]
@@ -107,11 +107,11 @@ EOF
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   make_empty_remote_env
 
-  run "$FLOX_BIN" install hello --remote "$OWNER/test"
+  run "$FLOX_BIN" install hello --reference "$OWNER/test"
   assert_success
-  assert_output --partial "environment '$OWNER/test' (remote)" # managed env output
+  assert_output --partial "environment '$OWNER/test' (local)"
 
-  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
+  run --separate-stderr "$FLOX_BIN" list --name --reference "$OWNER/test"
   assert_success
   assert_output "hello"
 }
@@ -121,12 +121,12 @@ EOF
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs_vim.yaml"
   make_empty_remote_env
 
-  "$FLOX_BIN" install emacs vim --remote "$OWNER/test"
+  "$FLOX_BIN" install emacs vim --reference "$OWNER/test"
 
-  run "$FLOX_BIN" uninstall vim --remote "$OWNER/test"
+  run "$FLOX_BIN" uninstall vim --reference "$OWNER/test"
   assert_success
 
-  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
+  run --separate-stderr "$FLOX_BIN" list --name --reference "$OWNER/test"
   assert_success
   assert_output "emacs"
 }
@@ -145,11 +145,11 @@ version = 1
 hello.pkg-path = "hello"
 EOF
 
-  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH" --remote "$OWNER/test"
+  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH" --reference "$OWNER/test"
   assert_success
   assert_output --partial "✅ Environment successfully updated."
 
-  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
+  run --separate-stderr "$FLOX_BIN" list --name --reference "$OWNER/test"
   assert_success
   assert_output "hello"
 }
@@ -160,20 +160,20 @@ EOF
 @test "m9: activate works in remote environment" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   make_empty_remote_env
-  "$FLOX_BIN" install hello --remote "$OWNER/test"
+  "$FLOX_BIN" install hello --reference "$OWNER/test"
 
   export FLOX_CACHE_DIR="$(realpath $FLOX_CACHE_DIR)"
-  run "$FLOX_BIN" activate --trust --remote "$OWNER/test" -c 'command -v hello'
+  run "$FLOX_BIN" activate --trust --reference "$OWNER/test" -c 'command -v hello'
   assert_success
   assert_output --partial "$FLOX_CACHE_DIR/run/owner/$NIX_SYSTEM.test.dev/bin/hello"
 }
 
 # We need to trust the remote environment before we can activate it.
 # bats test_tags=remote,activate,trust,remote:activate:trust-required
-@test "m10.0: 'activate --remote' fails if remote environment is not trusted" {
+@test "m10.0: 'activate --reference' fails if remote environment is not trusted" {
   make_empty_remote_env
 
-  run "$FLOX_BIN" activate --remote "$OWNER/test"
+  run "$FLOX_BIN" activate --reference "$OWNER/test"
   assert_failure
   assert_output --partial "The environment $OWNER/test is not trusted."
 }
@@ -188,29 +188,28 @@ EOF
 
 # We can use the `--trust` flag to trust the environment temporarily.
 # bats test_tags=remote,activate,trust,remote:activate:trust-option
-@test "m10.1: 'activate --remote --trust' succeeds" {
+@test "m10.1: 'activate --reference --trust' succeeds" {
   make_empty_remote_env
 
-  run "$FLOX_BIN" activate --remote "$OWNER/test" --trust -- true
+  run "$FLOX_BIN" activate --reference "$OWNER/test" --trust -- true
   assert_success
 }
 
-@test "m10.1: 'activate --trust' isn't supported for included remote environment" {
+@test "m10.1: 'activate --trust' succeeds for included remote environment" {
   make_composer_with_remote_include
 
   run "$FLOX_BIN" activate --trust -- true
-  assert_failure
-  assert_output --partial "The included environment $OWNER/test is not trusted."
+  assert_success
 }
 
 # We can use the `config to trust a specific remote environment.
 # The `trust` flag is not required when activating a trusted environment.
 # bats test_tags=remote,activate,trust,remote:activate:trust-config
-@test "m10.2: 'activate --remote' succeeds if trusted by config" {
+@test "m10.2: 'activate --reference' succeeds if trusted by config" {
   make_empty_remote_env
 
   run "$FLOX_BIN" config --set "trusted_environments.$OWNER/test" "trust"
-  run "$FLOX_BIN" activate --remote "$OWNER/test" -- true
+  run "$FLOX_BIN" activate --reference "$OWNER/test" -- true
   assert_success
 }
 
@@ -223,36 +222,39 @@ EOF
 }
 
 # bats test_tags=remote,activate,trust,remote:activate:trust-config
-@test "m10.2: 'activate --remote' succeeds if trusted by config (case-sensitive)" {
+@test "m10.2: 'activate --reference' succeeds if trusted by config (case-sensitive)" {
   make_empty_remote_env CaseSensitive
 
   run "$FLOX_BIN" config --set "trusted_environments.$OWNER/CaseSensitive" "trust"
-  run "$FLOX_BIN" activate --remote "$OWNER/CaseSensitive" -- true
+  run "$FLOX_BIN" activate --reference "$OWNER/CaseSensitive" -- true
   assert_success
 }
 
 # We can use the `config to trust a specific remote environment.
 # The `trust` flag is not required when activating a trusted environment.
 # bats test_tags=remote,activate,trust,remote:activate:deny-config
-@test "m10.3: 'activate --remote' fails if denied by config, --trust overrides" {
+@test "m10.3: 'activate --reference' fails if denied by config, --trust overrides" {
   make_empty_remote_env
 
   run "$FLOX_BIN" config --set "trusted_environments.$OWNER/test" "deny"
 
-  run "$FLOX_BIN" activate --remote "$OWNER/test" -- true
+  run "$FLOX_BIN" activate --reference "$OWNER/test" -- true
   assert_failure
 
-  run "$FLOX_BIN" activate --remote "$OWNER/test" --trust -- true
+  run "$FLOX_BIN" activate --reference "$OWNER/test" --trust -- true
   assert_success
 }
 
-@test "m10.0: 'activate' fails if included remote environment is denied by config" {
+@test "m10.0: 'activate' fails if included remote environment is denied by config, --trust overrides" {
   make_composer_with_remote_include
 
   run "$FLOX_BIN" config --set "trusted_environments.$OWNER/test" "deny"
-  run "$FLOX_BIN" activate --trust -- true
+  run "$FLOX_BIN" activate -- true
   assert_failure
   assert_output --partial "The included environment $OWNER/test is not trusted."
+
+  run "$FLOX_BIN" activate --trust -- true
+  assert_success
 }
 
 # bats test_tags=remote,activate,trust,remote:activate:trust-current-user
@@ -262,12 +264,12 @@ EOF
 #
 # flox reads the user handle from the auth token.
 # The default floxhub test token has the user handle "test".
-@test "m10.4: 'activate --remote' succeeds if owned by current user" {
+@test "m10.4: 'activate --reference' succeeds if owned by current user" {
   export OWNER="test"
   floxhub_setup "$OWNER"
   make_empty_remote_env
 
-  run "$FLOX_BIN" activate --remote "$OWNER/test" -- true
+  run "$FLOX_BIN" activate --reference "$OWNER/test" -- true
   assert_success
 }
 
@@ -278,11 +280,11 @@ EOF
 #
 # flox reads the user handle from the auth token.
 # Here we set a floxhub token with the user handle "test".
-@test "m10.5: 'activate --remote' succeeds if owned by Flox" {
+@test "m10.5: 'activate --reference' succeeds if owned by Flox" {
   floxhub_setup "flox"
   OWNER=flox make_empty_remote_env
 
-  run "$FLOX_BIN" activate --remote "flox/test" -- true
+  run "$FLOX_BIN" activate --reference "flox/test" -- true
   assert_success
 }
 
@@ -294,16 +296,16 @@ EOF
   make_empty_remote_env
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" \
-    "$FLOX_BIN" install hello --remote "$OWNER/test"
+    "$FLOX_BIN" install hello --reference "$OWNER/test"
 
-  run "$FLOX_BIN" list --remote "$OWNER/test"
+  run "$FLOX_BIN" list --reference "$OWNER/test"
   assert_success
   assert_output --partial "2.0"
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
-    run "$FLOX_BIN" upgrade --remote "$OWNER/test"
+    run "$FLOX_BIN" upgrade --reference "$OWNER/test"
 
-  run "$FLOX_BIN" list --remote "$OWNER/test"
+  run "$FLOX_BIN" list --reference "$OWNER/test"
   assert_success
   assert_output --partial "2.12.1"
 
@@ -313,21 +315,21 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=remote,remote:not-found
-@test "activate --remote fails on a non existent environment" {
+@test "activate --reference fails on a non existent environment" {
   run "$FLOX_BIN" activate -r "$OWNER/i-dont-exist"
   assert_failure
   assert_output --partial "Environment not found in FloxHub."
 }
 
 # bats test_tags=remote,remote:not-found
-@test "edit --remote fails on a non existent environment" {
+@test "edit --reference fails on a non existent environment" {
   run "$FLOX_BIN" edit -r "$OWNER/i-dont-exist"
   assert_failure
   assert_output --partial "Environment not found in FloxHub."
 }
 
 # bats test_tags=remote,remote:not-found
-@test "install --remote fails on a non existent environment" {
+@test "install --reference fails on a non existent environment" {
   run "$FLOX_BIN" install hello -r "$OWNER/i-dont-exist"
   assert_failure
   assert_output --partial "Environment not found in FloxHub."
@@ -336,33 +338,33 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=remote,remote:auth-required,remote:auth-required:install
-@test "'install --remote' fails if not authenticated" {
+@test "'install --reference' fails if not authenticated" {
   unset FLOX_FLOXHUB_TOKEN # logout, effectively
-  run "$FLOX_BIN" install hello --remote "$OWNER/test"
+  run "$FLOX_BIN" install hello --reference "$OWNER/test"
   assert_failure
   assert_output --partial "You are not logged in to FloxHub."
 }
 
 # bats test_tags=remote,remote:auth-required,remote:auth-required:uninstall
-@test "'uninstall --remote' fails if not authenticated" {
+@test "'uninstall --reference' fails if not authenticated" {
   unset FLOX_FLOXHUB_TOKEN # logout, effectively
-  run "$FLOX_BIN" uninstall hello --remote "$OWNER/test"
+  run "$FLOX_BIN" uninstall hello --reference "$OWNER/test"
   assert_failure
   assert_output --partial "You are not logged in to FloxHub."
 }
 
 # bats test_tags=remote,remote:auth-required,remote:auth-required:edit
-@test "'edit --remote' fails if not authenticated" {
+@test "'edit --reference' fails if not authenticated" {
   unset FLOX_FLOXHUB_TOKEN # logout, effectively
-  run "$FLOX_BIN" edit --remote "$OWNER/test"
+  run "$FLOX_BIN" edit --reference "$OWNER/test"
   assert_failure
   assert_output --partial "You are not logged in to FloxHub."
 }
 
 # bats test_tags=remote,remote:auth-required,remote:auth-required:upgrade
-@test "'upgrade --remote' fails if not authenticated" {
+@test "'upgrade --reference' fails if not authenticated" {
   unset FLOX_FLOXHUB_TOKEN # logout, effectively
-  run "$FLOX_BIN" upgrade hello --remote "$OWNER/test"
+  run "$FLOX_BIN" upgrade hello --reference "$OWNER/test"
   assert_failure
   assert_output --partial "You are not logged in to FloxHub."
 }

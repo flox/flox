@@ -45,7 +45,6 @@ use crate::models::manifest::composite::CompositeManifest;
 use crate::providers::catalog::{
     self,
     ALL_SYSTEMS,
-    CatalogPage,
     MsgAttrPathNotFoundNotFoundForAllSystems,
     MsgAttrPathNotFoundNotInCatalog,
     MsgAttrPathNotFoundSystemsNotOnSamePage,
@@ -371,21 +370,6 @@ pub struct LockedPackageStorePath {
     pub store_path: String,
     pub system: System,
     pub priority: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct LockedGroup {
-    /// name of the group
-    name: String,
-    /// system this group provides packages for
-    system: System,
-    /// [CatalogPage] that was selected to fulfill this group
-    ///
-    /// If resolution of a group provides multiple pages,
-    /// a single page is selected based on cross group constraints.
-    /// By default this is the latest page that provides packages
-    /// for all requested systems.
-    page: CatalogPage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
@@ -1744,6 +1728,7 @@ pub mod test_helpers {
             systems: Some(vec![PackageSystem::Aarch64Darwin.to_string()]),
             version: None,
             priority: None,
+            outputs: None,
         }
         .into();
 
@@ -1786,6 +1771,7 @@ pub mod test_helpers {
             flake: format!("github:nowhere/exciting#{name}"),
             priority: None,
             systems: None,
+            outputs: None,
         };
 
         let locked = LockedPackageFlake {
@@ -1841,6 +1827,7 @@ pub mod test_helpers {
             flake: "github:nix-community/nix-eval-jobs".to_string(),
             priority: None,
             systems: None,
+            outputs: None,
         }
     }
 
@@ -1895,7 +1882,7 @@ pub(crate) mod tests {
         fake_store_path_lock,
     };
 
-    use self::catalog::PackageResolutionInfo;
+    use self::catalog::{CatalogPage, PackageResolutionInfo};
     use super::*;
     use crate::flox::RemoteEnvironmentRef;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
@@ -2274,6 +2261,7 @@ pub(crate) mod tests {
                 systems: None,
                 version: None,
                 priority: None,
+                outputs: None,
             }
             .into(),
         );
@@ -2856,10 +2844,14 @@ pub(crate) mod tests {
                 .await;
         if let Err(ResolveError::ResolutionFailed(res_failures)) = locked_manifest {
             // A newline is added for formatting when it's a single message
-            assert_eq!(
-                res_failures.to_string(),
-                "\nThe attr_path darwin.ps is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,x86_64-darwin), (x86_64-darwin)."
-            );
+            assert_eq!(res_failures.to_string(), indoc! {"
+                package 'darwin.ps' not available for
+                    - aarch64-linux
+                  but it is available for
+                    - x86_64-darwin
+
+                For more on managing system-specific packages, visit the documentation:
+                https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages"});
         } else {
             panic!("expected resolution failure, got {:?}", locked_manifest);
         }
@@ -3330,7 +3322,7 @@ pub(crate) mod tests {
         #[test]
         fn lock_manifest_noop_if_locked_without_install_section((flox, tempdir, environments_to_include) in generate_path_environments_without_install_or_include(3)) {
             let manifest = Manifest {
-                version: Version,
+                version: 1.into(),
                 include: Include {
                     environments: environments_to_include
                         .into_iter()
@@ -3376,6 +3368,7 @@ pub(crate) mod tests {
                 priority: None,
                 version: None,
                 systems: None,
+                outputs: None,
             }),
         );
         manifest
@@ -3899,7 +3892,7 @@ pub(crate) mod tests {
         .unwrap();
 
         assert_eq!(merged, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
             ..Default::default()
         });
@@ -3975,7 +3968,7 @@ pub(crate) mod tests {
         .unwrap();
 
         assert_eq!(merged, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([
                 ("foo".to_string(), "highest_precedence".to_string()),
                 ("bar".to_string(), "higher_precedence".to_string())
@@ -4097,7 +4090,7 @@ pub(crate) mod tests {
         .unwrap();
 
         assert_eq!(merged, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([(
                 "foo".to_string(),
                 "highest_precedence".to_string()
@@ -4159,7 +4152,7 @@ pub(crate) mod tests {
             .unwrap();
 
         assert_eq!(lockfile.manifest, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
             ..Default::default()
         });
@@ -4204,7 +4197,7 @@ pub(crate) mod tests {
         .unwrap();
 
         assert_eq!(merged, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([(
                 "foo".to_string(),
                 if modify_include_descriptor {
@@ -4277,7 +4270,7 @@ pub(crate) mod tests {
             .unwrap();
 
         assert_eq!(lockfile.manifest, Manifest {
-            version: Version,
+            version: 1.into(),
             vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
             ..Default::default()
         });

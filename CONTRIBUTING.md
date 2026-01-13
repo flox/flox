@@ -519,8 +519,6 @@ changes.
 
 ## Merges
 
-Changes should be **squashed and merged** into `main`.
-
 Development is done on branches and merged back to `main`.  Keep your branch
 updated by rebasing and resolving conflicts regularly to avoid messy merges.
 Merges to `main` should be squashed and *ff-only* back to `main` using GitHub

@@ -9,6 +9,8 @@
 /.flox
 /autom4te.cache/
 /cli/target
+# <https://github.com/rust-lang/rust-analyzer/issues/20821>
+/target
 /build/*
 compile_commands.json
 result

@@ -283,9 +283,9 @@ mod tests {
             format_active: false,
         };
         assert_eq!(envs.to_string(), formatdoc! {"
-            name_path                   /envs/path
-            name_managed                /envs/managed (https://hub.example.com/owner/name_managed)
-            name_remote                 remote (https://hub.example.com/owner/name_remote)
+            name_path                  /envs/path
+            name_managed               /envs/managed (https://hub.example.com/owner/name_managed)
+            name_remote                remote (https://hub.example.com/owner/name_remote)
         "});
     }
 }

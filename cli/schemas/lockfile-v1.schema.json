@@ -23,6 +23,12 @@
       },
       "type": "object"
     },
+    "AllSentinel": {
+      "enum": [
+        "all"
+      ],
+      "type": "string"
+    },
     "Allows": {
       "additionalProperties": false,
       "properties": {
@@ -736,7 +742,7 @@
           "description": "Variables that are exported to the shell environment upon activation."
         },
         "version": {
-          "$ref": "#/$defs/version"
+          "$ref": "#/$defs/ManifestVersion"
         }
       },
       "required": [
@@ -756,6 +762,12 @@
           "$ref": "#/$defs/PackageDescriptorStorePath"
         }
       ]
+    },
+    "ManifestVersion": {
+      "format": "uint8",
+      "maximum": 255,
+      "minimum": 0,
+      "type": "integer"
     },
     "Options": {
       "additionalProperties": false,
@@ -795,6 +807,16 @@
     "PackageDescriptorCatalog": {
       "additionalProperties": false,
       "properties": {
+        "outputs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SelectedOutputs"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "pkg-group": {
           "type": [
             "string",
@@ -838,6 +860,16 @@
       "properties": {
         "flake": {
           "type": "string"
+        },
+        "outputs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SelectedOutputs"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "priority": {
           "format": "uint64",
@@ -1002,6 +1034,19 @@
       ],
       "type": "string"
     },
+    "SelectedOutputs": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AllSentinel"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
+    },
     "SemverOptions": {
       "additionalProperties": false,
       "properties": {
@@ -1016,6 +1061,7 @@
       "type": "object"
     },
     "Service": {
+      "additionalProperties": false,
       "description": "Service section configuration with resource limits",
       "properties": {
         "cpu_quota": {
@@ -1449,6 +1495,7 @@
       "type": "string"
     },
     "ServiceUnit": {
+      "additionalProperties": false,
       "description": "Represents a systemd service configuration",
       "properties": {
         "service": {
@@ -1482,6 +1529,7 @@
       "type": "object"
     },
     "Unit": {
+      "additionalProperties": false,
       "description": "Unit section configuration",
       "properties": {
         "after": {

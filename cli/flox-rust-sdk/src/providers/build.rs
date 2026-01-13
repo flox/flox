@@ -10,7 +10,7 @@ use itertools::Itertools;
 use serde::Deserialize;
 use tempfile::NamedTempFile;
 use thiserror::Error;
-use tracing::{debug, error};
+use tracing::debug;
 use url::Url;
 
 use super::buildenv::{BuildEnvOutputs, BuiltStorePath};
@@ -309,8 +309,8 @@ impl ManifestBuilder for FloxBuildMk<'_> {
             "EXPRESSION_BUILD_NIXPKGS_URL={expression_build_nixpkgs_url}"
         ));
 
-        if system_override.is_some() {
-            command.arg(format!("NIX_SYSTEM={}", system_override.unwrap()));
+        if let Some(system_override) = system_override {
+            command.arg(format!("NIX_SYSTEM={system_override}"));
         }
 
         command.arg(format!(
@@ -914,7 +914,7 @@ pub mod test_helpers {
         assert!(dir.is_symlink());
         assert!(dir.read_link().unwrap().starts_with("/nix/store/"));
 
-        let file = dir.join(file_name);
+        let file = Path::join(&dir, file_name);
         assert!(file.is_file());
         assert_eq!(fs::read_to_string(file).unwrap(), content);
     }
@@ -2413,10 +2413,8 @@ mod tests {
         "#}
         } else {
             formatdoc! {r#"
-                4 packages found in {store_path_prefix_pattern}-{package_name}-0\.0\.0
+                1 packages found in {store_path_prefix_pattern}-{package_name}-0\.0\.0
                        not found in {store_path_prefix_pattern}-environment-build-{package_name}
-
-                Displaying first 3 only:
         "#}
         };
         let re = regex::Regex::new(&expected_pattern).unwrap();
@@ -3480,6 +3478,37 @@ mod tests {
         fs::remove_file(&deleted_file_path).unwrap();
 
         assert_build_status(&flox, &mut env, package_name, None, true);
+    }
+
+    async fn manifest_builds_handle_unwritable_subdirs(sandbox: &str) {
+        let package_name = String::from("foo");
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            sandbox = "{sandbox}"
+            command = """
+                mkdir -p $out/unwritable
+                touch $out/unwritable/file
+                chmod 555 $out/unwritable
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+        let _ = GitCommandProvider::init(&env_path, false).unwrap();
+        assert_build_status(&flox, &mut env, &package_name, None, true);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn manifest_builds_handle_unwritable_subdirs_sandbox_pure() {
+        manifest_builds_handle_unwritable_subdirs("pure").await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn manifest_builds_handle_unwritable_subdirs_sandbox_off() {
+        manifest_builds_handle_unwritable_subdirs("off").await;
     }
 }
 

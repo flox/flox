@@ -5,16 +5,16 @@ then:
   status: 200
   header:
   - name: date
-    value: Tue, 03 Jun 2025 17:26:29 GMT
+    value: Sun, 28 Dec 2025 12:34:42 GMT
   - name: content-type
     value: application/json
   - name: content-length
-    value: '2476'
+    value: '2416'
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LmR68gHcIAMEafg=
-  body: '{"items":[{"attr_path":"javacc","catalog":null,"pkg_path":"javacc","name":"javacc-7.0.13","pname":"javacc","version":"7.0.13","description":"Parser generator for building parsers from grammars","stabilities":[],"system":"x86_64-linux"},{"attr_path":"javaCup","catalog":null,"pkg_path":"javaCup","name":"java-cup-11b-20160615","pname":"javaCup","version":"20160615","description":"LALR parser generator for Java","stabilities":[],"system":"x86_64-linux"},{"attr_path":"hdf_java","catalog":null,"pkg_path":"hdf_java","name":"hdf-java-3.3.2","pname":"hdf_java","version":"3.3.2","description":"A Java package that implements HDF4 and HDF5 data objects in an object-oriented form","stabilities":[],"system":"x86_64-linux"},{"attr_path":"dbus_java","catalog":null,"pkg_path":"dbus_java","name":"dbus-java-2.7","pname":"dbus_java","version":"2.7","description":null,"stabilities":[],"system":"x86_64-linux"},{"attr_path":"geoipjava","catalog":null,"pkg_path":"geoipjava","name":"GeoIPJava-1.2.5","pname":"geoipjava","version":"1.2.5","description":"GeoIP Java API","stabilities":[],"system":"x86_64-linux"},{"attr_path":"tabula-java","catalog":null,"pkg_path":"tabula-java","name":"tabula-java-1.0.5","pname":"tabula-java","version":"1.0.5","description":"Library for extracting tables from PDF files","stabilities":[],"system":"x86_64-linux"},{"attr_path":"erlang_javac","catalog":null,"pkg_path":"erlang_javac","name":"erlang_javac-25.3.2.12","pname":"erlang_javac","version":"25.3.2.12","description":"Programming language used for massively scalable soft real-time systems","stabilities":[],"system":"x86_64-linux"},{"attr_path":"swigWithJava","catalog":null,"pkg_path":"swigWithJava","name":"swig-4.2.1","pname":"swigWithJava","version":"4.2.1","description":"Interface compiler that connects C/C++ code to higher-level languages","stabilities":[],"system":"x86_64-linux"},{"attr_path":"yourkit-java","catalog":null,"pkg_path":"yourkit-java","name":"yourkit-java-2025.3-b135","pname":"yourkit-java","version":"2025.3-b135","description":"Award winning, fully featured low overhead profiler for Java EE and Java SE platforms","stabilities":[],"system":"x86_64-linux"},{"attr_path":"java-hamcrest","catalog":null,"pkg_path":"java-hamcrest","name":"java-hamcrest-3.0","pname":"java-hamcrest","version":"3.0","description":"Java library containing matchers that can be combined to create flexible expressions of intent","stabilities":[],"system":"x86_64-linux"}],"total_count":900}'
+    value: WTKLUg_MoAMESVQ=
+  body: '{"items":[{"attr_path":"javacc","catalog":null,"pkg_path":"javacc","name":"javacc-7.0.13","pname":"javacc","version":"7.0.13","description":"Parser generator for building parsers from grammars","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"javaCup","catalog":null,"pkg_path":"javaCup","name":"java-cup-11b-20160615","pname":"javaCup","version":"20160615","description":"LALR parser generator for Java","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"coc-java","catalog":null,"pkg_path":"coc-java","name":"coc-java-1.26.1","pname":"coc-java","version":"1.26.1","description":"Java extension for coc.nvim","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"hdf_java","catalog":null,"pkg_path":"hdf_java","name":"hdf-java-3.3.2","pname":"hdf_java","version":"3.3.2","description":"A Java package that implements HDF4 and HDF5 data objects in an object-oriented form","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"dbus_java","catalog":null,"pkg_path":"dbus_java","name":"dbus-java-2.7","pname":"dbus_java","version":"2.7","description":null,"stabilities":[],"system":"aarch64-darwin"},{"attr_path":"geoipjava","catalog":null,"pkg_path":"geoipjava","name":"GeoIPJava-1.2.5","pname":"geoipjava","version":"1.2.5","description":"GeoIP Java API","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"tabula-java","catalog":null,"pkg_path":"tabula-java","name":"tabula-java-1.0.5","pname":"tabula-java","version":"1.0.5","description":"Library for extracting tables from PDF files","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"erlang_javac","catalog":null,"pkg_path":"erlang_javac","name":"erlang_javac-25.3.2.12","pname":"erlang_javac","version":"25.3.2.12","description":"Programming language used for massively scalable soft real-time systems","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"swigWithJava","catalog":null,"pkg_path":"swigWithJava","name":"swig-4.2.1","pname":"swigWithJava","version":"4.2.1","description":"Interface compiler that connects C/C++ code to higher-level languages","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"yourkit-java","catalog":null,"pkg_path":"yourkit-java","name":"yourkit-java-2025.9-b161","pname":"yourkit-java","version":"2025.9-b161","description":"Award winning, fully featured low overhead profiler for Java EE and Java SE platforms","stabilities":[],"system":"aarch64-darwin"}],"total_count":1044}'
 ---
 when:
   path: /api/v1/catalog/search
@@ -23,13 +23,13 @@ then:
   status: 200
   header:
   - name: date
-    value: Tue, 03 Jun 2025 17:26:30 GMT
+    value: Sun, 28 Dec 2025 12:34:42 GMT
   - name: content-type
     value: application/json
   - name: content-length
-    value: '641'
+    value: '654'
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LmR7BgjXIAMESMg=
-  body: '{"items":[{"attr_path":"jdk","catalog":null,"pkg_path":"jdk","name":"zulu-ca-jdk-21.0.4","pname":"jdk","version":"21.0.4","description":"Certified builds of OpenJDK","stabilities":[],"system":"x86_64-linux"},{"attr_path":"jdk8","catalog":null,"pkg_path":"jdk8","name":"zulu-ca-jdk-8.0.422","pname":"jdk8","version":"8.0.422","description":"Certified builds of OpenJDK","stabilities":[],"system":"x86_64-linux"},{"attr_path":"jdk11","catalog":null,"pkg_path":"jdk11","name":"openjdk-11.0.26+4","pname":"jdk11","version":"11.0.26+4","description":"Open-source Java Development Kit","stabilities":[],"system":"x86_64-linux"}],"total_count":143}'
+    value: WTKLbiMPIAMESSA=
+  body: '{"items":[{"attr_path":"jdk","catalog":null,"pkg_path":"jdk","name":"openjdk-21.0.9+10","pname":"jdk","version":"21.0.9+10","description":"Open-source Java Development Kit","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"jdk8","catalog":null,"pkg_path":"jdk8","name":"openjdk-8u472-b08","pname":"jdk8","version":"8u472-b08","description":"Open-source Java Development Kit","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"jdk11","catalog":null,"pkg_path":"jdk11","name":"zulu-ca-jdk-11.0.24","pname":"jdk11","version":"11.0.24","description":"Certified builds of OpenJDK","stabilities":[],"system":"aarch64-darwin"}],"total_count":192}'

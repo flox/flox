@@ -38,24 +38,24 @@ let
   system = builtins.currentSystem;
 
   # Copy manifest file into the store for access within derivations.
-  manifestLockFile = builtins.path {
+  lockfilePath = builtins.path {
     path = manifestLock;
     name = "manifest.lock";
   };
 
   # Parse the manifest file.
-  manifestLockData = builtins.fromJSON (builtins.readFile manifestLock);
-  manifestData = manifestLockData.manifest;
+  lockfile = builtins.fromJSON (builtins.readFile manifestLock);
+  manifest = lockfile.manifest;
 
-  buildSection = if (builtins.hasAttr "build" manifestData) then manifestData.build else { };
-  hookSection = if (builtins.hasAttr "hook" manifestData) then manifestData.hook else { };
-  profileSection = if (builtins.hasAttr "profile" manifestData) then manifestData.profile else { };
+  buildSection = if (builtins.hasAttr "build" manifest) then manifest.build else { };
+  hookSection = if (builtins.hasAttr "hook" manifest) then manifest.hook else { };
+  profileSection = if (builtins.hasAttr "profile" manifest) then manifest.profile else { };
   vars =
-    if (builtins.hasAttr "vars" manifestData) then
+    if (builtins.hasAttr "vars" manifest) then
       (builtins.toFile "envrc-vars" (
         builtins.concatStringsSep "" (
-          builtins.map (n: "export ${n}=\"${builtins.getAttr n manifestData.vars}\"\n") (
-            builtins.attrNames manifestData.vars
+          builtins.map (n: "export ${n}=\"${builtins.getAttr n manifest.vars}\"\n") (
+            builtins.attrNames manifest.vars
           )
         )
         # alternative ... worth it?
@@ -73,12 +73,12 @@ let
   ]
   ++ (builtins.map (buildId: "build-${buildId}") (builtins.attrNames buildSection));
 
-  createManifestChunks = [
+  createRenderedEnvironmentChunks = [
     # static chunks
     ''
       export PATH="${coreutils}/bin''${PATH:+:}''${PATH}"
       "${coreutils}/bin/mkdir" -p $out/activate.d
-      "${coreutils}/bin/cp" --no-preserve=mode ${manifestLockFile} $out/manifest.lock
+      "${coreutils}/bin/cp" --no-preserve=mode ${lockfilePath} $out/manifest.lock
       "${coreutils}/bin/cp" --no-preserve=mode ${defaultEnvrc} $out/activate.d/envrc
     ''
     # [vars] section
@@ -170,8 +170,8 @@ let
     ) (builtins.attrNames buildSection)
   );
 
-  createManifestScript = builtins.toFile "create-manifest-script" (
-    builtins.concatStringsSep "" createManifestChunks
+  renderEnvironmentScript = builtins.toFile "render-environment-script" (
+    builtins.concatStringsSep "" createRenderedEnvironmentChunks
   );
 
   # Create manifest package as derivation which invokes above script.
@@ -181,7 +181,7 @@ let
     builder = "/bin/sh";
     args = [
       "-eux"
-      createManifestScript
+      renderEnvironmentScript
     ];
   };
 
@@ -203,6 +203,11 @@ let
             # the updated string context populates `inputSrcs` for the
             # resulting derivation.
             let
+              descriptor =
+                if (builtins.hasAttr package.install_id manifest.install) then
+                  (builtins.getAttr package.install_id manifest.install)
+                else
+                  throw "manifest does not contain a package with install ID '${package.install_id}'";
               outputsToInstall =
                 if (builtins.hasAttr "outputs_to_install" package) then
                   (builtins.getAttr "outputs_to_install" package)
@@ -213,36 +218,65 @@ let
                   )
                 else
                   null;
-              # Unfortunately, due to pkgdb limitations in the 1.0 release we
-              # adopted the convention of installing all outputs for every
-              # package, so for the _short_ term while we migrate to the new
-              # buildenv we will continue this practice to keep the experience
-              # consistent for users. However, it won't be long before we
-              # switch over to the more correct strategy of honoring
-              # outputs_to_install, and when we do we can remove "true ||"
-              # from the following conditional.
-              filteredOutputs =
-                if (true || outputsToInstall == null) then
-                  # Filter out outputs named `stubs` because they're needed at build time,
-                  # but break things at run time. This may be unnecessary once we do
-                  # "outputs to install".
-                  (builtins.attrValues (builtins.removeAttrs package.outputs [ "stubs" ]))
+              getValidAttrs = (
+                selected: pkg:
+                builtins.map (
+                  output:
+                  if (builtins.elem output (builtins.attrNames pkg.outputs)) then
+                    output
+                  else
+                    throw "${pkg.attr_path} has no output named '${output}'"
+                ) selected
+              );
+              getV1Outputs = (
+                pkg:
+                # Filter out outputs named `stubs` because they're needed at build time,
+                # but break things at run time. This may be unnecessary once we do
+                # "outputs to install". The `stubs` outputs became a problem when adding
+                # CUDA support.
+                (builtins.attrNames (builtins.removeAttrs package.outputs [ "stubs" ]))
+              );
+              getV2Outputs = (
+                pd: pkg:
+                if (builtins.hasAttr "outputs" pd) then
+                  if (builtins.isString pd.outputs) then
+                    # Handle outputs = "all"
+                    if (pd.outputs == "all") then
+                      builtins.attrNames package.outputs
+                    else
+                      throw "outputs must either be 'all' or a list of output names"
+                  # Handle outputs = [ "foo", "bar" ]
+                  else if (builtins.isList pd.outputs) then
+                    getValidAttrs pd.outputs pkg
+                  else
+                    throw "outputs must either be 'all' or a list of output names"
                 else
-                  (builtins.map (x: builtins.getAttr x package.outputs) outputsToInstall);
+                  # The problematic `stubs` outputs from CUDA packages aren't included
+                  # in outputs_to_install as far as I can tell, so we don't need to
+                  # filter it out here.
+                  outputsToInstall
+              );
+              outputs =
+                if (manifest.version == 1) then
+                  getV1Outputs package
+                else if (manifest.version == 2) then
+                  getV2Outputs descriptor package
+                else
+                  throw "unsupported manifest version: '${manifest.version}'";
             in
-            map (p: builtins.storePath p) filteredOutputs
+            builtins.map (output: builtins.storePath (builtins.getAttr output package.outputs)) outputs
           )
         else
           [ ]
       )
     else
       [ ]
-  ) manifestLockData.packages;
+  ) lockfile.packages;
 
 in
 # Throw a more meaningful error when lockfile version is < 1.
-assert (builtins.hasAttr "lockfile-version" manifestLockData);
-assert manifestLockData."lockfile-version" != "0";
+assert (builtins.hasAttr "lockfile-version" lockfile);
+assert lockfile."lockfile-version" != "0";
 builtins.derivation {
   inherit name;
   builder = "${floxBuildEnv}/lib/builder.pl";

@@ -27,28 +27,28 @@
     {
       "attr_path": "clang",
       "broken": false,
-      "derivation": "/nix/store/ndx34hl9icjsd7f3aiimnkkh0f6h3wr3-clang-wrapper-19.1.7.drv",
+      "derivation": "/nix/store/lsdis2d89vva776c3y1xc8nawknsgd94-clang-wrapper-21.1.2.drv",
       "description": "C language family frontend for LLVM (wrapper script)",
       "install_id": "clang",
       "license": "[ NCSA, Apache-2.0, LLVM-exception ]",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "name": "clang-wrapper-19.1.7",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=3e2499d5539c16d0d173ba53552a4ff8547f4539",
+      "name": "clang-wrapper-21.1.2",
       "pname": "clang",
-      "rev": "7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "rev_count": 870157,
-      "rev_date": "2025-10-02T04:57:58Z",
-      "scrape_date": "2025-10-03T04:40:08.763053Z",
+      "rev": "3e2499d5539c16d0d173ba53552a4ff8547f4539",
+      "rev_count": 916364,
+      "rev_date": "2025-12-25T08:32:45Z",
+      "scrape_date": "2025-12-26T03:02:30.630362Z",
       "stabilities": [
         "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "19.1.7",
+      "version": "21.1.2",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/zzx6cfl99zknfrj9v7lmrshwzslfjv26-clang-wrapper-19.1.7"
+        "out": "/nix/store/qk20nysrc2170f1mal5k6r0axqn6jmfj-clang-wrapper-21.1.2"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -57,28 +57,28 @@
     {
       "attr_path": "clang",
       "broken": false,
-      "derivation": "/nix/store/c5w5a1ly7dl81jji6gz3kpddis5z0k7i-clang-wrapper-19.1.7.drv",
+      "derivation": "/nix/store/h6qxyhn42cgm39ylabzd4vbzn4ddba9d-clang-wrapper-21.1.2.drv",
       "description": "C language family frontend for LLVM (wrapper script)",
       "install_id": "clang",
       "license": "[ NCSA, Apache-2.0, LLVM-exception ]",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "name": "clang-wrapper-19.1.7",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=3e2499d5539c16d0d173ba53552a4ff8547f4539",
+      "name": "clang-wrapper-21.1.2",
       "pname": "clang",
-      "rev": "7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "rev_count": 870157,
-      "rev_date": "2025-10-02T04:57:58Z",
-      "scrape_date": "2025-10-03T05:12:15.432462Z",
+      "rev": "3e2499d5539c16d0d173ba53552a4ff8547f4539",
+      "rev_count": 916364,
+      "rev_date": "2025-12-25T08:32:45Z",
+      "scrape_date": "2025-12-26T03:34:57.009130Z",
       "stabilities": [
         "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "19.1.7",
+      "version": "21.1.2",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/fk99cziyah7im2bahq2gw71cj90hwcq6-clang-wrapper-19.1.7"
+        "out": "/nix/store/fvj17s7clsf2n4rhyq0qqcrqhzybdqrz-clang-wrapper-21.1.2"
       },
       "system": "x86_64-darwin",
       "group": "toplevel",
@@ -87,17 +87,17 @@
     {
       "attr_path": "gcc",
       "broken": false,
-      "derivation": "/nix/store/xgd6sn2nbpk6p8hfkwfnaggapfa486id-gcc-wrapper-14.3.0.drv",
+      "derivation": "/nix/store/mkfdpq06yl2cc7pglhg9xp9ss0sdq041-gcc-wrapper-14.3.0.drv",
       "description": "GNU Compiler Collection, version 14.3.0 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=3e2499d5539c16d0d173ba53552a4ff8547f4539",
       "name": "gcc-wrapper-14.3.0",
       "pname": "gcc",
-      "rev": "7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "rev_count": 870157,
-      "rev_date": "2025-10-02T04:57:58Z",
-      "scrape_date": "2025-10-03T04:56:39.376769Z",
+      "rev": "3e2499d5539c16d0d173ba53552a4ff8547f4539",
+      "rev_count": 916364,
+      "rev_date": "2025-12-25T08:32:45Z",
+      "scrape_date": "2025-12-26T03:18:52.910405Z",
       "stabilities": [
         "staging",
         "unstable"
@@ -106,12 +106,13 @@
       "version": "14.3.0",
       "outputs_to_install": [
         "man",
+        "out",
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/x2q2m245k44wxcskdknl5xdqrsya7fcy-gcc-wrapper-14.3.0-info",
-        "man": "/nix/store/f5k9bkq97gqc4ajmbavv3wxdwcqmng64-gcc-wrapper-14.3.0-man",
-        "out": "/nix/store/hf8w753nxqwkc5y5kjx33fx8fxw2dczp-gcc-wrapper-14.3.0"
+        "info": "/nix/store/ibhizkj7d278admccd3b6d3cab5ny147-gcc-wrapper-14.3.0-info",
+        "man": "/nix/store/2f2wsf8vcd02j3lzjmvp21cw8gx1aj4m-gcc-wrapper-14.3.0-man",
+        "out": "/nix/store/48ywmq5vl4jld47z5f1p662vwi0anw6y-gcc-wrapper-14.3.0"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -120,17 +121,17 @@
     {
       "attr_path": "gcc",
       "broken": false,
-      "derivation": "/nix/store/i9kj1nhzkg91xsq8ny4z4hipl0b42kad-gcc-wrapper-14.3.0.drv",
+      "derivation": "/nix/store/xd09z9hp96djzb97y37k6pfmd12w3509-gcc-wrapper-14.3.0.drv",
       "description": "GNU Compiler Collection, version 14.3.0 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=3e2499d5539c16d0d173ba53552a4ff8547f4539",
       "name": "gcc-wrapper-14.3.0",
       "pname": "gcc",
-      "rev": "7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "rev_count": 870157,
-      "rev_date": "2025-10-02T04:57:58Z",
-      "scrape_date": "2025-10-03T05:27:32.946063Z",
+      "rev": "3e2499d5539c16d0d173ba53552a4ff8547f4539",
+      "rev_count": 916364,
+      "rev_date": "2025-12-25T08:32:45Z",
+      "scrape_date": "2025-12-26T03:51:08.985046Z",
       "stabilities": [
         "staging",
         "unstable"
@@ -139,12 +140,13 @@
       "version": "14.3.0",
       "outputs_to_install": [
         "man",
+        "out",
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/12sy2qyk3qir1rg4jdrdnj91jaw50my2-gcc-wrapper-14.3.0-info",
-        "man": "/nix/store/ds5j2vvwhdvfgkjp7jnfx82bqswks46x-gcc-wrapper-14.3.0-man",
-        "out": "/nix/store/95k9rsn1zsw1yvir8mj824ldhf90i4qw-gcc-wrapper-14.3.0"
+        "info": "/nix/store/3rfwb68rg2nna0b4cj222wyz5iwkgkww-gcc-wrapper-14.3.0-info",
+        "man": "/nix/store/bb8rnwrvpa8z5x3yxr9sndqs31zl11bc-gcc-wrapper-14.3.0-man",
+        "out": "/nix/store/vr15iyyykg9zai6fpgvhcgyw7gckl78w-gcc-wrapper-14.3.0"
       },
       "system": "x86_64-linux",
       "group": "toplevel",
@@ -153,28 +155,28 @@
     {
       "attr_path": "go",
       "broken": false,
-      "derivation": "/nix/store/4vsv792v76f1v0d3w0yd36fb54qbx40v-go-1.25.0.drv",
+      "derivation": "/nix/store/sn3j8a68h7icr6mwchbvl10gr3a5y5sz-go-1.25.4.drv",
       "description": "Go Programming language",
       "install_id": "go",
       "license": "BSD-3-Clause",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "name": "go-1.25.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=3e2499d5539c16d0d173ba53552a4ff8547f4539",
+      "name": "go-1.25.4",
       "pname": "go",
-      "rev": "7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "rev_count": 870157,
-      "rev_date": "2025-10-02T04:57:58Z",
-      "scrape_date": "2025-10-03T04:40:09.627704Z",
+      "rev": "3e2499d5539c16d0d173ba53552a4ff8547f4539",
+      "rev_count": 916364,
+      "rev_date": "2025-12-25T08:32:45Z",
+      "scrape_date": "2025-12-26T03:02:31.512535Z",
       "stabilities": [
         "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "1.25.0",
+      "version": "1.25.4",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/cr196bvbbai01r0w11p1inkzkdrqdx6y-go-1.25.0"
+        "out": "/nix/store/52f5kjcmgmvgrz3rij676b3rjmgg5l5g-go-1.25.4"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -183,28 +185,28 @@
     {
       "attr_path": "go",
       "broken": false,
-      "derivation": "/nix/store/l1ircnwvgwv6l1s6qzj0avfbyjp35ca8-go-1.25.0.drv",
+      "derivation": "/nix/store/n7i6i8mi1n086fvdj6ln4yzkzhc4lfp5-go-1.25.4.drv",
       "description": "Go Programming language",
       "install_id": "go",
       "license": "BSD-3-Clause",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "name": "go-1.25.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=3e2499d5539c16d0d173ba53552a4ff8547f4539",
+      "name": "go-1.25.4",
       "pname": "go",
-      "rev": "7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "rev_count": 870157,
-      "rev_date": "2025-10-02T04:57:58Z",
-      "scrape_date": "2025-10-03T04:56:40.000926Z",
+      "rev": "3e2499d5539c16d0d173ba53552a4ff8547f4539",
+      "rev_count": 916364,
+      "rev_date": "2025-12-25T08:32:45Z",
+      "scrape_date": "2025-12-26T03:18:53.582804Z",
       "stabilities": [
         "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "1.25.0",
+      "version": "1.25.4",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/yhcdwwikp86p2cpq0qr7di91ji63460s-go-1.25.0"
+        "out": "/nix/store/2ajrlmz1qdpm9k9ankhnp3973wxg1gqs-go-1.25.4"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -213,28 +215,28 @@
     {
       "attr_path": "go",
       "broken": false,
-      "derivation": "/nix/store/iqfbwa0qdhgrynay4i1c2lg988i98wz1-go-1.25.0.drv",
+      "derivation": "/nix/store/qivzbrqalppn7xmyh1v5cimy6acfxxpi-go-1.25.4.drv",
       "description": "Go Programming language",
       "install_id": "go",
       "license": "BSD-3-Clause",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "name": "go-1.25.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=3e2499d5539c16d0d173ba53552a4ff8547f4539",
+      "name": "go-1.25.4",
       "pname": "go",
-      "rev": "7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "rev_count": 870157,
-      "rev_date": "2025-10-02T04:57:58Z",
-      "scrape_date": "2025-10-03T05:12:16.314162Z",
+      "rev": "3e2499d5539c16d0d173ba53552a4ff8547f4539",
+      "rev_count": 916364,
+      "rev_date": "2025-12-25T08:32:45Z",
+      "scrape_date": "2025-12-26T03:34:57.925372Z",
       "stabilities": [
         "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "1.25.0",
+      "version": "1.25.4",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/hz7dfw13v8iff4vf6vbnqnlnd7wh7j5x-go-1.25.0"
+        "out": "/nix/store/1rqpvp45rl4sr1l0czrlbmv8jqj9sa7r-go-1.25.4"
       },
       "system": "x86_64-darwin",
       "group": "toplevel",
@@ -243,28 +245,28 @@
     {
       "attr_path": "go",
       "broken": false,
-      "derivation": "/nix/store/q4lnc9dhphz8h133yz9cx2whfrmndifc-go-1.25.0.drv",
+      "derivation": "/nix/store/wvxcldq04svn1f0wz5548afkbi8cnlrp-go-1.25.4.drv",
       "description": "Go Programming language",
       "install_id": "go",
       "license": "BSD-3-Clause",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "name": "go-1.25.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=3e2499d5539c16d0d173ba53552a4ff8547f4539",
+      "name": "go-1.25.4",
       "pname": "go",
-      "rev": "7df7ff7d8e00218376575f0acdcc5d66741351ee",
-      "rev_count": 870157,
-      "rev_date": "2025-10-02T04:57:58Z",
-      "scrape_date": "2025-10-03T05:27:33.651241Z",
+      "rev": "3e2499d5539c16d0d173ba53552a4ff8547f4539",
+      "rev_count": 916364,
+      "rev_date": "2025-12-25T08:32:45Z",
+      "scrape_date": "2025-12-26T03:51:09.725786Z",
       "stabilities": [
         "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "1.25.0",
+      "version": "1.25.4",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/3fd683jfggglpshxprz9mi5sz8wd3c9p-go-1.25.0"
+        "out": "/nix/store/0a3dyfq09dnkw28ap2i450wjimvdmv6s-go-1.25.4"
       },
       "system": "x86_64-linux",
       "group": "toplevel",

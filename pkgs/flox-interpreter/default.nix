@@ -11,7 +11,7 @@
   ld-floxlib,
   nawk,
   process-compose,
-  runCommandNoCC,
+  runCommand,
   shellcheck,
   shfmt,
   stdenv,
@@ -87,7 +87,7 @@ let
   };
 
 in
-runCommandNoCC "flox-interpreter"
+runCommand "flox-interpreter"
   {
     nativeBuildInputs = [ gnused ];
     outputs = [

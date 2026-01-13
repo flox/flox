@@ -47,6 +47,7 @@ pub use core_environment::{
 };
 
 pub mod fetcher;
+pub mod floxmeta_branch;
 pub mod generations;
 pub mod managed_environment;
 pub mod path_environment;
@@ -614,7 +615,7 @@ impl UninitializedEnvironment {
     // quotes whereas we use message_description for activate errors in Rust.
     pub fn bare_description(&self) -> String {
         if let Some(owner) = self.owner_if_remote() {
-            format!("{}/{} (remote)", owner, self.name())
+            format!("{}/{} (local)", owner, self.name())
         } else if let Some(owner) = self.owner_if_managed() {
             format!("{}/{}", owner, self.name())
         } else {
@@ -766,6 +767,9 @@ pub enum EnvironmentError {
 
     #[error("authentication error")]
     Auth(#[source] AuthError),
+
+    #[error("{0}")]
+    EditWithUnsupportedFeature(String),
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -19,11 +19,12 @@ fn wrap_command(env_ref: &ActivateEnvironmentRef, command: &str) -> String {
         // https://github.com/systemd/systemd/issues/2913#issuecomment-3289916490
         let logging_prefix = "exec 1> >(cat); exec 2> >(cat >&2); ";
 
-        // Replace newline characters with literal `\n` sequences so that multi-line
-        // commands can be quoted and fit in a single systemd directive line.
-        let escaped_newlines = command.replace('\n', r"\n");
+        // Escape backslashes and newlines so that multi-line commands can be
+        // quoted and fit in a single systemd directive line while preserving
+        // line continuations.
+        let escaped_command = command.replace('\\', r"\\").replace('\n', r"\n");
 
-        escape(format!("{logging_prefix}{escaped_newlines}").into())
+        escape(format!("{logging_prefix}{escaped_command}").into())
     };
 
     format!(
@@ -202,6 +203,16 @@ mod tests {
                 "}.to_string(),
                 expected: r#"flox activate -d /test/env -- exec bash -c 'exec 1> >(cat); exec 2> >(cat >&2); while true; do\n  echo hello\n  sleep 2\ndone\n'"#.to_string(),
             },
+            TestCase {
+                description: "command with line continuations",
+                env_ref: project_env_ref(),
+                input: indoc! {r"
+                    echo line1 \
+                      line2 \
+                      line3
+                "}.to_string(),
+                expected: r#"flox activate -d /test/env -- exec bash -c 'exec 1> >(cat); exec 2> >(cat >&2); echo line1 \\\n  line2 \\\n  line3\n'"#.to_string(),
+            }
         ];
 
         for case in test_cases {

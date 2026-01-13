@@ -291,6 +291,10 @@ mod container_source_tests {
             exposed_ports: Some(BTreeSet::from(["80/tcp".to_string()])),
             volumes: Some(BTreeSet::from(["/app".to_string()])),
             working_dir: Some("/app".to_string()),
+            labels: Some(BTreeMap::from([
+                ("app".to_string(), "myapp".to_string()),
+                ("version".to_string(), "1.0".to_string()),
+            ])),
             ..Default::default()
         };
         let oci_config: OCIConfig = manifest_config.into();
@@ -308,7 +312,11 @@ mod container_source_tests {
           "Volumes": {
             "/app": {}
           },
-          "WorkingDir": "/app"
+          "WorkingDir": "/app",
+          "Labels": {
+            "app": "myapp",
+            "version": "1.0"
+          }
         }"#});
     }
 

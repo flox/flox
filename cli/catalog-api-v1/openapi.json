@@ -1847,6 +1847,93 @@
         }
       }
     },
+    "/api/v1/catalog/sbom/package/{derivation}": {
+      "post": {
+        "tags": [
+          "sbom"
+        ],
+        "summary": "Get SBOM for a package derivation",
+        "description": "Get SBOM (Software Bill of Materials) for a package derivation.\n\nArgs:\n    derivation: The derivation filename without /nix/store/ prefix\n                (e.g., \"abc123def-foo-1.0.drv\")\n    outputs: Optional comma-separated list of outputs (e.g., \"out,bin,dev\").\n             If omitted, includes the package's default outputs from derivation metadata.\n             Must be alphanumeric with underscores only, max 100 chars total.\n    format: SBOM format (defaults to SbomFormat.SPDX_2_3_JSON)\n    body: Request body (reserved for future extension)\n    auth_result: Authentication payload\n    cache: Request-scoped dependency cache (injected)\n\nReturns:\n    SBOM document in the requested format",
+        "operationId": "package_sbom_api_v1_catalog_sbom_package__derivation__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "derivation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Derivation"
+            }
+          },
+          {
+            "name": "outputs",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Comma-separated list of output names (e.g., 'out,bin,dev')",
+              "title": "Outputs",
+              "nullable": true,
+              "type": "string",
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9_]+(?:,[a-zA-Z0-9_]+)*$",
+              "example": "out"
+            },
+            "description": "Comma-separated list of output names (e.g., 'out,bin,dev')"
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SbomFormat",
+              "default": "spdx-2.3-json"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PackageSbomRequest",
+                "default": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "SBOM for the given package derivation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response 200 Package Sbom Api V1 Catalog Sbom Package  Derivation  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request could not be processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalog/store": {
       "post": {
         "tags": [
@@ -1945,35 +2032,6 @@
             "HTTPBasic": []
           }
         ]
-      }
-    },
-    "/metrics/": {
-      "get": {
-        "summary": "Handle Metrics",
-        "operationId": "handle_metrics_metrics__get",
-        "responses": {
-          "200": {
-            "description": "Service Status",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "string",
-                  "title": "Response 200 Handle Metrics Metrics  Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Unprocessable Entity",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
       }
     }
   },
@@ -2333,7 +2391,11 @@
           "attr_path_not_found.not_found_for_all_systems",
           "missing_builds",
           "unacceptable_licenses",
-          "change_in_version_format"
+          "change_in_version_format",
+          "unfree",
+          "insecure",
+          "broken",
+          "version_not_found"
         ],
         "title": "MessageType"
       },
@@ -3204,6 +3266,12 @@
         ],
         "title": "PackageResolutionInfo"
       },
+      "PackageSbomRequest": {
+        "properties": {},
+        "type": "object",
+        "title": "PackageSbomRequest",
+        "description": "Request body for package SBOM endpoint (reserved for future extension)."
+      },
       "PackageSearchResult": {
         "properties": {
           "items": {
@@ -3671,6 +3739,14 @@
           "items"
         ],
         "title": "ResolvedPackageGroups"
+      },
+      "SbomFormat": {
+        "type": "string",
+        "enum": [
+          "spdx-2.3-json"
+        ],
+        "title": "SbomFormat",
+        "description": "Supported SBOM format types."
       },
       "ServiceStatus": {
         "properties": {

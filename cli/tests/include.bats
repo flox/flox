@@ -243,6 +243,7 @@ function edit_remote() {
 EOF
   )"
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f - -r owner/remote
+  "$FLOX_BIN" push -f -r owner/remote
 }
 
 @test "include upgrade reports no changes for remote environments" {

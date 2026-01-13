@@ -108,7 +108,7 @@ impl RawManifest {
     /// could work today, but is still limited by the lack of an optional tag.
     pub fn to_typed(&self) -> Result<Manifest, toml_edit::de::Error> {
         match self.get_version() {
-            Some(1) => Ok(toml_edit::de::from_document(self.0.clone())?),
+            Some(1) | Some(2) => Ok(toml_edit::de::from_document(self.0.clone())?),
             Some(v) => {
                 let msg = format!("unsupported manifest version: {v}");
                 Err(toml_edit::de::Error::custom(msg))
@@ -667,6 +667,27 @@ pub(super) fn is_custom_package(pkg_path: &str) -> bool {
     !is_base_catalog_pkg
 }
 
+/// Represents the outputs to install for a package.
+/// This is the raw representation used in parsing CLI arguments.
+#[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum RawSelectedOutputs {
+    /// Install all outputs (specified as `^..`)
+    All,
+    /// Install specific outputs (specified as `^out,man,dev`)
+    Specific(Vec<String>),
+}
+
+impl RawSelectedOutputs {
+    /// Parse outputs from a string (e.g., "..", "out,man,dev")
+    pub fn parse(s: &str) -> Self {
+        if s == ".." {
+            Self::All
+        } else {
+            Self::Specific(s.split(',').map(|s| s.trim().to_string()).collect())
+        }
+    }
+}
+
 /// A package to install from the catalog.
 ///
 /// Users may specify a different install ID than the package name,
@@ -686,6 +707,10 @@ pub struct CatalogPackage {
     ///
     /// [Environment::install]: crate::models::environment::Environment::install
     pub systems: Option<Vec<System>>,
+    /// Outputs to install for this package.
+    /// If `None`, the default outputs are installed.
+    /// This can be parsed from the shorthand descriptor using the `^` syntax.
+    pub outputs: Option<RawSelectedOutputs>,
 }
 
 impl CatalogPackage {
@@ -706,16 +731,34 @@ impl FromStr for CatalogPackage {
     ///
     /// The descriptor is parsed as follows:
     /// ```text
-    ///     descriptor ::= <attribute_path>[@<version>]
+    ///     descriptor ::= <attribute_path>[@<version>] | <attribute_path>[^<outputs>]
     ///
     ///     attribute_path ::= <install_id> | <attribute_path_rest>.<install_id>
     ///     attribute_path_rest ::= <identifier> | <attribute_path_rest>.<identifier>
     ///     install_id ::= <identifier> | @<identifier>
     ///
     ///     version ::= <string> # interpreted as semver or plain version by the resolver
+    ///     outputs ::= ".." | <output_list> # interpreted as all outputs or specific outputs to install
     /// ```
     fn from_str(descriptor: &str) -> Result<Self, RawManifestError> {
-        fn split_version(haystack: &str) -> (usize, Option<&str>) {
+        fn split_outputs(
+            raw_str: &str,
+        ) -> Result<(&str, Option<RawSelectedOutputs>), RawManifestError> {
+            match raw_str.split_once('^') {
+                Some((attr_path, outputs_str)) => {
+                    if outputs_str.is_empty() {
+                        return Err(RawManifestError::MalformedStringDescriptor {
+                            msg: "expected output specification after '^'".to_string(),
+                            desc: raw_str.to_string(),
+                        });
+                    }
+                    let outputs = RawSelectedOutputs::parse(outputs_str);
+                    Ok((attr_path, Some(outputs)))
+                },
+                None => Ok((raw_str, None)),
+            }
+        }
+        fn split_version(haystack: &str) -> Result<(&str, Option<String>), RawManifestError> {
             let mut version_at = None;
             let mut start = 0;
 
@@ -749,33 +792,41 @@ impl FromStr for CatalogPackage {
             }
 
             let version = version_at.map(|at| &haystack[at + 1..]);
-            (version_at.unwrap_or(haystack.len()), version)
-        }
-
-        let (attr_path_len, version) = split_version(descriptor);
-        let attr_path = descriptor[..attr_path_len].to_string();
-        let version = if let Some(version) = version {
-            if version.is_empty() {
-                return Err(RawManifestError::MalformedStringDescriptor {
-                    msg: indoc! {"
+            let attr_path = &haystack[..version_at.unwrap_or(haystack.len())];
+            let version = if let Some(version) = version {
+                if version.is_empty() {
+                    return Err(RawManifestError::MalformedStringDescriptor {
+                        msg: indoc! {"
                         Expected version requirement after '@'.
                         Try adding quotes around the argument."}
-                    .to_string(),
-                    desc: descriptor.to_string(),
-                });
-            }
-            Some(version.to_string())
-        } else {
-            None
-        };
+                        .to_string(),
+                        desc: haystack.to_string(),
+                    });
+                }
+                Some(version.to_string())
+            } else {
+                None
+            };
+            Ok((attr_path, version))
+        }
 
-        let install_id = install_id_from_attr_path(&attr_path, descriptor)?;
+        let mut attr_path = descriptor;
+        let mut outputs = None;
+        let mut version = None;
+        if attr_path.contains('@') {
+            (attr_path, version) = split_version(descriptor)?;
+        } else {
+            (attr_path, outputs) = split_outputs(descriptor)?;
+        }
+
+        let install_id = install_id_from_attr_path(attr_path, descriptor)?;
 
         Ok(Self {
             id: install_id,
-            pkg_path: attr_path,
+            pkg_path: attr_path.to_string(),
             version,
             systems: None,
+            outputs,
         })
     }
 }
@@ -924,6 +975,24 @@ impl From<&CatalogPackage> for InlineTable {
                         .collect(),
                 ),
             );
+        }
+        if let Some(ref outputs) = val.outputs {
+            match outputs {
+                RawSelectedOutputs::All => {
+                    table.insert("outputs", Value::String(Formatted::new("all".to_string())));
+                },
+                RawSelectedOutputs::Specific(output_names) => {
+                    table.insert(
+                        "outputs",
+                        Value::Array(
+                            output_names
+                                .iter()
+                                .map(|s| Value::String(Formatted::new(s.clone())))
+                                .collect(),
+                        ),
+                    );
+                },
+            }
         }
         table
     }
@@ -1279,6 +1348,7 @@ pub(super) mod test {
                 pkg_path: "python3".to_string(),
                 version: Some("3.11.6".to_string()),
                 systems: None,
+                outputs: None,
             }]),
             ..Default::default()
         };
@@ -1888,6 +1958,7 @@ pub(super) mod test {
             pkg_path: "hello".to_string(),
             version: None,
             systems: None,
+            outputs: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1897,6 +1968,7 @@ pub(super) mod test {
             pkg_path: "foo.bar".to_string(),
             version: Some("=1.2.3".to_string()),
             systems: None,
+            outputs: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1906,6 +1978,7 @@ pub(super) mod test {
             pkg_path: "foo.bar".to_string(),
             version: Some("23.11".to_string()),
             systems: None,
+            outputs: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1915,6 +1988,7 @@ pub(super) mod test {
             pkg_path: "rubyPackages.\"http_parser.rb\"".to_string(),
             version: None,
             systems: None,
+            outputs: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1925,6 +1999,7 @@ pub(super) mod test {
             pkg_path: "nodePackages.@angular/cli".to_string(),
             version: None,
             systems: None,
+            outputs: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1940,6 +2015,7 @@ pub(super) mod test {
                     .to_string(),
             version: None,
             systems: None,
+            outputs: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1950,6 +2026,7 @@ pub(super) mod test {
             pkg_path: "nodePackages.@angular".to_string(),
             version: Some("1.2.3".to_string()),
             systems: None,
+            outputs: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1961,6 +2038,7 @@ pub(super) mod test {
             pkg_path: "@1.2.3".to_string(),
             version: None,
             systems: None,
+            outputs: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1973,6 +2051,7 @@ pub(super) mod test {
             pkg_path: "@pkg".to_string(),
             version: Some("version".to_string()),
             systems: None,
+            outputs: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1983,6 +2062,7 @@ pub(super) mod test {
             pkg_path: "mycatalog/foo".to_string(),
             version: None,
             systems: None,
+            outputs: None,
         });
         assert_eq!(parsed.is_custom_catalog(), true);
 
@@ -1993,6 +2073,7 @@ pub(super) mod test {
             pkg_path: "mycatalog/foo.bar".to_string(),
             version: None,
             systems: None,
+            outputs: None,
         });
         assert_eq!(parsed.is_custom_catalog(), true);
 
@@ -2003,12 +2084,95 @@ pub(super) mod test {
             pkg_path: "mycatalog/category/package".to_string(),
             version: None,
             systems: None,
+            outputs: None,
         });
         assert_eq!(parsed.is_custom_catalog(), true);
 
         CatalogPackage::from_str("foo.\"bar.baz.qux@1.2.3")
             .expect_err("missing closing quote should cause failure");
         CatalogPackage::from_str("foo@").expect_err("missing version should cause failure");
+    }
+
+    #[test]
+    fn manifest_is_updated_correctly_with_outputs() {
+        let package = PackageToInstall::parse(&"".to_string(), "curl^bin,man").unwrap();
+        let manifest = "
+version = 1
+        ";
+        let insertion = insert_packages(manifest, &[package]).expect("couldn't add package");
+        assert_eq!(
+            insertion.new_toml.unwrap().to_string(),
+            "
+version = 1
+
+[install]
+curl.pkg-path = \"curl\"
+curl.outputs = [\"bin\", \"man\"]
+        "
+        );
+    }
+
+    #[test]
+    fn parses_descriptors_with_outputs() {
+        // Package with specific outputs
+        let parsed: CatalogPackage = "curl^bin,man".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
+            id: "curl".to_string(),
+            pkg_path: "curl".to_string(),
+            version: None,
+            systems: None,
+            outputs: Some(RawSelectedOutputs::Specific(vec![
+                "bin".to_string(),
+                "man".to_string()
+            ])),
+        });
+
+        // Package with all outputs
+        let parsed: CatalogPackage = "curl^..".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
+            id: "curl".to_string(),
+            pkg_path: "curl".to_string(),
+            version: None,
+            systems: None,
+            outputs: Some(RawSelectedOutputs::All),
+        });
+
+        // Package with version containing special characters
+        let parsed: CatalogPackage = "nodePackages.typescript@^5.0.0".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
+            id: "typescript".to_string(),
+            pkg_path: "nodePackages.typescript".to_string(),
+            version: Some("^5.0.0".to_string()),
+            systems: None,
+            outputs: None,
+        });
+
+        // Invalid package with version and outputs
+        let parsed: CatalogPackage = "nodePackages.typescript@5.0^bin,man,dev".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
+            id: "typescript".to_string(),
+            pkg_path: "nodePackages.typescript".to_string(),
+            version: Some("5.0^bin,man,dev".to_string()),
+            systems: None,
+            outputs: None,
+        });
+
+        // Package with outputs containing spaces (should be trimmed)
+        let parsed: CatalogPackage = "curl^bin, man , dev".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
+            id: "curl".to_string(),
+            pkg_path: "curl".to_string(),
+            version: None,
+            systems: None,
+            outputs: Some(RawSelectedOutputs::Specific(vec![
+                "bin".to_string(),
+                "man".to_string(),
+                "dev".to_string()
+            ])),
+        });
+
+        // Error: empty outputs specification
+        CatalogPackage::from_str("curl^").expect_err("empty outputs should cause failure");
     }
 
     /// Determines whether to have a branch and/or revision in the URL

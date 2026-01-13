@@ -119,7 +119,7 @@ teardown() {
   assert_regex "$output" "yarn: yarn-berry \(.+\)"
 }
 
-# bats test_tags=catalog
+# bats test_tags=catalog,krb5
 @test "install krb5 with node" {
   skip "stuck on old catalog page"
   "$FLOX_BIN" init
@@ -152,7 +152,7 @@ teardown() {
       # XXX "$TESTS_DIR/init/node/krb5.sh" is not always present so only run
       #     once we have confirmed that it exists, and then expect it to fail.
       if [ -f "$TESTS_DIR/init/node/krb5.sh" ]; then
-        run "$FLOX_BIN" activate -c "CPATH=\"\$FLOX_ENV/include/c++/v1:\$CPATH\" source \"\$TESTS_DIR/init/node/krb5.sh\""
+        run "$FLOX_BIN" activate -- bash "$TESTS_DIR/init/node/krb5.sh"
         assert_failure
       fi
 
@@ -160,8 +160,7 @@ teardown() {
         run "$FLOX_BIN" install krb5
       assert_success
 
-      # TODO: fix CPATH in activate
-      run "$FLOX_BIN" activate -c "bash -c 'CPATH=\"\$FLOX_ENV/include/c++/v1:\$CPATH\" . \"\$INPUT_DATA/init/node/krb5.sh\"'"
+      run "$FLOX_BIN" activate -- bash "$INPUT_DATA/init/node/krb5.sh"
       assert_success
       ;;
     *)

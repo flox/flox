@@ -209,7 +209,7 @@ impl<State> CoreEnvironment<State> {
 
         let environment_lockfile_path = self.lockfile_path();
 
-        if Some(&lockfile_contents) == existing_lockfile_contents.as_ref() {
+        if Some(&lockfile) == existing_lockfile.as_ref() {
             debug!(
                 ?environment_lockfile_path,
                 "lockfile is up to date, skipping write"
@@ -1182,6 +1182,7 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     use catalog::{GENERATED_DATA, MANUALLY_GENERATED};
+    use flox_core::activate::mode::ActivateMode;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use tempfile::{TempDir, tempdir_in};
@@ -1195,6 +1196,7 @@ mod tests {
     use crate::providers::catalog;
     use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::services::process_compose::SERVICE_CONFIG_FILENAME;
+    use crate::utils::serialize_json_with_newline;
 
     /// Create a CoreEnvironment with an empty manifest (with version = 1)
     fn empty_core_environment() -> (CoreEnvironment, Flox, TempDir) {
@@ -1505,17 +1507,15 @@ mod tests {
         assert_eq!(mtime_after, mtime_original);
     }
 
-    /// Locking an environment should write a lockfile
-    /// if the contents change compared to the existing lockfile,
-    /// even if the contents are semantically equivalent.
+    /// Locking an environment should not write a lockfile if the contents are
+    /// semantically equivalent to the existing lockfile.
     #[test]
-    fn lock_writes_if_contents_change() {
+    fn lock_skips_write_if_formatting_changes() {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut environment =
             new_core_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
 
-        // add some whitespace to the file, that simulates different original content
-        // we subsequently expect the file to be modified
+        // add some whitespace to the file
         {
             let mut lockfile = OpenOptions::new()
                 .read(true)
@@ -1524,6 +1524,46 @@ mod tests {
                 .unwrap();
 
             writeln!(lockfile, "\n\n\n",).unwrap();
+
+            // fsync metadata to ensure the mtime is updated
+            lockfile.sync_all().unwrap();
+        }
+
+        let mtime_original = environment
+            .lockfile_path()
+            .metadata()
+            .unwrap()
+            .modified()
+            .unwrap();
+
+        let _ = environment.lock(&flox).unwrap();
+
+        let mtime_after = environment
+            .lockfile_path()
+            .metadata()
+            .unwrap()
+            .modified()
+            .unwrap();
+
+        assert_eq!(mtime_after, mtime_original);
+    }
+
+    /// Locking an environment should write a lockfile if the contents change
+    /// semantically compared to the existing lockfile
+    #[test]
+    fn lock_writes_if_modified() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut environment =
+            new_core_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+
+        // Make a non-formatting change to the lock
+        {
+            let mut lockfile = environment.existing_lockfile().unwrap().unwrap();
+            lockfile.manifest.options.activate.mode = Some(ActivateMode::Dev);
+            let lockfile_contents = serialize_json_with_newline(&lockfile).unwrap();
+            let lockfile_path = environment.lockfile_path();
+            let mut lockfile = OpenOptions::new().write(true).open(lockfile_path).unwrap();
+            lockfile.write_all(lockfile_contents.as_bytes()).unwrap();
 
             // fsync metadata to ensure the mtime is updated
             lockfile.sync_all().unwrap();

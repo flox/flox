@@ -406,15 +406,68 @@ if ($manifest) {
 
         # Function for emitting a package set in the format consumed by
         # the builder.pl script.
-        sub packagesToPkgs($) {
+        sub packagesToPkgs($$) {
+            my $manifest = shift;
             my $packages = shift;
             my @retarray = ();
 
             # Counter for ensuring that all "other" outputs are added with a unique
-            # priority value. # XXX Remove once we properly support outputs_to_install.
+            # priority value for v1 manifests.
             my $otherOutputPriorityCounter = 1;
 
+            # Helper function to validate that requested outputs exist
+            sub getValidAttrs {
+                my ($selected, $pkg) = @_;
+                my @result = ();
+                foreach my $output (@{$selected}) {
+                    if (exists $pkg->{"outputs"}{$output}) {
+                        push @result, $output;
+                    } else {
+                        die "$pkg->{attr_path} has no output named '$output'\n";
+                    }
+                }
+                return @result;
+            }
+
+            # Get outputs for v1 manifests
+            sub getV1Outputs {
+                my $pkg = shift;
+                # Filter out outputs named `stubs` because they're needed at build time,
+                # but break things at run time. This may be unnecessary once we do
+                # "outputs to install". The `stubs` outputs became a problem when adding
+                # CUDA support.
+                return grep { $_ ne "stubs" } keys %{$pkg->{"outputs"}};
+            }
+
+            # Get outputs for v2 manifests
+            sub getV2Outputs {
+                my ($descriptor, $pkg, $outputsToInstall) = @_;
+                if (exists $descriptor->{"outputs"}) {
+                    my $ref = ref($descriptor->{"outputs"});
+                    # Handle outputs = "all"
+                    if ($ref eq "") {
+                        if ($descriptor->{"outputs"} eq "all") {
+                            return keys %{$pkg->{"outputs"}};
+                        } else {
+                            die "outputs must either be 'all' or a list of output names\n";
+                        }
+                    }
+                    # Handle outputs = [ "foo", "bar" ]
+                    elsif ($ref eq "ARRAY") {
+                        return getValidAttrs($descriptor->{"outputs"}, $pkg);
+                    } else {
+                        die "outputs must either be 'all' or a list of output names\n";
+                    }
+                } else {
+                    # The problematic `stubs` outputs from CUDA packages aren't included
+                    # in outputs_to_install as far as I can tell, so we don't need to
+                    # filter it out here.
+                    return defined $outputsToInstall ? @{$outputsToInstall} : ();
+                }
+            }
+
             foreach my $package (@{$packages}) {
+
 
                 # If the package is a store path to install then we can skip looking for outputs,
                 # and add the path directly to the return array.
@@ -426,60 +479,86 @@ if ($manifest) {
                     next;
                 }
 
-                my @outputsToInstall = ();
-                my @otherOutputs = (); # XXX remove once we properly support outputs_to_install.
+                # For synthetic packages (like interpreter_out, interpreter_wrapper, manifestPackage)
+                # that don't have an install_id, just install all their outputs directly.
+                if (!exists $package->{"install_id"}) {
+                    my @paths = values %{$package->{"outputs"}};
+                    next unless scalar @paths;
+                    push @retarray, {
+                        "paths" => \@paths,
+                        "priority" => (1000 * $package->{"priority"})
+                    };
+                    next;
+                }
+
+                # Get the descriptor from manifest.install
+                my $descriptor;
+                if (exists $manifest->{"install"}{$package->{"install_id"}}) {
+                    $descriptor = $manifest->{"install"}{$package->{"install_id"}};
+                } else {
+                    die "manifest does not contain a package with install ID '$package->{install_id}'\n";
+                }
+
                 # XXX flake locking bug: outputs-to-install != outputs_to_install
-                if ( defined $package->{"outputs-to-install"} and not
-                     defined $package->{"outputs_to_install"} ) {
-                    $package->{"outputs_to_install"} = $package->{"outputs-to-install"};
+                my $outputsToInstall;
+                if (defined $package->{"outputs_to_install"}) {
+                    $outputsToInstall = $package->{"outputs_to_install"};
+                } elsif (defined $package->{"outputs-to-install"}) {
+                    $outputsToInstall = $package->{"outputs-to-install"};
+                } else {
+                    $outputsToInstall = undef;
                 }
-                unless ( defined $package->{"outputs_to_install"} ) {
-                    @{$package->{"outputs_to_install"}} = grep { $_ ne "log" } keys %{$package->{"outputs"}};
-                }
-                foreach my $output (keys %{$package->{"outputs"}}) {
-                    # Unfortunately, due to pkgdb limitations in the 1.0 release we
-                    # adopted the convention of installing all outputs for every
-                    # package, so for the _short_ term while we migrate to the new
-                    # buildenv we will continue this practice to keep the experience
-                    # consistent for users. However, it won't be long before we
-                    # switch over to the more correct strategy of honoring
-                    # outputs_to_install, and when we do we can uncomment the
-                    # following two lines.
-                    # next unless grep { $_ eq $output } @{$package->{"outputs_to_install"}};
-                    # push @outputsToInstall, $package->{"outputs"}{$output};
 
-                    # Pure sandbox manifest builds also include a "log" output which is
-                    # a file, and therefore cannot / should not be installed to the env.
-                    # If we encounter this output and it's a file then we skip it.
-                    # XXX Remove once we properly support outputs_to_install.
-                    next if $output eq "log" and -f $package->{"outputs"}{$output};
-                    next if $output eq "stubs";
+                # Determine which outputs to install based on manifest version
+                if ($manifest->{"version"} == 1) {
+                    # V1 manifest logic: group outputs_to_install together,
+                    # increment priority only for "other" outputs
+                    my @outputs = getV1Outputs($package);
+                    my @outputsToInstallPaths = ();
+                    my @otherOutputPaths = ();
 
-                    # And for now we divide the outputs into two categories: those
-                    # that should be installed by default and those that should not.
-                    # XXX Remove once we properly support outputs_to_install.
-                    if (grep { $_ eq $output } @{$package->{"outputs_to_install"}}) {
-                        push @outputsToInstall, $package->{"outputs"}{$output};
-                    } else {
-                        push @otherOutputs, $package->{"outputs"}{$output};
+                    foreach my $output (@outputs) {
+                        my $path = $package->{"outputs"}{$output};
+                        if (grep { $_ eq $output } @{$outputsToInstall}) {
+                            push @outputsToInstallPaths, $path;
+                        } else {
+                            push @otherOutputPaths, $path;
+                        }
                     }
 
-                }
-                next unless scalar @outputsToInstall;
-                push @retarray, {
-                    "paths" => \@outputsToInstall,
-                    "priority" => (1000 * $package->{"priority"})
-                };
+                    # Add outputs_to_install with same priority
+                    if (scalar @outputsToInstallPaths) {
+                        push @retarray, {
+                            "paths" => \@outputsToInstallPaths,
+                            "priority" => (1000 * $package->{"priority"})
+                        };
+                    }
 
-                # Increment the priority as we add "other" outputs to be installed
-                # specifically to avoid collisions with each other.
-                # XXX Remove once we properly support outputs_to_install.
-                next unless scalar @otherOutputs;
-                foreach my $otherOutput (@otherOutputs) {
-                    push @retarray, {
-                        "paths" => [ $otherOutput ],
-                        "priority" => ((1000 * $package->{"priority"}) + $otherOutputPriorityCounter++)
-                    };
+                    # Add other outputs with incrementing priority
+                    foreach my $otherPath (@otherOutputPaths) {
+                        push @retarray, {
+                            "paths" => [ $otherPath ],
+                            "priority" => ((1000 * $package->{"priority"}) + $otherOutputPriorityCounter++)
+                        };
+                    }
+                } elsif ($manifest->{"version"} == 2) {
+                    # V2 manifest logic: increment priority for all outputs
+                    my @outputs = getV2Outputs($descriptor, $package, $outputsToInstall);
+                    my @paths = map { $package->{"outputs"}{$_} } @outputs;
+
+                    next unless scalar @paths;
+
+                    # Increment the priority as we add outputs to avoid collisions
+                    # between outputs from the same package.
+                    my $outputPriorityCounter = 0;
+                    foreach my $path (@paths) {
+                        push @retarray, {
+                            "paths" => [ $path ],
+                            "priority" => ((1000 * $package->{"priority"}) + $outputPriorityCounter++)
+                        };
+                    }
+                } else {
+                    die "unsupported manifest version: '$manifest->{version}'\n";
                 }
 
             }
@@ -607,19 +686,19 @@ if ($manifest) {
         my @outputData = (
             {
               "name" => "runtime",
-              "pkgs" => packagesToPkgs(\@developPackages),
+              "pkgs" => packagesToPkgs($manifest, \@developPackages),
               "recurse" => 0
             },
             {
               "name" => "develop",
-              "pkgs" => packagesToPkgs(\@developPackages),
+              "pkgs" => packagesToPkgs($manifest, \@developPackages),
               "recurse" => 1
             }
         );
         foreach my $buildName (@buildNames) {
             push @outputData, {
                 "name" => "build-$buildName",
-                "pkgs" => packagesToPkgs($buildPackagesHash{$buildName}),
+                "pkgs" => packagesToPkgs($manifest, $buildPackagesHash{$buildName}),
                 "recurse" => 1
             };
         }
@@ -807,3 +886,4 @@ if ($manifest) {
     }
 }
 # </flox>
+

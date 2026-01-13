@@ -21,6 +21,9 @@ const FLOXHUB_AUTHENTICATED_HOSTNAMES: [&str; 6] = [
 pub trait AuthProvider {
     fn token(&self) -> Option<&FloxhubToken>;
     fn create_netrc(&self) -> Result<TempPath, AuthError>;
+    /// Attempt to create a netrc file, returning it if the user has a valid
+    /// token, or `None` when they don't.
+    fn try_create_netrc(&self) -> Option<PathBuf>;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -112,6 +115,13 @@ impl AuthProvider for Auth {
             },
             None => Err(AuthError::NoToken),
         }
+    }
+
+    fn try_create_netrc(&self) -> Option<PathBuf> {
+        self.floxhub_token
+            .as_ref()
+            .and_then(|token| write_floxhub_netrc(&self.netrc_tempdir, token).ok())
+            .map(|temp_path| temp_path.to_path_buf())
     }
 }
 

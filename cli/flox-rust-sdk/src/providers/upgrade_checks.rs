@@ -8,6 +8,7 @@ use time::OffsetDateTime;
 use tracing::debug;
 
 use crate::models::environment::UpgradeResult;
+use crate::models::environment::generations::AllGenerationsMetadata;
 
 #[derive(Debug, Error)]
 pub enum UpgradeChecksError {
@@ -29,7 +30,8 @@ pub struct UpgradeInformation {
     #[serde(with = "time::serde::iso8601")]
     pub last_checked: OffsetDateTime,
     /// The result of the last upgrade check
-    pub result: UpgradeResult,
+    pub upgrade_result: UpgradeResult,
+    pub remote_generations_metadata: Option<AllGenerationsMetadata>,
 }
 
 /// A guard for a file containing upgrade information,
@@ -283,11 +285,12 @@ mod tests {
 
         *locked.info_mut() = Some(UpgradeInformation {
             last_checked: OffsetDateTime::now_utc().replace_millisecond(0).unwrap(),
-            result: UpgradeResult {
+            upgrade_result: UpgradeResult {
                 old_lockfile: None,
                 new_lockfile: Lockfile::default(),
                 store_path: None,
             },
+            remote_generations_metadata: None,
         });
 
         drop(locked);
@@ -304,11 +307,12 @@ mod tests {
         let mut locked = guard.lock_if_unlocked().unwrap().unwrap();
         let info = UpgradeInformation {
             last_checked: OffsetDateTime::now_utc().replace_millisecond(0).unwrap(),
-            result: UpgradeResult {
+            upgrade_result: UpgradeResult {
                 old_lockfile: None,
                 new_lockfile: Lockfile::default(),
                 store_path: None,
             },
+            remote_generations_metadata: None,
         };
         let _ = locked.info_mut().insert(info.clone());
         locked.commit().unwrap();
