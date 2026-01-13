@@ -1229,8 +1229,6 @@ impl Lockfile {
         groups: impl IntoIterator<Item = PackageGroup>,
         seed_lockfile: Option<&Lockfile>,
     ) -> (Vec<LockedPackage>, Vec<PackageGroup>) {
-        let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
-
         let (already_locked_groups, groups_to_lock): (Vec<_>, Vec<_>) =
             groups.into_iter().partition(|group| {
                 group
@@ -1239,19 +1237,31 @@ impl Lockfile {
                     .all(|descriptor| descriptor.derivation.is_some())
             });
 
-        // convert already locked groups back to locked packages
-        let already_locked_packages = already_locked_groups
+        // Collect the set of (install_id, system) pairs that are fully locked
+        let locked_keys: HashSet<_> = already_locked_groups
             .iter()
             .flat_map(|group| &group.descriptors)
             .flat_map(|descriptor| {
-                std::iter::repeat(&descriptor.install_id).zip(&descriptor.systems)
+                descriptor
+                    .systems
+                    .iter()
+                    .map(|system| (descriptor.install_id.as_str(), system.to_string()))
             })
-            .filter_map(|(install_id, system)| {
-                seed_locked_packages
-                    .get(&(install_id, &system.to_string()))
-                    .map(|(_, locked_package)| (*locked_package).to_owned())
+            .collect();
+
+        // Extract locked packages from the seed lockfile in their original order
+        // to preserve lockfile stability when no resolution is needed
+        let already_locked_packages = seed_lockfile
+            .map(|seed| {
+                seed.packages
+                    .iter()
+                    .filter(|pkg| {
+                        locked_keys.contains(&(pkg.install_id(), pkg.system().to_string()))
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>()
             })
-            .collect::<Vec<_>>();
+            .unwrap_or_default();
 
         (already_locked_packages, groups_to_lock)
     }
@@ -2959,7 +2969,8 @@ pub(crate) mod tests {
             Lockfile::split_fully_locked_groups(groups, Some(&locked));
 
         // All packages of group1 are locked
-        assert_eq!(&fully_locked, &[bar_locked, foo_locked].map(Into::into));
+        // Order should match the seed lockfile's package order (foo, bar)
+        assert_eq!(&fully_locked, &[foo_locked, bar_locked].map(Into::into));
 
         // Only one package of group2 is locked, so it should be in to_resolve as a group
         assert_eq!(to_resolve, vec![PackageGroup {
@@ -2993,6 +3004,73 @@ pub(crate) mod tests {
                 }
             ],
         }]);
+    }
+
+    /// When a lockfile has packages in non-alphabetical system order,
+    /// relocking with all packages already locked should preserve the original order.
+    /// This prevents unnecessary lockfile rewrites during activation.
+    /// Regression test for: https://github.com/flox/flox/issues/XXXX
+    #[test]
+    fn preserve_package_order_when_all_locked() {
+        let (foo_iid, foo_descriptor, foo_locked) =
+            fake_catalog_package_lock("foo", Some("group1"));
+
+        let foo_locked_darwin_x86 = LockedPackageCatalog {
+            system: PackageSystem::X8664Darwin.to_string(),
+            ..foo_locked.clone()
+        };
+        let foo_locked_darwin_aarch64 = LockedPackageCatalog {
+            system: PackageSystem::Aarch64Darwin.to_string(),
+            ..foo_locked.clone()
+        };
+
+        let mut manifest = Manifest::default();
+        // Set systems in non-alphabetical order (x86_64-darwin comes before aarch64-darwin)
+        manifest.options.systems = Some(vec![
+            PackageSystem::X8664Darwin.to_string(),
+            PackageSystem::Aarch64Darwin.to_string(),
+        ]);
+
+        // Make the descriptor not specify systems so it uses manifest options
+        let mut foo_descriptor_no_systems = foo_descriptor.unwrap_catalog_descriptor().unwrap();
+        foo_descriptor_no_systems.systems = None;
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid.clone(), foo_descriptor_no_systems.into());
+
+        // Create a seed lockfile with packages in non-alphabetical order
+        // (x86_64-darwin first, then aarch64-darwin)
+        let seed = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![
+                foo_locked_darwin_x86.clone().into(),
+                foo_locked_darwin_aarch64.clone().into(),
+            ],
+            compose: None,
+        };
+
+        let groups = Lockfile::collect_package_groups(&manifest, Some(&seed)).unwrap();
+        let (fully_locked, to_resolve): (Vec<_>, Vec<_>) =
+            Lockfile::split_fully_locked_groups(groups, Some(&seed));
+
+        // All packages should be considered locked
+        assert!(
+            to_resolve.is_empty(),
+            "All packages should be fully locked, nothing to resolve"
+        );
+
+        // Order should match the seed lockfile (x86_64-darwin first, then aarch64-darwin)
+        // not alphabetical order (aarch64-darwin, x86_64-darwin)
+        assert_eq!(
+            fully_locked,
+            vec![
+                foo_locked_darwin_x86.into(),
+                foo_locked_darwin_aarch64.into()
+            ],
+            "Package order should match seed lockfile, not alphabetical system order"
+        );
     }
 
     /// When packages are locked for multiple systems,
