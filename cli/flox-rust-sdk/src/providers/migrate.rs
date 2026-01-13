@@ -4,6 +4,9 @@ use std::path::{Path, PathBuf};
 
 use crate::data::System;
 use crate::flox::Flox;
+use crate::models::environment::managed_environment::ManagedEnvironment;
+use crate::models::environment::path_environment::PathEnvironment;
+use crate::models::environment::remote_environment::RemoteEnvironment;
 use crate::models::environment::{ConcreteEnvironment, EditResult, Environment, EnvironmentError};
 use crate::models::lockfile::{
     LockedPackage,
@@ -11,6 +14,7 @@ use crate::models::lockfile::{
     LockedPackageFlake,
     LockedPackageStorePath,
     Lockfile,
+    PackageOutputs,
 };
 use crate::models::manifest::typed::{
     Inner,
@@ -19,6 +23,7 @@ use crate::models::manifest::typed::{
     PackageDescriptorCatalog,
     PackageDescriptorFlake,
     PackageDescriptorStorePath,
+    SetOutputs,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -57,42 +62,73 @@ fn local_env_is_writable(manifest_path: &Path) -> Result<bool, MigrationError> {
     }
 }
 
-pub fn try_migrate_v1_to_v2(
-    flox: &Flox,
-    env: &mut ConcreteEnvironment,
-) -> Result<(), MigrationError> {
-    match env {
-        ConcreteEnvironment::Path(inner) => {
-            if !local_env_is_writable(inner.manifest_path(flox)?.as_path())? {
-                return Err(MigrationError::NotWritable(inner.name().to_string()));
-            }
-            // We need to make sure that there's a lockfile present so that we
-            // can inspect the outputs of each package. We want to avoid this
-            // sequence, which could give surprising behavior:
-            // - v1 manifest, v1 lockfile exist
-            // - delete v1 lockfile for some reason
-            // - activate, which locks, which is a write operation
-            // - triggers migration
-            // - v2 manifest, v2 lockfile _without_ migrated package outputs
-            let lockfile = inner
-                .as_core_environment_mut()?
-                .ensure_locked(flox)?
-                .lockfile();
-            let existing_manifest = inner.manifest(flox)?;
-            let migrated_manifest = migrate_manifest_v1_to_v2(&existing_manifest, &lockfile)?;
-            let migrated_contents = toml_edit::ser::to_string(&migrated_manifest)
-                .map_err(MigrationError::SerializeManifest)?;
-            let edit_result = inner.edit(flox, migrated_contents)?;
-            if let EditResult::Unchanged = edit_result {
-                return Err(MigrationError::Unchanged);
-            }
-            Ok(())
-        },
-        // You can't check write permissions ahead of time for FloxHub envs
-        // because that information is stored server side and a local cache
-        // could be invalidated at any time.
-        ConcreteEnvironment::Managed(inner) => todo!(),
-        ConcreteEnvironment::Remote(inner) => todo!(),
+pub trait MigrateEnv: Environment {
+    /// Attempts to determine whether the environment is writable before doing
+    /// the migration so that we can skip the migration if we know ahead of time
+    /// that it isn't possible.
+    ///
+    /// Returns Ok(_) if it was possible to learn the answer, and Err(_) if we
+    /// encountered an error while determining the answer. For path and managed
+    /// environments we use filesystem permissions to know whether the
+    /// environment is writable. For remote environments, the local write should
+    /// always succeed. For managed and remote environments, you can't know
+    /// ahead of time whether the *push* will succeed, so we don't consider
+    /// those cases when doing the migration.
+    fn is_writable(&self, flox: &Flox) -> Result<bool, MigrationError>;
+
+    /// Attempt to migrate the enviroment from a v1 manifest to a v2 manifest.
+    fn migrate_env(&mut self, flox: &Flox) -> Result<(), MigrationError> {
+        match self.is_writable(flox) {
+            Ok(false) => {
+                return Err(MigrationError::NotWritable(self.name().to_string()));
+            },
+            Ok(true) => {
+                // proceed
+            },
+            Err(err) => {
+                return Err(err);
+            },
+        }
+        // This will ensure that a lockfile exists before we attempt
+        // to migrate.
+        let lockfile = self.lockfile(flox)?.lockfile();
+        let existing_manifest = self.manifest(flox)?;
+        let migrated_manifest = migrate_manifest_v1_to_v2(&existing_manifest, &lockfile)?;
+        let migrated_contents = toml_edit::ser::to_string(&migrated_manifest)
+            .map_err(MigrationError::SerializeManifest)?;
+        let edit_result = self.edit(flox, migrated_contents)?;
+        if let EditResult::Unchanged = edit_result {
+            return Err(MigrationError::Unchanged);
+        }
+        Ok(())
+    }
+}
+
+impl MigrateEnv for PathEnvironment {
+    fn is_writable(&self, flox: &Flox) -> Result<bool, MigrationError> {
+        local_env_is_writable(self.manifest_path(flox)?.as_path())
+    }
+}
+
+impl MigrateEnv for ManagedEnvironment {
+    fn is_writable(&self, flox: &Flox) -> Result<bool, MigrationError> {
+        local_env_is_writable(self.manifest_path(flox)?.as_path())
+    }
+}
+
+impl MigrateEnv for RemoteEnvironment {
+    fn is_writable(&self, _flox: &Flox) -> Result<bool, MigrationError> {
+        Ok(true)
+    }
+}
+
+impl MigrateEnv for ConcreteEnvironment {
+    fn is_writable(&self, flox: &Flox) -> Result<bool, MigrationError> {
+        match self {
+            ConcreteEnvironment::Path(inner) => inner.is_writable(flox),
+            ConcreteEnvironment::Managed(inner) => inner.is_writable(flox),
+            ConcreteEnvironment::Remote(inner) => inner.is_writable(flox),
+        }
     }
 }
 
@@ -104,6 +140,21 @@ fn migrate_manifest_v1_to_v2(
 
     // Update the manifest version
     migrated.version = 2.into();
+
+    let collected = collect_locked_packages_by_kind(manifest, lockfile)?;
+    let install = migrated.install.inner_mut();
+    for locked_descriptor in collected.catalog.iter() {
+        install
+            .entry(locked_descriptor.install_id.clone())
+            .insert_entry(locked_descriptor.migrated());
+    }
+    for locked_descriptor in collected.flake.iter() {
+        install
+            .entry(locked_descriptor.install_id.clone())
+            .insert_entry(locked_descriptor.migrated());
+    }
+    // Note: We don't need to migrate store path packages
+
     Ok(migrated)
 }
 
@@ -128,7 +179,7 @@ struct LockedDescriptor<D, L> {
 /// list of outputs that would be installed by default (`outputs_to_install`).
 /// If these are the same, then we can save some verbosity in the manifest by
 /// not listing outputs for this package.
-trait PackageNeedsMigration {
+trait MigratePackage {
     /// Returns true if this locked package descriptor needs to be migrated
     /// to explicitly list out its outputs.
     fn needs_migration(&self) -> bool {
@@ -147,20 +198,38 @@ trait PackageNeedsMigration {
     /// when we go to compare the full list of outputs to the list of outputs
     /// to install, it will cause issues.
     fn outputs_to_install_union(&self) -> HashSet<OutputName>;
+
+    /// Returns the migrated package descriptor.
+    ///
+    /// This may be a no-op for certain packages (store path packages and
+    /// packages where `outputs_to_install` matches the list of all outputs).
+    fn migrated(&self) -> ManifestPackageDescriptor;
 }
 
-impl PackageNeedsMigration for LockedDescriptor<PackageDescriptorCatalog, LockedPackageCatalog> {
+// These two types have exactly the same logic for doing the migration,
+// but their `outputs` and `outputs_to_install` fields are nested differently
+// on their locked package types, so by adding and using some interfaces we can
+// write the logic once for both kinds of package descriptor:
+// - PackageDescriptorCatalog
+// - PackageDescriptorFlake
+impl<P, L> MigratePackage for LockedDescriptor<P, L>
+where
+    // The package descriptor type
+    P: SetOutputs + Into<ManifestPackageDescriptor> + Clone,
+    // The locked package type
+    L: PackageOutputs,
+{
     fn output_union(&self) -> HashSet<OutputName> {
         let initial_outputs = self
             .locked
             .values()
             .next()
-            .map(|locked_pkg| locked_pkg.outputs.keys().cloned().collect::<HashSet<_>>())
+            .map(|locked_pkg| locked_pkg.outputs().keys().cloned().collect::<HashSet<_>>())
             .unwrap_or_default();
         self.locked
             .values()
             .fold(initial_outputs, |acc, locked_pkg| {
-                let set = locked_pkg.outputs.keys().cloned().collect::<HashSet<_>>();
+                let set = locked_pkg.outputs().keys().cloned().collect::<HashSet<_>>();
                 acc.union(&set).cloned().collect::<HashSet<_>>()
             })
     }
@@ -171,99 +240,25 @@ impl PackageNeedsMigration for LockedDescriptor<PackageDescriptorCatalog, Locked
             .values()
             .next()
             .map(|locked_pkg| {
-                HashSet::from_iter(locked_pkg.outputs_to_install.clone().unwrap_or(vec![]))
+                HashSet::from_iter(locked_pkg.outputs_to_install().clone().unwrap_or(vec![]))
             })
             .unwrap_or_default();
         self.locked
             .values()
             .fold(initial_outputs, |acc, locked_pkg| {
                 let set =
-                    HashSet::from_iter(locked_pkg.outputs_to_install.clone().unwrap_or(vec![]));
-                acc.union(&set).cloned().collect::<HashSet<_>>()
-            })
-    }
-}
-
-impl PackageNeedsMigration for LockedDescriptor<PackageDescriptorFlake, LockedPackageFlake> {
-    fn output_union(&self) -> HashSet<OutputName> {
-        let initial_outputs = self
-            .locked
-            .values()
-            .next()
-            .map(|locked_pkg| {
-                locked_pkg
-                    .locked_installable
-                    .outputs
-                    .keys()
-                    .cloned()
-                    .collect::<HashSet<_>>()
-            })
-            .unwrap_or_default();
-        self.locked
-            .values()
-            .fold(initial_outputs, |acc, locked_pkg| {
-                let set = locked_pkg
-                    .locked_installable
-                    .outputs
-                    .keys()
-                    .cloned()
-                    .collect::<HashSet<_>>();
+                    HashSet::from_iter(locked_pkg.outputs_to_install().clone().unwrap_or(vec![]));
                 acc.union(&set).cloned().collect::<HashSet<_>>()
             })
     }
 
-    fn outputs_to_install_union(&self) -> HashSet<OutputName> {
-        let initial_outputs = self
-            .locked
-            .values()
-            .next()
-            .map(|locked_pkg| {
-                HashSet::from_iter(
-                    locked_pkg
-                        .locked_installable
-                        .outputs_to_install
-                        .clone()
-                        .unwrap_or(vec![]),
-                )
-            })
-            .unwrap_or_default();
-        self.locked
-            .values()
-            .fold(initial_outputs, |acc, locked_pkg| {
-                let set = HashSet::from_iter(
-                    locked_pkg
-                        .locked_installable
-                        .outputs_to_install
-                        .clone()
-                        .unwrap_or(vec![]),
-                );
-                acc.union(&set).cloned().collect::<HashSet<_>>()
-            })
+    fn migrated(&self) -> ManifestPackageDescriptor {
+        let mut pd = self.pd.clone();
+        if self.needs_migration() {
+            pd.set_outputs_to_all();
+        }
+        pd.into()
     }
-}
-
-impl PackageNeedsMigration
-    for LockedDescriptor<PackageDescriptorStorePath, LockedPackageStorePath>
-{
-    fn needs_migration(&self) -> bool {
-        false
-    }
-
-    fn output_union(&self) -> HashSet<OutputName> {
-        // SAFETY: this is only called by needs_migration,
-        //         which has a hardcoded return value
-        unreachable!()
-    }
-
-    fn outputs_to_install_union(&self) -> HashSet<OutputName> {
-        // SAFETY: this is only called by needs_migration,
-        //         which has a hardcoded return value
-        unreachable!()
-    }
-}
-
-trait MigratePackage {
-    fn migrate(&self) -> ManifestPackageDescriptor;
 }
 
 /// The pairings between concrete package descriptor types from the manifest,
@@ -271,34 +266,15 @@ trait MigratePackage {
 struct CollectedPackages {
     catalog: Vec<LockedDescriptor<PackageDescriptorCatalog, LockedPackageCatalog>>,
     flake: Vec<LockedDescriptor<PackageDescriptorFlake, LockedPackageFlake>>,
-    store_path: Vec<LockedDescriptor<PackageDescriptorStorePath, LockedPackageStorePath>>,
+    // Unused for now, but kept here since the union of all three fields on this
+    // struct should form the complete set of packages in the lockfile.
+    _store_path: Vec<LockedDescriptor<PackageDescriptorStorePath, LockedPackageStorePath>>,
 }
 
 // Between output names, install IDs, systems, etc, which are all strings
 // under the hood, having different types to keep them straight makes the
 // interfaces a little bit easier to read.
 type OutputName = String;
-
-/// The organized outputs from all of the single-system locked packages
-/// corresponding to a single install ID.
-struct CollectedOutputs {
-    /// A copy of the `outputs_to_install` field used to help order the
-    /// outputs as listed in the user's manifest.
-    ///
-    /// The order in which the outputs are listed determines a priority
-    /// order when rendering the environment, so the order is significant.
-    /// The `outputs_to_install` field is a list, which has an ordering.
-    /// The `outputs` field is a map, which doesn't have an ordering.
-    /// So what we can do to best preserve the intended ordering is put the
-    /// outputs from `outputs_to_install` first, and all others afterwards.
-    outputs_to_install: Vec<OutputName>,
-
-    /// The output names that appeared for all systems.
-    common: HashSet<OutputName>,
-
-    /// The outputs that only appeared for certain systems.
-    system_specific: HashMap<OutputName, Vec<System>>,
-}
 
 // This function is generic because I want to reuse it for different concrete
 // locked package types
@@ -408,25 +384,9 @@ fn collect_locked_packages_by_kind(
     let collected = CollectedPackages {
         catalog: catalog_pkgs,
         flake: flake_pkgs,
-        store_path: store_path_pkgs,
+        _store_path: store_path_pkgs,
     };
     Ok(collected)
-}
-
-struct MigratedPackageDescriptor {
-    /// The new package descriptor with `outputs` populated.
-    pd: ManifestPackageDescriptor,
-
-    /// Any outputs that weren't common to all systems, mapping each output
-    /// name to the systems on which it _was_ available.
-    ommitted_outputs: HashMap<OutputName, Vec<System>>,
-}
-
-fn migrate_package_descriptor_v1_to_v2(
-    pd: &ManifestPackageDescriptor,
-    lockfile: &Lockfile,
-) -> MigratedPackageDescriptor {
-    todo!()
 }
 
 #[cfg(test)]
@@ -439,6 +399,7 @@ mod tests {
     use super::*;
     use crate::flox::test_helpers::flox_instance;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
+    use crate::models::manifest::typed::SelectedOutputs;
     use crate::providers::buildenv::test_helpers::locked_package_catalog_from_mock_all_systems;
     use crate::providers::catalog::GENERATED_DATA;
     use crate::providers::catalog::test_helpers::catalog_replay_client;
@@ -507,16 +468,15 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn v1_with_missing_lockfile_is_locked_before_migration() {
         let (mut flox, _tmpdir) = flox_instance();
-        let env = new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        let mut env = new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
         flox.features.outputs = true;
         flox.catalog_client =
             catalog_replay_client(GENERATED_DATA.join("envs/hello/hello.yaml")).await;
 
         std::fs::remove_file(env.lockfile_path(&flox).unwrap()).unwrap();
 
-        let mut concrete = ConcreteEnvironment::Path(env);
-        try_migrate_v1_to_v2(&flox, &mut concrete).unwrap();
-        assert!(concrete.lockfile_path(&flox).unwrap().exists());
+        env.migrate_env(&flox).unwrap();
+        assert!(env.lockfile_path(&flox).unwrap().exists());
     }
 
     // #[test]
@@ -609,7 +569,7 @@ mod tests {
 
         assert_eq!(collected.catalog.len(), 7);
         assert_eq!(collected.flake.len(), 0);
-        assert_eq!(collected.store_path.len(), 0);
+        assert_eq!(collected._store_path.len(), 0);
 
         let nodejs = collected
             .catalog
@@ -662,69 +622,69 @@ mod tests {
     }
 
     #[test]
-    fn identifies_package_that_needs_migration() {
+    fn identifies_catalog_package_that_needs_migration() {
         let locked_pd = package_with_different_outputs_to_install();
         assert!(locked_pd.needs_migration());
     }
 
     #[test]
-    fn identifies_package_that_doesnt_need_migration() {
+    fn identifies_catalog_package_that_doesnt_need_migration() {
         let locked_pd = package_with_same_outputs_as_outputs_to_install();
         assert!(!locked_pd.needs_migration());
     }
 
-    // TODO: add tests for flake packages needing migration
+    // #[test]
+    // fn identifies_flake_package_that_needs_migration() {
+    //     todo!()
+    // }
+
+    // #[test]
+    // fn identifies_flake_package_that_doesnt_need_migration() {
+    //     todo!()
+    // }
 
     #[test]
-    fn identifies_package_with_system_specific_outputs() {
-        // This uses a locked Bash package, which contains a `debug` output
-        // only available on Linux systems.
-        let lockfile_path =
-            CanonicalPath::new_unchecked(GENERATED_DATA.join("envs/bash/manifest.lock"));
-        let lockfile = Lockfile::read_from_file(&lockfile_path).unwrap();
-        let descriptor = lockfile.manifest.install.inner().get("bash").unwrap();
-
-        let migrated = migrate_package_descriptor_v1_to_v2(descriptor, &lockfile);
-        assert!(!migrated.ommitted_outputs.is_empty());
-        let debug_output_systems = migrated.ommitted_outputs.get("debug").unwrap();
-        assert_eq!(debug_output_systems, &vec![
-            "aarch64-linux".to_string(),
-            "x86_64-linux".to_string()
-        ]);
+    fn migrated_package_contains_all_outputs() {
+        let needs_migration = package_with_different_outputs_to_install();
+        let migrated = needs_migration.migrated();
+        let ManifestPackageDescriptor::Catalog(pd) = migrated else {
+            panic!("expected catalog package");
+        };
+        assert_eq!(pd.outputs, Some(SelectedOutputs::all()));
     }
 
     #[test]
-    fn identifies_package_with_no_system_specific_outputs() {
-        // This uses a locked Bash package, which contains a `debug` output
-        // only available on Linux systems.
-        let lockfile_path =
-            CanonicalPath::new_unchecked(GENERATED_DATA.join("envs/hello/manifest.lock"));
-        let lockfile = Lockfile::read_from_file(&lockfile_path).unwrap();
-        let descriptor = lockfile.manifest.install.inner().get("hello").unwrap();
-
-        let migrated = migrate_package_descriptor_v1_to_v2(descriptor, &lockfile);
-        assert!(migrated.ommitted_outputs.is_empty());
+    fn package_not_needing_migration_is_untouched() {
+        let locked_descriptor = package_with_same_outputs_as_outputs_to_install();
+        let migrated = locked_descriptor.migrated();
+        let ManifestPackageDescriptor::Catalog(pd) = migrated else {
+            panic!("expected catalog package");
+        };
+        assert_eq!(pd.outputs, None);
     }
 
-    // #[test]
-    // fn migrated_package_contains_all_outputs() {
-    //     todo!()
-    // }
+    #[test]
+    fn migration_updates_manifest_version() {
+        let manifest_path = GENERATED_DATA.join("envs/krb5_prereqs/manifest.toml");
+        let contents = std::fs::read_to_string(manifest_path).unwrap();
+        let manifest = Manifest::from_str(&contents).unwrap();
+        let lockfile_path =
+            CanonicalPath::new_unchecked(GENERATED_DATA.join("envs/krb5_prereqs/manifest.lock"));
+        let lockfile = Lockfile::read_from_file(&lockfile_path).unwrap();
 
-    // #[test]
-    // fn package_not_needing_migration_is_untouched() {
-    //     todo!()
-    // }
+        let migrated = migrate_manifest_v1_to_v2(&manifest, &lockfile).unwrap();
+        assert_eq!(migrated.version, 2.into());
+    }
 
-    // #[test]
-    // fn migration_updates_manifest_version() {
-    //     todo!()
-    // }
-
-    // #[test]
-    // fn can_migrate_local_environment() {
-    //     todo!()
-    // }
+    #[test]
+    fn can_migrate_local_environment() {
+        let (mut flox, _tmpdir) = flox_instance();
+        let mut env =
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/krb5_prereqs"));
+        flox.features.outputs = true;
+        env.migrate_env(&flox).unwrap();
+        assert_eq!(env.manifest(&flox).unwrap().version, 2.into());
+    }
 
     // #[test]
     // fn can_migrate_remote_environment() {
