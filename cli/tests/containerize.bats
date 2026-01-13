@@ -153,6 +153,10 @@ setup_file() {
     else
       create_and_start_podman_machine
     fi
+  else
+    # `podman` behaves differently on Linux when using XDG_RUNTIME_DIR set by
+    # xdg_vars_setup, I'm guessing because it uses /run to interact with systemd
+    unset XDG_RUNTIME_DIR
   fi
 
   mkdir -p "$XDG_CONFIG_HOME/containers"
