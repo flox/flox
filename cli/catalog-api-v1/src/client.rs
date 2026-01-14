@@ -4303,14 +4303,14 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/`
     }
     /**Get user catalog metadata
 
-Get user catalog metadata
+Get user catalog metadata.
 
-Required Query Parameters:
+Path Parameters:
 - **catalog_name**: The name of the catalog
 
-
 Returns:
-- **UserCatalog**: The user catalog
+- **UserCatalog**: The user catalog metadata including id, name, created_at,
+  and owner_handle.
 
 Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}`
 
@@ -4374,14 +4374,15 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}`
     }
     /**Delete a user catalog
 
-Delete a user catalog
+Delete a user catalog.
 
-Required Query Parameters:
+Path Parameters:
 - **catalog_name**: The name of catalog to delete
-
 
 Returns:
 - **None**
+
+Note: This endpoint is not yet implemented and returns 501.
 
 Sends a `DELETE` request to `/api/v1/catalog/catalogs/{catalog_name}`
 
@@ -5234,7 +5235,14 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/remov
     }
     /**Get store config
 
-Get store configuration
+Get store configuration for a catalog.
+
+Path Parameters:
+- **catalog_name**: The name of the catalog
+
+Returns:
+- **CatalogStoreConfig**: The store configuration (null, meta-only,
+  nix-copy, or publisher type) with associated URIs if applicable.
 
 Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
 
@@ -5303,7 +5311,16 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
     }
     /**Set store config
 
-Update store configuration
+Update store configuration for a catalog.
+
+Path Parameters:
+- **catalog_name**: The name of the catalog
+
+Body Parameters:
+- **CatalogStoreConfig**: The new store configuration to set
+
+Returns:
+- **CatalogStoreConfig**: The updated store configuration.
 
 Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
 
@@ -5513,44 +5530,42 @@ Required Body:
 - **groups**: An object with an `items` array of PackageGroups to resolve.
 
 Optional Query Parameters:
-- **none**
+- **candidate_pages**: Number of additional candidate pages to return
+  (default: 0)
 
 Returns:
-- **ResolvedPackageGroups**: A object with an `items` array of
-    `ResolvedPackageGroup` items.
+- **ResolvedPackageGroups**: An object with an `items` array of
+  `ResolvedPackageGroup` items.
 
 Resolution Rules:
 - Each `PackageGroup` is resolved independently.
-- Each page that has a package that meets each of the descriptors in that group is returned in the results
-- The latest page will include details for each package in the group from that page
-- The remainder pages are returned without details (to get those details... TBD)
+- Each page that has packages meeting all descriptors in the group is
+  returned.
+- The latest complete page includes full package details.
+- Additional candidate pages are returned without full details.
 
-A Package Descriptor match:
-- **name**: [required] - is not used in matching, only for reference (TBD is
-            there a uniqueness constraint?)
-- **attr_path**: [required] - this must match the nix attribute path exactly and in full
-- **version**: [optional] - Either a literal version to match or a **semver** constraint.
-    This will be treated as a **semver** IFF TBD, otherwise it will be treated as
-    a literal string match to the nix `version` field.  If this is detected as a **semver**,
-    packages whose `version` field cannot be parsed as a **semver** will be excluded.
-- **allow_pre_release**: [optional] - Defaults to False.  Only applies
-    when a **semver** constraint is given.  If true, a `version` that can
-    be parsed as a valid semver, that includes a pre-release suffix will
-    be included as a candidate.  Otherwise, they will be excluded.
-- **allow_broken**: [optional] - Defaults to False.  A package
-    marked as broken = True will be excluded unless this is set to True.
-- **allow_unfree**: [optional] - Defaults to True.  A package
-    marked as unfree = True will be excluded unless this is set to True.
-- **allow_insecure**: [optional] - Defaults to False.  A package
-    marked as insecure = True will be excluded unless this is set to True.
-- **allow_missing_builds**: [optional] - Defaults to
-    False.  A package is expected to have been built if it
-    is not marked as broken, unfree, or insecure.  A package
-    that is expected to have been built, but none of it's outputs have been
-    observed to build, will attempt to be excluded unless this is set to
-    True.  This constraint may be softened if the group can not be resolved
-    with it enforced.  If this occurs, the ressponse will note this by
-    including a warning level message.
+PackageDescriptor Fields:
+- **install_id**: [required] Reference identifier for the package in the
+  manifest. Used for error messages and result correlation.
+- **attr_path**: [required] The nix attribute path to match exactly.
+- **systems**: [required] List of systems to resolve for (e.g.,
+  x86_64-linux).
+- **version**: [optional] Version constraint. Can be a literal version or
+  semver constraint. Packages whose version cannot be parsed as semver are
+  excluded when using semver constraints.
+- **derivation**: [optional] Specific derivation path to match.
+- **allow_pre_releases**: [optional] Include pre-release versions when using
+  semver constraints (default: False).
+- **allow_broken**: [optional] Include packages marked as broken
+  (default: False).
+- **allow_unfree**: [optional] Include packages with unfree licenses
+  (default: True).
+- **allow_insecure**: [optional] Include packages marked as insecure
+  (default: False).
+- **allowed_licenses**: [optional] List of acceptable license identifiers.
+- **allow_missing_builds**: [optional] Include packages without confirmed
+  build artifacts (default: False). If resolution fails with this
+  constraint, it may be relaxed with a warning message.
 
 Sends a `POST` request to `/api/v1/catalog/resolve`
 
@@ -5708,16 +5723,17 @@ Arguments:
 Search the catalog(s) under the given criteria for matching packages.
 
 Required Query Parameters:
-- **search_term**: The search term to search on.
-- **system**: This is returned but does not affect results
+- **system**: The system architecture to search for (e.g., x86_64-linux)
 
 Optional Query Parameters:
-- **catalogs**: Comma separated list of catalog names to search; defaults to all catalogs
-- **page**: Optional page number for pagination (def = 0)
-- **pageSize**: Optional page size for pagination (def = 10)
+- **search_term**: The search term to filter packages by
+- **catalogs**: Comma separated list of catalog names to search; defaults to
+  all catalogs. Note: when searching base catalog, search_term is required.
+- **page**: Page number for pagination (default: 0)
+- **pageSize**: Page size for pagination (default: 10)
 
 Returns:
-- **PackageSearchResult**: A list of PackageInfo and the total result count
+- **PackageSearchResult**: A list of PackageInfoSearch items and total count
 
 Sends a `GET` request to `/api/v1/catalog/search`
 
@@ -5853,13 +5869,15 @@ Sends a `POST` request to `/api/v1/catalog/settings/{key}`
     }
     /**Get store info for a list of derivations
 
-Get store info for a list of derivations
+Get store info for a list of output paths.
 
 Body Parameters:
-- **StoreInfoRequest**: A list of derivation paths
+- **StoreInfoRequest**: Object containing an `outpaths` list of output paths
 
 Returns:
-- **StoreInfoResponse**: a map of derivation path to a list of store info objects
+- **StoreInfoResponse**: A map of output path to a list of StoreInfo objects,
+  each containing catalog, package, URL, and optional authentication info
+  for downloading the binary artifacts.
 
 Sends a `POST` request to `/api/v1/catalog/store`
 
@@ -5918,11 +5936,14 @@ Sends a `POST` request to `/api/v1/catalog/store`
     }
     /**Get status for a list of storepaths
 
-Get status for a list of storepaths
+Get status for a list of store paths.
+
 Body Parameters:
-- **StoreInfoRequest**: A list of derivation paths
+- **StorepathRequest**: Object containing an `outpaths` list of store paths
+
 Returns:
-- **StoreInfoResponse**: a map of derivation path to a list of store info objects
+- **StorepathStatusResponse**: A map of store path to a list of
+  StorepathStatus objects indicating catalog, package, and narinfo status.
 
 Sends a `POST` request to `/api/v1/catalog/store/status`
 
