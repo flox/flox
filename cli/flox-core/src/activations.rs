@@ -345,6 +345,7 @@ pub struct ActivationState {
     info: EnvironmentInfo,
     mode: ActivateMode,
     ready: Ready,
+    /// Pid must be a non-zero value when writing state to disk.
     executive_pid: Pid,
     current_process_compose_store_path: Option<StartIdentifier>,
     attached_pids: BTreeMap<Pid, Attachment>,
@@ -688,6 +689,12 @@ pub fn write_activations_json(
     path: impl AsRef<Path>,
     lock: LockFile,
 ) -> Result<(), Error> {
+    if activations.executive_pid == EXECUTIVE_NOT_STARTED {
+        anyhow::bail!(
+            "Cannot write activation state without executive PID set (path: {})",
+            path.as_ref().display()
+        );
+    }
     crate::serialize_atomically(&json!(activations), &path, lock)?;
     Ok(())
 }
@@ -711,8 +718,11 @@ pub mod test_helpers {
     pub fn write_activation_state(
         runtime_dir: &Path,
         dot_flox_path: &Path,
-        state: ActivationState,
+        mut state: ActivationState,
     ) {
+        if !state.executive_started() {
+            state.set_executive_pid(1);
+        }
         let state_json_path = state_json_path(runtime_dir, dot_flox_path);
         let lock = acquire_activations_json_lock(&state_json_path).expect("failed to acquire lock");
         write_activations_json(&state, &state_json_path, lock).expect("failed to write state");
@@ -732,6 +742,7 @@ mod tests {
     use std::time::Duration;
 
     use indoc::formatdoc;
+    use tempfile::TempDir;
 
     use super::*;
     // NOTE: these two functions are copied from flox-rust-sdk since you can't
@@ -780,6 +791,53 @@ mod tests {
         Attachment {
             start_id,
             expiration: None,
+        }
+    }
+
+    mod read_and_write_state {
+        use super::*;
+
+        #[test]
+        fn read_and_write_roundtrip() {
+            let temp_dir = TempDir::new().unwrap();
+            let dot_flox_path = temp_dir.path().join(".flox");
+            let state_path = state_json_path(temp_dir.path(), dot_flox_path);
+
+            let write_state = make_activations(Ready::False);
+            let lock = acquire_activations_json_lock(&state_path).unwrap();
+            write_activations_json(&write_state, &state_path, lock).unwrap();
+
+            let (read_state_opt, _lock) = read_activations_json(&state_path).unwrap();
+            let read_state = read_state_opt.expect("state should be present");
+            assert_eq!(
+                write_state, read_state,
+                "written and read states should match"
+            );
+        }
+
+        #[test]
+        fn write_without_executive_pid_fails() {
+            let temp_dir = TempDir::new().unwrap();
+            let dot_flox_path = temp_dir.path().join(".flox");
+            let flox_env = dot_flox_path.join("run/test");
+            let state_path = state_json_path(temp_dir.path(), &dot_flox_path);
+
+            let state = ActivationState::new(&ActivateMode::default(), dot_flox_path, flox_env);
+            assert_eq!(
+                state.executive_pid, EXECUTIVE_NOT_STARTED,
+                "executive PID should be unset"
+            );
+
+            let lock = acquire_activations_json_lock(&state_path).unwrap();
+            let result = write_activations_json(&state, &state_path, lock);
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                format!(
+                    "Cannot write activation state without executive PID set (path: {})",
+                    state_path.display()
+                ),
+                "writing state without executive PID should fail"
+            );
         }
     }
 
