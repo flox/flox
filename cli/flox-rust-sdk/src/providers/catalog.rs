@@ -9,7 +9,6 @@ use std::str::FromStr;
 use std::sync::{Arc, LazyLock, Mutex};
 
 use async_stream::try_stream;
-use base64::Engine as _;
 use catalog_api_v1::types::{
     self as api_types,
     ErrorResponse,
@@ -24,10 +23,6 @@ use futures::stream::Stream;
 use futures::{Future, StreamExt, TryStreamExt};
 use httpmock::{MockServer, RecordingID};
 use indoc::formatdoc;
-use libgssapi::context::{ClientCtx, CtxFlags};
-use libgssapi::credential::{Cred, CredUsage};
-use libgssapi::name::Name;
-use libgssapi::oid::{GSS_MECH_KRB5, GSS_NT_HOSTBASED_SERVICE, OidSet};
 use reqwest::StatusCode;
 use reqwest::header::{self, HeaderMap};
 use serde::{Deserialize, Serialize};
@@ -35,6 +30,7 @@ use thiserror::Error;
 use tracing::{debug, info, instrument};
 use url::Url;
 
+use super::catalog_auth::AuthStrategy;
 use super::publish::CheckedEnvironmentMetadata;
 use crate::data::System;
 use crate::flox::{FLOX_VERSION, Flox};
@@ -138,8 +134,6 @@ pub struct CatalogClientConfig {
     pub floxhub_token: Option<String>,
     pub extra_headers: BTreeMap<String, String>,
     pub mock_mode: CatalogMockMode,
-    /// Enable GSSAPI/Kerberos authentication
-    pub use_gssapi: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, derive_more::Display, PartialEq)]
@@ -389,29 +383,8 @@ impl CatalogClient {
             );
         };
 
-        // GSSAPI/Kerberos authentication
-        if config.use_gssapi {
-            match Self::generate_gssapi_token(&config.catalog_url) {
-                Ok(token) => {
-                    let auth_value = format!("Negotiate {}", token);
-                    header_map.insert(
-                        header::HeaderName::from_static("authorization"),
-                        header::HeaderValue::from_str(&auth_value).unwrap(),
-                    );
-                    debug!("Added GSSAPI Negotiate authorization header");
-                },
-                Err(e) => {
-                    tracing::warn!("Failed to generate GSSAPI token: {}", e);
-                },
-            }
-        }
-        // Authenticated requests (for custom catalogs) require a token.
-        else if let Some(token) = &config.floxhub_token {
-            header_map.insert(
-                header::HeaderName::from_static("authorization"),
-                header::HeaderValue::from_str(&format!("bearer {token}")).unwrap(),
-            );
-        };
+        // Add authentication headers (compile-time strategy selection via Cargo features)
+        super::catalog_auth::CatalogAuthStrategy::add_auth_headers(&mut header_map, config);
 
         for (key, value) in &config.extra_headers {
             header_map.insert(
@@ -421,63 +394,6 @@ impl CatalogClient {
         }
 
         header_map
-    }
-
-    /// Generate a GSSAPI token for the given catalog URL
-    ///
-    /// This uses Kerberos authentication to generate a SPNEGO token
-    /// for HTTP Negotiate authentication.
-    fn generate_gssapi_token(catalog_url: &str) -> Result<String, String> {
-        // Parse the URL to extract the hostname
-        let url = Url::parse(catalog_url).map_err(|e| format!("Invalid URL: {}", e))?;
-        let hostname = url
-            .host_str()
-            .ok_or_else(|| "No hostname in catalog URL".to_string())?;
-
-        // Create the service principal name (SPN) for HTTP service
-        // Format: HTTP@hostname
-        let service_name = format!("HTTP@{}", hostname);
-        debug!("Using GSSAPI service principal: {}", service_name);
-
-        // Import the service name as a GSSAPI name
-        let target_name = Name::new(service_name.as_bytes(), Some(&GSS_NT_HOSTBASED_SERVICE))
-            .map_err(|e| format!("Failed to create GSSAPI name: {:?}", e))?;
-
-        // Acquire default credentials (from Kerberos ticket cache)
-        let cred = Cred::acquire(None, None, CredUsage::Initiate, None)
-            .map_err(|e| format!("Failed to acquire GSSAPI credentials: {:?}", e))?;
-
-        // Create GSSAPI context flags
-        let mut ctx_flags = CtxFlags::empty();
-        ctx_flags.insert(CtxFlags::GSS_C_MUTUAL_FLAG);
-        ctx_flags.insert(CtxFlags::GSS_C_REPLAY_FLAG);
-
-        // Create a Kerberos-only OID set
-        let mut desired_mechs =
-            OidSet::new().map_err(|e| format!("Failed to create OID set: {:?}", e))?;
-        desired_mechs
-            .add(&GSS_MECH_KRB5)
-            .map_err(|e| format!("Failed to add Kerberos OID: {:?}", e))?;
-
-        // Initialize the client context
-        let mut client_ctx =
-            ClientCtx::new(Some(cred), target_name, ctx_flags, Some(&GSS_MECH_KRB5));
-
-        // Perform the initial GSSAPI handshake step
-        // First parameter: input token (None for initial step)
-        // Second parameter: channel bindings (None for no channel bindings)
-        let token = client_ctx
-            .step(None, None)
-            .map_err(|e| format!("GSSAPI context initialization failed: {:?}", e))?;
-
-        // Check if token was generated
-        let token_bytes = token.ok_or_else(|| "No token generated by GSSAPI".to_string())?;
-
-        // Encode the token as base64 (convert Buf to byte slice)
-        let encoded_token = base64::engine::general_purpose::STANDARD.encode(&token_bytes[..]);
-        debug!("Generated GSSAPI token ({} bytes)", token_bytes.len());
-
-        Ok(encoded_token)
     }
 }
 
@@ -1959,7 +1875,6 @@ pub mod test_helpers {
             floxhub_token: None,
             extra_headers: Default::default(),
             mock_mode: CatalogMockMode::Replay(path.as_ref().to_path_buf()),
-            use_gssapi: false,
         };
         Client::Catalog(CatalogClient::new(catalog_config))
     }
@@ -2050,7 +1965,6 @@ pub mod test_helpers {
             floxhub_token: auth.token().map(|token| token.secret().to_string()),
             extra_headers: Default::default(),
             mock_mode: mock_mode.clone(),
-            use_gssapi: false,
         };
         let client_inner = CatalogClient::new(catalog_config);
         let mut client = Client::Catalog(client_inner);
@@ -2179,7 +2093,6 @@ mod tests {
             floxhub_token: None,
             extra_headers: Default::default(),
             mock_mode: Default::default(),
-            use_gssapi: false,
         }
     }
 
@@ -2344,7 +2257,6 @@ mod tests {
             floxhub_token: None,
             extra_headers,
             mock_mode: Default::default(),
-            use_gssapi: false,
         };
 
         let client = CatalogClient::new(config);

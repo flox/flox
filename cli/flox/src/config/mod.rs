@@ -81,10 +81,6 @@ pub struct FloxConfig {
     // so just use a String.
     pub catalog_url: Option<String>,
 
-    /// Use GSSAPI/Kerberos authentication for catalog connections
-    #[serde(default)]
-    pub catalog_use_gssapi: bool,
-
     /// Rule whether to change the shell prompt in activated environments.
     /// Deprecated in favor of set_prompt and hide_default_prompt.
     pub shell_prompt: Option<EnvironmentPromptConfig>,
