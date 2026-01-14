@@ -186,15 +186,42 @@ EOF
 }
 
 # bats test_tags=edit:rename-remote
-@test "'flox edit --name' fails with a remote environment" {
+@test "'flox edit --name' renames a remote environment" {
   floxhub_setup "owner"
 
   "$FLOX_BIN" init --name name
   "$FLOX_BIN" push --owner "owner"
 
+  # Access the remote environment to create the cache
+  run "$FLOX_BIN" list --reference "owner/name"
+  assert_success
+
+  # Verify old cache exists before rename
+  assert [ -d "$FLOX_CACHE_DIR/remote/owner/name" ]
+
   run "$FLOX_BIN" edit --reference "owner/name" --name "renamed"
+  assert_success
+  assert_output --partial "renamed environment 'name' to 'renamed'"
+
+  # Verify the cache directory was renamed
+  assert [ ! -d "$FLOX_CACHE_DIR/remote/owner/name" ]
+  assert [ -d "$FLOX_CACHE_DIR/remote/owner/renamed" ]
+
+  # Verify the rename worked on FloxHub
+  run "$FLOX_BIN" list --reference "owner/renamed"
+  assert_success
+}
+
+# bats test_tags=edit:rename-managed
+@test "'flox edit --name' fails with a managed environment" {
+  floxhub_setup "owner"
+
+  "$FLOX_BIN" init --name name
+  "$FLOX_BIN" push --owner "owner"
+
+  run "$FLOX_BIN" edit --name "renamed"
   assert_failure
-  assert_output --partial "Cannot rename environments on FloxHub"
+  assert_output --partial "Use 'flox edit -r <owner>/<name> -n <new_name>' to rename environments on FloxHub"
 }
 
 # ---------------------------------------------------------------------------- #
