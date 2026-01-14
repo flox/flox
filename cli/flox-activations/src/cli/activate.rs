@@ -210,18 +210,14 @@ impl ActivateArgs {
 
         let pid = std::process::id() as i32;
         let result = activations.start_or_attach(pid, &context.flox_activate_store_path);
-
-        // Early return for AlreadyStarting - no write needed
-        if matches!(result, StartOrAttachResult::AlreadyStarting { .. }) {
-            drop(lock);
-            return Ok(result);
-        }
-
         let start_id = match &result {
             StartOrAttachResult::Start { start_id } | StartOrAttachResult::Attach { start_id } => {
                 start_id
             },
-            _ => unreachable!(),
+            StartOrAttachResult::AlreadyStarting { .. } => {
+                drop(lock); // Explicit for clarity only.
+                return Ok(result); // Return early for retry.
+            },
         };
 
         let start_state_dir = start_id.state_dir_path(
