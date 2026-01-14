@@ -23,9 +23,48 @@ pub enum UserStateError {
     BadFilePath(PathBuf),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+/// Compatibility wrapper for deserializing old and new UserState formats
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum UserStateCompat {
+    New {
+        completed_floxhub_default_onboarding: Option<bool>,
+    },
+    Old {
+        confirmed_create_default_env: Option<bool>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
 pub struct UserState {
-    pub confirmed_create_default_env: Option<bool>,
+    /// Tracks whether user has completed FloxHub default environment onboarding.
+    /// Set to true once the user has gone through the install flow.
+    pub completed_floxhub_default_onboarding: Option<bool>,
+}
+
+impl<'de> serde::Deserialize<'de> for UserState {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        match UserStateCompat::deserialize(deserializer)? {
+            UserStateCompat::New {
+                completed_floxhub_default_onboarding,
+            } => Ok(UserState {
+                completed_floxhub_default_onboarding,
+            }),
+            UserStateCompat::Old {
+                confirmed_create_default_env,
+            } => {
+                // Old users who said "Yes" have completed onboarding (created local env)
+                // Old users who said "No" have not completed onboarding
+                // We'll treat them as not having completed FloxHub onboarding
+                Ok(UserState {
+                    completed_floxhub_default_onboarding: confirmed_create_default_env,
+                })
+            },
+        }
+    }
 }
 
 // TODO: These functions are very close to their counterparts in
