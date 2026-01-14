@@ -166,16 +166,12 @@ impl Watcher for PidWatcher {
 #[cfg(test)]
 pub mod test {
     use std::collections::BTreeMap;
-    use std::path::Path;
     use std::process::{Child, Command};
     use std::sync::atomic::Ordering;
 
     use flox_core::activate::mode::ActivateMode;
-    use flox_core::activations::{
-        StartOrAttachResult,
-        acquire_activations_json_lock,
-        state_json_path,
-    };
+    use flox_core::activations::test_helpers::{read_activation_state, write_activation_state};
+    use flox_core::activations::{StartOrAttachResult, state_json_path};
     use flox_core::proc_status::{ProcStatus, pid_is_running, read_pid_status};
 
     use super::*;
@@ -242,27 +238,6 @@ pub mod test {
         assert!(!pid_is_running(pid));
         assert_eq!(read_pid_status(pid), ProcStatus::Zombie);
         proc.wait().unwrap();
-    }
-
-    /// Helper to write an ActivationState to disk
-    ///
-    /// Takes ownership of state so we don't accidentally use it after e.g. a
-    /// watcher modifies state on disk
-    pub fn write_activation_state(
-        runtime_dir: &Path,
-        dot_flox_path: &Path,
-        state: ActivationState,
-    ) {
-        let state_json_path = state_json_path(runtime_dir, dot_flox_path);
-        let lock = acquire_activations_json_lock(&state_json_path).expect("failed to acquire lock");
-        write_activations_json(&state, &state_json_path, lock).expect("failed to write state");
-    }
-
-    /// Helper to read an ActivationState from disk
-    pub fn read_activation_state(runtime_dir: &Path, dot_flox_path: &Path) -> ActivationState {
-        let state_json_path = state_json_path(runtime_dir, dot_flox_path);
-        let (state, _lock) = read_activations_json(&state_json_path).expect("failed to read state");
-        state.unwrap()
     }
 
     #[test]

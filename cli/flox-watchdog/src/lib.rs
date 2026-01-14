@@ -244,11 +244,11 @@ fn ensure_process_group_leader() -> Result<(), Error> {
 #[cfg(test)]
 mod test {
     use flox_core::activate::mode::ActivateMode;
+    use flox_core::activations::test_helpers::write_activation_state;
     use flox_core::activations::{ActivationState, StartOrAttachResult};
     use process::test::{shutdown_flags, start_process, stop_process};
 
     use super::*;
-    use crate::process::test::write_activation_state;
 
     #[test]
     fn cleanup_removes_state_directory() {

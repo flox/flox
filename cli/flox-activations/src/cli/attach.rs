@@ -101,42 +101,16 @@ impl AttachArgs {
 #[cfg(test)]
 mod test {
     use std::collections::BTreeMap;
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     use flox_core::activate::mode::ActivateMode;
-    use flox_core::activations::{
-        ActivationState,
-        StartOrAttachResult,
-        acquire_activations_json_lock,
-        read_activations_json,
-        state_json_path,
-        write_activations_json,
-    };
+    use flox_core::activations::test_helpers::*;
+    use flox_core::activations::{ActivationState, StartOrAttachResult};
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
     use time::OffsetDateTime;
 
     use super::{AttachArgs, AttachExclusiveArgs};
-
-    /// Helper to write an ActivationState to disk
-    ///
-    /// Takes ownership of state so we don't accidentally use it after e.g. a
-    /// watcher modifies state on disk
-    pub fn write_activation_state(
-        runtime_dir: &Path,
-        dot_flox_path: &Path,
-        state: ActivationState,
-    ) {
-        let state_json_path = state_json_path(runtime_dir, dot_flox_path);
-        let lock = acquire_activations_json_lock(&state_json_path).expect("failed to acquire lock");
-        write_activations_json(&state, &state_json_path, lock).expect("failed to write state");
-    }
-    /// Helper to read an ActivationState from disk
-    pub fn read_activation_state(runtime_dir: &Path, dot_flox_path: &Path) -> ActivationState {
-        let state_json_path = state_json_path(runtime_dir, dot_flox_path);
-        let (state, _lock) = read_activations_json(&state_json_path).expect("failed to read state");
-        state.unwrap()
-    }
 
     /// Attaching with a timeout adds an expiration to the (already) attached PID
     #[test]

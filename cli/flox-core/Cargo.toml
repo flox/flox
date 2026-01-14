@@ -31,3 +31,4 @@ indoc.workspace = true
 [features]
 default = ["proc_status"]
 proc_status = []
+tests = []

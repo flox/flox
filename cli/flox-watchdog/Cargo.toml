@@ -22,6 +22,7 @@ tracing-subscriber.workspace = true
 kqueue.workspace = true
 
 [dev-dependencies]
+flox-core = { workspace = true, features = ["tests"] }
 filetime = "0.2.26"
 tempfile.workspace = true
 serde_json.workspace = true

@@ -692,6 +692,40 @@ pub fn write_activations_json(
     Ok(())
 }
 
+#[cfg(any(test, feature = "tests"))]
+pub mod test_helpers {
+    use std::path::Path;
+
+    use super::{
+        ActivationState,
+        acquire_activations_json_lock,
+        read_activations_json,
+        state_json_path,
+        write_activations_json,
+    };
+
+    /// Helper to write an ActivationState to disk
+    ///
+    /// Takes ownership of state so we don't accidentally use it after e.g. a
+    /// watcher modifies state on disk
+    pub fn write_activation_state(
+        runtime_dir: &Path,
+        dot_flox_path: &Path,
+        state: ActivationState,
+    ) {
+        let state_json_path = state_json_path(runtime_dir, dot_flox_path);
+        let lock = acquire_activations_json_lock(&state_json_path).expect("failed to acquire lock");
+        write_activations_json(&state, &state_json_path, lock).expect("failed to write state");
+    }
+
+    /// Helper to read an ActivationState from disk
+    pub fn read_activation_state(runtime_dir: &Path, dot_flox_path: &Path) -> ActivationState {
+        let state_json_path = state_json_path(runtime_dir, dot_flox_path);
+        let (state, _lock) = read_activations_json(&state_json_path).expect("failed to read state");
+        state.unwrap()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::process::{self, Child, Command};
