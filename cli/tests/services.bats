@@ -68,10 +68,10 @@ setup() {
 
 teardown() {
   cat_teardown_fifo
-  # Wait for watchdogs before project teardown, otherwise some tests will hang
+  # Wait for executives before project teardown, otherwise some tests will hang
   # forever.
   #
-  # I'm guessing this is because the watchdog and process-compose have logfiles
+  # I'm guessing this is because the executive and process-compose have logfiles
   # in the project directory,
   # so maybe one of them tries to log something and hangs.
   # ps output is showing a process-compose down hanging forever,
@@ -81,12 +81,12 @@ teardown() {
   # ...if only the reproducer wasn't to delete the logs.
   #
   # When running in parallel `wait_for_activations`
-  # may wait for watchdog processes of unrelated tests.
+  # may wait for executive processes of unrelated tests.
   # It tries to avoid non-test processes by looking for the data dir argument,
-  # passed to the watchdog process.
+  # passed to the executive process.
   # Within the `services` tests, we call `setup_isolated_flox` during `setup()`,
   # which sets the data dir to a unique value for every test,
-  # thus avoiding waiting for unrelated watchdog processes.
+  # thus avoiding waiting for unrelated executive processes.
   wait_for_activations "$PROJECT_DIR" || return 1
   project_teardown
   common_test_teardown
@@ -601,13 +601,13 @@ EOF
 )
     assert_success
 
-    # give the watchdog a chance to clean up the services before the next iteration
+    # give the executive a chance to clean up the services before the next iteration
     wait_for_activations "$PROJECT_DIR"
   done
 }
 
 # NB: There is a corresponding test in `activate.bats`.
-@test "start, restart: refuses to attach to an older activations.json version" {
+@test "start, restart: handles differences in state.json version" {
   setup_sleeping_services
 
   # Prevent backtraces from `flox-activations` leaking into output.
@@ -619,21 +619,23 @@ EOF
     echo "Testing: flox services $command"
     command="$command" run "$FLOX_BIN" activate -- bash <(
       cat << 'EOF'
+        echo "Started outer activation.."
         echo "$$" > activation_pid
 
-        ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
-        ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
-        ACTIVATIONS_VERSION="$(jq -r '.version' ${ACTIVATIONS_JSON})"
+        ACTIVATIONS_DIR=$(dirname "$_FLOX_START_STATE_DIR")
+        STATE_PATH="${ACTIVATIONS_DIR}/state.json"
 
-        jq_edit "$ACTIVATIONS_JSON" '.version = 0'
+        # Stop the executive before making changes to state.json which will
+        # cause it to exit with an error on the next polling loop.
+        EXECUTIVE_PID=$(jq --exit-status --raw-output '.executive_pid' "$STATE_PATH")
+        kill -9 "$EXECUTIVE_PID"
+
+        # Fake an older version.
+        jq_edit "$STATE_PATH" '.version = 0'
+
+        # This should fail because the outer activation is still attached and running.
+        echo "Attempting inner activation.."
         "$FLOX_BIN" services "$command"
-        EXIT_CODE=$?
-
-        # Force cleanup because the watchdog will exit early on a version mismatch.
-        jq_edit "$ACTIVATIONS_JSON" ".version = ${ACTIVATIONS_VERSION}"
-        jq_edit "$ACTIVATIONS_JSON" '.activations |= []'
-
-        exit $EXIT_CODE
 EOF
     )
 
@@ -641,14 +643,20 @@ EOF
     ACTIVATION_PID=$(cat activation_pid)
 
     assert_failure
-    assert_output "❌ ERROR: This environment has already been activated with an incompatible version of 'flox'.
+    assert_output "Started outer activation..
+Attempting inner activation..
+❌ ERROR: This environment has already been activated with an incompatible version of 'flox'.
 
 Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"
 
-    # In case the watchdog managed to survive this far.
-    wait_for_activations "$PROJECT_DIR"
+    # Verify that a subsequent activation succeeds because the state is ignored
+    # and reset when the attached pid and executive are no longer running.
+    # This also ensures that wait_for_activations will succeed.
+    FLOX_SHELL=bash run "$FLOX_BIN" activate -- true
+    assert_success
   done
+
 }
 
 # bats test_tags=services:stop
@@ -992,9 +1000,9 @@ EOF
   run grep "process=flox_never_exit" "${PROJECT_DIR}"/.flox/log/services.*.log
   assert_success
 
-  # Poll because watchdog may not have started by the time the activation finishes.
-  watchdog_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log.*)"
-  wait_for_partial_file_content "$watchdog_log" "woof"
+  # Poll because executive may not have started by the time the activation finishes.
+  executive_log="$(echo $PROJECT_DIR/.flox/log/executive.*.log.*)"
+  wait_for_partial_file_content "$executive_log" "woof"
 }
 
 @test "activate: --start-services warns if environment does not have services" {
@@ -1454,9 +1462,9 @@ EOF
   assert_output --partial "Service 'one' started."
 
 
-  watchdog_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log.*)"
-  wait_for_partial_file_content "$watchdog_log" "woof"
-  wait_for_partial_file_content "$watchdog_log" "finished cleanup"
+  executive_log="$(echo $PROJECT_DIR/.flox/log/executive.*.log.*)"
+  wait_for_partial_file_content "$executive_log" "woof"
+  wait_for_partial_file_content "$executive_log" "finished cleanup"
 }
 
 @test "kills daemon process" {
@@ -1546,10 +1554,10 @@ EOF
   "$FLOX_BIN" activate --start-services -- bash -c "echo > started_1 && echo > $TEARDOWN_FIFO" &
   timeout 2 cat started_1
 
-  # Check that services and watchdog are both running
+  # Check that services and executive are both running
   "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
-  watchdog_1_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log.*)"
-  run cat "$watchdog_1_log"
+  executive_log="$(echo $PROJECT_DIR/.flox/log/executive.*.log.*)"
+  run cat "$executive_log"
   assert_success
   assert_output --partial "woof"
 
@@ -1580,25 +1588,14 @@ EOF
   run cat output
   assert_output --partial "⚠️  Skipped starting services, services are already running"
 
-  # Check that watchdog 1 has finished cleanup
-  run cat "$watchdog_1_log"
-  assert_output --partial "woof"
-  wait_for_partial_file_content "$watchdog_1_log" "finished cleanup"
-  rm "$watchdog_1_log"
-
-  # Check that watchdog 2 is running
-  watchdog_2_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log.*)"
-  run cat "$watchdog_2_log"
-  assert_output --partial "woof"
-  refute_output "finished cleanup"
-
-  # Even though watchdog 1 cleaned up, services should still be running
+  # Services should still be running after the 1st activation exited.
+  wait_for_partial_file_content "$executive_log" "detaching terminated PID"
   "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
 
-  # Teardown 2nd activation and wait for watchdog to cleanup
+  # Teardown 2nd activation and wait for executive to cleanup
   cat finished_2
   unset TEARDOWN_FIFO
-  wait_for_partial_file_content "$watchdog_2_log" "finished cleanup"
+  wait_for_partial_file_content "$executive_log" "finished cleanup"
 
   # Make sure services have stopped
   timeout 1s bash -c '

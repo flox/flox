@@ -6,13 +6,13 @@ use std::{env, thread};
 
 use anyhow::{Context, Error, bail};
 use flox_core::activate::context::AttachCtx;
+use flox_core::activations::StartIdentifier;
 use time::OffsetDateTime;
 use time::macros::format_description;
 use tracing::debug;
 
 use crate::activate_script_builder::apply_activation_env;
 use crate::cli::activate::VarsFromEnvironment;
-use crate::cli::start_or_attach::StartOrAttachResult;
 use crate::env_diff::EnvDiff;
 
 /// Path to the process-compose binary
@@ -74,7 +74,7 @@ pub fn start_services_blocking(
     context: &AttachCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
-    start_or_attach: &StartOrAttachResult,
+    start_id: &StartIdentifier,
     env_diff: EnvDiff,
 ) -> Result<(), anyhow::Error> {
     let config_file = format!("{}/service-config.yaml", context.env);
@@ -105,7 +105,7 @@ pub fn start_services_blocking(
         subsystem_verbosity,
         vars_from_env,
         &env_diff,
-        start_or_attach,
+        start_id,
     );
     command
         .env("NO_COLOR", "1")

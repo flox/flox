@@ -5,17 +5,12 @@ use std::sync::{Arc, LazyLock};
 use std::{env, fs};
 
 use anyhow::{Context, Result, bail};
-use flox_core::activations::{
-    activation_state_dir_path,
-    activations_json_path,
-    read_activations_json,
-    write_activations_json,
-};
+use flox_core::activations::{activation_state_dir_path, read_activations_json, state_json_path};
 use flox_core::traceable_path;
 use logger::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::libc::{SIGCHLD, SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
-use process::{LockedActivations, PidWatcher, WaitResult};
+use process::{LockedActivationState, PidWatcher, WaitResult};
 use signal_hook::iterator::Signals;
 use tracing::{debug, error, info, instrument};
 
@@ -45,9 +40,6 @@ pub struct Cli {
     /// The path to the runtime directory keeping activation data
     pub runtime_dir: PathBuf,
 
-    /// The activation ID to monitor
-    pub activation_id: String,
-
     /// The path to the process-compose socket
     pub socket_path: PathBuf,
 
@@ -63,7 +55,6 @@ pub fn run(args: Cli) -> Result<(), Error> {
     let span = tracing::Span::current();
     span.record("flox_env", traceable_path(&args.flox_env));
     span.record("runtime_dir", traceable_path(&args.runtime_dir));
-    span.record("id", &args.activation_id);
     span.record("socket", traceable_path(&args.socket_path));
     span.record("log_dir", traceable_path(&args.log_dir));
     debug!("starting");
@@ -97,11 +88,12 @@ fn run_inner(
     should_clean_up: Arc<AtomicBool>,
     should_reap: Signals,
 ) -> Result<(), Error> {
-    let activations_json_path = activations_json_path(&args.runtime_dir, &args.dot_flox_path);
+    let state_json_path = state_json_path(&args.runtime_dir, &args.dot_flox_path);
 
     let mut watcher = PidWatcher::new(
-        activations_json_path.clone(),
-        args.activation_id.clone(),
+        state_json_path.clone(),
+        args.dot_flox_path.clone(),
+        args.runtime_dir.clone(),
         should_terminate,
         should_clean_up,
         should_reap,
@@ -117,12 +109,8 @@ fn run_inner(
     spawn_logs_gc_threads(args.log_dir);
     info!(
         this_pid = nix::unistd::getpid().as_raw(),
-        target_activation_id = args.activation_id,
         "watchdog is on duty"
     );
-
-    let activation_state_dir =
-        activation_state_dir_path(&args.runtime_dir, &args.dot_flox_path, &args.activation_id)?;
 
     match watcher.wait_for_termination() {
         Ok(WaitResult::CleanUp(locked_activations)) => {
@@ -131,9 +119,7 @@ fn run_inner(
             cleanup(
                 locked_activations,
                 &args.socket_path,
-                &activations_json_path,
-                &activation_state_dir,
-                &args.activation_id,
+                activation_state_dir_path(&args.runtime_dir, &args.dot_flox_path),
             )
             .context("cleanup failed")?;
         },
@@ -145,17 +131,14 @@ fn run_inner(
         },
         Err(err) => {
             info!("running cleanup after error");
-            let (activations_json, lock) = read_activations_json(&activations_json_path)?;
-            let Some(activations_json) = activations_json else {
+            let (activations_json, lock) = read_activations_json(&state_json_path)?;
+            let Some(activations) = activations_json else {
                 bail!("watchdog shouldn't be running when activations.json doesn't exist");
             };
-            let activations = activations_json.check_version()?;
             let _ = cleanup(
                 (activations, lock),
                 &args.socket_path,
-                &activations_json_path,
-                &activation_state_dir,
-                &args.activation_id,
+                activation_state_dir_path(&args.runtime_dir, &args.dot_flox_path),
             );
             bail!(err.context("failed while waiting for termination"))
         },
@@ -168,40 +151,38 @@ fn run_inner(
 // multiple watchdogs could perform cleanup.
 // The following can be run multiple times without issue.
 fn cleanup(
-    locked_activations: LockedActivations,
+    locked_activations: LockedActivationState,
     socket_path: impl AsRef<Path>,
-    activations_json_path: impl AsRef<Path>,
     activation_state_dir_path: impl AsRef<Path>,
-    activation_id: impl AsRef<str>,
 ) -> Result<()> {
     info!("running cleanup");
 
-    let (mut activations_json, lock) = locked_activations;
-    activations_json.remove_activation(activation_id);
+    let (activations_json, _hold_the_lock) = locked_activations;
 
-    // Even if this activation has no more attached PIDs, there may be other
-    // activations for a different build of the same environment
-    if activations_json.is_empty() {
-        let socket_path = socket_path.as_ref();
-        if socket_path.exists() {
-            if let Err(err) = process_compose_down(socket_path) {
-                error!(%err, "failed to run process-compose shutdown command");
-            }
-            info!("shut down process-compose");
-        } else {
-            info!(reason = "no socket", "did not shut down process-compose");
+    if !activations_json.attached_pids_is_empty() {
+        unreachable!("cleanup should only be called when there are no more attached PIDs");
+    }
+    let socket_path = socket_path.as_ref();
+    if socket_path.exists() {
+        if let Err(err) = process_compose_down(socket_path) {
+            error!(%err, "failed to run process-compose shutdown command");
         }
+        info!("shut down process-compose");
+    } else {
+        info!(reason = "no socket", "did not shut down process-compose");
     }
 
-    fs::remove_dir_all(activation_state_dir_path)
-        .context("couldn't remove activations state dir")?;
-
-    // We want to hold the lock until
-    // - services are cleaned up
-    // - activation state dir is removed, otherwise the removal could occur
-    //   after a newly started activation has already put files in activation
-    //   state dir
-    write_activations_json(&activations_json, activations_json_path, lock)?;
+    // Atomically remove the activation state directory
+    // We want to avoid a race where remove_dir_all removes the lock before
+    // removing activation state dir,
+    // and then another activation creates a lock and causes remove_dir_all to
+    // fail.
+    let activation_state_dir_path = activation_state_dir_path.as_ref();
+    let cleanup_path =
+        activation_state_dir_path.with_extension(format!("cleanup.{}", std::process::id()));
+    fs::rename(activation_state_dir_path, &cleanup_path)
+        .context("couldn't rename activations dir for cleanup")?;
+    fs::remove_dir_all(&cleanup_path).context("couldn't remove activations dir")?;
 
     info!("finished cleanup");
 
@@ -262,52 +243,48 @@ fn ensure_process_group_leader() -> Result<(), Error> {
 
 #[cfg(test)]
 mod test {
-    use flox_activations::cli::{SetReadyArgs, StartOrAttachArgs};
+    use flox_core::activate::mode::ActivateMode;
+    use flox_core::activations::{ActivationState, StartOrAttachResult};
     use process::test::{shutdown_flags, start_process, stop_process};
 
     use super::*;
+    use crate::process::test::write_activation_state;
 
     #[test]
-    fn cleanup_removes_activation() {
+    fn cleanup_removes_state_directory() {
         let temp_dir = tempfile::tempdir().unwrap();
         let runtime_dir = temp_dir.path();
         let log_dir = temp_dir.path();
-        let flox_env = PathBuf::from("flox_env");
+        let dot_flox_path = PathBuf::from(".flox");
+        let flox_env = dot_flox_path.join("run/test");
         let store_path = "store_path".to_string();
 
         let proc = start_process();
         let pid = proc.id() as i32;
-        let start_or_attach = StartOrAttachArgs {
-            pid,
-            dot_flox_path: flox_env.clone(),
-            store_path: store_path.clone(),
-            runtime_dir: runtime_dir.to_path_buf(),
-        };
-        let activation_id = start_or_attach.handle_inner().unwrap().activation_id;
-        let set_ready = SetReadyArgs {
-            id: activation_id.clone(),
-            dot_flox_path: flox_env.clone(),
-            runtime_dir: runtime_dir.to_path_buf(),
-        };
-        set_ready.handle().unwrap();
 
-        let activations_json_path = activations_json_path(runtime_dir, &flox_env);
+        // Create an ActivationState with one PID attached
+        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
+        let result = state.start_or_attach(pid, &store_path);
+        let StartOrAttachResult::Start { start_id, .. } = result else {
+            panic!("Expected Start")
+        };
+        state.set_ready(&start_id);
 
-        let activations_json = read_activations_json(&activations_json_path)
-            .unwrap()
-            .0
-            .unwrap()
-            .check_version()
-            .unwrap();
-        assert!(!activations_json.is_empty());
+        // Write state to disk
+        write_activation_state(runtime_dir, &dot_flox_path, state);
+
+        let activation_state_directory = activation_state_dir_path(runtime_dir, &dot_flox_path);
+        assert!(
+            activation_state_directory.exists(),
+            "state directory should exist before cleanup"
+        );
 
         stop_process(proc);
 
         let cli = Cli {
-            dot_flox_path: flox_env.clone(),
-            flox_env,
+            dot_flox_path: dot_flox_path.clone(),
+            flox_env: dot_flox_path.clone(),
             runtime_dir: runtime_dir.to_path_buf(),
-            activation_id,
             socket_path: PathBuf::from("/does_not_exist"),
             log_dir: log_dir.to_path_buf(),
             disable_metrics: true,
@@ -316,12 +293,10 @@ mod test {
         let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
         run_inner(cli, terminate_flag, cleanup_flag, reap_flag).unwrap();
 
-        let activations_json = read_activations_json(&activations_json_path)
-            .unwrap()
-            .0
-            .unwrap()
-            .check_version()
-            .unwrap();
-        assert!(activations_json.is_empty());
+        // Verify state directory is completely removed after cleanup
+        assert!(
+            !activation_state_directory.exists(),
+            "state directory should be removed after cleanup"
+        );
     }
 }

@@ -17,6 +17,9 @@ _profile_d="__OUT__/etc/profile.d"
 
 set -euo pipefail
 
+# Set umask to ensure files are created with 0600 (may contain secrets)
+umask 077
+
 # shellcheck source-path=SCRIPTDIR/activate.d
 source "${_activate_d}/helpers.bash"
 
@@ -31,7 +34,7 @@ env-project:,\
 env-description:,\
 mode:,\
 watchdog:,\
-activation-state-dir:,\
+start-state-dir:,\
 invocation-type:,\
 activation-id:,\
 noprofile"
@@ -42,9 +45,8 @@ USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
 [--env-description <name>] \
 [--noprofile] \
 [(-m|--mode) (dev|run)] \
-[--activation-state-dir <path>] \
-[--invocation-type <type>] \
-[--activation-id <id>]"
+[--start-state-dir <path>] \
+[--invocation-type <type>]"
 
 if ! PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@"); then
   echo "Failed to parse options." >&2
@@ -126,14 +128,14 @@ while true; do
       _FLOX_ENV_ACTIVATION_MODE="$1"
       shift
       ;;
-    --activation-state-dir)
+    --start-state-dir)
       shift
       if [ -z "${1:-}" ]; then
-        echo "Option --activation-state-dir requires a path as an argument." >&2
+        echo "Option --start-state-dir requires a path as an argument." >&2
         echo "$USAGE" >&2
         exit 1
       fi
-      _flox_activation_state_dir="$1"
+      _start_state_dir="$1"
       shift
       ;;
     --invocation-type)
@@ -144,16 +146,6 @@ while true; do
         exit 1
       fi
       _flox_invocation_type="$1"
-      shift
-      ;;
-    --activation-id)
-      shift
-      if [ -z "${1:-}" ]; then
-        echo "Option --activation-id requires an id as an argument." >&2
-        echo "$USAGE" >&2
-        exit 1
-      fi
-      _FLOX_ACTIVATION_ID="$1"
       shift
       ;;
     --noprofile)
@@ -182,11 +174,11 @@ if [ "${_flox_invocation_type}" = "interactive" ] && [ -n "${FLOX_ENV_DESCRIPTIO
 fi
 
 # First activation of this environment. Snapshot environment to start.
-_start_env_json="$_flox_activation_state_dir/start.env.json"
+_start_env_json="$_start_state_dir/start.env.json"
 $_jq -nS env > "$_start_env_json"
 
 # TODO remove
-_start_env="$_flox_activation_state_dir/bare.env"
+_start_env="$_start_state_dir/bare.env"
 export | LC_ALL=C $_sort > "$_start_env"
 
 # Process the flox environment customizations, which includes (amongst
@@ -222,11 +214,11 @@ fi
 # Capture _end_env and generate _add_env and _del_env.
 # Mark the environment as ready to use for attachments.
 # Capture ending environment.
-_end_env_json="$_flox_activation_state_dir/end.env.json"
+_end_env_json="$_start_state_dir/end.env.json"
 $_jq -nS env > "$_end_env_json"
 
 # TODO remove
-_end_env="$_flox_activation_state_dir/post-hook.env"
+_end_env="$_start_state_dir/post-hook.env"
 export | LC_ALL=C $_sort > "$_end_env"
 
 # The userShell initialization scripts that follow have the potential to undo
@@ -236,8 +228,8 @@ export | LC_ALL=C $_sort > "$_end_env"
 # to compare the starting and ending environment captures (think of it as a
 # better diff for comparing sorted files), and `sed(1)` to format the output
 # in the best format for use in each language-specific activation script.
-_add_env="$_flox_activation_state_dir/add.env"
-_del_env="$_flox_activation_state_dir/del.env"
+_add_env="$_start_state_dir/add.env"
+_del_env="$_start_state_dir/del.env"
 
 # Capture environment variables to _set_ as "key=value" pairs.
 # comm -13: only env declarations unique to `$_end_env` (new declarations)
@@ -249,12 +241,5 @@ LC_ALL=C $_comm -13 "$_start_env" "$_end_env" \
 LC_ALL=C $_comm -23 "$_start_env" "$_end_env" \
   | $_sed -e 's/^declare -x //' -e 's/=.*//' > "$_del_env"
 # TODO end remove
-
-# Finally mark the environment as ready to use for attachments.
-"$_flox_activations" \
-  set-ready \
-  --runtime-dir "$FLOX_RUNTIME_DIR" \
-  --dot-flox-path "$_FLOX_DOT_FLOX_PATH" \
-  --id "$_FLOX_ACTIVATION_ID"
 
 "$_flox_activate_tracer" "$_activate_d/start.bash" END

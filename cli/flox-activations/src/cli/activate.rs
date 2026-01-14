@@ -1,22 +1,30 @@
-use std::fs::{self};
+use std::fs::{self, DirBuilder};
+use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
-use flox_core::activations::{self, activations_json_path};
+use flox_core::activations::{
+    ActivationState,
+    ModeMismatch,
+    StartIdentifier,
+    StartOrAttachResult,
+    read_activations_json,
+    state_json_path,
+    write_activations_json,
+};
 use indoc::formatdoc;
 use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::{Pid, getpid};
 use serde::{Deserialize, Serialize};
-use signal_hook::consts::{SIGCHLD, SIGUSR1, SIGUSR2};
+use signal_hook::consts::{SIGCHLD, SIGUSR1};
 use signal_hook::iterator::Signals;
 use tracing::debug;
 
-use super::StartOrAttachArgs;
-use crate::activate_script_builder::FLOX_ENV_DIRS_VAR;
+use crate::activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_command_for_start_script};
 use crate::attach::{attach, quote_run_args};
 use crate::cli::executive::ExecutiveCtx;
 use crate::env_diff::EnvDiff;
@@ -88,110 +96,277 @@ impl ActivateArgs {
         // Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
         unsafe { std::env::remove_var("FLOX_SHELL") };
 
-        let start_or_attach = StartOrAttachArgs {
-            pid: std::process::id() as i32,
-            dot_flox_path: context.attach_ctx.dot_flox_path.clone(),
-            store_path: context.flox_activate_store_path.clone(),
-            runtime_dir: PathBuf::from(&context.attach_ctx.flox_runtime_dir),
-        }
-        .handle_inner()?;
-
         let vars_from_env = VarsFromEnvironment::get()?;
 
-        if start_or_attach.attach {
-            debug!(
-                "Attaching to existing activation in state dir {:?}, id {}",
-                start_or_attach.activation_state_dir, start_or_attach.activation_id
-            );
-            if context.attach_ctx.flox_activate_start_services {
-                let diff = EnvDiff::from_files(&start_or_attach.activation_state_dir)?;
-                start_services_blocking(
-                    &context.attach_ctx,
-                    subsystem_verbosity,
-                    vars_from_env.clone(),
-                    &start_or_attach,
-                    diff,
-                )?;
-            };
-            if invocation_type == InvocationType::Interactive {
-                eprintln!(
-                    "{}",
-                    formatdoc! {"✅ Attached to existing activation of environment '{}'
-                             To stop using this environment, type 'exit'
-                            ",
-                    context.attach_ctx.env_description,
-                    }
-                );
-            }
-        } else {
-            let parent_pid = getpid();
-
-            // Serialize ExecutiveCtx before forking
-            let executive_ctx = ExecutiveCtx {
-                context: context.clone(),
-                subsystem_verbosity,
-                vars_from_env: vars_from_env.clone(),
-                start_or_attach: start_or_attach.clone(),
-                invocation_type: invocation_type.clone(),
-                parent_pid: parent_pid.as_raw(),
-            };
-
-            let temp_file = tempfile::NamedTempFile::with_prefix_in(
-                "executive_ctx_",
-                &start_or_attach.activation_state_dir,
-            )?;
-            serde_json::to_writer(&temp_file, &executive_ctx)?;
-            let executive_ctx_path = temp_file.path().to_path_buf();
-            temp_file.keep()?;
-
-            let mut executive = Command::new((*FLOX_ACTIVATIONS_BIN).clone());
-            executive.args([
-                "executive",
-                "--dot-flox-path",
-                &context.attach_ctx.dot_flox_path.to_string_lossy(),
-                "--executive-ctx",
-                &executive_ctx_path.to_string_lossy(),
-            ]);
-            debug!(
-                "Spawning executive process to start activation: {:?}",
-                executive
-            );
-            // We want stdin, stdout, and stderr inherited
-            let child = executive.spawn()?;
-            Self::wait_for_start(
-                Pid::from_raw(child.id() as i32),
-                &context,
-                &start_or_attach.activation_id,
-            )?;
-        }
+        let start_id = self.start_or_attach(
+            &context,
+            &invocation_type,
+            subsystem_verbosity,
+            &vars_from_env,
+        )?;
 
         attach(
             context,
             invocation_type,
             subsystem_verbosity,
             vars_from_env,
-            start_or_attach,
+            start_id,
         )
     }
 
-    /// Wait for the executive to start the activation, mark it ready, and send
-    /// SIGUSR1 to signal success.
-    /// The executive sends SIGUSR2 on failure.
-    /// If the child dies, then we error.
-    fn wait_for_start(
-        child_pid: Pid,
+    fn start_or_attach(
+        &self,
         context: &ActivateCtx,
-        activation_id: &str,
-    ) -> Result<(), anyhow::Error> {
+        invocation_type: &InvocationType,
+        subsystem_verbosity: u32,
+        vars_from_env: &VarsFromEnvironment,
+    ) -> Result<StartIdentifier, anyhow::Error> {
+        let mut retries = 30; // 30 * 200ms = 6 seconds for concurrent start blocking
+
+        loop {
+            match self.try_start_or_attach(
+                context,
+                invocation_type,
+                subsystem_verbosity,
+                vars_from_env,
+            )? {
+                StartOrAttachResult::Start { start_id, .. }
+                | StartOrAttachResult::Attach { start_id, .. } => {
+                    return Ok(start_id);
+                },
+                StartOrAttachResult::AlreadyStarting {
+                    pid: blocking_pid, ..
+                } if retries > 0 => {
+                    debug!(
+                        pid = blocking_pid,
+                        retries = retries,
+                        "Another activation is starting",
+                    );
+
+                    retries -= 1;
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                    continue;
+                },
+                StartOrAttachResult::AlreadyStarting {
+                    pid: blocking_pid, ..
+                } => {
+                    anyhow::bail!(
+                        "Timed out waiting for concurrent activation to complete (blocked by PID {})",
+                        blocking_pid
+                    );
+                },
+            }
+        }
+    }
+
+    /// Try to start or attach to an activation.
+    ///
+    /// Returns StartOrAttachResult indicating whether we started, attached, or should retry.
+    fn try_start_or_attach(
+        &self,
+        context: &ActivateCtx,
+        invocation_type: &InvocationType,
+        subsystem_verbosity: u32,
+        vars_from_env: &VarsFromEnvironment,
+    ) -> Result<StartOrAttachResult, anyhow::Error> {
+        let activations_json_path = state_json_path(
+            &context.attach_ctx.flox_runtime_dir,
+            &context.attach_ctx.dot_flox_path,
+        );
+
+        let (activations_opt, lock) = read_activations_json(&activations_json_path)?;
+        let mut activations = activations_opt.unwrap_or_else(|| {
+            ActivationState::new(
+                &context.mode,
+                &context.attach_ctx.dot_flox_path,
+                &context.attach_ctx.env,
+            )
+        });
+
+        if activations.mode() != &context.mode {
+            if let Some(running) = activations.running_processes() {
+                return Err(ModeMismatch::from_running_processes(
+                    activations.mode().clone(),
+                    context.mode.clone(),
+                    running,
+                )
+                .into());
+            }
+
+            // Prevent a deadlock if modes mismatch but nothing has cleaned up old state.
+            // TODO: What if process-compose is still running with a different mode?
+            debug!(
+                old_mode = ?activations.mode(),
+                new_mode = ?context.mode,
+                "discarding activation state due to change of mode and no running processes"
+            );
+            activations = ActivationState::new(
+                &context.mode,
+                &context.attach_ctx.dot_flox_path,
+                &context.attach_ctx.env,
+            );
+        }
+
+        let pid = std::process::id() as i32;
+        let result = activations.start_or_attach(pid, &context.flox_activate_store_path);
+
+        // Early return for AlreadyStarting - no write needed
+        if matches!(result, StartOrAttachResult::AlreadyStarting { .. }) {
+            drop(lock);
+            return Ok(result);
+        }
+
+        let (needs_new_executive, start_id) = match &result {
+            StartOrAttachResult::Start {
+                needs_new_executive,
+                start_id,
+            }
+            | StartOrAttachResult::Attach {
+                needs_new_executive,
+                start_id,
+            } => (*needs_new_executive, start_id),
+            _ => unreachable!(),
+        };
+
+        let start_state_dir = start_id.state_dir_path(
+            &context.attach_ctx.flox_runtime_dir,
+            &context.attach_ctx.dot_flox_path,
+        )?;
+        if matches!(result, StartOrAttachResult::Start { .. }) {
+            DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(&start_state_dir)?;
+        }
+
+        let new_executive = if needs_new_executive {
+            // Register signal handler BEFORE spawning executive to avoid race condition
+            // where SIGUSR1 arrives before handler is registered
+            let signals = Signals::new([SIGCHLD, SIGUSR1])?;
+            let exec_pid = self.spawn_executive(context, &start_state_dir)?;
+            activations.set_executive_pid(exec_pid.as_raw());
+            Some((exec_pid, signals))
+        } else {
+            None
+        };
+
+        write_activations_json(&activations, &activations_json_path, lock)?;
+
+        if let Some((exec_pid, signals)) = new_executive {
+            Self::wait_for_executive(exec_pid, signals)?;
+        }
+
+        match &result {
+            StartOrAttachResult::Start { start_id, .. } => {
+                let mut start_command = assemble_command_for_start_script(
+                    context.clone(),
+                    subsystem_verbosity,
+                    vars_from_env.clone(),
+                    start_id,
+                    invocation_type.clone(),
+                );
+                debug!("spawning start.bash: {:?}", start_command);
+                let status = start_command.spawn()?.wait()?;
+                if !status.success() {
+                    // hook.on-activate may have already printed to stderr
+                    bail!("Running hook.on-activate failed");
+                }
+
+                // Re-acquire lock to mark ready
+                let (activations_opt, lock) = read_activations_json(&activations_json_path)?;
+                let mut activations = activations_opt.expect("activations.json should exist");
+                activations.set_ready(start_id);
+                write_activations_json(&activations, &activations_json_path, lock)?;
+            },
+            StartOrAttachResult::Attach { .. } => {
+                // TODO: should this be here?
+                if *invocation_type == InvocationType::Interactive {
+                    eprintln!(
+                        "{}",
+                        formatdoc! {"✅ Attached to existing activation of environment '{}'
+                                 To stop using this environment, type 'exit'
+                                ",
+                        context.attach_ctx.env_description,
+                        }
+                    );
+                }
+            },
+            StartOrAttachResult::AlreadyStarting { .. } => unreachable!(),
+        }
+
+        if context.attach_ctx.flox_activate_start_services {
+            let start_state_dir = start_id.state_dir_path(
+                &context.attach_ctx.flox_runtime_dir,
+                &context.attach_ctx.dot_flox_path,
+            )?;
+            let diff = EnvDiff::from_files(&start_state_dir)?;
+            start_services_blocking(
+                &context.attach_ctx,
+                subsystem_verbosity,
+                vars_from_env.clone(),
+                start_id,
+                diff,
+            )?;
+        };
+
+        Ok(result)
+    }
+
+    fn spawn_executive(
+        &self,
+        context: &ActivateCtx,
+        start_state_dir: &Path,
+    ) -> Result<Pid, anyhow::Error> {
+        let parent_pid = getpid();
+
+        // Serialize ExecutiveCtx
+        let executive_ctx = ExecutiveCtx {
+            context: context.clone(),
+            parent_pid: parent_pid.as_raw(),
+        };
+
+        let temp_file = tempfile::NamedTempFile::with_prefix_in("executive_ctx_", start_state_dir)?;
+        serde_json::to_writer(&temp_file, &executive_ctx)?;
+        let executive_ctx_path = temp_file.path().to_path_buf();
+        temp_file.keep()?;
+
+        // Spawn executive
+        let mut executive = Command::new((*FLOX_ACTIVATIONS_BIN).clone());
+        executive.args([
+            "executive",
+            "--dot-flox-path",
+            &context.attach_ctx.dot_flox_path.to_string_lossy(),
+            "--executive-ctx",
+            &executive_ctx_path.to_string_lossy(),
+        ]);
+        executive
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+
+        debug!(
+            "Spawning executive process to start activation: {:?}",
+            executive
+        );
+        let child = executive.spawn()?;
+        Ok(Pid::from_raw(child.id() as i32))
+    }
+
+    /// Wait for the executive to signal that it has started by sending SIGUSR1.
+    /// If the executive dies, then we error.
+    /// Signals should have been registered for SIGCHLD and SIGUSR1
+    fn wait_for_executive(child_pid: Pid, mut signals: Signals) -> Result<(), anyhow::Error> {
         debug!(
             "Awaiting SIGUSR1 from child process with PID: {}",
             child_pid
         );
 
-        let mut signals = Signals::new([SIGCHLD, SIGUSR1, SIGUSR2])?;
+        // I think the executive will always either successfully send SIGUSR1,
+        // or it will exit sending SIGCHLD
+        // If I'm wrong, this will loop forever
         loop {
             let pending = signals.wait();
-            // We want to handle SIGUSR1 and SIGUSR2 rather than SIGCHLD if both
+            // We want to handle SIGUSR1 rather than SIGCHLD if both
             // are received
             // I'm not 100% confident SIGCHLD couldn't be delivered prior to
             // SIGUSR1 or SIGUSR2,
@@ -204,25 +379,10 @@ impl ActivateArgs {
             // Proceed after receiving SIGUSR1
             if signals.contains(&SIGUSR1) {
                 debug!(
-                    "Received SIGUSR1 (start completed successfully) from child process {}",
+                    "Received SIGUSR1 (executive started successfully) from child process {}",
                     child_pid
                 );
                 return Ok(());
-            // Bail on SIGUSR2
-            } else if signals.contains(&SIGUSR2) {
-                debug!(
-                    "Received SIGUSR2 (start failed) from child process {}",
-                    child_pid
-                );
-                Self::cleanup_on_failure(
-                    activation_id,
-                    &context.attach_ctx.flox_runtime_dir,
-                    &context.attach_ctx.dot_flox_path,
-                )?;
-                // Exit non-zero, but don't print anything as the executive
-                // prints an error
-                // TODO: don't exit prior to destructors
-                std::process::exit(1);
             } else if signals.contains(&SIGCHLD) {
                 // SIGCHLD can come from any child process, not just ours.
                 // Use waitpid with WNOHANG to check if OUR child has exited.
@@ -239,7 +399,7 @@ impl ActivateArgs {
                         // Our child has exited
                         return Err(anyhow!(
                             // TODO: we should print the path to the log file
-                            "Activation process {} terminated unexpectedly with status: {:?}",
+                            "Executive {} terminated unexpectedly with status: {:?}",
                             child_pid,
                             status
                         ));
@@ -247,14 +407,14 @@ impl ActivateArgs {
                     Err(nix::errno::Errno::ECHILD) => {
                         // Child already reaped, this shouldn't happen but handle gracefully
                         return Err(anyhow!(
-                            "Activation process {} terminated unexpectedly (already reaped)",
+                            "Executive {} terminated unexpectedly (already reaped)",
                             child_pid
                         ));
                     },
                     Err(e) => {
                         // Unexpected error from waitpid
                         return Err(anyhow!(
-                            "Failed to check status of activation process {}: {}",
+                            "Failed to check status of executive process {}: {}",
                             child_pid,
                             e
                         ));
@@ -264,23 +424,6 @@ impl ActivateArgs {
                 unreachable!("Received unexpected signal or empty iterator over signals");
             }
         }
-    }
-
-    fn cleanup_on_failure(
-        activation_id: &str,
-        runtime_dir: impl AsRef<Path>,
-        flox_env: impl AsRef<Path>,
-    ) -> Result<()> {
-        let activations_json_path = activations_json_path(runtime_dir, flox_env);
-        let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
-        let Some(activations) = activations else {
-            anyhow::bail!("Expected an existing activations.json file");
-        };
-        let mut activations = activations.check_version()?;
-        activations.remove_activation(activation_id);
-        activations::write_activations_json(&activations, activations_json_path, lock)?;
-        // TODO: should we remove the directory or activations.json file?
-        Ok(())
     }
 }
 
