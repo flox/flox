@@ -593,6 +593,70 @@ EOF
 EOF
 }
 
+flox_prompt_environments_shows_layered_correctly() {
+  local shell="${1?}"
+  local activate1 activate2
+
+  "$FLOX_BIN" init --name first
+  "$FLOX_BIN" init -d "${PROJECT_DIR}/second"
+
+  case "$shell" in
+    bash | zsh)
+      activate1='eval "$("$FLOX_BIN" activate)"'
+      activate2='eval "$("$FLOX_BIN" activate -d "$PROJECT_DIR/second")"'
+      ;;
+    fish)
+      activate1='eval ("$FLOX_BIN" activate)'
+      activate2='eval ("$FLOX_BIN" activate -d "$PROJECT_DIR/second")'
+      ;;
+    tcsh)
+      activate1="eval \"\`$FLOX_BIN activate\`\""
+      activate2="eval \"\`$FLOX_BIN activate -d $PROJECT_DIR/second\`\""
+      ;;
+    *)
+      echo "Unsupported shell: ${shell}"
+      exit 1
+      ;;
+  esac
+
+  cat <<EOF | "$shell"
+$activate1
+echo "First: \$FLOX_PROMPT_ENVIRONMENTS" > "$PROJECT_DIR/prompt1"
+$activate2
+echo "Second: \$FLOX_PROMPT_ENVIRONMENTS" > "$PROJECT_DIR/prompt2"
+EOF
+
+  run cat "$PROJECT_DIR/prompt1"
+  assert_output "First: first"
+
+  run cat "$PROJECT_DIR/prompt2"
+  assert_output "Second: second first"
+}
+
+# bats test_tags=activate,activate:prompt
+@test "FLOX_PROMPT_ENVIRONMENTS shows layered environments correctly (bash)" {
+  project_setup_common
+  flox_prompt_environments_shows_layered_correctly bash
+}
+
+# bats test_tags=activate,activate:prompt
+@test "FLOX_PROMPT_ENVIRONMENTS shows layered environments correctly (fish)" {
+  project_setup_common
+  flox_prompt_environments_shows_layered_correctly fish
+}
+
+# bats test_tags=activate,activate:prompt
+@test "FLOX_PROMPT_ENVIRONMENTS shows layered environments correctly (zsh)" {
+  project_setup_common
+  flox_prompt_environments_shows_layered_correctly zsh
+}
+
+# bats test_tags=activate,activate:prompt
+@test "FLOX_PROMPT_ENVIRONMENTS shows layered environments correctly (tcsh)" {
+  project_setup_common
+  flox_prompt_environments_shows_layered_correctly tcsh
+}
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:hook,activate:hook:bash
