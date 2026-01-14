@@ -633,9 +633,11 @@ async fn create_or_get_floxhub_default(flox: &mut Flox) -> Result<RemoteEnvironm
             message::info("Using existing FloxHub 'default' environment");
             Ok(env)
         },
+        // Environment doesn't exist on FloxHub - create it
+        // This can be either UpstreamNotFound or GetLatestVersion(Fetch) with "ref not found"
         Err(flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError::OpenManagedEnvironment(
             ManagedEnvironmentError::UpstreamNotFound { .. }
-        )) => {
+        )) | Err(flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError::GetLatestVersion(_)) => {
             // Create new default environment on FloxHub
             message::info("Creating FloxHub 'default' environment...");
 
