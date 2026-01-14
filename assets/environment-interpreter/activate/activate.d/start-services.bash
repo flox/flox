@@ -1,4 +1,5 @@
 "$_flox_activate_tracer" "$_activate_d/start-services.bash" START
+source "${_activate_d}/style.bash"
 
 NOT_READY="SOCKET_NOT_READY"
 
@@ -68,13 +69,21 @@ start_services_blocking() {
   local activation_timeout="${_FLOX_SERVICES_ACTIVATE_TIMEOUT:-2}"
   local blocking_command="wait_for_services_socket \"$socket_file\""
   if ! "$_timeout" "$activation_timeout" $_bash -c "$blocking_command"; then
+    # We've disabled color for the process-compose logs, but we still may
+    # want color in our terminal for the error message.
+    if allows_color; then
+      COLOR_ENABLED=1
+    else
+      COLOR_ENABLED=0
+    fi
+    icon="$(red_x $COLOR_ENABLED)"
     if [ ! -e "$log_file" ]; then
       # If something failed before process-compose could write to the log file,
       # don't tell a user to look at the log file
-      echo "❌ Failed to start services" >&2
+      echo -e "$icon Failed to start services" >&2
       exit 1
     else
-      echo "❌ Failed to start services:" >&2
+      echo -e "$icon Failed to start services:" >&2
       "$_cat" "$log_file" >&2
       exit 1
     fi

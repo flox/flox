@@ -54,7 +54,7 @@ setup() {
   floxhub_setup "owner"
 
   FLOXHUB_GIT_WARNING=$(cat <<EOF
-⚠️  Using file://${FLOX_FLOXHUB_PATH} as FloxHub host
+! Using file://${FLOX_FLOXHUB_PATH} as FloxHub host
 '\$_FLOX_FLOXHUB_GIT_URL' is used for testing purposes only,
 alternative FloxHub hosts are not yet supported!
 EOF
@@ -110,7 +110,7 @@ EOF
   assert_output - << EOF
 ${FLOXHUB_GIT_WARNING?}
 
-❌ ERROR: Generations are only available for environments pushed to floxhub.
+✘ ERROR: Generations are only available for environments pushed to floxhub.
 The environment ${PROJECT_NAME} is a local only environment.
 EOF
 }
@@ -128,7 +128,7 @@ ${FLOXHUB_GIT_WARNING?}
 
 ${FLOXHUB_GIT_WARNING?}
 
-⚠️  No packages are installed for your current system ('${NIX_SYSTEM}').
+! No packages are installed for your current system ('${NIX_SYSTEM}').
 
 You can see the whole manifest with 'flox list --config'.
 EOF
@@ -198,7 +198,7 @@ ${FLOXHUB_GIT_WARNING?}
 
 ${FLOXHUB_GIT_WARNING?}
 
-❌ ERROR: generations error: Cannot modify environments that are activated with a specific generation.
+✘ ERROR: generations error: Cannot modify environments that are activated with a specific generation.
 
 If you wish to modify the environment at this generation:
 - Exit the current activation of the environment

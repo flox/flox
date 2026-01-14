@@ -1119,7 +1119,7 @@ mod upgrade_notification_tests {
         let printed = writer.to_string();
 
         assert_eq!(printed, formatdoc! {"
-            ℹ️  Upgrades are available for packages in 'name'.
+            ℹ Upgrades are available for packages in 'name'.
             Use 'flox upgrade --dry-run' for details.
 
         "});

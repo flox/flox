@@ -183,7 +183,7 @@ EOF
     # NB: No --start-services.
     run "$FLOX_BIN" activate -- "$FLOX_BIN" services "$command"
     assert_failure
-    assert_line "❌ ERROR: Environment does not have any services defined."
+    assert_line "✘ ERROR: Environment does not have any services defined."
   done
 }
 
@@ -208,7 +208,7 @@ EOF
     # NB: No --start-services.
     run "$FLOX_BIN" activate -- "$FLOX_BIN" services "$command"
     assert_failure
-    assert_line "❌ ERROR: Environment does not have any services defined for '$NIX_SYSTEM'."
+    assert_line "✘ ERROR: Environment does not have any services defined for '$NIX_SYSTEM'."
   done
 }
 
@@ -224,7 +224,7 @@ EOF
 EOF
 )
   assert_success
-  assert_line "⚠️  Your manifest has changes that may require running 'flox services restart'."
+  assert_line "! Your manifest has changes that may require running 'flox services restart'."
 }
 
 # bats test_tags=services:manifest-changes
@@ -238,7 +238,7 @@ EOF
 EOF
 )
   assert_success
-  assert_line "⚠️  Your manifest has changes that may require running 'flox services restart'."
+  assert_line "! Your manifest has changes that may require running 'flox services restart'."
 }
 
 # bats test_tags=services:manifest-changes
@@ -253,7 +253,7 @@ EOF
 EOF
 )
   assert_success
-  assert_line "⚠️  Your manifest has changes that may require running 'flox services restart'."
+  assert_line "! Your manifest has changes that may require running 'flox services restart'."
 }
 
 # bats test_tags=services:manifest-changes
@@ -268,7 +268,7 @@ EOF
 EOF
 )
   assert_success
-  assert_line "⚠️  Your manifest has changes that may require running 'flox services restart'."
+  assert_line "! Your manifest has changes that may require running 'flox services restart'."
 }
 
 # bats test_tags=services:manifest-changes
@@ -292,7 +292,7 @@ EOF
 EOF
 )
   assert_success
-  assert_line "⚠️  Your manifest has changes that may require running 'flox services restart'."
+  assert_line "! Your manifest has changes that may require running 'flox services restart'."
 }
 
 # ---------------------------------------------------------------------------- #
@@ -306,7 +306,7 @@ EOF
 EOF
 )
   assert_failure
-  assert_output --partial "❌ ERROR: Service 'invalid' does not exist."
+  assert_output --partial "✘ ERROR: Service 'invalid' does not exist."
 
   # This doesn't guarantee that the services haven't been restarted _after_
   # we've read the counter files. So an intermittent failure could indicate that
@@ -323,7 +323,7 @@ EOF
 
   run "$FLOX_BIN" services restart one
   assert_failure
-  assert_line "❌ ERROR: Cannot restart services for an environment that is not activated."
+  assert_line "✘ ERROR: Cannot restart services for an environment that is not activated."
 }
 
 # bats test_tags=services:restart
@@ -337,7 +337,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' started"
+  assert_output --partial "✔ Service 'one' started"
 
   wait_for_file_content start_counter.one 2
   wait_for_file_content start_counter.two 1
@@ -355,8 +355,8 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' started"
-  assert_output --partial "✅ Service 'two' started"
+  assert_output --partial "✔ Service 'one' started"
+  assert_output --partial "✔ Service 'two' started"
 
   wait_for_file_content start_counter.one 2
   wait_for_file_content start_counter.two 2
@@ -374,9 +374,9 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' started"
-  assert_output --partial "✅ Service 'two' started"
-  assert_output --partial "✅ Service 'sleeping' restarted"
+  assert_output --partial "✔ Service 'one' started"
+  assert_output --partial "✔ Service 'two' started"
+  assert_output --partial "✔ Service 'sleeping' restarted"
 
   wait_for_file_content start_counter.one 2
   wait_for_file_content start_counter.two 2
@@ -393,8 +393,8 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'sleeping' stopped"
-  assert_output --partial "✅ Service 'sleeping' started"
+  assert_output --partial "✔ Service 'sleeping' stopped"
+  assert_output --partial "✔ Service 'sleeping' started"
 
   wait_for_file_content start_counter.sleeping 2
 }
@@ -409,7 +409,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' started"
+  assert_output --partial "✔ Service 'one' started"
   refute_output --partial "Service 'two'"
   refute_output --partial "Service 'sleeping'"
 
@@ -432,7 +432,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'touch_file' started"
+  assert_output --partial "✔ Service 'touch_file' started"
   assert_output --regexp "touch_file +(Running|Completed)"
 }
 
@@ -446,9 +446,9 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' started"
-  assert_output --partial "✅ Service 'two' started"
-  assert_output --partial "✅ Service 'sleeping' started"
+  assert_output --partial "✔ Service 'one' started"
+  assert_output --partial "✔ Service 'two' started"
+  assert_output --partial "✔ Service 'sleeping' started"
 
   wait_for_file_content start_counter.one 1
   wait_for_file_content start_counter.two 1
@@ -467,7 +467,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' started"
+  assert_output --partial "✔ Service 'one' started"
   refute_output --partial "Service 'two'"
   refute_output --partial "Service 'sleeping'"
   refute_output --partial "Service 'touch_file'"
@@ -485,7 +485,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'touch_file' started"
+  assert_output --partial "✔ Service 'touch_file' started"
   [ -e hello.txt ]
 }
 
@@ -500,7 +500,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'touch_file' started"
+  assert_output --partial "✔ Service 'touch_file' started"
   [ -e hello.txt ]
 }
 
@@ -515,7 +515,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'touch_file' started"
+  assert_output --partial "✔ Service 'touch_file' started"
   [ -e hello.txt ]
 }
 
@@ -530,7 +530,7 @@ EOF
 EOF
 )
   assert_failure
-  assert_output --partial "❌ ERROR: Service 'one' does not exist."
+  assert_output --partial "✘ ERROR: Service 'one' does not exist."
   refute_output --partial "Service 'touch_file'"
   [ ! -e hello.txt ]
 }
@@ -546,7 +546,7 @@ EOF
 EOF
 )
   assert_failure
-  assert_output --partial "❌ ERROR: Service 'invalid' does not exist."
+  assert_output --partial "✘ ERROR: Service 'invalid' does not exist."
 }
 
 # bats test_tags=services:stop
@@ -561,7 +561,7 @@ EOF
 EOF
 )
   assert_failure
-  assert_output --partial "❌ ERROR: Service 'invalid' does not exist."
+  assert_output --partial "✘ ERROR: Service 'invalid' does not exist."
   assert_output --regexp "one +Running"
   assert_output --regexp "two +Running"
 }
@@ -580,7 +580,7 @@ EOF
 EOF
 )
     assert_failure
-    assert_output --partial "❌ ERROR: Services not started or quit unexpectedly."
+    assert_output --partial "✘ ERROR: Services not started or quit unexpectedly."
   done
 }
 
@@ -635,7 +635,7 @@ EOF
     ACTIVATIONS_JSON=$(cat activations_json)
 
     assert_failure
-    assert_output "❌ ERROR: failed to run activation script: Error: This environment has already been activated with an incompatible version of 'flox'.
+    assert_output "✘ ERROR: failed to run activation script: Error: This environment has already been activated with an incompatible version of 'flox'.
 
 Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"
@@ -656,8 +656,8 @@ PIDs of the running activations: ${ACTIVATION_PID}"
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' stopped"
-  assert_output --partial "✅ Service 'two' stopped"
+  assert_output --partial "✔ Service 'one' stopped"
+  assert_output --partial "✔ Service 'two' stopped"
   assert_output --regexp "one +Completed"
   assert_output --regexp "two +Completed"
 }
@@ -672,7 +672,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' stopped"
+  assert_output --partial "✔ Service 'one' stopped"
   assert_output --regexp "one +Completed"
   assert_output --regexp "two +Running"
 }
@@ -687,8 +687,8 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' stopped"
-  assert_output --partial "✅ Service 'two' stopped"
+  assert_output --partial "✔ Service 'one' stopped"
+  assert_output --partial "✔ Service 'two' stopped"
   assert_output --regexp "one +Completed"
   assert_output --regexp "two +Completed"
 }
@@ -705,7 +705,7 @@ EOF
 )
   assert_success
   assert_output --regexp "one +Completed"
-  assert_output --partial "⚠️  Service 'one' is not running"
+  assert_output --partial "! Service 'one' is not running"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -732,7 +732,7 @@ EOF
 EOF
   )
   assert_failure
-  assert_line "❌ ERROR: A single service name is required when the --follow flag is not specified"
+  assert_line "✘ ERROR: A single service name is required when the --follow flag is not specified"
 }
 
 # bats test_tags=services:logs:tail:exactly-one-service
@@ -746,7 +746,7 @@ EOF
 EOF
   )
   assert_failure
-  assert_line "❌ ERROR: A single service name is required when the --follow flag is not specified"
+  assert_line "✘ ERROR: A single service name is required when the --follow flag is not specified"
 }
 
 # bats test_tags=services:logs:tail:no-such-service
@@ -760,7 +760,7 @@ EOF
 EOF
   )
   assert_failure
-  assert_line "❌ ERROR: Service 'doesnotexist' does not exist."
+  assert_line "✘ ERROR: Service 'doesnotexist' does not exist."
 }
 
 # Runs a service that will sleep after printing a few lines of logs.
@@ -944,7 +944,7 @@ EOF
 
   run "$FLOX_BIN" activate -s -- true
   assert_success
-  assert_output --partial "⚠️  Skipped starting services, services are already running"
+  assert_output --partial "! Skipped starting services, services are already running"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -957,7 +957,7 @@ EOF
   export _FLOX_SERVICES_SOCKET_OVERRIDE="/no_permission.sock"
 
   run "$FLOX_BIN" activate -s -- true
-  assert_output --partial "❌ Failed to start services"
+  assert_output --partial "✘ Failed to start services"
 }
 
 @test "blocking: activation blocks on process list" {
@@ -1001,7 +1001,7 @@ EOF
 
   run "$FLOX_BIN" activate --start-services -- true
   assert_success
-  assert_output "⚠️  Environment does not have any services defined."
+  assert_output "! Environment does not have any services defined."
 }
 
 @test "activate: outer activation starts services and inner activation doesn't" {
@@ -1124,7 +1124,7 @@ EOF
 
   run "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- true
   assert_success
-  assert_output --partial "⚠️  Skipped starting services, services are already running"
+  assert_output --partial "! Skipped starting services, services are already running"
 }
 
 @test "remote: can interact with services from outside the activation" {
@@ -1551,7 +1551,7 @@ EOF
   TEARDOWN_FIFO="$PROJECT_DIR/finished_2"
   timeout 2 cat finished_1
   run cat output
-  assert_output --partial "⚠️  Skipped starting services, services are already running"
+  assert_output --partial "! Skipped starting services, services are already running"
 
   # Check that watchdog 1 has finished cleanup
   run cat "$watchdog_1_log"

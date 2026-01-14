@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::io::Write;
 
+use crossterm::style::Stylize;
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::composite::{COMPOSER_MANIFEST_ID, Warning};
 use flox_rust_sdk::models::manifest::raw::PackageToInstall;
@@ -25,30 +26,65 @@ pub(crate) fn plain(v: impl Display) {
     print_message(v);
 }
 pub(crate) fn error(v: impl Display) {
-    print_message(std::format_args!("❌ ERROR: {v}"));
+    let icon = if stderr_supports_color() {
+        "✘".red().to_string()
+    } else {
+        "✘".to_string()
+    };
+    print_message(std::format_args!("{icon} ERROR: {v}"));
 }
 pub(crate) fn created(v: impl Display) {
-    print_message(std::format_args!("✨ {v}"));
+    let icon = if stderr_supports_color() {
+        "⚡︎".yellow().to_string()
+    } else {
+        "⚡︎".to_string()
+    };
+    print_message(std::format_args!("{icon} {v}"));
 }
 /// double width character, add an additional space for alignment
 pub(crate) fn deleted(v: impl Display) {
-    print_message(std::format_args!("🗑️  {v}"));
+    let icon = if stderr_supports_color() {
+        "━".red().to_string()
+    } else {
+        "━".to_string()
+    };
+    print_message(std::format_args!("{icon} {v}"));
 }
 pub(crate) fn updated(v: impl Display) {
-    print_message(std::format_args!("✅ {v}"));
+    let icon = if stderr_supports_color() {
+        "✔".green().to_string()
+    } else {
+        "✔".to_string()
+    };
+    print_message(std::format_args!("{icon} {v}"));
 }
 /// double width character, add an additional space for alignment
 pub(crate) fn info(v: impl Display) {
-    print_message(std::format_args!("ℹ️  {v}"));
+    let icon = if stderr_supports_color() {
+        "ℹ".blue().to_string()
+    } else {
+        "ℹ".to_string()
+    };
+    print_message(std::format_args!("{icon} {v}"));
 }
 /// double width character, add an additional space for alignment
 pub(crate) fn warning(v: impl Display) {
-    print_message(std::format_args!("⚠️  {v}"));
+    let icon = if stderr_supports_color() {
+        "!".yellow().to_string()
+    } else {
+        "!".to_string()
+    };
+    print_message(std::format_args!("{icon} {v}"));
 }
 
 /// double width character, add an additional space for alignment
 pub(crate) fn warning_to_buffer(out: &mut impl Write, v: impl Display) {
-    print_message_to_buffer(out, std::format_args!("⚠️  {v}"));
+    let icon = if stderr_supports_color() {
+        "!".yellow().to_string()
+    } else {
+        "!".to_string()
+    };
+    print_message_to_buffer(out, std::format_args!("{icon} {v}"));
 }
 
 pub(crate) fn package_installed(pkg: &PackageToInstall, environment_description: &str) {
@@ -289,7 +325,7 @@ mod tests {
         // - composer environment is listed last
         // - environment `dep_one` doesn't appear because its fields are overridden later
         assert_eq!(writer.to_string(), indoc! {"
-            ℹ️  The following manifest fields were overridden during merging:
+            ℹ The following manifest fields were overridden during merging:
             - Environment 'dep_two' set:
               - vars.overridden_by_dep2
             - This environment set:

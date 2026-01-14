@@ -931,7 +931,7 @@ mod tests {
             .await
             .expect("installation failed");
         let expected = formatdoc! {"
-            ⚠\u{fe0f}  '{install_id}' installed only for the following systems: {installed_systems}
+             ! '{install_id}' installed only for the following systems: {installed_systems}
         "};
         assert_eq!(writer.to_string(), expected);
     }

@@ -147,7 +147,7 @@ EOF
 
   run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH" --reference "$OWNER/test"
   assert_success
-  assert_output --partial "✅ Environment successfully updated."
+  assert_output --partial "✔ Environment successfully updated."
 
   run --separate-stderr "$FLOX_BIN" list --name --reference "$OWNER/test"
   assert_success

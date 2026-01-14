@@ -3,6 +3,7 @@ _daemonize="@daemonize@/bin/daemonize"
 _flox_activations="@flox_activations@"
 _sed="@gnused@/bin/sed"
 _sort="@coreutils@/bin/sort"
+source "${_activate_d}/style.bash"
 
 # Run activate hook
 # If $1 is an empty string, the environment is not captured,
@@ -15,6 +16,12 @@ start() {
   _flox_invocation_type="${1?}"
   shift
 
+  if allows_color; then
+    COLOR_ENABLED=1
+  else
+    COLOR_ENABLED=0
+  fi
+
   if [ -z "$_flox_activation_state_dir" ]; then
     echo "Error: _flox_activation_state_dir cannot be empty" >&2
     exit 1
@@ -25,8 +32,9 @@ start() {
   # Don't clobber STDERR or recommend 'exit' for non-interactive shells.
   # If inside a container, FLOX_ENV_DESCRIPTION won't be set, and we don't need to
   # print a message
+  icon="$(green_check $COLOR_ENABLED)"
   if [ "${_flox_invocation_type}" = "interactive" ] && [ -n "${FLOX_ENV_DESCRIPTION:-}" ]; then
-    echo "✅ You are now using the environment '$FLOX_ENV_DESCRIPTION'." >&2
+    echo -e "$icon You are now using the environment '$FLOX_ENV_DESCRIPTION'." >&2
     echo "To stop using this environment, type 'exit'" >&2
     echo >&2
   fi
