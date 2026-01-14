@@ -1484,6 +1484,7 @@ dependencies = [
  "async-stream",
  "base64",
  "catalog-api-v1",
+ "cfg-if",
  "chrono",
  "derive_more",
  "enum_dispatch",
@@ -2449,7 +2450,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7c4b02199fee7c5d21a5ae7d8cfa79a6ef5bb2fc834d6e9058e89c825efdc55"
 dependencies = [
  "cfg-if",
- "windows-link 0.2.0",
+ "windows-link",
 ]
 
 [[package]]
