@@ -539,7 +539,7 @@ dependencies = [
  "regex",
  "rustc-hash",
  "shlex",
- "syn 2.0.111",
+ "syn 2.0.114",
 ]
 
 [[package]]
@@ -1451,6 +1451,7 @@ dependencies = [
  "async-stream",
  "base64",
  "catalog-api-v1",
+ "cfg-if",
  "chrono",
  "derive_more",
  "enum_dispatch",

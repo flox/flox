@@ -27,3 +27,4 @@ filetime = "0.2.26"
 tempfile.workspace = true
 serde_json.workspace = true
 flox-activations.workspace = true
+
