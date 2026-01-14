@@ -24,7 +24,7 @@ pub fn generate_zsh_startup_commands(args: &ZshStartupArgs, writer: &mut impl Wr
         format!("{}", &args.flox_activate_tracelevel),
     ));
     stmts.push(set_unexported_unexpanded(
-        "_FLOX_ACTIVATION_STATE_DIR",
+        "_FLOX_START_STATE_DIR",
         args.activation_state_dir.display().to_string(),
     ));
     stmts.push(set_unexported_unexpanded(
@@ -96,7 +96,7 @@ mod tests {
         let output = String::from_utf8_lossy(&buf);
         expect![[r#"
             typeset -g _flox_activate_tracelevel='3';
-            typeset -g _FLOX_ACTIVATION_STATE_DIR='/activation_state_dir';
+            typeset -g _FLOX_START_STATE_DIR='/activation_state_dir';
             typeset -g _activate_d='/activate_d';
             typeset -g _FLOX_ENV='/flox_env';
             typeset -g _FLOX_ENV_CACHE='/flox_env_cache';
