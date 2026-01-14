@@ -1617,6 +1617,7 @@ pub mod test_helpers {
     use crate::models::environment::floxmeta_branch::test_helpers::unusable_mock_floxmeta_branch;
     use crate::models::environment::path_environment::test_helpers::{
         new_named_path_environment_from_env_files,
+        new_named_path_environment_from_env_files_in,
         new_named_path_environment_in,
     };
     use crate::models::environment::test_helpers::new_core_environment;
@@ -1711,6 +1712,18 @@ pub mod test_helpers {
     ) -> ManagedEnvironment {
         let path_environment =
             new_named_path_environment_from_env_files(flox, env_files_dir, "name");
+
+        ManagedEnvironment::push_new(flox, path_environment, owner, false, false).unwrap()
+    }
+
+    pub fn mock_managed_environment_from_env_files_in(
+        flox: &Flox,
+        env_files_dir: impl AsRef<Path>,
+        path: impl AsRef<Path>,
+        owner: EnvironmentOwner,
+    ) -> ManagedEnvironment {
+        let path_environment =
+            new_named_path_environment_from_env_files_in(flox, env_files_dir, path, "name");
 
         ManagedEnvironment::push_new(flox, path_environment, owner, false, false).unwrap()
     }

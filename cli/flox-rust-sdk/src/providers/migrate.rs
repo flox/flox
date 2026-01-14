@@ -20,6 +20,7 @@ use crate::models::manifest::typed::{
     Inner,
     Manifest,
     ManifestPackageDescriptor,
+    ManifestVersion,
     PackageDescriptorCatalog,
     PackageDescriptorFlake,
     PackageDescriptorStorePath,
@@ -62,6 +63,16 @@ fn local_env_is_writable(manifest_path: &Path) -> Result<bool, MigrationError> {
     }
 }
 
+/// Indicates the outcome of an error-free migration attempt.
+#[derive(Debug, PartialEq, Eq)]
+pub enum MigrationResult {
+    /// The environment was migrated from v1 to v2.
+    Updated,
+
+    /// The environment did not need to be migrated, so no action was taken.
+    AlreadyV2,
+}
+
 pub trait MigrateEnv: Environment {
     /// Attempts to determine whether the environment is writable before doing
     /// the migration so that we can skip the migration if we know ahead of time
@@ -77,7 +88,42 @@ pub trait MigrateEnv: Environment {
     fn is_writable(&self, flox: &Flox) -> Result<bool, MigrationError>;
 
     /// Attempt to migrate the enviroment from a v1 manifest to a v2 manifest.
-    fn migrate_env(&mut self, flox: &Flox) -> Result<(), MigrationError> {
+    fn migrate_env(&mut self, flox: &Flox) -> Result<MigrationResult, MigrationError> {
+        // Order of priorities for bailing on a migration:
+        // - Manifest version is already 2
+        // - Environment is readonly
+        //
+        // This priority order is a result of needing to ensure that a lockfile
+        // exists before migrating. Consider this sequence, which would provide
+        // surprising behavior:
+        // - v1 manifest, v1 lockfile exist
+        // - delete v1 lockfile for some reason
+        // - attempt to install a package, which is a write operation
+        // - write operation triggers migration
+        // - no lockfile present to collect package outputs from, so don't
+        //   migrate the `outputs` field of each package
+        // - v2 manifest, v2 lockfile _without_ migrated package outputs
+        // - packages that previously had all outputs now only have the default
+        //   outputs
+        //
+        // Another scenario to consider:
+        // - Someone migrated the environment to v2
+        // - Somehow the lockfile is missing
+        // - The environment is readonly for the current user
+        // - User attempts a write operation
+        // - Write operation can't possibly succeed because the environment is
+        //   readonly.
+        // - Attempted write operation triggers the migration attempt
+        // - Migration can't succeed because environment is readonly, regardless
+        //   of the fact that we don't *need* to migrate because the environment
+        //   is already at v2.
+        // - Error should be associated with the impossible write operation
+        //   instead of the migration that we don't even need to do in the
+        //   first place.
+        let existing_manifest = self.manifest(flox)?;
+        if existing_manifest.version == ManifestVersion::from(2) {
+            return Ok(MigrationResult::AlreadyV2);
+        }
         match self.is_writable(flox) {
             Ok(false) => {
                 return Err(MigrationError::NotWritable(self.name().to_string()));
@@ -92,7 +138,6 @@ pub trait MigrateEnv: Environment {
         // This will ensure that a lockfile exists before we attempt
         // to migrate.
         let lockfile = self.lockfile(flox)?.lockfile();
-        let existing_manifest = self.manifest(flox)?;
         let migrated_manifest = migrate_manifest_v1_to_v2(&existing_manifest, &lockfile)?;
         let migrated_contents = toml_edit::ser::to_string(&migrated_manifest)
             .map_err(MigrationError::SerializeManifest)?;
@@ -100,7 +145,7 @@ pub trait MigrateEnv: Environment {
         if let EditResult::Unchanged = edit_result {
             return Err(MigrationError::Unchanged);
         }
-        Ok(())
+        Ok(MigrationResult::Updated)
     }
 }
 
@@ -391,16 +436,23 @@ fn collect_locked_packages_by_kind(
 
 #[cfg(test)]
 mod tests {
+    use std::fs::OpenOptions;
     use std::str::FromStr;
 
     use flox_core::canonical_path::CanonicalPath;
     use tempfile::TempDir;
 
     use super::*;
-    use crate::flox::test_helpers::flox_instance;
+    use crate::flox::EnvironmentOwner;
+    use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
+    use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_from_env_files;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
+    use crate::models::environment::remote_environment::test_helpers::mock_remote_environment_from_env_files;
     use crate::models::manifest::typed::SelectedOutputs;
-    use crate::providers::buildenv::test_helpers::locked_package_catalog_from_mock_all_systems;
+    use crate::providers::buildenv::test_helpers::{
+        locked_package_catalog_from_mock_all_systems,
+        locked_package_flake_from_mock_all_systems,
+    };
     use crate::providers::catalog::GENERATED_DATA;
     use crate::providers::catalog::test_helpers::catalog_replay_client;
 
@@ -421,18 +473,45 @@ mod tests {
         }
     }
 
-    fn package_with_different_outputs_to_install()
+    fn locked_flake_descriptor_from_mock(
+        install_id: &str,
+    ) -> LockedDescriptor<PackageDescriptorFlake, LockedPackageFlake> {
+        let subpath = format!("envs/flake_{install_id}/manifest.lock");
+        let (descriptor, locked_packages) =
+            locked_package_flake_from_mock_all_systems(install_id, GENERATED_DATA.join(subpath));
+        let locked_descriptors_by_system = locked_packages
+            .into_iter()
+            .map(|p| (p.locked_installable.system.clone(), p))
+            .collect::<HashMap<_, _>>();
+        LockedDescriptor {
+            install_id: install_id.to_string(),
+            pd: descriptor,
+            locked: locked_descriptors_by_system,
+        }
+    }
+
+    fn catalog_package_with_different_outputs_to_install()
     -> LockedDescriptor<PackageDescriptorCatalog, LockedPackageCatalog> {
         locked_catalog_descriptor_from_mock("bash")
     }
 
-    fn package_with_same_outputs_as_outputs_to_install()
+    fn catalog_package_with_same_outputs_as_outputs_to_install()
     -> LockedDescriptor<PackageDescriptorCatalog, LockedPackageCatalog> {
         locked_catalog_descriptor_from_mock("hello")
     }
 
+    fn flake_package_with_different_outputs_to_install()
+    -> LockedDescriptor<PackageDescriptorFlake, LockedPackageFlake> {
+        locked_flake_descriptor_from_mock("bash")
+    }
+
+    fn flake_package_with_same_outputs_as_outputs_to_install()
+    -> LockedDescriptor<PackageDescriptorFlake, LockedPackageFlake> {
+        locked_flake_descriptor_from_mock("hello")
+    }
+
     #[test]
-    fn detects_readonly_and_writable_local_envs() {
+    fn detects_readonly_and_writable_local_env_files() {
         let tempdir = TempDir::new().unwrap();
         let writable_path = tempdir.path().join("writable");
         let readonly_path = tempdir.path().join("readonly");
@@ -460,13 +539,178 @@ mod tests {
 
         // Readonly file should return Ok(false)
         assert!(!local_env_is_writable(&readonly_path).unwrap());
+        // Make the readonly file writable so it can be deleted
+        let mut perms = readonly.metadata().unwrap().permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        readonly.set_permissions(perms).unwrap();
 
         // Nonexistent file should return an error
         assert!(local_env_is_writable(&nonexistent_path).is_err());
     }
 
+    #[test]
+    fn detects_writable_path_env() {
+        let (mut flox, _tmpdir) = flox_instance();
+        flox.features.outputs = true;
+        let env = new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        assert!(env.is_writable(&flox).unwrap());
+    }
+
+    #[test]
+    fn detects_writable_managed_env() {
+        let env_owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (mut flox, _tmpdir) = flox_instance_with_optional_floxhub(Some(&env_owner));
+        flox.features.outputs = true;
+        let env = mock_managed_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            env_owner.clone(),
+        );
+        assert!(env.is_writable(&flox).unwrap());
+    }
+
+    #[test]
+    fn detects_readonly_path_env() {
+        let (mut flox, _tmpdir) = flox_instance();
+        flox.features.outputs = true;
+        let env = new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+
+        let manifest_path = env.manifest_path(&flox).unwrap();
+        let mut perms = manifest_path.metadata().unwrap().permissions();
+        perms.set_readonly(true);
+        let manifest_file = OpenOptions::new()
+            .write(true)
+            .create_new(false)
+            .open(&manifest_path)
+            .unwrap();
+        manifest_file.set_permissions(perms).unwrap();
+
+        assert!(!env.is_writable(&flox).unwrap());
+
+        // Make the readonly file writable so it can be deleted
+        let mut perms = manifest_path.metadata().unwrap().permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        manifest_file.set_permissions(perms).unwrap();
+    }
+
+    #[test]
+    fn detects_readonly_managed_env() {
+        let env_owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (mut flox, _tmpdir) = flox_instance_with_optional_floxhub(Some(&env_owner));
+        flox.features.outputs = true;
+        let env = mock_managed_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            env_owner.clone(),
+        );
+
+        let manifest_path = env.manifest_path(&flox).unwrap();
+        let mut perms = manifest_path.metadata().unwrap().permissions();
+        perms.set_readonly(true);
+        let manifest_file = OpenOptions::new()
+            .write(true)
+            .create_new(false)
+            .open(&manifest_path)
+            .unwrap();
+        manifest_file.set_permissions(perms).unwrap();
+
+        assert!(!env.is_writable(&flox).unwrap());
+
+        // Make the readonly file writable so it can be deleted
+        let mut perms = manifest_path.metadata().unwrap().permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        manifest_file.set_permissions(perms).unwrap();
+    }
+
+    // NOTE: There's no test for writable remote environments because they're
+    //       always writable locally.
+
+    #[test]
+    fn readonly_v1_env_reported_as_not_migratable() {
+        let (mut flox, _tmpdir) = flox_instance();
+        flox.features.outputs = true;
+        let mut env = new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+
+        let manifest_path = env.manifest_path(&flox).unwrap();
+        let mut perms = manifest_path.metadata().unwrap().permissions();
+        perms.set_readonly(true);
+        let manifest_file = OpenOptions::new()
+            .write(true)
+            .create_new(false)
+            .open(&manifest_path)
+            .unwrap();
+        manifest_file.set_permissions(perms).unwrap();
+
+        let res = env.migrate_env(&flox);
+        assert!(matches!(res, Err(MigrationError::NotWritable(_))));
+
+        // Make the readonly file writable so it can be deleted
+        let mut perms = manifest_path.metadata().unwrap().permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        manifest_file.set_permissions(perms).unwrap();
+    }
+
+    #[test]
+    fn writable_v2_env_reported_as_no_migration_needed() {
+        let (mut flox, _tmpdir) = flox_instance();
+        flox.features.outputs = true;
+        let mut env = new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+
+        // Update the manifest to version 2 so no migration is needed
+        let mut manifest = env.manifest(&flox).unwrap();
+        manifest.version = 2.into();
+        env.edit(&flox, toml_edit::ser::to_string(&manifest).unwrap())
+            .unwrap();
+
+        let res = env.migrate_env(&flox).unwrap();
+        assert_eq!(res, MigrationResult::AlreadyV2);
+    }
+
+    #[test]
+    fn readonly_v2_env_reported_as_no_migration_needed() {
+        let (mut flox, _tmpdir) = flox_instance();
+        flox.features.outputs = true;
+        let mut env = new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+
+        // Update the manifest to version 2 so no migration is needed
+        let mut manifest = env.manifest(&flox).unwrap();
+        manifest.version = 2.into();
+        env.edit(&flox, toml_edit::ser::to_string(&manifest).unwrap())
+            .unwrap();
+
+        // Make the manifest readonly
+        let manifest_path = env.manifest_path(&flox).unwrap();
+        let mut perms = manifest_path.metadata().unwrap().permissions();
+        perms.set_readonly(true);
+        let manifest_file = OpenOptions::new()
+            .write(true)
+            .create_new(false)
+            .open(&manifest_path)
+            .unwrap();
+        manifest_file.set_permissions(perms).unwrap();
+
+        let res = env.migrate_env(&flox).unwrap();
+        assert_eq!(res, MigrationResult::AlreadyV2);
+
+        // Make the readonly file writable so it can be deleted
+        let mut perms = manifest_path.metadata().unwrap().permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        manifest_file.set_permissions(perms).unwrap();
+    }
+
     #[tokio::test(flavor = "multi_thread")]
-    async fn v1_with_missing_lockfile_is_locked_before_migration() {
+    async fn v1_with_missing_lockfile_is_locked_during_migration() {
+        // This test originally verified that the missing lockfile was produced
+        // as part of pre-checks before the migration, and that is still the
+        // actual behavior, but the interface was rewritten in such a way that
+        // it's not possible to verify that the lockfile is produced *before*
+        // migrating (there's no place to pause and check), so instead we verify
+        // that the migration at least *produces* a lockfile.
         let (mut flox, _tmpdir) = flox_instance();
         let mut env = new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
         flox.features.outputs = true;
@@ -478,36 +722,6 @@ mod tests {
         env.migrate_env(&flox).unwrap();
         assert!(env.lockfile_path(&flox).unwrap().exists());
     }
-
-    // #[test]
-    // fn detects_writable_remote_env() {
-    //     todo!()
-    // }
-
-    // #[test]
-    // fn detects_writable_managed_env() {
-    //     todo!()
-    // }
-
-    // #[test]
-    // fn writable_v1_env_reported_as_migratable() {
-    //     todo!()
-    // }
-
-    // #[test]
-    // fn readonly_v1_env_reported_as_not_migratable() {
-    //     todo!()
-    // }
-
-    // #[test]
-    // fn writable_v2_env_reported_as_no_migration_needed() {
-    //     todo!()
-    // }
-
-    // #[test]
-    // fn readonly_v2_env_reported_as_no_migration_needed() {
-    //     todo!()
-    // }
 
     #[test]
     fn looks_up_locked_packages_by_install_id() {
@@ -623,29 +837,31 @@ mod tests {
 
     #[test]
     fn identifies_catalog_package_that_needs_migration() {
-        let locked_pd = package_with_different_outputs_to_install();
+        let locked_pd = catalog_package_with_different_outputs_to_install();
         assert!(locked_pd.needs_migration());
     }
 
     #[test]
     fn identifies_catalog_package_that_doesnt_need_migration() {
-        let locked_pd = package_with_same_outputs_as_outputs_to_install();
+        let locked_pd = catalog_package_with_same_outputs_as_outputs_to_install();
         assert!(!locked_pd.needs_migration());
     }
 
-    // #[test]
-    // fn identifies_flake_package_that_needs_migration() {
-    //     todo!()
-    // }
+    #[test]
+    fn identifies_flake_package_that_needs_migration() {
+        let locked_pd = flake_package_with_different_outputs_to_install();
+        assert!(locked_pd.needs_migration());
+    }
 
-    // #[test]
-    // fn identifies_flake_package_that_doesnt_need_migration() {
-    //     todo!()
-    // }
+    #[test]
+    fn identifies_flake_package_that_doesnt_need_migration() {
+        let locked_pd = flake_package_with_same_outputs_as_outputs_to_install();
+        assert!(!locked_pd.needs_migration());
+    }
 
     #[test]
     fn migrated_package_contains_all_outputs() {
-        let needs_migration = package_with_different_outputs_to_install();
+        let needs_migration = catalog_package_with_different_outputs_to_install();
         let migrated = needs_migration.migrated();
         let ManifestPackageDescriptor::Catalog(pd) = migrated else {
             panic!("expected catalog package");
@@ -655,7 +871,7 @@ mod tests {
 
     #[test]
     fn package_not_needing_migration_is_untouched() {
-        let locked_descriptor = package_with_same_outputs_as_outputs_to_install();
+        let locked_descriptor = catalog_package_with_same_outputs_as_outputs_to_install();
         let migrated = locked_descriptor.migrated();
         let ManifestPackageDescriptor::Catalog(pd) = migrated else {
             panic!("expected catalog package");
@@ -686,18 +902,69 @@ mod tests {
         assert_eq!(env.manifest(&flox).unwrap().version, 2.into());
     }
 
-    // #[test]
-    // fn can_migrate_remote_environment() {
-    //     todo!()
-    // }
+    #[test]
+    fn can_migrate_remote_environment() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (mut flox, _tmpdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        flox.features.outputs = true;
+        let mut env = mock_remote_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/krb5_prereqs"),
+            owner.clone(),
+        );
+        let res = env.migrate_env(&flox).unwrap();
+        let migrated = env.manifest(&flox).unwrap();
 
-    // #[test]
-    // fn can_migrate_managed_environment() {
-    //     todo!()
-    // }
+        assert_eq!(res, MigrationResult::Updated);
+        assert_eq!(migrated.version, 2.into());
+        // Arbitrarily selected package out of the many in this environment
+        let ManifestPackageDescriptor::Catalog(nodejs) =
+            migrated.install.inner().get("nodejs").unwrap()
+        else {
+            panic!("expected catalog package descriptor");
+        };
+        assert_eq!(nodejs.outputs, Some(SelectedOutputs::all()));
+    }
 
-    // #[test]
-    // fn migration_creates_new_generation_for_floxhub_env() {
-    //     todo!()
-    // }
+    #[test]
+    fn can_migrate_managed_environment() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (mut flox, _tmpdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        flox.features.outputs = true;
+        let mut env = mock_managed_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/krb5_prereqs"),
+            owner.clone(),
+        );
+        let res = env.migrate_env(&flox).unwrap();
+        let migrated = env.manifest(&flox).unwrap();
+
+        assert_eq!(res, MigrationResult::Updated);
+        assert_eq!(migrated.version, 2.into());
+        // Arbitrarily selected package out of the many in this environment
+        let ManifestPackageDescriptor::Catalog(nodejs) =
+            migrated.install.inner().get("nodejs").unwrap()
+        else {
+            panic!("expected catalog package descriptor");
+        };
+        assert_eq!(nodejs.outputs, Some(SelectedOutputs::all()));
+    }
+
+    #[test]
+    fn migration_creates_new_generation_for_floxhub_env() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (mut flox, _tmpdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        flox.features.outputs = true;
+        let mut env = mock_managed_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/krb5_prereqs"),
+            owner.clone(),
+        );
+        let n_generations_before = env.generations().metadata().unwrap().generations().len();
+        env.migrate_env(&flox).unwrap();
+        env.manifest(&flox).unwrap();
+        let n_generations_after = env.generations().metadata().unwrap().generations().len();
+
+        assert!(n_generations_after > n_generations_before);
+    }
 }

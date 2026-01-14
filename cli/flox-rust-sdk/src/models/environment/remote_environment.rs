@@ -529,7 +529,10 @@ pub mod test_helpers {
     use tempfile::tempdir_in;
 
     use super::*;
-    use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_in;
+    use crate::models::environment::managed_environment::test_helpers::{
+        mock_managed_environment_from_env_files_in,
+        mock_managed_environment_in,
+    };
 
     pub fn mock_remote_environment(
         flox: &Flox,
@@ -543,6 +546,26 @@ pub mod test_helpers {
             owner,
             tempdir_in(&flox.temp_dir).unwrap().keep(),
             name,
+        );
+        RemoteEnvironment::new_in(
+            flox,
+            managed_environment.parent_path().unwrap(),
+            managed_environment.pointer().clone(),
+            None,
+        )
+        .unwrap()
+    }
+
+    pub fn mock_remote_environment_from_env_files(
+        flox: &Flox,
+        env_files_dir: impl AsRef<Path>,
+        owner: EnvironmentOwner,
+    ) -> RemoteEnvironment {
+        let managed_environment = mock_managed_environment_from_env_files_in(
+            flox,
+            env_files_dir,
+            tempdir_in(&flox.temp_dir).unwrap().keep(),
+            owner,
         );
         RemoteEnvironment::new_in(
             flox,

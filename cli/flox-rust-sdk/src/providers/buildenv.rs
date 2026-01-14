@@ -1291,6 +1291,7 @@ pub(crate) mod test_helpers {
         Inner,
         ManifestPackageDescriptor,
         PackageDescriptorCatalog,
+        PackageDescriptorFlake,
     };
     use crate::providers::auth::Auth;
 
@@ -1354,6 +1355,39 @@ pub(crate) mod test_helpers {
                     return None;
                 }
                 let LockedPackage::Catalog(lp) = p else {
+                    panic!("'{}' was not a catalog package", install_id);
+                };
+                Some(lp.clone())
+            })
+            .collect::<Vec<_>>();
+        (pd, locked)
+    }
+
+    pub(crate) fn locked_package_flake_from_mock_all_systems(
+        install_id: &str,
+        mock_lockfile_path: impl AsRef<Path>,
+    ) -> (PackageDescriptorFlake, Vec<LockedPackageFlake>) {
+        let lockfile =
+            lockfile::Lockfile::read_from_file(&CanonicalPath::new(mock_lockfile_path).unwrap())
+                .expect("failed to read lockfile");
+        let ManifestPackageDescriptor::FlakeRef(pd) = lockfile
+            .manifest
+            .install
+            .inner()
+            .get(install_id)
+            .unwrap()
+            .clone()
+        else {
+            panic!("'{}' was not a catalog package", install_id);
+        };
+        let locked = lockfile
+            .packages
+            .iter()
+            .filter_map(|p| {
+                if p.install_id() != install_id {
+                    return None;
+                }
+                let LockedPackage::Flake(lp) = p else {
                     panic!("'{}' was not a catalog package", install_id);
                 };
                 Some(lp.clone())

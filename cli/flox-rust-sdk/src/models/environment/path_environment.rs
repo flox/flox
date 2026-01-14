@@ -691,6 +691,20 @@ pub mod test_helpers {
         )
     }
 
+    pub fn new_named_path_environment_from_env_files_in(
+        flox: &Flox,
+        env_files_dir: impl AsRef<Path>,
+        dot_flox_parent_path: impl AsRef<Path>,
+        name: &str,
+    ) -> PathEnvironment {
+        new_path_environment_from_env_files_in(
+            flox,
+            env_files_dir,
+            dot_flox_parent_path,
+            Some(name),
+        )
+    }
+
     pub fn new_path_environment_from_env_files_in(
         flox: &Flox,
         env_files_dir: impl AsRef<Path>,
