@@ -9,6 +9,7 @@ use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
+    PushResult,
 };
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
@@ -53,7 +54,6 @@ use tracing::{debug, info_span, instrument, span, warn};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
-use crate::commands::activate::Activate;
 use crate::commands::{
     ConcreteEnvironment,
     EnvironmentSelectError,
@@ -338,7 +338,19 @@ impl Install {
         message::packages_already_installed(&partitioned.already_installed, &description);
         message::packages_newly_overridden_by_composer(&new_package_overrides);
 
+        // Auto-push changes to FloxHub for remote environments
         if installation.new_manifest.is_some() {
+            if let ConcreteEnvironment::Remote(ref mut remote_env) = concrete_environment {
+                let push_result = remote_env.push(&flox, false)?;
+                match push_result {
+                    PushResult::Updated => {
+                        message::updated("Environment changes pushed to FloxHub");
+                    },
+                    PushResult::UpToDate => {
+                        // No changes to push, which shouldn't happen since new_manifest.is_some()
+                    },
+                }
+            }
             warn_manifest_changes_for_services(&flox, &concrete_environment);
         }
 
@@ -662,7 +674,9 @@ async fn create_or_get_floxhub_default(flox: &mut Flox) -> Result<RemoteEnvironm
 }
 
 fn prompt_to_modify_rc_file(owner: &str) -> Result<bool, anyhow::Error> {
-    let shell = Activate::detect_shell_for_in_place()?;
+    // Use SHELL env var directly for onboarding since we're not in an activation context
+    // where parent process detection would be more reliable
+    let shell = Shell::detect_from_env("SHELL")?;
     let shell_cmd = match shell {
         Shell::Bash(_) | Shell::Zsh(_) => {
             format!(r#"eval "$(flox activate -r {}/default -m run)""#, owner)
