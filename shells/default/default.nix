@@ -8,6 +8,7 @@
   flox-nix-plugins,
   hivemind,
   just,
+  krb5,
   lib,
   mitmproxy,
   mkShell,
@@ -89,6 +90,9 @@ mkShell (
       flox-cli
       flox-activations
     ];
+
+    # Include krb5 for development to enable building with GSSAPI feature
+    buildInputs = [ krb5.dev ];
 
     packages = ciPackages ++ lib.optionals (!ci) devPackages;
 
