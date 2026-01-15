@@ -16,7 +16,6 @@ use nix::unistd::{getpgid, getpid, setsid};
 use signal_hook::iterator::Signals;
 use tracing::{debug, error, info, instrument};
 
-use super::log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use super::watcher::{LockedActivationState, PidWatcher, WaitResult, Watcher};
 use crate::process_compose::process_compose_down;
 
@@ -35,9 +34,6 @@ pub struct Args {
 
     /// The path to the process-compose socket
     pub socket_path: PathBuf,
-
-    /// The directory to store and garbage collect logs
-    pub log_dir: PathBuf,
 }
 
 #[instrument("monitoring", err(Debug), skip_all)]
@@ -46,7 +42,6 @@ pub fn run(args: Args) -> Result<(), Error> {
     span.record("flox_env", traceable_path(&args.flox_env));
     span.record("runtime_dir", traceable_path(&args.runtime_dir));
     span.record("socket", traceable_path(&args.socket_path));
-    span.record("log_dir", traceable_path(&args.log_dir));
     debug!("starting");
 
     ensure_process_group_leader()
@@ -96,8 +91,6 @@ pub(super) fn run_inner(
         "checked socket"
     );
 
-    spawn_heartbeat_log();
-    spawn_logs_gc_threads(args.log_dir);
     info!(
         this_pid = nix::unistd::getpid().as_raw(),
         "executive is on duty"
@@ -214,7 +207,6 @@ mod test {
     fn cleanup_removes_state_directory() {
         let temp_dir = tempfile::tempdir().unwrap();
         let runtime_dir = temp_dir.path();
-        let log_dir = temp_dir.path();
         let dot_flox_path = PathBuf::from(".flox");
         let flox_env = dot_flox_path.join("run/test");
         let store_path = "store_path".to_string();
@@ -246,7 +238,6 @@ mod test {
             flox_env: dot_flox_path.clone(),
             runtime_dir: runtime_dir.to_path_buf(),
             socket_path: PathBuf::from("/does_not_exist"),
-            log_dir: log_dir.to_path_buf(),
         };
 
         let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
