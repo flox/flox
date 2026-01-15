@@ -3,11 +3,10 @@
 //! This module monitors activation processes and performs cleanup when all
 //! processes have terminated.
 
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, LazyLock};
-use std::{env, fs};
 
 use anyhow::{Context, Result, bail};
 use flox_core::activations::{activation_state_dir_path, read_activations_json, state_json_path};
@@ -19,12 +18,9 @@ use tracing::{debug, error, info, instrument};
 
 use super::log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use super::watcher::{LockedActivationState, PidWatcher, WaitResult, Watcher};
+use crate::process_compose::process_compose_down;
 
 type Error = anyhow::Error;
-
-pub static PROCESS_COMPOSE_BIN: LazyLock<String> = LazyLock::new(|| {
-    env::var("PROCESS_COMPOSE_BIN").unwrap_or(env!("PROCESS_COMPOSE_BIN").to_string())
-});
 
 #[derive(Debug, Clone)]
 pub struct Args {
@@ -181,36 +177,6 @@ fn cleanup(
     info!("finished cleanup");
 
     Ok(())
-}
-
-/// Shuts down process-compose by running `process-compose down` via the unix socket.
-///
-/// This is a variation of `providers::services::process_compose_down` to avoid
-/// the dependency on `flox-rust-sdk`.
-fn process_compose_down(socket_path: impl AsRef<Path>) -> Result<()> {
-    let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
-    cmd.arg("down");
-    cmd.arg("--unix-socket");
-    cmd.arg(socket_path.as_ref());
-    cmd.env("NO_COLOR", "1");
-
-    debug!(
-        command = format!(
-            "{} down --unix-socket {}",
-            *PROCESS_COMPOSE_BIN,
-            socket_path.as_ref().display()
-        ),
-        "running process-compose down"
-    );
-
-    let output = cmd
-        .output()
-        .context("failed to execute process-compose down")?;
-
-    output.status.success().then_some(()).ok_or_else(|| {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::anyhow!("process-compose down failed: {}", stderr)
-    })
 }
 
 /// We want to make sure that the executive is detached from the terminal in case it sends
