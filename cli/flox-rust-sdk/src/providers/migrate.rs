@@ -77,6 +77,9 @@ pub enum MigrationResult {
 
     /// The environment did not need to be migrated, so no action was taken.
     AlreadyV2,
+
+    /// The feature flag wasn't enabled, so we didn't try.
+    FeatureNotEnabled,
 }
 
 pub trait MigrateEnv: Environment {
@@ -95,6 +98,9 @@ pub trait MigrateEnv: Environment {
 
     /// Attempt to migrate the enviroment from a v1 manifest to a v2 manifest.
     fn migrate_env(&mut self, flox: &Flox) -> Result<MigrationResult, MigrationError> {
+        if !flox.features.outputs {
+            return Ok(MigrationResult::FeatureNotEnabled);
+        }
         // Order of priorities for bailing on a migration:
         // - Manifest version is already 2
         // - Environment is readonly
@@ -128,14 +134,16 @@ pub trait MigrateEnv: Environment {
         //   first place.
         let existing_manifest = self.manifest(flox)?;
         if existing_manifest.version == ManifestVersion::from(2) {
+            debug!("manifest version is 2, skipping migration");
             return Ok(MigrationResult::AlreadyV2);
         }
         match self.is_writable(flox) {
             Ok(false) => {
+                debug!("environment is not writable");
                 return Err(MigrationError::NotWritable(self.name().to_string()));
             },
             Ok(true) => {
-                // proceed
+                debug!("environment is writable, proceeding with migration");
             },
             Err(err) => {
                 return Err(err);
@@ -143,6 +151,8 @@ pub trait MigrateEnv: Environment {
         }
         // This will ensure that a lockfile exists before we attempt
         // to migrate.
+        self.set_migrating(true);
+        debug!("ensuring lockfile up to date lockfile exists before migration");
         let lockfile = self.lockfile(flox)?.lockfile();
         let mut raw_manifest = self.raw_manifest(flox)?;
         let migrated_manifest = migrate_manifest_v1_to_v2(&existing_manifest, &lockfile)?;
@@ -152,6 +162,7 @@ pub trait MigrateEnv: Environment {
         if let EditResult::Unchanged = edit_result {
             return Err(MigrationError::Unchanged);
         }
+        self.set_migrating(false);
         Ok(MigrationResult::Updated)
     }
 }
@@ -491,6 +502,7 @@ mod tests {
     use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_from_env_files;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
     use crate::models::environment::remote_environment::test_helpers::mock_remote_environment_from_env_files;
+    use crate::models::lockfile::LockResult;
     use crate::models::manifest::typed::SelectedOutputs;
     use crate::providers::buildenv::test_helpers::{
         locked_package_catalog_from_mock_all_systems,
@@ -764,6 +776,17 @@ mod tests {
 
         env.migrate_env(&flox).unwrap();
         assert!(env.lockfile_path(&flox).unwrap().exists());
+    }
+
+    #[test]
+    fn lock_of_v1_with_up_to_date_lockfile_doesnt_trigger_migration() {
+        let (mut flox, _tmpdir) = flox_instance();
+        let mut env = new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        flox.features.outputs = true;
+        let res = env.lockfile(&flox).unwrap();
+        assert!(matches!(res, LockResult::Unchanged(_)));
+        let manifest = res.lockfile().manifest;
+        assert_eq!(manifest.version, 1.into());
     }
 
     #[test]

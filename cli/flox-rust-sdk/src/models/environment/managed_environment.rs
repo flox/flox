@@ -61,6 +61,7 @@ use crate::models::manifest::raw::{
 use crate::models::manifest::typed::{IncludeDescriptor, Manifest, ManifestError};
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{GitCommandError, GitProvider, GitRemoteCommandError, PushFlag};
+use crate::providers::migrate::MigrateEnv;
 
 pub const GENERATION_LOCK_FILENAME: &str = "env.lock";
 
@@ -75,6 +76,7 @@ pub struct ManagedEnvironment {
     /// Specific generation to use, i.e. from `flox activate`
     /// This doesn't represent the live generation.
     generation: Option<GenerationId>,
+    is_migrating: bool,
 }
 
 #[derive(Debug, Error)]
@@ -207,9 +209,23 @@ impl Environment for ManagedEnvironment {
 
             return Ok(LockResult::Unchanged(lockfile));
         }
-
-        let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
-        self.ensure_locked(flox, &mut local_checkout)
+        let mut env_view = self.local_env_or_copy_current_generation(flox)?;
+        if flox.features.outputs {
+            if let Some(lockfile) = env_view.lockfile_if_up_to_date()? {
+                Ok(LockResult::Unchanged(lockfile))
+            } else {
+                #[allow(clippy::collapsible_else_if)]
+                if self.is_migrating() {
+                    self.ensure_locked(flox, &mut env_view)
+                } else {
+                    self.migrate_env(flox).map_err(Box::new)?;
+                    let lockfile = self.existing_lockfile(flox)?.unwrap();
+                    Ok(LockResult::Changed(lockfile))
+                }
+            }
+        } else {
+            self.ensure_locked(flox, &mut env_view)
+        }
     }
 
     /// Returns the lockfile if it already exists.
@@ -228,6 +244,14 @@ impl Environment for ManagedEnvironment {
         self.local_env_or_copy_current_generation(flox)?
             .existing_lockfile()
             .map_err(EnvironmentError::Core)
+    }
+
+    fn is_migrating(&self) -> bool {
+        self.is_migrating
+    }
+
+    fn set_migrating(&mut self, state: bool) {
+        self.is_migrating = state;
     }
 
     /// Install packages to the environment atomically
@@ -907,6 +931,7 @@ impl ManagedEnvironment {
             floxmeta_branch,
             include_fetcher,
             generation,
+            is_migrating: false,
         };
 
         Ok(env)
@@ -1657,6 +1682,7 @@ pub mod test_helpers {
             floxmeta_branch,
             include_fetcher: mock_include_fetcher(),
             generation: None,
+            is_migrating: false,
         }
     }
 
@@ -2740,5 +2766,36 @@ mod test {
             0,
             "Remote should not yet have hello package"
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn migration_not_triggered_when_lockfile_up_to_date() {
+        let owner = "owner".parse().unwrap();
+        let (mut flox, _tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        flox.features.outputs = true;
+
+        let mut env =
+            mock_managed_environment_from_env_files(&flox, GENERATED_DATA.join("envs/bash"), owner);
+        let lockfile = env.lockfile(&flox).unwrap().lockfile();
+        assert_eq!(lockfile.manifest.version, 1.into());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn migration_triggered_when_lockfile_is_stale() {
+        let owner = "owner".parse().unwrap();
+        let (mut flox, _tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        flox.features.outputs = true;
+
+        let mut env =
+            mock_managed_environment_from_env_files(&flox, GENERATED_DATA.join("envs/bash"), owner);
+
+        // Modify the manifest without locking
+        let mut manifest = env.manifest(&flox).unwrap();
+        let manifest_path = env.manifest_path(&flox).unwrap();
+        manifest.options.allow.unfree = Some(false);
+        std::fs::write(manifest_path, toml_edit::ser::to_string(&manifest).unwrap()).unwrap();
+
+        let lockfile = env.lockfile(&flox).unwrap().lockfile();
+        assert_eq!(lockfile.manifest.version, 2.into());
     }
 }

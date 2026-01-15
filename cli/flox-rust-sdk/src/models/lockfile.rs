@@ -77,7 +77,7 @@ pub struct Registry {
     _json: Value,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LockResult {
     /// Locking produced a new Lockfile.
     /// The change could be a minimal as whitespace.

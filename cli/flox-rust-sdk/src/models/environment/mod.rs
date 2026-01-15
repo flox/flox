@@ -35,6 +35,7 @@ use crate::providers::git::{
     GitDiscoverError,
     GitProvider,
 };
+use crate::providers::migrate::MigrationError;
 use crate::utils::copy_file_without_permissions;
 
 mod core_environment;
@@ -155,6 +156,9 @@ pub trait Environment: Send {
     /// Some implementations error if the lock does not already exist, while
     /// others call lock.
     fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError>;
+
+    fn is_migrating(&self) -> bool;
+    fn set_migrating(&mut self, state: bool);
 
     /// Extract the current content of the manifest
     ///
@@ -791,6 +795,9 @@ pub enum EnvironmentError {
 
     #[error("{0}")]
     EditWithUnsupportedFeature(String),
+
+    #[error(transparent)]
+    Migration(#[from] Box<MigrationError>),
 }
 
 #[derive(Debug, thiserror::Error)]

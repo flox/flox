@@ -53,6 +53,7 @@ use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, LockResult, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
 use crate::models::manifest::typed::{ActivateMode, Manifest, ManifestError};
 use crate::providers::buildenv::BuildEnvOutputs;
+use crate::providers::migrate::{MigrateEnv, MigrationResult};
 
 /// Struct representing a local environment
 ///
@@ -76,6 +77,8 @@ pub struct PathEnvironment {
     /// The rendered environment links for this environment.
     /// These may not yet exist if the environment has not been built.
     rendered_env_links: RenderedEnvironmentLinks,
+
+    is_migrating: bool,
 }
 
 /// A profile script or list of packages to install when initializing an environment
@@ -136,6 +139,7 @@ impl PathEnvironment {
             path: dot_flox_path,
             pointer,
             rendered_env_links,
+            is_migrating: false,
         })
     }
 
@@ -189,8 +193,34 @@ impl PathEnvironment {
 impl Environment for PathEnvironment {
     /// This will lock the environment if it is not already locked.
     fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
-        let mut env_view = self.as_core_environment_mut()?;
-        env_view.ensure_locked(flox)
+        if flox.features.outputs {
+            let existing_manifest_lockfile = if self.lockfile_up_to_date()? {
+                debug!("lockfile is up to date, skipping re-lock");
+                return Ok(LockResult::Unchanged(
+                    self.existing_lockfile(flox)?.unwrap(),
+                ));
+            } else {
+                debug!("lockfile is stale, re-locking");
+                let mut env_view = self.as_core_environment_mut()?;
+                env_view.ensure_locked(flox)?
+            };
+            if self.is_migrating() {
+                debug!("migration in-progress, skipping migration trigger");
+                Ok(existing_manifest_lockfile)
+            } else {
+                #[allow(clippy::collapsible_else_if)]
+                if self.migrate_env(flox).map_err(Box::new)? == MigrationResult::AlreadyV2 {
+                    debug!("manifest was already v2");
+                    Ok(existing_manifest_lockfile)
+                } else {
+                    debug!("getting post-migration lockfile");
+                    Ok(LockResult::Changed(self.existing_lockfile(flox)?.unwrap()))
+                }
+            }
+        } else {
+            let mut env_view = self.as_core_environment_mut()?;
+            env_view.ensure_locked(flox)
+        }
     }
 
     /// Returns the lockfile if it already exists.
@@ -198,6 +228,14 @@ impl Environment for PathEnvironment {
         self.as_core_environment()?
             .existing_lockfile()
             .map_err(EnvironmentError::Core)
+    }
+
+    fn is_migrating(&self) -> bool {
+        self.is_migrating
+    }
+
+    fn set_migrating(&mut self, state: bool) {
+        self.is_migrating = state;
     }
 
     /// Install packages to the environment atomically

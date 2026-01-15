@@ -90,6 +90,7 @@ pub struct RemoteEnvironment {
     /// Specific generation to use, i.e. from `flox activate`
     /// This doesn't represent the live generation.
     generation: Option<GenerationId>,
+    is_migrating: bool,
 }
 
 impl RemoteEnvironment {
@@ -227,6 +228,7 @@ impl RemoteEnvironment {
             inner,
             rendered_env_links,
             generation,
+            is_migrating: false,
         })
     }
 
@@ -324,6 +326,14 @@ impl Environment for RemoteEnvironment {
     /// Returns the lockfile if it exists.
     fn existing_lockfile(&self, flox: &Flox) -> Result<Option<Lockfile>, EnvironmentError> {
         self.inner.existing_lockfile(flox)
+    }
+
+    fn is_migrating(&self) -> bool {
+        self.is_migrating
+    }
+
+    fn set_migrating(&mut self, state: bool) {
+        self.is_migrating = state;
     }
 
     /// Install packages to the environment atomically

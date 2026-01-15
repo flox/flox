@@ -3,6 +3,7 @@ use bpaf::Bpaf;
 use crossterm::style::Stylize;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{Environment, SingleSystemUpgradeDiff};
+use flox_rust_sdk::providers::migrate::MigrateEnv;
 use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{info_span, instrument};
@@ -47,6 +48,9 @@ impl Upgrade {
             .environment
             .detect_concrete_environment(&flox, "Upgrade")?;
         environment_subcommand_metric!("upgrade", concrete_environment);
+        if !self.dry_run {
+            concrete_environment.migrate_env(&flox)?;
+        }
 
         let description = environment_description(&concrete_environment)?;
 
@@ -166,13 +170,17 @@ fn render_diff(diff: &SingleSystemUpgradeDiff) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_named_path_environment,
         new_named_path_environment_from_env_files,
+        new_path_environment_from_env_files_in,
     };
     use flox_rust_sdk::models::manifest::raw::PackageToInstall;
+    use flox_rust_sdk::models::manifest::typed::Manifest;
     use flox_rust_sdk::providers::catalog::GENERATED_DATA;
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
@@ -269,5 +277,57 @@ mod tests {
             available for other systems supported by this environment.
             "}
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn upgrade_triggers_migration() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.outputs = true;
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+        let _env = new_path_environment_from_env_files_in(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            tempdir.path(),
+            None,
+        );
+        Upgrade {
+            environment: EnvironmentSelect::Dir(tempdir.path().to_path_buf()),
+            dry_run: false,
+            groups_or_iids: vec![],
+        }
+        .handle(flox)
+        .await
+        .unwrap();
+        let manifest_path = tempdir.path().join(".flox/env/manifest.toml");
+        let manifest_contents = std::fs::read_to_string(manifest_path).unwrap();
+        let manifest = Manifest::from_str(&manifest_contents).unwrap();
+        assert_eq!(manifest.version, 2.into());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn dry_run_doesnt_trigger_migration() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.outputs = true;
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+        let _env = new_path_environment_from_env_files_in(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            tempdir.path(),
+            None,
+        );
+        Upgrade {
+            environment: EnvironmentSelect::Dir(tempdir.path().to_path_buf()),
+            dry_run: true,
+            groups_or_iids: vec![],
+        }
+        .handle(flox)
+        .await
+        .unwrap();
+        let manifest_path = tempdir.path().join(".flox/env/manifest.toml");
+        let manifest_contents = std::fs::read_to_string(manifest_path).unwrap();
+        let manifest = Manifest::from_str(&manifest_contents).unwrap();
+        assert_eq!(manifest.version, 1.into());
     }
 }
