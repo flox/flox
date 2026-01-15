@@ -11,7 +11,6 @@ use std::sync::atomic::AtomicBool;
 use anyhow::{Context, Result, bail};
 use flox_core::activations::{activation_state_dir_path, read_activations_json, state_json_path};
 use flox_core::traceable_path;
-use nix::libc::{SIGCHLD, SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use signal_hook::iterator::Signals;
 use tracing::{debug, error, info, instrument};
 
@@ -25,9 +24,6 @@ pub struct Args {
     /// The path to the .flox directory
     pub dot_flox_path: PathBuf,
 
-    /// The path to the Flox environment symlink
-    pub flox_env: PathBuf,
-
     /// The path to the runtime directory keeping activation data
     pub runtime_dir: PathBuf,
 
@@ -35,36 +31,9 @@ pub struct Args {
     pub socket_path: PathBuf,
 }
 
+/// Monitoring loop that watches activation processes and performs cleanup.
 #[instrument("monitoring", err(Debug), skip_all)]
-pub fn run(args: Args) -> Result<(), Error> {
-    let span = tracing::Span::current();
-    span.record("flox_env", traceable_path(&args.flox_env));
-    span.record("runtime_dir", traceable_path(&args.runtime_dir));
-    span.record("socket", traceable_path(&args.socket_path));
-    debug!("starting");
-
-    // Set the signal handlers
-    let should_clean_up = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(SIGUSR1, Arc::clone(&should_clean_up))
-        .context("failed to set SIGUSR1 signal handler")?;
-    let should_terminate = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate))
-        .context("failed to set SIGINT signal handler")?;
-    signal_hook::flag::register(SIGTERM, Arc::clone(&should_terminate))
-        .context("failed to set SIGTERM signal handler")?;
-    signal_hook::flag::register(SIGQUIT, Arc::clone(&should_terminate))
-        .context("failed to set SIGQUIT signal handler")?;
-    // This compliments the SubreaperGuard setup by `flox_activations::executive`
-    // WARNING: You cannot reliably use Command::wait after we've entered the
-    // monitoring loop, including concurrent threads like GCing logs, because
-    // children will be reaped automatically.
-    let should_reap = Signals::new([SIGCHLD])?;
-
-    run_inner(args, should_terminate, should_clean_up, should_reap)
-}
-
-/// Function to be used for unit tests that doesn't do weird process stuff
-pub(super) fn run_inner(
+pub fn run_monitoring_loop(
     args: Args,
     should_terminate: Arc<AtomicBool>,
     should_clean_up: Arc<AtomicBool>,
@@ -85,11 +54,6 @@ pub(super) fn run_inner(
         socket = traceable_path(&args.socket_path),
         exists = &args.socket_path.exists(),
         "checked socket"
-    );
-
-    info!(
-        this_pid = nix::unistd::getpid().as_raw(),
-        "executive is on duty"
     );
 
     match watcher.wait_for_termination() {
@@ -209,13 +173,12 @@ mod test {
 
         let args = Args {
             dot_flox_path: dot_flox_path.clone(),
-            flox_env: dot_flox_path.clone(),
             runtime_dir: runtime_dir.to_path_buf(),
             socket_path: PathBuf::from("/does_not_exist"),
         };
 
         let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
-        run_inner(args, terminate_flag, cleanup_flag, reap_flag).unwrap();
+        run_monitoring_loop(args, terminate_flag, cleanup_flag, reap_flag).unwrap();
 
         // Verify state directory is completely removed after cleanup
         assert!(

@@ -1,14 +1,18 @@
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use anyhow::{Context, Result};
 use clap::Args;
 use flox_core::activate::context::ActivateCtx;
 use log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
+use nix::libc::{SIGCHLD, SIGINT, SIGQUIT, SIGTERM};
 use nix::sys::signal::Signal::SIGUSR1;
 use nix::sys::signal::kill;
 use nix::unistd::{Pid, getpgid, getpid, setsid};
 use serde::{Deserialize, Serialize};
+use signal_hook::iterator::Signals;
 use tracing::{debug, debug_span};
 
 use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
@@ -99,14 +103,32 @@ impl ExecutiveArgs {
         spawn_heartbeat_log();
         spawn_logs_gc_threads(log_dir);
 
+        // Set up signal handlers just before entering the monitoring loop.
+        // Doing this too early could prevent the executive from being killed if
+        // it gets stuck.
+        let should_clean_up = Arc::new(AtomicBool::new(false));
+        signal_hook::flag::register(nix::libc::SIGUSR1, Arc::clone(&should_clean_up))
+            .context("failed to set SIGUSR1 signal handler")?;
+        let should_terminate = Arc::new(AtomicBool::new(false));
+        signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate))
+            .context("failed to set SIGINT signal handler")?;
+        signal_hook::flag::register(SIGTERM, Arc::clone(&should_terminate))
+            .context("failed to set SIGTERM signal handler")?;
+        signal_hook::flag::register(SIGQUIT, Arc::clone(&should_terminate))
+            .context("failed to set SIGQUIT signal handler")?;
+        // This compliments the SubreaperGuard setup above.
+        // WARNING: You cannot reliably use Command::wait after we've entered the
+        // monitoring loop, including concurrent threads like GCing logs, because
+        // children will be reaped automatically.
+        let should_reap = Signals::new([SIGCHLD])?;
+
         let args = monitoring::Args {
             dot_flox_path: context.attach_ctx.dot_flox_path.clone(),
-            flox_env: context.attach_ctx.env.clone().into(),
             runtime_dir: context.attach_ctx.flox_runtime_dir.clone().into(),
             socket_path: socket_path.into(),
         };
         debug!(?args, "starting monitoring loop");
-        monitoring::run(args)
+        monitoring::run_monitoring_loop(args, should_terminate, should_clean_up, should_reap)
     }
 }
 
