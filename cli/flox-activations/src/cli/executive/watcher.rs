@@ -59,7 +59,6 @@ pub struct PidWatcher {
     dot_flox_path: PathBuf,
     runtime_dir: PathBuf,
     should_terminate_flag: Arc<AtomicBool>,
-    should_clean_up_flag: Arc<AtomicBool>,
     should_reap_signals: Signals,
 }
 
@@ -71,7 +70,6 @@ impl PidWatcher {
         dot_flox_path: PathBuf,
         runtime_dir: PathBuf,
         should_terminate_flag: Arc<AtomicBool>,
-        should_clean_up_flag: Arc<AtomicBool>,
         should_reap_signals: Signals,
     ) -> Self {
         Self {
@@ -79,7 +77,6 @@ impl PidWatcher {
             dot_flox_path,
             runtime_dir,
             should_terminate_flag,
-            should_clean_up_flag,
             should_reap_signals,
         }
     }
@@ -96,16 +93,6 @@ impl Watcher for PidWatcher {
                 .load(std::sync::atomic::Ordering::SeqCst)
             {
                 return Ok(WaitResult::Terminate);
-            }
-            if self
-                .should_clean_up_flag
-                .load(std::sync::atomic::Ordering::SeqCst)
-            {
-                let (activations_json, lock) = read_activations_json(&self.state_json_path)?;
-                let Some(activations_json) = activations_json else {
-                    bail!("executive shouldn't be running when state.json doesn't exist");
-                };
-                return Ok(WaitResult::CleanUp((activations_json, lock)));
             }
             for _ in self.should_reap_signals.pending() {
                 reap_orphaned_children();
@@ -196,10 +183,9 @@ pub mod test {
     }
 
     /// Makes shutdown flags to mimic those used by the executive
-    pub fn shutdown_flags() -> (Arc<AtomicBool>, Arc<AtomicBool>, Signals) {
+    pub fn shutdown_flags() -> (Arc<AtomicBool>, Signals) {
         const NO_SIGNALS: &[i32] = &[];
         (
-            Arc::new(AtomicBool::new(false)),
             Arc::new(AtomicBool::new(false)),
             Signals::new(NO_SIGNALS).expect("failed to create Signals"),
         )
@@ -266,13 +252,12 @@ pub mod test {
 
         let state_json_path =
             flox_core::activations::state_json_path(runtime_dir.path(), &dot_flox_path);
-        let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
+        let (terminate_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
             state_json_path,
             dot_flox_path.clone(),
             runtime_dir.path().to_path_buf(),
             terminate_flag,
-            cleanup_flag,
             reap_flag,
         );
         let barrier = Arc::new(std::sync::Barrier::new(2));
@@ -330,13 +315,12 @@ pub mod test {
         stop_process(proc1);
 
         let state_json_path = state_json_path(runtime_dir.path(), &dot_flox_path);
-        let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
+        let (terminate_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
             state_json_path,
             dot_flox_path.clone(),
             runtime_dir.path().to_path_buf(),
-            terminate_flag.clone(),
-            cleanup_flag,
+            terminate_flag,
             reap_flag,
         );
 
@@ -415,13 +399,12 @@ pub mod test {
         assert!(state_dir_2.exists());
 
         let state_json_path = state_json_path(runtime_dir.path(), &dot_flox_path);
-        let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
+        let (terminate_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
             state_json_path,
             dot_flox_path.clone(),
             runtime_dir.path().to_path_buf(),
             terminate_flag.clone(),
-            cleanup_flag,
             reap_flag,
         );
 
@@ -467,13 +450,12 @@ pub mod test {
         write_activation_state(runtime_dir.path(), &dot_flox_path, state);
 
         let state_json_path = state_json_path(runtime_dir.path(), &dot_flox_path);
-        let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
+        let (terminate_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
             state_json_path,
             dot_flox_path.clone(),
             runtime_dir.path().to_path_buf(),
             terminate_flag.clone(),
-            cleanup_flag.clone(),
             reap_flag,
         );
         let barrier = Arc::new(std::sync::Barrier::new(2));
@@ -491,51 +473,5 @@ pub mod test {
         });
         stop_process(proc);
         assert!(matches!(wait_result, WaitResult::Terminate));
-    }
-
-    #[test]
-    fn terminates_on_signal_handler_flag() {
-        let runtime_dir = tempfile::tempdir().unwrap();
-        let dot_flox_path = PathBuf::from(".flox");
-        let flox_env = dot_flox_path.join("run/test");
-        let store_path = "store_path".to_string();
-
-        let proc = start_process();
-        let pid = proc.id() as i32;
-
-        // Create an ActivationState with one PID attached
-        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
-        let result = state.start_or_attach(pid, &store_path);
-        let StartOrAttachResult::Start { start_id, .. } = result else {
-            panic!("Expected Start")
-        };
-        state.set_ready(&start_id);
-        write_activation_state(runtime_dir.path(), &dot_flox_path, state);
-
-        let state_json_path = state_json_path(runtime_dir.path(), &dot_flox_path);
-        let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
-        let mut watcher = PidWatcher::new(
-            state_json_path,
-            dot_flox_path.clone(),
-            runtime_dir.path().to_path_buf(),
-            terminate_flag.clone(),
-            cleanup_flag.clone(),
-            reap_flag,
-        );
-        let barrier = Arc::new(std::sync::Barrier::new(2));
-        let wait_result = std::thread::scope(move |s| {
-            let b_clone = barrier.clone();
-            let flag_handle = s.spawn(move || {
-                b_clone.wait();
-                cleanup_flag.store(true, std::sync::atomic::Ordering::SeqCst);
-            });
-            barrier.wait();
-            let watcher_handle = s.spawn(move || watcher.wait_for_termination().unwrap());
-            let wait_result = watcher_handle.join().unwrap();
-            let _ = flag_handle.join(); // should already have terminated
-            wait_result
-        });
-        stop_process(proc);
-        assert!(matches!(wait_result, WaitResult::CleanUp(_)));
     }
 }

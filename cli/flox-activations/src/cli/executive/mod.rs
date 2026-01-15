@@ -114,9 +114,6 @@ impl ExecutiveArgs {
         // Set up signal handlers just before entering the monitoring loop.
         // Doing this too early could prevent the executive from being killed if
         // it gets stuck.
-        let should_clean_up = Arc::new(AtomicBool::new(false));
-        signal_hook::flag::register(nix::libc::SIGUSR1, Arc::clone(&should_clean_up))
-            .context("failed to set SIGUSR1 signal handler")?;
         let should_terminate = Arc::new(AtomicBool::new(false));
         signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate))
             .context("failed to set SIGINT signal handler")?;
@@ -136,7 +133,6 @@ impl ExecutiveArgs {
             context.attach_ctx.flox_runtime_dir.into(),
             socket_path.into(),
             should_terminate,
-            should_clean_up,
             should_reap,
         )
     }
@@ -173,7 +169,6 @@ fn run_monitoring_loop(
     runtime_dir: PathBuf,
     socket_path: PathBuf,
     should_terminate: Arc<AtomicBool>,
-    should_clean_up: Arc<AtomicBool>,
     should_reap: Signals,
 ) -> Result<()> {
     let state_json_path = state_json_path(&runtime_dir, &dot_flox_path);
@@ -183,7 +178,6 @@ fn run_monitoring_loop(
         dot_flox_path.clone(),
         runtime_dir.clone(),
         should_terminate,
-        should_clean_up,
         should_reap,
     );
 
@@ -308,13 +302,12 @@ mod test {
 
         stop_process(proc);
 
-        let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
+        let (terminate_flag, reap_flag) = shutdown_flags();
         run_monitoring_loop(
             dot_flox_path.clone(),
             runtime_dir.to_path_buf(),
             PathBuf::from("/does_not_exist"),
             terminate_flag,
-            cleanup_flag,
             reap_flag,
         )
         .unwrap();
