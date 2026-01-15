@@ -194,7 +194,11 @@ EOF
 
   run "$FLOX_BIN" edit --reference "owner/name" --name "renamed"
   assert_failure
-  assert_output --partial "Cannot rename environments on FloxHub"
+  assert_output --partial - <<EOF
+✘ ERROR: FloxHub environments must currently be renamed on FloxHub.
+Rename this environment at https://hub.flox.dev/owner/name/settings
+Then pull the renamed environment.
+EOF
 }
 
 # ---------------------------------------------------------------------------- #
