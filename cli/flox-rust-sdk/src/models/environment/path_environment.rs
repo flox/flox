@@ -312,6 +312,21 @@ impl Environment for PathEnvironment {
         fs::read_to_string(self.manifest_path(flox)?).map_err(EnvironmentError::ReadManifest)
     }
 
+    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError> {
+        self.manifest_contents(flox).and_then(|contents| {
+            Manifest::from_str(contents.as_str())
+                .map_err(ManifestError::Parse)
+                .map_err(EnvironmentError::ManifestError)
+        })
+    }
+
+    fn raw_manifest(&self, flox: &Flox) -> Result<RawManifest, EnvironmentError> {
+        self.manifest_contents(flox).and_then(|contents| {
+            let raw = RawManifest::from_str(contents.as_str());
+            raw.map_err(EnvironmentError::TomlEditDeserialize)
+        })
+    }
+
     /// Returns the environment name
     fn name(&self) -> EnvironmentName {
         self.pointer.name.clone()
@@ -405,14 +420,6 @@ impl Environment for PathEnvironment {
     /// should be created
     fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         services_socket_path(&self.path_hash(), flox)
-    }
-
-    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError> {
-        self.manifest_contents(flox).and_then(|contents| {
-            Manifest::from_str(contents.as_str())
-                .map_err(ManifestError::Parse)
-                .map_err(EnvironmentError::ManifestError)
-        })
     }
 }
 

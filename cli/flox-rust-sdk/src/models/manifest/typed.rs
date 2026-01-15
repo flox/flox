@@ -629,6 +629,16 @@ impl SelectedOutputs {
     pub fn all() -> SelectedOutputs {
         SelectedOutputs::All(AllSentinel::All)
     }
+
+    pub fn to_toml(&self) -> toml_edit::Value {
+        match self {
+            SelectedOutputs::All(_) => toml_edit::Value::from("all"),
+            SelectedOutputs::Specific(items) => {
+                let array = toml_edit::Array::from_iter(items.iter());
+                toml_edit::Value::Array(array)
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]

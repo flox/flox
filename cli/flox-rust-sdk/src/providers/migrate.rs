@@ -2,6 +2,9 @@ use std::collections::{HashMap, HashSet};
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
+use toml_edit::{Item, Value};
+use tracing::debug;
+
 use crate::data::System;
 use crate::flox::Flox;
 use crate::models::environment::managed_environment::ManagedEnvironment;
@@ -16,6 +19,7 @@ use crate::models::lockfile::{
     Lockfile,
     PackageOutputs,
 };
+use crate::models::manifest::raw::RawManifest;
 use crate::models::manifest::typed::{
     Inner,
     Manifest,
@@ -41,6 +45,8 @@ pub enum MigrationError {
     PreviouslyMigrated,
     #[error(transparent)]
     EnvironmentError(#[from] EnvironmentError),
+    #[error("malformed manifest: {0}")]
+    RawManifest(String),
     // This variant is a catch-all for situations where the lockfile and manifest
     // aren't consistent with each other for whatever reason.
     #[error("internal error: {0}")]
@@ -138,9 +144,10 @@ pub trait MigrateEnv: Environment {
         // This will ensure that a lockfile exists before we attempt
         // to migrate.
         let lockfile = self.lockfile(flox)?.lockfile();
+        let mut raw_manifest = self.raw_manifest(flox)?;
         let migrated_manifest = migrate_manifest_v1_to_v2(&existing_manifest, &lockfile)?;
-        let migrated_contents = toml_edit::ser::to_string(&migrated_manifest)
-            .map_err(MigrationError::SerializeManifest)?;
+        update_descriptors_in_raw_manifest(&mut raw_manifest, &migrated_manifest)?;
+        let migrated_contents = raw_manifest.to_string();
         let edit_result = self.edit(flox, migrated_contents)?;
         if let EditResult::Unchanged = edit_result {
             return Err(MigrationError::Unchanged);
@@ -433,6 +440,42 @@ fn collect_locked_packages_by_kind(
     };
     Ok(collected)
 }
+
+fn update_descriptors_in_raw_manifest(
+    raw: &mut RawManifest,
+    migrated: &Manifest,
+) -> Result<(), MigrationError> {
+    raw["version"] = toml_edit::Item::Value(Value::from(*migrated.version.inner() as i64));
+    for (install_id, pd) in migrated.install.inner().iter() {
+        use ManifestPackageDescriptor::*;
+        match pd {
+            Catalog(pd_inner) => {
+                debug!(id = install_id, "migrating package in raw manifest");
+                if let Some(ref outputs) = pd_inner.outputs {
+                    raw["install"][install_id]["outputs"] = Item::Value(outputs.to_toml());
+                    debug!(id = install_id, "updated outputs");
+                } else {
+                    debug!(id = install_id, "skipping, no outputs specified");
+                }
+            },
+            FlakeRef(pd_inner) => {
+                debug!(id = install_id, "migrating package in raw manifest");
+                if let Some(ref outputs) = pd_inner.outputs {
+                    raw["install"][install_id]["outputs"] = Item::Value(outputs.to_toml());
+                    debug!(id = install_id, "updated outputs");
+                } else {
+                    debug!(id = install_id, "skipping, no outputs specified");
+                }
+            },
+            _ => {
+                debug!(id = install_id, "skipping store path package");
+            },
+        }
+    }
+    Ok(())
+}
+
+// fn add_outputs_to_toml_descriptor()
 
 #[cfg(test)]
 mod tests {
@@ -899,7 +942,21 @@ mod tests {
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/krb5_prereqs"));
         flox.features.outputs = true;
         env.migrate_env(&flox).unwrap();
-        assert_eq!(env.manifest(&flox).unwrap().version, 2.into());
+        let manifest = env.manifest(&flox).unwrap();
+        assert_eq!(manifest.version, 2.into());
+        assert_eq!(
+            manifest
+                .install
+                .inner()
+                .get("nodejs")
+                .unwrap()
+                .as_catalog_descriptor_ref()
+                .unwrap()
+                .outputs
+                .as_ref()
+                .unwrap(),
+            &SelectedOutputs::all()
+        );
     }
 
     #[test]

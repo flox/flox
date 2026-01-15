@@ -51,7 +51,13 @@ use crate::models::environment::{LOCKFILE_FILENAME, copy_dir_recursive};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmeta::{FloxMetaError, floxmeta_git_options};
 use crate::models::lockfile::{LockResult, Lockfile};
-use crate::models::manifest::raw::{CatalogPackage, FlakePackage, PackageToInstall, StorePath};
+use crate::models::manifest::raw::{
+    CatalogPackage,
+    FlakePackage,
+    PackageToInstall,
+    RawManifest,
+    StorePath,
+};
 use crate::models::manifest::typed::{IncludeDescriptor, Manifest, ManifestError};
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{GitCommandError, GitProvider, GitRemoteCommandError, PushFlag};
@@ -473,6 +479,21 @@ impl Environment for ManagedEnvironment {
         Ok(manifest)
     }
 
+    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError> {
+        self.manifest_contents(flox).and_then(|contents| {
+            Manifest::from_str(contents.as_str())
+                .map_err(ManifestError::Parse)
+                .map_err(EnvironmentError::ManifestError)
+        })
+    }
+
+    fn raw_manifest(&self, flox: &Flox) -> Result<RawManifest, EnvironmentError> {
+        self.manifest_contents(flox).and_then(|contents| {
+            let raw = RawManifest::from_str(contents.as_str());
+            raw.map_err(EnvironmentError::TomlEditDeserialize)
+        })
+    }
+
     /// This will lock if there is an out of sync local checkout
     fn rendered_env_links(
         &mut self,
@@ -603,14 +624,6 @@ impl Environment for ManagedEnvironment {
     /// should be created
     fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         services_socket_path(&self.path_hash(), flox)
-    }
-
-    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError> {
-        self.manifest_contents(flox).and_then(|contents| {
-            Manifest::from_str(contents.as_str())
-                .map_err(ManifestError::Parse)
-                .map_err(EnvironmentError::ManifestError)
-        })
     }
 }
 
