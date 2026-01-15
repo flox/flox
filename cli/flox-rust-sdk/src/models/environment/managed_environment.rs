@@ -2715,3 +2715,140 @@ mod test {
         );
     }
 }
+
+#[cfg(test)]
+mod compare_remote_tests {
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::flox::test_helpers::flox_instance_with_optional_floxhub;
+    use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_in;
+    use crate::providers::catalog::MockClient;
+
+    /// Helper to create a pair of environment instances at different paths
+    /// sharing the same remote environment
+    fn setup_env_pair(env_name: &str) -> (Flox, TempDir, ManagedEnvironment, ManagedEnvironment) {
+        let owner = "owner".parse().unwrap();
+        let (mut flox, temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let client = MockClient::new();
+        flox.catalog_client = client.into();
+
+        // Create first instance (env_a)
+        let project_a_path = flox.temp_dir.join("project_a");
+        std::fs::create_dir_all(&project_a_path).unwrap();
+
+        let env_a = mock_managed_environment_in(
+            &flox,
+            "version = 1",
+            owner.clone(),
+            &project_a_path,
+            Some(env_name),
+        );
+
+        // Create second instance (env_b) at different path, same remote
+        let project_b_path = flox.temp_dir.join("project_b");
+        std::fs::create_dir_all(&project_b_path).unwrap();
+        let project_b_path = CanonicalPath::new(project_b_path).unwrap();
+
+        let env_b =
+            ManagedEnvironment::open(&flox, env_a.pointer.clone(), project_b_path, None).unwrap();
+
+        (flox, temp_dir_handle, env_a, env_b)
+    }
+
+    /// Test that compare_remote shows Ahead before push, Equal after push
+    #[test]
+    fn compare_remote_transitions_ahead_to_equal_after_push() {
+        let (flox, _temp_dir_handle, mut env_a, _env_b) = setup_env_pair("test-env");
+
+        assert_eq!(env_a.compare_remote().unwrap(), BranchOrd::Equal);
+
+        env_a
+            .edit(&flox, "version = 1\n\n# local change".to_string())
+            .unwrap();
+        assert_eq!(env_a.compare_remote().unwrap(), BranchOrd::Ahead);
+
+        assert_eq!(env_a.push(&flox, false).unwrap(), PushResult::Updated);
+        assert_eq!(env_a.compare_remote().unwrap(), BranchOrd::Equal);
+    }
+
+    /// Test that push returns UpToDate when already synced
+    #[test]
+    fn push_returns_up_to_date_when_synced() {
+        let (flox, _temp_dir_handle, mut env_a, _env_b) = setup_env_pair("test-env");
+
+        assert_eq!(env_a.push(&flox, false).unwrap(), PushResult::UpToDate);
+        assert_eq!(env_a.compare_remote().unwrap(), BranchOrd::Equal);
+    }
+
+    /// Test that pull returns UpToDate when synced or ahead
+    #[test]
+    fn pull_returns_up_to_date_when_synced_or_ahead() {
+        let (flox, _temp_dir_handle, mut env_a, _env_b) = setup_env_pair("test-env");
+
+        // Synced
+        assert_eq!(env_a.pull(&flox, false).unwrap(), PullResult::UpToDate);
+
+        // Ahead also returns UpToDate
+        env_a
+            .edit(&flox, "version = 1\n\n# local".to_string())
+            .unwrap();
+        assert_eq!(env_a.compare_remote().unwrap(), BranchOrd::Ahead);
+        assert_eq!(env_a.pull(&flox, false).unwrap(), PullResult::UpToDate);
+    }
+
+    /// Test that after pushing from one instance, another instance sees Behind
+    #[test]
+    fn compare_remote_shows_behind_after_other_instance_pushes() {
+        let (flox, _temp_dir_handle, mut env_a, mut env_b) = setup_env_pair("shared-env");
+
+        // Both start synced
+        assert_eq!(env_a.compare_remote().unwrap(), BranchOrd::Equal);
+        assert_eq!(env_b.compare_remote().unwrap(), BranchOrd::Equal);
+
+        // A pushes a change
+        env_a
+            .edit(&flox, "version = 1\n\n# modified by A".to_string())
+            .unwrap();
+        assert_eq!(env_a.push(&flox, false).unwrap(), PushResult::Updated);
+        assert_eq!(env_a.compare_remote().unwrap(), BranchOrd::Equal);
+
+        // B is now behind
+        // Note: B should see its behind without fetching
+        assert_eq!(env_b.compare_remote().unwrap(), BranchOrd::Behind);
+        // Note: Since B is strictly behind, pushing can return uptodate
+        assert_eq!(env_b.push(&flox, false).unwrap(), PushResult::UpToDate);
+
+        // B pulls and syncs
+        assert_eq!(env_b.pull(&flox, false).unwrap(), PullResult::Updated);
+        assert_eq!(env_b.compare_remote().unwrap(), BranchOrd::Equal);
+    }
+
+    /// Test that compare_remote shows Diverged and operations require force
+    #[test]
+    fn compare_remote_diverged_requires_force() {
+        let (flox, _temp_dir_handle, mut env_a, mut env_b) = setup_env_pair("shared-env");
+
+        // Both make conflicting changes
+        env_a
+            .edit(&flox, "version = 1\n\n# change by A".to_string())
+            .unwrap();
+        env_b
+            .edit(&flox, "version = 1\n\n# change by B".to_string())
+            .unwrap();
+
+        env_a.push(&flox, false).unwrap();
+
+        // Note: B should see its behind without fetching
+        assert_eq!(env_b.compare_remote().unwrap(), BranchOrd::Diverged);
+
+        // Operations fail without force
+        assert!(env_b.pull(&flox, false).is_err());
+        assert!(env_b.push(&flox, false).is_err());
+
+        // Force pull succeeds
+        assert_eq!(env_b.pull(&flox, true).unwrap(), PullResult::Updated);
+        assert_eq!(env_b.compare_remote().unwrap(), BranchOrd::Equal);
+    }
+}
