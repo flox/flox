@@ -33,6 +33,7 @@ tempfile.workspace = true
 
 
 [dev-dependencies]
+flox-core = { workspace = true, features = ["tests"] }
 nix.workspace = true
 temp-env.workspace = true
 pretty_assertions.workspace = true

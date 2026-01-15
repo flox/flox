@@ -247,15 +247,9 @@ pub fn state_json_path(runtime_dir: impl AsRef<Path>, dot_flox_path: impl AsRef<
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum StartOrAttachResult {
     /// A new activation was started for the given StartIdentifier
-    Start {
-        start_id: StartIdentifier,
-        needs_new_executive: bool,
-    },
+    Start { start_id: StartIdentifier },
     /// Attached to an existing ready activation with the given StartIdentifier
-    Attach {
-        start_id: StartIdentifier,
-        needs_new_executive: bool,
-    },
+    Attach { start_id: StartIdentifier },
     /// Another process is currently starting an activation.
     /// The caller should wait and retry.
     AlreadyStarting { pid: Pid, start_id: StartIdentifier },
@@ -351,6 +345,7 @@ pub struct ActivationState {
     info: EnvironmentInfo,
     mode: ActivateMode,
     ready: Ready,
+    /// Pid must be a non-zero value when writing state to disk.
     executive_pid: Pid,
     current_process_compose_store_path: Option<StartIdentifier>,
     attached_pids: BTreeMap<Pid, Attachment>,
@@ -433,7 +428,6 @@ impl ActivationState {
             };
         }
 
-        let needs_new_executive = self.needs_new_executive();
         let ready = self.ready.clone();
         match ready {
             Ready::True(start_id) if start_id.store_path == store_path.as_ref() => {
@@ -441,17 +435,11 @@ impl ActivationState {
                     start_id: start_id.clone(),
                     expiration: None,
                 });
-                StartOrAttachResult::Attach {
-                    start_id,
-                    needs_new_executive,
-                }
+                StartOrAttachResult::Attach { start_id }
             },
             Ready::False | Ready::True(_) | Ready::Starting(_, _) => {
                 let start_id = self.start(pid, &store_path);
-                StartOrAttachResult::Start {
-                    start_id,
-                    needs_new_executive,
-                }
+                StartOrAttachResult::Start { start_id }
             },
         }
     }
@@ -569,20 +557,14 @@ impl ActivationState {
         );
     }
 
-    /// Check if the executive needs to be spawned.
-    fn needs_new_executive(&self) -> bool {
-        if self.executive_pid == EXECUTIVE_NOT_STARTED {
-            debug!("executive has not been spawned yet");
-            return true;
-        }
+    /// Check if executive has been started.
+    pub fn executive_started(&self) -> bool {
+        self.executive_pid != EXECUTIVE_NOT_STARTED
+    }
 
-        if !pid_is_running(self.executive_pid) {
-            debug!(pid = self.executive_pid, "executive process is not running");
-            return true;
-        }
-
-        debug!(pid = self.executive_pid, "executive process is running");
-        false
+    /// Check if executive was started and is running.
+    pub fn executive_running(&self) -> bool {
+        self.executive_started() && pid_is_running(self.executive_pid)
     }
 
     pub fn replace_attachment(
@@ -707,8 +689,51 @@ pub fn write_activations_json(
     path: impl AsRef<Path>,
     lock: LockFile,
 ) -> Result<(), Error> {
+    if activations.executive_pid == EXECUTIVE_NOT_STARTED {
+        anyhow::bail!(
+            "Cannot write activation state without executive PID set (path: {})",
+            path.as_ref().display()
+        );
+    }
     crate::serialize_atomically(&json!(activations), &path, lock)?;
     Ok(())
+}
+
+#[cfg(any(test, feature = "tests"))]
+pub mod test_helpers {
+    use std::path::Path;
+
+    use super::{
+        ActivationState,
+        acquire_activations_json_lock,
+        read_activations_json,
+        state_json_path,
+        write_activations_json,
+    };
+
+    /// Helper to write an ActivationState to disk
+    ///
+    /// Takes ownership of state so we don't accidentally use it after e.g. a
+    /// watcher modifies state on disk
+    pub fn write_activation_state(
+        runtime_dir: &Path,
+        dot_flox_path: &Path,
+        mut state: ActivationState,
+    ) {
+        if !state.executive_started() {
+            state.set_executive_pid(1);
+        }
+        let state_json_path = state_json_path(runtime_dir, dot_flox_path);
+        let lock = acquire_activations_json_lock(&state_json_path).expect("failed to acquire lock");
+        write_activations_json(&state, &state_json_path, lock).expect("failed to write state");
+    }
+
+    /// Helper to read an ActivationState from disk
+    pub fn read_activation_state(runtime_dir: &Path, dot_flox_path: &Path) -> ActivationState {
+        let state_json_path = state_json_path(runtime_dir, dot_flox_path);
+        let (state, _lock) = read_activations_json(&state_json_path).expect("failed to read state");
+        state.unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -717,6 +742,7 @@ mod tests {
     use std::time::Duration;
 
     use indoc::formatdoc;
+    use tempfile::TempDir;
 
     use super::*;
     // NOTE: these two functions are copied from flox-rust-sdk since you can't
@@ -765,6 +791,53 @@ mod tests {
         Attachment {
             start_id,
             expiration: None,
+        }
+    }
+
+    mod read_and_write_state {
+        use super::*;
+
+        #[test]
+        fn read_and_write_roundtrip() {
+            let temp_dir = TempDir::new().unwrap();
+            let dot_flox_path = temp_dir.path().join(".flox");
+            let state_path = state_json_path(temp_dir.path(), dot_flox_path);
+
+            let write_state = make_activations(Ready::False);
+            let lock = acquire_activations_json_lock(&state_path).unwrap();
+            write_activations_json(&write_state, &state_path, lock).unwrap();
+
+            let (read_state_opt, _lock) = read_activations_json(&state_path).unwrap();
+            let read_state = read_state_opt.expect("state should be present");
+            assert_eq!(
+                write_state, read_state,
+                "written and read states should match"
+            );
+        }
+
+        #[test]
+        fn write_without_executive_pid_fails() {
+            let temp_dir = TempDir::new().unwrap();
+            let dot_flox_path = temp_dir.path().join(".flox");
+            let flox_env = dot_flox_path.join("run/test");
+            let state_path = state_json_path(temp_dir.path(), &dot_flox_path);
+
+            let state = ActivationState::new(&ActivateMode::default(), dot_flox_path, flox_env);
+            assert_eq!(
+                state.executive_pid, EXECUTIVE_NOT_STARTED,
+                "executive PID should be unset"
+            );
+
+            let lock = acquire_activations_json_lock(&state_path).unwrap();
+            let result = write_activations_json(&state, &state_path, lock);
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                format!(
+                    "Cannot write activation state without executive PID set (path: {})",
+                    state_path.display()
+                ),
+                "writing state without executive PID should fail"
+            );
         }
     }
 
@@ -855,16 +928,7 @@ mod tests {
             let result = activations.start_or_attach(pid, &store_path);
 
             let start_id = match result {
-                StartOrAttachResult::Start {
-                    start_id,
-                    needs_new_executive: needs_executive_spawn,
-                } => {
-                    assert!(
-                        !needs_executive_spawn,
-                        "Executive should not need spawning (PID 1 always runs)"
-                    );
-                    start_id
-                },
+                StartOrAttachResult::Start { start_id } => start_id,
                 _ => panic!("Expected StartOrAttachResult::Start, got {:?}", result),
             };
 
@@ -890,15 +954,8 @@ mod tests {
             let result = activations.start_or_attach(pid, &start_id.store_path);
 
             match result {
-                StartOrAttachResult::Attach {
-                    start_id: id,
-                    needs_new_executive: needs_executive_spawn,
-                } => {
+                StartOrAttachResult::Attach { start_id: id } => {
                     assert_eq!(id, start_id);
-                    assert!(
-                        !needs_executive_spawn,
-                        "Executive should already be running"
-                    );
                 },
                 _ => panic!("Expected StartOrAttachResult::Attach, got {:?}", result),
             }
@@ -920,16 +977,7 @@ mod tests {
             let result = activations.start_or_attach(pid, &new_path);
 
             let start_id = match result {
-                StartOrAttachResult::Start {
-                    start_id,
-                    needs_new_executive: needs_executive_spawn,
-                } => {
-                    assert!(
-                        !needs_executive_spawn,
-                        "Executive should already be running"
-                    );
-                    start_id
-                },
+                StartOrAttachResult::Start { start_id } => start_id,
                 _ => panic!("Expected StartOrAttachResult::Start, got {:?}", result),
             };
 
@@ -989,16 +1037,7 @@ mod tests {
             let result = activations.start_or_attach(pid, &old_start_id.store_path);
 
             let new_start_id = match result {
-                StartOrAttachResult::Start {
-                    start_id,
-                    needs_new_executive: needs_executive_spawn,
-                } => {
-                    assert!(
-                        !needs_executive_spawn,
-                        "Executive should not need spawning (PID 1 always runs)"
-                    );
-                    start_id
-                },
+                StartOrAttachResult::Start { start_id } => start_id,
                 _ => panic!("Expected StartOrAttachResult::Start, got {:?}", result),
             };
 
@@ -1023,15 +1062,8 @@ mod tests {
             for pid in [100, 200, 300].iter() {
                 let result = activations.start_or_attach(*pid, &start_id.store_path);
                 match result {
-                    StartOrAttachResult::Attach {
-                        start_id: id,
-                        needs_new_executive: needs_executive_spawn,
-                    } => {
+                    StartOrAttachResult::Attach { start_id: id } => {
                         assert_eq!(id, start_id);
-                        assert!(
-                            !needs_executive_spawn,
-                            "Executive should already be running"
-                        );
                     },
                     _ => panic!(
                         "Expected StartOrAttachResult::Attach for PID {}, got {:?}",
@@ -1073,15 +1105,8 @@ mod tests {
             let result = activations.start_or_attach(pid, &start_id.store_path);
 
             match result {
-                StartOrAttachResult::Attach {
-                    start_id: id,
-                    needs_new_executive: needs_executive_spawn,
-                } => {
+                StartOrAttachResult::Attach { start_id: id } => {
                     assert_eq!(id, start_id);
-                    assert!(
-                        !needs_executive_spawn,
-                        "Executive should already be running"
-                    );
                 },
                 _ => panic!("Expected StartOrAttachResult::Attach, got {:?}", result),
             }
