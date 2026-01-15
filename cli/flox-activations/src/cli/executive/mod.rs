@@ -4,8 +4,6 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::Args;
 use flox_core::activate::context::ActivateCtx;
-#[cfg(target_os = "linux")]
-use flox_watchdog::reaper::linux::SubreaperGuard;
 use nix::sys::signal::Signal::SIGUSR1;
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
@@ -14,6 +12,16 @@ use tracing::{debug, debug_span};
 
 use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
 use crate::logger;
+
+mod log_gc;
+mod monitoring;
+mod reaper;
+mod watcher;
+// TODO: Re-enable sentry after fixing OpenSSL dependency issues
+// mod sentry;
+
+#[cfg(target_os = "linux")]
+use reaper::linux::SubreaperGuard;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutiveCtx {
@@ -69,6 +77,11 @@ impl ExecutiveArgs {
 
         debug!("{self:?}");
 
+        // TODO: Enable earlier in `flox-activations` rather than just when detached?
+        // TODO: Re-enable sentry after fixing OpenSSL dependency issues
+        // let disable_metrics = env::var(FLOX_DISABLE_METRICS_VAR).is_ok();
+        // let _sentry_guard = (!disable_metrics).then(sentry::init_sentry);
+
         // TODO: Use types to group the mutually optional fields for containers.
         if !context.run_monitoring_loop {
             debug!("monitoring loop disabled, exiting executive");
@@ -78,20 +91,14 @@ impl ExecutiveArgs {
             unreachable!("flox_services_socket must be set in activation context");
         };
 
-        let watchdog = flox_watchdog::Cli {
+        let args = monitoring::Args {
             dot_flox_path: context.attach_ctx.dot_flox_path.clone(),
             flox_env: context.attach_ctx.env.clone().into(),
             runtime_dir: context.attach_ctx.flox_runtime_dir.clone().into(),
             socket_path: socket_path.into(),
             log_dir: log_dir.into(),
         };
-
-        // TODO: Enable earlier in `flox-activations` rather than just when detached?
-        // TODO: Re-enable sentry after fixing OpenSSL dependency issues
-        // let disable_metrics = env::var(FLOX_DISABLE_METRICS_VAR).is_ok();
-        // let _sentry_guard = (!disable_metrics).then(flox_watchdog::init_sentry);
-
-        debug!(watchdog = ?watchdog, "starting watchdog");
-        flox_watchdog::run(watchdog)
+        debug!(?args, "starting monitoring loop");
+        monitoring::run(args)
     }
 }

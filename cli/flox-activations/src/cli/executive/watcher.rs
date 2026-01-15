@@ -21,13 +21,13 @@ use signal_hook::iterator::Signals;
 use time::OffsetDateTime;
 use tracing::trace;
 
-use crate::reaper::reap_orphaned_children;
+use super::reaper::reap_orphaned_children;
 /// How long to wait between watcher updates.
 pub const WATCHER_SLEEP_INTERVAL: Duration = Duration::from_millis(100);
 
 type Error = anyhow::Error;
 
-/// A deserialized activations.json together with a lock preventing it from
+/// A deserialized state.json together with a lock preventing it from
 /// being modified
 /// TODO: there's probably a cleaner way to do this
 pub type LockedActivationState = (ActivationState, LockFile);
@@ -44,7 +44,7 @@ pub trait Watcher {
     /// Instructs the watcher to update the list of PIDs that it's watching
     /// by reading the environment registry (for now).
     fn cleanup_pids(&mut self) -> Result<Option<WaitResult>, Error>;
-    /// Writes the current activation PIDs back out to `activations.json`
+    /// Writes the current activation PIDs back out to `state.json`
     /// while holding a lock on it.
     fn update_activations_file(
         &self,
@@ -103,7 +103,7 @@ impl Watcher for PidWatcher {
             {
                 let (activations_json, lock) = read_activations_json(&self.state_json_path)?;
                 let Some(activations_json) = activations_json else {
-                    bail!("watchdog shouldn't be running when activations.json doesn't exist");
+                    bail!("executive shouldn't be running when state.json doesn't exist");
                 };
                 return Ok(WaitResult::CleanUp((activations_json, lock)));
             }
@@ -118,7 +118,7 @@ impl Watcher for PidWatcher {
     fn cleanup_pids(&mut self) -> Result<Option<WaitResult>, Error> {
         let (activations_json, lock) = read_activations_json(&self.state_json_path)?;
         let Some(mut activations) = activations_json else {
-            bail!("watchdog shouldn't be running when activations.json doesn't exist");
+            bail!("executive shouldn't be running when state.json doesn't exist");
         };
 
         let now = OffsetDateTime::now_utc();
@@ -153,7 +153,7 @@ impl Watcher for PidWatcher {
         Ok(None)
     }
 
-    /// Update the `activations.json` file with the current list of running PIDs.
+    /// Update the `state.json` file with the current list of running PIDs.
     fn update_activations_file(
         &self,
         activations: ActivationState,
@@ -195,7 +195,7 @@ pub mod test {
         child.wait().expect("failed to wait");
     }
 
-    /// Makes shutdown flags to mimic those used by the watchdog
+    /// Makes shutdown flags to mimic those used by the executive
     pub fn shutdown_flags() -> (Arc<AtomicBool>, Arc<AtomicBool>, Signals) {
         const NO_SIGNALS: &[i32] = &[];
         (

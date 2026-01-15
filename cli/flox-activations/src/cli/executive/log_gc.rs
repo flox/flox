@@ -9,14 +9,14 @@ use glob::glob;
 use tracing::{debug, error, info};
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(3600);
-const WATCHDOG_GC_INTERVAL: Duration = Duration::from_secs(3600);
+const EXECUTIVE_GC_INTERVAL: Duration = Duration::from_secs(3600);
 const KEEP_EXECUTIVE_DAYS: u64 = 3;
 const KEEP_LAST_N_PROCESSES: usize = 5;
 
 /// Starts a background thread which emits a log entry at an interval. This is
-/// used as an indication of whether a watchdog's log file can be garbage
-/// collected. The thread will run until the watchdog exits.
-pub(crate) fn spawn_heartbeat_log() {
+/// used as an indication of whether an executive's log file can be garbage
+/// collected. The thread will run until the executive exits.
+pub(super) fn spawn_heartbeat_log() {
     /// Assert that HEARTBEAT_INTERVAL falls in the range of KEEP_EXECUTIVE_DAYS at compile time.
     const _: () = assert!(
         HEARTBEAT_INTERVAL.as_secs() < duration_from_days(KEEP_EXECUTIVE_DAYS).as_secs(),
@@ -33,16 +33,13 @@ pub(crate) fn spawn_heartbeat_log() {
 
 /// Starts a background thread which garbage collects known log files. This is
 /// done on a best effort basis; errors are traced rather than being bubbled up
-/// and the thread will loop until the watchdog exits.
-///
-/// All of the functions called here must be deterministic because there may be
-/// multiple watchdogs running for the same environment log dir.
-pub(crate) fn spawn_logs_gc_threads(dir: impl AsRef<Path>) {
+/// and the thread will loop until the executive exits.
+pub(super) fn spawn_logs_gc_threads(dir: impl AsRef<Path>) {
     let dir = dir.as_ref().to_path_buf();
     spawn(move || {
         loop {
             gc_logs_executive(&dir, KEEP_EXECUTIVE_DAYS)
-                .unwrap_or_else(|err| error!(%err, "failed to delete watchdog logs"));
+                .unwrap_or_else(|err| error!(%err, "failed to delete executive logs"));
             gc_logs_per_process(&dir, "services.*.log", KEEP_LAST_N_PROCESSES)
                 .unwrap_or_else(|err| error!(%err, "failed to delete services logs"));
             gc_logs_per_process(
@@ -52,7 +49,7 @@ pub(crate) fn spawn_logs_gc_threads(dir: impl AsRef<Path>) {
             )
             .unwrap_or_else(|err| error!(%err, "failed to delete upgrade-check logs"));
 
-            std::thread::sleep(WATCHDOG_GC_INTERVAL);
+            std::thread::sleep(EXECUTIVE_GC_INTERVAL);
         }
     });
 }

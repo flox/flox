@@ -53,8 +53,7 @@ pre-commit run -a              # Run all linters
 | `flox` | Main CLI binary, command implementations |
 | `flox-rust-sdk` | Core SDK: data structures, models, providers |
 | `flox-core` | Low-level utilities (activations, paths, versions) |
-| `flox-activations` | Environment activation binaries |
-| `flox-watchdog` | Process monitoring for environments |
+| `flox-activations` | Environment activation binaries and process monitoring |
 | `catalog-api-v1` | Catalog API client (generated from OpenAPI) |
 | `flox-test-utils` | Shared test helpers |
 | `mk_data` | Test data generator |

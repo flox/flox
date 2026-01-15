@@ -1,3 +1,8 @@
+//! Executive monitoring loop for activation lifecycle management.
+//!
+//! This module monitors activation processes and performs cleanup when all
+//! processes have terminated.
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::AtomicBool;
@@ -7,21 +12,13 @@ use std::{env, fs};
 use anyhow::{Context, Result, bail};
 use flox_core::activations::{activation_state_dir_path, read_activations_json, state_json_path};
 use flox_core::traceable_path;
-use logger::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::libc::{SIGCHLD, SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
-use process::{LockedActivationState, PidWatcher, WaitResult};
 use signal_hook::iterator::Signals;
 use tracing::{debug, error, info, instrument};
 
-use crate::process::Watcher;
-
-mod logger;
-mod process;
-pub mod reaper;
-// TODO: Re-enable sentry after fixing OpenSSL dependency issues
-// mod sentry;
-// pub use sentry::init_sentry;
+use super::log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
+use super::watcher::{LockedActivationState, PidWatcher, WaitResult, Watcher};
 
 type Error = anyhow::Error;
 
@@ -30,7 +27,7 @@ pub static PROCESS_COMPOSE_BIN: LazyLock<String> = LazyLock::new(|| {
 });
 
 #[derive(Debug, Clone)]
-pub struct Cli {
+pub struct Args {
     /// The path to the .flox directory
     pub dot_flox_path: PathBuf,
 
@@ -47,8 +44,8 @@ pub struct Cli {
     pub log_dir: PathBuf,
 }
 
-#[instrument("watchdog", err(Debug), skip_all)]
-pub fn run(args: Cli) -> Result<(), Error> {
+#[instrument("monitoring", err(Debug), skip_all)]
+pub fn run(args: Args) -> Result<(), Error> {
     let span = tracing::Span::current();
     span.record("flox_env", traceable_path(&args.flox_env));
     span.record("runtime_dir", traceable_path(&args.runtime_dir));
@@ -56,7 +53,8 @@ pub fn run(args: Cli) -> Result<(), Error> {
     span.record("log_dir", traceable_path(&args.log_dir));
     debug!("starting");
 
-    ensure_process_group_leader().context("failed to ensure watchdog is detached from terminal")?;
+    ensure_process_group_leader()
+        .context("failed to ensure executive is detached from terminal")?;
 
     // Set the signal handlers
     let should_clean_up = Arc::new(AtomicBool::new(false));
@@ -79,8 +77,8 @@ pub fn run(args: Cli) -> Result<(), Error> {
 }
 
 /// Function to be used for unit tests that doesn't do weird process stuff
-fn run_inner(
-    args: Cli,
+pub(super) fn run_inner(
+    args: Args,
     should_terminate: Arc<AtomicBool>,
     should_clean_up: Arc<AtomicBool>,
     should_reap: Signals,
@@ -106,7 +104,7 @@ fn run_inner(
     spawn_logs_gc_threads(args.log_dir);
     info!(
         this_pid = nix::unistd::getpid().as_raw(),
-        "watchdog is on duty"
+        "executive is on duty"
     );
 
     match watcher.wait_for_termination() {
@@ -130,7 +128,7 @@ fn run_inner(
             info!("running cleanup after error");
             let (activations_json, lock) = read_activations_json(&state_json_path)?;
             let Some(activations) = activations_json else {
-                bail!("watchdog shouldn't be running when activations.json doesn't exist");
+                bail!("executive shouldn't be running when state.json doesn't exist");
             };
             let _ = cleanup(
                 (activations, lock),
@@ -144,9 +142,8 @@ fn run_inner(
     Ok(())
 }
 
-// If the activation for a watchdog gets removed from the registry as stale by a different watchdog,
-// multiple watchdogs could perform cleanup.
-// The following can be run multiple times without issue.
+/// Shutdown `process-compose` if running and remove all activation state.
+/// To be called when there are no longer any PIDs attached.
 fn cleanup(
     locked_activations: LockedActivationState,
     socket_path: impl AsRef<Path>,
@@ -216,12 +213,12 @@ fn process_compose_down(socket_path: impl AsRef<Path>) -> Result<()> {
     })
 }
 
-/// We want to make sure that the watchdog is detached from the terminal in case it sends
+/// We want to make sure that the executive is detached from the terminal in case it sends
 /// any signals to the activation. A terminal sends signals to all processes in a process group,
-/// and we want to make sure that the watchdog is in its own process group to avoid receiving any
+/// and we want to make sure that the executive is in its own process group to avoid receiving any
 /// signals intended for the shell.
 ///
-/// From local testing I haven't been able to deliver signals to the watchdog by sending signals to
+/// From local testing I haven't been able to deliver signals to the executive by sending signals to
 /// the activation, so this is more of a "just in case" measure.
 fn ensure_process_group_leader() -> Result<(), Error> {
     let pid = getpid();
@@ -243,8 +240,8 @@ mod test {
     use flox_core::activate::mode::ActivateMode;
     use flox_core::activations::test_helpers::write_activation_state;
     use flox_core::activations::{ActivationState, StartOrAttachResult};
-    use process::test::{shutdown_flags, start_process, stop_process};
 
+    use super::super::watcher::test::{shutdown_flags, start_process, stop_process};
     use super::*;
 
     #[test]
@@ -278,7 +275,7 @@ mod test {
 
         stop_process(proc);
 
-        let cli = Cli {
+        let args = Args {
             dot_flox_path: dot_flox_path.clone(),
             flox_env: dot_flox_path.clone(),
             runtime_dir: runtime_dir.to_path_buf(),
@@ -287,7 +284,7 @@ mod test {
         };
 
         let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();
-        run_inner(cli, terminate_flag, cleanup_flag, reap_flag).unwrap();
+        run_inner(args, terminate_flag, cleanup_flag, reap_flag).unwrap();
 
         // Verify state directory is completely removed after cleanup
         assert!(
