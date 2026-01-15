@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::Args;
 use flox_core::activate::context::ActivateCtx;
+use log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::sys::signal::Signal::SIGUSR1;
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
@@ -91,12 +92,14 @@ impl ExecutiveArgs {
             unreachable!("flox_services_socket must be set in activation context");
         };
 
+        spawn_heartbeat_log();
+        spawn_logs_gc_threads(log_dir);
+
         let args = monitoring::Args {
             dot_flox_path: context.attach_ctx.dot_flox_path.clone(),
             flox_env: context.attach_ctx.env.clone().into(),
             runtime_dir: context.attach_ctx.flox_runtime_dir.clone().into(),
             socket_path: socket_path.into(),
-            log_dir: log_dir.into(),
         };
         debug!(?args, "starting monitoring loop");
         monitoring::run(args)
