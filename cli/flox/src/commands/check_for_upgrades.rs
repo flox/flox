@@ -70,12 +70,22 @@ impl CheckForUpgrades {
         }
 
         let mut environment = self.environment.into_concrete_environment(&flox, None)?;
-        update_remote_environment_state(&flox, &environment)?;
-        check_for_package_upgrades(
+        let check_exit_branch = check_for_package_upgrades(
             &flox,
             &mut environment,
             Duration::seconds(self.check_timeout),
         )?;
+        match check_exit_branch {
+            ExitBranch::Checked => update_remote_environment_state(&flox, &environment)?,
+            // `check_exit_branch` determined,
+            // that we are already concurrently checking for updates (LockTaken)
+            // or we have `AlreadyChecked` for updates recently (within self.check_timeout)
+            // and there have been no local changes (to the lockfile).
+            //
+            // Use either case, use this to throttle environment fetches.
+            ExitBranch::LockTaken | ExitBranch::AlreadyChecked => {},
+        }
+
         Ok(())
     }
 }
