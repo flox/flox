@@ -15,12 +15,18 @@ flox-init - initialize a Flox environment
 flox [<general-options>] init
      [-n <name>]
      [-d <path>]
+     [-b]
      [--auto-setup]
+     [--no-auto-setup]
+
+flox [<general-options>] init
+     [-r <owner/name>]
+     [-b]
 ```
 
 # DESCRIPTION
 
-Create a new empty environment in the current directory.
+Create a new empty environment in the current directory or on FloxHub.
 
 The name of the environment will be the basename of the current directory
 or `default` if the current directory is `$HOME`.
@@ -42,9 +48,20 @@ These suggestions can be taken without prompting by passing `--auto-setup`.
 The suggestions can be accepted but then edited using `flox edit`.
 Currently, suggestions are made for Python and Nodejs.
 
+With `--reference` Flox will create a FloxHub environment which can
+subsequently be used by other commands using the `--reference` flag.
+When creating FloxHub environments Flox _will not_ run any setup hooks based
+on the current directory.
+
+
 # OPTIONS
 
-## Init Options
+## Common Init Options
+
+`--bare`
+:   Set up the environment with the emptiest possible manifest.
+
+## Options to initialize a local environment
 
 `-n <name>`, `--name <name>`
 :   What to name the new environment (default: current directory).
@@ -56,6 +73,17 @@ Currently, suggestions are made for Python and Nodejs.
 :   Apply Flox recommendations for the environment based on what languages are
     being used in the containing directory.
 
+`--no-auto-setup`
+:   Don't auto-detect language support for a project or make suggestions.
+
+## Options to initialize an environment on FloxHub
+
+`-r <owner>/<name>`, `--reference <owner>/<name>`
+:   The environment reference for the FloxHub Environment to be created.
+    User needs write access to `<owner>`, and an environment with the same
+    `<name>` must not already exist.
+
+
 ```{.include}
 ./include/general-options.md
 ```
@@ -63,4 +91,3 @@ Currently, suggestions are made for Python and Nodejs.
 # SEE ALSO
 [`flox-activate(1)`](./flox-activate.md),
 [`flox-install(1)`](./flox-install.md),
-
