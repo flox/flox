@@ -45,9 +45,6 @@ pub struct Cli {
 
     /// The directory to store and garbage collect logs
     pub log_dir: PathBuf,
-
-    /// Disable metric reporting
-    pub disable_metrics: bool,
 }
 
 #[instrument("watchdog", err(Debug), skip_all)]
@@ -287,7 +284,6 @@ mod test {
             runtime_dir: runtime_dir.to_path_buf(),
             socket_path: PathBuf::from("/does_not_exist"),
             log_dir: log_dir.to_path_buf(),
-            disable_metrics: true,
         };
 
         let (terminate_flag, cleanup_flag, reap_flag) = shutdown_flags();

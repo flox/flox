@@ -1,10 +1,9 @@
+use std::fs;
 use std::path::PathBuf;
-use std::{env, fs};
 
 use anyhow::{Context, Result};
 use clap::Args;
 use flox_core::activate::context::ActivateCtx;
-use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 #[cfg(target_os = "linux")]
 use flox_watchdog::reaper::linux::SubreaperGuard;
 use nix::sys::signal::Signal::SIGUSR1;
@@ -85,12 +84,12 @@ impl ExecutiveArgs {
             runtime_dir: context.attach_ctx.flox_runtime_dir.clone().into(),
             socket_path: socket_path.into(),
             log_dir: log_dir.into(),
-            disable_metrics: env::var(FLOX_DISABLE_METRICS_VAR).is_ok(),
         };
 
         // TODO: Enable earlier in `flox-activations` rather than just when detached?
         // TODO: Re-enable sentry after fixing OpenSSL dependency issues
-        // let _sentry_guard = (!watchdog.disable_metrics).then(flox_watchdog::init_sentry);
+        // let disable_metrics = env::var(FLOX_DISABLE_METRICS_VAR).is_ok();
+        // let _sentry_guard = (!disable_metrics).then(flox_watchdog::init_sentry);
 
         debug!(watchdog = ?watchdog, "starting watchdog");
         flox_watchdog::run(watchdog)
