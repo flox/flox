@@ -12,7 +12,6 @@ use anyhow::{Context, Result, bail};
 use flox_core::activations::{activation_state_dir_path, read_activations_json, state_json_path};
 use flox_core::traceable_path;
 use nix::libc::{SIGCHLD, SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
-use nix::unistd::{getpgid, getpid, setsid};
 use signal_hook::iterator::Signals;
 use tracing::{debug, error, info, instrument};
 
@@ -43,9 +42,6 @@ pub fn run(args: Args) -> Result<(), Error> {
     span.record("runtime_dir", traceable_path(&args.runtime_dir));
     span.record("socket", traceable_path(&args.socket_path));
     debug!("starting");
-
-    ensure_process_group_leader()
-        .context("failed to ensure executive is detached from terminal")?;
 
     // Set the signal handlers
     let should_clean_up = Arc::new(AtomicBool::new(false));
@@ -169,28 +165,6 @@ fn cleanup(
 
     info!("finished cleanup");
 
-    Ok(())
-}
-
-/// We want to make sure that the executive is detached from the terminal in case it sends
-/// any signals to the activation. A terminal sends signals to all processes in a process group,
-/// and we want to make sure that the executive is in its own process group to avoid receiving any
-/// signals intended for the shell.
-///
-/// From local testing I haven't been able to deliver signals to the executive by sending signals to
-/// the activation, so this is more of a "just in case" measure.
-fn ensure_process_group_leader() -> Result<(), Error> {
-    let pid = getpid();
-    // Trivia:
-    // You can't create a new session if you're already a session leader, the reason being that
-    // the other processes in the group aren't automatically moved to the new session. You're supposed
-    // to have this invariant: all processes in a process group share the same controlling terminal.
-    // If you were able to create a new session as session leader and leave behind the other processes
-    // in the group in the old session, it would be possible for processes in this group to be in two
-    // different sessions and therefore have two different controlling terminals.
-    if pid != getpgid(None).context("failed to get process group leader")? {
-        setsid().context("failed to create new session")?;
-    }
     Ok(())
 }
 

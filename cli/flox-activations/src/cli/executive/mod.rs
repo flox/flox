@@ -7,7 +7,7 @@ use flox_core::activate::context::ActivateCtx;
 use log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::sys::signal::Signal::SIGUSR1;
 use nix::sys::signal::kill;
-use nix::unistd::Pid;
+use nix::unistd::{Pid, getpgid, getpid, setsid};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span};
 
@@ -58,6 +58,10 @@ impl ExecutiveArgs {
         #[cfg(target_os = "linux")]
         let _subreaper_guard = SubreaperGuard::new()?;
 
+        // Ensure the executive is detached from the terminal
+        ensure_process_group_leader()
+            .context("failed to ensure executive is detached from terminal")?;
+
         // Signal the parent that the executive is ready
         debug!("sending SIGUSR1 to parent {}", parent_pid);
         kill(Pid::from_raw(parent_pid), SIGUSR1)?;
@@ -104,4 +108,28 @@ impl ExecutiveArgs {
         debug!(?args, "starting monitoring loop");
         monitoring::run(args)
     }
+}
+
+/// Ensures the executive is detached from the terminal by becoming a process group leader.
+///
+/// We want to make sure that the executive is detached from the terminal in case it sends
+/// any signals to the activation. A terminal sends signals to all processes in a process group,
+/// and we want to make sure that the executive is in its own process group to avoid receiving any
+/// signals intended for the shell.
+///
+/// From local testing I haven't been able to deliver signals to the executive by sending signals to
+/// the activation, so this is more of a "just in case" measure.
+fn ensure_process_group_leader() -> Result<(), anyhow::Error> {
+    let pid = getpid();
+    // Trivia:
+    // You can't create a new session if you're already a session leader, the reason being that
+    // the other processes in the group aren't automatically moved to the new session. You're supposed
+    // to have this invariant: all processes in a process group share the same controlling terminal.
+    // If you were able to create a new session as session leader and leave behind the other processes
+    // in the group in the old session, it would be possible for processes in this group to be in two
+    // different sessions and therefore have two different controlling terminals.
+    if pid != getpgid(None).context("failed to get process group leader")? {
+        setsid().context("failed to create new session")?;
+    }
+    Ok(())
 }
