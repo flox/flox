@@ -772,8 +772,20 @@ where
         let installable = {
             let locked_url = &locked.locked_installable.locked_url;
             let attr_path = &locked.locked_installable.locked_flake_attr_path;
+            let outputs = {
+                let requested_outputs = locked
+                    .locked_installable
+                    .requested_outputs_to_install
+                    .as_ref();
+                let package_outputs_to_install =
+                    locked.locked_installable.outputs_to_install.as_ref();
+                requested_outputs
+                    .or(package_outputs_to_install)
+                    .map(|outputs| outputs.join(","))
+                    .unwrap_or("*".to_string())
+            };
 
-            format!("{}#{}^*", locked_url, attr_path)
+            format!("{locked_url}#{attr_path}^{outputs}")
         };
 
         let _span = info_span!(
