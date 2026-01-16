@@ -1,5 +1,5 @@
-//! This module uses platform specific mechanisms to determine when processes
-//! are runnable, zombies, or terminated.
+//! This module watches PIDs and uses platform specific mechanisms to determine
+//! when processes are runnable, zombies, or terminated.
 //!
 //! On Linux we read `/proc`. See the
 //! [man page](https://man7.org/linux/man-pages/man5/proc_pid_stat.5.html) for
@@ -9,21 +9,13 @@
 //! API, but mostly for build-complexity reasons.
 
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use flox_core::activations::{ActivationState, read_activations_json, write_activations_json};
 use flox_core::proc_status::pid_is_running;
 use fslock::LockFile;
-use signal_hook::iterator::Signals;
 use time::OffsetDateTime;
 use tracing::trace;
-
-use super::reaper::reap_orphaned_children;
-/// How long to wait between watcher updates.
-pub const WATCHER_SLEEP_INTERVAL: Duration = Duration::from_millis(100);
 
 type Error = anyhow::Error;
 
@@ -32,77 +24,30 @@ type Error = anyhow::Error;
 /// TODO: there's probably a cleaner way to do this
 pub type LockedActivationState = (ActivationState, LockFile);
 
-#[derive(Debug)]
-pub enum WaitResult {
-    CleanUp(LockedActivationState),
-    Terminate,
-}
-
-pub trait Watcher {
-    /// Block while the watcher waits for a termination or cleanup event.
-    fn wait_for_termination(&mut self) -> Result<WaitResult, Error>;
-    /// Instructs the watcher to update the list of PIDs that it's watching
-    /// by reading the environment registry (for now).
-    fn cleanup_pids(&mut self) -> Result<Option<WaitResult>, Error>;
-    /// Writes the current activation PIDs back out to `state.json`
-    /// while holding a lock on it.
-    fn update_activations_file(
-        &self,
-        activations: ActivationState,
-        lock: LockFile,
-    ) -> Result<(), Error>;
-}
-
+/// Watches PIDs attached to an activation and updates state.json when they terminate.
 #[derive(Debug)]
 pub struct PidWatcher {
     state_json_path: PathBuf,
     dot_flox_path: PathBuf,
     runtime_dir: PathBuf,
-    should_terminate_flag: Arc<AtomicBool>,
-    should_reap_signals: Signals,
 }
 
 impl PidWatcher {
-    /// Creates a new watcher that uses platform-specific mechanisms to wait
-    /// for activation processes to terminate.
-    pub fn new(
-        state_json_path: PathBuf,
-        dot_flox_path: PathBuf,
-        runtime_dir: PathBuf,
-        should_terminate_flag: Arc<AtomicBool>,
-        should_reap_signals: Signals,
-    ) -> Self {
+    /// Creates a new watcher for the given activation.
+    pub fn new(state_json_path: PathBuf, dot_flox_path: PathBuf, runtime_dir: PathBuf) -> Self {
         Self {
             state_json_path,
             dot_flox_path,
             runtime_dir,
-            should_terminate_flag,
-            should_reap_signals,
-        }
-    }
-}
-
-impl Watcher for PidWatcher {
-    fn wait_for_termination(&mut self) -> Result<WaitResult, Error> {
-        loop {
-            if let Some(exit) = self.cleanup_pids()? {
-                return Ok(exit);
-            }
-            if self
-                .should_terminate_flag
-                .load(std::sync::atomic::Ordering::SeqCst)
-            {
-                return Ok(WaitResult::Terminate);
-            }
-            for _ in self.should_reap_signals.pending() {
-                reap_orphaned_children();
-            }
-            std::thread::sleep(WATCHER_SLEEP_INTERVAL);
         }
     }
 
     /// Reload and check the list of PIDs for an activation.
-    fn cleanup_pids(&mut self) -> Result<Option<WaitResult>, Error> {
+    ///
+    /// Returns `Some(LockedActivationState)` if all PIDs have terminated and
+    /// cleanup should proceed.
+    /// Returns `None` if there are still active PIDs.
+    pub fn cleanup_pids(&mut self) -> Result<Option<LockedActivationState>, Error> {
         let (activations_json, lock) = read_activations_json(&self.state_json_path)?;
         let Some(mut activations) = activations_json else {
             bail!("executive shouldn't be running when state.json doesn't exist");
@@ -114,8 +59,7 @@ impl Watcher for PidWatcher {
         // If there are no more attached PIDs for any start, return early and
         // cleanup the entirety of the activation state directory
         if activations.attached_pids_is_empty() {
-            let res = WaitResult::CleanUp((activations, lock));
-            return Ok(Some(res));
+            return Ok(Some((activations, lock)));
         }
 
         // Cleanup empty start IDs
@@ -154,7 +98,7 @@ impl Watcher for PidWatcher {
 pub mod test {
     use std::collections::BTreeMap;
     use std::process::{Child, Command};
-    use std::sync::atomic::Ordering;
+    use std::time::Duration;
 
     use flox_core::activate::mode::ActivateMode;
     use flox_core::activations::test_helpers::{read_activation_state, write_activation_state};
@@ -180,15 +124,6 @@ pub mod test {
     pub fn stop_process(mut child: Child) {
         child.kill().expect("failed to kill");
         child.wait().expect("failed to wait");
-    }
-
-    /// Makes shutdown flags to mimic those used by the executive
-    pub fn shutdown_flags() -> (Arc<AtomicBool>, Signals) {
-        const NO_SIGNALS: &[i32] = &[];
-        (
-            Arc::new(AtomicBool::new(false)),
-            Signals::new(NO_SIGNALS).expect("failed to create Signals"),
-        )
     }
 
     /// Wait some attempts for the process to reach the desired state
@@ -227,7 +162,7 @@ pub mod test {
     }
 
     #[test]
-    fn terminates_when_all_pids_terminate() {
+    fn cleanup_returns_when_all_pids_terminate() {
         let runtime_dir = tempfile::tempdir().unwrap();
         let dot_flox_path = PathBuf::from(".flox");
         let flox_env = dot_flox_path.join("run/test");
@@ -252,29 +187,25 @@ pub mod test {
 
         let state_json_path =
             flox_core::activations::state_json_path(runtime_dir.path(), &dot_flox_path);
-        let (terminate_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
             state_json_path,
             dot_flox_path.clone(),
             runtime_dir.path().to_path_buf(),
-            terminate_flag,
-            reap_flag,
         );
-        let barrier = Arc::new(std::sync::Barrier::new(2));
-        let wait_result = std::thread::scope(move |s| {
-            let b_clone = barrier.clone();
-            let procs_handle = s.spawn(move || {
-                b_clone.wait();
-                stop_process(proc1);
-                stop_process(proc2);
-            });
-            barrier.wait();
-            let watcher_handle = s.spawn(move || watcher.wait_for_termination().unwrap());
-            let wait_result = watcher_handle.join().unwrap();
-            let _ = procs_handle.join(); // should already have terminated
-            wait_result
-        });
-        assert!(matches!(wait_result, WaitResult::CleanUp(_)));
+
+        // Terminate both processes
+        stop_process(proc1);
+        stop_process(proc2);
+
+        let (state, _lock) = watcher
+            .cleanup_pids()
+            .unwrap()
+            .expect("should return cleanup result");
+        assert_eq!(
+            state.attachments_by_start_id(),
+            BTreeMap::new(),
+            "should return empty state for cleanup"
+        );
     }
 
     /// When an attachment to a start exits, its PID is removed if its the first
@@ -315,36 +246,36 @@ pub mod test {
         stop_process(proc1);
 
         let state_json_path = state_json_path(runtime_dir.path(), &dot_flox_path);
-        let (terminate_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
             state_json_path,
             dot_flox_path.clone(),
             runtime_dir.path().to_path_buf(),
-            terminate_flag,
-            reap_flag,
         );
 
-        std::thread::scope(move |s| {
-            let watcher_thread = s.spawn(move || watcher.wait_for_termination().unwrap());
-            // This wait is just to let the watcher update its watchlist
-            // and realize that one of the processes has exited.
-            std::thread::sleep(2 * WATCHER_SLEEP_INTERVAL);
+        // Call cleanup_pids to process the terminated PID
+        let result = watcher.cleanup_pids().unwrap();
+        assert!(result.is_none(), "should not cleanup while pid2 is running");
 
-            // Check state while proc2 is still running
-            let intermediate_state = read_activation_state(runtime_dir.path(), &dot_flox_path);
-            let intermediate_attachments = intermediate_state.attachments_by_start_id();
-            assert_eq!(
-                BTreeMap::from([(start_id.clone(), vec![(pid2, None)])]),
-                intermediate_attachments,
-                "only pid2 should be running and present after proc1 terminated"
-            );
+        // Check state while proc2 is still running
+        let intermediate_state = read_activation_state(runtime_dir.path(), &dot_flox_path);
+        let intermediate_attachments = intermediate_state.attachments_by_start_id();
+        assert_eq!(
+            BTreeMap::from([(start_id.clone(), vec![(pid2, None)])]),
+            intermediate_attachments,
+            "only pid2 should be running and present after proc1 terminated"
+        );
 
-            // Clean up all extra processes and watcher
-            stop_process(proc2);
-            watcher_thread
-                .join()
-                .expect("watcher thread didn't exit cleanly");
-        });
+        // Clean up
+        stop_process(proc2);
+        let (state, _lock) = watcher
+            .cleanup_pids()
+            .unwrap()
+            .expect("should return cleanup result");
+        assert_eq!(
+            state.attachments_by_start_id(),
+            BTreeMap::new(),
+            "should return empty state for cleanup"
+        );
     }
 
     /// After all attachments to a start exit, start state directory is removed
@@ -399,79 +330,31 @@ pub mod test {
         assert!(state_dir_2.exists());
 
         let state_json_path = state_json_path(runtime_dir.path(), &dot_flox_path);
-        let (terminate_flag, reap_flag) = shutdown_flags();
         let mut watcher = PidWatcher::new(
             state_json_path,
             dot_flox_path.clone(),
             runtime_dir.path().to_path_buf(),
-            terminate_flag.clone(),
-            reap_flag,
         );
 
-        std::thread::scope(|s| {
-            let watcher_thread = s.spawn(move || watcher.wait_for_termination().unwrap());
+        // Terminate proc1 and call cleanup_pids
+        stop_process(proc1);
+        let result = watcher.cleanup_pids().unwrap();
+        assert!(result.is_none(), "should not cleanup while pid2 is running");
 
-            stop_process(proc1);
+        // Verify state_dir_1 has been removed but state_dir_2 still exists
+        assert!(!state_dir_1.exists(), "state directory 1 should be removed");
+        assert!(state_dir_2.exists(), "state directory 2 should still exist");
 
-            // Wait for watcher to process the termination
-            std::thread::sleep(2 * WATCHER_SLEEP_INTERVAL);
-
-            // Verify state_dir_1 has been removed but state_dir_2 still exists
-            assert!(!state_dir_1.exists(), "state directory 1 should be removed");
-            assert!(state_dir_2.exists(), "state directory 2 should still exist");
-
-            // Clean up all extra processes and watcher
-            terminate_flag.store(true, Ordering::SeqCst);
-            stop_process(proc2);
-            watcher_thread
-                .join()
-                .expect("watcher thread didn't exit cleanly");
-        });
-    }
-
-    #[test]
-    fn terminates_on_shutdown_flag() {
-        let runtime_dir = tempfile::tempdir().unwrap();
-        let dot_flox_path = PathBuf::from(".flox");
-        let flox_env = dot_flox_path.join("run/test");
-        let store_path = "store_path".to_string();
-
-        let proc = start_process();
-        let pid = proc.id() as i32;
-
-        // Create an ActivationState with one PID attached
-        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
-        let result = state.start_or_attach(pid, &store_path);
-        let StartOrAttachResult::Start { start_id, .. } = result else {
-            panic!("Expected Start")
-        };
-        state.set_ready(&start_id);
-
-        write_activation_state(runtime_dir.path(), &dot_flox_path, state);
-
-        let state_json_path = state_json_path(runtime_dir.path(), &dot_flox_path);
-        let (terminate_flag, reap_flag) = shutdown_flags();
-        let mut watcher = PidWatcher::new(
-            state_json_path,
-            dot_flox_path.clone(),
-            runtime_dir.path().to_path_buf(),
-            terminate_flag.clone(),
-            reap_flag,
+        // Clean up
+        stop_process(proc2);
+        let (state, _lock) = watcher
+            .cleanup_pids()
+            .unwrap()
+            .expect("should return cleanup result");
+        assert_eq!(
+            state.attachments_by_start_id(),
+            BTreeMap::new(),
+            "should return empty state for cleanup"
         );
-        let barrier = Arc::new(std::sync::Barrier::new(2));
-        let wait_result = std::thread::scope(move |s| {
-            let b_clone = barrier.clone();
-            let flag_handle = s.spawn(move || {
-                b_clone.wait();
-                terminate_flag.store(true, std::sync::atomic::Ordering::SeqCst);
-            });
-            barrier.wait();
-            let watcher_handle = s.spawn(move || watcher.wait_for_termination().unwrap());
-            let wait_result = watcher_handle.join().unwrap();
-            let _ = flag_handle.join(); // should already have terminated
-            wait_result
-        });
-        stop_process(proc);
-        assert!(matches!(wait_result, WaitResult::Terminate));
     }
 }
