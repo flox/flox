@@ -61,7 +61,7 @@ flowchart TB
     ErrorMaxRetries["Error: Max retries exceeded (6s)"]
   end
 
-  subgraph executive["Executive Spawning & Signaling"]
+  subgraph executive_spawning["Executive Spawning & Signaling"]
     SpawnExec["Spawn flox-activations executive<br>as detached process"]
     ExecSetSupreaper["Executive: Set as subreaper (Linux)"]
     ExecSignal["Executive: Send SIGUSR1 to parent"]
