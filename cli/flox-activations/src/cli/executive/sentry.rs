@@ -41,7 +41,7 @@ pub fn init_sentry() -> Option<ClientInitGuard> {
 
         // https://docs.sentry.io/platforms/rust/configuration/releases/
         release: Some(Cow::Owned(format!(
-            "flox-watchdog@{}",
+            "flox-activations::executive@{}",
             &*FLOX_VERSION_STRING
         ))),
 

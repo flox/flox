@@ -176,9 +176,9 @@ common_file_teardown() {
 teardown_file() { common_file_teardown; }
 
 # Wait for all activations started by the current test to be cleaned up by the
-# executive (watchdog). Detects activations from the per-test `FLOX_CACHE_DIR`
+# executive. Detects activations from the per-test `FLOX_CACHE_DIR`
 # that is created by `setup_isolated_flox`. This is safe to call before the
-# executive/watchdog has started. The `project_dir` argument is only used to
+# executive has started. The `project_dir` argument is only used to
 # report logs.
 #
 # This is primarily used in `teardown()` to prevent us leaving stray
@@ -192,7 +192,7 @@ teardown_file() { common_file_teardown; }
 wait_for_activations() {
   project_dir="${1?}"
   if [ -z "$project_dir" ]; then
-    echo "ERROR: cannot wait for watchdogs with empty project_dir" >&3
+    echo "ERROR: cannot wait for executives with empty project_dir" >&3
     return 1
   fi
 

@@ -150,13 +150,13 @@ setup() {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 }
 teardown() {
-  # fifo is in PROJECT_DIR and keeps watchdog running,
+  # fifo is in PROJECT_DIR and keeps executive running,
   # so cat_teardown_fifo must be run before wait_for_activations and
   # project_teardown
   cat_teardown_fifo
   # Cleaning up the `BATS_TEST_TMPDIR` occasionally fails,
   # because of an 'env-registry.json' that gets concurrently written
-  # by the watchdog as the activation terminates.
+  # by the executive as the activation terminates.
   if [ -n "${PROJECT_DIR:-}" ]; then
     # Not all tests call project_setup
     wait_for_activations "$PROJECT_DIR" || return 1
@@ -3268,7 +3268,7 @@ EOF
   assert_success
   assert_output "first_activation"
 
-  # Teardown the first activation and wait for the watchdog to clean it up
+  # Teardown the first activation and wait for the executive to clean it up
   cat "$TEARDOWN_FIFO"
   unset TEARDOWN_FIFO # otherwise teardown will hang
   wait_for_activations "$PROJECT_DIR"
@@ -3408,7 +3408,7 @@ PIDs of the running activations: ${ACTIVATION_PID}"
 
 # ---------------------------------------------------------------------------- #
 
-# Sub-commands like `flox-activations` and `flox-watchdog` depend on this.
+# Sub-commands like `flox-activations` depend on this.
 @test "activate: sets FLOX_DISABLE_METRICS from config" {
   project_setup
 

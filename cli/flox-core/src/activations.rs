@@ -24,7 +24,7 @@ type Pid = i32;
 pub enum RunningProcesses {
     /// One or more shell processes are attached to the activation
     Attachments(Vec<Pid>),
-    /// No attachments, but the executive/watchdog process is running
+    /// No attachments, but the executive process is running
     Executive(Pid),
 }
 

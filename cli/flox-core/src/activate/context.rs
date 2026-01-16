@@ -79,7 +79,7 @@ pub struct ActivateCtx {
 
     pub invocation_type: Option<InvocationType>,
 
-    /// Whether to run the monitoring loop (aka. watchdog)
+    /// Whether to run the monitoring loop
     pub run_monitoring_loop: bool,
 
     /// Whether to clean up the context file after reading it.

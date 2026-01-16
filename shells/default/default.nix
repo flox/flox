@@ -147,8 +147,7 @@ mkShell (
       define_dev_env_var MANUALLY_GENERATED "''${REPO_ROOT}/test_data/manually_generated";
 
       # Add all internal rust crates to the PATH.
-      # That's `flox` itself as well as the `flox-watchdog`
-      # and `flox-activations` subsystems.
+      # That's `flox` itself as well as the `flox-activations` subsystem.
       export PATH="''${REPO_ROOT}/cli/target/debug":$PATH;
       echo -n "''${REPO_ROOT}/cli/target/debug:" >> "$REPO_ROOT/build/.PATH";
 

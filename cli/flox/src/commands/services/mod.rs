@@ -295,7 +295,7 @@ fn processes_by_name_or_default_to_all<'a>(
 }
 
 /// Note that this must be called within an existing activation, otherwise it
-/// will leave behind a process-compose since it doesn't start a watchdog.
+/// will leave behind a process-compose since it doesn't start an executive.
 pub async fn start_services_with_new_process_compose(
     config: Config,
     flox: Flox,
