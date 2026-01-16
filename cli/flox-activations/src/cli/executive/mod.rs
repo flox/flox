@@ -1,7 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
@@ -13,10 +14,11 @@ use nix::libc::{SIGCHLD, SIGINT, SIGQUIT, SIGTERM};
 use nix::sys::signal::Signal::SIGUSR1;
 use nix::sys::signal::kill;
 use nix::unistd::{Pid, getpgid, getpid, setsid};
+use reaper::reap_orphaned_children;
 use serde::{Deserialize, Serialize};
 use signal_hook::iterator::Signals;
 use tracing::{debug, debug_span, error, info, instrument};
-use watcher::{LockedActivationState, PidWatcher, WaitResult, Watcher};
+use watcher::{LockedActivationState, PidWatcher};
 
 use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
 use crate::logger;
@@ -30,6 +32,9 @@ mod watcher;
 
 #[cfg(target_os = "linux")]
 use reaper::linux::SubreaperGuard;
+
+/// How long to wait between monitoring loop iterations.
+const MONITORING_LOOP_INTERVAL: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutiveCtx {
@@ -69,6 +74,9 @@ impl ExecutiveArgs {
         ensure_process_group_leader()
             .context("failed to ensure executive is detached from terminal")?;
 
+        // Set up signal handlers early. All signals registered together.
+        let signals = SignalHandlers::new()?;
+
         // Signal the parent that the executive is ready
         debug!("sending SIGUSR1 to parent {}", parent_pid);
         kill(Pid::from_raw(parent_pid), SIGUSR1)?;
@@ -106,9 +114,29 @@ impl ExecutiveArgs {
         spawn_heartbeat_log();
         spawn_logs_gc_threads(log_dir);
 
-        // Set up signal handlers just before entering the monitoring loop.
-        // Doing this too early could prevent the executive from being killed if
-        // it gets stuck.
+        debug!("starting monitoring loop");
+        run_monitoring_loop(
+            context.attach_ctx.dot_flox_path,
+            context.attach_ctx.flox_runtime_dir.into(),
+            socket_path.into(),
+            signals,
+        )
+    }
+}
+
+/// Handles signal registration and checking for the executive process.
+///
+/// All signals are registered together early in `handle()`. SIGKILL is always
+/// available as a fallback if the executive gets stuck during startup.
+#[derive(Debug)]
+pub struct SignalHandlers {
+    should_terminate: Arc<AtomicBool>,
+    should_reap: Signals,
+}
+
+impl SignalHandlers {
+    /// Register all signal handlers.
+    pub fn new() -> Result<Self> {
         let should_terminate = Arc::new(AtomicBool::new(false));
         signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate))
             .context("failed to set SIGINT signal handler")?;
@@ -116,20 +144,43 @@ impl ExecutiveArgs {
             .context("failed to set SIGTERM signal handler")?;
         signal_hook::flag::register(SIGQUIT, Arc::clone(&should_terminate))
             .context("failed to set SIGQUIT signal handler")?;
-        // This compliments the SubreaperGuard setup above.
-        // WARNING: You cannot reliably use Command::wait after we've entered the
-        // monitoring loop, including concurrent threads like GCing logs, because
-        // children will be reaped automatically.
+        // This complements the SubreaperGuard setup.
+        // WARNING: You cannot reliably use Command::wait after SignalHandlers is
+        // created, including concurrent threads like GCing logs, because children
+        // will be reaped automatically.
         let should_reap = Signals::new([SIGCHLD])?;
-
-        debug!("starting monitoring loop");
-        run_monitoring_loop(
-            context.attach_ctx.dot_flox_path,
-            context.attach_ctx.flox_runtime_dir.into(),
-            socket_path.into(),
+        Ok(Self {
             should_terminate,
             should_reap,
-        )
+        })
+    }
+
+    /// Check if a termination signal has been received.
+    pub fn should_terminate(&self) -> bool {
+        self.should_terminate.load(Ordering::SeqCst)
+    }
+
+    /// Reap any children that have terminated since the last check.
+    pub fn reap_pending_children(&mut self) {
+        for _ in self.should_reap.pending() {
+            reap_orphaned_children();
+        }
+    }
+
+    /// Create SignalHandlers for testing without registering real signal handlers.
+    #[cfg(test)]
+    pub fn new_for_test() -> Result<Self> {
+        const NO_SIGNALS: &[i32] = &[];
+        Ok(Self {
+            should_terminate: Arc::new(AtomicBool::new(false)),
+            should_reap: Signals::new(NO_SIGNALS).context("failed to create Signals")?,
+        })
+    }
+
+    /// Trigger termination flag for testing.
+    #[cfg(test)]
+    pub fn trigger_termination(&self) {
+        self.should_terminate.store(true, Ordering::SeqCst);
     }
 }
 
@@ -163,8 +214,7 @@ fn run_monitoring_loop(
     dot_flox_path: PathBuf,
     runtime_dir: PathBuf,
     socket_path: PathBuf,
-    should_terminate: Arc<AtomicBool>,
-    should_reap: Signals,
+    mut signals: SignalHandlers,
 ) -> Result<()> {
     let state_json_path = state_json_path(&runtime_dir, &dot_flox_path);
 
@@ -172,8 +222,6 @@ fn run_monitoring_loop(
         state_json_path.clone(),
         dot_flox_path.clone(),
         runtime_dir.clone(),
-        should_terminate,
-        should_reap,
     );
 
     debug!(
@@ -182,44 +230,55 @@ fn run_monitoring_loop(
         "checked socket"
     );
 
-    match watcher.wait_for_termination() {
-        Ok(WaitResult::CleanUp(locked_activations)) => {
-            // Exit
-            info!("running cleanup after all PIDs terminated");
-            cleanup(
-                locked_activations,
-                &socket_path,
-                activation_state_dir_path(&runtime_dir, &dot_flox_path),
-            )
-            .context("cleanup failed")?;
-        },
-        Ok(WaitResult::Terminate) => {
-            // If we get a SIGINT/SIGTERM/SIGQUIT/SIGKILL we leave behind the activation in the registry,
+    loop {
+        // Check for terminated PIDs and clean up state
+        match watcher.cleanup_pids() {
+            Ok(None) => {
+                // Still have active PIDs, continue monitoring
+            },
+            Ok(Some(locked_activations)) => {
+                info!("running cleanup after all PIDs terminated");
+                cleanup_all(
+                    locked_activations,
+                    &socket_path,
+                    activation_state_dir_path(&runtime_dir, &dot_flox_path),
+                )
+                .context("cleanup failed")?;
+                return Ok(());
+            },
+            Err(err) => {
+                info!("running cleanup after error");
+                let (activations_json, lock) = read_activations_json(&state_json_path)?;
+                let Some(activations) = activations_json else {
+                    bail!("executive shouldn't be running when state.json doesn't exist");
+                };
+                let _ = cleanup_all(
+                    (activations, lock),
+                    &socket_path,
+                    activation_state_dir_path(&runtime_dir, &dot_flox_path),
+                );
+                bail!(err.context("failed while waiting for termination"))
+            },
+        }
+
+        // Check for termination signals
+        if signals.should_terminate() {
+            // If we get a SIGINT/SIGTERM/SIGQUIT we leave behind the activation in the registry,
             // but there's not much we can do about that because we don't know who sent us one of those
             // signals or why.
             bail!("received stop signal, exiting without cleanup");
-        },
-        Err(err) => {
-            info!("running cleanup after error");
-            let (activations_json, lock) = read_activations_json(&state_json_path)?;
-            let Some(activations) = activations_json else {
-                bail!("executive shouldn't be running when state.json doesn't exist");
-            };
-            let _ = cleanup(
-                (activations, lock),
-                &socket_path,
-                activation_state_dir_path(&runtime_dir, &dot_flox_path),
-            );
-            bail!(err.context("failed while waiting for termination"))
-        },
-    }
+        }
 
-    Ok(())
+        // Reap any orphaned children
+        signals.reap_pending_children();
+
+        std::thread::sleep(MONITORING_LOOP_INTERVAL);
+    }
 }
 
 /// Shutdown `process-compose` if running and remove all activation state.
 /// To be called when there are no longer any PIDs attached.
-fn cleanup(
+fn cleanup_all(
     locked_activations: LockedActivationState,
     socket_path: impl AsRef<Path>,
     activation_state_dir_path: impl AsRef<Path>,
@@ -264,11 +323,11 @@ mod test {
     use flox_core::activations::test_helpers::write_activation_state;
     use flox_core::activations::{ActivationState, StartOrAttachResult};
 
-    use super::watcher::test::{shutdown_flags, start_process, stop_process};
+    use super::watcher::test::{start_process, stop_process};
     use super::*;
 
     #[test]
-    fn cleanup_removes_state_directory() {
+    fn monitoring_loop_removes_state_on_cleanup() {
         let temp_dir = tempfile::tempdir().unwrap();
         let runtime_dir = temp_dir.path();
         let dot_flox_path = PathBuf::from(".flox");
@@ -297,13 +356,11 @@ mod test {
 
         stop_process(proc);
 
-        let (terminate_flag, reap_flag) = shutdown_flags();
         run_monitoring_loop(
             dot_flox_path.clone(),
             runtime_dir.to_path_buf(),
             PathBuf::from("/does_not_exist"),
-            terminate_flag,
-            reap_flag,
+            SignalHandlers::new_for_test().unwrap(),
         )
         .unwrap();
 
@@ -312,5 +369,61 @@ mod test {
             !activation_state_directory.exists(),
             "state directory should be removed after cleanup"
         );
+    }
+
+    #[test]
+    fn monitoring_loop_bails_on_termination_signal() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let runtime_dir = temp_dir.path();
+        let dot_flox_path = PathBuf::from(".flox");
+        let flox_env = dot_flox_path.join("run/test");
+        let store_path = "store_path".to_string();
+
+        let proc = start_process();
+        let pid = proc.id() as i32;
+
+        // Create an ActivationState with one PID attached
+        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
+        let result = state.start_or_attach(pid, &store_path);
+        let StartOrAttachResult::Start { start_id, .. } = result else {
+            panic!("Expected Start")
+        };
+        state.set_ready(&start_id);
+
+        // Write state to disk
+        write_activation_state(runtime_dir, &dot_flox_path, state);
+
+        let activation_state_directory = activation_state_dir_path(runtime_dir, &dot_flox_path);
+        assert!(
+            activation_state_directory.exists(),
+            "state directory should exist before monitoring loop"
+        );
+
+        // Create SignalHandlers and trigger termination before starting the loop
+        let signals = SignalHandlers::new_for_test().unwrap();
+        signals.trigger_termination();
+
+        let result = run_monitoring_loop(
+            dot_flox_path.clone(),
+            runtime_dir.to_path_buf(),
+            PathBuf::from("/does_not_exist"),
+            signals,
+        );
+
+        // Verify the loop exited with the expected error
+        let err = result.expect_err("should return error on termination signal");
+        assert!(
+            err.to_string().contains("received stop signal"),
+            "error should indicate stop signal was received: {err}"
+        );
+
+        // Verify cleanup did NOT occur - state directory should still exist
+        assert!(
+            activation_state_directory.exists(),
+            "state directory should NOT be removed when exiting due to termination signal"
+        );
+
+        // Clean up the process
+        stop_process(proc);
     }
 }
