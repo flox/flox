@@ -25,8 +25,9 @@ use crate::models::lockfile::{
     LockedPackageFlake,
     LockedPackageStorePath,
     Lockfile,
+    PackageToList,
 };
-use crate::models::manifest::typed::ActivateMode;
+use crate::models::manifest::typed::{ActivateMode, ManifestError, SelectedOutputs};
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::providers::auth::{catalog_auth_to_envs, store_needs_auth};
 use crate::providers::catalog::{CatalogClientError, StoreInfo};
@@ -1096,6 +1097,45 @@ impl CheckedStorePaths {
     /// Check whether a store path has been checked.
     fn checked(&self, path: impl AsRef<str>) -> bool {
         self.checked.contains(path.as_ref())
+    }
+}
+
+pub fn get_installed_outputs(package: &PackageToList) -> Result<Vec<String>, ManifestError> {
+    let (package_name, outputs, descriptor_outputs, outputs_to_install) = match package {
+        PackageToList::StorePath(_) => return Ok(vec![]),
+        PackageToList::Catalog(descriptor, locked) => (
+            &locked.install_id,
+            &locked.outputs,
+            &descriptor.outputs,
+            &locked.outputs_to_install,
+        ),
+        PackageToList::Flake(descriptor, locked) => (
+            &locked.install_id,
+            &locked.locked_installable.outputs,
+            &descriptor.outputs,
+            &locked.locked_installable.outputs_to_install,
+        ),
+    };
+    let all_outputs = outputs.keys().cloned().collect();
+
+    match descriptor_outputs {
+        Some(SelectedOutputs::All(_)) => Ok(all_outputs),
+        Some(SelectedOutputs::Specific(selected)) => {
+            let invalid_outputs: Vec<String> = selected
+                .iter()
+                .filter(|&o| !outputs.contains_key(o))
+                .cloned()
+                .collect();
+            if invalid_outputs.is_empty() {
+                Ok(selected.clone())
+            } else {
+                Err(ManifestError::InvalidOutputs(
+                    invalid_outputs,
+                    package_name.clone(),
+                ))
+            }
+        },
+        None => Ok(outputs_to_install.clone().unwrap_or(all_outputs)),
     }
 }
 
