@@ -7,11 +7,13 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
+use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     Environment,
     EnvironmentError,
     InstallationAttempt,
+    ManagedPointer,
     PathPointer,
 };
 use flox_rust_sdk::models::lockfile::{
@@ -128,7 +130,16 @@ impl Install {
         );
 
         // Ensure the user is logged in for the following remote operations
-        if let EnvironmentSelect::Remote(_) = self.environment {
+        if let EnvironmentSelect::Remote(ref env_ref) = self.environment
+            && !RemoteEnvironment::is_cached(
+                &flox,
+                &ManagedPointer::new(
+                    env_ref.owner().clone(),
+                    env_ref.name().clone(),
+                    &flox.floxhub,
+                ),
+            )
+        {
             ensure_floxhub_token(&mut flox).await?;
         }
 

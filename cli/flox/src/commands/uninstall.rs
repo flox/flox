@@ -1,7 +1,8 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{Environment, EnvironmentError};
+use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
+use flox_rust_sdk::models::environment::{Environment, EnvironmentError, ManagedPointer};
 use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{debug, info_span, instrument};
@@ -39,7 +40,16 @@ impl Uninstall {
         );
 
         // Ensure the user is logged in for the following remote operations
-        if let EnvironmentSelect::Remote(_) = self.environment {
+        if let EnvironmentSelect::Remote(ref env_ref) = self.environment
+            && !RemoteEnvironment::is_cached(
+                &flox,
+                &ManagedPointer::new(
+                    env_ref.owner().clone(),
+                    env_ref.name().clone(),
+                    &flox.floxhub,
+                ),
+            )
+        {
             ensure_floxhub_token(&mut flox).await?;
         };
 

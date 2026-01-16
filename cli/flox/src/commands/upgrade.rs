@@ -2,7 +2,8 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use crossterm::style::Stylize;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{Environment, SingleSystemUpgradeDiff};
+use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
+use flox_rust_sdk::models::environment::{Environment, ManagedPointer, SingleSystemUpgradeDiff};
 use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{info_span, instrument};
@@ -39,7 +40,16 @@ impl Upgrade {
         );
 
         // Ensure the user is logged in for the following remote operations
-        if let EnvironmentSelect::Remote(_) = self.environment {
+        if let EnvironmentSelect::Remote(ref env_ref) = self.environment
+            && !RemoteEnvironment::is_cached(
+                &flox,
+                &ManagedPointer::new(
+                    env_ref.owner().clone(),
+                    env_ref.name().clone(),
+                    &flox.floxhub,
+                ),
+            )
+        {
             ensure_floxhub_token(&mut flox).await?;
         };
 
