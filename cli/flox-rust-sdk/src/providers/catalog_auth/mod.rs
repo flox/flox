@@ -6,8 +6,8 @@
 //! - Default (no feature): Bearer token authentication only (no GSSAPI dependencies)
 //! - `catalog-auth-gssapi`: GSSAPI/Kerberos authentication
 
-use cfg_if::cfg_if;
 use reqwest::header::HeaderMap;
+use serde::{Deserialize, Serialize};
 
 use crate::providers::catalog::CatalogClientConfig;
 
@@ -21,19 +21,34 @@ pub trait AuthStrategy {
     fn add_auth_headers(header_map: &mut HeaderMap, config: &CatalogClientConfig);
 }
 
-// Conditionally compile authentication modules and type alias based on features
-cfg_if! {
-    if #[cfg(feature = "catalog-auth-gssapi")] {
-        mod gssapi;
-        use gssapi::GssapiAuthStrategy;
+// Always include bearer token strategy
+mod bearer_token;
+use bearer_token::BearerTokenAuthStrategy;
 
-        /// Type alias for build-time injection: GSSAPI authentication strategy
-        pub type CatalogAuthStrategy = GssapiAuthStrategy;
-    } else {
-        mod bearer_token;
-        use bearer_token::BearerTokenAuthStrategy;
+// Conditionally include GSSAPI strategy
+#[cfg(feature = "catalog-auth-gssapi")]
+mod gssapi;
+#[cfg(feature = "catalog-auth-gssapi")]
+use gssapi::GssapiAuthStrategy;
 
-        /// Type alias for build-time injection: Bearer token authentication strategy
-        pub type CatalogAuthStrategy = BearerTokenAuthStrategy;
+/// Available authentication methods
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum AuthMethod {
+    #[default]
+    /// Bearer token authentication (default)
+    Bearer,
+    /// GSSAPI/Kerberos authentication
+    #[cfg(feature = "catalog-auth-gssapi")]
+    Gssapi,
+}
+
+impl AuthStrategy for AuthMethod {
+    fn add_auth_headers(header_map: &mut HeaderMap, config: &CatalogClientConfig) {
+        match &config.auth_method {
+            AuthMethod::Bearer => BearerTokenAuthStrategy::add_auth_headers(header_map, config),
+            #[cfg(feature = "catalog-auth-gssapi")]
+            AuthMethod::Gssapi => GssapiAuthStrategy::add_auth_headers(header_map, config),
+        }
     }
 }

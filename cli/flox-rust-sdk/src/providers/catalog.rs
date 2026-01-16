@@ -30,12 +30,13 @@ use thiserror::Error;
 use tracing::{debug, info, instrument};
 use url::Url;
 
-use super::catalog_auth::AuthStrategy;
+use super::catalog_auth::AuthMethod;
 use super::publish::CheckedEnvironmentMetadata;
 use crate::data::System;
 use crate::flox::{FLOX_VERSION, Flox};
 use crate::models::search::{PackageDetails, ResultCount, SearchLimit, SearchResults};
 use crate::utils::INVOCATION_SOURCES;
+use crate::providers::catalog_auth::AuthStrategy;
 
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
 pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
@@ -134,8 +135,8 @@ pub struct CatalogClientConfig {
     pub floxhub_token: Option<String>,
     pub extra_headers: BTreeMap<String, String>,
     pub mock_mode: CatalogMockMode,
+    pub auth_method: AuthMethod,
 }
-
 #[derive(Clone, Copy, Debug, Default, derive_more::Display, PartialEq)]
 /// The QoS class of a catalog request.
 ///
@@ -384,7 +385,7 @@ impl CatalogClient {
         };
 
         // Add authentication headers (compile-time strategy selection via Cargo features)
-        super::catalog_auth::CatalogAuthStrategy::add_auth_headers(&mut header_map, config);
+        AuthMethod::add_auth_headers(&mut header_map, config);
 
         for (key, value) in &config.extra_headers {
             header_map.insert(
@@ -1875,6 +1876,7 @@ pub mod test_helpers {
             floxhub_token: None,
             extra_headers: Default::default(),
             mock_mode: CatalogMockMode::Replay(path.as_ref().to_path_buf()),
+            auth_method: Default::default(),
         };
         Client::Catalog(CatalogClient::new(catalog_config))
     }
@@ -1965,6 +1967,7 @@ pub mod test_helpers {
             floxhub_token: auth.token().map(|token| token.secret().to_string()),
             extra_headers: Default::default(),
             mock_mode: mock_mode.clone(),
+            auth_method: Default::default(),
         };
         let client_inner = CatalogClient::new(catalog_config);
         let mut client = Client::Catalog(client_inner);
@@ -2093,6 +2096,7 @@ mod tests {
             floxhub_token: None,
             extra_headers: Default::default(),
             mock_mode: Default::default(),
+            auth_method: Default::default(),
         }
     }
 
@@ -2257,6 +2261,7 @@ mod tests {
             floxhub_token: None,
             extra_headers,
             mock_mode: Default::default(),
+            auth_method: Default::default(),
         };
 
         let client = CatalogClient::new(config);
