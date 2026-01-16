@@ -6,7 +6,6 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox, RemoteEnvironmentRef};
-use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
@@ -157,7 +156,7 @@ impl Init {
             InitEnvironmentTypeSelect::FloxHub { environment_ref } => {
                 let mut flox = flox;
                 ensure_floxhub_token(&mut flox).await?;
-                init_floxhub_environment(&flox, environment_ref, self.bare)?;
+                init_floxhub_environment_decorated(&flox, environment_ref, self.bare)?;
             },
         }
         Ok(())
@@ -284,32 +283,15 @@ async fn init_local_environment(
     Ok(())
 }
 
-fn init_floxhub_environment(flox: &Flox, env_ref: RemoteEnvironmentRef, bare: bool) -> Result<()> {
-    let temp_env_dir = tempfile::TempDir::new_in(&flox.temp_dir)?;
-    let path_pointer = PathPointer::new(env_ref.name().clone());
-
-    let path_environment = if bare {
-        PathEnvironment::init_bare(path_pointer, temp_env_dir.path(), flox)?
-    } else {
-        let customization = InitCustomization {
-            activate_mode: Some(ActivateMode::Run),
-            ..Default::default()
-        };
-
-        PathEnvironment::init(path_pointer, temp_env_dir.path(), &customization, flox)?
-    };
-
-    let managed =
-        ManagedEnvironment::push_new(flox, path_environment, env_ref.owner().clone(), false, true)?;
-    let pointer = managed.pointer();
-
-    // validate that the environment exists
-    let validated = RemoteEnvironment::new(flox, pointer.clone(), None)
-        .context("Could not validate that new environment exists on FloxHub")?;
-    let env_ref = validated.env_ref();
-
+/// Same as [RemoteEnvironment::init_floxhub_environment]
+/// but with added decoration/messaging on success.
+fn init_floxhub_environment_decorated(
+    flox: &Flox,
+    env_ref: RemoteEnvironmentRef,
+    bare: bool,
+) -> Result<()> {
+    RemoteEnvironment::init_floxhub_environment(flox, env_ref.clone(), bare)?;
     message::created(format!("Created environment '{env_ref}'"));
-
     message::plain(formatdoc! {"
 
         Next:
@@ -318,7 +300,6 @@ fn init_floxhub_environment(flox: &Flox, env_ref: RemoteEnvironmentRef, bare: bo
           Enter the environment                     -> $ flox activate -r {env_ref}
           Add environment variables and shell hooks -> $ flox edit -r {env_ref}"
     });
-
     Ok(())
 }
 
@@ -720,9 +701,7 @@ mod tests {
 
     use flox_rust_sdk::flox::EnvironmentOwner;
     use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub;
-    use flox_rust_sdk::models::environment::generations::{GenerationsExt, HistoryKind};
-    use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
-    use flox_rust_sdk::models::environment::{EnvironmentError, ManagedPointer};
+    use flox_rust_sdk::models::environment::ManagedPointer;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
@@ -984,7 +963,7 @@ mod tests {
         let (subscriber, written) = test_subscriber_message_only();
 
         tracing::subscriber::with_default(subscriber, || {
-            init_floxhub_environment(&flox, env_ref.clone(), false)
+            init_floxhub_environment_decorated(&flox, env_ref.clone(), false)
         })
         .unwrap();
 
@@ -1002,68 +981,5 @@ mod tests {
 
         RemoteEnvironment::new(&flox, ManagedPointer::new(owner, name, &flox.floxhub), None)
             .expect("find initialized remote environment");
-    }
-
-    #[test]
-    fn init_floxhub_environment_can_create_bare_env() {
-        let owner = EnvironmentOwner::from_str("test").unwrap();
-        let name = EnvironmentName::from_str("foo").unwrap();
-        let env_ref = RemoteEnvironmentRef::new_from_parts(owner.clone(), name.clone());
-
-        let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-        init_floxhub_environment(&flox, env_ref.clone(), true).unwrap();
-
-        let env =
-            RemoteEnvironment::new(&flox, ManagedPointer::new(owner, name, &flox.floxhub), None)
-                .expect("find initialized remote environment");
-
-        // TODO: should be changed to version 2 once released!
-        assert_eq!(env.manifest_contents(&flox).unwrap(), "version = 1\n");
-    }
-
-    #[test]
-    fn init_existing_floxhub_environment_fails() {
-        let owner = EnvironmentOwner::from_str("test").unwrap();
-        let name = EnvironmentName::from_str("foo").unwrap();
-        let env_ref = RemoteEnvironmentRef::new_from_parts(owner.clone(), name.clone());
-
-        let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-
-        init_floxhub_environment(&flox, env_ref.clone(), false).expect("first init succeeds");
-
-        let err = init_floxhub_environment(&flox, env_ref.clone(), false)
-            .expect_err("second init should fail")
-            .downcast::<EnvironmentError>();
-
-        assert!(
-            matches!(
-                err,
-                Ok(EnvironmentError::ManagedEnvironment(
-                    ManagedEnvironmentError::UpstreamAlreadyExists { .. }
-                )),
-            ),
-            "{err:?}"
-        );
-    }
-
-    /// Prove that initialized environments have a history that starts with `initialized`.
-    #[test]
-    fn init_floxhub_environment_create_initialize_history() {
-        let owner = EnvironmentOwner::from_str("test").unwrap();
-        let name = EnvironmentName::from_str("foo").unwrap();
-        let env_ref = RemoteEnvironmentRef::new_from_parts(owner.clone(), name.clone());
-
-        let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-        init_floxhub_environment(&flox, env_ref.clone(), true).unwrap();
-
-        let env =
-            RemoteEnvironment::new(&flox, ManagedPointer::new(owner, name, &flox.floxhub), None)
-                .expect("find initialized remote environment");
-
-        let generation_metadata = env.generations_metadata().unwrap();
-        let history = generation_metadata.history();
-        let history_kind = &history.iter().next().unwrap().kind;
-
-        assert_eq!(history_kind, &HistoryKind::Initialize);
     }
 }
