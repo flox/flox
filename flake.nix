@@ -109,6 +109,16 @@
           flox-watchdog = callPackage ./pkgs/flox-watchdog { }; # Flox Command Line Interface ( development build ).
           flox-activations = callPackage ./pkgs/flox-activations { };
           flox-cli = callPackage ./pkgs/flox-cli { };
+
+          # GSSAPI-enabled variant with Kerberos authentication
+          flox-cli-gssapi = callPackage ./pkgs/flox-cli {
+            rust-internal-deps = final.rust-internal-deps.override {
+              rust-external-deps = final.rust-external-deps.override {
+                overrideCatalogAuth = "catalog-auth-gssapi";
+              };
+            };
+          };
+
           flox-manpages = callPackage ./pkgs/flox-manpages { }; # Flox Command Line Interface Manpages
           flox = callPackage ./pkgs/flox { }; # Flox Command Line Interface ( production build ).
 
@@ -179,6 +189,7 @@
           flox-watchdog
           flox-activations
           flox-cli
+          flox-cli-gssapi
           flox-cli-tests
           flox-manpages
           flox
