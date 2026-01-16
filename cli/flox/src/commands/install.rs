@@ -169,54 +169,12 @@ impl Install {
                 })
             },
             Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
-                let bail_message = formatdoc! {"
-                    {e}
-
-                    Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'",
-                self.packages.join(" ")};
-                if !Dialog::can_prompt() {
-                    bail!(bail_message);
-                }
-                let user_state_path = user_state_path(&flox);
-                let (lock, mut user_state) = lock_and_read_user_state_file(&user_state_path)?;
-                if user_state.confirmed_create_default_env.is_some() {
-                    bail!(bail_message);
-                }
-                let msg = formatdoc! {"
-                    Packages must be installed into a Flox environment, which can be
-                    a user 'default' environment or attached to a directory.
-                "};
-                message::plain(msg);
-                let package_list = package_list_for_prompt(&packages_to_install)
-                    .context("must specify at least one package to install")?;
-                let (choice_idx, _) = Dialog {
-                    message: &format!(
-                        "Would you like to install {package_list} to the 'default' environment?"
-                    ),
-                    help_message: None,
-                    typed: Select {
-                        options: vec!["Yes", "No"],
-                    },
-                }
-                .raw_prompt()?;
-                let should_install_to_default_env = choice_idx == 0;
-                if !should_install_to_default_env {
-                    user_state.confirmed_create_default_env = Some(false);
-                    write_user_state_file(&user_state, &user_state_path, lock)
-                        .context("failed to save default environment choice")?;
-                    let msg = format!(
-                        "Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'",
-                        self.packages.join(" ")
-                    );
-                    message::plain(msg);
-                    return Err(Exit(1.into()).into());
-                }
-                let env = create_default_env(&flox)?;
-                user_state.confirmed_create_default_env = Some(should_install_to_default_env);
-                write_user_state_file(&user_state, &user_state_path, lock)
-                    .context("failed to save default environment choice")?;
-                prompt_to_modify_rc_file()?;
-                ConcreteEnvironment::Path(env)
+                try_create_default_environment_interactive(
+                    &flox,
+                    e,
+                    &self.packages,
+                    &packages_to_install,
+                )?
             },
             Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
             Err(e) => Err(e)?,
@@ -572,6 +530,79 @@ impl Install {
     }
 }
 
+fn try_create_default_environment_interactive(
+    flox: &Flox,
+    e: EnvironmentSelectError,
+    packages_arguments: &[String],
+    packages_to_install: &[PackageToInstall],
+) -> Result<ConcreteEnvironment> {
+    let bail_message = formatdoc! {"
+        {e}
+
+        Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'",
+        packages_arguments.join(" ")
+    };
+    if !Dialog::can_prompt() {
+        bail!(bail_message);
+    }
+
+    let user_state_path = user_state_path(flox);
+    let (lock, mut user_state) = lock_and_read_user_state_file(&user_state_path)?;
+
+    // bail if user previously reacted to the onboarding dialog (positive or negative)
+    if user_state.confirmed_create_default_env.is_some() {
+        bail!(bail_message);
+    }
+
+    // prompt user to install to default env
+    let should_install_to_default_env = {
+        let msg = formatdoc! {"
+            Packages must be installed into a Flox environment, which can be
+            a user 'default' environment or attached to a directory.
+        "};
+        message::plain(msg);
+        let package_list = package_list_for_prompt(packages_to_install)
+            .context("must specify at least one package to install")?;
+        let (choice_idx, _) = Dialog {
+            message: &format!(
+                "Would you like to install {package_list} to the 'default' environment?"
+            ),
+            help_message: None,
+            typed: Select {
+                options: vec!["Yes", "No"],
+            },
+        }
+        .raw_prompt()?;
+
+        choice_idx == 0
+    };
+
+    if !should_install_to_default_env {
+        // record that user denied to install to (new) default env
+        user_state.confirmed_create_default_env = Some(false);
+        write_user_state_file(&user_state, &user_state_path, lock)
+            .context("failed to save default environment choice")?;
+        let msg = format!(
+            "Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'",
+            packages_arguments.join(" ")
+        );
+        message::plain(msg);
+        return Err(Exit(1.into()).into());
+    }
+
+    let env = create_default_env(flox)?;
+
+    // record that we created default env
+    // Note: we record this _after_ attempting to create the default env,
+    // to allow a future attempt if the creation failed.
+    user_state.confirmed_create_default_env = Some(should_install_to_default_env);
+    write_user_state_file(&user_state, &user_state_path, lock)
+        .context("failed to save default environment choice")?;
+
+    prompt_to_modify_rc_file()?;
+
+    Ok(ConcreteEnvironment::Path(env))
+}
 /// Returns a formatted string representing a possibly truncated list of
 /// packages to install.
 fn package_list_for_prompt(packages: &[PackageToInstall]) -> Option<String> {
