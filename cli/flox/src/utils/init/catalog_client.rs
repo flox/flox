@@ -53,6 +53,7 @@ pub fn init_catalog_client(config: &Config) -> Result<Client, anyhow::Error> {
         floxhub_token: config.flox.floxhub_token.clone(),
         extra_headers,
         mock_mode,
+        auth_method: config.flox.catalog_auth_method.clone(),
     };
 
     debug!(

@@ -1451,7 +1451,6 @@ dependencies = [
  "async-stream",
  "base64",
  "catalog-api-v1",
- "cfg-if",
  "chrono",
  "derive_more",
  "enum_dispatch",

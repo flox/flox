@@ -30,7 +30,7 @@ use thiserror::Error;
 use tracing::{debug, info, instrument};
 use url::Url;
 
-use super::catalog_auth::AuthStrategy;
+use super::catalog_auth::{AuthMethod, AuthStrategy};
 use super::publish::CheckedEnvironmentMetadata;
 use crate::data::System;
 use crate::flox::{FLOX_VERSION, Flox};
@@ -134,8 +134,8 @@ pub struct CatalogClientConfig {
     pub floxhub_token: Option<String>,
     pub extra_headers: BTreeMap<String, String>,
     pub mock_mode: CatalogMockMode,
+    pub auth_method: AuthMethod,
 }
-
 #[derive(Clone, Copy, Debug, Default, derive_more::Display, PartialEq)]
 /// The QoS class of a catalog request.
 ///
@@ -1859,6 +1859,7 @@ pub mod test_helpers {
             floxhub_token: None,
             extra_headers: Default::default(),
             mock_mode: CatalogMockMode::Replay(path.as_ref().to_path_buf()),
+            auth_method: Default::default(),
         };
         Client::Catalog(CatalogClient::new(catalog_config))
     }
@@ -1949,6 +1950,7 @@ pub mod test_helpers {
             floxhub_token: auth.token().map(|token| token.secret().to_string()),
             extra_headers: Default::default(),
             mock_mode: mock_mode.clone(),
+            auth_method: Default::default(),
         };
         let client_inner = CatalogClient::new(catalog_config);
         let mut client = Client::Catalog(client_inner);
@@ -2077,6 +2079,7 @@ mod tests {
             floxhub_token: None,
             extra_headers: Default::default(),
             mock_mode: Default::default(),
+            auth_method: Default::default(),
         }
     }
 
@@ -2241,6 +2244,7 @@ mod tests {
             floxhub_token: None,
             extra_headers,
             mock_mode: Default::default(),
+            auth_method: Default::default(),
         };
 
         let client = CatalogClient::new(config);
