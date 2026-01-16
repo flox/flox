@@ -287,7 +287,8 @@ impl Install {
         // Get the new set of composer overrides
         let new_composer_package_overrides = lockfile
             .compose
-            .map(|c| c.warnings)
+            .as_ref()
+            .map(|c| c.warnings.clone())
             .map(|warnings| package_overrides_for_manifest_id(&warnings, COMPOSER_MANIFEST_ID))
             .unwrap_or_default();
         let new_package_overrides = new_package_overrides(
@@ -323,6 +324,14 @@ impl Install {
         message::packages_installed_with_system_subsets(&partitioned.system_subsets);
         message::packages_already_installed(&partitioned.already_installed, &description);
         message::packages_newly_overridden_by_composer(&new_package_overrides);
+        if flox.features.outputs {
+            let install_ids = partitioned
+                .successes
+                .into_iter()
+                .map(|pkg| pkg.id().to_string())
+                .collect::<Vec<_>>();
+            message::packages_with_additional_outputs(&install_ids, &lockfile, &flox.system);
+        }
 
         if installation.new_manifest.is_some() {
             warn_manifest_changes_for_services(&flox, &concrete_environment);
