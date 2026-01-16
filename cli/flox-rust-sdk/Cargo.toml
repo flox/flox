@@ -8,7 +8,6 @@ edition = "2024"
 [dependencies]
 async-stream.workspace = true
 catalog-api-v1.workspace = true
-cfg-if.workspace = true
 chrono.workspace = true
 derive_more.workspace = true
 enum_dispatch.workspace = true
