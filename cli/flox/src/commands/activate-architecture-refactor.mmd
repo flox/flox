@@ -4,7 +4,7 @@ config:
   layout: dagre
 ---
 flowchart TB
- subgraph cli["flox-activations with activate"]
+ subgraph cli["flox-activations activate"]
         s3["Registry Module"]
         match_activation_mode{"activation mode?"}
         n37[["exec(userShell<br>&lt;RCFILE_options&gt;)"]]
@@ -24,162 +24,82 @@ flowchart TB
  subgraph s2["process-compose"]
         n98["flox-never-exit"]
   end
+ subgraph init["Initialization & Version Check"]
+        LockState["Lock state.json"]
+        ReadState{"Read state.json<br>exists?"}
+        CheckVersion{"version == 3?"}
+        ExtractPIDs["Extract PIDs from old version"]
+        CheckOldPIDsRunning{"Old PIDs<br>still running?"}
+        ErrorOldVersion["Error: Old version with running processes"]
+        InitNewState["Initialize new ActivationState<br>version=3, ready=False"]
+  end
+ subgraph exec_check["Executive Check & Reset"]
+        CheckExecRunning{"executive_running()?"}
+        ResetState["Reset state:<br>Discard all state contents<br>(but leave start state dirs)"]
+  end
+ subgraph mode_check["Mode Mismatch Check"]
+        CheckModeMatch{"requested_mode ==<br>state.mode?"}
+        ErrorModeMismatch["Error: Mode mismatch with running processes"]
+  end
+ subgraph decision["Start or Attach Decision"]
+        InvokeStartOrAttach["Call state.start_or_attach(store_path)"]
+        CheckResult{"StartOrAttach<br>Result?"}
+        CreateStartID["Create StartIdentifier:<br>{store_path, timestamp_millis}"]
+  end
+ subgraph start_path["Start Path (Run Hooks)"]
+        SetStarting["Set ready = Starting(getpid, start_id)"]
+        CreateStateDir["Create per-start state directory:<br>{store_basename}.{timestamp}/"]
+        CheckExecStart{"executive_started()?"}
+        WriteStateBeforeHooks["Write state.json<br>(executive_pid must be set)"]
+        UnlockForHooks["Unlock state.json"]
+        RunHooks["Run start.bash"]
+        LockAfterHooks["Lock state.json"]
+        SetReady["Set ready = True(start_id)"]
+        AddAttachmentStart["Add self to attached_pids[getpid]<br>with start_id + expiration"]
+        WriteStateAfterHooks["Write state.json"]
+        UnlockAfterHooks["Unlock state.json"]
+  end
+ subgraph attach_path["Attach Path (Fast Path)"]
+        AddAttachment["Add self to attached_pids[getpid]<br>with start_id + expiration"]
+        CheckExecAttach{"executive_started()?"}
+        WriteStateAttach["Write state.json<br>(executive_pid must be set)"]
+        UnlockAttach["Unlock state.json"]
+  end
+ subgraph retry["Already Starting - Retry Loop"]
+        AlreadyStarting["Another process is starting<br>(pid, start_id)"]
+        UnlockRetry["Unlock state.json"]
+        IncrementRetry["retries++"]
+        CheckRetryLimit{"retries &lt; 30?"}
+        Sleep["Sleep 200ms"]
+        ErrorMaxRetries["Error: Max retries exceeded (6s)"]
+  end
+ subgraph executive_spawning["Executive Spawning & Signaling"]
+        SpawnExec["Spawn flox-activations executive<br>as detached process"]
+        ExecSetSupreaper["Executive: Set as subreaper (Linux)"]
+        ExecSignal["Executive: Send SIGUSR1 to parent"]
+        ExecWatchdog["Executive: Run watchdog loop<br>(background monitoring)"]
+        WaitSignal["Parent: Wait for SIGUSR1"]
+        UpdateExecPID["Update state.executive_pid = child_pid"]
+  end
+ subgraph state_structure["State Directory Structure"]
+        ShowStructure["Directory structure:<br>{runtime_dir}/activations/{env_hash}-{env_name}/<br>├── state.json<br>├── state.json.lock<br>└── {store_basename}.{timestamp}/<br>&nbsp;&nbsp;&nbsp;&nbsp;├── start.env.json<br>&nbsp;&nbsp;&nbsp;&nbsp;├── end.env.json<br>&nbsp;&nbsp;&nbsp;&nbsp;└── [shell rc files]"]
+  end
+ subgraph write_guard["State Write Guard"]
+        WriteGuard["write_activations_json validates:<br>executive_pid != EXECUTIVE_NOT_STARTED<br>(Must have spawned executive before writing)"]
+  end
  subgraph s3["<br>"]
-   Start["Begin activate"] --> LockState
-
-  subgraph init["Initialization & Version Check"]
-    LockState["Lock state.json"]
-    ReadState{"Read state.json<br>exists?"}
-    CheckVersion{"version == 3?"}
-    ExtractPIDs["Extract PIDs from old version"]
-    CheckOldPIDsRunning{"Old PIDs<br>still running?"}
-    ErrorOldVersion["Error: Old version with running processes"]
-    InitNewState["Initialize new ActivationState<br>version=3, ready=False"]
-  end
-
-  subgraph exec_check["Executive Check & Reset"]
-    CheckExecRunning{"executive_running()?"}
-    ResetState["Reset state:<br>Discard all state contents<br>(but leave start state dirs)"]
-  end
-
-  subgraph mode_check["Mode Mismatch Check"]
-    CheckModeMatch{"requested_mode ==<br>state.mode?"}
-    ErrorModeMismatch["Error: Mode mismatch with running processes"]
-  end
-
-  subgraph decision["Start or Attach Decision"]
-    InvokeStartOrAttach["Call state.start_or_attach(store_path)"]
-    CheckResult{"StartOrAttach<br>Result?"}
-    CreateStartID["Create StartIdentifier:<br>{store_path, timestamp_millis}"]
-  end
-
-  subgraph start_path["Start Path (Run Hooks)"]
-    SetStarting@{ label: "Set ready = Starting(getpid, start_id)" }
-    CreateStateDir["Create per-start state directory:<br>{store_basename}.{timestamp}/"]
-    CheckExecStart{"executive_started()?"}
-    WriteStateBeforeHooks["Write state.json<br>(executive_pid must be set)"]
-    UnlockForHooks["Unlock state.json"]
-    RunHooks["Run start.bash hooks"]
-    LockAfterHooks["Lock state.json"]
-    SetReady@{ label: "Set ready = True(start_id)" }
-    AddAttachmentStart@{ label: "Add self to attached_pids[getpid]<br>with start_id + expiration" }
-    WriteStateAfterHooks["Write state.json"]
-    UnlockAfterHooks["Unlock state.json"]
-  end
-
-  subgraph attach_path["Attach Path (Fast Path)"]
-    AddAttachment@{ label: "Add self to attached_pids[getpid]<br>with start_id + expiration" }
-    CheckExecAttach{"executive_started()?"}
-    WriteStateAttach["Write state.json<br>(executive_pid must be set)"]
-    UnlockAttach["Unlock state.json"]
-  end
-
-  subgraph retry["Already Starting - Retry Loop"]
-    AlreadyStarting["Another process is starting<br>(pid, start_id)"]
-    UnlockRetry["Unlock state.json"]
-    IncrementRetry["retries++"]
-    CheckRetryLimit{"retries < 30?"}
-    Sleep["Sleep 200ms"]
-    ErrorMaxRetries["Error: Max retries exceeded (6s)"]
-  end
-
-  subgraph executive_spawning["Executive Spawning & Signaling"]
-    SpawnExec["Spawn flox-activations executive<br>as detached process"]
-    ExecSetSupreaper["Executive: Set as subreaper (Linux)"]
-    ExecSignal["Executive: Send SIGUSR1 to parent"]
-    ExecWatchdog["Executive: Run watchdog loop<br>(background monitoring)"]
-    WaitSignal["Parent: Wait for SIGUSR1"]
-    UpdateExecPID["Update state.executive_pid = child_pid"]
-  end
-
-  subgraph state_structure["State Directory Structure"]
-    ShowStructure["Directory structure:<br>{runtime_dir}/activations/{env_hash}-{env_name}/<br>├── state.json<br>├── state.json.lock<br>└── {store_basename}.{timestamp}/<br>&nbsp;&nbsp;&nbsp;&nbsp;├── start.env.json<br>&nbsp;&nbsp;&nbsp;&nbsp;├── end.env.json<br>&nbsp;&nbsp;&nbsp;&nbsp;└── [shell rc files]"]
-  end
-
-  subgraph write_guard["State Write Guard"]
-    WriteGuard["write_activations_json validates:<br>executive_pid != EXECUTIVE_NOT_STARTED<br>(Must have spawned executive before writing)"]
-  end
-
-  %% Initialization flow
-  LockState --> ReadState
-  ReadState -->|No| InitNewState
-  ReadState -->|Yes| CheckVersion
-  CheckVersion -->|No| ExtractPIDs
-  ExtractPIDs --> CheckOldPIDsRunning
-  CheckOldPIDsRunning -->|Yes| ErrorOldVersion
-  CheckOldPIDsRunning -->|No| InitNewState
-  CheckVersion -->|Yes| CheckExecRunning
-
-  %% Executive check flow
-  InitNewState --> CheckExecRunning
-  CheckExecRunning -->|No| ResetState
-  CheckExecRunning -->|Yes| CheckModeMatch
-  ResetState --> CheckModeMatch
-
-  %% Mode check flow
-  CheckModeMatch -->|No| ErrorModeMismatch
-  CheckModeMatch -->|Yes| InvokeStartOrAttach
-
-  %% Decision flow
-  InvokeStartOrAttach --> CheckResult
-  CheckResult -->|Start| CreateStartID
-  CheckResult -->|Attach| AddAttachment
-  CheckResult -->|AlreadyStarting| AlreadyStarting
-
-  %% Start path flow
-  CreateStartID --> SetStarting
-  SetStarting --> CreateStateDir
-  CreateStateDir -.->|"(for reference)"| ShowStructure
-  CreateStateDir --> CheckExecStart
-  CheckExecStart -->|No| SpawnExec
-  CheckExecStart -->|Yes| WriteStateBeforeHooks
-  WriteStateBeforeHooks -.->|"validates"| WriteGuard
-  WriteStateBeforeHooks --> UnlockForHooks
-  UnlockForHooks --> RunHooks
-  RunHooks --> LockAfterHooks
-  LockAfterHooks --> SetReady
-  SetReady --> AddAttachmentStart
-  AddAttachmentStart --> WriteStateAfterHooks
-  WriteStateAfterHooks -.->|"validates"| WriteGuard
-  WriteStateAfterHooks --> UnlockAfterHooks
-  UnlockAfterHooks --> Done["Done: Shell attached to start_id<br>{store_path, timestamp}"]
-
-  %% Attach path flow
-  AddAttachment --> CheckExecAttach
-  CheckExecAttach -->|No| SpawnExec
-  CheckExecAttach -->|Yes| WriteStateAttach
-  WriteStateAttach -.->|"validates"| WriteGuard
-  WriteStateAttach --> UnlockAttach
-  UnlockAttach --> Done
-
-  %% Retry flow
-  AlreadyStarting --> UnlockRetry
-  UnlockRetry --> IncrementRetry
-  IncrementRetry --> CheckRetryLimit
-  CheckRetryLimit -->|Yes| Sleep
-  Sleep --> LockState
-  CheckRetryLimit -->|No| ErrorMaxRetries
-
-  %% Executive spawning flow (shared by both paths)
-  SpawnExec --> ExecSetSupreaper
-  SpawnExec --> WaitSignal
-  ExecSetSupreaper --> ExecSignal
-  ExecSignal --> ExecWatchdog
-  ExecSignal -.->|SIGUSR1| WaitSignal
-  WaitSignal --> UpdateExecPID
-  UpdateExecPID --> WriteStateBeforeHooks
-  UpdateExecPID --> WriteStateAttach
-
-  style Start fill:#e1f5e1
-  style Done fill:#e1f5e1
-  style ErrorOldVersion fill:#ffe1e1
-  style ErrorModeMismatch fill:#ffe1e1
-  style ErrorMaxRetries fill:#ffe1e1
-  style ShowStructure fill:#f0f0f0,stroke:#999,stroke-dasharray: 5 5
-  style WriteGuard fill:#fff3cd,stroke:#856404,stroke-dasharray: 5 5
-  style ExecWatchdog fill:#e1e8f5
-  style ResetState fill:#ffebcc
-
+        Start["Begin activate"]
+        init
+        exec_check
+        mode_check
+        decision
+        start_path
+        attach_path
+        retry
+        executive_spawning
+        state_structure
+        write_guard
+        Done["Done: PID attached to start_id<br>{store_path, timestamp}"]
   end
  subgraph activate["start.bash"]
         n7[["Capture start.env.json"]]
@@ -216,6 +136,60 @@ flowchart TB
         n89{"activate()<br>services(start)"}
         n36["Initialise ActivateCtx"]
   end
+    Start --> LockState
+    LockState --> ReadState
+    ReadState -- No --> InitNewState
+    ReadState -- Yes --> CheckVersion
+    CheckVersion -- No --> ExtractPIDs
+    ExtractPIDs --> CheckOldPIDsRunning
+    CheckOldPIDsRunning -- Yes --> ErrorOldVersion
+    CheckOldPIDsRunning -- No --> InitNewState
+    CheckVersion -- Yes --> CheckExecRunning
+    InitNewState --> CheckExecRunning
+    CheckExecRunning -- No --> ResetState
+    CheckExecRunning -- Yes --> CheckModeMatch
+    ResetState --> CheckModeMatch
+    CheckModeMatch -- No --> ErrorModeMismatch
+    CheckModeMatch -- Yes --> InvokeStartOrAttach
+    InvokeStartOrAttach --> CheckResult
+    CheckResult -- Start --> CreateStartID
+    CheckResult -- Attach --> AddAttachment
+    CheckResult -- AlreadyStarting --> AlreadyStarting
+    CreateStartID --> SetStarting
+    SetStarting --> CreateStateDir
+    CreateStateDir -. (for reference) .-> ShowStructure
+    CreateStateDir --> CheckExecStart
+    CheckExecStart -- No --> SpawnExec
+    CheckExecStart -- Yes --> WriteStateBeforeHooks
+    WriteStateBeforeHooks -. validates .-> WriteGuard
+    WriteStateBeforeHooks --> UnlockForHooks
+    UnlockForHooks --> RunHooks
+    RunHooks -- "(wait for start.bash)" --> LockAfterHooks
+    RunHooks -- subprocess --> n7
+    LockAfterHooks --> SetReady
+    SetReady --> AddAttachmentStart
+    AddAttachmentStart --> WriteStateAfterHooks
+    WriteStateAfterHooks -. validates .-> WriteGuard
+    WriteStateAfterHooks --> UnlockAfterHooks
+    UnlockAfterHooks --> Done
+    AddAttachment --> CheckExecAttach
+    CheckExecAttach -- No --> SpawnExec
+    CheckExecAttach -- Yes --> WriteStateAttach
+    WriteStateAttach -. validates .-> WriteGuard
+    WriteStateAttach --> UnlockAttach
+    UnlockAttach --> Done
+    AlreadyStarting --> UnlockRetry
+    UnlockRetry --> IncrementRetry
+    IncrementRetry --> CheckRetryLimit
+    CheckRetryLimit -- Yes --> Sleep
+    Sleep --> LockState
+    CheckRetryLimit -- No --> ErrorMaxRetries
+    SpawnExec --> ExecSetSupreaper & WaitSignal
+    ExecSetSupreaper --> ExecSignal
+    ExecSignal --> ExecWatchdog
+    ExecSignal -. SIGUSR1 .-> WaitSignal
+    WaitSignal --> UpdateExecPID
+    UpdateExecPID --> WriteStateBeforeHooks & WriteStateAttach
     ns --> n162
     node_aqepkktvr ~~~ n0
     n0 ~~~ nz
@@ -243,22 +217,22 @@ flowchart TB
     pc_start --> n157
     n148 --> s2
     n100 --> ns
-    n100 -- SIGUSR1 --> s3
+    n100 -- SIGUSR1 --> WaitSignal
     n162 -- All PIDs --> n66
     n162 -- Some PIDs --> n163
     n163 --> ns
     n162 -- No PIDs --> ns
     n143 --> n142
-    s3 -- child --> n125
-    s3 -- subprocess --> n7
-    s3 --> n137
-    n160(["Container entrypoint"]) --> s3
-    n36 --> s3
     match_activation_mode -- "<span style=padding-left:>flox activate -c 'command script'</span>" --> apply_activation_env_shell
     apply_activation_env_shell --> n145
     apply_activation_env_interactive --> n37
     n7 --> n6
     n6 --> nd
+    n160(["Container entrypoint"]) --> Start
+    n36 --> Start
+    n63 --> LockAfterHooks
+    SpawnExec -- child --> n125
+    Done --> n137
 
     n83@{ shape: doc}
     n137@{ shape: diam}
@@ -281,6 +255,15 @@ flowchart TB
     style pc_start fill:#FFE0B2
     style n157 fill:#FFE0B2
     style exec_cmd fill:#FFE0B2
+    style ErrorOldVersion fill:#ffe1e1
+    style ResetState fill:#ffebcc
+    style ErrorModeMismatch fill:#ffe1e1
+    style ErrorMaxRetries fill:#ffe1e1
+    style ExecWatchdog fill:#e1e8f5
+    style ShowStructure fill:#f0f0f0,stroke:#999,stroke-dasharray: 5 5
+    style WriteGuard fill:#fff3cd,stroke:#856404,stroke-dasharray: 5 5
+    style Start fill:#e1f5e1
+    style Done fill:#e1f5e1
     style n7 fill:#BBDEFB
     style n6 fill:#BBDEFB
     style nd fill:#BBDEFB
@@ -306,7 +289,7 @@ flowchart TB
     style n89 fill:#FFE0B2
     style n36 fill:#FFE0B2
     style A fill:#FFFFFF
+    style s4 fill:transparent
     style cli fill:#F8F8F8
     style activate fill:#F8F8F8
     style executive fill:#F8F8F8
-    style s4 fill:transparent
