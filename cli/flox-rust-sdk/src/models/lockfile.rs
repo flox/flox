@@ -77,13 +77,22 @@ pub struct Registry {
     _json: Value,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LockResult {
     /// Locking produced a new Lockfile.
     /// The change could be a minimal as whitespace.
     Changed(Lockfile),
     /// Locking did not produce a new Lockfile.
     Unchanged(Lockfile),
+}
+
+impl LockResult {
+    pub fn lockfile(&self) -> Lockfile {
+        match self {
+            LockResult::Changed(inner) => inner.clone(),
+            LockResult::Unchanged(inner) => inner.clone(),
+        }
+    }
 }
 
 impl From<LockResult> for Lockfile {
@@ -204,6 +213,15 @@ impl LockedPackage {
             LockedPackage::StorePath(_) => None,
         }
     }
+}
+
+/// A trait for listing the outputs of packages.
+///
+/// This is implemented as a trait rather than a method on [`LockedPackage`]
+/// because we don't list outputs for [`LockedPackageStorePath`].
+pub trait PackageOutputs {
+    fn outputs(&self) -> BTreeMap<String, String>;
+    fn outputs_to_install(&self) -> Option<Vec<String>>;
 }
 
 #[skip_serializing_none]
@@ -327,6 +345,16 @@ impl LockedPackageCatalog {
     }
 }
 
+impl PackageOutputs for LockedPackageCatalog {
+    fn outputs(&self) -> BTreeMap<String, String> {
+        self.outputs.clone()
+    }
+
+    fn outputs_to_install(&self) -> Option<Vec<String>> {
+        self.outputs_to_install.clone()
+    }
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -350,6 +378,16 @@ impl LockedPackageFlake {
             install_id,
             locked_installable,
         }
+    }
+}
+
+impl PackageOutputs for LockedPackageFlake {
+    fn outputs(&self) -> BTreeMap<String, String> {
+        self.locked_installable.outputs.clone()
+    }
+
+    fn outputs_to_install(&self) -> Option<Vec<String>> {
+        self.locked_installable.outputs_to_install.clone()
     }
 }
 

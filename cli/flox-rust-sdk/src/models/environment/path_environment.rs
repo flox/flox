@@ -16,6 +16,7 @@
 use std::ffi::OsStr;
 use std::fs::{self};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use flox_core::write_atomically;
 use indoc::formatdoc;
@@ -50,8 +51,9 @@ use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME, create_dot_flo
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, LockResult, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
-use crate::models::manifest::typed::ActivateMode;
+use crate::models::manifest::typed::{ActivateMode, Manifest, ManifestError};
 use crate::providers::buildenv::BuildEnvOutputs;
+use crate::providers::migrate::{MigrateEnv, MigrationResult};
 
 /// Struct representing a local environment
 ///
@@ -75,6 +77,8 @@ pub struct PathEnvironment {
     /// The rendered environment links for this environment.
     /// These may not yet exist if the environment has not been built.
     rendered_env_links: RenderedEnvironmentLinks,
+
+    is_migrating: bool,
 }
 
 /// A profile script or list of packages to install when initializing an environment
@@ -135,6 +139,7 @@ impl PathEnvironment {
             path: dot_flox_path,
             pointer,
             rendered_env_links,
+            is_migrating: false,
         })
     }
 
@@ -153,14 +158,14 @@ impl PathEnvironment {
         self.as_core_environment()
     }
 
-    fn as_core_environment(&self) -> Result<CoreEnvironment, EnvironmentError> {
+    pub(crate) fn as_core_environment(&self) -> Result<CoreEnvironment, EnvironmentError> {
         Ok(CoreEnvironment::new(
             self.path.join(ENV_DIR_NAME),
             self.include_fetcher()?,
         ))
     }
 
-    fn as_core_environment_mut(&mut self) -> Result<CoreEnvironment, EnvironmentError> {
+    pub(crate) fn as_core_environment_mut(&mut self) -> Result<CoreEnvironment, EnvironmentError> {
         self.as_core_environment()
     }
 
@@ -188,8 +193,34 @@ impl PathEnvironment {
 impl Environment for PathEnvironment {
     /// This will lock the environment if it is not already locked.
     fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
-        let mut env_view = self.as_core_environment_mut()?;
-        env_view.ensure_locked(flox)
+        if flox.features.outputs {
+            let existing_manifest_lockfile = if self.lockfile_up_to_date()? {
+                debug!("lockfile is up to date, skipping re-lock");
+                return Ok(LockResult::Unchanged(
+                    self.existing_lockfile(flox)?.unwrap(),
+                ));
+            } else {
+                debug!("lockfile is stale, re-locking");
+                let mut env_view = self.as_core_environment_mut()?;
+                env_view.ensure_locked(flox)?
+            };
+            if self.is_migrating() {
+                debug!("migration in-progress, skipping migration trigger");
+                Ok(existing_manifest_lockfile)
+            } else {
+                #[allow(clippy::collapsible_else_if)]
+                if self.migrate_env(flox).map_err(Box::new)? == MigrationResult::AlreadyV2 {
+                    debug!("manifest was already v2");
+                    Ok(existing_manifest_lockfile)
+                } else {
+                    debug!("getting post-migration lockfile");
+                    Ok(LockResult::Changed(self.existing_lockfile(flox)?.unwrap()))
+                }
+            }
+        } else {
+            let mut env_view = self.as_core_environment_mut()?;
+            env_view.ensure_locked(flox)
+        }
     }
 
     /// Returns the lockfile if it already exists.
@@ -197,6 +228,14 @@ impl Environment for PathEnvironment {
         self.as_core_environment()?
             .existing_lockfile()
             .map_err(EnvironmentError::Core)
+    }
+
+    fn is_migrating(&self) -> bool {
+        self.is_migrating
+    }
+
+    fn set_migrating(&mut self, state: bool) {
+        self.is_migrating = state;
     }
 
     /// Install packages to the environment atomically
@@ -309,6 +348,21 @@ impl Environment for PathEnvironment {
     /// - avoid double-locking
     fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError> {
         fs::read_to_string(self.manifest_path(flox)?).map_err(EnvironmentError::ReadManifest)
+    }
+
+    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError> {
+        self.manifest_contents(flox).and_then(|contents| {
+            Manifest::from_str(contents.as_str())
+                .map_err(ManifestError::Parse)
+                .map_err(EnvironmentError::ManifestError)
+        })
+    }
+
+    fn raw_manifest(&self, flox: &Flox) -> Result<RawManifest, EnvironmentError> {
+        self.manifest_contents(flox).and_then(|contents| {
+            let raw = RawManifest::from_str(contents.as_str());
+            raw.map_err(EnvironmentError::TomlEditDeserialize)
+        })
     }
 
     /// Returns the environment name
@@ -674,6 +728,20 @@ pub mod test_helpers {
         name: &str,
     ) -> PathEnvironment {
         let dot_flox_parent_path = tempdir_in(&flox.temp_dir).unwrap().keep();
+        new_path_environment_from_env_files_in(
+            flox,
+            env_files_dir,
+            dot_flox_parent_path,
+            Some(name),
+        )
+    }
+
+    pub fn new_named_path_environment_from_env_files_in(
+        flox: &Flox,
+        env_files_dir: impl AsRef<Path>,
+        dot_flox_parent_path: impl AsRef<Path>,
+        name: &str,
+    ) -> PathEnvironment {
         new_path_environment_from_env_files_in(
             flox,
             env_files_dir,

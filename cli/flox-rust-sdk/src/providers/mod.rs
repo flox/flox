@@ -5,6 +5,7 @@ pub mod catalog;
 pub mod container_builder;
 pub mod flake_installable_locker;
 pub mod git;
+pub mod migrate;
 pub mod nix;
 pub mod publish;
 pub mod services;

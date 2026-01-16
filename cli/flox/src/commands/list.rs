@@ -446,14 +446,18 @@ mod tests {
     use std::fs;
 
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::{
+        new_path_environment_from_env_files_in,
+        new_path_environment_in,
+    };
     use flox_rust_sdk::models::lockfile::LockedPackage;
     use flox_rust_sdk::models::lockfile::test_helpers::{
         LOCKED_NIX_EVAL_JOBS,
         fake_catalog_package_lock,
         nix_eval_jobs_descriptor,
     };
-    use flox_rust_sdk::models::manifest::typed::DEFAULT_PRIORITY;
+    use flox_rust_sdk::models::manifest::typed::{DEFAULT_PRIORITY, Manifest};
+    use flox_rust_sdk::providers::catalog::GENERATED_DATA;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
@@ -974,5 +978,29 @@ mod tests {
                 .to_string()
                 .contains("can not be used with path environments")
         )
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn list_config_doesnt_trigger_migration() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.outputs = true;
+        let _env = new_path_environment_from_env_files_in(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            tempdir.path(),
+            None,
+        );
+        List {
+            environment: EnvironmentSelect::Dir(tempdir.path().to_path_buf()),
+            upstream: false,
+            list_mode: ListMode::Config,
+        }
+        .handle(flox)
+        .await
+        .unwrap();
+        let manifest_path = tempdir.path().join(".flox/env/manifest.toml");
+        let manifest_contents = std::fs::read_to_string(manifest_path).unwrap();
+        let manifest = Manifest::from_str(&manifest_contents).unwrap();
+        assert_eq!(manifest.version, 1.into());
     }
 }

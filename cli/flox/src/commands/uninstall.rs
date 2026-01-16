@@ -2,6 +2,7 @@ use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{Environment, EnvironmentError};
+use flox_rust_sdk::providers::migrate::MigrateEnv;
 use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{debug, info_span, instrument};
@@ -68,6 +69,7 @@ impl Uninstall {
             Err(e) => Err(e)?,
         };
         environment_subcommand_metric!("uninstall", concrete_environment);
+        concrete_environment.migrate_env(&flox)?;
 
         let description = environment_description(&concrete_environment)?;
 
@@ -96,5 +98,40 @@ impl Uninstall {
         warn_manifest_changes_for_services(&flox, &concrete_environment);
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
+    use flox_rust_sdk::models::manifest::typed::Manifest;
+    use flox_rust_sdk::providers::catalog::GENERATED_DATA;
+
+    use super::*;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn uninstall_triggers_migration() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.outputs = true;
+        let _env = new_path_environment_from_env_files_in(
+            &flox,
+            GENERATED_DATA.join("envs/krb5_prereqs"),
+            tempdir.path(),
+            None,
+        );
+        Uninstall {
+            environment: EnvironmentSelect::Dir(tempdir.path().to_path_buf()),
+            packages: vec!["nodejs".to_string()],
+        }
+        .handle(flox)
+        .await
+        .unwrap();
+        let manifest_path = tempdir.path().join(".flox/env/manifest.toml");
+        let manifest_contents = std::fs::read_to_string(manifest_path).unwrap();
+        let manifest = Manifest::from_str(&manifest_contents).unwrap();
+        assert_eq!(manifest.version, 2.into());
     }
 }

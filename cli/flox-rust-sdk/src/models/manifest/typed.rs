@@ -70,6 +70,13 @@ pub(crate) trait SkipSerializing {
     fn skip_serializing(&self) -> bool;
 }
 
+/// An interface for setting the outputs of a package descriptor,
+/// only to be implemented by package descriptors for which setting outputs
+/// is possible.
+pub trait SetOutputs {
+    fn set_outputs_to_all(&mut self);
+}
+
 /// Not meant for writing manifest files, only for reading them.
 /// Modifications should be made using `manifest::raw`.
 
@@ -421,9 +428,7 @@ impl ManifestPackageDescriptor {
             _ => false,
         }
     }
-}
 
-impl ManifestPackageDescriptor {
     /// Check if two package descriptors should have the same resolution.
     /// This is used to determine if a package needs to be re-resolved
     /// in the presence of an existing lock.
@@ -568,6 +573,12 @@ impl PackageDescriptorCatalog {
     }
 }
 
+impl SetOutputs for PackageDescriptorCatalog {
+    fn set_outputs_to_all(&mut self) {
+        self.outputs = Some(SelectedOutputs::all());
+    }
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -581,6 +592,12 @@ pub struct PackageDescriptorFlake {
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub(crate) systems: Option<Vec<System>>,
     pub outputs: Option<SelectedOutputs>,
+}
+
+impl SetOutputs for PackageDescriptorFlake {
+    fn set_outputs_to_all(&mut self) {
+        self.outputs = Some(SelectedOutputs::all());
+    }
 }
 
 #[skip_serializing_none]
@@ -603,6 +620,25 @@ pub struct PackageDescriptorStorePath {
 pub enum SelectedOutputs {
     All(AllSentinel),
     Specific(Vec<String>),
+}
+
+impl SelectedOutputs {
+    // This is just a helper method so that no one has to write out
+    // this AllSentinel::All thing, which only exists for deserialization
+    // purposes.
+    pub fn all() -> SelectedOutputs {
+        SelectedOutputs::All(AllSentinel::All)
+    }
+
+    pub fn to_toml(&self) -> toml_edit::Value {
+        match self {
+            SelectedOutputs::All(_) => toml_edit::Value::from("all"),
+            SelectedOutputs::Specific(items) => {
+                let array = toml_edit::Array::from_iter(items.iter());
+                toml_edit::Value::Array(array)
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
@@ -1058,9 +1094,10 @@ pub enum ManifestError {
     MultiplePackagesMatch(String, Vec<String>),
     #[error("not a valid activation mode")]
     ActivateModeInvalid,
-
     #[error("outputs '{0:?}' don't exists for package {1}")]
     InvalidOutputs(Vec<String>, String),
+    #[error(transparent)]
+    Parse(#[from] toml_edit::de::Error),
 }
 
 /// The section where users can declare dependencies on other environments.

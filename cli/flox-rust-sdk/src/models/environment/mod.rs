@@ -25,6 +25,8 @@ use super::manifest::typed::{ActivateMode, ManifestError};
 use crate::data::{CanonicalPath, CanonicalizeError, System};
 use crate::flox::{Flox, Floxhub};
 use crate::models::environment::generations::GenerationsEnvironment;
+use crate::models::manifest::raw::RawManifest;
+use crate::models::manifest::typed::Manifest;
 use crate::providers::auth::AuthError;
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{
@@ -33,6 +35,7 @@ use crate::providers::git::{
     GitDiscoverError,
     GitProvider,
 };
+use crate::providers::migrate::MigrationError;
 use crate::utils::copy_file_without_permissions;
 
 mod core_environment;
@@ -154,11 +157,20 @@ pub trait Environment: Send {
     /// others call lock.
     fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError>;
 
+    fn is_migrating(&self) -> bool;
+    fn set_migrating(&mut self, state: bool);
+
     /// Extract the current content of the manifest
     ///
     /// Implementations may use process context from [Flox]
     /// to determine the current content of the manifest.
     fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError>;
+
+    /// Returns the raw manifest, which preserves formatting.
+    fn raw_manifest(&self, flox: &Flox) -> Result<RawManifest, EnvironmentError>;
+
+    /// Find and parse the manifest
+    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError>;
 
     /// Return the path to rendered environment in the Nix store.
     ///
@@ -662,6 +674,8 @@ pub enum EnvironmentError {
     // endregion
     #[error(transparent)]
     ManifestError(#[from] ManifestError),
+    #[error(transparent)]
+    TomlEditDeserialize(#[from] toml_edit::de::Error),
 
     // todo: candidate for impl specific error
     // * only path env implements init
@@ -781,6 +795,9 @@ pub enum EnvironmentError {
 
     #[error("{0}")]
     EditWithUnsupportedFeature(String),
+
+    #[error(transparent)]
+    Migration(#[from] Box<MigrationError>),
 }
 
 #[derive(Debug, thiserror::Error)]

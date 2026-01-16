@@ -40,6 +40,7 @@ use flox_rust_sdk::providers::catalog::{
     MsgAttrPathNotFoundNotFoundForAllSystems,
     MsgAttrPathNotFoundNotInCatalog,
 };
+use flox_rust_sdk::providers::migrate::MigrateEnv;
 use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{debug, info_span, instrument, span, warn};
@@ -222,6 +223,8 @@ impl Install {
             Err(e) => Err(e)?,
         };
         environment_subcommand_metric!("install", concrete_environment);
+
+        concrete_environment.migrate_env(&flox)?;
 
         let description = environment_description(&concrete_environment)?;
 
@@ -712,11 +715,17 @@ fn add_activation_to_rc_file(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::{
+        new_path_environment_from_env_files_in,
+        new_path_environment_in,
+    };
     use flox_rust_sdk::models::lockfile::LockedPackageCatalog;
     use flox_rust_sdk::models::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_rust_sdk::models::manifest::raw::{CatalogPackage, PackageToInstall};
+    use flox_rust_sdk::models::manifest::typed::Manifest;
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
     use flox_rust_sdk::providers::catalog::{GENERATED_DATA, SystemEnum};
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
@@ -934,5 +943,31 @@ mod tests {
              ! '{install_id}' installed only for the following systems: {installed_systems}
         "};
         assert_eq!(writer.to_string(), expected);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn install_triggers_migration() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.outputs = true;
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/curl_after_hello.yaml")).await;
+        let _env = new_path_environment_from_env_files_in(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            tempdir.path(),
+            None,
+        );
+        Install {
+            environment: EnvironmentSelect::Dir(tempdir.path().to_path_buf()),
+            id: vec![],
+            packages: vec!["curl".to_string()],
+        }
+        .handle(flox)
+        .await
+        .unwrap();
+        let manifest_path = tempdir.path().join(".flox/env/manifest.toml");
+        let manifest_contents = std::fs::read_to_string(manifest_path).unwrap();
+        let manifest = Manifest::from_str(&manifest_contents).unwrap();
+        assert_eq!(manifest.version, 2.into());
     }
 }
