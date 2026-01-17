@@ -77,13 +77,22 @@ pub struct Registry {
     _json: Value,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LockResult {
     /// Locking produced a new Lockfile.
     /// The change could be a minimal as whitespace.
     Changed(Lockfile),
     /// Locking did not produce a new Lockfile.
     Unchanged(Lockfile),
+}
+
+impl LockResult {
+    pub fn lockfile(&self) -> Lockfile {
+        match self {
+            LockResult::Changed(inner) => inner.clone(),
+            LockResult::Unchanged(inner) => inner.clone(),
+        }
+    }
 }
 
 impl From<LockResult> for Lockfile {
@@ -163,7 +172,7 @@ impl LockedPackage {
         }
     }
 
-    pub(crate) fn system(&self) -> &System {
+    pub fn system(&self) -> &System {
         match self {
             LockedPackage::Catalog(pkg) => &pkg.system,
             LockedPackage::Flake(pkg) => &pkg.locked_installable.system,
@@ -203,6 +212,42 @@ impl LockedPackage {
             LockedPackage::Flake(pkg) => pkg.locked_installable.version.as_deref(),
             LockedPackage::StorePath(_) => None,
         }
+    }
+}
+
+/// A trait for listing the outputs of packages.
+///
+/// This is implemented as a trait rather than a method on [`LockedPackage`]
+/// because we don't list outputs for [`LockedPackageStorePath`].
+pub trait PackageOutputs {
+    fn outputs(&self) -> BTreeMap<String, String>;
+    fn outputs_to_install(&self) -> Option<Vec<String>>;
+    /// Returns the list of all outputs for the package.
+    fn all_outputs(&self) -> Vec<String> {
+        self.outputs().keys().cloned().collect::<Vec<_>>()
+    }
+    /// Returns the deduplicated list of outputs to install.
+    ///
+    /// Note that this assumes the particular behavior of the catalog-server
+    /// bug that causes the duplication in the first place, which is that you
+    /// end up with runs of repeated outputs (`"out"` only, as far as I can tell).
+    fn deduped_outputs_to_install(&self) -> Option<Vec<String>> {
+        self.outputs_to_install().map(|output_list| {
+            let mut to_dedup = output_list.clone();
+            to_dedup.dedup();
+            to_dedup
+        })
+    }
+    /// Returns `true` if `outputs_to_install` exists and matches the
+    /// full list of outputs.
+    fn outputs_match_outputs_to_install(&self) -> Option<bool> {
+        self.deduped_outputs_to_install().map(|outputs_to_install| {
+            let mut sorted_oti = outputs_to_install.clone();
+            sorted_oti.sort();
+            let mut sorted_all_outputs = self.all_outputs();
+            sorted_all_outputs.sort();
+            sorted_oti == sorted_all_outputs
+        })
     }
 }
 
@@ -327,6 +372,16 @@ impl LockedPackageCatalog {
     }
 }
 
+impl PackageOutputs for LockedPackageCatalog {
+    fn outputs(&self) -> BTreeMap<String, String> {
+        self.outputs.clone()
+    }
+
+    fn outputs_to_install(&self) -> Option<Vec<String>> {
+        self.outputs_to_install.clone()
+    }
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -350,6 +405,16 @@ impl LockedPackageFlake {
             install_id,
             locked_installable,
         }
+    }
+}
+
+impl PackageOutputs for LockedPackageFlake {
+    fn outputs(&self) -> BTreeMap<String, String> {
+        self.locked_installable.outputs.clone()
+    }
+
+    fn outputs_to_install(&self) -> Option<Vec<String>> {
+        self.locked_installable.outputs_to_install.clone()
     }
 }
 

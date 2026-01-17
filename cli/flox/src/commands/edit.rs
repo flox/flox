@@ -19,6 +19,7 @@ use flox_rust_sdk::models::environment::{
     EnvironmentError,
 };
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
+use flox_rust_sdk::providers::migrate::MigrateEnv;
 use flox_rust_sdk::providers::services::process_compose::ServiceError;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -97,6 +98,7 @@ impl Edit {
                 Err(e) => Err(e)?,
             };
         environment_subcommand_metric!("edit", detected_environment);
+        detected_environment.migrate_env(&flox)?;
 
         match self.action {
             EditAction::EditManifest { file } => {

@@ -1,0 +1,4 @@
+version = 1
+
+[install]
+bash.flake = "github:NixOS/nixpkgs/nixpkgs-unstable#bash"

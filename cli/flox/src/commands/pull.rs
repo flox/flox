@@ -22,6 +22,7 @@ use flox_rust_sdk::models::environment::{
 };
 use flox_rust_sdk::models::manifest::raw::add_system;
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
+use flox_rust_sdk::providers::migrate::MigrateEnv;
 use indoc::{formatdoc, indoc};
 use toml_edit::DocumentMut;
 use tracing::{debug, info_span, instrument};
@@ -164,12 +165,13 @@ impl Pull {
                     ConcreteEnvironment::Path(_) => {
                         unreachable!("patch environments should be filtered out")
                     },
-                    ConcreteEnvironment::Managed(managed_environment) => {
+                    ConcreteEnvironment::Managed(mut managed_environment) => {
                         Self::pull_managed_environment_updates(
                             &flox,
-                            managed_environment,
+                            &mut managed_environment,
                             self.force,
-                        )?
+                        )?;
+                        managed_environment.migrate_env(&flox)?;
                     },
                     ConcreteEnvironment::Remote(remote_environment) => {
                         Self::pull_remote_environment_updates(
@@ -191,7 +193,7 @@ impl Pull {
     /// which will update the lockfile.
     fn pull_managed_environment_updates(
         flox: &Flox,
-        mut env: ManagedEnvironment,
+        env: &mut ManagedEnvironment,
         force: bool,
     ) -> Result<(), EnvironmentError> {
         let state = env.pull(flox, force)?;
@@ -208,7 +210,7 @@ impl Pull {
                     suffix = if force { " (forced)" } else { "" }
                 });
 
-                warn_manifest_changes_for_services(flox, &env);
+                warn_manifest_changes_for_services(flox, env);
             },
             PullResult::UpToDate => {
                 message::warning(formatdoc! {"

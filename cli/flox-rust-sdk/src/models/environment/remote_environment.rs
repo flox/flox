@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use thiserror::Error;
 use tracing::debug;
@@ -40,7 +41,8 @@ use crate::models::environment::floxmeta_branch::{
 use crate::models::environment::managed_environment::GENERATION_LOCK_FILENAME;
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::{LockResult, Lockfile};
-use crate::models::manifest::raw::PackageToInstall;
+use crate::models::manifest::raw::{PackageToInstall, RawManifest};
+use crate::models::manifest::typed::Manifest;
 
 const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
 
@@ -88,6 +90,7 @@ pub struct RemoteEnvironment {
     /// Specific generation to use, i.e. from `flox activate`
     /// This doesn't represent the live generation.
     generation: Option<GenerationId>,
+    is_migrating: bool,
 }
 
 impl RemoteEnvironment {
@@ -225,6 +228,7 @@ impl RemoteEnvironment {
             inner,
             rendered_env_links,
             generation,
+            is_migrating: false,
         })
     }
 
@@ -324,6 +328,14 @@ impl Environment for RemoteEnvironment {
         self.inner.existing_lockfile(flox)
     }
 
+    fn is_migrating(&self) -> bool {
+        self.is_migrating
+    }
+
+    fn set_migrating(&mut self, state: bool) {
+        self.is_migrating = state;
+    }
+
     /// Install packages to the environment atomically
     fn install(
         &mut self,
@@ -398,6 +410,17 @@ impl Environment for RemoteEnvironment {
     /// - avoid double-locking
     fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError> {
         self.inner.manifest_contents(flox)
+    }
+
+    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError> {
+        self.inner.manifest(flox)
+    }
+
+    fn raw_manifest(&self, flox: &Flox) -> Result<RawManifest, EnvironmentError> {
+        self.manifest_contents(flox).and_then(|contents| {
+            let raw = RawManifest::from_str(contents.as_str());
+            raw.map_err(EnvironmentError::TomlEditDeserialize)
+        })
     }
 
     fn rendered_env_links(
@@ -524,7 +547,10 @@ pub mod test_helpers {
     use tempfile::tempdir_in;
 
     use super::*;
-    use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_in;
+    use crate::models::environment::managed_environment::test_helpers::{
+        mock_managed_environment_from_env_files_in,
+        mock_managed_environment_in,
+    };
 
     pub fn mock_remote_environment(
         flox: &Flox,
@@ -538,6 +564,26 @@ pub mod test_helpers {
             owner,
             tempdir_in(&flox.temp_dir).unwrap().keep(),
             name,
+        );
+        RemoteEnvironment::new_in(
+            flox,
+            managed_environment.parent_path().unwrap(),
+            managed_environment.pointer().clone(),
+            None,
+        )
+        .unwrap()
+    }
+
+    pub fn mock_remote_environment_from_env_files(
+        flox: &Flox,
+        env_files_dir: impl AsRef<Path>,
+        owner: EnvironmentOwner,
+    ) -> RemoteEnvironment {
+        let managed_environment = mock_managed_environment_from_env_files_in(
+            flox,
+            env_files_dir,
+            tempdir_in(&flox.temp_dir).unwrap().keep(),
+            owner,
         );
         RemoteEnvironment::new_in(
             flox,
