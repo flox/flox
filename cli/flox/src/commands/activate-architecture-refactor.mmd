@@ -97,6 +97,7 @@ flowchart TB
         nd["set_manifest_vars<br>source hook.on-activate<br>"]
         n63[["Capture end.env.json"]]
         n167["Capture start.env.json"]
+        n169(["exec args"])
   end
  subgraph colorkey["Color Key"]
         node_aqepkktvr["rust"]
@@ -212,8 +213,9 @@ flowchart TB
     match_activation_mode -- "<span style=padding-left:>flox activate -c 'command script'</span>" --> apply_activation_env_shell
     apply_activation_env_shell --> n145
     apply_activation_env_interactive --> n37
-    n7 -- cmd<br>mode --> n6
     n7 --> n167
+    n167 --> n6
+    n7 -- cmd<br>mode --> n6
     n6 --> nd
     n160(["Container entrypoint"]) --> Start
     n36 --> Start
@@ -225,7 +227,6 @@ flowchart TB
     ny --> n164
     n110 ~~~ n165
     n166(["flox-build.mk"]) -- "activate -- cmd args<br>activate -c 'cmd &amp;&amp; cmd'" --> activate
-    n167 --> n6
 
     n83@{ shape: doc}
     n137@{ shape: diam}
