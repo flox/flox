@@ -19,7 +19,6 @@ use flox_rust_sdk::models::environment::{
 use indoc::formatdoc;
 use tracing::{debug, instrument};
 
-use crate::commands::check_for_upgrades::invalidate_cached_remote_state;
 use crate::commands::{EnvironmentSelect, ensure_floxhub_token, environment_select};
 use crate::subcommand_metric;
 use crate::utils::errors::format_core_error;
@@ -142,12 +141,6 @@ fn handle_managed_environment_push(
         .push(flox, force)
         .map_err(|err| convert_error(err, pointer.clone(), false))?;
 
-    // avoid false environment upgrade notifications after referring to outdated remote state
-    let _ =
-        invalidate_cached_remote_state(&mut environment.into()).inspect_err(|invalidation_error| {
-            debug!(%invalidation_error, "failed to invalidate cached remote state");
-        });
-
     match push_result {
         PushResult::Updated => {
             let message = push_message(&pointer, force, false)?;
@@ -185,12 +178,6 @@ fn handle_remote_environment_push(
             ", name = remote_env.name()});
         },
     }
-
-    // avoid false environment upgrade notifications after referring to outdated remote state
-    let _ =
-        invalidate_cached_remote_state(&mut remote_env.into()).inspect_err(|invalidation_error| {
-            debug!(%invalidation_error, "failed to invalidate cached remote state");
-        });
 
     Ok(())
 }

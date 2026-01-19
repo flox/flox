@@ -45,6 +45,7 @@ use super::{
     copy_dir_recursive,
 };
 use crate::flox::{EnvironmentName, Flox};
+use crate::models::environment::floxmeta_branch::BranchOrd;
 use crate::models::environment::{MANIFEST_FILENAME, UninitializedEnvironment};
 use crate::providers::git::{
     GitCommandError,
@@ -596,6 +597,8 @@ pub trait GenerationsExt {
         flox: &Flox,
         generation: GenerationId,
     ) -> Result<super::RenderedEnvironmentLinks, EnvironmentError>;
+
+    fn compare_remote(&self) -> Result<BranchOrd, EnvironmentError>;
 }
 
 /// Combined type for environments supporting generations,

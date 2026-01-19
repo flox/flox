@@ -31,6 +31,7 @@ use super::{
 };
 use crate::flox::{EnvironmentOwner, Flox, RemoteEnvironmentRef};
 use crate::models::environment::floxmeta_branch::{
+    BranchOrd,
     FloxmetaBranch,
     FloxmetaBranchError,
     GenerationLock,
@@ -556,6 +557,10 @@ impl GenerationsExt for RemoteEnvironment {
         &self,
     ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
         self.inner.remote_generations_metadata()
+    }
+
+    fn compare_remote(&self) -> Result<BranchOrd, EnvironmentError> {
+        self.inner.compare_remote()
     }
 }
 
