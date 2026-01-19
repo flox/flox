@@ -223,7 +223,7 @@ flowchart TB
     AddAttachment --> WriteStateAttach
     ErrorMaxRetries --> Sleep
     ny --> n164
-    n110 --> n165
+    n110 ~~~ n165
     n166(["flox-build.mk"]) -- "activate -- cmd args<br>activate -c 'cmd &amp;&amp; cmd'" --> activate
     n167 --> n6
 
@@ -247,9 +247,9 @@ flowchart TB
     style apply_activation_env_shell fill:#FFE0B2
     style apply_activation_env_interactive fill:#FFE0B2
     style n155 fill:#FFE0B2
+    style exec_cmd fill:#FFE0B2
     style pc_start fill:#FFE0B2
     style n157 fill:#FFE0B2
-    style exec_cmd fill:#FFE0B2
     style ErrorOldVersion fill:#ffe1e1
     style ResetState fill:#ffebcc
     style ErrorModeMismatch fill:#ffe1e1
