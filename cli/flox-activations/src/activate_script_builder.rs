@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 
-use flox_core::activate::context::{ActivateCtx, AttachCtx, InvocationType};
+use flox_core::activate::context::{ActivateCtx, AttachCtx};
 use flox_core::activate::vars::{FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_VAR};
 use flox_core::activations::StartIdentifier;
 use flox_core::util::default_nix_env_vars;
@@ -26,7 +26,6 @@ pub(super) fn assemble_command_for_start_script(
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
     start_id: &StartIdentifier,
-    invocation_type: InvocationType,
 ) -> Command {
     let mut command = Command::new(
         context
@@ -43,7 +42,7 @@ pub(super) fn assemble_command_for_start_script(
         vars_from_env,
         start_id,
     );
-    add_start_script_options(&mut command, &context.attach_ctx, start_id, invocation_type);
+    add_start_script_options(&mut command, &context.attach_ctx, start_id);
     command
 }
 
@@ -144,18 +143,12 @@ fn add_start_script_options(
     command: &mut Command,
     context: &AttachCtx,
     start_id: &StartIdentifier,
-    invocation_type: InvocationType,
 ) {
     let state_dir_path = start_id
         .state_dir_path(&context.flox_runtime_dir, &context.dot_flox_path)
         .expect("Failed to compute state dir path");
 
-    command.args([
-        "--start-state-dir",
-        &state_dir_path.to_string_lossy(),
-        "--invocation-type",
-        &invocation_type.to_string(),
-    ]);
+    command.args(["--start-state-dir", &state_dir_path.to_string_lossy()]);
 }
 
 /// Prior to the refactor, these variables were exported in the activate script

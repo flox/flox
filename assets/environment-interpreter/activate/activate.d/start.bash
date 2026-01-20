@@ -35,7 +35,6 @@ env-description:,\
 mode:,\
 watchdog:,\
 start-state-dir:,\
-invocation-type:,\
 activation-id:,\
 noprofile"
 USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
@@ -45,8 +44,7 @@ USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
 [--env-description <name>] \
 [--noprofile] \
 [(-m|--mode) (dev|run)] \
-[--start-state-dir <path>] \
-[--invocation-type <type>]"
+[--start-state-dir <path>]"
 
 if ! PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@"); then
   echo "Failed to parse options." >&2
@@ -138,16 +136,6 @@ while true; do
       _start_state_dir="$1"
       shift
       ;;
-    --invocation-type)
-      shift
-      if [ -z "${1:-}" ]; then
-        echo "Option --invocation-type requires a type as an argument." >&2
-        echo "$USAGE" >&2
-        exit 1
-      fi
-      _flox_invocation_type="$1"
-      shift
-      ;;
     --noprofile)
       FLOX_NOPROFILE="true"
       shift
@@ -163,15 +151,6 @@ while true; do
       ;;
   esac
 done
-
-# Don't clobber STDERR or recommend 'exit' for non-interactive shells.
-# If inside a container, FLOX_ENV_DESCRIPTION won't be set, and we don't need to
-# print a message
-if [ "${_flox_invocation_type}" = "interactive" ] && [ -n "${FLOX_ENV_DESCRIPTION:-}" ]; then
-  echo "✅ You are now using the environment '$FLOX_ENV_DESCRIPTION'." >&2
-  echo "To stop using this environment, type 'exit'" >&2
-  echo >&2
-fi
 
 # First activation of this environment. Snapshot environment to start.
 _start_env_json="$_start_state_dir/start.env.json"
