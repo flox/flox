@@ -1022,8 +1022,8 @@ EOF
   assert_success
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    "${TESTS_DIR}/services/echo_activate_vars.sh" outer
-    "$FLOX_BIN" activate -d "$INNER_PROJECT_DIR" -- bash "${TESTS_DIR}/services/echo_activate_vars.sh" inner
+    echo "outer FLOX_ACTIVATE_START_SERVICES=${FLOX_ACTIVATE_START_SERVICES}"
+    "$FLOX_BIN" activate -d "$INNER_PROJECT_DIR" -- bash -c 'echo "inner FLOX_ACTIVATE_START_SERVICES=${FLOX_ACTIVATE_START_SERVICES}"'
 EOF
 )
   assert_success
@@ -1041,8 +1041,8 @@ EOF
   # NB: no --start-services
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
     "$FLOX_BIN" services start
-    "${TESTS_DIR}/services/echo_activate_vars.sh" outer
-    "$FLOX_BIN" activate -d "$INNER_PROJECT_DIR" -- bash "${TESTS_DIR}/services/echo_activate_vars.sh" inner
+    echo "outer FLOX_ACTIVATE_START_SERVICES=${FLOX_ACTIVATE_START_SERVICES}"
+    "$FLOX_BIN" activate -d "$INNER_PROJECT_DIR" -- bash -c 'echo "inner FLOX_ACTIVATE_START_SERVICES=${FLOX_ACTIVATE_START_SERVICES}"'
 EOF
 )
   assert_success
@@ -1351,7 +1351,31 @@ EOF
 
   # Edit the manifest adding a second service and changing the value of FOO.
   # Then start services again.
-  run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/start_picks_up_modifications.sh"
+  run "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
+    set -euo pipefail
+
+    MANIFEST_CONTENTS_2="$(cat << "MANIFEST"
+      version = 1
+
+      [services]
+      one.command = "echo $FOO"
+      two.command = "sleep infinity"
+
+      [hook]
+      on-activate = "export FOO=foo_two"
+MANIFEST
+    )"
+
+    echo "$MANIFEST_CONTENTS_2" | "$FLOX_BIN" edit -f -
+
+    # Make sure we avoid a race of service one failing to complete
+    "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
+
+    "$FLOX_BIN" services start
+    "$FLOX_BIN" services status
+    "$FLOX_BIN" services logs one
+EOF
+  )
   assert_success
 
   # The added service should be running.
@@ -1376,7 +1400,23 @@ EOF
 
   # Edit the manifest adding a second service.
   # Then try to start the second service.
-  run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/start_does_not_pick_up_modifications.sh"
+  run "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
+    set -euo pipefail
+
+    MANIFEST_CONTENTS_2="$(cat << "MANIFEST"
+      version = 1
+
+      [services]
+      one.command = "sleep infinity"
+      two.command = "sleep infinity"
+MANIFEST
+    )"
+
+    echo "$MANIFEST_CONTENTS_2" | "$FLOX_BIN" edit -f -
+
+    "$FLOX_BIN" services start two
+EOF
+  )
   assert_failure
   assert_output --partial "Service 'two' was defined after services were started."
 }
@@ -1434,7 +1474,39 @@ EOF
 
   # Call flox services start and check if the prior process-compose gets shutdown
   # This also appears to hang forever if process-compose doesn't get shutdown
-  run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/start_shuts_down_process_compose.sh"
+  run "$FLOX_BIN" activate -s -- bash <(cat << 'EOF'
+    set -euo pipefail
+
+    process_compose_pids_called_with_arg() {
+      # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
+      # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
+      # grep command itself doesn't get listed when we search for the data dir.
+      # The `cut` just extracts the PID.
+      pattern="$1"
+      ps_output="$(ps -eo pid,args)"
+      process_composes="$(echo "$ps_output" | grep process-compose)"
+      matches="$(echo "$process_composes" | grep "$pattern")"
+      # This is a load-bearing 'xargs', it strips leading/trailing whitespace that
+      # trips up 'cut'
+      pids="$(echo "$matches" | xargs | cut -d' ' -f1)"
+      echo "$pids"
+    }
+
+    # Make sure we avoid a race of service one failing to complete
+    "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
+
+    process_compose_pids_before="$(process_compose_pids_called_with_arg "$(pwd)/.flox/run")"
+    "$FLOX_BIN" services start
+
+    export process_compose_pids_before
+    export -f process_compose_pids_called_with_arg
+    timeout 2s bash -c '
+      while [[ "$process_compose_pids_before" == "$(process_compose_pids_called_with_arg "$(pwd)/.flox/run")" ]]; do
+        sleep 0.1
+      done
+    '
+EOF
+  )
   assert_success
 }
 
@@ -1490,7 +1562,17 @@ EOF
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/daemonize.yaml"
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
-  run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/check_daemon_process.sh"
+  run "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
+    set -euxo pipefail
+
+    timeout 2 bash -c 'set -x; while [ ! -e "$(pwd)/pidfile" ]; do sleep .1; done'
+
+    "$FLOX_BIN" services status
+    "$FLOX_BIN" services stop
+
+    timeout 2 bash -c 'set -x; while kill -0 "$(cat "$(pwd)/pidfile")"; do sleep .1; done'
+EOF
+  )
   assert_success
 }
 
