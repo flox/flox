@@ -4,7 +4,9 @@ use std::path::PathBuf;
 use anyhow::Result;
 use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file};
 
-/// Arguments for generating bash startup commands
+use crate::env_diff::EnvDiff;
+
+/// Arguments for generating zsh startup commands
 #[derive(Debug, Clone)]
 pub struct ZshStartupArgs {
     pub flox_activate_tracelevel: u32,
@@ -14,23 +16,25 @@ pub struct ZshStartupArgs {
     pub flox_env_project: Option<PathBuf>,
     pub flox_env_description: Option<String>,
     pub clean_up: Option<PathBuf>,
-    pub activation_state_dir: PathBuf,
 }
 
-pub fn generate_zsh_startup_commands(args: &ZshStartupArgs, writer: &mut impl Write) -> Result<()> {
+pub fn generate_zsh_startup_commands(
+    args: &ZshStartupArgs,
+    env_diff: &EnvDiff,
+    writer: &mut impl Write,
+) -> Result<()> {
     let mut stmts = vec![];
     stmts.push(set_unexported_unexpanded(
         "_flox_activate_tracelevel",
         format!("{}", &args.flox_activate_tracelevel),
     ));
     stmts.push(set_unexported_unexpanded(
-        "_FLOX_START_STATE_DIR",
-        args.activation_state_dir.display().to_string(),
-    ));
-    stmts.push(set_unexported_unexpanded(
         "_activate_d",
         args.activate_d.display().to_string(),
     ));
+
+    // Restore environment variables set in the previous initialization.
+    env_diff.generate_statements(&mut stmts);
     // Propagate required variables that are documented as exposed.
     stmts.push(set_unexported_unexpanded(
         "_FLOX_ENV",
@@ -71,6 +75,8 @@ pub fn generate_zsh_startup_commands(args: &ZshStartupArgs, writer: &mut impl Wr
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use expect_test::expect;
 
     use super::*;
@@ -81,10 +87,16 @@ mod tests {
 
     #[test]
     fn test_generate_zsh_startup_commands_basic() {
+        let additions = {
+            let mut map = HashMap::new();
+            map.insert("ADDED_VAR".to_string(), "ADDED_VALUE".to_string());
+            map
+        };
+        let deletions = vec!["DELETED_VAR".to_string()];
+        let env_diff = EnvDiff::from_parts(additions, deletions);
         let args = ZshStartupArgs {
             flox_activate_tracelevel: 3,
             activate_d: PathBuf::from("/activate_d"),
-            activation_state_dir: PathBuf::from("/activation_state_dir"),
             flox_env: "/flox_env".into(),
             flox_env_cache: Some("/flox_env_cache".into()),
             flox_env_project: Some("/flox_env_project".into()),
@@ -92,12 +104,13 @@ mod tests {
             clean_up: Some("/path/to/rc/file".into()),
         };
         let mut buf = Vec::new();
-        generate_zsh_startup_commands(&args, &mut buf).unwrap();
+        generate_zsh_startup_commands(&args, &env_diff, &mut buf).unwrap();
         let output = String::from_utf8_lossy(&buf);
         expect![[r#"
             typeset -g _flox_activate_tracelevel='3';
-            typeset -g _FLOX_START_STATE_DIR='/activation_state_dir';
             typeset -g _activate_d='/activate_d';
+            export ADDED_VAR='ADDED_VALUE';
+            unset DELETED_VAR;
             typeset -g _FLOX_ENV='/flox_env';
             typeset -g _FLOX_ENV_CACHE='/flox_env_cache';
             typeset -g _FLOX_ENV_PROJECT='/flox_env_project';

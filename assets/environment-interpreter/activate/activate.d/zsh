@@ -1,6 +1,5 @@
 "$_flox_activate_tracer" "$_activate_d/zsh" START
 
-_sed="@gnused@/bin/sed"
 _flox_activations="@flox_activations@"
 
 
@@ -112,10 +111,6 @@ if [ "$old_fpath" != "$new_fpath" ]; then
     set -x
   fi
 fi
-
-# Restore environment variables set in the previous bash initialization.
-eval "$($_sed -e 's/^/unset /' -e 's/$/;/' "$_FLOX_START_STATE_DIR/del.env")"
-eval "$($_sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_START_STATE_DIR/add.env")"
 
 # Set the prompt if we're in an interactive shell.
 if [[ -o interactive ]]; then
