@@ -62,7 +62,6 @@ let
       daemonize
       findutils
       getopt
-      gnused
       jq
       nawk
       ;
