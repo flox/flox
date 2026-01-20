@@ -538,6 +538,9 @@ pub enum TomlEditError {
 
     #[error("'{0}' is not a supported attribute in manifest version 1")]
     UnsupportedAttributeV1(String),
+
+    #[error("malformed package entry for '{0}'")]
+    MalformedPackageEntry(String),
 }
 
 /// Records the result of trying to install a collection of packages to the
@@ -686,6 +689,23 @@ impl RawSelectedOutputs {
             Self::Specific(s.split(',').map(|s| s.trim().to_string()).collect())
         }
     }
+}
+
+/// Represents the modification to apply to a package in the manifest.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PackageModification {
+    /// Remove the entire package from the manifest
+    Remove,
+    /// Update the outputs field to the specified list
+    UpdateOutputs(Vec<String>),
+}
+
+/// Represents a package modification specification with install ID.
+/// This contains the final state to apply to the manifest.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackageToModify {
+    pub install_id: String,
+    pub modification: PackageModification,
 }
 
 /// A package to install from the catalog.
@@ -1122,6 +1142,88 @@ pub fn remove_packages(
     }
 
     Ok(toml)
+}
+
+/// Modify packages in the `[install]` table of a manifest.
+/// This function applies modifications to packages, either removing them entirely
+/// or updating their outputs field.
+///
+/// The caller is responsible for computing the final state (e.g., which outputs
+/// should remain after an uninstall operation). This function simply applies
+/// those modifications to the TOML structure.
+///
+/// TODO: Consider generalizing `PackageModification::UpdateOutputs` to use a full
+/// package descriptor (e.g., `PackageModification::Update(PackageToInstall)`) to
+/// support arbitrary modifications like changing versions, pkg-path, or other fields.
+/// This would allow reusing `insert_packages` logic and enable more use cases beyond
+/// just output modifications.
+pub fn modify_packages(
+    manifest_contents: &str,
+    modifications: &[PackageToModify],
+) -> Result<DocumentMut, TomlEditError> {
+    debug!("attempting to modify packages in the manifest");
+    let mut toml = manifest_contents
+        .parse::<RawManifest>()
+        .map_err(TomlEditError::ParseManifest)?
+        .0;
+
+    let installs_table = {
+        let installs_field = toml
+            .get_mut("install")
+            .ok_or_else(|| TomlEditError::PackageNotFound(modifications[0].install_id.clone()))?;
+
+        let type_name = installs_field.type_name().into();
+        installs_field
+            .as_table_mut()
+            .ok_or(TomlEditError::MalformedInstallTable(type_name))?
+    };
+
+    for spec in modifications {
+        let id = &spec.install_id;
+        debug!("processing modification for package '{id}'");
+
+        if !installs_table.contains_key(id) {
+            debug!("package with install id '{id}' wasn't found");
+            return Err(TomlEditError::PackageNotFound(id.clone()));
+        }
+
+        match &spec.modification {
+            PackageModification::Remove => {
+                installs_table.remove(id);
+                debug!("package with install id '{id}' was removed");
+            },
+            PackageModification::UpdateOutputs(outputs) => {
+                update_package_outputs(installs_table, id, outputs)?;
+                debug!("updated outputs for package '{id}' to: {:?}", outputs);
+            },
+        }
+    }
+
+    Ok(toml)
+}
+
+/// Update the outputs field of a package entry in the install table.
+fn update_package_outputs(
+    installs_table: &mut Table,
+    install_id: &str,
+    outputs: &[String],
+) -> Result<(), TomlEditError> {
+    let package_entry = installs_table.get_mut(install_id).unwrap();
+
+    let package_table = package_entry
+        .as_table_like_mut()
+        .ok_or_else(|| TomlEditError::MalformedPackageEntry(install_id.to_string()))?;
+
+    // Create the outputs array
+    let outputs_array = Array::from_iter(
+        outputs
+            .iter()
+            .map(|s| Value::String(Formatted::new(s.clone()))),
+    );
+
+    package_table.insert("outputs", Item::Value(Value::Array(outputs_array)));
+
+    Ok(())
 }
 
 /// Check whether a TOML document contains a line declaring that the provided package
@@ -1923,6 +2025,113 @@ pub(super) mod test {
         ];
         let removal = remove_packages(DUMMY_MANIFEST, &test_packages);
         assert!(matches!(removal, Err(TomlEditError::PackageNotFound(_))));
+    }
+
+    #[test]
+    fn modify_packages_removes_package() {
+        let modifications = vec![PackageToModify {
+            install_id: "hello".to_string(),
+            modification: PackageModification::Remove,
+        }];
+        let toml = modify_packages(DUMMY_MANIFEST, &modifications).unwrap();
+        assert!(!contains_package(&toml, "hello").unwrap());
+        assert!(contains_package(&toml, "ripgrep").unwrap());
+        assert!(contains_package(&toml, "bat").unwrap());
+    }
+
+    #[test]
+    fn modify_packages_updates_outputs() {
+        let manifest = indoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+            hello.outputs = ["out", "man", "dev"]
+        "#};
+
+        let modifications = vec![PackageToModify {
+            install_id: "hello".to_string(),
+            modification: PackageModification::UpdateOutputs(vec![
+                "out".to_string(),
+                "man".to_string(),
+            ]),
+        }];
+
+        let toml = modify_packages(manifest, &modifications).unwrap();
+        let toml_str = toml.to_string();
+
+        // Check that the outputs field was updated
+        assert!(toml_str.contains(r#"outputs = ["out", "man"]"#));
+        assert!(contains_package(&toml, "hello").unwrap());
+    }
+
+    #[test]
+    fn modify_packages_updates_outputs_on_inline_table() {
+        let manifest = indoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+            hello.outputs = ["out", "man", "dev", "doc"]
+        "#};
+
+        let modifications = vec![PackageToModify {
+            install_id: "hello".to_string(),
+            modification: PackageModification::UpdateOutputs(vec!["out".to_string()]),
+        }];
+
+        let toml = modify_packages(manifest, &modifications).unwrap();
+        let toml_str = toml.to_string();
+
+        // Check that only one output remains
+        assert!(toml_str.contains(r#"outputs = ["out"]"#));
+    }
+
+    #[test]
+    fn modify_packages_multiple_modifications() {
+        let manifest = indoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+            hello.outputs = ["out", "man"]
+
+            ripgrep.pkg-path = "ripgrep"
+
+            bat.pkg-path = "bat"
+            bat.outputs = ["out", "doc"]
+        "#};
+
+        let modifications = vec![
+            PackageToModify {
+                install_id: "ripgrep".to_string(),
+                modification: PackageModification::Remove,
+            },
+            PackageToModify {
+                install_id: "bat".to_string(),
+                modification: PackageModification::UpdateOutputs(vec!["out".to_string()]),
+            },
+        ];
+
+        let toml = modify_packages(manifest, &modifications).unwrap();
+
+        assert!(contains_package(&toml, "hello").unwrap());
+        assert!(!contains_package(&toml, "ripgrep").unwrap());
+        assert!(contains_package(&toml, "bat").unwrap());
+
+        let toml_str = toml.to_string();
+        assert!(toml_str.contains(r#"bat.outputs = ["out"]"#));
+    }
+
+    #[test]
+    fn modify_packages_error_package_not_found() {
+        let modifications = vec![PackageToModify {
+            install_id: "nonexistent".to_string(),
+            modification: PackageModification::Remove,
+        }];
+
+        let result = modify_packages(DUMMY_MANIFEST, &modifications);
+        assert!(matches!(result, Err(TomlEditError::PackageNotFound(_))));
     }
 
     #[test]
