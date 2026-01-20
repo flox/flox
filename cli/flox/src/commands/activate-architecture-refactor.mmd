@@ -92,12 +92,17 @@ flowchart TB
         Done["Done: PID attached to start_id<br>{store_path, timestamp}"]
   end
  subgraph activate["activate (bash)"]
-        n7[["source &lt;(flox-activations set-env-dirs)<br>source &lt;(flox-activations fix-paths)"]]
+        n7["cmd mode?"]
         n6["source etc-profiles"]
-        nd["set_manifest_vars<br>source hook.on-activate<br>"]
+        nd["set_manifest_vars"]
+        n171["hook.on-activate"]
         n63[["Capture end.env.json"]]
         n167["Capture start.env.json"]
-        n169(["exec args"])
+        n169(["exec new_args"])
+        n170["set required vars (FLOX_ENV, PATH, FLOX_ENV_CACHE, etc.)"]
+        n172@{ label: "Set new_args to `bash -c 'args'` if passed -c, else cmd args" }
+        n173["--no-run-hook-on-activate?"]
+        n174["cmd mode?"]
   end
  subgraph colorkey["Color Key"]
         node_aqepkktvr["rust"]
@@ -184,8 +189,7 @@ flowchart TB
     match_activation_mode -- "flox activate -- cmd args" --> apply_activation_env_exec
     match_activation_mode -- interactive --> apply_activation_env_interactive
     apply_activation_env_exec --> exec_cmd
-    nd --> n63
-    nd -- cmd<br>mode --> n169(["exec args"])
+    nd --> n173
     A(["Parent PID<br>flox activate<br>"]) -- fork() &amp;&amp; exec(flox) --> n88
     n88 --> n89
     n89 --> n36
@@ -213,9 +217,9 @@ flowchart TB
     match_activation_mode -- "<span style=padding-left:>flox activate -c 'command script'</span>" --> apply_activation_env_shell
     apply_activation_env_shell --> n145
     apply_activation_env_interactive --> n37
-    n7 --> n167
+    n7 -- no --> n167
+    n7 -- yes --> n172
     n167 --> n6
-    n7 -- cmd<br>mode --> n6
     n6 --> nd
     n160(["Container entrypoint"]) --> Start
     n36 --> Start
@@ -226,12 +230,22 @@ flowchart TB
     ErrorMaxRetries --> Sleep
     ny --> n164
     n110 ~~~ n165
-    n166(["flox-build.mk"]) -- "activate -- cmd args<br>activate -c 'cmd &amp;&amp; cmd'" --> activate
+    n166(["flox-build.mk"]) -- "activate -- cmd args<br>activate -c 'cmd &amp;&amp; args'" --> activate
+    n170 --> n6
+    n172 --> n170
+    n173 --> n174 & n171
+    n174 -- no --> n63
+    n174 -- yes --> n169
+    n171 --> n174
 
     n83@{ shape: doc}
     n137@{ shape: diam}
     pc_start@{ shape: rect}
+    n7@{ shape: diam}
     n167@{ shape: subproc}
+    n172@{ shape: rect}
+    n173@{ shape: diam}
+    n174@{ shape: diam}
     n100@{ shape: rect}
     n162@{ shape: diam}
     n164@{ shape: subproc}
@@ -262,8 +276,14 @@ flowchart TB
     style n7 fill:#BBDEFB
     style n6 fill:#BBDEFB
     style nd fill:#BBDEFB
+    style n171 fill:#BBDEFB
     style n63 fill:#BBDEFB
     style n167 fill:#BBDEFB
+    style n169 fill:#FFF9C4,stroke-width:2px,stroke-dasharray: 2
+    style n170 fill:#BBDEFB
+    style n172 fill:#BBDEFB
+    style n173 fill:#BBDEFB
+    style n174 fill:#BBDEFB
     style node_aqepkktvr fill:#FFE0B2
     style n0 fill:#BBDEFB
     style nz fill:#E1BEE7
@@ -286,7 +306,6 @@ flowchart TB
     style n88 fill:#FFE0B2
     style n89 fill:#FFE0B2
     style n36 fill:#FFE0B2
-    style n169 fill:#FFF9C4,stroke-width:2px,stroke-dasharray: 2
     style A fill:#FFFFFF
     style n166 fill:#FFF9C4,stroke-width:2px,stroke-dasharray: 2
     style activate fill:#F8F8F8
