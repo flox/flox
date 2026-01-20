@@ -3,7 +3,6 @@
 
 [ "${_flox_activate_tracelevel:?}" -eq 0 ] || set -x
 
-_daemonize="@daemonize@/bin/daemonize"
 _getopt="@getopt@/bin/getopt"
 _flox_activations="@flox_activations@"
 _jq="@jq@/bin/jq"

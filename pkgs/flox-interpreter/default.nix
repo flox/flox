@@ -59,7 +59,6 @@ let
     inherit
       bash
       coreutils
-      daemonize
       findutils
       getopt
       jq
@@ -72,7 +71,6 @@ let
     # otherwise copy the binary from the environment into the store,
     # so that sandboxed builds and flox built containers can access it.
     flox_activations = "${flox-activations}/libexec/flox-activations";
-    util_linux = util-linuxMinimal;
     # Make clear when packages are not available on Darwin.
     ld_floxlib = if stdenv.isLinux then ld-floxlib else "__LINUX_ONLY__";
     iconv = if stdenv.isLinux then iconv else "__LINUX_ONLY__";
