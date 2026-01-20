@@ -15,6 +15,7 @@ use crate::data::System;
 use crate::flox::Features;
 use crate::models::environment::path_environment::InitCustomization;
 use crate::models::lockfile::DEFAULT_SYSTEMS_STR;
+use crate::models::manifest::typed::SelectedOutputs;
 
 /// Represents the `[version]` number key in manifest.toml
 pub const MANIFEST_VERSION_KEY: &str = "version";
@@ -691,6 +692,42 @@ impl RawSelectedOutputs {
     }
 }
 
+/// Represents a package uninstall specification parsed from CLI arguments.
+/// This is the input from the user before resolution against the manifest.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UninstallSpec {
+    /// A "loose" reference to a package to be uninstalled
+    /// This can be the pkg-path or install_id of the package
+    pub package_ref: String,
+    /// Specific outputs to uninstall, or None to uninstall the entire package
+    pub outputs: Option<RawSelectedOutputs>,
+}
+
+impl UninstallSpec {
+    /// Parse from string format: "install_id" or "install_id^out,man,dev" or "install_id^.."
+    pub fn parse(s: &str) -> Result<Self, RawManifestError> {
+        match s.split_once('^') {
+            Some((install_id, outputs_str)) => {
+                if outputs_str.is_empty() {
+                    return Err(RawManifestError::MalformedStringDescriptor {
+                        msg: "expected output specification after '^'".to_string(),
+                        desc: s.to_string(),
+                    });
+                }
+                let outputs = RawSelectedOutputs::parse(outputs_str);
+                Ok(Self {
+                    package_ref: install_id.to_string(),
+                    outputs: Some(outputs),
+                })
+            },
+            None => Ok(Self {
+                package_ref: s.to_string(),
+                outputs: None,
+            }),
+        }
+    }
+}
+
 /// Represents the modification to apply to a package in the manifest.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackageModification {
@@ -1158,17 +1195,13 @@ pub fn remove_packages(
 /// This would allow reusing `insert_packages` logic and enable more use cases beyond
 /// just output modifications.
 pub fn modify_packages(
-    manifest_contents: &str,
+    raw_manifest: &mut RawManifest,
     modifications: &[PackageToModify],
-) -> Result<DocumentMut, TomlEditError> {
+) -> Result<(), TomlEditError> {
     debug!("attempting to modify packages in the manifest");
-    let mut toml = manifest_contents
-        .parse::<RawManifest>()
-        .map_err(TomlEditError::ParseManifest)?
-        .0;
 
     let installs_table = {
-        let installs_field = toml
+        let installs_field = raw_manifest
             .get_mut("install")
             .ok_or_else(|| TomlEditError::PackageNotFound(modifications[0].install_id.clone()))?;
 
@@ -1199,7 +1232,7 @@ pub fn modify_packages(
         }
     }
 
-    Ok(toml)
+    Ok(())
 }
 
 /// Update the outputs field of a package entry in the install table.
@@ -1224,6 +1257,57 @@ fn update_package_outputs(
     package_table.insert("outputs", Item::Value(Value::Array(outputs_array)));
 
     Ok(())
+}
+
+/// Convert an uninstall specification to a package modification.
+///
+/// This function connects the intent (what outputs to uninstall),
+/// with the reality of which outputs are currently installed.
+/// Recall that, if the manifest defines outputs as [RawSelectedOutputs::All],
+/// we include `all_outputs`, and with [RawSelectedOutputs::Specific]
+/// we include the specifically named outputs.
+/// If outputs is undefined, we fall back to `outputs_to_install`
+///
+/// The purpose of this function is to determine the _new_ list of outputs
+/// after removing the outputs referred to in `spec`
+/// taking into account the substitute and default value for the attribute.
+pub fn modification_for_outputs(
+    outputs_to_remove: Option<&RawSelectedOutputs>,
+    current_outputs: Option<&SelectedOutputs>,
+    outputs_to_install: &[String],
+    all_outputs: &[String],
+) -> PackageModification {
+    let Some(ref outputs_to_remove) = outputs_to_remove else {
+        // No outputs specified: remove entire package
+        return PackageModification::Remove;
+    };
+
+    // Choose the starting set of outputs based on
+    let manifest_outputs = match current_outputs {
+        Some(SelectedOutputs::All(_)) => all_outputs.to_vec(),
+        Some(SelectedOutputs::Specific(outputs)) => outputs.clone(),
+        None => outputs_to_install.to_vec(), // implicit default uses outputs to install
+    };
+
+    // Remove the specified outputs from the manifest definition
+    let mut remaining_outputs = match outputs_to_remove {
+        RawSelectedOutputs::All => Vec::new(),
+        RawSelectedOutputs::Specific(to_remove) => manifest_outputs
+            .into_iter()
+            .filter(|o| !to_remove.contains(o))
+            .collect(),
+    };
+
+    // Intersect with what's actually installed
+    remaining_outputs.retain(|o| outputs_to_install.contains(o));
+
+    if remaining_outputs.is_empty() {
+        // All outputs removed: remove entire package
+        return PackageModification::Remove;
+    }
+
+    // Some outputs remain: update outputs field
+    PackageModification::UpdateOutputs(remaining_outputs)
 }
 
 /// Check whether a TOML document contains a line declaring that the provided package
@@ -1294,7 +1378,7 @@ pub(super) mod test {
 
     use super::*;
     use crate::models::lockfile::DEFAULT_SYSTEMS_STR;
-    use crate::models::manifest::typed::ActivateMode;
+    use crate::models::manifest::typed::{ActivateMode, AllSentinel};
 
     const DUMMY_MANIFEST: &str = indoc! {r#"
         version = 1
@@ -2033,10 +2117,11 @@ pub(super) mod test {
             install_id: "hello".to_string(),
             modification: PackageModification::Remove,
         }];
-        let toml = modify_packages(DUMMY_MANIFEST, &modifications).unwrap();
-        assert!(!contains_package(&toml, "hello").unwrap());
-        assert!(contains_package(&toml, "ripgrep").unwrap());
-        assert!(contains_package(&toml, "bat").unwrap());
+        let mut manifest = DUMMY_MANIFEST.parse().unwrap();
+        modify_packages(&mut manifest, &modifications).unwrap();
+        assert!(!contains_package(&manifest, "hello").unwrap());
+        assert!(contains_package(&manifest, "ripgrep").unwrap());
+        assert!(contains_package(&manifest, "bat").unwrap());
     }
 
     #[test]
@@ -2049,6 +2134,8 @@ pub(super) mod test {
             hello.outputs = ["out", "man", "dev"]
         "#};
 
+        let mut manifest = manifest.parse().unwrap();
+
         let modifications = vec![PackageToModify {
             install_id: "hello".to_string(),
             modification: PackageModification::UpdateOutputs(vec![
@@ -2057,12 +2144,12 @@ pub(super) mod test {
             ]),
         }];
 
-        let toml = modify_packages(manifest, &modifications).unwrap();
-        let toml_str = toml.to_string();
+        modify_packages(&mut manifest, &modifications).unwrap();
+        let toml_str = manifest.to_string();
 
         // Check that the outputs field was updated
         assert!(toml_str.contains(r#"outputs = ["out", "man"]"#));
-        assert!(contains_package(&toml, "hello").unwrap());
+        assert!(contains_package(&manifest, "hello").unwrap());
     }
 
     #[test]
@@ -2074,14 +2161,15 @@ pub(super) mod test {
             hello.pkg-path = "hello"
             hello.outputs = ["out", "man", "dev", "doc"]
         "#};
+        let mut manifest = manifest.parse().unwrap();
 
         let modifications = vec![PackageToModify {
             install_id: "hello".to_string(),
             modification: PackageModification::UpdateOutputs(vec!["out".to_string()]),
         }];
 
-        let toml = modify_packages(manifest, &modifications).unwrap();
-        let toml_str = toml.to_string();
+        modify_packages(&mut manifest, &modifications).unwrap();
+        let toml_str = manifest.to_string();
 
         // Check that only one output remains
         assert!(toml_str.contains(r#"outputs = ["out"]"#));
@@ -2101,6 +2189,7 @@ pub(super) mod test {
             bat.pkg-path = "bat"
             bat.outputs = ["out", "doc"]
         "#};
+        let mut manifest = manifest.parse().unwrap();
 
         let modifications = vec![
             PackageToModify {
@@ -2113,13 +2202,13 @@ pub(super) mod test {
             },
         ];
 
-        let toml = modify_packages(manifest, &modifications).unwrap();
+        modify_packages(&mut manifest, &modifications).unwrap();
 
-        assert!(contains_package(&toml, "hello").unwrap());
-        assert!(!contains_package(&toml, "ripgrep").unwrap());
-        assert!(contains_package(&toml, "bat").unwrap());
+        assert!(contains_package(&manifest, "hello").unwrap());
+        assert!(!contains_package(&manifest, "ripgrep").unwrap());
+        assert!(contains_package(&manifest, "bat").unwrap());
 
-        let toml_str = toml.to_string();
+        let toml_str = manifest.to_string();
         assert!(toml_str.contains(r#"bat.outputs = ["out"]"#));
     }
 
@@ -2130,8 +2219,120 @@ pub(super) mod test {
             modification: PackageModification::Remove,
         }];
 
-        let result = modify_packages(DUMMY_MANIFEST, &modifications);
+        let mut manifest = DUMMY_MANIFEST.parse().unwrap();
+        let result = modify_packages(&mut manifest, &modifications);
         assert!(matches!(result, Err(TomlEditError::PackageNotFound(_))));
+    }
+
+    #[test]
+    fn uninstall_spec_no_outputs_removes_package() {
+        let result =
+            modification_for_outputs(None, None, &["out".to_string(), "man".to_string()], &[
+                "out".to_string(),
+                "man".to_string(),
+                "dev".to_string(),
+            ]);
+        assert_eq!(result, PackageModification::Remove,);
+    }
+
+    #[test]
+    fn uninstall_spec_specific_outputs_from_explicit_list() {
+        let current = SelectedOutputs::Specific(vec![
+            "out".to_string(),
+            "man".to_string(),
+            "dev".to_string(),
+        ]);
+        let result = modification_for_outputs(
+            Some(&RawSelectedOutputs::Specific(vec!["man".to_string()])),
+            Some(&current),
+            &["out".to_string(), "man".to_string(), "dev".to_string()],
+            &["out".to_string(), "man".to_string(), "dev".to_string()],
+        );
+        assert_eq!(
+            result,
+            PackageModification::UpdateOutputs(vec!["out".to_string(), "dev".to_string()]),
+        );
+    }
+
+    #[test]
+    fn uninstall_spec_from_all_outputs() {
+        let current = SelectedOutputs::All(AllSentinel::All);
+        let all_outputs = vec![
+            "out".to_string(),
+            "man".to_string(),
+            "dev".to_string(),
+            "doc".to_string(),
+        ];
+        let result = modification_for_outputs(
+            Some(&RawSelectedOutputs::Specific(vec!["doc".to_string()])),
+            Some(&current),
+            &["out".to_string(), "man".to_string(), "doc".to_string()],
+            &all_outputs,
+        );
+        assert_eq!(
+            result,
+            PackageModification::UpdateOutputs(vec!["out".to_string(), "man".to_string()]),
+        );
+    }
+
+    #[test]
+    fn uninstall_spec_from_implicit_defaults() {
+        let outputs_to_install = vec!["out".to_string(), "man".to_string()];
+        let result = modification_for_outputs(
+            Some(&RawSelectedOutputs::Specific(vec!["man".to_string()])),
+            None, // No explicit outputs in manifest
+            &outputs_to_install,
+            &["out".to_string(), "man".to_string(), "dev".to_string()],
+        );
+        assert_eq!(
+            result,
+            PackageModification::UpdateOutputs(vec!["out".to_string()]),
+        );
+    }
+
+    #[test]
+    fn uninstall_spec_all_outputs_removes_package() {
+        let current = SelectedOutputs::Specific(vec!["out".to_string(), "man".to_string()]);
+        let result = modification_for_outputs(
+            Some(&RawSelectedOutputs::All),
+            Some(&current),
+            &["out".to_string(), "man".to_string()],
+            &["out".to_string(), "man".to_string()],
+        );
+        assert_eq!(result, PackageModification::Remove,);
+    }
+
+    #[test]
+    fn uninstall_spec_last_output_removes_package() {
+        let current = SelectedOutputs::Specific(vec!["out".to_string()]);
+        let result = modification_for_outputs(
+            Some(&RawSelectedOutputs::Specific(vec!["out".to_string()])),
+            Some(&current),
+            &["out".to_string()],
+            &["out".to_string(), "man".to_string()],
+        );
+        assert_eq!(result, PackageModification::Remove,);
+    }
+
+    #[test]
+    fn uninstall_spec_intersects_with_installed() {
+        // Package has outputs = ["out", "man", "dev"] but only ["out", "man"] are installed
+        let current = SelectedOutputs::Specific(vec![
+            "out".to_string(),
+            "man".to_string(),
+            "dev".to_string(),
+        ]);
+        let outputs_to_install = vec!["out".to_string(), "man".to_string()];
+        let result = modification_for_outputs(
+            Some(&RawSelectedOutputs::Specific(vec!["man".to_string()])),
+            Some(&current),
+            &outputs_to_install,
+            &["out".to_string(), "man".to_string(), "dev".to_string()],
+        );
+        assert_eq!(
+            result,
+            PackageModification::UpdateOutputs(vec!["out".to_string()]),
+        );
     }
 
     #[test]
