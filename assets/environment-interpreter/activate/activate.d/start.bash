@@ -4,7 +4,6 @@
 [ "${_flox_activate_tracelevel:?}" -eq 0 ] || set -x
 
 _getopt="@getopt@/bin/getopt"
-_flox_activations="@flox_activations@"
 _jq="@jq@/bin/jq"
 
 _profile_d="__OUT__/etc/profile.d"
@@ -20,23 +19,19 @@ source "${_activate_d}/helpers.bash"
 "$_flox_activate_tracer" "$_activate_d/start.bash" START
 
 # Parse command-line arguments.
-OPTIONS="e:c:m:"
+OPTIONS="c:m:"
 LONGOPTS="command:,\
 shell:,\
 env-cache:,\
 env-project:,\
 env-description:,\
 mode:,\
-watchdog:,\
-start-state-dir:,\
-activation-id:,\
-noprofile"
+start-state-dir:"
 USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
 [--shell <shell>] \
 [--env-cache <path>] \
 [--env-project <path>] \
 [--env-description <name>] \
-[--noprofile] \
 [(-m|--mode) (dev|run)] \
 [--start-state-dir <path>]"
 
@@ -51,7 +46,6 @@ eval set -- "$PARSED"
 
 # Set default values for options.
 FLOX_CMD=""
-FLOX_NOPROFILE="${FLOX_NOPROFILE:-}"
 # The rust CLI contains sophisticated logic to detect the shell based on
 # $FLOX_SHELL or the process listening on STDOUT, but that won't happen when
 # activating from the top-level activation script, so fall back to $SHELL as a
@@ -128,10 +122,6 @@ while true; do
         exit 1
       fi
       _start_state_dir="$1"
-      shift
-      ;;
-    --noprofile)
-      FLOX_NOPROFILE="true"
       shift
       ;;
     --)
