@@ -1390,13 +1390,15 @@ dependencies = [
  "dirs",
  "expect-test",
  "flox-core",
- "flox-watchdog",
  "fslock",
+ "glob",
  "indoc",
  "is_executable",
  "itertools",
+ "kqueue",
  "nix",
  "pretty_assertions",
+ "procfs",
  "serde",
  "serde_json",
  "shell-escape",
@@ -1495,29 +1497,6 @@ dependencies = [
  "nix",
  "proptest",
  "tempfile",
-]
-
-[[package]]
-name = "flox-watchdog"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "clap",
- "filetime",
- "flox-activations",
- "flox-core",
- "fslock",
- "glob",
- "kqueue",
- "nix",
- "procfs",
- "serde_json",
- "signal-hook 0.4.1",
- "tempfile",
- "time",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
 ]
 
 [[package]]

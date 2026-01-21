@@ -34,7 +34,7 @@ craneLib.buildPackage (
 
     # Note about incremental compilation:
     #
-    # Unlike the `flox` and `flox-watchdog` packages,
+    # Unlike the `flox` package,
     # we cannot reuse the `flox-*-deps` packages for incremental compilation
     # because this crate is built with the "small" profile,
     # which among othet things applies different compiler optimizations.

@@ -156,3 +156,33 @@ pub fn start_services_blocking(
     debug!("Process-compose socket ready at: {:?}", socket_file);
     Ok(())
 }
+
+/// Shuts down process-compose by running `process-compose down` via the unix socket.
+///
+/// This is a variation of `providers::services::process_compose_down` to avoid
+/// the dependency on `flox-rust-sdk`.
+pub(crate) fn process_compose_down(socket_path: impl AsRef<Path>) -> Result<(), Error> {
+    let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
+    cmd.arg("down");
+    cmd.arg("--unix-socket");
+    cmd.arg(socket_path.as_ref());
+    cmd.env("NO_COLOR", "1");
+
+    debug!(
+        command = format!(
+            "{} down --unix-socket {}",
+            *PROCESS_COMPOSE_BIN,
+            socket_path.as_ref().display()
+        ),
+        "running process-compose down"
+    );
+
+    let output = cmd
+        .output()
+        .context("failed to execute process-compose down")?;
+
+    output.status.success().then_some(()).ok_or_else(|| {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::anyhow!("process-compose down failed: {}", stderr)
+    })
+}
