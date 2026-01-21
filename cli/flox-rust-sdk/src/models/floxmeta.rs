@@ -220,8 +220,13 @@ pub fn floxmeta_git_options(
     );
 
     let token = if let Some(token) = floxhub_token {
-        debug!("using configured FloxHub token");
-        token.secret()
+        if let Some(secret) = token.secret_if_valid() {
+            debug!("using valid FloxHub token");
+            secret
+        } else {
+            debug!("FloxHub token is expired, not using for authentication");
+            ""
+        }
     } else {
         debug!("no FloxHub token configured");
         ""

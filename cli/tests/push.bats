@@ -57,16 +57,23 @@ teardown() {
 }
 
 # bats test_tags=push:h1:expired
-@test "h2: push login: running flox with an expired token prompts the user to login" {
+@test "h2: push login: running flox with an expired token prompts re-authentication" {
   # set an expired token
   export FLOX_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDB9.-5VCofPtmYQuvh21EV1nEJhTFV_URkRP0WFu4QDPFxY"
 
   run "$FLOX_BIN" init
+  # The warning message has been updated to prompt for re-authentication
   assert_output --partial 'Your FloxHub token has expired.'
+  assert_output --partial "Run 'flox auth login' to re-authenticate."
 
-  run "$FLOX_BIN" push --owner owner # dummy owner
+  # Redirect stdin from /dev/null to ensure non-interactive mode
+  # This makes Dialog::can_prompt() return false regardless of CI environment
+  run "$FLOX_BIN" push --owner owner < /dev/null
   assert_failure
-  assert_output --partial 'You are not logged in to FloxHub.'
+  # With the new implementation, the token is kept (for identity verification)
+  # but FloxHub operations in non-interactive mode fail with a re-auth prompt
+  assert_output --partial 'Your FloxHub token has expired.'
+  assert_output --partial 'To re-authenticate you can either'
 }
 
 # bats test_tags=push:broken

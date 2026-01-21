@@ -128,6 +128,10 @@ pub struct FloxhubToken {
     token: String,
     /// Assertions about the identity of the token's owner
     token_data: FloxTokenClaims,
+    /// Whether the token has expired.
+    /// Expired tokens can still be used to identify the user (for trust checks)
+    /// but cannot be used for authentication (API calls, git operations).
+    expired: bool,
 }
 
 impl FloxhubToken {
@@ -144,6 +148,20 @@ impl FloxhubToken {
     /// Return the handle of the user the token belongs to
     pub fn handle(&self) -> &str {
         &self.token_data.handle
+    }
+
+    /// Returns whether the token has expired.
+    pub fn is_expired(&self) -> bool {
+        self.expired
+    }
+
+    /// Returns the token secret only if the token is valid (not expired).
+    pub fn secret_if_valid(&self) -> Option<&str> {
+        if !self.is_expired() {
+            Some(&self.token)
+        } else {
+            None
+        }
     }
 }
 
@@ -162,7 +180,6 @@ impl FromStr for FloxhubToken {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Client side we don't need to verify the signature,
         // as all priviledged access is guarded server side.
-        // It's still convenient to verify common claims e.g. expiration dates.
 
         #[derive(Clone, Debug, Deserialize)]
         struct ClaimsWithValidation<T> {
@@ -183,26 +200,23 @@ impl FromStr for FloxhubToken {
                 .as_secs() as usize
         };
 
-        match token.claims.exp {
+        let expired = match token.claims.exp {
             None => Err(FloxhubTokenError::InvalidToken(
                 jsonwebtoken::errors::ErrorKind::InvalidToken.into(),
             ))?,
-            Some(exp) if exp < now => Err(FloxhubTokenError::Expired)?,
-            Some(_) => {},
+            Some(exp) => exp < now,
         };
 
         Ok(FloxhubToken {
             token: s.to_string(),
             token_data: token.claims.claims,
+            expired,
         })
     }
 }
 
 #[derive(Debug, Clone, Error, Eq, PartialEq)]
 pub enum FloxhubTokenError {
-    #[error("token expired")]
-    Expired,
-
     #[error("invalid token")]
     InvalidToken(#[source] jsonwebtoken::errors::Error),
 }
@@ -347,6 +361,7 @@ pub mod test_helpers {
         FloxhubToken {
             token,
             token_data: FloxTokenClaims { handle },
+            expired: false,
         }
     }
 
@@ -457,9 +472,18 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_detect_expired() {
-        let token_error =
-            FloxhubToken::new(FAKE_EXPIRED_TOKEN.to_string()).expect_err("Token should be expired");
-        assert_eq!(token_error, FloxhubTokenError::Expired);
+        let token =
+            FloxhubToken::new(FAKE_EXPIRED_TOKEN.to_string()).expect("Expired token should parse");
+        assert!(token.is_expired(), "Token should be marked as expired");
+        assert_eq!(token.handle(), "test", "Handle should still be accessible");
+        assert!(
+            token.secret_if_valid().is_none(),
+            "secret_if_valid should return None for expired tokens"
+        );
+        assert!(
+            !token.secret().is_empty(),
+            "secret() should still return the token string"
+        );
     }
 
     #[test]

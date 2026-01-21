@@ -273,6 +273,27 @@ EOF
   assert_success
 }
 
+# bats test_tags=remote,activate,trust,remote:activate:trust-current-user-expired
+#
+# Expired tokens should still preserve user identity for trust verification.
+# An environment owned by the current user should be trusted even with an expired token.
+#
+# The expired token below has the user handle "test".
+@test "m10.4.1: 'activate --reference' succeeds if owned by current user with expired token" {
+  export OWNER="test"
+  floxhub_setup "$OWNER"
+  make_empty_remote_env
+
+  # Use an expired token (exp: 2024-01-01T00:00:00+00:00, handle: "test")
+  export FLOX_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDB9.-5VCofPtmYQuvh21EV1nEJhTFV_URkRP0WFu4QDPFxY"
+
+  # The expired token warning should appear, but activation should succeed
+  # because the user handle from the expired token matches the environment owner.
+  run "$FLOX_BIN" activate --reference "$OWNER/test" -- true
+  assert_success
+  assert_output --partial "Your FloxHub token has expired."
+}
+
 # bats test_tags=remote,activate,trust,remote:activate:trust-flox
 #
 # If the remotely accessed environment is owned by Flox,
