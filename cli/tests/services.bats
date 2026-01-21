@@ -455,86 +455,6 @@ EOF
   wait_for_file_content start_counter.sleeping 1
 }
 
-# bats test_tags=services:restart
-@test "restart: does not reload config when some services are still running" {
-  setup_start_counter_services
-
-  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    # Wait for completion so that we indicate "start" instead of "restart"
-    "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
-    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
-    "$FLOX_BIN" services restart one
-EOF
-)
-  assert_success
-  assert_output --partial "✅ Service 'one' started"
-  refute_output --partial "Service 'two'"
-  refute_output --partial "Service 'sleeping'"
-  refute_output --partial "Service 'touch_file'"
-
-  wait_for_file_content start_counter.one 2
-}
-
-# bats test_tags=services:restart
-@test "restart: reloads config when all services are restarted" {
-  setup_start_counter_services
-
-  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
-    "$FLOX_BIN" services restart
-EOF
-)
-  assert_success
-  assert_output --partial "✅ Service 'touch_file' started"
-  [ -e hello.txt ]
-}
-
-# bats test_tags=services:restart
-@test "restart: reloads config when given no service and all services are stopped" {
-  setup_start_counter_services
-
-  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    "$FLOX_BIN" services stop
-    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
-    "$FLOX_BIN" services restart
-EOF
-)
-  assert_success
-  assert_output --partial "✅ Service 'touch_file' started"
-  [ -e hello.txt ]
-}
-
-# bats test_tags=services:restart
-@test "restart: reloads config when given single service and all services are stopped" {
-  setup_start_counter_services
-
-  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    "$FLOX_BIN" services stop
-    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
-    "$FLOX_BIN" services restart touch_file
-EOF
-)
-  assert_success
-  assert_output --partial "✅ Service 'touch_file' started"
-  [ -e hello.txt ]
-}
-
-# bats test_tags=services:restart
-@test "restart: errors when given service isn't in reloaded config" {
-  setup_start_counter_services
-
-  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    "$FLOX_BIN" services stop
-    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
-    "$FLOX_BIN" services restart one
-EOF
-)
-  assert_failure
-  assert_output --partial "❌ ERROR: Service 'one' does not exist."
-  refute_output --partial "Service 'touch_file'"
-  [ ! -e hello.txt ]
-}
-
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=services:stop
@@ -1332,9 +1252,9 @@ EOF
   assert_output --regexp "one +(Running|Completed)"
 }
 
-@test "start: picks up changes after environment modification when all services have stopped" {
+# ---------------------------------------------------------------------------- #
 
-
+@test "config reload: start: picks up environment modifications when all services have stopped" {
   MANIFEST_CONTENTS_1="$(cat << "EOF"
     version = 1
 
@@ -1384,9 +1304,7 @@ EOF
   assert_output --partial "foo_two"
 }
 
-@test "start: does not pick up changes after environment modification when some services still running" {
-
-
+@test "config reload: start: does not pick up changes after environment modification when some services still running" {
   MANIFEST_CONTENTS_1="$(cat << "EOF"
     version = 1
 
@@ -1420,6 +1338,131 @@ EOF
   assert_failure
   assert_output --partial "Service 'two' was defined after services were started."
 }
+
+@test "config reload: activate: picks up environment modifications when all services have stopped" {
+  MANIFEST_CONTENTS_1="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "echo $FOO > out"
+
+    [hook]
+    on-activate = "export FOO=foo_one"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS_1" | "$FLOX_BIN" edit -f -
+
+  # Start a background activation with an initial value of FOO.
+  TEARDOWN_FIFO="$PROJECT_DIR/finished"
+  mkfifo "$TEARDOWN_FIFO"
+  "$FLOX_BIN" activate -s -c "echo > \"$TEARDOWN_FIFO\"" &
+
+  # The initial value of FOO should be written.
+  wait_for_file_content out foo_one
+
+  MANIFEST_CONTENTS_2="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "echo $FOO > out"
+    two.command = "sleep infinity"
+
+    [hook]
+    on-activate = "export FOO=foo_two"
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENTS_2" | "$FLOX_BIN" edit -f -
+
+  # Start a new and concurrent activation and services with a modified value of FOO.
+  "$FLOX_BIN" activate -s -- true
+
+  # The modified value of FOO should be written.
+  wait_for_file_content out foo_two
+
+  # The added service should be running.
+  "${TESTS_DIR}"/services/wait_for_service_status.sh two:Running
+
+}
+
+@test "config reload: restart: does not pick up environment modifications when some services still running" {
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    # Wait for completion so that we indicate "start" instead of "restart"
+    "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
+    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
+    "$FLOX_BIN" services restart one
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'one' started"
+  refute_output --partial "Service 'two'"
+  refute_output --partial "Service 'sleeping'"
+  refute_output --partial "Service 'touch_file'"
+
+  wait_for_file_content start_counter.one 2
+}
+
+@test "config reload: restart: picks up environment modifications when all services are restarted" {
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
+    "$FLOX_BIN" services restart
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'touch_file' started"
+  [ -e hello.txt ]
+}
+
+@test "config reload: restart: picks up environment modifications when all services are stopped" {
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    "$FLOX_BIN" services stop
+    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
+    "$FLOX_BIN" services restart
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'touch_file' started"
+  [ -e hello.txt ]
+}
+
+@test "config reload: restart <service>: picks up environment modifications when all services are stopped" {
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    "$FLOX_BIN" services stop
+    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
+    "$FLOX_BIN" services restart touch_file
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'touch_file' started"
+  [ -e hello.txt ]
+}
+
+@test "config reload: restart <service>: errors when given service isn't in reloaded config" {
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    "$FLOX_BIN" services stop
+    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
+    "$FLOX_BIN" services restart one
+EOF
+)
+  assert_failure
+  assert_output --partial "❌ ERROR: Service 'one' does not exist."
+  refute_output --partial "Service 'touch_file'"
+  [ ! -e hello.txt ]
+}
+
+# ---------------------------------------------------------------------------- #
 
 @test "start: respects activation mode" {
   # Run a service that checks if CPATH is set
@@ -1576,54 +1619,6 @@ EOF
   assert_success
 }
 
-@test "activate: picks up changes after environment modification when all services have stopped" {
-
-  MANIFEST_CONTENTS_1="$(cat << "EOF"
-    version = 1
-
-    [services]
-    one.command = "echo $FOO > out"
-
-    [hook]
-    on-activate = "export FOO=foo_one"
-EOF
-  )"
-
-  "$FLOX_BIN" init
-  echo "$MANIFEST_CONTENTS_1" | "$FLOX_BIN" edit -f -
-
-  # Start a background activation with an initial value of FOO.
-  TEARDOWN_FIFO="$PROJECT_DIR/finished"
-  mkfifo "$TEARDOWN_FIFO"
-  "$FLOX_BIN" activate -s -c "echo > \"$TEARDOWN_FIFO\"" &
-
-  # The initial value of FOO should be written.
-  wait_for_file_content out foo_one
-
-  MANIFEST_CONTENTS_2="$(cat << "EOF"
-    version = 1
-
-    [services]
-    one.command = "echo $FOO > out"
-    two.command = "sleep infinity"
-
-    [hook]
-    on-activate = "export FOO=foo_two"
-EOF
-  )"
-
-  echo "$MANIFEST_CONTENTS_2" | "$FLOX_BIN" edit -f -
-
-  # Start a new and concurrent activation and services with a modified value of FOO.
-  "$FLOX_BIN" activate -s -- true
-
-  # The modified value of FOO should be written.
-  wait_for_file_content out foo_two
-
-  # The added service should be running.
-  "${TESTS_DIR}"/services/wait_for_service_status.sh two:Running
-
-}
 
 @test "services stop after multiple activations of an environment exit" {
   setup_sleeping_services
