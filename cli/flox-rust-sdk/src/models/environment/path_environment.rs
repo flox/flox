@@ -49,7 +49,7 @@ use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME, create_dot_flox_gitignore};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, LockResult, Lockfile};
-use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
+use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest, UninstallSpec};
 use crate::models::manifest::typed::ActivateMode;
 use crate::providers::buildenv::BuildEnvOutputs;
 
@@ -228,7 +228,7 @@ impl Environment for PathEnvironment {
     /// uninstalled rather than a bool.
     fn uninstall(
         &mut self,
-        packages: Vec<String>,
+        packages: Vec<UninstallSpec>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;

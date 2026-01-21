@@ -2,6 +2,7 @@ use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{Environment, EnvironmentError};
+use flox_rust_sdk::models::manifest::raw::UninstallSpec;
 use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{debug, info_span, instrument};
@@ -19,7 +20,8 @@ pub struct Uninstall {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    /// The install IDs or package paths of the packages to remove
+    /// The install IDs or package paths of the packages to remove.
+    /// Supports output specification: "pkg^out,man" to uninstall specific outputs.
     #[bpaf(positional("packages"), some("Must specify at least one package"))]
     packages: Vec<String>,
 }
@@ -71,13 +73,20 @@ impl Uninstall {
 
         let description = environment_description(&concrete_environment)?;
 
+        // Parse package arguments into UninstallSpec
+        let uninstall_specs: Vec<UninstallSpec> = self
+            .packages
+            .iter()
+            .map(|s| UninstallSpec::parse(s))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| anyhow::anyhow!("Failed to parse uninstall spec: {}", e))?;
+
         let span = info_span!(
             "uninstall",
             concrete_environment = %description,
             progress = format!("Uninstalling {} packages", self.packages.len()));
 
-        let attempt =
-            span.in_scope(|| concrete_environment.uninstall(self.packages.clone(), &flox))?;
+        let attempt = span.in_scope(|| concrete_environment.uninstall(uninstall_specs, &flox))?;
 
         // Note, you need two spaces between this emoji and the package name
         // otherwise they appear right next to each other.

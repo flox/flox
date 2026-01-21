@@ -52,7 +52,13 @@ use crate::models::environment::{LOCKFILE_FILENAME, copy_dir_recursive};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmeta::{FloxMetaError, floxmeta_git_options};
 use crate::models::lockfile::{LockResult, Lockfile};
-use crate::models::manifest::raw::{CatalogPackage, FlakePackage, PackageToInstall, StorePath};
+use crate::models::manifest::raw::{
+    CatalogPackage,
+    FlakePackage,
+    PackageToInstall,
+    StorePath,
+    UninstallSpec,
+};
 use crate::models::manifest::typed::IncludeDescriptor;
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{GitCommandError, GitProvider, GitRemoteCommandError, PushFlag};
@@ -288,7 +294,7 @@ impl Environment for ManagedEnvironment {
     /// Uninstall packages from the environment atomically
     fn uninstall(
         &mut self,
-        packages: Vec<String>,
+        packages: Vec<UninstallSpec>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         self.guard_generation_immutable()?;
@@ -312,7 +318,12 @@ impl Environment for ManagedEnvironment {
         }
 
         let result = local_checkout.uninstall(packages.clone(), flox)?;
-        let change = HistoryKind::Uninstall { targets: packages };
+        // Store install IDs for history
+        let targets: Vec<String> = packages
+            .iter()
+            .map(|spec| spec.package_ref.clone())
+            .collect();
+        let change = HistoryKind::Uninstall { targets };
 
         // It's an error to uninstall a package that isn't installed so if we
         // got this far then we need a new generation.
@@ -2517,15 +2528,28 @@ mod test {
             "initialised environment should have generation 1"
         );
 
-        env.uninstall(vec![package.clone()], &flox).unwrap();
+        env.uninstall(
+            vec![UninstallSpec {
+                package_ref: package.clone(),
+                outputs: None,
+            }],
+            &flox,
+        )
+        .unwrap();
         assert_eq!(
             env.generations_metadata().unwrap().current_gen().as_deref(),
             Some(&2),
             "uninstalling a package should create a new generation"
         );
 
-        env.uninstall(vec![package.clone()], &flox)
-            .expect_err("uninstalling a package should fail if it is not installed");
+        env.uninstall(
+            vec![UninstallSpec {
+                package_ref: package.clone(),
+                outputs: None,
+            }],
+            &flox,
+        )
+        .expect_err("uninstalling a package should fail if it is not installed");
         assert_eq!(
             env.generations_metadata().unwrap().current_gen().as_deref(),
             Some(&2),

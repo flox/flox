@@ -120,7 +120,7 @@ pub trait Environment: Send {
     /// Uninstall packages from the environment atomically
     fn uninstall(
         &mut self,
-        packages: Vec<String>,
+        packages: Vec<crate::models::manifest::raw::UninstallSpec>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError>;
 
