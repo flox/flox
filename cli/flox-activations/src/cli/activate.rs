@@ -24,7 +24,7 @@ use signal_hook::consts::{SIGCHLD, SIGUSR1};
 use signal_hook::iterator::Signals;
 use tracing::debug;
 
-use crate::activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_command_for_start_script};
+use crate::activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_activate_command};
 use crate::attach::{attach, quote_run_args};
 use crate::cli::executive::ExecutiveCtx;
 use crate::env_diff::EnvDiff;
@@ -250,7 +250,7 @@ impl ActivateArgs {
 
         match &result {
             StartOrAttachResult::Start { start_id, .. } => {
-                let mut start_command = assemble_command_for_start_script(
+                let mut start_command = assemble_activate_command(
                     context.clone(),
                     subsystem_verbosity,
                     vars_from_env.clone(),
@@ -264,7 +264,7 @@ impl ActivateArgs {
                     context.attach_ctx.env_description,
                     });
                 }
-                debug!("spawning start.bash: {:?}", start_command);
+                debug!("spawning activate script: {:?}", start_command);
                 let status = start_command.spawn()?.wait()?;
                 if !status.success() {
                     // hook.on-activate may have already printed to stderr
