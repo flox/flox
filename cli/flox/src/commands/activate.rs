@@ -1,6 +1,6 @@
 use std::io::{BufWriter, stdout};
 use std::os::unix::process::CommandExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::LazyLock;
 use std::{env, fs};
@@ -11,6 +11,7 @@ use crossterm::tty::IsTty;
 use flox_core::activate::context::{ActivateCtx, ActivateMode, AttachCtx, InvocationType};
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY_VAR};
 use flox_core::traceable_path;
+use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
 use flox_rust_sdk::models::environment::generations::{
     AllGenerationsMetadata,
@@ -25,15 +26,14 @@ use flox_rust_sdk::models::environment::{
     UpgradeResult,
 };
 use flox_rust_sdk::models::lockfile::LockResult;
-use flox_rust_sdk::models::manifest::typed::{IncludeDescriptor, Inner};
-use flox_rust_sdk::providers::services::process_compose::shutdown_process_compose_if_all_processes_stopped;
+use flox_rust_sdk::models::manifest::typed::{IncludeDescriptor, Inner, Manifest};
+use flox_rust_sdk::providers::services::process_compose::ProcessStates;
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use indoc::{formatdoc, indoc};
 use shell_gen::ShellWithPath;
 use tracing::{debug, trace, warn};
 
-use super::services::ServicesEnvironment;
 use super::{
     EnvironmentSelect,
     UninitializedEnvironment,
@@ -192,8 +192,7 @@ impl Activate {
             flox,
             concrete_environment,
             invocation_type,
-            false,
-            &[],
+            Vec::new(),
         )
         .await
     }
@@ -201,21 +200,19 @@ impl Activate {
     /// This function contains the bulk of the implementation for
     /// Activate::handle,
     /// but it allows us to create an activation for use by `services start` or
-    /// `services-restart`.
+    /// `services restart`.
     ///
-    /// If self.start_services is true and services_to_start is empty, all
-    /// services will be started.
-    // TODO: there's probably a cleaner way to extract the functionality we need
-    // for start and restart,
-    // but for now just hack through the is_ephemeral bool.
+    /// The `services_for_ephemeral_activation` parameter specifies services to start with an
+    /// ephemeral activation. If non-empty, the activation runs ephemerally (waits for output
+    /// rather than exec'ing). If empty and `self.start_services` is true, all services for the
+    /// current system will be started with a non-ephemeral activation.
     pub async fn activate(
         self,
         mut config: Config,
         flox: Flox,
         mut concrete_environment: ConcreteEnvironment,
         invocation_type: InvocationType,
-        is_ephemeral: bool,
-        services_to_start: &[String],
+        services_for_ephemeral_activation: Vec<String>,
     ) -> Result<()> {
         let now_active = UninitializedEnvironment::from_concrete_environment(&concrete_environment);
 
@@ -357,14 +354,6 @@ impl Activate {
         let prompt_color_2 = env::var("FLOX_PROMPT_COLOR_2")
             .unwrap_or(utils::colors::INDIGO_300.to_ansi256().to_string());
 
-        let flox_services_to_start = if is_ephemeral && !services_to_start.is_empty() {
-            // Store JSON in an env var because bash doesn't
-            // support storing arrays in env vars
-            Some(Vec::from(services_to_start))
-        } else {
-            None
-        };
-
         let socket_path = concrete_environment.services_socket_path(&flox)?;
         let flox_env_cuda_detection = match manifest.options.cuda_detection {
             Some(false) => "0", // manifest opts-out
@@ -372,45 +361,20 @@ impl Activate {
         }
         .to_string();
 
-        if self.start_services {
-            ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
-
-            if manifest.services.inner().is_empty() {
-                message::warning(ServicesCommandsError::NoDefinedServices);
-            } else if manifest
-                .services
-                .copy_for_system(&flox.system)
-                .inner()
-                .is_empty()
-            {
-                message::warning(ServicesCommandsError::NoDefinedServicesForSystem {
-                    system: flox.system.clone(),
-                });
-            }
-        }
-
-        let should_have_services = self.start_services
-            && !manifest
-                .services
-                .copy_for_system(&flox.system)
-                .inner()
-                .is_empty();
-        let start_new_process_compose = should_have_services
-            && if socket_path.exists() {
-                // Returns `Ok(true)` if `process-compose` was shutdown
-                shutdown_process_compose_if_all_processes_stopped(&socket_path)?
-            } else {
-                true
-            };
-        tracing::debug!(
-            should_have_services,
-            start_new_process_compose,
+        // Determine services to start with a new process-compose
+        let is_ephemeral = !services_for_ephemeral_activation.is_empty();
+        let services_to_start = if is_ephemeral {
+            services_for_ephemeral_activation
+        } else if self.start_services {
+            Self::gather_services_for_flag(manifest, &flox.system, &socket_path)
+        } else {
+            Vec::new()
+        };
+        debug!(
+            is_ephemeral,
+            ?services_to_start,
             "setting service variables"
         );
-        let flox_activate_start_services = start_new_process_compose;
-        if should_have_services && !start_new_process_compose {
-            message::warning("Skipped starting services, services are already running");
-        }
 
         let shell = if invocation_type == InvocationType::InPlace {
             Self::detect_shell_for_in_place()?
@@ -437,10 +401,9 @@ impl Activate {
             // TODO: we should probably figure out a more consistent way to
             // pass this since it's also passed for `flox build`
             flox_runtime_dir: flox.runtime_dir.to_string_lossy().to_string(),
-            flox_services_to_start,
             flox_env_cuda_detection,
-            flox_activate_start_services,
             flox_services_socket: Some(socket_path),
+            services_to_start,
             interpreter_path,
         };
 
@@ -531,6 +494,42 @@ impl Activate {
                 );
                 ShellWithPath::Bash(INTERACTIVE_BASH_BIN.clone())
             })
+    }
+
+    /// Handle the `--start-services` flag by determining which services to start.
+    ///
+    /// Returns None (with warning) if:
+    /// - No services are defined in the manifest
+    /// - No services are defined for the current system
+    /// - Services are already running
+    fn gather_services_for_flag(
+        manifest: &Manifest,
+        system: &System,
+        socket_path: &Path,
+    ) -> Vec<String> {
+        if manifest.services.inner().is_empty() {
+            message::warning(ServicesCommandsError::NoDefinedServices);
+            return Vec::new();
+        }
+
+        let services_for_system = manifest.services.copy_for_system(system);
+        if services_for_system.inner().is_empty() {
+            message::warning(ServicesCommandsError::NoDefinedServicesForSystem {
+                system: system.clone(),
+            });
+            return Vec::new();
+        }
+
+        let has_running_services = ProcessStates::read(socket_path)
+            .map(|states| states.iter().any(|p| p.is_running))
+            .unwrap_or(false);
+
+        if has_running_services {
+            message::warning("Skipped starting services, services are already running");
+            return Vec::new();
+        }
+
+        services_for_system.inner().keys().cloned().collect()
     }
 
     /// Detect the shell to use for in-place activation

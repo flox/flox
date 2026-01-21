@@ -9,7 +9,6 @@ use flox_rust_sdk::providers::services::process_compose::{
     LoggedError,
     ProcessStates,
     ServiceError,
-    process_compose_down,
     restart_service,
 };
 use tracing::{debug, instrument};
@@ -44,7 +43,7 @@ impl Restart {
         guard_service_commands_available(&env, &flox.system)?;
 
         let socket = env.socket();
-        let existing_process_compose = socket.exists();
+        let is_current = env.process_compose_is_current(&flox, &current_mode);
 
         let existing_processes = match ProcessStates::read(socket) {
             Ok(process_states) => process_states,
@@ -57,14 +56,13 @@ impl Restart {
         let all_processes_stopped = existing_processes.iter().all(|p| p.is_stopped());
         let restart_all = self.names.is_empty();
 
-        // TODO: We could optimise by checking whether the manifest has actually changed.
-        let start_new_process_compose = restart_all || all_processes_stopped;
+        debug!(
+            socket_exists = socket.exists(),
+            is_current, all_processes_stopped, restart_all, "evaluating restart conditions"
+        );
 
+        let start_new_process_compose = !is_current && (all_processes_stopped || restart_all);
         if start_new_process_compose {
-            if existing_process_compose {
-                debug!("stopping existing process-compose instance");
-                process_compose_down(socket)?;
-            }
             debug!("restarting services in new process-compose instance");
             let names = start_services_with_new_process_compose(
                 config,
@@ -96,7 +94,7 @@ impl Restart {
     }
 
     // Return a "started" or "restarted" action depending on whether the service
-    // was previous consider running.
+    // was previously considered running.
     fn action_for_service_name(name: &str, processes: &ProcessStates) -> String {
         let process = match processes.process(name) {
             Some(proc) => proc,
@@ -108,7 +106,7 @@ impl Restart {
         }
     }
 
-    // Retarts services using an already running process-compose.
+    // Restarts services using an already running process-compose.
     // Defaults to restarting all services if no services are specified.
     fn restart_with_existing_process_compose(
         socket: impl AsRef<Path>,

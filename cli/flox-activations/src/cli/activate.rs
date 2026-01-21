@@ -18,18 +18,22 @@ use flox_core::activations::{
     write_activations_json,
 };
 use indoc::formatdoc;
+use nix::sys::signal::{Signal, kill};
 use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::{Pid, getpid};
 use serde::{Deserialize, Serialize};
 use signal_hook::consts::{SIGCHLD, SIGUSR1};
 use signal_hook::iterator::Signals;
-use tracing::debug;
+use tracing::{debug, error};
 
 use crate::activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_command_for_start_script};
 use crate::attach::{attach, quote_run_args};
 use crate::cli::executive::ExecutiveCtx;
-use crate::env_diff::EnvDiff;
-use crate::process_compose::start_services_blocking;
+use crate::process_compose::{
+    process_compose_down,
+    start_services_via_socket,
+    wait_for_socket_ready,
+};
 
 pub const NO_REMOVE_ACTIVATION_FILES: &str = "_FLOX_NO_REMOVE_ACTIVATION_FILES";
 
@@ -105,6 +109,20 @@ impl ActivateArgs {
             subsystem_verbosity,
             &vars_from_env,
         )?;
+
+        if !context.attach_ctx.services_to_start.is_empty() {
+            let socket_path = context
+                .attach_ctx
+                .flox_services_socket
+                .as_ref()
+                .expect("flox_services_socket must be set to start services");
+            Self::start_services_with_new_process_compose(
+                &context.attach_ctx.flox_runtime_dir,
+                &context.attach_ctx.dot_flox_path,
+                socket_path,
+                &context.attach_ctx.services_to_start,
+            )?;
+        }
 
         attach(
             context,
@@ -292,22 +310,66 @@ impl ActivateArgs {
             StartOrAttachResult::AlreadyStarting { .. } => unreachable!(),
         }
 
-        if context.attach_ctx.flox_activate_start_services {
-            let start_state_dir = start_id.state_dir_path(
-                &context.attach_ctx.flox_runtime_dir,
-                &context.attach_ctx.dot_flox_path,
-            )?;
-            let diff = EnvDiff::from_files(&start_state_dir)?;
-            start_services_blocking(
-                &context.attach_ctx,
-                subsystem_verbosity,
-                vars_from_env.clone(),
-                start_id,
-                diff,
-            )?;
-        };
-
         Ok(result)
+    }
+
+    /// Start services with a new process-compose instance.
+    ///
+    /// The CLI has already decided that a new process-compose is needed.
+    /// This function starts process-compose and then starts the specified services.
+    fn start_services_with_new_process_compose(
+        runtime_dir: &str,
+        dot_flox_path: &Path,
+        socket_path: &Path,
+        services: &[String],
+    ) -> Result<(), anyhow::Error> {
+        let activations_json_path = state_json_path(runtime_dir, dot_flox_path);
+        let (activations_opt, lock) = read_activations_json(&activations_json_path)?;
+        let activations = activations_opt.expect("state.json should exist");
+        let executive_pid = activations.executive_pid();
+        // Don't hold a lock because the executive will need it when starting `process-compose`
+        drop(lock);
+
+        debug!("starting new process-compose for services");
+        Self::signal_new_process_compose(socket_path, executive_pid)?;
+        start_services_via_socket(socket_path, services)?;
+
+        Ok(())
+    }
+
+    /// Start a new process-compose instance by signaling the executive.
+    fn signal_new_process_compose(
+        socket_path: &Path,
+        executive_pid: i32,
+    ) -> Result<(), anyhow::Error> {
+        // Stop first, if running, to ensure that we wait on the socket from the new instance.
+        if socket_path.exists() {
+            debug!("shutting down old process-compose");
+            if let Err(err) = process_compose_down(socket_path) {
+                error!(%err, "failed to stop process-compose");
+            }
+        }
+
+        debug!(
+            executive_pid,
+            "sending SIGUSR1 to executive to start new process-compose",
+        );
+        kill(Pid::from_raw(executive_pid), Signal::SIGUSR1)?;
+
+        let activation_timeout = std::env::var("_FLOX_SERVICES_ACTIVATE_TIMEOUT")
+            .ok()
+            .and_then(|t| t.parse().ok())
+            .map(Duration::from_secs_f64)
+            .unwrap_or(Duration::from_secs(2));
+        let socket_ready = wait_for_socket_ready(socket_path, activation_timeout)?;
+        if !socket_ready {
+            // TODO: We used to print the services log (if it exists) here to
+            // help users debug the failure but we no longer have the path
+            // available now that it's started by the executive.
+            bail!("Failed to start services: process-compose socket not ready");
+        }
+
+        Ok(())
     }
 
     fn spawn_executive(
@@ -433,7 +495,8 @@ pub struct VarsFromEnvironment {
 }
 
 impl VarsFromEnvironment {
-    fn get() -> Result<Self> {
+    // TODO: move now that it's also used by executive
+    pub fn get() -> Result<Self> {
         let flox_env_dirs = std::env::var(FLOX_ENV_DIRS_VAR).ok();
         let path = match std::env::var("PATH") {
             Ok(path) => path,

@@ -6,11 +6,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::manifest::typed::Services;
-use flox_rust_sdk::providers::services::process_compose::{
-    ProcessStates,
-    shutdown_process_compose_if_all_processes_stopped,
-    start_service,
-};
+use flox_rust_sdk::providers::services::process_compose::{ProcessStates, start_service};
 use tracing::{debug, instrument};
 
 use crate::commands::services::{
@@ -42,13 +38,18 @@ impl Start {
         let (current_mode, generation) = guard_is_within_activation(&env, "start")?;
         guard_service_commands_available(&env, &flox.system)?;
 
-        let start_new_process_compose = if !env.expect_services_running() {
-            true
-        } else {
-            // Returns `Ok(true)` if `process-compose` was shutdown
-            shutdown_process_compose_if_all_processes_stopped(env.socket())?
-        };
+        let socket = env.socket();
+        let is_current = env.process_compose_is_current(&flox, &current_mode);
 
+        let existing_processes = ProcessStates::read(socket).unwrap_or(ProcessStates::from(vec![]));
+        let all_processes_stopped = existing_processes.iter().all(|p| p.is_stopped());
+
+        debug!(
+            socket_exists = socket.exists(),
+            is_current, all_processes_stopped, "evaluating start conditions"
+        );
+
+        let start_new_process_compose = !is_current && all_processes_stopped;
         if start_new_process_compose {
             debug!("starting services in new process-compose instance");
             let names = start_services_with_new_process_compose(
@@ -68,7 +69,7 @@ impl Start {
         } else {
             debug!("starting services with existing process-compose instance");
             Self::start_with_existing_process_compose(
-                env.socket(),
+                socket,
                 &env.manifest.services,
                 &flox.system,
                 &self.names,

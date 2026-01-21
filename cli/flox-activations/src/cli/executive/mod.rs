@@ -6,8 +6,13 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
-use flox_core::activate::context::ActivateCtx;
-use flox_core::activations::{activation_state_dir_path, read_activations_json, state_json_path};
+use flox_core::activate::context::{ActivateCtx, AttachCtx};
+use flox_core::activations::{
+    activation_state_dir_path,
+    read_activations_json,
+    state_json_path,
+    write_activations_json,
+};
 use flox_core::traceable_path;
 use log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::libc::{SIGCHLD, SIGINT, SIGQUIT, SIGTERM};
@@ -22,7 +27,7 @@ use watcher::{LockedActivationState, PidWatcher};
 
 use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
 use crate::logger;
-use crate::process_compose::process_compose_down;
+use crate::process_compose::{process_compose_down, start_process_compose_no_services};
 
 mod log_gc;
 mod reaper;
@@ -81,11 +86,11 @@ impl ExecutiveArgs {
         debug!("sending SIGUSR1 to parent {}", parent_pid);
         kill(Pid::from_raw(parent_pid), SIGUSR1)?;
 
-        let Some(log_dir) = &context.attach_ctx.flox_env_log_dir else {
+        let Some(log_dir) = context.attach_ctx.flox_env_log_dir.clone() else {
             unreachable!("flox_env_log_dir must be set in activation context");
         };
         let log_file = format!("executive.{}.log", std::process::id());
-        logger::init_file_logger(subsystem_verbosity, log_file, log_dir)
+        logger::init_file_logger(subsystem_verbosity, log_file, &log_dir)
             .context("failed to initialize logger")?;
 
         // Propagate PID field to all spans.
@@ -107,19 +112,20 @@ impl ExecutiveArgs {
             debug!("monitoring loop disabled, exiting executive");
             return Ok(());
         }
-        let Some(socket_path) = &context.attach_ctx.flox_services_socket else {
+        let Some(socket_path) = context.attach_ctx.flox_services_socket.clone() else {
             unreachable!("flox_services_socket must be set in activation context");
         };
 
         spawn_heartbeat_log();
-        spawn_logs_gc_threads(log_dir);
+        spawn_logs_gc_threads(&log_dir);
 
         debug!("starting monitoring loop");
         run_monitoring_loop(
-            context.attach_ctx.dot_flox_path,
-            context.attach_ctx.flox_runtime_dir.into(),
-            socket_path.into(),
+            context.attach_ctx,
             signals,
+            socket_path,
+            log_dir,
+            subsystem_verbosity.unwrap_or(0),
         )
     }
 }
@@ -131,6 +137,7 @@ impl ExecutiveArgs {
 #[derive(Debug)]
 pub struct SignalHandlers {
     should_terminate: Arc<AtomicBool>,
+    should_start_services: Arc<AtomicBool>,
     should_reap: Signals,
 }
 
@@ -138,12 +145,15 @@ impl SignalHandlers {
     /// Register all signal handlers.
     pub fn new() -> Result<Self> {
         let should_terminate = Arc::new(AtomicBool::new(false));
+        let should_start_services = Arc::new(AtomicBool::new(false));
         signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate))
             .context("failed to set SIGINT signal handler")?;
         signal_hook::flag::register(SIGTERM, Arc::clone(&should_terminate))
             .context("failed to set SIGTERM signal handler")?;
         signal_hook::flag::register(SIGQUIT, Arc::clone(&should_terminate))
             .context("failed to set SIGQUIT signal handler")?;
+        signal_hook::flag::register(nix::libc::SIGUSR1, Arc::clone(&should_start_services))
+            .context("failed to set SIGUSR1 signal handler")?;
         // This complements the SubreaperGuard setup.
         // WARNING: You cannot reliably use Command::wait after SignalHandlers is
         // created, including concurrent threads like GCing logs, because children
@@ -151,6 +161,7 @@ impl SignalHandlers {
         let should_reap = Signals::new([SIGCHLD])?;
         Ok(Self {
             should_terminate,
+            should_start_services,
             should_reap,
         })
     }
@@ -158,6 +169,12 @@ impl SignalHandlers {
     /// Check if a termination signal has been received.
     pub fn should_terminate(&self) -> bool {
         self.should_terminate.load(Ordering::SeqCst)
+    }
+
+    /// Check if SIGUSR1 was received (start services signal).
+    /// Atomically clears the flag after reading.
+    pub fn should_start_services(&self) -> bool {
+        self.should_start_services.swap(false, Ordering::SeqCst)
     }
 
     /// Reap any children that have terminated since the last check.
@@ -173,6 +190,7 @@ impl SignalHandlers {
         const NO_SIGNALS: &[i32] = &[];
         Ok(Self {
             should_terminate: Arc::new(AtomicBool::new(false)),
+            should_start_services: Arc::new(AtomicBool::new(false)),
             should_reap: Signals::new(NO_SIGNALS).context("failed to create Signals")?,
         })
     }
@@ -211,11 +229,16 @@ fn ensure_process_group_leader() -> Result<(), anyhow::Error> {
 /// Monitoring loop that watches activation processes and performs cleanup.
 #[instrument("monitoring", err(Debug), skip_all)]
 fn run_monitoring_loop(
-    dot_flox_path: PathBuf,
-    runtime_dir: PathBuf,
-    socket_path: PathBuf,
+    // AttachCtx from when the Executive was started.
+    // Does NOT represent the most recent attach.
+    initial_attach_ctx: AttachCtx,
     mut signals: SignalHandlers,
+    socket_path: PathBuf,
+    log_dir: PathBuf,
+    subsystem_verbosity: u32,
 ) -> Result<()> {
+    let dot_flox_path = initial_attach_ctx.dot_flox_path.clone();
+    let runtime_dir: PathBuf = initial_attach_ctx.flox_runtime_dir.clone().into();
     let state_json_path = state_json_path(&runtime_dir, &dot_flox_path);
 
     let mut watcher = PidWatcher::new(
@@ -269,11 +292,81 @@ fn run_monitoring_loop(
             bail!("received stop signal, exiting without cleanup");
         }
 
+        // Check for SIGUSR1 (start services signal) after cleanup and termination checks
+        if signals.should_start_services() {
+            debug!("Received SIGUSR1, starting process-compose");
+            let (activations_json, lock) = read_activations_json(&state_json_path)?;
+            let Some(activations) = activations_json else {
+                bail!("executive shouldn't be running when state.json doesn't exist");
+            };
+
+            match handle_start_services_signal(
+                (activations, lock),
+                &socket_path,
+                &log_dir,
+                subsystem_verbosity,
+                &initial_attach_ctx,
+            ) {
+                Ok(Some((activations, lock))) => {
+                    write_activations_json(&activations, &state_json_path, lock)?;
+                },
+                Ok(None) => {},
+                Err(err) => {
+                    error!(%err, "failed to handle start services signal");
+                },
+            }
+        }
+
         // Reap any orphaned children
         signals.reap_pending_children();
 
         std::thread::sleep(MONITORING_LOOP_INTERVAL);
     }
+}
+
+/// Handle the SIGUSR1 signal to start process-compose.
+///
+/// Return:
+/// - `Some(LockedActivationState)` if state was modified and needs to be written
+/// - `None` if there were no changes and the lock was dropped
+fn handle_start_services_signal(
+    locked_activations: LockedActivationState,
+    socket_path: &Path,
+    log_dir: &Path,
+    subsystem_verbosity: u32,
+    attach_ctx: &AttachCtx,
+) -> Result<Option<LockedActivationState>> {
+    let (mut activations, lock) = locked_activations;
+
+    // There's nothing we can do if another "start" has occurred in the time it
+    // took us to receive and process the signal. `flox-activations activate`
+    // may timeout and present an error to the user.
+    let Some(ready_start_id) = activations.ready_start_id().cloned() else {
+        info!(
+            reason = "no currently ready activation to attach",
+            "skipping process-compose start"
+        );
+        return Ok(None);
+    };
+
+    // `flox-activations activate` ensures that `process-compose` is stopped
+    // (and the socket removed) before signaling a restart.
+    if socket_path.exists() {
+        info!(reason = "already running", "skipping process-compose start");
+        return Ok(None);
+    }
+
+    start_process_compose_no_services(
+        socket_path,
+        log_dir,
+        subsystem_verbosity,
+        attach_ctx,
+        &ready_start_id,
+    )?;
+
+    activations.set_current_process_compose_start_id(ready_start_id);
+
+    Ok(Some((activations, lock)))
 }
 
 /// Shutdown `process-compose` if running and remove all activation state.
@@ -326,6 +419,29 @@ mod test {
     use super::watcher::test::{start_process, stop_process};
     use super::*;
 
+    /// Create a minimal AttachCtx for testing.
+    /// The actual values don't matter since tests don't trigger SIGUSR1.
+    fn test_attach_ctx(dot_flox_path: &Path, runtime_dir: &Path, flox_env: &str) -> AttachCtx {
+        AttachCtx {
+            dot_flox_path: dot_flox_path.to_path_buf(),
+            env: flox_env.to_string(),
+            env_project: None,
+            env_cache: dot_flox_path.join("cache"),
+            env_description: "test".to_string(),
+            flox_active_environments: "".to_string(),
+            flox_env_log_dir: None,
+            prompt_color_1: "".to_string(),
+            prompt_color_2: "".to_string(),
+            flox_prompt_environments: "".to_string(),
+            set_prompt: false,
+            flox_runtime_dir: runtime_dir.to_string_lossy().to_string(),
+            flox_env_cuda_detection: "".to_string(),
+            flox_services_socket: None,
+            services_to_start: Vec::new(),
+            interpreter_path: PathBuf::from("/nix/store/fake"),
+        }
+    }
+
     #[test]
     fn monitoring_loop_removes_state_on_cleanup() {
         let temp_dir = tempfile::tempdir().unwrap();
@@ -356,11 +472,14 @@ mod test {
 
         stop_process(proc);
 
+        let attach_ctx = test_attach_ctx(&dot_flox_path, runtime_dir, &flox_env.to_string_lossy());
+
         run_monitoring_loop(
-            dot_flox_path.clone(),
-            runtime_dir.to_path_buf(),
-            PathBuf::from("/does_not_exist"),
+            attach_ctx,
             SignalHandlers::new_for_test().unwrap(),
+            PathBuf::from("/does_not_exist"),
+            PathBuf::from("/tmp/test_log_dir"),
+            0,
         )
         .unwrap();
 
@@ -403,11 +522,14 @@ mod test {
         let signals = SignalHandlers::new_for_test().unwrap();
         signals.trigger_termination();
 
+        let attach_ctx = test_attach_ctx(&dot_flox_path, runtime_dir, &flox_env.to_string_lossy());
+
         let result = run_monitoring_loop(
-            dot_flox_path.clone(),
-            runtime_dir.to_path_buf(),
-            PathBuf::from("/does_not_exist"),
+            attach_ctx,
             signals,
+            PathBuf::from("/does_not_exist"),
+            PathBuf::from("/tmp/test_log_dir"),
+            0,
         );
 
         // Verify the loop exited with the expected error

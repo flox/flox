@@ -209,18 +209,6 @@ fn arbitrary_process_config_environment()
     ))
 }
 
-/// Appends the `flox_never_exit` service to a non-empty list of services that
-/// will be started by a new `process-compose` instance in order to prevent it
-/// from exiting (and no longer serving `logs`, `status`, etc) if the specified
-/// services finish of their own accord.
-pub fn new_services_to_start(names: &[String]) -> Vec<String> {
-    let mut names_modified = names.to_vec();
-    if !names.is_empty() {
-        names_modified.push(PROCESS_NEVER_EXIT_NAME.to_string());
-    }
-    names_modified
-}
-
 /// Cre
 pub fn generate_never_exit_process() -> ProcessConfig {
     ProcessConfig {
@@ -537,22 +525,6 @@ pub fn process_compose_down(socket_path: impl AsRef<Path>) -> Result<(), Service
         let stderr = String::from_utf8_lossy(&output.stderr);
         Err(ServiceError::from_process_compose_log(stderr))
     }
-}
-
-/// Check if all processes are stopped and shutdown `process-compose` if they
-/// are.
-///
-/// Returns true if process-compose was shutdown.
-pub fn shutdown_process_compose_if_all_processes_stopped(
-    socket: impl AsRef<Path>,
-) -> Result<bool, ServiceError> {
-    let processes = ProcessStates::read(&socket)?;
-    let all_processes_stopped = processes.iter().all(|p| p.is_stopped());
-    if all_processes_stopped {
-        tracing::debug!("all processes stopped; shutting down 'process-compose'");
-        process_compose_down(socket)?;
-    }
-    Ok(all_processes_stopped)
 }
 
 /// Strings extracted from a process-compose error log.

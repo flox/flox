@@ -133,6 +133,7 @@ setup_start_counter_services() {
   run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
   assert_success
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    "${TESTS_DIR}"/services/wait_for_service_status.sh touch_file:Completed
 EOF
 )
   assert_success
@@ -898,8 +899,7 @@ EOF
   # which looks the same as taking a long time to create the socket
   export _FLOX_SERVICES_SOCKET_OVERRIDE="/no_permission.sock"
   run "$FLOX_BIN" activate -s -- true
-  assert_output --partial "❌ ERROR: Failed to start services"
-  assert_output --partial 'ERR error="listen unix /no_permission.sock: bind:'
+  assert_output "❌ ERROR: Failed to start services: process-compose socket not ready"
 }
 
 @test "blocking: activation blocks on process list" {
@@ -1420,6 +1420,7 @@ EOF
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
     "$FLOX_BIN" services restart
+    "${TESTS_DIR}"/services/wait_for_service_status.sh touch_file:Completed
 EOF
 )
   assert_success
@@ -1434,6 +1435,7 @@ EOF
     "$FLOX_BIN" services stop
     "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
     "$FLOX_BIN" services restart
+    "${TESTS_DIR}"/services/wait_for_service_status.sh touch_file:Completed
 EOF
 )
   assert_success
@@ -1448,6 +1450,7 @@ EOF
     "$FLOX_BIN" services stop
     "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
     "$FLOX_BIN" services restart touch_file
+    "${TESTS_DIR}"/services/wait_for_service_status.sh touch_file:Completed
 EOF
 )
   assert_success
@@ -1698,4 +1701,64 @@ EOF
   assert_success
   assert_output --partial "Service 'one' started."
   assert_output --partial "right_value"
+}
+
+# The base environment is captured at the time the executive is started from the
+# initial activation, not for subsequent activations and [re]starts, in order to
+# provide as much determinism as possible.
+@test "vars: don't leak from outer shells of subsequent starts" {
+  MANIFEST_CONTENTS_INITIAL="$(cat << "EOF"
+    version = 1
+
+    [hook]
+    on-activate = '''
+      export MANIFEST_VAR="initial_manifest_value"
+    '''
+
+    [services]
+    initial.command = 'echo "OUTER_VAR=$OUTER_VAR MANIFEST_VAR=$MANIFEST_VAR" > initial_values'
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS_INITIAL" | "$FLOX_BIN" edit -f -
+
+  mkfifo started
+  TEARDOWN_FIFO="$PROJECT_DIR/finished"
+  mkfifo "$TEARDOWN_FIFO"
+  OUTER_VAR="initial_outer_value" "$FLOX_BIN" activate --start-services -- bash <(cat << EOF
+    echo > started
+    echo > "$TEARDOWN_FIFO"
+EOF
+  ) &
+  timeout 2 cat started
+
+  "${TESTS_DIR}"/services/wait_for_service_status.sh initial:Completed
+  run cat initial_values
+  assert_success
+  assert_output "OUTER_VAR=initial_outer_value MANIFEST_VAR=initial_manifest_value"
+
+  MANIFEST_CONTENTS_UPDATED="$(cat << "EOF"
+    version = 1
+
+    [hook]
+    on-activate = '''
+      export MANIFEST_VAR="updated_manifest_value"
+    '''
+
+    [services]
+    updated.command = 'echo "OUTER_VAR=$OUTER_VAR MANIFEST_VAR=$MANIFEST_VAR" > updated_values'
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_UPDATED" | "$FLOX_BIN" edit -f -
+
+  # Start a second activation with different outer and inner variables and restart services
+  OUTER_VAR="updated_outer_value" "$FLOX_BIN" activate -- bash <(cat << EOF
+    "$FLOX_BIN" services restart
+EOF
+  )
+
+  "${TESTS_DIR}"/services/wait_for_service_status.sh updated:Completed
+  run cat updated_values
+  assert_output "OUTER_VAR=initial_outer_value MANIFEST_VAR=updated_manifest_value"
 }

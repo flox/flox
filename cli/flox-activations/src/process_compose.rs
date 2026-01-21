@@ -9,7 +9,7 @@ use flox_core::activate::context::AttachCtx;
 use flox_core::activations::StartIdentifier;
 use time::OffsetDateTime;
 use time::macros::format_description;
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::activate_script_builder::apply_activation_env;
 use crate::cli::activate::VarsFromEnvironment;
@@ -22,11 +22,14 @@ static PROCESS_COMPOSE_BIN: LazyLock<String> = LazyLock::new(|| {
 });
 const BASH_BIN: &str = env!("X_BASH_BIN");
 
+/// Name of the never-exit service that keeps process-compose running.
+// TODO: duplicated from SDK
+const PROCESS_NEVER_EXIT_NAME: &str = "flox_never_exit";
+
 /// Wait for the process-compose socket to become ready.
 ///
-/// Returns true if services started, false if they didn't start within timeout,
-/// and Error for other failures.
-fn wait_for_services_socket(socket_file: &Path, timeout: Duration) -> Result<bool, Error> {
+/// Returns `true` if socket is ready, `false` if timeout, and Error for other failures.
+pub fn wait_for_socket_ready(socket_file: &Path, timeout: Duration) -> Result<bool, Error> {
     let start = Instant::now();
     let poll_interval = Duration::from_millis(20);
 
@@ -41,16 +44,16 @@ fn wait_for_services_socket(socket_file: &Path, timeout: Duration) -> Result<boo
         .arg("json");
     let pretty_command = format!("{:?}", command);
     debug!(
-        "Beginning polling services status with command: {}",
+        "Beginning polling socket readiness with command: {}",
         pretty_command
     );
 
     loop {
         let output = command.output().context(format!(
-            "failed to poll services status with command: {pretty_command}"
+            "failed to poll socket readiness with command: {pretty_command}"
         ))?;
 
-        // Ignore command status and just check if we get the JSON we're looking for
+        // Ignore command status and just check if we get valid JSON
         let result: Result<Vec<serde_json::Value>, _> = serde_json::from_slice(&output.stdout);
         if let Ok(parsed) = result
             && !parsed.is_empty()
@@ -69,61 +72,57 @@ fn wait_for_services_socket(socket_file: &Path, timeout: Duration) -> Result<boo
     }
 }
 
-/// Start services using process-compose, blocking until the socket is ready.
-pub fn start_services_blocking(
-    context: &AttachCtx,
+/// Start process-compose with only the flox_never_exit service.
+/// This allows services to be started later via the socket API.
+pub fn start_process_compose_no_services(
+    socket_path: &Path,
+    log_dir: &Path,
     subsystem_verbosity: u32,
-    vars_from_env: VarsFromEnvironment,
+    attach_ctx: &AttachCtx,
     start_id: &StartIdentifier,
-    env_diff: EnvDiff,
 ) -> Result<(), anyhow::Error> {
-    let config_file = format!("{}/service-config.yaml", context.env);
-    let Some(socket_file) = &context.flox_services_socket else {
-        unreachable!("flox_services_socket must be set to start services");
-    };
+    let runtime_dir: &Path = attach_ctx.flox_runtime_dir.as_ref();
+    let dot_flox_path = &attach_ctx.dot_flox_path;
+    let start_state_dir = start_id.state_dir_path(runtime_dir, dot_flox_path)?;
+    let config_file = start_id.store_path.join("service-config.yaml");
+
     // Generate timestamped log file name
     let format =
         format_description!("[year][month][day][hour][minute][second][subsecond digits:6]");
     let timestamp = OffsetDateTime::now_local()?
         .format(&format)
         .context("failed to format timestamp")?;
-    let Some(flox_env_log_dir) = &context.flox_env_log_dir else {
-        unreachable!("flox_env_log_dir must be set to start services");
-    };
-    let log_file = flox_env_log_dir.join(format!("services.{}.log", timestamp));
+    let log_file = log_dir.join(format!("services.{}.log", timestamp));
 
-    debug!(
-        "Starting process-compose with config: {:?}, socket: {:?}, log: {:?}",
-        config_file, socket_file, log_file
-    );
-
-    // Build the command
     let mut command = Command::new(&*PROCESS_COMPOSE_BIN);
+
+    // The executive inherits the pre-activation environment from activate,
+    // so these values are the same as what the initial activation captured.
+    let vars_from_env = VarsFromEnvironment::get()?;
+    // Load the environment diff for the activation that we're attaching to.
+    let env_diff = EnvDiff::from_files(start_state_dir)?;
     apply_activation_env(
         &mut command,
-        context.clone(),
+        attach_ctx.clone(),
         subsystem_verbosity,
         vars_from_env,
         &env_diff,
         start_id,
     );
+
     command
         .env("NO_COLOR", "1")
         .env("COMPOSE_SHELL", BASH_BIN)
         .arg("up")
         .arg("-f")
-        .arg(config_file)
+        .arg(&config_file)
         .arg("-u")
-        .arg(socket_file)
+        .arg(socket_path)
         .arg("-L")
         .arg(&log_file)
         .arg("--disable-dotenv")
-        .arg("--tui=false");
-
-    // Add specific services if provided
-    if let Some(services) = &context.flox_services_to_start {
-        command.args(services);
-    }
+        .arg("--tui=false")
+        .arg(PROCESS_NEVER_EXIT_NAME); // Only start the never_exit service
 
     // Redirect stdio to detach from terminal
     command
@@ -131,29 +130,51 @@ pub fn start_services_blocking(
         .stdout(Stdio::null())
         .stderr(Stdio::null());
 
-    debug!("Spawning process-compose: {:?}", command);
+    info!(
+        ?config_file,
+        ?socket_path,
+        ?log_file,
+        "spawning process-compose without any services",
+    );
     command.spawn().context("Failed to spawn process-compose")?;
 
-    let activation_timeout = if let Ok(timeout) = env::var("_FLOX_SERVICES_ACTIVATE_TIMEOUT") {
-        Duration::from_secs_f64(timeout.parse()?)
-    } else {
-        Duration::from_secs(2)
-    };
+    Ok(())
+}
 
-    // Wait for the socket to become ready
-    let started = wait_for_services_socket(socket_file, activation_timeout)?;
-    if !started {
-        // Startup failed, return error with log file contents if available
-        if !log_file.exists() {
-            bail!("Failed to start services");
-        } else {
-            let log_contents = std::fs::read_to_string(&log_file)
-                .unwrap_or_else(|_| format!("unable to read logs in '{}'", log_file.display()));
-            bail!("Failed to start services:\n{}", log_contents);
+/// Start specific services via the process-compose socket API.
+/// This should be called after process-compose is ready.
+pub fn start_services_via_socket(
+    socket_path: &Path,
+    services: &[String],
+) -> Result<(), anyhow::Error> {
+    for service in services {
+        if service == PROCESS_NEVER_EXIT_NAME {
+            continue;
+        }
+
+        let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
+        cmd.env("NO_COLOR", "1")
+            .arg("--unix-socket")
+            .arg(socket_path)
+            .arg("process")
+            .arg("start")
+            .arg(service);
+
+        debug!(service, ?cmd, "starting service via socket");
+
+        let output = cmd
+            .output()
+            .context(format!("failed to start service '{}'", service))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // Ignore "already running" errors
+            if !stderr.contains("is already running") {
+                bail!("Failed to start service '{}': {}", service, stderr);
+            }
         }
     }
 
-    debug!("Process-compose socket ready at: {:?}", socket_file);
     Ok(())
 }
 
@@ -161,7 +182,7 @@ pub fn start_services_blocking(
 ///
 /// This is a variation of `providers::services::process_compose_down` to avoid
 /// the dependency on `flox-rust-sdk`.
-pub(crate) fn process_compose_down(socket_path: impl AsRef<Path>) -> Result<(), Error> {
+pub fn process_compose_down(socket_path: impl AsRef<Path>) -> Result<(), Error> {
     let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
     cmd.arg("down");
     cmd.arg("--unix-socket");
