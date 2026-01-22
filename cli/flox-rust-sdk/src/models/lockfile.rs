@@ -385,30 +385,15 @@ pub struct Compose {
 }
 
 impl Compose {
-    /// Get the highest priority included environment which provides each package.
-    /// Packages that are not provided by any included environments will be absent from the map.
-    pub fn get_includes_for_packages(
-        &self,
-        packages: &[String],
-    ) -> Result<HashMap<String, LockedInclude>, ManifestError> {
-        let mut result = HashMap::new();
-        for package in packages {
-            if let Some(include) = Self::get_include_for_package(package, &self.include)? {
-                result.insert(package.clone(), include);
-            }
-        }
-
-        Ok(result)
-    }
-
     /// Detect which included environment, if any, provides a given package.
-    fn get_include_for_package(
+    pub fn get_include_for_package(
+        &self,
         package: &str,
-        includes: &[LockedInclude],
+        version: &Option<String>,
     ) -> Result<Option<LockedInclude>, ManifestError> {
         // Reverse of merge order so that we return the highest priority match.
-        for include in includes.iter().rev() {
-            match include.manifest.resolve_install_id(package) {
+        for include in self.include.iter().rev() {
+            match include.manifest.resolve_install_id(package, version) {
                 Ok(_) => return Ok(Some(include.clone())),
                 Err(ManifestError::PackageNotFound(_)) => continue,
                 Err(ManifestError::MultiplePackagesMatch(_, _)) => continue,

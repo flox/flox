@@ -186,7 +186,11 @@ impl Manifest {
     /// to an `install_id` if unambiguous.
     ///
     /// This ensures that installation references remain valid for other package operations.
-    pub fn resolve_install_id(&self, package_ref: &str) -> Result<String, ManifestError> {
+    pub fn resolve_install_id(
+        &self,
+        package_ref: &str,
+        version: &Option<String>,
+    ) -> Result<String, ManifestError> {
         // User passed an install id directly
         if self.install.inner().contains_key(package_ref) {
             return Ok(package_ref.to_string());
@@ -209,16 +213,16 @@ impl Manifest {
                 };
 
                 // Select if the descriptor's pkg_path matches the user's input
-                if des.pkg_path == package_ref {
+                if des.pkg_path == package_ref && version.is_none() {
                     return true;
                 }
 
                 // Select if the descriptor matches the user's input when the version is included
-                if let Some(version) = &des.version {
-                    format!("{}@{}", des.pkg_path, version) == package_ref
-                } else {
-                    false
+                if des.pkg_path == package_ref && &des.version == version {
+                    return true;
                 }
+
+                false
             })
             .map(|(iid, _)| iid.to_owned())
             .collect::<Vec<String>>();
@@ -1450,7 +1454,9 @@ pub mod test {
     #[test]
     fn test_resolve_install_id_by_install_id() {
         let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
-        let result = manifest_mock.resolve_install_id("testInstallID").unwrap();
+        let result = manifest_mock
+            .resolve_install_id("testInstallID", &None)
+            .unwrap();
         assert_eq!(result, "testInstallID");
     }
 
@@ -1458,7 +1464,9 @@ pub mod test {
     /// Return the install ID if a pkg-path matches the user input
     fn test_resolve_install_id_by_pkg_path() {
         let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
-        let result = manifest_mock.resolve_install_id("dotted.package").unwrap();
+        let result = manifest_mock
+            .resolve_install_id("dotted.package", &None)
+            .unwrap();
         assert_eq!(result, "testInstallID");
     }
 
@@ -1471,7 +1479,9 @@ pub mod test {
             ("dotted.package", "dotted.package"),
         ]);
 
-        let result = manifest_mock.resolve_install_id("dotted.package").unwrap();
+        let result = manifest_mock
+            .resolve_install_id("dotted.package", &None)
+            .unwrap();
         assert_eq!(result, "dotted.package");
     }
 
@@ -1484,7 +1494,7 @@ pub mod test {
             ("testInstallID3", "dotted.package"),
         ]);
         let result = manifest_mock
-            .resolve_install_id("dotted.package")
+            .resolve_install_id("dotted.package", &None)
             .unwrap_err();
         assert!(matches!(result, ManifestError::MultiplePackagesMatch(_, _)));
     }
@@ -1494,7 +1504,7 @@ pub mod test {
     fn test_resolve_install_id_pkg_not_found() {
         let manifest_mock = generate_mock_manifest(vec![("testInstallID1", "dotted.package")]);
         let result = manifest_mock
-            .resolve_install_id("invalid.packageName")
+            .resolve_install_id("invalid.packageName", &None)
             .unwrap_err();
         assert!(matches!(result, ManifestError::PackageNotFound(_)));
     }
@@ -1513,7 +1523,7 @@ pub mod test {
         };
 
         let result = manifest_mock
-            .resolve_install_id("dotted.package@1.0")
+            .resolve_install_id("dotted.package", &Some("1.0".to_string()))
             .unwrap();
 
         assert_eq!(result, "testInstallID");
