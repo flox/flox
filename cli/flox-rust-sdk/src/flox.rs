@@ -119,6 +119,8 @@ struct FloxTokenClaims {
     /// The FloxHub handle of the user this token belongs to
     #[serde(rename = "https://flox.dev/handle")]
     handle: String,
+    /// The expiration time of the token (Unix timestamp)
+    exp: usize,
 }
 
 /// A token authenticating a user with FloxHub
@@ -128,10 +130,6 @@ pub struct FloxhubToken {
     token: String,
     /// Assertions about the identity of the token's owner
     token_data: FloxTokenClaims,
-    /// Whether the token has expired.
-    /// Expired tokens can still be used to identify the user (for trust checks)
-    /// but cannot be used for authentication (API calls, git operations).
-    expired: bool,
 }
 
 impl FloxhubToken {
@@ -150,18 +148,17 @@ impl FloxhubToken {
         &self.token_data.handle
     }
 
-    /// Returns whether the token has expired.
+    /// Returns whether the token has expired by checking the `exp` claim
+    /// against the current time.
     pub fn is_expired(&self) -> bool {
-        self.expired
-    }
-
-    /// Returns the token secret only if the token is valid (not expired).
-    pub fn secret_if_valid(&self) -> Option<&str> {
-        if !self.is_expired() {
-            Some(&self.token)
-        } else {
-            None
-        }
+        let now = {
+            let start = std::time::SystemTime::now();
+            start
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("Time went backwards")
+                .as_secs() as usize
+        };
+        self.token_data.exp < now
     }
 }
 
@@ -180,38 +177,14 @@ impl FromStr for FloxhubToken {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Client side we don't need to verify the signature,
         // as all priviledged access is guarded server side.
-        // It's still convenient to verify common claims e.g. expiration dates.
+        // We still decode the token to extract claims like handle and expiration.
 
-        #[derive(Clone, Debug, Deserialize)]
-        struct ClaimsWithValidation<T> {
-            exp: Option<usize>,
-            #[serde(flatten)]
-            claims: T,
-        }
-
-        let token =
-            jsonwebtoken::dangerous::insecure_decode::<ClaimsWithValidation<FloxTokenClaims>>(s)
-                .map_err(FloxhubTokenError::InvalidToken)?;
-
-        let now = {
-            let start = std::time::SystemTime::now();
-            start
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("Time went backwards")
-                .as_secs() as usize
-        };
-
-        let expired = match token.claims.exp {
-            None => Err(FloxhubTokenError::InvalidToken(
-                jsonwebtoken::errors::ErrorKind::InvalidToken.into(),
-            ))?,
-            Some(exp) => exp < now,
-        };
+        let token = jsonwebtoken::dangerous::insecure_decode::<FloxTokenClaims>(s)
+            .map_err(FloxhubTokenError::InvalidToken)?;
 
         Ok(FloxhubToken {
             token: s.to_string(),
-            token_data: token.claims.claims,
-            expired,
+            token_data: token.claims,
         })
     }
 }
@@ -352,18 +325,8 @@ pub mod test_helpers {
             .as_str()
             .unwrap()
             .to_string();
-        let handle = json
-            .get(idx)
-            .and_then(|obj| obj.get("handle"))
-            .expect("couldn't get user handle from test user file")
-            .as_str()
-            .unwrap()
-            .to_string();
-        FloxhubToken {
-            token,
-            token_data: FloxTokenClaims { handle },
-            expired: false,
-        }
+        // Parse the token to extract claims (including exp) from the JWT
+        FloxhubToken::from_str(&token).expect("couldn't parse test user token")
     }
 
     pub fn flox_instance() -> (Flox, TempDir) {
@@ -478,12 +441,8 @@ pub mod tests {
         assert!(token.is_expired(), "Token should be marked as expired");
         assert_eq!(token.handle(), "test", "Handle should still be accessible");
         assert!(
-            token.secret_if_valid().is_none(),
-            "secret_if_valid should return None for expired tokens"
-        );
-        assert!(
             !token.secret().is_empty(),
-            "secret() should still return the token string"
+            "secret() should still return the token string for expired tokens"
         );
     }
 

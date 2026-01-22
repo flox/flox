@@ -220,13 +220,12 @@ pub fn floxmeta_git_options(
     );
 
     let token = if let Some(token) = floxhub_token {
-        if let Some(secret) = token.secret_if_valid() {
-            debug!("using valid FloxHub token");
-            secret
+        if token.is_expired() {
+            debug!("FloxHub token is expired, sending for identification");
         } else {
-            debug!("FloxHub token is expired, not using for authentication");
-            ""
+            debug!("using valid FloxHub token");
         }
+        token.secret()
     } else {
         debug!("no FloxHub token configured");
         ""
@@ -236,7 +235,8 @@ pub fn floxmeta_git_options(
     // The credential helper should help avoiding a leak of the token in the process list.
     //
     // If no token is provided, we still set the credential helper and pass an empty string as password
-    // to enforce authentication failures and avoid fallback to pinentry
+    // to enforce authentication failures and avoid fallback to pinentry.
+    // Expired tokens are still sent so FloxHub can identify who is trying to authenticate.
     options.add_env_var("FLOX_FLOXHUB_TOKEN", token);
     options.add_config_flag(
         &format!("credential.{floxhub_git_url}.helper"),
