@@ -2,7 +2,7 @@ use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{Environment, EnvironmentError};
-use flox_rust_sdk::models::manifest::raw::UninstallSpec;
+use flox_rust_sdk::models::manifest::raw::{PackageModification, UninstallSpec};
 use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{debug, info_span, instrument};
@@ -90,17 +90,29 @@ impl Uninstall {
 
         // Note, you need two spaces between this emoji and the package name
         // otherwise they appear right next to each other.
-        self.packages.iter().for_each(|package| {
-            message::deleted(format!(
-                "'{package}' uninstalled from environment {description}"
-            ));
-            if let Some(include) = attempt.still_included.get(package) {
-                message::info(format!(
-                    "'{package}' is still installed by environment '{}'",
-                    include.name,
-                ));
+        for modification in attempt.modifications.iter() {
+            let install_id = &modification.install_id;
+
+            match modification.modification {
+                PackageModification::Remove => {
+                    message::deleted(format!(
+                        "'{install_id}' uninstalled from environment {description}"
+                    ));
+                    if let Some(include) = attempt.still_included.get(install_id) {
+                        message::info(format!(
+                            "'{install_id}' is still installed by environment '{}'",
+                            include.name,
+                        ));
+                    }
+                },
+                PackageModification::UpdateOutputs(ref outputs) => {
+                    message::deleted(format!(
+                        "Updated outputs of {install_id} to [{}] from environment {description}",
+                        outputs.join(", ")
+                    ));
+                },
             }
-        });
+        }
 
         warn_manifest_changes_for_services(&flox, &concrete_environment);
 
