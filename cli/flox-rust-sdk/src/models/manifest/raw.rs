@@ -701,29 +701,36 @@ pub struct UninstallSpec {
     pub package_ref: String,
     /// Specific outputs to uninstall, or None to uninstall the entire package
     pub outputs: Option<RawSelectedOutputs>,
+    /// Specific version to uninstall, currently mutually exclusive with outputs
+    pub version: Option<String>,
 }
 
 impl UninstallSpec {
     /// Parse from string format: "install_id" or "install_id^out,man,dev" or "install_id^.."
     pub fn parse(s: &str) -> Result<Self, RawManifestError> {
-        match s.split_once('^') {
-            Some((install_id, outputs_str)) => {
-                if outputs_str.is_empty() {
-                    return Err(RawManifestError::MalformedStringDescriptor {
-                        msg: "expected output specification after '^'".to_string(),
-                        desc: s.to_string(),
-                    });
-                }
-                let outputs = RawSelectedOutputs::parse(outputs_str);
-                Ok(Self {
-                    package_ref: install_id.to_string(),
-                    outputs: Some(outputs),
+        // if the string parses as a url, assume it's a flake ref
+        match Url::parse(s) {
+            Ok(url) => Ok(UninstallSpec {
+                package_ref: url.to_string(),
+                outputs: None,
+                version: None,
+            }),
+            // if it's not a url, parse it as a catalog package
+            _ => {
+                let CatalogPackage {
+                    id: _id,
+                    pkg_path,
+                    version,
+                    systems: _systems,
+                    outputs,
+                } = s.parse()?;
+
+                Ok(UninstallSpec {
+                    package_ref: pkg_path,
+                    outputs,
+                    version,
                 })
             },
-            None => Ok(Self {
-                package_ref: s.to_string(),
-                outputs: None,
-            }),
         }
     }
 }

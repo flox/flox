@@ -2532,6 +2532,7 @@ mod test {
             vec![UninstallSpec {
                 package_ref: package.clone(),
                 outputs: None,
+                version: None,
             }],
             &flox,
         )
@@ -2546,6 +2547,7 @@ mod test {
             vec![UninstallSpec {
                 package_ref: package.clone(),
                 outputs: None,
+                version: None,
             }],
             &flox,
         )
