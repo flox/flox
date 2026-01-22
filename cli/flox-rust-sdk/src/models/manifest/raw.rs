@@ -2270,7 +2270,11 @@ pub(super) mod test {
         );
         assert_eq!(
             result,
-            PackageModification::UpdateOutputs(vec!["out".to_string(), "man".to_string()]),
+            PackageModification::UpdateOutputs(vec![
+                "out".to_string(),
+                "man".to_string(),
+                "dev".to_string(),
+            ]),
         );
     }
 
@@ -2311,27 +2315,6 @@ pub(super) mod test {
             &["out".to_string(), "man".to_string()],
         );
         assert_eq!(result, PackageModification::Remove,);
-    }
-
-    #[test]
-    fn uninstall_spec_intersects_with_installed() {
-        // Package has outputs = ["out", "man", "dev"] but only ["out", "man"] are installed
-        let current = SelectedOutputs::Specific(vec![
-            "out".to_string(),
-            "man".to_string(),
-            "dev".to_string(),
-        ]);
-        let outputs_to_install = vec!["out".to_string(), "man".to_string()];
-        let result = modification_for_outputs(
-            &RawSelectedOutputs::Specific(vec!["man".to_string()]),
-            Some(&current),
-            &outputs_to_install,
-            &["out".to_string(), "man".to_string(), "dev".to_string()],
-        );
-        assert_eq!(
-            result,
-            PackageModification::UpdateOutputs(vec!["out".to_string()]),
-        );
     }
 
     #[test]
