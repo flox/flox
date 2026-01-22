@@ -62,16 +62,12 @@ teardown() {
   export FLOX_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDB9.-5VCofPtmYQuvh21EV1nEJhTFV_URkRP0WFu4QDPFxY"
 
   run "$FLOX_BIN" init
-  # The warning message has been updated to prompt for re-authentication
   assert_output --partial 'Your FloxHub token has expired.'
   assert_output --partial "Run 'flox auth login' to re-authenticate."
 
   # Redirect stdin from /dev/null to ensure non-interactive mode
-  # This makes Dialog::can_prompt() return false regardless of CI environment
   run "$FLOX_BIN" push --owner owner < /dev/null
   assert_failure
-  # With the new implementation, the token is kept (for identity verification)
-  # but FloxHub operations in non-interactive mode fail with a re-auth prompt
   assert_output --partial 'Your FloxHub token has expired.'
   assert_output --partial 'To re-authenticate you can either'
 }

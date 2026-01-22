@@ -235,8 +235,7 @@ pub fn floxmeta_git_options(
     // The credential helper should help avoiding a leak of the token in the process list.
     //
     // If no token is provided, we still set the credential helper and pass an empty string as password
-    // to enforce authentication failures and avoid fallback to pinentry.
-    // Expired tokens are still sent so FloxHub can identify who is trying to authenticate.
+    // to enforce authentication failures and avoid fallback to pinentry
     options.add_env_var("FLOX_FLOXHUB_TOKEN", token);
     options.add_config_flag(
         &format!("credential.{floxhub_git_url}.helper"),
