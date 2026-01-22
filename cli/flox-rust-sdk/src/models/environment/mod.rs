@@ -805,6 +805,12 @@ pub enum UninstallError {
          Remove the package from environment '{1}' and then run 'flox include upgrade'"
     )]
     PackageOnlyIncluded(String, String),
+
+    #[error("'{0}' was not found in Lockfile")]
+    PackageNotInLockfile(String),
+
+    #[error("''{1}' does not have an output '{0}'")]
+    InvalidOutputForPackage(String, String),
 }
 
 /// Open an environment defined in `path` that has a `.flox` within.

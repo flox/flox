@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::Write;
@@ -38,6 +39,7 @@ use crate::models::manifest::raw::{
     PackageToInstall,
     PackageToModify,
     RawManifest,
+    RawSelectedOutputs,
     TomlEditError,
     UninstallSpec,
     insert_packages,
@@ -344,19 +346,18 @@ impl CoreEnvironment<ReadOnly> {
 
         // keep track of which packages are available in includes (to inform result messages)
         let mut packages_in_includes = HashMap::new();
-        // keep track of which modifications are made (to inform result messages)
-        let mut modifications = Vec::new();
+
+        let mut removals = HashMap::new();
 
         let mut raw_manifest: RawManifest = self
             .manifest_contents()?
             .parse()
             .map_err(|err| CoreEnvironmentError::ModifyToml(TomlEditError::ParseManifest(err)))?;
+        let manifest = raw_manifest
+            .to_typed()
+            .map_err(|err| CoreEnvironmentError::ModifyToml(TomlEditError::ParseManifest(err)))?;
 
         for spec in uninstall_specs {
-            let manifest = raw_manifest.to_typed().map_err(|err| {
-                CoreEnvironmentError::ModifyToml(TomlEditError::ParseManifest(err))
-            })?;
-
             let include_for_package = lockfile
                 .compose
                 .as_ref()
@@ -389,6 +390,32 @@ impl CoreEnvironment<ReadOnly> {
                 packages_in_includes.insert(install_id.clone(), include.clone());
             }
 
+            let outputs_to_uninstall = spec.outputs.unwrap_or(RawSelectedOutputs::All);
+
+            let outputs_to_remove_accumulated = removals.entry(install_id.clone());
+            match outputs_to_remove_accumulated {
+                Entry::Occupied(mut occupied_entry) => {
+                    let mut accumulated = occupied_entry.get_mut();
+                    match (&mut accumulated, outputs_to_uninstall) {
+                        (RawSelectedOutputs::All, _) | (_, RawSelectedOutputs::All) => {
+                            *accumulated = RawSelectedOutputs::All;
+                        },
+                        (
+                            RawSelectedOutputs::Specific(items_acc),
+                            RawSelectedOutputs::Specific(items),
+                        ) => items_acc.extend(items),
+                    };
+                },
+                Entry::Vacant(vacant_entry) => {
+                    vacant_entry.insert(outputs_to_uninstall);
+                },
+            };
+        }
+
+        // keep track of which modifications are made (to inform result messages)
+        let mut modifications = Vec::new();
+
+        for (install_id, outputs_to_uninstall) in removals {
             // Compute modifications for the uninstall spec
 
             // Get current outputs from manifest
@@ -443,13 +470,27 @@ impl CoreEnvironment<ReadOnly> {
                 },
             };
 
+            if let RawSelectedOutputs::Specific(ref outputs) = outputs_to_uninstall {
+                for output in outputs {
+                    if !all_outputs.contains(output) {
+                        return Err(CoreEnvironmentError::UninstallError(
+                            UninstallError::InvalidOutputForPackage(
+                                output.clone(),
+                                install_id.clone(),
+                            ),
+                        ))?;
+                    }
+                }
+            }
+
             // Compute modification for the combination of specified outputs available and current outputs
             let modification = raw::modification_for_outputs(
-                spec.outputs.as_ref(),
+                &outputs_to_uninstall,
                 current_outputs,
                 &outputs_to_install,
                 &all_outputs,
             );
+
             let modification = [PackageToModify {
                 install_id,
                 modification,

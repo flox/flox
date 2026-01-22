@@ -1279,16 +1279,11 @@ fn update_package_outputs(
 /// after removing the outputs referred to in `spec`
 /// taking into account the substitute and default value for the attribute.
 pub fn modification_for_outputs(
-    outputs_to_remove: Option<&RawSelectedOutputs>,
+    outputs_to_remove: &RawSelectedOutputs,
     current_outputs: Option<&SelectedOutputs>,
     outputs_to_install: &[String],
     all_outputs: &[String],
 ) -> PackageModification {
-    let Some(ref outputs_to_remove) = outputs_to_remove else {
-        // No outputs specified: remove entire package
-        return PackageModification::Remove;
-    };
-
     // Choose the starting set of outputs based on
     let manifest_outputs = match current_outputs {
         Some(SelectedOutputs::All(_)) => all_outputs.to_vec(),
@@ -1297,16 +1292,13 @@ pub fn modification_for_outputs(
     };
 
     // Remove the specified outputs from the manifest definition
-    let mut remaining_outputs = match outputs_to_remove {
+    let remaining_outputs = match outputs_to_remove {
         RawSelectedOutputs::All => Vec::new(),
         RawSelectedOutputs::Specific(to_remove) => manifest_outputs
             .into_iter()
             .filter(|o| !to_remove.contains(o))
             .collect(),
     };
-
-    // Intersect with what's actually installed
-    remaining_outputs.retain(|o| outputs_to_install.contains(o));
 
     if remaining_outputs.is_empty() {
         // All outputs removed: remove entire package
@@ -2233,12 +2225,12 @@ pub(super) mod test {
 
     #[test]
     fn uninstall_spec_no_outputs_removes_package() {
-        let result =
-            modification_for_outputs(None, None, &["out".to_string(), "man".to_string()], &[
-                "out".to_string(),
-                "man".to_string(),
-                "dev".to_string(),
-            ]);
+        let result = modification_for_outputs(
+            &RawSelectedOutputs::All,
+            None,
+            &["out".to_string(), "man".to_string()],
+            &["out".to_string(), "man".to_string(), "dev".to_string()],
+        );
         assert_eq!(result, PackageModification::Remove,);
     }
 
@@ -2250,7 +2242,7 @@ pub(super) mod test {
             "dev".to_string(),
         ]);
         let result = modification_for_outputs(
-            Some(&RawSelectedOutputs::Specific(vec!["man".to_string()])),
+            &RawSelectedOutputs::Specific(vec!["man".to_string()]),
             Some(&current),
             &["out".to_string(), "man".to_string(), "dev".to_string()],
             &["out".to_string(), "man".to_string(), "dev".to_string()],
@@ -2271,7 +2263,7 @@ pub(super) mod test {
             "doc".to_string(),
         ];
         let result = modification_for_outputs(
-            Some(&RawSelectedOutputs::Specific(vec!["doc".to_string()])),
+            &RawSelectedOutputs::Specific(vec!["doc".to_string()]),
             Some(&current),
             &["out".to_string(), "man".to_string(), "doc".to_string()],
             &all_outputs,
@@ -2286,7 +2278,7 @@ pub(super) mod test {
     fn uninstall_spec_from_implicit_defaults() {
         let outputs_to_install = vec!["out".to_string(), "man".to_string()];
         let result = modification_for_outputs(
-            Some(&RawSelectedOutputs::Specific(vec!["man".to_string()])),
+            &RawSelectedOutputs::Specific(vec!["man".to_string()]),
             None, // No explicit outputs in manifest
             &outputs_to_install,
             &["out".to_string(), "man".to_string(), "dev".to_string()],
@@ -2301,7 +2293,7 @@ pub(super) mod test {
     fn uninstall_spec_all_outputs_removes_package() {
         let current = SelectedOutputs::Specific(vec!["out".to_string(), "man".to_string()]);
         let result = modification_for_outputs(
-            Some(&RawSelectedOutputs::All),
+            &RawSelectedOutputs::All,
             Some(&current),
             &["out".to_string(), "man".to_string()],
             &["out".to_string(), "man".to_string()],
@@ -2313,7 +2305,7 @@ pub(super) mod test {
     fn uninstall_spec_last_output_removes_package() {
         let current = SelectedOutputs::Specific(vec!["out".to_string()]);
         let result = modification_for_outputs(
-            Some(&RawSelectedOutputs::Specific(vec!["out".to_string()])),
+            &RawSelectedOutputs::Specific(vec!["out".to_string()]),
             Some(&current),
             &["out".to_string()],
             &["out".to_string(), "man".to_string()],
@@ -2331,7 +2323,7 @@ pub(super) mod test {
         ]);
         let outputs_to_install = vec!["out".to_string(), "man".to_string()];
         let result = modification_for_outputs(
-            Some(&RawSelectedOutputs::Specific(vec!["man".to_string()])),
+            &RawSelectedOutputs::Specific(vec!["man".to_string()]),
             Some(&current),
             &outputs_to_install,
             &["out".to_string(), "man".to_string(), "dev".to_string()],
