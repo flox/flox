@@ -1334,7 +1334,6 @@ pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<&FloxhubToke
             bail!(message);
         },
         Some(_) => {
-            // Token must be expired here (valid case handled above)
             debug!("floxhub token is expired; prompting user for re-authentication");
 
             message::plain("Your FloxHub token has expired. Re-authenticating...");

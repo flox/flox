@@ -180,6 +180,7 @@ impl FromStr for FloxhubToken {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Client side we don't need to verify the signature,
         // as all priviledged access is guarded server side.
+        // It's still convenient to verify common claims e.g. expiration dates.
 
         #[derive(Clone, Debug, Deserialize)]
         struct ClaimsWithValidation<T> {

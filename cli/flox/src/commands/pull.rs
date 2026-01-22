@@ -596,7 +596,6 @@ impl Pull {
                     let message = "You do not have permission to pull this environment";
                     anyhow::Error::msg(message)
                 },
-                // Handle UpstreamNotFound from FloxmetaBranch errors
                 ManagedEnvironmentError::FloxmetaBranch(
                     FloxmetaBranchError::UpstreamNotFound {
                         env_ref,
@@ -604,7 +603,6 @@ impl Pull {
                         user,
                     },
                 ) => Self::format_upstream_not_found_error(flox, &env_ref, user.as_deref()),
-                // Handle direct UpstreamNotFound (may come from different code paths)
                 ManagedEnvironmentError::UpstreamNotFound {
                     env_ref,
                     upstream: _,
