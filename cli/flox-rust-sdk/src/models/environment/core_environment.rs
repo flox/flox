@@ -364,8 +364,8 @@ impl CoreEnvironment<ReadOnly> {
             })?;
 
             // resolve the actual install_id for the package
-            let install_id = match manifest.get_install_ids(vec![spec.package_ref]) {
-                Ok(ids) => ids.into_iter().nth(0).expect("querying exactly one id"),
+            let install_id = match manifest.resolve_install_id(&spec.package_ref) {
+                Ok(id) => id,
                 Err(err) => {
                     if let ManifestError::PackageNotFound(ref package) = err
                         && let Some(include) = packages_in_includes.get(package)

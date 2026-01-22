@@ -403,12 +403,12 @@ impl Compose {
 
     /// Detect which included environment, if any, provides a given package.
     fn get_include_for_package(
-        package: &String,
+        package: &str,
         includes: &[LockedInclude],
     ) -> Result<Option<LockedInclude>, ManifestError> {
         // Reverse of merge order so that we return the highest priority match.
         for include in includes.iter().rev() {
-            match include.manifest.get_install_ids(vec![package.to_string()]) {
+            match include.manifest.resolve_install_id(package) {
                 Ok(_) => return Ok(Some(include.clone())),
                 Err(ManifestError::PackageNotFound(_)) => continue,
                 Err(ManifestError::MultiplePackagesMatch(_, _)) => continue,
