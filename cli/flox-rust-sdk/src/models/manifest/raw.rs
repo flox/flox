@@ -1151,43 +1151,6 @@ pub fn insert_packages(
     })
 }
 
-/// Remove package names from the `[install]` table of a manifest based on their install IDs.
-pub fn remove_packages(
-    manifest_contents: &str,
-    install_ids: &[String],
-) -> Result<DocumentMut, TomlEditError> {
-    debug!("attempting to remove packages from the manifest");
-    let mut toml = manifest_contents
-        .parse::<RawManifest>()
-        .map_err(TomlEditError::ParseManifest)?
-        .0;
-
-    let installs_table = {
-        let installs_field = toml
-            .get_mut("install")
-            .ok_or(TomlEditError::PackageNotFound(install_ids[0].clone()))?;
-
-        let type_name = installs_field.type_name().into();
-
-        installs_field
-            .as_table_mut()
-            .ok_or(TomlEditError::MalformedInstallTable(type_name))?
-    };
-
-    for id in install_ids {
-        debug!("checking for presence of package '{id}'");
-        if !installs_table.contains_key(id) {
-            debug!("package with install id '{id}' wasn't found");
-            return Err(TomlEditError::PackageNotFound(id.clone()));
-        } else {
-            installs_table.remove(id);
-            debug!("package with install id '{id}' was removed");
-        }
-    }
-
-    Ok(toml)
-}
-
 /// Modify packages in the `[install]` table of a manifest.
 /// This function applies modifications to packages, either removing them entirely
 /// or updating their outputs field.
@@ -2075,42 +2038,6 @@ pub(super) mod test {
     }
 
     #[test]
-    fn remove_error_when_manifest_malformed() {
-        let test_packages = vec!["hello".to_owned()];
-        let attempted_removal = remove_packages(BAD_MANIFEST, &test_packages);
-        assert!(matches!(
-            attempted_removal,
-            Err(TomlEditError::ParseManifest(_))
-        ))
-    }
-
-    #[test]
-    fn error_when_install_table_missing() {
-        let test_packages = vec!["hello".to_owned()];
-        let removal = remove_packages("version = 1", &test_packages);
-        assert!(matches!(removal, Err(TomlEditError::PackageNotFound(_))));
-    }
-
-    #[test]
-    fn removes_all_requested_packages() {
-        let test_packages = vec!["hello".to_owned(), "ripgrep".to_owned()];
-        let toml = remove_packages(DUMMY_MANIFEST, &test_packages).unwrap();
-        assert!(!contains_package(&toml, "hello").unwrap());
-        assert!(!contains_package(&toml, "ripgrep").unwrap());
-    }
-
-    #[test]
-    fn error_when_removing_nonexistent_package() {
-        let test_packages = vec![
-            "hello".to_owned(),
-            "DOES_NOT_EXIST".to_owned(),
-            "nodePackages.@".to_owned(),
-        ];
-        let removal = remove_packages(DUMMY_MANIFEST, &test_packages);
-        assert!(matches!(removal, Err(TomlEditError::PackageNotFound(_))));
-    }
-
-    #[test]
     fn modify_packages_removes_package() {
         let modifications = vec![PackageToModify {
             install_id: "hello".to_string(),
@@ -2236,14 +2163,13 @@ pub(super) mod test {
 
     #[test]
     fn uninstall_spec_specific_outputs_from_explicit_list() {
-        let current = SelectedOutputs::Specific(vec![
-            "out".to_string(),
-            "man".to_string(),
-            "dev".to_string(),
-        ]);
         let result = modification_for_outputs(
             &RawSelectedOutputs::Specific(vec!["man".to_string()]),
-            Some(&current),
+            Some(&SelectedOutputs::Specific(vec![
+                "out".to_string(),
+                "man".to_string(),
+                "dev".to_string(),
+            ])),
             &["out".to_string(), "man".to_string(), "dev".to_string()],
             &["out".to_string(), "man".to_string(), "dev".to_string()],
         );
@@ -2253,9 +2179,10 @@ pub(super) mod test {
         );
     }
 
+    /// When currently "all" outputs are installed,
+    /// remove from all available outputs rather than outputs_to_install.
     #[test]
     fn uninstall_spec_from_all_outputs() {
-        let current = SelectedOutputs::All(AllSentinel::All);
         let all_outputs = vec![
             "out".to_string(),
             "man".to_string(),
@@ -2264,7 +2191,7 @@ pub(super) mod test {
         ];
         let result = modification_for_outputs(
             &RawSelectedOutputs::Specific(vec!["doc".to_string()]),
-            Some(&current),
+            Some(&SelectedOutputs::All(AllSentinel::All)),
             &["out".to_string(), "man".to_string(), "doc".to_string()],
             &all_outputs,
         );
@@ -2280,11 +2207,10 @@ pub(super) mod test {
 
     #[test]
     fn uninstall_spec_from_implicit_defaults() {
-        let outputs_to_install = vec!["out".to_string(), "man".to_string()];
         let result = modification_for_outputs(
             &RawSelectedOutputs::Specific(vec!["man".to_string()]),
             None, // No explicit outputs in manifest
-            &outputs_to_install,
+            &["out".to_string(), "man".to_string()],
             &["out".to_string(), "man".to_string(), "dev".to_string()],
         );
         assert_eq!(
@@ -2295,10 +2221,12 @@ pub(super) mod test {
 
     #[test]
     fn uninstall_spec_all_outputs_removes_package() {
-        let current = SelectedOutputs::Specific(vec!["out".to_string(), "man".to_string()]);
         let result = modification_for_outputs(
             &RawSelectedOutputs::All,
-            Some(&current),
+            Some(&SelectedOutputs::Specific(vec![
+                "out".to_string(),
+                "man".to_string(),
+            ])),
             &["out".to_string(), "man".to_string()],
             &["out".to_string(), "man".to_string()],
         );
@@ -2307,10 +2235,9 @@ pub(super) mod test {
 
     #[test]
     fn uninstall_spec_last_output_removes_package() {
-        let current = SelectedOutputs::Specific(vec!["out".to_string()]);
         let result = modification_for_outputs(
             &RawSelectedOutputs::Specific(vec!["out".to_string()]),
-            Some(&current),
+            Some(&SelectedOutputs::Specific(vec!["out".to_string()])),
             &["out".to_string()],
             &["out".to_string(), "man".to_string()],
         );
