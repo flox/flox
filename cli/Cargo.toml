@@ -19,9 +19,9 @@ resolver = "2"
 anyhow = "1"
 async-stream = "0.3.6"
 blake3 = "1.8.2"
-bpaf = { version = "0.9.20", features = ["derive", "autocomplete"] }
+bpaf = { version = "0.9.22", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
-chrono = { version = "0.4.42", features = ["serde"] }
+chrono = { version = "0.4.43", features = ["serde"] }
 clap = { version = "4.5.54", features = ["derive"] }
 close_fds = "0.3"
 config = { version = "0.15", default-features = false, features = ["toml"] }
@@ -47,7 +47,7 @@ httpmock = { git = "https://github.com/flox/httpmock.git", default-features = fa
 indent = "0.1.1"
 indexmap = { version = "2.13.0", features = ["serde"] }
 indoc = "2.0.7"
-inquire = "0.9.1"
+inquire = "0.9.2"
 indicatif = "0.18"
 itertools = "0.14.0"
 jsonwebtoken = { version = "10.2", features = ["rust_crypto"] }
@@ -95,7 +95,7 @@ toml_edit = { version = "0.23", features = ["serde"] }
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-indicatif = "0.3"
-tracing-subscriber = { version = "=0.3.19", features = ["env-filter"] }
+tracing-subscriber = { version = "=0.3.22", features = ["env-filter"] }
 url = { version = "2.5", features = ["serde"] }
 url-escape = "0.1.1"
 uuid = { version = "1.16", features = ["serde", "v4"] }

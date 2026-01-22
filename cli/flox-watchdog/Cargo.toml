@@ -23,7 +23,7 @@ tracing-subscriber.workspace = true
 kqueue.workspace = true
 
 [dev-dependencies]
-filetime = "0.2.26"
+filetime = "0.2.27"
 tempfile.workspace = true
 serde_json.workspace = true
 flox-activations.workspace = true
