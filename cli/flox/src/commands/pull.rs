@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::{Flox, RemoteEnvironmentRef};
+use flox_rust_sdk::models::environment::floxmeta_branch::FloxmetaBranchError;
 use flox_rust_sdk::models::environment::generations::{GenerationId, GenerationsExt};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
@@ -318,7 +319,7 @@ impl Pull {
 
         let mut env = {
             let result = ManagedEnvironment::open(flox, pointer, &dot_flox_path, None)
-                .map_err(Self::handle_open_error_during_pull_new);
+                .map_err(|err| Self::handle_open_error_during_pull_new(flox, err));
             match result {
                 Err(err) => {
                     fs::remove_dir_all(&dot_flox_path)
@@ -588,39 +589,73 @@ impl Pull {
     //    in errors.rs.
     // 3. [UpstreamNotFound] is slightly different but could be folded into a generic message as well,
     //    inlined into the caller.
-    fn handle_open_error_during_pull_new(err: EnvironmentError) -> anyhow::Error {
-        if let EnvironmentError::ManagedEnvironment(err) = err {
-            match err {
+    fn handle_open_error_during_pull_new(flox: &Flox, err: EnvironmentError) -> anyhow::Error {
+        if let EnvironmentError::ManagedEnvironment(managed_err) = err {
+            match managed_err {
                 ManagedEnvironmentError::AccessDenied => {
                     let message = "You do not have permission to pull this environment";
                     anyhow::Error::msg(message)
                 },
+                // Handle UpstreamNotFound from FloxmetaBranch errors
+                ManagedEnvironmentError::FloxmetaBranch(
+                    FloxmetaBranchError::UpstreamNotFound {
+                        env_ref,
+                        upstream: _,
+                        user,
+                    },
+                ) => Self::format_upstream_not_found_error(flox, &env_ref, user.as_deref()),
+                // Handle direct UpstreamNotFound (may come from different code paths)
                 ManagedEnvironmentError::UpstreamNotFound {
                     env_ref,
                     upstream: _,
                     user,
-                } => {
-                    let by_current_user = user
-                        .map(|u| u == env_ref.owner().as_str())
-                        .unwrap_or_default();
-                    let message = format!("The environment {env_ref} does not exist.");
-                    if by_current_user {
-                        anyhow!(formatdoc! {"
-                        {message}
-
-                        Double check the name or create it with:
-
-                            $ flox init --name {name}
-                            $ flox push
-                    ", name = env_ref.name()})
-                    } else {
-                        anyhow!(message)
-                    }
-                },
-                _ => err.into(),
+                } => Self::format_upstream_not_found_error(flox, &env_ref, user.as_deref()),
+                _ => managed_err.into(),
             }
         } else {
             err.into()
+        }
+    }
+
+    /// Format an UpstreamNotFound error with appropriate context.
+    ///
+    /// When the user is pulling their own environment with an expired token,
+    /// suggests re-authentication since the "not found" error is likely due
+    /// to authentication failure, not because the environment doesn't exist.
+    fn format_upstream_not_found_error(
+        flox: &Flox,
+        env_ref: &RemoteEnvironmentRef,
+        user: Option<&str>,
+    ) -> anyhow::Error {
+        let by_current_user = user
+            .map(|u| u == env_ref.owner().as_str())
+            .unwrap_or_default();
+
+        // Check if the token is expired - this might be why authentication failed
+        let token_expired = flox.floxhub_token.as_ref().is_some_and(|t| t.is_expired());
+
+        let message = format!("The environment {env_ref} does not exist.");
+
+        if by_current_user && token_expired {
+            // The user is pulling their own environment with an expired token.
+            // The "not found" error is likely due to authentication failure,
+            // not because the environment doesn't exist.
+            anyhow!(formatdoc! {"
+                Could not access the environment {env_ref}.
+
+                Try `flox pull` again after re-authenticating.
+            "})
+        } else if by_current_user {
+            anyhow!(formatdoc! {"
+                {message}
+
+                Double check the name or create it with:
+
+                    $ flox init --name {name}
+                    $ flox push
+            ", name = env_ref.name()})
+        } else {
+            anyhow!(message)
         }
     }
 }
