@@ -342,16 +342,10 @@ impl CoreEnvironment<ReadOnly> {
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         let lockfile: Lockfile = self.lock(flox)?.into();
 
-        // Extract install IDs for include checking
-        let identifiers: Vec<String> = uninstall_specs
-            .iter()
-            .map(|s| s.package_ref.clone())
-            .collect();
-        let packages_in_includes = if let Some(ref compose) = lockfile.compose {
-            compose.get_includes_for_packages(&identifiers)?
-        } else {
-            HashMap::new()
-        };
+        // keep track of which packages are available in includes (to inform result messages)
+        let mut packages_in_includes = HashMap::new();
+        // keep track of which modifications are made (to inform result messages)
+        let mut modifications = Vec::new();
 
         let mut raw_manifest: RawManifest = self
             .manifest_contents()?
@@ -363,12 +357,20 @@ impl CoreEnvironment<ReadOnly> {
                 CoreEnvironmentError::ModifyToml(TomlEditError::ParseManifest(err))
             })?;
 
+            let include_for_package = lockfile
+                .compose
+                .as_ref()
+                .map(|compose| compose.get_include_for_package(&spec.package_ref, &spec.version))
+                .transpose()?
+                .flatten();
+
             // resolve the actual install_id for the package
-            let install_id = match manifest.resolve_install_id(&spec.package_ref) {
+            let install_id = match manifest.resolve_install_id(&spec.package_ref, &spec.version) {
                 Ok(id) => id,
                 Err(err) => {
+                    // if package wasn't found, look it up in includes for a detailed error
                     if let ManifestError::PackageNotFound(ref package) = err
-                        && let Some(include) = packages_in_includes.get(package)
+                        && let Some(include) = include_for_package
                     {
                         return Err(EnvironmentError::Core(
                             CoreEnvironmentError::UninstallError(
@@ -382,6 +384,10 @@ impl CoreEnvironment<ReadOnly> {
                     return Err(EnvironmentError::ManifestError(err));
                 },
             };
+
+            if let Some(ref include) = include_for_package {
+                packages_in_includes.insert(install_id.clone(), include.clone());
+            }
 
             // Compute modifications for the uninstall spec
 
@@ -444,13 +450,15 @@ impl CoreEnvironment<ReadOnly> {
                 &outputs_to_install,
                 &all_outputs,
             );
-            let modification = PackageToModify {
+            let modification = [PackageToModify {
                 install_id,
                 modification,
-            };
+            }];
 
-            raw::modify_packages(&mut raw_manifest, &[modification])
+            raw::modify_packages(&mut raw_manifest, &modification)
                 .map_err(CoreEnvironmentError::ModifyToml)?;
+
+            modifications.extend(modification);
         }
 
         let (store_path, _) =
@@ -459,6 +467,7 @@ impl CoreEnvironment<ReadOnly> {
         Ok(UninstallationAttempt {
             new_manifest: Some(raw_manifest.to_string()),
             still_included: packages_in_includes,
+            modifications,
             built_environment_store_paths: Some(store_path),
         })
     }
