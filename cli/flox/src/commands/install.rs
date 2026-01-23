@@ -5,12 +5,17 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox, RemoteEnvironmentRef};
-use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
+use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
+use flox_rust_sdk::models::environment::remote_environment::{
+    RemoteEnvironment,
+    RemoteEnvironmentError,
+};
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     Environment,
     EnvironmentError,
     InstallationAttempt,
+    ManagedPointer,
 };
 use flox_rust_sdk::models::lockfile::{
     LockedPackage,
@@ -601,11 +606,20 @@ async fn try_create_default_environment_interactive(
             .parse()
             .expect("'default' is a known accepted name");
 
-        let env_ref = RemoteEnvironmentRef::new_from_parts(owner, name);
+        let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
 
-        RemoteEnvironment::init_floxhub_environment(flox, env_ref.clone(), false)
-            .with_context(|| format!("Failed to initialize FloxHub environment '{env_ref}'"))
-    }?;
+        match RemoteEnvironment::new(flox, pointer, None) {
+            Ok(existing_env) => {
+                debug!("environment already exists -- will not init again");
+                existing_env
+            },
+            Err(RemoteEnvironmentError::OpenManagedEnvironment(
+                ManagedEnvironmentError::UpstreamNotFound { env_ref, .. },
+            )) => RemoteEnvironment::init_floxhub_environment(flox, env_ref.clone(), false)
+                .with_context(|| format!("Failed to initialize FloxHub environment '{env_ref}'"))?,
+            Err(e) => Err(e)?,
+        }
+    };
 
     // record that we created default env
     // Note: we record this _after_ attempting to create the default env,
