@@ -163,8 +163,16 @@ EOF
 @test "services aren't started unless requested" {
   setup_sleeping_services
 
-  RUST_LOG=debug run "$FLOX_BIN" activate -- true
-  assert_output --partial "setting service variables should_have_services=false start_new_process_compose=false"
+  # NB: No --start-services
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    echo "FLOX_ACTIVATE_START_SERVICES=${FLOX_ACTIVATE_START_SERVICES}"
+    "$FLOX_BIN" services status
+EOF
+)
+  assert_success
+  assert_line "FLOX_ACTIVATE_START_SERVICES=false"
+  assert_output --regexp "one +Stopped"
+  assert_output --regexp "two +Stopped"
 }
 
 @test "help for the command is displayed with no args" {
