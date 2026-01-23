@@ -19,9 +19,9 @@ resolver = "2"
 anyhow = "1"
 async-stream = "0.3.6"
 blake3 = "1.8.2"
-bpaf = { version = "0.9.20", features = ["derive", "autocomplete"] }
+bpaf = { version = "0.9.22", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
-chrono = { version = "0.4.42", features = ["serde"] }
+chrono = { version = "0.4.43", features = ["serde"] }
 clap = { version = "4.5.54", features = ["derive"] }
 close_fds = "0.3"
 config = { version = "0.15", default-features = false, features = ["toml"] }
@@ -47,12 +47,12 @@ httpmock = { git = "https://github.com/flox/httpmock.git", default-features = fa
 indent = "0.1.1"
 indexmap = { version = "2.13.0", features = ["serde"] }
 indoc = "2.0.7"
-inquire = "0.9.1"
+inquire = "0.9.2"
 indicatif = "0.18"
 itertools = "0.14.0"
 jsonwebtoken = { version = "10.2", features = ["rust_crypto"] }
 log = { version = "0.4.29", features = ["kv"] }
-nix = { version = "0.30", features = ["signal", "process", "user"] }
+nix = { version = "0.31", features = ["signal", "process", "user"] }
 oauth2 = "5.0"
 path-dedot = "3.1.1"
 pollster = "0.4.0"
