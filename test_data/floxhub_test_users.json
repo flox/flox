@@ -9,7 +9,7 @@
             }
   },
   {
-    "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTksImh0dHBzOi8vZmxveC5kZXYvaGFuZGxlIjoidGVzdDIifQ.XxaKMMLFE84Ls1lswdcyC4h-8v1liYcMIoj3rMlIQ6U",
+    "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTksImh0dHBzOi8vZmxveC5kZXYvaGFuZGxlIjoidGVzdF91c2VyX25vX2NhdGFsb2dzIn0.XoajLiSMhn5cU4O-aCCFm8jq9jRHNK4JfLiOocOBrRM",
     "handle": "test_user_no_catalogs",
     "roles": {  }
   },
