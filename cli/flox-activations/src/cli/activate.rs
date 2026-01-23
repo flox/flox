@@ -255,8 +255,15 @@ impl ActivateArgs {
                     subsystem_verbosity,
                     vars_from_env.clone(),
                     start_id,
-                    invocation_type.clone(),
                 );
+                // TODO: should this be here?
+                if *invocation_type == InvocationType::Interactive {
+                    eprintln!("{}", formatdoc! {"✅ You are now using the environment '{}'
+                                     To stop using this environment, type 'exit'
+                                     ",
+                    context.attach_ctx.env_description,
+                    });
+                }
                 debug!("spawning start.bash: {:?}", start_command);
                 let status = start_command.spawn()?.wait()?;
                 if !status.success() {
@@ -276,8 +283,8 @@ impl ActivateArgs {
                     eprintln!(
                         "{}",
                         formatdoc! {"✅ Attached to existing activation of environment '{}'
-                                 To stop using this environment, type 'exit'
-                                ",
+                                     To stop using this environment, type 'exit'
+                                     ",
                         context.attach_ctx.env_description,
                         }
                     );

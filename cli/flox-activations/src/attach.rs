@@ -205,7 +205,6 @@ fn startup_ctx(
                 flox_env_project: ctx.attach_ctx.env_project.clone(),
                 flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
                 clean_up,
-                activation_state_dir: state_dir.to_path_buf(),
             };
             StartupCtx {
                 args: StartupArgs::Zsh(startup_args),
@@ -236,7 +235,9 @@ fn write_to_path(ctx: &StartupCtx, path: &Path) -> Result<()> {
         StartupArgs::Tcsh(ref args) => {
             generate_tcsh_startup_commands(args, &ctx.env_diff, &mut writer)?
         },
-        StartupArgs::Zsh(ref args) => generate_zsh_startup_commands(args, &mut writer)?,
+        StartupArgs::Zsh(ref args) => {
+            generate_zsh_startup_commands(args, &ctx.env_diff, &mut writer)?
+        },
     }
     Ok(())
 }
@@ -253,7 +254,9 @@ fn write_to_stdout(ctx: &StartupCtx) -> Result<()> {
         StartupArgs::Tcsh(ref args) => {
             generate_tcsh_startup_commands(args, &ctx.env_diff, &mut writer)?
         },
-        StartupArgs::Zsh(ref args) => generate_zsh_startup_commands(args, &mut writer)?,
+        StartupArgs::Zsh(ref args) => {
+            generate_zsh_startup_commands(args, &ctx.env_diff, &mut writer)?
+        },
     }
     Ok(())
 }
