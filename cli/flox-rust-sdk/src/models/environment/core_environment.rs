@@ -29,6 +29,7 @@ use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::lockfile::{
     LockResult,
+    LockedInclude,
     LockedPackage,
     Lockfile,
     ResolutionFailure,
@@ -43,6 +44,7 @@ use crate::models::manifest::raw::{
     TomlEditError,
     UninstallSpec,
     insert_packages,
+    modify_packages,
 };
 use crate::models::manifest::typed::{self, Inner, Manifest, ManifestError};
 use crate::providers::auth::{Auth, AuthError};
@@ -344,10 +346,7 @@ impl CoreEnvironment<ReadOnly> {
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         let lockfile: Lockfile = self.lock(flox)?.into();
 
-        // keep track of which packages are available in includes (to inform result messages)
-        let mut packages_in_includes = HashMap::new();
-
-        let mut removals = HashMap::new();
+        let resolved_removals = resolve_specs_to_concrete_install_ids(&uninstall_specs, &lockfile)?;
 
         let mut raw_manifest: RawManifest = self
             .manifest_contents()?
@@ -357,157 +356,31 @@ impl CoreEnvironment<ReadOnly> {
             .to_typed()
             .map_err(|err| CoreEnvironmentError::ModifyToml(TomlEditError::ParseManifest(err)))?;
 
-        for spec in uninstall_specs {
-            let include_for_package = lockfile
-                .compose
-                .as_ref()
-                .map(|compose| compose.get_include_for_package(&spec.package_ref, &spec.version))
-                .transpose()?
-                .flatten();
-
-            // resolve the actual install_id for the package
-            let install_id = match manifest.resolve_install_id(&spec.package_ref, &spec.version) {
-                Ok(id) => id,
-                Err(err) => {
-                    // if package wasn't found, look it up in includes for a detailed error
-                    if let ManifestError::PackageNotFound(ref package) = err
-                        && let Some(include) = include_for_package
-                    {
-                        return Err(EnvironmentError::Core(
-                            CoreEnvironmentError::UninstallError(
-                                UninstallError::PackageOnlyIncluded(
-                                    package.to_string(),
-                                    include.name.clone(),
-                                ),
-                            ),
-                        ));
-                    };
-                    return Err(EnvironmentError::ManifestError(err));
-                },
-            };
-
-            if let Some(ref include) = include_for_package {
-                packages_in_includes.insert(install_id.clone(), include.clone());
-            }
-
-            let outputs_to_uninstall = spec.outputs.unwrap_or(RawSelectedOutputs::All);
-
-            let outputs_to_remove_accumulated = removals.entry(install_id.clone());
-            match outputs_to_remove_accumulated {
-                Entry::Occupied(mut occupied_entry) => {
-                    let mut accumulated = occupied_entry.get_mut();
-                    match (&mut accumulated, outputs_to_uninstall) {
-                        (RawSelectedOutputs::All, _) | (_, RawSelectedOutputs::All) => {
-                            *accumulated = RawSelectedOutputs::All;
-                        },
-                        (
-                            RawSelectedOutputs::Specific(items_acc),
-                            RawSelectedOutputs::Specific(items),
-                        ) => items_acc.extend(items),
-                    };
-                },
-                Entry::Vacant(vacant_entry) => {
-                    vacant_entry.insert(outputs_to_uninstall);
-                },
-            };
-        }
-
         // keep track of which modifications are made (to inform result messages)
-        let mut modifications = Vec::new();
-
-        for (install_id, outputs_to_uninstall) in removals {
-            // Compute modifications for the uninstall spec
-
-            // Get current outputs from manifest
-            let manifest_package = manifest
-                .install
-                .inner()
-                .get(&install_id)
-                .expect("install_id resolved from manifest should exist in manifest");
-
-            let current_outputs = match manifest_package {
-                typed::ManifestPackageDescriptor::Catalog(pkg) => pkg.outputs.as_ref(),
-                typed::ManifestPackageDescriptor::FlakeRef(pkg) => pkg.outputs.as_ref(),
-                typed::ManifestPackageDescriptor::StorePath(_) => None,
-            };
-
-            // Get all available outputs and outputs_to_install from lockfile
-            let locked_package = lockfile
-                .packages
+        let modifications = compute_uninstall_modifications(
+            resolved_removals
                 .iter()
-                .find(|pkg| pkg.install_id() == install_id)
-                .expect("install_id should be present in fresh lockfile");
+                .map(|(install_id, (outputs, _))| (install_id, outputs)),
+            &lockfile,
+            &manifest,
+        )?;
 
-            let (outputs_to_install, all_outputs) = match locked_package {
-                LockedPackage::Catalog(pkg) => {
-                    let all_outputs = pkg.outputs.keys().cloned().collect::<Vec<_>>();
-
-                    let outputs_to_install = pkg
-                        .outputs_to_install
-                        .clone()
-                        .unwrap_or_else(|| all_outputs.clone());
-
-                    (outputs_to_install, all_outputs)
-                },
-                LockedPackage::Flake(pkg) => {
-                    let all_outputs = pkg
-                        .locked_installable
-                        .outputs
-                        .keys()
-                        .cloned()
-                        .collect::<Vec<_>>();
-                    let outputs_to_install = pkg
-                        .locked_installable
-                        .outputs_to_install
-                        .clone()
-                        .unwrap_or_else(|| all_outputs.clone());
-
-                    (outputs_to_install, all_outputs)
-                },
-                LockedPackage::StorePath(_) => {
-                    // We assume store paths have no multiple outputs
-                    (Vec::new(), Vec::new())
-                },
-            };
-
-            if let RawSelectedOutputs::Specific(ref outputs) = outputs_to_uninstall {
-                for output in outputs {
-                    if !all_outputs.contains(output) {
-                        return Err(CoreEnvironmentError::UninstallError(
-                            UninstallError::InvalidOutputForPackage(
-                                output.clone(),
-                                install_id.clone(),
-                            ),
-                        ))?;
-                    }
-                }
-            }
-
-            // Compute modification for the combination of specified outputs available and current outputs
-            let modification = raw::modification_for_outputs(
-                &outputs_to_uninstall,
-                current_outputs,
-                &outputs_to_install,
-                &all_outputs,
-            );
-
-            let modification = [PackageToModify {
-                install_id,
-                modification,
-            }];
-
-            raw::modify_packages(&mut raw_manifest, &modification)
-                .map_err(CoreEnvironmentError::ModifyToml)?;
-
-            modifications.extend(modification);
-        }
+        modify_packages(&mut raw_manifest, &modifications)
+            .map_err(CoreEnvironmentError::ModifyToml)?;
 
         let (store_path, _) =
             self.transact_with_manifest_contents(raw_manifest.to_string(), flox)?;
 
+        // collect the modified install ids that are installed through includes
+        // and their respective includes.
+        let still_included = resolved_removals
+            .into_iter()
+            .filter_map(|(install_id, (_, include))| Some((install_id, include?)))
+            .collect();
+
         Ok(UninstallationAttempt {
             new_manifest: Some(raw_manifest.to_string()),
-            still_included: packages_in_includes,
+            still_included,
             modifications,
             built_environment_store_paths: Some(store_path),
         })
@@ -941,6 +814,179 @@ impl CoreEnvironment<ReadOnly> {
         self.replace_with(temp_env)?;
         Ok(store_path)
     }
+}
+
+/// Resolve uninstall specifications to install IDs and aggregate outputs to remove.
+///
+/// This function processes a list of uninstall specs and:
+/// 1. Resolves each package reference (pkg-path or install_id) to a concrete install_id
+/// 2. Aggregates outputs to remove when multiple specs target the same package
+/// 3. Tracks which packages come from includes (for better error messages)
+/// 4. Returns detailed errors if packages are only available in includes
+fn resolve_specs_to_concrete_install_ids(
+    uninstall_specs: &[UninstallSpec],
+    lockfile: &Lockfile,
+) -> Result<HashMap<String, (RawSelectedOutputs, Option<LockedInclude>)>, EnvironmentError> {
+    let manifest = &lockfile.user_manifest();
+
+    let mut removals = HashMap::new();
+
+    for spec in uninstall_specs {
+        // Check if this package is available in an included environment
+        let include_for_package = lockfile
+            .compose
+            .as_ref()
+            .map(|compose| compose.get_include_for_package(&spec.package_ref, &spec.version))
+            .transpose()?
+            .flatten();
+
+        // Resolve the package reference to an install_id
+        let install_id = match manifest.resolve_install_id(&spec.package_ref, &spec.version) {
+            Ok(id) => id,
+            Err(err) => {
+                // If package wasn't found in manifest, check if it exists only in an include
+                if let ManifestError::PackageNotFound(ref package) = err
+                    && let Some(include) = include_for_package
+                {
+                    return Err(EnvironmentError::Core(
+                        CoreEnvironmentError::UninstallError(UninstallError::PackageOnlyIncluded(
+                            package.to_string(),
+                            include.name.clone(),
+                        )),
+                    ));
+                };
+                return Err(EnvironmentError::ManifestError(err));
+            },
+        };
+
+        let outputs_to_uninstall = spec
+            .outputs
+            .as_ref()
+            .unwrap_or(&RawSelectedOutputs::All)
+            .clone();
+
+        // Aggregate outputs to remove if multiple specs target the same package
+        let outputs_to_remove_accumulated = removals.entry(install_id.clone());
+        match outputs_to_remove_accumulated {
+            Entry::Occupied(mut occupied_entry) => {
+                let (accumulated, _) = occupied_entry.get_mut();
+                match (accumulated, outputs_to_uninstall) {
+                    // If either the accumulated or new spec removes all outputs, remove all
+                    (accumulated @ RawSelectedOutputs::All, _)
+                    | (accumulated, RawSelectedOutputs::All) => {
+                        *accumulated = RawSelectedOutputs::All;
+                    },
+                    // Otherwise, merge the specific output lists
+                    (
+                        RawSelectedOutputs::Specific(items_acc),
+                        RawSelectedOutputs::Specific(items),
+                    ) => items_acc.extend(items),
+                };
+            },
+            Entry::Vacant(vacant_entry) => {
+                vacant_entry.insert((outputs_to_uninstall, include_for_package));
+            },
+        };
+    }
+
+    Ok(removals)
+}
+
+/// Compute manifest modifications to uninstall the specified outputs from packages.
+///
+/// For each package in `removals`, this function:
+/// 1. Extracts the current outputs configuration from the manifest
+/// 2. Retrieves available outputs and currently installed outputs from the lockfile
+/// 3. Validates that requested outputs exist for the package
+/// 4. Computes the appropriate modification (remove package entirely or update outputs)
+fn compute_uninstall_modifications<'r>(
+    removals: impl IntoIterator<Item = (&'r String, &'r RawSelectedOutputs)>,
+    lockfile: &Lockfile,
+    manifest: &Manifest,
+) -> Result<Vec<PackageToModify>, EnvironmentError> {
+    let mut modifications = Vec::new();
+
+    for (install_id, outputs_to_uninstall) in removals {
+        // Get current outputs configuration from manifest
+        let manifest_package = manifest
+            .install
+            .inner()
+            .get(install_id)
+            .expect("install_id resolved from manifest should exist in manifest");
+
+        let current_outputs = match manifest_package {
+            typed::ManifestPackageDescriptor::Catalog(pkg) => pkg.outputs.as_ref(),
+            typed::ManifestPackageDescriptor::FlakeRef(pkg) => pkg.outputs.as_ref(),
+            typed::ManifestPackageDescriptor::StorePath(_) => None,
+        };
+
+        // Get all available outputs and outputs_to_install from lockfile
+        let locked_package = lockfile
+            .packages
+            .iter()
+            .find(|pkg| pkg.install_id() == install_id)
+            .expect("install_id should be present in fresh lockfile");
+
+        let (outputs_to_install, all_outputs) = match locked_package {
+            LockedPackage::Catalog(pkg) => {
+                let all_outputs = pkg.outputs.keys().cloned().collect::<Vec<_>>();
+
+                let outputs_to_install = pkg
+                    .outputs_to_install
+                    .clone()
+                    .unwrap_or_else(|| all_outputs.clone());
+
+                (outputs_to_install, all_outputs)
+            },
+            LockedPackage::Flake(pkg) => {
+                let all_outputs = pkg
+                    .locked_installable
+                    .outputs
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                let outputs_to_install = pkg
+                    .locked_installable
+                    .outputs_to_install
+                    .clone()
+                    .unwrap_or_else(|| all_outputs.clone());
+
+                (outputs_to_install, all_outputs)
+            },
+            LockedPackage::StorePath(_) => {
+                // We assume store paths have no multiple outputs
+                (Vec::new(), Vec::new())
+            },
+        };
+
+        // Validate that requested outputs exist for this package
+        if let RawSelectedOutputs::Specific(outputs) = outputs_to_uninstall {
+            for output in outputs {
+                if !all_outputs.contains(output) {
+                    Err(CoreEnvironmentError::UninstallError(
+                        UninstallError::InvalidOutputForPackage(output.clone(), install_id.clone()),
+                    ))?;
+                }
+            }
+        }
+
+        // Compute modification for the combination of specified outputs, available outputs, and current outputs
+        let modification = raw::modification_for_outputs(
+            outputs_to_uninstall,
+            current_outputs,
+            &outputs_to_install,
+            &all_outputs,
+        );
+
+        let modification = [PackageToModify {
+            install_id: install_id.clone(),
+            modification,
+        }];
+
+        modifications.extend(modification);
+    }
+
+    Ok(modifications)
 }
 
 /// A writable view of an environment directory
