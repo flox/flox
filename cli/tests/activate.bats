@@ -386,6 +386,43 @@ EOF
   refute_output --partial "sourcing profile.zsh"
 }
 
+# bats test_tags=activate:standalone
+@test "activation script can be run directly" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
+
+  # Test running the activate script directly in various forms.
+  export _FLOX_SHELL_FORCE="bash"
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.run/activate -c :
+  assert_success
+  assert_output --partial "sourcing hook.on-activate"
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --command :
+  assert_success
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -c true
+  assert_success
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --command true
+  assert_success
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate true
+  assert_success
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -- true
+  assert_success
+}
+
+# bats test_tags=activate:standalone
+@test "activation script can use packages from PATH when run directly" {
+  project_setup
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" "$FLOX_BIN" install hello
+
+  # Verify that running the activate script directly can access installed packages.
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -- hello
+  assert_success
+  assert_output --partial "Hello, world!"
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -c hello
+  assert_success
+  assert_output --partial "Hello, world!"
+}
+
 # bats test_tags=activate,activate:hook,activate:hook:fish
 @test "fish: interactive activate runs profile scripts" {
   project_setup

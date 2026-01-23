@@ -255,7 +255,11 @@ if [ "$_skip_hook_on_activate" = "false" ]; then
 fi
 
 if [ "$_command_mode" = "true" ]; then
-  exec "$@"
+  if [ -n "$FLOX_CMD" ]; then
+    exec bash -c "$FLOX_CMD"
+  else
+    exec "$@"
+  fi
 fi
 
 if [ "$_command_mode" = "false" ]; then
