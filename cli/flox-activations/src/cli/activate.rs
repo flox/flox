@@ -2,6 +2,7 @@ use std::fs::{self, DirBuilder};
 use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow, bail};
 use clap::Args;
@@ -121,7 +122,9 @@ impl ActivateArgs {
         subsystem_verbosity: u32,
         vars_from_env: &VarsFromEnvironment,
     ) -> Result<StartIdentifier, anyhow::Error> {
-        let mut retries = 30; // 30 * 200ms = 6 seconds for concurrent start blocking
+        let retry_delay = Duration::from_millis(200);
+        let warning_interval = Duration::from_secs(5);
+        let mut last_warning: Option<Instant> = None;
 
         loop {
             match self.try_start_or_attach(
@@ -136,24 +139,20 @@ impl ActivateArgs {
                 },
                 StartOrAttachResult::AlreadyStarting {
                     pid: blocking_pid, ..
-                } if retries > 0 => {
-                    debug!(
-                        pid = blocking_pid,
-                        retries = retries,
-                        "Another activation is starting",
-                    );
-
-                    retries -= 1;
-                    std::thread::sleep(std::time::Duration::from_millis(200));
-                    continue;
-                },
-                StartOrAttachResult::AlreadyStarting {
-                    pid: blocking_pid, ..
                 } => {
-                    anyhow::bail!(
-                        "Timed out waiting for concurrent activation to complete (blocked by PID {})",
-                        blocking_pid
-                    );
+                    let now = Instant::now();
+                    let should_warn =
+                        last_warning.is_none_or(|t| now.duration_since(t) >= warning_interval);
+
+                    if should_warn {
+                        eprintln!(
+                            "⚠️  Waiting for another activation to complete (blocked by PID {})...",
+                            blocking_pid
+                        );
+                        last_warning = Some(now);
+                    }
+
+                    std::thread::sleep(retry_delay);
                 },
             }
         }
