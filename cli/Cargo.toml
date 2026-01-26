@@ -79,7 +79,7 @@ shell-escape = "0.1.5"
 slug = "0.1"
 supports-color = "3.0.2"
 # provides process tools for shell detection
-sysinfo = "0.37.2"
+sysinfo = "0.38.0"
 # provide system version information for metric
 # TODO: review if we need this
 sys-info = "0.9"
@@ -110,7 +110,7 @@ temp-env = "0.3.2"
 
 # watchdog dependencies
 kqueue = "1.1.1"
-signal-hook = "0.4.1"
+signal-hook = "0.4.3"
 
 # build(.rs) dependencies
 openapiv3 = "2.2"
