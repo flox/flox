@@ -33,7 +33,7 @@ in
 # which includes fixes against the above vuln.
 # FWIW, using `.appendPatches` apparently runs into build issues in CI,
 # likely on account of <https://github.com/NixOS/nix/issues/14751>.
-(nixVersions.extend (
+((nixVersions.extend (
   final: prev: {
     nixComponents_2_31 = prev.nixComponents_2_31.override {
       version = "2.31.5";
@@ -44,11 +44,13 @@ in
         hash = "sha256-b7fhCXxl9qKTNPQvG8T/+nOxB95kalt9/aSY+ZSRctk=";
       };
     };
-
   }
 )).
-
-"${nixVersion}"
+"${nixVersion}").overrideAttrs (_prev: {
+  # Disable functional tests; they require sandboxing and other host
+  # capabilities that are not available in this environment.
+  doCheck = false;
+})
 #  .appendPatches
 #   # E.g:
 #   # (builtins.path { path = ./patches/pr_<PR>_<description>.patch; })
