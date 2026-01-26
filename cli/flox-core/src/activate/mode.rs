@@ -5,20 +5,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(
-    Debug,
-    Clone,
-    Serialize,
-    Deserialize,
-    Hash,
-    PartialEq,
-    Eq,
-    Ord,
-    PartialOrd,
-    Default,
-    JsonSchema,
-    proptest_derive::Arbitrary,
+    Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, Ord, PartialOrd, Default, JsonSchema,
 )]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub enum ActivateMode {
     #[default]
     Dev,
