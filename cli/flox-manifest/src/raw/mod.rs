@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::LazyLock;
 
+use flox_core::activate::mode::ActivateMode;
 use flox_core::data::System;
 use indoc::indoc;
 use itertools::Itertools;
@@ -10,7 +11,7 @@ use reqwest::Url;
 use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Table, Value};
 use tracing::{debug, trace};
 
-use crate::parsed::common::{self, ActivateMode, VersionKind};
+use crate::parsed::common::{self, VersionKind};
 use crate::parsed::v1_10_0::SelectedOutputs;
 use crate::parsed::{Inner, v1, v1_10_0};
 use crate::util::is_custom_package;

@@ -4,7 +4,17 @@ use std::{fs, io};
 
 use enum_dispatch::enum_dispatch;
 use flox_core::activate::mode::ActivateMode;
+use flox_core::data::environment_ref::{
+    ActivateEnvironmentRef,
+    EnvironmentName,
+    EnvironmentOwner,
+    RemoteEnvironmentRef,
+};
 pub use flox_core::{Version, path_hash};
+use flox_manifest::lockfile::compose::LockedInclude;
+use flox_manifest::lockfile::{Lockfile, LockfileError};
+use flox_manifest::raw::PackageToInstall;
+use flox_manifest::{Manifest, ManifestError, Migrated, Validated};
 use generations::{GenerationId, GenerationsError};
 use indoc::formatdoc;
 use managed_environment::ManagedEnvironment;
@@ -19,21 +29,20 @@ use walkdir::WalkDir;
 use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
 use super::env_registry::EnvRegistryError;
-use super::environment_ref::{EnvironmentName, EnvironmentOwner};
-use super::lockfile::{LockResult, LockedInclude, Lockfile, RecoverableMergeError, ResolveError};
-use super::manifest::raw::PackageToInstall;
-use super::manifest::typed::ManifestError;
 use crate::data::{CanonicalPath, CanonicalizeError, System};
 use crate::flox::{Flox, Floxhub};
 use crate::models::environment::generations::GenerationsEnvironment;
 use crate::providers::auth::AuthError;
 use crate::providers::buildenv::BuildEnvOutputs;
+use crate::providers::catalog::ResolveError;
 use crate::providers::git::{
     GitCommandDiscoverError,
     GitCommandProvider,
     GitDiscoverError,
     GitProvider,
 };
+use crate::providers::lock_manifest::{LockResult, RecoverableMergeError};
+use crate::providers::manifest_init::ManifestInitError;
 use crate::utils::copy_file_without_permissions;
 
 mod core_environment;
@@ -61,8 +70,6 @@ pub const DEFAULT_MAX_AGE_DAYS: u32 = 90;
 
 pub const DOT_FLOX: &str = ".flox";
 pub const ENVIRONMENT_POINTER_FILENAME: &str = "env.json";
-pub const MANIFEST_FILENAME: &str = "manifest.toml";
-pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const GCROOTS_DIR_NAME: &str = "run";
 pub const CACHE_DIR_NAME: &str = "cache";
 pub const LIB_DIR_NAME: &str = "lib";
@@ -78,7 +85,7 @@ pub use flox_core::N_HASH_CHARS;
 /// along with whether each package was already installed
 #[derive(Debug)]
 pub struct InstallationAttempt {
-    pub new_manifest: Option<String>,
+    pub new_manifest: Option<Manifest<Migrated>>,
     pub already_installed: HashMap<String, bool>,
     /// The store paths of environment that was built to validate the install.
     /// This is used as an optimization to skip builds that we've already done.
@@ -88,7 +95,7 @@ pub struct InstallationAttempt {
 /// The result of an uninstallation attempt
 #[derive(Debug)]
 pub struct UninstallationAttempt {
-    pub new_manifest: Option<String>,
+    pub new_manifest: Option<Manifest<Migrated>>,
     /// Packages that were requested to be uninstalled but are stilled provided
     /// by included environments.
     pub still_included: HashMap<String, LockedInclude>,
@@ -143,11 +150,20 @@ pub trait Environment: Send {
     /// others call lock.
     fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError>;
 
-    /// Extract the current content of the manifest
+    /// Reads the manifest from disk without performing the migration.
+    ///
+    /// All operations are to be performed on the migrated manifest when possible.
+    /// This is only intended to be used when comparing against manifests that are
+    /// stored unmigrated e.g. manifests stored in the lockfile, manifests stored
+    /// in generations, etc.
+    fn pre_migration_manifest(&self, flox: &Flox) -> Result<Manifest<Validated>, EnvironmentError>;
+
+    /// Reads the manifest from disk and returns the migrated manifest,
+    /// potentially locking it if necessary.
     ///
     /// Implementations may use process context from [Flox]
     /// to determine the current content of the manifest.
-    fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError>;
+    fn manifest(&mut self, flox: &Flox) -> Result<Manifest<Migrated>, EnvironmentError>;
 
     /// Return the path to rendered environment in the Nix store.
     ///
@@ -242,6 +258,21 @@ pub enum ConcreteEnvironment {
     Managed(ManagedEnvironment),
     /// Container for [RemoteEnvironment]
     Remote(RemoteEnvironment),
+}
+
+impl TryFrom<&ConcreteEnvironment> for ActivateEnvironmentRef {
+    type Error = EnvironmentError;
+
+    fn try_from(env: &ConcreteEnvironment) -> Result<Self, Self::Error> {
+        let env_ref = match env {
+            ConcreteEnvironment::Path(env) => ActivateEnvironmentRef::Local(env.parent_path()?),
+            ConcreteEnvironment::Managed(env) => ActivateEnvironmentRef::Local(env.parent_path()?),
+            ConcreteEnvironment::Remote(env) => {
+                ActivateEnvironmentRef::Remote(RemoteEnvironmentRef::from(env.pointer().clone()))
+            },
+        };
+        Ok(env_ref)
+    }
 }
 
 /// A link to a built environment in the Nix store.
@@ -380,6 +411,12 @@ impl ManagedPointer {
     pub fn floxhub_url(&self) -> Result<Url, ParseError> {
         self.floxhub_base_url
             .join(&format!("{}/{}", self.owner, self.name))
+    }
+}
+
+impl From<ManagedPointer> for RemoteEnvironmentRef {
+    fn from(pointer: ManagedPointer) -> Self {
+        RemoteEnvironmentRef::from_parts(pointer.owner, pointer.name)
     }
 }
 
@@ -651,6 +688,10 @@ pub enum EnvironmentError {
     // endregion
     #[error(transparent)]
     ManifestError(#[from] ManifestError),
+    #[error(transparent)]
+    Lockfile(#[from] LockfileError),
+    #[error(transparent)]
+    ManifestInit(#[from] ManifestInitError),
 
     // todo: candidate for impl specific error
     // * only path env implements init

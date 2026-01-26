@@ -244,7 +244,8 @@ mod tests {
     use std::path::PathBuf;
     use std::str::FromStr;
 
-    use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, Floxhub};
+    use flox_core::data::environment_ref::{EnvironmentName, EnvironmentOwner};
+    use flox_rust_sdk::flox::Floxhub;
     use flox_rust_sdk::models::environment::PathPointer;
     use indoc::formatdoc;
     use pretty_assertions::assert_eq;

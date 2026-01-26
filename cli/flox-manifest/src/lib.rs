@@ -109,9 +109,6 @@ pub enum ManifestError {
     // =========================================================================
     // Everything else
     // =========================================================================
-    #[error("not a valid activation mode")]
-    ActivateModeInvalid,
-
     #[error("outputs '{0:?}' don't exists for package {1}")]
     InvalidOutputs(Vec<String>, String),
 

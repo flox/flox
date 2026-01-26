@@ -55,6 +55,7 @@ sapling-renderdag = "0.1.0"
 shell_gen = { path = "../shell_gen" }
 minus = { version = "5.6.1", features = ["static_output", "search"] }
 nef-lock-catalog.workspace = true
+flox-manifest.workspace = true
 
 [dev-dependencies]
 catalog-api-v1.workspace = true
@@ -68,6 +69,7 @@ tempfile.workspace = true
 toml.workspace = true
 flox-rust-sdk = { workspace = true, features = ["tests"] }
 flox-test-utils.workspace = true
+flox-core = { workspace = true, features = ["tests"] }
 
 
 [features]

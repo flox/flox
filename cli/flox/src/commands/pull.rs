@@ -3,7 +3,8 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
-use flox_rust_sdk::flox::{Flox, RemoteEnvironmentRef};
+use flox_core::data::environment_ref::RemoteEnvironmentRef;
+use flox_rust_sdk::flox::{Flox, Flox, RemoteEnvironmentRef};
 use flox_rust_sdk::models::environment::floxmeta_branch::FloxmetaBranchError;
 use flox_rust_sdk::models::environment::generations::{GenerationId, GenerationsExt};
 use flox_rust_sdk::models::environment::managed_environment::{

@@ -1,15 +1,19 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use flox_core::data::environment_ref::RemoteEnvironmentRef;
+use flox_manifest::lockfile::Lockfile;
+use flox_manifest::lockfile::compose::LockedInclude;
+use flox_manifest::parsed::common::IncludeDescriptor;
+use flox_manifest::{Manifest, TypedOnly};
+
 use super::{ConcreteEnvironment, EnvironmentError, open_path};
 use crate::flox::Flox;
 use crate::models::environment::generations::GenerationsExt;
 use crate::models::environment::managed_environment::ManagedEnvironmentError;
 use crate::models::environment::remote_environment::RemoteEnvironment;
 use crate::models::environment::{Environment, ManagedPointer};
-use crate::models::environment_ref::RemoteEnvironmentRef;
-use crate::models::lockfile::{LockedInclude, Lockfile, RecoverableMergeError};
-use crate::models::manifest::typed::{IncludeDescriptor, Manifest};
+use crate::providers::lock_manifest::RecoverableMergeError;
 
 /// Context required to fetch an environment include
 #[derive(Clone, Debug)]
@@ -45,7 +49,7 @@ impl IncludeFetcher {
         flox: &Flox,
         dir: impl AsRef<Path>,
         name: &Option<String>,
-    ) -> Result<(Manifest, String), EnvironmentError> {
+    ) -> Result<(Manifest<TypedOnly>, String), EnvironmentError> {
         if self.base_directory.is_none() {
             return Err(EnvironmentError::Recoverable(
                 RecoverableMergeError::RemoteCannotIncludeLocal,
@@ -104,7 +108,7 @@ impl IncludeFetcher {
         remote: &RemoteEnvironmentRef,
         name: &Option<String>,
         generation: Option<usize>,
-    ) -> Result<(Manifest, String), EnvironmentError> {
+    ) -> Result<(Manifest<TypedOnly>, String), EnvironmentError> {
         let pointer =
             ManagedPointer::new(remote.owner().clone(), remote.name().clone(), &flox.floxhub);
 
@@ -167,6 +171,7 @@ pub mod test_helpers {
 mod test {
     use std::fs;
 
+    use flox_manifest::interfaces::AsTypedOnlyManifest;
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
 
@@ -175,7 +180,7 @@ mod test {
     use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_in;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_in;
     use crate::models::environment::remote_environment::test_helpers::mock_remote_environment;
-    use crate::models::lockfile::LockResult;
+    use crate::providers::lock_manifest::LockResult;
 
     #[test]
     fn fetch_path_relative_path() {
@@ -438,11 +443,7 @@ mod test {
             .unwrap()
             .current_gen()
             .unwrap();
-        let initial_generation_manifest: Manifest = remote_env
-            .manifest_contents(&flox)
-            .unwrap()
-            .parse()
-            .unwrap();
+        let initial_generation_manifest = remote_env.manifest(&flox).unwrap();
 
         // Fetch and lock the remote environment at a given generation.
         let include_fetcher = IncludeFetcher {
@@ -456,7 +457,7 @@ mod test {
 
         let fetched = include_fetcher.fetch(&flox, &include_descriptor).unwrap();
         assert_eq!(fetched, LockedInclude {
-            manifest: initial_generation_manifest.clone(),
+            manifest: initial_generation_manifest.as_typed_only(),
             name: "name".to_string(),
             descriptor: include_descriptor.clone(),
         });

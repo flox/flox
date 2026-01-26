@@ -2,7 +2,8 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
-use flox_rust_sdk::flox::{EnvironmentOwner, Flox};
+use flox_core::data::environment_ref::EnvironmentOwner;
+use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
@@ -268,7 +269,7 @@ fn cant_change_owner_error(pointer: &ManagedPointer, owner: EnvironmentOwner) ->
 mod tests {
     use std::str::FromStr;
 
-    use flox_rust_sdk::flox::EnvironmentOwner;
+    use flox_core::data::environment_ref::EnvironmentOwner;
     use flox_rust_sdk::flox::test_helpers::{
         create_test_token,
         flox_instance_with_optional_floxhub,

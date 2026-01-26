@@ -2,11 +2,11 @@
 
 use std::io;
 
+use flox_core::data::environment_ref::ActivateEnvironmentRef;
+use flox_manifest::parsed::Inner;
+use flox_manifest::parsed::common::ServiceDescriptor;
 use shell_escape::escape;
 use systemd::unit::ServiceUnit;
-
-use crate::models::environment_ref::ActivateEnvironmentRef;
-use crate::models::manifest::typed::{Inner, ServiceDescriptor};
 
 /// Wrap a command with Flox activation.
 //
@@ -141,13 +141,13 @@ mod tests {
     use std::collections::BTreeMap;
     use std::path::Path;
 
+    use flox_core::data::environment_ref::RemoteEnvironmentRef;
+    use flox_manifest::parsed::common::{ServiceShutdown, Vars};
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use systemd::unit::{Service, ServiceType, ServiceUnit, Unit};
 
     use super::*;
-    use crate::models::environment_ref::RemoteEnvironmentRef;
-    use crate::models::manifest::typed::{ServiceDescriptor, ServiceShutdown, Vars};
 
     fn project_env_ref() -> ActivateEnvironmentRef {
         ActivateEnvironmentRef::Local(Path::new("/test/env").to_path_buf())
@@ -262,7 +262,7 @@ mod tests {
 
         let descriptor = ServiceDescriptor {
             command: "start-command".to_string(),
-            vars: Some(Vars(vars.clone())),
+            vars: Some(Vars::from_map(vars.clone())),
             is_daemon: Some(true),
             shutdown: Some(ServiceShutdown {
                 command: "stop-command".to_string(),
@@ -298,7 +298,7 @@ mod tests {
     fn from_service_descriptor_precedence() {
         let descriptor = ServiceDescriptor {
             command: "start-descriptor".to_string(), // overridden
-            vars: Some(Vars(BTreeMap::from_iter(vec![
+            vars: Some(Vars::from_map(BTreeMap::from_iter(vec![
                 ("DESCRIPTOR_ONLY".to_string(), "from-descriptor".to_string()),
                 // overridden by systemd.service.envrionment
                 ("SHARED_KEY".to_string(), "from-descriptor".to_string()),

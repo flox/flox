@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
 use std::path::PathBuf;
-use std::str::FromStr;
 
+use flox_core::activate::mode::ActivateMode;
 use flox_core::data::System;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 #[cfg(any(test, feature = "tests"))]
@@ -276,38 +276,6 @@ impl SkipSerializing for ActivateOptions {
     }
 }
 
-#[derive(
-    Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, Ord, PartialOrd, Default, JsonSchema,
-)]
-#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
-#[serde(rename_all = "kebab-case")]
-pub enum ActivateMode {
-    #[default]
-    Dev,
-    Run,
-}
-
-impl Display for ActivateMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ActivateMode::Dev => write!(f, "dev"),
-            ActivateMode::Run => write!(f, "run"),
-        }
-    }
-}
-
-impl FromStr for ActivateMode {
-    type Err = ManifestError;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "dev" => Ok(ActivateMode::Dev),
-            "run" => Ok(ActivateMode::Run),
-            _ => Err(ManifestError::ActivateModeInvalid),
-        }
-    }
-}
-
 /// A map of service names to service definitions
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
@@ -558,7 +526,7 @@ pub struct ContainerizeConfig {
     /// These values act as defaults and may be replaced by any specified when creating a container.
     /// Flox sets an entrypoint to activate the containerized environment,
     /// and `cmd` is then run inside the activation, similar to
-    /// `flox activate -- cmd`.
+    /// `flox activate -c cmd`.
     #[cfg_attr(
         any(test, feature = "tests"),
         proptest(strategy = "optional_vec_of_strings(3, 4)")
