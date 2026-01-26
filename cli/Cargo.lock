@@ -1428,6 +1428,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shell_gen",
+ "sysinfo",
  "tempfile",
  "thiserror 2.0.17",
  "time",

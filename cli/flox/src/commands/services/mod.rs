@@ -5,6 +5,7 @@ use bpaf::Bpaf;
 use flox_core::activate::context::InvocationType;
 use flox_core::activate::mode::ActivateMode;
 use flox_core::activations::{read_activations_json, state_json_path};
+use flox_core::proc_status::is_descendant_of;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
@@ -32,6 +33,18 @@ mod start;
 mod status;
 mod stop;
 
+/// The state of process-compose relative to the current activation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProcessComposeState {
+    /// The same activation is still starting (hook.on-activate is running).
+    /// Cannot start a new process-compose instance - would deadlock on ourselves.
+    ActivationStartingSelf,
+    /// Process-compose is running with the current store path.
+    Current,
+    /// Process-compose is not running or has a different store path.
+    NotCurrent,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ServicesCommandsError {
     #[error(
@@ -54,6 +67,13 @@ pub enum ServicesCommandsError {
         To use the service, restart services with 'flox services restart'"
     )]
     DefinedServiceNotActive { name: String },
+    #[error(
+        "Cannot start services from 'hook.on-activate'.\n\
+        \n\
+        Starting services from the activation hook would cause a deadlock.\n\
+        Activate the environment with 'flox activate --start-services' instead."
+    )]
+    CalledFromActivationHook,
 }
 
 /// Services Commands.
@@ -167,30 +187,47 @@ impl ServicesEnvironment {
         &self.socket
     }
 
-    /// Check if process-compose is running with the same store path.
-    ///
-    /// NB: This method will lock and build an environment in order to compare its store path.
-    pub fn process_compose_is_current(&mut self, flox: &Flox, mode: &ActivateMode) -> bool {
-        if !self.socket.exists() {
-            return false;
-        }
+    /// Check the state of process-compose relative to the current activation.
+    pub fn process_compose_state(
+        &mut self,
+        flox: &Flox,
+        mode: &ActivateMode,
+    ) -> ProcessComposeState {
+        let state_path = state_json_path(&flox.runtime_dir, self.environment.dot_flox_path());
+        let Ok((Some(state), lock)) = read_activations_json(&state_path) else {
+            return ProcessComposeState::NotCurrent;
+        };
+        drop(lock);
 
         let Ok(rendered_env_links) = self.environment.rendered_env_links(flox) else {
-            return false;
+            return ProcessComposeState::NotCurrent;
         };
 
         let rendered_link = rendered_env_links.for_mode(mode);
         let link_path: &Path = rendered_link.as_ref();
         let Ok(current_store_path) = std::fs::read_link(link_path) else {
-            return false;
+            return ProcessComposeState::NotCurrent;
         };
 
-        let state_path = state_json_path(&flox.runtime_dir, self.environment.dot_flox_path());
-        let Ok((Some(state), _lock)) = read_activations_json(&state_path) else {
-            return false;
-        };
+        // Check if activation is still starting (hook.on-activate running)
+        if let Some((starting_pid, starting_store_path)) = state.starting_pid_and_store_path()
+            && starting_store_path == current_store_path
+            && is_descendant_of(starting_pid)
+        {
+            // We're a descendant of the starting process with the same store path.
+            // This means we're calling from within the activation hooks which would deadlock.
+            return ProcessComposeState::ActivationStartingSelf;
+        }
 
-        state.process_compose_is_current(Some(&current_store_path))
+        if !self.socket.exists() {
+            return ProcessComposeState::NotCurrent;
+        }
+
+        if state.process_compose_is_current(Some(&current_store_path)) {
+            ProcessComposeState::Current
+        } else {
+            ProcessComposeState::NotCurrent
+        }
     }
 }
 
