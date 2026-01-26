@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
@@ -19,6 +20,11 @@ use tempfile::TempDir;
 pub mod manifests;
 
 type Error = anyhow::Error;
+
+pub static GENERATED_DATA: LazyLock<PathBuf> =
+    LazyLock::new(|| PathBuf::from(std::env::var("GENERATED_DATA").unwrap()));
+pub static MANUALLY_GENERATED: LazyLock<PathBuf> =
+    LazyLock::new(|| PathBuf::from(std::env::var("MANUALLY_GENERATED").unwrap()));
 
 // Modifications to `rexpect`:
 // - The built-in reader used by `rexpect` has a hard-coded sleep interval of 100ms,

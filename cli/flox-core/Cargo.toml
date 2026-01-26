@@ -14,9 +14,9 @@ derive_more.workspace = true
 fslock.workspace = true
 log.workspace = true
 # should be a dev-dependency but test doesn't apply across crates
-proptest.workspace = true
+proptest = { optional = true, workspace = true }
 # should be a dev-dependency but test doesn't apply across crates
-proptest-derive.workspace = true
+proptest-derive = { optional = true, workspace = true }
 sentry.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -29,6 +29,9 @@ time.workspace = true
 thiserror.workspace = true
 schemars.workspace = true
 uuid.workspace = true
+regex.workspace = true
+serde_with.workspace = true
+shell-escape.workspace = true
 
 [dev-dependencies]
 indoc.workspace = true
@@ -36,4 +39,7 @@ indoc.workspace = true
 [features]
 default = ["proc_status"]
 proc_status = []
-tests = []
+tests = [
+    "dep:proptest",
+    "dep:proptest-derive",
+]

@@ -1469,10 +1469,13 @@ dependencies = [
  "log",
  "proptest",
  "proptest-derive",
+ "regex",
  "schemars 1.2.1",
  "sentry",
  "serde",
  "serde_json",
+ "serde_with",
+ "shell-escape",
  "shell_gen",
  "supports-color",
  "sysinfo",
@@ -1481,6 +1484,34 @@ dependencies = [
  "time",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "flox-manifest"
+version = "0.1.0"
+dependencies = [
+ "catalog-api-v1",
+ "chrono",
+ "derive_more",
+ "flox-core",
+ "flox-test-utils",
+ "indent",
+ "indoc",
+ "itertools 0.14.0",
+ "pretty_assertions",
+ "proptest",
+ "proptest-derive",
+ "reqwest",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "systemd",
+ "thiserror 2.0.18",
+ "toml",
+ "toml_edit",
+ "tracing",
+ "url-escape",
 ]
 
 [[package]]
