@@ -1317,6 +1317,7 @@ dependencies = [
  "derive_more",
  "dirs",
  "flox-core",
+ "flox-manifest",
  "flox-rust-sdk",
  "flox-test-utils",
  "fslock",
@@ -1393,13 +1394,44 @@ dependencies = [
  "log",
  "proptest",
  "proptest-derive",
+ "regex",
  "schemars 1.2.0",
  "serde",
  "serde_json",
+ "serde_with",
+ "shell-escape",
  "tempfile",
  "thiserror 2.0.18",
  "time",
  "tracing",
+]
+
+[[package]]
+name = "flox-manifest"
+version = "0.1.0"
+dependencies = [
+ "catalog-api-v1",
+ "chrono",
+ "derive_more",
+ "flox-core",
+ "flox-test-utils",
+ "indent",
+ "indoc",
+ "itertools",
+ "pretty_assertions",
+ "proptest",
+ "proptest-derive",
+ "reqwest",
+ "schemars 1.2.0",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "systemd",
+ "thiserror 2.0.18",
+ "toml",
+ "toml_edit",
+ "tracing",
+ "url-escape",
 ]
 
 [[package]]
@@ -1413,6 +1445,7 @@ dependencies = [
  "derive_more",
  "enum_dispatch",
  "flox-core",
+ "flox-manifest",
  "flox-test-utils",
  "fslock",
  "futures",
