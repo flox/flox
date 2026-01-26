@@ -29,6 +29,7 @@ use crate::utils::dialog::Dialog;
 use crate::utils::message;
 
 mod go;
+mod manifest;
 mod node;
 mod python;
 

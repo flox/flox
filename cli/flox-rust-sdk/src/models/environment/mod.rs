@@ -3,6 +3,12 @@ use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use enum_dispatch::enum_dispatch;
+use flox_core::data::environment_ref::{
+    ActivateEnvironmentRef,
+    EnvironmentName,
+    EnvironmentOwner,
+    RemoteEnvironmentRef,
+};
 pub use flox_core::{Version, path_hash};
 use generations::{GenerationId, GenerationsError};
 use indoc::formatdoc;
@@ -18,7 +24,6 @@ use walkdir::WalkDir;
 use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
 use super::env_registry::EnvRegistryError;
-use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::{LockResult, LockedInclude, Lockfile, RecoverableMergeError, ResolveError};
 use super::manifest::raw::PackageToInstall;
 use super::manifest::typed::{ActivateMode, ManifestError};
@@ -255,6 +260,21 @@ pub enum ConcreteEnvironment {
     Remote(RemoteEnvironment),
 }
 
+impl TryFrom<&ConcreteEnvironment> for ActivateEnvironmentRef {
+    type Error = EnvironmentError;
+
+    fn try_from(env: &ConcreteEnvironment) -> Result<Self, Self::Error> {
+        let env_ref = match env {
+            ConcreteEnvironment::Path(env) => ActivateEnvironmentRef::Local(env.parent_path()?),
+            ConcreteEnvironment::Managed(env) => ActivateEnvironmentRef::Local(env.parent_path()?),
+            ConcreteEnvironment::Remote(env) => {
+                ActivateEnvironmentRef::Remote(RemoteEnvironmentRef::from(env.pointer().clone()))
+            },
+        };
+        Ok(env_ref)
+    }
+}
+
 /// A link to a built environment in the Nix store.
 ///
 /// The path may not exist if the environment has never been built and linked.
@@ -391,6 +411,12 @@ impl ManagedPointer {
     pub fn floxhub_url(&self) -> Result<Url, ParseError> {
         self.floxhub_base_url
             .join(&format!("{}/{}", self.owner, self.name))
+    }
+}
+
+impl From<ManagedPointer> for RemoteEnvironmentRef {
+    fn from(pointer: ManagedPointer) -> Self {
+        RemoteEnvironmentRef::from_parts(pointer.owner, pointer.name)
     }
 }
 

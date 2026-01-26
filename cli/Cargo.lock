@@ -1393,13 +1393,42 @@ dependencies = [
  "log",
  "proptest",
  "proptest-derive",
+ "regex",
  "schemars 1.2.0",
  "serde",
  "serde_json",
+ "serde_with",
+ "shell-escape",
  "tempfile",
  "thiserror 2.0.18",
  "time",
  "tracing",
+]
+
+[[package]]
+name = "flox-lockfile"
+version = "0.1.0"
+
+[[package]]
+name = "flox-manifest"
+version = "0.1.0"
+dependencies = [
+ "derive_more",
+ "flox-core",
+ "flox-test-utils",
+ "indoc",
+ "itertools",
+ "pretty_assertions",
+ "proptest",
+ "proptest-derive",
+ "schemars 1.2.0",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "systemd",
+ "thiserror 2.0.18",
+ "toml",
+ "toml_edit",
 ]
 
 [[package]]

@@ -1,5 +1,6 @@
 pub mod activations;
 pub mod canonical_path;
+pub mod data;
 #[cfg(feature = "proc_status")]
 pub mod proc_status;
 mod version;

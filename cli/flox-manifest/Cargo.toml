@@ -1,0 +1,33 @@
+[package]
+name = "flox-manifest"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+thiserror.workspace = true
+toml.workspace = true
+toml_edit.workspace = true
+serde.workspace = true
+indoc.workspace = true
+itertools.workspace = true
+schemars.workspace = true
+serde_with.workspace = true
+systemd.workspace = true
+derive_more.workspace = true
+serde_json.workspace = true
+
+# should be in dev-dependencies but test doesn't apply across crates
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
+flox-test-utils = { workspace = true, optional = true }
+flox-core = { workspace = true, optional = true }
+pretty_assertions = { workspace = true, optional = true }
+
+[features]
+tests = [
+    "dep:proptest",
+    "dep:proptest-derive",
+    "dep:pretty_assertions",
+    "dep:flox-test-utils",
+    "dep:flox-core"
+]

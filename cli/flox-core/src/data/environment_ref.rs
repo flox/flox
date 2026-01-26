@@ -8,8 +8,6 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use shell_escape::escape;
 use thiserror::Error;
 
-use super::environment::{ConcreteEnvironment, Environment, EnvironmentError, ManagedPointer};
-
 pub static DEFAULT_NAME: &str = "default";
 pub static DEFAULT_OWNER: &str = "local";
 
@@ -42,6 +40,18 @@ impl FromStr for EnvironmentOwner {
     }
 }
 
+#[cfg(any(test, feature = "tests"))]
+impl proptest::arbitrary::Arbitrary for EnvironmentName {
+    type Parameters = ();
+    type Strategy = proptest::strategy::BoxedStrategy<Self>;
+
+    fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+        use proptest::prelude::Strategy;
+
+        "[^ /]".prop_map(|s| EnvironmentName(s.to_string())).boxed()
+    }
+}
+
 #[derive(
     Debug,
     Clone,
@@ -70,11 +80,31 @@ impl FromStr for EnvironmentName {
     }
 }
 
+#[cfg(any(test, feature = "tests"))]
+impl proptest::arbitrary::Arbitrary for EnvironmentOwner {
+    type Parameters = ();
+    type Strategy = proptest::strategy::BoxedStrategy<Self>;
+
+    fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+        use proptest::prelude::Strategy;
+
+        "[^ /]"
+            .prop_map(|s| EnvironmentOwner(s.to_string()))
+            .boxed()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, SerializeDisplay, DeserializeFromStr)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct RemoteEnvironmentRef {
     owner: EnvironmentOwner,
     name: EnvironmentName,
+}
+
+impl RemoteEnvironmentRef {
+    pub fn from_parts(owner: EnvironmentOwner, name: EnvironmentName) -> Self {
+        Self { owner, name }
+    }
 }
 
 impl Display for RemoteEnvironmentRef {
@@ -94,15 +124,6 @@ impl FromStr for RemoteEnvironmentRef {
             owner: EnvironmentOwner::from_str(owner)?,
             name: EnvironmentName::from_str(name)?,
         })
-    }
-}
-
-impl From<ManagedPointer> for RemoteEnvironmentRef {
-    fn from(pointer: ManagedPointer) -> Self {
-        Self {
-            owner: pointer.owner,
-            name: pointer.name,
-        }
     }
 }
 
@@ -177,49 +198,6 @@ impl ActivateEnvironmentRef {
             ActivateEnvironmentRef::Remote(remote) => {
                 format!("-r {}", escape(remote.to_string().into()))
             },
-        }
-    }
-}
-
-impl TryFrom<&ConcreteEnvironment> for ActivateEnvironmentRef {
-    type Error = EnvironmentError;
-
-    fn try_from(env: &ConcreteEnvironment) -> Result<Self, Self::Error> {
-        let env_ref = match env {
-            ConcreteEnvironment::Path(env) => ActivateEnvironmentRef::Local(env.parent_path()?),
-            ConcreteEnvironment::Managed(env) => ActivateEnvironmentRef::Local(env.parent_path()?),
-            ConcreteEnvironment::Remote(env) => {
-                ActivateEnvironmentRef::Remote(RemoteEnvironmentRef::from(env.pointer().clone()))
-            },
-        };
-        Ok(env_ref)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use proptest::arbitrary::Arbitrary;
-    use proptest::strategy::{BoxedStrategy, Strategy};
-
-    use super::*;
-
-    impl Arbitrary for EnvironmentOwner {
-        type Parameters = ();
-        type Strategy = BoxedStrategy<Self>;
-
-        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
-            "[^ /]"
-                .prop_map(|s| EnvironmentOwner(s.to_string()))
-                .boxed()
-        }
-    }
-
-    impl Arbitrary for EnvironmentName {
-        type Parameters = ();
-        type Strategy = BoxedStrategy<Self>;
-
-        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
-            "[^ /]".prop_map(|s| EnvironmentName(s.to_string())).boxed()
         }
     }
 }
