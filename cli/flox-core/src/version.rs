@@ -5,7 +5,8 @@ use thiserror::Error;
 
 // We should only derive Arbitrary for tests, but we can't use test across
 // crates
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, proptest_derive::Arbitrary)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct Version<const V: u8>;
 
 impl<const V: u8> schemars::JsonSchema for Version<V> {

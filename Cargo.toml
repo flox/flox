@@ -11,6 +11,7 @@ members = [
     "cli/systemd",
     "cli/xtask",
     "cli/nef-lock-catalog",
+    "cli/flox-manifest"
 ]
 default-members = ["cli/flox", "cli/flox-activations"]
 
