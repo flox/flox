@@ -26,6 +26,10 @@ nixVersions."${nixVersion}".overrideAttrs (prev: {
   # Necessary for compiling with debug symbols
   inherit stdenv;
 
+  # Disable functional tests - they require sandboxing and other system
+  # capabilities that may not be available in all build environments.
+  doCheck = false;
+
   # Apply patch files.
   patches = (prev.patches or [ ]) ++ [
     # E.g:
