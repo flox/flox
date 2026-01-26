@@ -109,9 +109,6 @@ pub enum ManifestError {
     // =========================================================================
     // Everything else
     // =========================================================================
-    #[error("not a valid activation mode")]
-    ActivateModeInvalid,
-
     #[error("outputs '{0:?}' don't exists for package {1}")]
     InvalidOutputs(Vec<String>, String),
 
@@ -550,6 +547,9 @@ pub mod test_helpers {
             KnownSchemaVersion::V1 => "version = 1".into(),
             _ => format!("schema-version = \"{schema}\""),
         };
+        if body.as_ref().is_empty() {
+            return format!("{schema_str}\n");
+        }
         formatdoc! {r#"
             {}
 

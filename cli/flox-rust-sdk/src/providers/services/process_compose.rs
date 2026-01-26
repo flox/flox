@@ -15,6 +15,10 @@ use std::sync::mpsc::{Receiver, Sender};
 
 use flox_core::process_compose::PROCESS_NEVER_EXIT_NAME;
 use flox_core::traceable_path;
+use flox_manifest::interfaces::CommonFields;
+use flox_manifest::lockfile::Lockfile;
+use flox_manifest::parsed::Inner;
+use flox_manifest::parsed::common::{ServiceShutdown, Services};
 #[cfg(test)]
 use flox_test_utils::proptest::alphanum_string;
 #[cfg(test)]
@@ -26,8 +30,6 @@ use tempfile::NamedTempFile;
 use tracing::debug;
 
 use crate::flox::Flox;
-use crate::models::lockfile::Lockfile;
-use crate::models::manifest::typed::{Inner, ServiceShutdown, Services};
 use crate::utils::CommandExt;
 /// The path to the nix provided `sleep` binary.
 ///
@@ -221,11 +223,11 @@ pub fn generate_never_exit_process() -> ProcessConfig {
 impl From<Services> for ProcessComposeConfig {
     fn from(services: Services) -> Self {
         let processes = services
-            .0
+            .into_inner()
             .into_iter()
             .map(|(name, service)| {
                 let command = service.command;
-                let environment = service.vars.map(|vars| vars.0);
+                let environment = service.vars.map(|vars| vars.inner().clone());
                 (name, ProcessConfig {
                     command,
                     vars: environment,
@@ -316,12 +318,12 @@ pub fn maybe_make_service_config_file(
     flox: &Flox,
     lockfile: &Lockfile,
 ) -> Result<Option<PathBuf>, ServiceError> {
-    let service_config_path = if !lockfile.manifest.services.inner().is_empty() {
+    let service_config_path = if !lockfile.manifest.services().inner().is_empty() {
         let config_path = service_config_write_location(&flox.temp_dir)?;
         write_process_compose_config(
             &lockfile
                 .manifest
-                .services
+                .services()
                 .copy_for_system(&flox.system)
                 .into(),
             &config_path,

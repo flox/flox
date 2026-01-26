@@ -35,6 +35,7 @@ flox-activations = { path = "cli/flox-activations" }
 flox-core = { path = "cli/flox-core" }
 flox-rust-sdk = { path = "cli/flox-rust-sdk" }
 flox-test-utils = { path = "cli/flox-test-utils" }
+flox-manifest = { path = "cli/flox-manifest" }
 fslock = "0.2.1"
 fs_extra = "1.3.0"
 futures = "0.3"

@@ -17,9 +17,10 @@ use flox_core::activate::context::{
 };
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY_VAR};
 use flox_core::activations::activation_state_dir_path;
+use flox_core::data::environment_ref::DEFAULT_NAME;
 use flox_core::traceable_path;
 use flox_rust_sdk::data::System;
-use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
+use flox_rust_sdk::flox::{DEFAULT_NAME, Flox, Flox};
 use flox_rust_sdk::models::environment::floxmeta_branch::BranchOrd;
 use flox_rust_sdk::models::environment::generations::{GenerationId, GenerationsExt};
 use flox_rust_sdk::models::environment::managed_environment::DivergedMetadata;

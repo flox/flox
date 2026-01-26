@@ -3,8 +3,8 @@ use std::fs::File;
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use flox_core::data::environment_ref::ActivateEnvironmentRef;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment_ref::ActivateEnvironmentRef;
 use flox_rust_sdk::models::manifest::typed::{Inner, ServiceDescriptor};
 use flox_rust_sdk::providers::services::systemd::render_systemd_unit_file;
 use tracing::instrument;
