@@ -17,7 +17,13 @@ use std::ffi::OsStr;
 use std::fs::{self};
 use std::path::{Path, PathBuf};
 
+use flox_core::data::environment_ref::EnvironmentName;
 use flox_core::write_atomically;
+use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
+use flox_manifest::lockfile::{LOCKFILE_FILENAME, Lockfile};
+use flox_manifest::parsed::common::ActivateMode;
+use flox_manifest::raw::{CatalogPackage, DEFAULT_SYSTEMS_STR, PackageToInstall};
+use flox_manifest::{MANIFEST_FILENAME, Manifest, Migrated, Validated, Writable};
 use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::debug;
@@ -35,7 +41,6 @@ use super::{
     EnvironmentPointer,
     GCROOTS_DIR_NAME,
     InstallationAttempt,
-    LOCKFILE_FILENAME,
     LOG_DIR_NAME,
     PathPointer,
     RenderedEnvironmentLinks,
@@ -46,12 +51,10 @@ use super::{
 use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
 use crate::models::env_registry::{deregister, ensure_registered};
-use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME, create_dot_flox_gitignore};
-use crate::models::environment_ref::EnvironmentName;
-use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, LockResult, Lockfile};
-use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
-use crate::models::manifest::typed::ActivateMode;
+use crate::models::environment::{ENV_DIR_NAME, create_dot_flox_gitignore};
 use crate::providers::buildenv::BuildEnvOutputs;
+use crate::providers::lock_manifest::LockResult;
+use crate::providers::manifest_init::ManifestInitializer;
 
 /// Struct representing a local environment
 ///
@@ -157,7 +160,7 @@ impl PathEnvironment {
         Ok(CoreEnvironment::new(
             self.path.join(ENV_DIR_NAME),
             self.include_fetcher()?,
-        ))
+        )?)
     }
 
     fn as_core_environment_mut(&mut self) -> Result<CoreEnvironment, EnvironmentError> {
@@ -197,6 +200,19 @@ impl Environment for PathEnvironment {
         self.as_core_environment()?
             .existing_lockfile()
             .map_err(EnvironmentError::Core)
+    }
+
+    fn pre_migration_manifest(
+        &self,
+        _flox: &Flox,
+    ) -> Result<Manifest<Validated>, EnvironmentError> {
+        let manifest = self.as_core_environment()?.pre_migration_manifest()?;
+        Ok(manifest)
+    }
+
+    fn manifest(&mut self, flox: &Flox) -> Result<Manifest<Migrated>, EnvironmentError> {
+        let manifest = self.as_core_environment()?.manifest(flox)?;
+        Ok(manifest)
     }
 
     /// Install packages to the environment atomically
@@ -300,15 +316,6 @@ impl Environment for PathEnvironment {
         }
 
         Ok(result)
-    }
-
-    /// Extract the current content of the manifest
-    ///
-    /// This may differ from the locked manifest, which should typically be used unless you need to:
-    /// - provide the latest editable contents to the user
-    /// - avoid double-locking
-    fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError> {
-        fs::read_to_string(self.manifest_path(flox)?).map_err(EnvironmentError::ReadManifest)
     }
 
     /// Returns the environment name
@@ -448,9 +455,14 @@ impl PathEnvironment {
         }
 
         // The most minimal manifest we can generate.
-        let manifest = "version = 1\n";
+        let manifest = Manifest::parse_typed("schema-version = \"1.10.0\"\n")?;
 
-        let environment = Self::write_new_unchecked(flox, pointer, dot_flox_parent_path, manifest)?;
+        let environment = Self::write_new_unchecked(
+            flox,
+            pointer,
+            dot_flox_parent_path,
+            &manifest.as_writable(),
+        )?;
 
         Ok(environment)
     }
@@ -479,22 +491,26 @@ impl PathEnvironment {
         // Create manifest
         let manifest = {
             tracing::debug!("creating raw catalog manifest");
-            RawManifest::new_documented(
+            ManifestInitializer::new_documented(
                 flox.features,
                 &DEFAULT_SYSTEMS_STR.iter().collect::<Vec<_>>(),
                 customization,
-            )
+            )?
         };
 
-        let mut environment =
-            Self::write_new_unchecked(flox, pointer, dot_flox_parent_path, manifest.to_string())?;
+        let mut environment = Self::write_new_unchecked(
+            flox,
+            pointer,
+            dot_flox_parent_path,
+            &manifest.as_writable(),
+        )?;
 
         // Build environment if customization installs at least one package
         if matches!(customization.packages.as_deref(), Some([_, ..])) {
             let mut env_view = CoreEnvironment::new(
                 environment.path.join(ENV_DIR_NAME),
                 environment.include_fetcher()?,
-            );
+            )?;
             env_view.lock(flox)?;
             let store_paths = env_view.build(flox)?;
             environment.link(flox, &store_paths)?;
@@ -520,7 +536,7 @@ impl PathEnvironment {
         flox: &Flox,
         pointer: PathPointer,
         dot_flox_parent_path: impl AsRef<Path>,
-        manifest: impl AsRef<str>,
+        manifest: &Manifest<Writable>,
     ) -> Result<Self, EnvironmentError> {
         let dot_flox_path = dot_flox_parent_path.as_ref().join(DOT_FLOX);
         let env_dir = dot_flox_path.join(ENV_DIR_NAME);
@@ -541,12 +557,11 @@ impl PathEnvironment {
         }
 
         // Write `manifest.toml`
-        let write_res =
-            fs::write(manifest_path, manifest.as_ref()).map_err(EnvironmentError::WriteManifest);
+        let write_res = manifest.write_to_file(&manifest_path);
         if let Err(e) = write_res {
             debug!("writing manifest did not complete successfully");
             fs::remove_dir_all(&env_dir).map_err(EnvironmentError::InitEnv)?;
-            return Err(e);
+            return Err(EnvironmentError::ManifestError(e));
         }
 
         // Write stateful directories to .flox/.gitignore
@@ -634,7 +649,8 @@ pub mod test_helpers {
                 .parse()
                 .unwrap(),
         );
-        PathEnvironment::write_new_unchecked(flox, pointer, path, contents).unwrap()
+        let manifest = Manifest::parse_typed(contents).unwrap();
+        PathEnvironment::write_new_unchecked(flox, pointer, path, &manifest.as_writable()).unwrap()
     }
 
     pub fn new_named_path_environment_in(
@@ -644,7 +660,8 @@ pub mod test_helpers {
         name: &str,
     ) -> PathEnvironment {
         let pointer = PathPointer::new(name.parse().unwrap());
-        PathEnvironment::write_new_unchecked(flox, pointer, path, contents).unwrap()
+        let manifest = Manifest::parse_typed(contents).unwrap();
+        PathEnvironment::write_new_unchecked(flox, pointer, path, &manifest.as_writable()).unwrap()
     }
 
     pub fn new_path_environment(flox: &Flox, contents: &str) -> PathEnvironment {
@@ -689,7 +706,7 @@ pub mod test_helpers {
         name: Option<&str>,
     ) -> PathEnvironment {
         let env_files_dir = env_files_dir.as_ref();
-        let manifest_contents = fs::read_to_string(env_files_dir.join(MANIFEST_FILENAME)).unwrap();
+        let manifest = Manifest::read_typed(env_files_dir.join(MANIFEST_FILENAME)).unwrap();
         let lockfile_contents = fs::read_to_string(env_files_dir.join(LOCKFILE_FILENAME)).unwrap();
         let pointer = PathPointer::new(
             name.unwrap_or_else(|| {
@@ -707,7 +724,7 @@ pub mod test_helpers {
             flox,
             pointer.clone(),
             &dot_flox_parent_path,
-            &manifest_contents,
+            &manifest.as_writable(),
         )
         .unwrap();
         let dot_flox_path =
@@ -715,7 +732,7 @@ pub mod test_helpers {
         let env_dir = dot_flox_path.join(ENV_DIR_NAME);
         let lockfile_path = env_dir.join(LOCKFILE_FILENAME);
         fs::write(lockfile_path, lockfile_contents).unwrap();
-        new_path_environment(flox, &manifest_contents);
+        new_path_environment(flox, &manifest.as_writable().to_string());
         PathEnvironment::open(flox, pointer, dot_flox_path).unwrap()
     }
 }
@@ -726,6 +743,9 @@ pub mod tests {
     use std::fs::OpenOptions;
     use std::io::Write;
 
+    use flox_manifest::interfaces::CommonFields;
+    use flox_manifest::parsed::Inner;
+    use flox_manifest::parsed::v1::test_helpers::manifest_without_install_or_include;
     use flox_test_utils::proptest::{alphanum_string, lowercase_alphanum_string};
     use indoc::indoc;
     use itertools::izip;
@@ -740,8 +760,7 @@ pub mod tests {
         new_path_environment,
         new_path_environment_in,
     };
-    use crate::models::lockfile::{Lockfile, RecoverableMergeError};
-    use crate::models::manifest::typed::test::manifest_without_install_or_include;
+    use crate::providers::lock_manifest::RecoverableMergeError;
     use crate::utils::serialize_json_with_newline;
 
     /// Returns (flox, tempdir, Vec<(dir relative to tempdir, PathEnvironment)>)
@@ -832,7 +851,8 @@ pub mod tests {
 
         // build the environment -> out link is created -> no rebuild necessary
         let mut env_view =
-            CoreEnvironment::new(env.path.join(ENV_DIR_NAME), env.include_fetcher().unwrap());
+            CoreEnvironment::new(env.path.join(ENV_DIR_NAME), env.include_fetcher().unwrap())
+                .unwrap();
         env_view.lock(&flox).unwrap();
         let store_paths = env_view.build(&flox).unwrap();
         env.link(&flox, &store_paths).unwrap();
@@ -841,7 +861,7 @@ pub mod tests {
 
         // modify the lockfile  -> rebuild necessary
         let mut lockfile = env.existing_lockfile(&flox).unwrap().unwrap();
-        lockfile.manifest.options.activate.mode = Some(ActivateMode::Dev);
+        lockfile.manifest.options_mut().activate.mode = Some(ActivateMode::Dev);
         let lockfile_contents = serialize_json_with_newline(&lockfile).unwrap();
         fs::write(env.lockfile_path(&flox).unwrap(), lockfile_contents).unwrap();
         assert!(env.needs_rebuild().unwrap());
@@ -966,7 +986,7 @@ pub mod tests {
             new_path_environment_in(&flox, composer_manifest_contents, composer_path);
         let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
 
-        assert_eq!(lockfile.manifest.vars.0["foo"], "v1");
+        assert_eq!(lockfile.manifest.vars().inner()["foo"], "v1");
 
         // Call include_upgrade() with a name of an included environment that does not exist
         let err = composer

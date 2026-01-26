@@ -41,11 +41,6 @@ pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
 
 pub const DEFAULT_CATALOG_URL: &str = "https://api.flox.dev";
 
-pub static GENERATED_DATA: LazyLock<PathBuf> =
-    LazyLock::new(|| PathBuf::from(std::env::var("GENERATED_DATA").unwrap()));
-pub static MANUALLY_GENERATED: LazyLock<PathBuf> =
-    LazyLock::new(|| PathBuf::from(std::env::var("MANUALLY_GENERATED").unwrap()));
-
 const RESPONSE_PAGE_SIZE: NonZeroU32 = NonZeroU32::new(1000).unwrap();
 
 type ResolvedGroups = Vec<ResolvedPackageGroup>;

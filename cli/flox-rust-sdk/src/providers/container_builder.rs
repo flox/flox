@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 
+use flox_manifest::parsed::common::{ActivateMode, ContainerizeConfig};
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use thiserror::Error;
@@ -11,7 +12,6 @@ use tracing::{debug, info, instrument};
 
 use super::buildenv::BuiltStorePath;
 use crate::flox::Flox;
-use crate::models::manifest::typed::{ActivateMode, ContainerizeConfig};
 use crate::providers::build::COMMON_NIXPKGS_URL;
 use crate::providers::nix::nix_base_command;
 use crate::utils::gomap::GoMap;

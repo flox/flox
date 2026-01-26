@@ -177,7 +177,7 @@ pub(crate) fn activated_environments() -> ActiveEnvironments {
 mod tests {
     use std::path::PathBuf;
 
-    use flox_rust_sdk::flox::EnvironmentName;
+    use flox_core::data::environment_ref::EnvironmentName;
     use flox_rust_sdk::models::environment::{DotFlox, EnvironmentPointer, PathPointer};
 
     use super::*;

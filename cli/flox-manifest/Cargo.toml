@@ -34,6 +34,7 @@ flox-core = { workspace = true, features = ["tests"] }
 flox-test-utils = { workspace = true }
 proptest.workspace = true
 proptest-derive.workspace = true
+pretty_assertions.workspace = true
 
 [features]
 tests = [

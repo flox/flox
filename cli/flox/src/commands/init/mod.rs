@@ -4,8 +4,9 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use flox_core::data::environment_ref::{DEFAULT_NAME, EnvironmentName, RemoteEnvironmentRef};
 use flox_rust_sdk::data::AttrPath;
-use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox, RemoteEnvironmentRef};
+use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
@@ -699,7 +700,7 @@ fn group_for_single_package(attr_path: &str, version: Option<&str>) -> PackageGr
 #[cfg(test)]
 mod tests {
 
-    use flox_rust_sdk::flox::EnvironmentOwner;
+    use flox_core::data::environment_ref::EnvironmentOwner;
     use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub;
     use flox_rust_sdk::models::environment::ManagedPointer;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;

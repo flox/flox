@@ -12,6 +12,7 @@ use catalog_api_v1::types::{
     PublishInfoResponseCatalog,
 };
 use chrono::{DateTime, Utc};
+use flox_manifest::lockfile::Lockfile;
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use thiserror::Error;
@@ -43,7 +44,6 @@ use super::git::{GitCommandError, GitCommandProvider, StatusInfo};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError, open_path};
-use crate::models::lockfile::Lockfile;
 use crate::providers::auth::catalog_auth_to_envs;
 use crate::providers::catalog::{CatalogStoreConfig, CatalogStoreConfigNixCopy};
 use crate::providers::git::GitProvider;
@@ -1054,6 +1054,8 @@ pub mod tests {
 
     use catalog_api_v1::types::CatalogStoreConfigNixCopy;
     use chrono::Utc;
+    use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
+    use flox_test_utils::GENERATED_DATA;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -1061,7 +1063,6 @@ pub mod tests {
     use crate::flox::test_helpers::{PublishTestUser, create_test_token, flox_instance};
     use crate::models::environment::path_environment::PathEnvironment;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
-    use crate::models::lockfile::Lockfile;
     use crate::providers::auth::{Auth, write_floxhub_netrc};
     use crate::providers::catalog::test_helpers::{
         TEST_READ_ONLY_CATALOG_NAME,
@@ -1071,7 +1072,6 @@ pub mod tests {
         reset_mocks,
     };
     use crate::providers::catalog::{
-        GENERATED_DATA,
         MockClient,
         PublishResponse,
         Response,
@@ -1201,11 +1201,11 @@ pub mod tests {
         let manifest_path = env
             .manifest_path(&flox)
             .expect("to be able to get manifest path");
-        std::fs::write(
-            &manifest_path,
-            format!("{}\n", env.manifest_contents(&flox).unwrap()),
-        )
-        .expect("to write some additional text to the .flox");
+        env.pre_migration_manifest(&flox)
+            .unwrap()
+            .as_writable()
+            .write_to_file(&manifest_path)
+            .unwrap();
         git.add(&[manifest_path.as_path()])
             .expect("adding flox files");
         git.commit("dirty comment").expect("be able to commit");

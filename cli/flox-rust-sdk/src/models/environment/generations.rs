@@ -26,6 +26,9 @@ use std::{env, fs};
 use chrono::{DateTime, Utc};
 use enum_dispatch::enum_dispatch;
 use flox_core::Version;
+use flox_core::data::environment_ref::EnvironmentName;
+use flox_manifest::lockfile::{LOCKFILE_FILENAME, Lockfile, LockfileError};
+use flox_manifest::{MANIFEST_FILENAME, Manifest, ManifestError, Migrated};
 use itertools::Itertools;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -37,16 +40,10 @@ use super::core_environment::CoreEnvironment;
 use super::fetcher::IncludeFetcher;
 use super::managed_environment::ManagedEnvironment;
 use super::remote_environment::RemoteEnvironment;
-use super::{
-    ConcreteEnvironment,
-    ENV_DIR_NAME,
-    EnvironmentError,
-    LOCKFILE_FILENAME,
-    copy_dir_recursive,
-};
-use crate::flox::{EnvironmentName, Flox};
+use super::{ConcreteEnvironment, ENV_DIR_NAME, EnvironmentError, copy_dir_recursive};
+use crate::flox::Flox;
 use crate::models::environment::floxmeta_branch::BranchOrd;
-use crate::models::environment::{MANIFEST_FILENAME, UninitializedEnvironment};
+use crate::models::environment::{CoreEnvironmentError, UninitializedEnvironment};
 use crate::providers::git::{
     GitCommandError,
     GitCommandOptions,
@@ -122,7 +119,7 @@ impl<S> Generations<S> {
     }
 
     /// Read the manifest of a given generation and return its contents as a string
-    pub fn manifest(&self, generation: usize) -> Result<String, GenerationsError> {
+    pub fn manifest_contents(&self, generation: usize) -> Result<String, GenerationsError> {
         let metadata = self.metadata()?;
         if !metadata.generations().contains_key(&generation.into()) {
             return Err(GenerationsError::GenerationNotFound(generation));
@@ -136,6 +133,20 @@ impl<S> Generations<S> {
             .map_err(GenerationsError::ShowManifest)?;
 
         Ok(manifest_osstr.to_string_lossy().to_string())
+    }
+
+    /// Read, parse, and migrate the manifest of a given generation.
+    pub fn manifest(&self, generation: usize) -> Result<Manifest<Migrated>, GenerationsError> {
+        let lockfile = self.lockfile(generation)?;
+        let manifest_contents = self.manifest_contents(generation)?;
+        Manifest::parse_and_migrate(manifest_contents, Some(&lockfile))
+            .map_err(GenerationsError::Manifest)
+    }
+
+    /// Read and parse the lockfile of a given generation.
+    pub fn lockfile(&self, generation: usize) -> Result<Lockfile, GenerationsError> {
+        let contents = self.lockfile_contents(generation)?;
+        Lockfile::from_str(contents.as_str()).map_err(GenerationsError::Lockfile)
     }
 
     /// Read the lockfile of a given generation and return its contents as a string.
@@ -156,13 +167,13 @@ impl<S> Generations<S> {
     }
 
     /// Read the manifest of the current generation and return its contents as a string
-    pub fn current_gen_manifest(&self) -> Result<String, GenerationsError> {
+    pub fn current_gen_manifest_contents(&self) -> Result<String, GenerationsError> {
         let metadata = self.metadata()?;
         let current_gen = metadata
             .current_gen()
             .ok_or(GenerationsError::NoGenerations)?;
 
-        self.manifest(*current_gen)
+        self.manifest_contents(*current_gen)
     }
 
     /// Read the lockfile of the current generation and return its contents as a string.
@@ -287,7 +298,7 @@ impl Generations<ReadWrite<'_>> {
                 .join(generation.to_string())
                 .join(ENV_DIR_NAME),
             include_fetcher,
-        );
+        )?;
 
         Ok(environment)
     }
@@ -481,6 +492,15 @@ pub enum GenerationsError {
     // endregion
     #[error("could not create temporary directory")]
     CreateTempDir(#[source] std::io::Error),
+
+    #[error(transparent)]
+    CoreEnvironment(#[from] CoreEnvironmentError),
+
+    #[error(transparent)]
+    Lockfile(#[from] LockfileError),
+
+    #[error(transparent)]
+    Manifest(#[from] ManifestError),
 }
 
 /// Realize the generations branch into a temporary directory
