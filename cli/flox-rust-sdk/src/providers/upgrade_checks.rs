@@ -212,8 +212,9 @@ mod tests {
     use std::sync::mpsc;
     use std::time::Duration;
 
+    use flox_manifest::lockfile::Lockfile;
+
     use super::*;
-    use crate::models::lockfile::Lockfile;
 
     #[test]
     fn try_acquire_lock_does_not_wait_for_lock() {

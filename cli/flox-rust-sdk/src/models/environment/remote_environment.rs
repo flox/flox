@@ -2,6 +2,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use flox_core::activate::mode::ActivateMode;
+use flox_core::data::environment_ref::{EnvironmentName, EnvironmentOwner, RemoteEnvironmentRef};
+use flox_manifest::lockfile::Lockfile;
+use flox_manifest::raw::PackageToInstall;
+use flox_manifest::{Manifest, Migrated, Validated};
 use thiserror::Error;
 use tracing::debug;
 
@@ -30,7 +34,7 @@ use super::{
     UninstallationAttempt,
     gcroots_dir,
 };
-use crate::flox::{EnvironmentOwner, Flox, RemoteEnvironmentRef};
+use crate::flox::Flox;
 use crate::models::environment::floxmeta_branch::{
     BranchOrd,
     FloxmetaBranch,
@@ -41,9 +45,7 @@ use crate::models::environment::floxmeta_branch::{
 use crate::models::environment::managed_environment::GENERATION_LOCK_FILENAME;
 use crate::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use crate::models::environment::{PathPointer, RenderedEnvironmentLink};
-use crate::models::environment_ref::EnvironmentName;
-use crate::models::lockfile::{LockResult, Lockfile};
-use crate::models::manifest::raw::PackageToInstall;
+use crate::providers::lock_manifest::LockResult;
 
 const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
 
@@ -365,6 +367,14 @@ impl Environment for RemoteEnvironment {
         self.inner.existing_lockfile(flox)
     }
 
+    fn pre_migration_manifest(&self, flox: &Flox) -> Result<Manifest<Validated>, EnvironmentError> {
+        self.inner.pre_migration_manifest(flox)
+    }
+
+    fn manifest(&mut self, flox: &Flox) -> Result<Manifest<Migrated>, EnvironmentError> {
+        self.inner.manifest(flox)
+    }
+
     /// Install packages to the environment atomically
     fn install(
         &mut self,
@@ -430,15 +440,6 @@ impl Environment for RemoteEnvironment {
         Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
 
         Ok(result)
-    }
-
-    /// Extract the current content of the manifest
-    ///
-    /// This may differ from the locked manifest, which should typically be used unless you need to:
-    /// - provide the latest editable contents to the user
-    /// - avoid double-locking
-    fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError> {
-        self.inner.manifest_contents(flox)
     }
 
     fn rendered_env_links(
@@ -599,6 +600,9 @@ mod tests {
     use std::os::unix::fs::symlink;
     use std::str::FromStr;
 
+    use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
+    use flox_manifest::test_helpers::with_latest_schema;
+    use flox_test_utils::GENERATED_DATA;
     use indoc::indoc;
 
     use super::test_helpers::mock_remote_environment;
@@ -606,8 +610,7 @@ mod tests {
     use crate::flox::test_helpers::flox_instance_with_optional_floxhub;
     use crate::models::environment::generations::HistoryKind;
     use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_from_env_files;
-    use crate::models::lockfile::RecoverableMergeError;
-    use crate::providers::catalog::GENERATED_DATA;
+    use crate::providers::lock_manifest::RecoverableMergeError;
 
     #[test]
     fn migrate_remote_gcroot_link_to_dir() {
@@ -697,7 +700,13 @@ mod tests {
                 .expect("find initialized remote environment");
 
         // TODO: should be changed to version 2 once released!
-        assert_eq!(env.manifest_contents(&flox).unwrap(), "version = 1\n");
+        assert_eq!(
+            env.pre_migration_manifest(&flox)
+                .unwrap()
+                .as_writable()
+                .to_string(),
+            with_latest_schema("")
+        );
     }
 
     #[test]
