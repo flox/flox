@@ -7,8 +7,8 @@ use flox_core::activate::mode::ActivateMode;
 use flox_core::activations::{read_activations_json, state_json_path};
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::models::environment::generations::GenerationId;
-use flox_rust_sdk::models::environment::{Environment, RenderedEnvironmentLinks};
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::typed::{Inner, Manifest, Services};
 use flox_rust_sdk::providers::services::process_compose::{ProcessState, ProcessStates};
@@ -119,7 +119,6 @@ pub struct ServicesEnvironment {
     environment: ConcreteEnvironment,
     socket: PathBuf,
     manifest: Manifest,
-    rendered_env_links: RenderedEnvironmentLinks,
 }
 
 impl ServicesEnvironment {
@@ -135,13 +134,11 @@ impl ServicesEnvironment {
         let socket = environment.services_socket_path(flox)?;
         let lockfile: Lockfile = environment.lockfile(flox)?.into();
         let manifest = lockfile.manifest;
-        let rendered_env_links = environment.rendered_env_links(flox)?;
 
         Ok(Self {
             environment,
             socket,
             manifest,
-            rendered_env_links,
         })
     }
 
@@ -171,12 +168,18 @@ impl ServicesEnvironment {
     }
 
     /// Check if process-compose is running with the same store path.
-    pub fn process_compose_is_current(&self, flox: &Flox, mode: &ActivateMode) -> bool {
+    ///
+    /// NB: This method will lock and build an environment in order to compare its store path.
+    pub fn process_compose_is_current(&mut self, flox: &Flox, mode: &ActivateMode) -> bool {
         if !self.socket.exists() {
             return false;
         }
 
-        let rendered_link = self.rendered_env_links.clone().for_mode(mode);
+        let Ok(rendered_env_links) = self.environment.rendered_env_links(flox) else {
+            return false;
+        };
+
+        let rendered_link = rendered_env_links.for_mode(mode);
         let link_path: &Path = rendered_link.as_ref();
         let Ok(current_store_path) = std::fs::read_link(link_path) else {
             return false;

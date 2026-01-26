@@ -33,13 +33,13 @@ pub struct Start {
 impl Start {
     #[instrument(name = "start", skip_all)]
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
-        let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
+        let mut env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
         environment_subcommand_metric!("services::start", env.environment);
         let (current_mode, generation) = guard_is_within_activation(&env, "start")?;
         guard_service_commands_available(&env, &flox.system)?;
 
-        let socket = env.socket();
         let is_current = env.process_compose_is_current(&flox, &current_mode);
+        let socket = env.socket();
 
         let existing_processes = ProcessStates::read(socket).unwrap_or(ProcessStates::from(vec![]));
         let all_processes_stopped = existing_processes.iter().all(|p| p.is_stopped());
