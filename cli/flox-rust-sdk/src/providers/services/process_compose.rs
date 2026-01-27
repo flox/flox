@@ -508,25 +508,6 @@ pub fn restart_service(
     }
 }
 
-pub fn process_compose_down(socket_path: impl AsRef<Path>) -> Result<(), ServiceError> {
-    let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
-    cmd.arg("down");
-    cmd.arg("--unix-socket");
-    cmd.arg(socket_path.as_ref());
-    cmd.env("NO_COLOR", "1");
-
-    debug!(command = %cmd.display(), "running process-compose down");
-
-    let output = cmd.output().map_err(ServiceError::ProcessComposeCmd)?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        tracing::debug!("'process-compose down' failed");
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(ServiceError::from_process_compose_log(stderr))
-    }
-}
-
 /// Strings extracted from a process-compose error log.
 ///
 /// This is just raw data intended to be interpreted into a specific kind of error
