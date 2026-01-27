@@ -1,6 +1,7 @@
 use crate::parsed::v1::ManifestV1;
 use crate::parsed::v1_9_0::ManifestV1_9_0;
 
+mod compose;
 mod parsed;
 mod raw;
 
