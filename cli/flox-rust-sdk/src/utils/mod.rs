@@ -3,6 +3,7 @@ pub mod gomap;
 pub mod guard;
 pub mod logging;
 
+use std::collections::HashSet;
 use std::fmt::{Display, Write};
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -30,6 +31,70 @@ pub static IN_CONTAINERD: LazyLock<bool> = LazyLock::new(|| env::var("FLOX_CONTA
 pub static FLOX_INTERPRETER: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(env::var("FLOX_INTERPRETER").unwrap_or(env!("FLOX_INTERPRETER").to_string()))
 });
+
+/// Heuristics table for inferring invocation sources from environment
+const INFERENCE_HEURISTICS: &[(&str, &str)] = &[
+    // CI environments
+    ("GITHUB_ACTIONS", "ci.github-actions"),
+    ("GITLAB_CI", "ci.gitlab"),
+    ("CIRCLECI", "ci.circleci"),
+    ("JENKINS_HOME", "ci.jenkins"),
+    ("BUILDKITE", "ci.buildkite"),
+    ("TRAVIS", "ci.travis"),
+    // Agentic tooling
+    ("ANTHROPIC_BEDROCK_AWS_REGION", "agentic.unknown"),
+    ("LANGCHAIN_API_KEY", "agentic.unknown"),
+    ("OPENAI_API_KEY", "agentic.unknown"),
+];
+
+/// Detect invocation sources from environment heuristics
+fn detect_heuristics() -> impl Iterator<Item = String> {
+    INFERENCE_HEURISTICS
+        .iter()
+        .filter_map(|(env_var, source)| env::var(env_var).ok().map(|_| source.to_string()))
+}
+
+/// Detect all invocation sources for the current CLI invocation
+///
+/// Returns a deduplicated vector of invocation source identifiers.
+/// Sources are detected from:
+/// 1. Explicit FLOX_INVOCATION_SOURCE environment variable (comma-separated)
+/// 2. CI environment (CI=true or specific CI platform env vars)
+/// 3. Containerd context (FLOX_CONTAINERD env var)
+/// 4. Inference heuristics for agentic tooling and other contexts
+pub fn detect_invocation_sources() -> Vec<String> {
+    let mut sources = HashSet::new();
+
+    // Explicit sources from FLOX_INVOCATION_SOURCE
+    if let Ok(explicit) = env::var("FLOX_INVOCATION_SOURCE") {
+        for source in explicit.split(',').map(str::trim) {
+            if !source.is_empty() {
+                sources.insert(source.to_string());
+            }
+        }
+    }
+
+    // CI detection (generic)
+    if *IN_CI {
+        sources.insert("ci".to_string());
+    }
+
+    // Containerd detection (backward compatibility)
+    if *IN_CONTAINERD {
+        sources.insert("containerd".to_string());
+    }
+
+    // Apply inference heuristics
+    sources.extend(detect_heuristics());
+
+    // Convert to sorted vec for consistent ordering
+    let mut result: Vec<String> = sources.into_iter().collect();
+    result.sort();
+    result
+}
+
+/// Detected invocation sources for this CLI run, computed once at startup
+pub static INVOCATION_SOURCES: LazyLock<Vec<String>> = LazyLock::new(detect_invocation_sources);
 
 #[derive(Error, Debug)]
 pub enum FindAndReplaceError {
@@ -300,5 +365,85 @@ mod tests {
         let logged = writer.to_string();
 
         assert_eq!(logged, content);
+    }
+
+    #[test]
+    fn test_detect_invocation_sources_explicit() {
+        temp_env::with_var("FLOX_INVOCATION_SOURCE", Some("vscode.terminal"), || {
+            let sources = detect_invocation_sources();
+            assert!(sources.contains(&"vscode.terminal".to_string()));
+        });
+    }
+
+    #[test]
+    fn test_detect_invocation_sources_multiple_explicit() {
+        temp_env::with_var(
+            "FLOX_INVOCATION_SOURCE",
+            Some("ci.github-actions,agentic.flox-mcp"),
+            || {
+                let sources = detect_invocation_sources();
+                assert!(sources.contains(&"ci.github-actions".to_string()));
+                assert!(sources.contains(&"agentic.flox-mcp".to_string()));
+            },
+        );
+    }
+
+    #[test]
+    fn test_detect_invocation_sources_ci() {
+        temp_env::with_var("CI", Some("true"), || {
+            let sources = detect_invocation_sources();
+            assert!(sources.contains(&"ci".to_string()));
+        });
+    }
+
+    #[test]
+    fn test_detect_invocation_sources_github_actions() {
+        temp_env::with_var("GITHUB_ACTIONS", Some("true"), || {
+            let sources = detect_invocation_sources();
+            assert!(sources.contains(&"ci.github-actions".to_string()));
+        });
+    }
+
+    #[test]
+    fn test_detect_invocation_sources_containerd() {
+        temp_env::with_var("FLOX_CONTAINERD", Some("1"), || {
+            let sources = detect_invocation_sources();
+            assert!(sources.contains(&"containerd".to_string()));
+        });
+    }
+
+    #[test]
+    fn test_detect_invocation_sources_agentic_heuristic() {
+        temp_env::with_var("ANTHROPIC_BEDROCK_AWS_REGION", Some("us-west-2"), || {
+            let sources = detect_invocation_sources();
+            assert!(sources.contains(&"agentic.unknown".to_string()));
+        });
+    }
+
+    #[test]
+    fn test_detect_invocation_sources_deduplication() {
+        temp_env::with_vars(
+            [("FLOX_INVOCATION_SOURCE", Some("ci")), ("CI", Some("true"))],
+            || {
+                let sources = detect_invocation_sources();
+                // Should only contain "ci" once despite both explicit and inferred
+                assert_eq!(sources.iter().filter(|s| *s == "ci").count(), 1);
+            },
+        );
+    }
+
+    #[test]
+    fn test_detect_invocation_sources_nested() {
+        temp_env::with_vars(
+            [
+                ("FLOX_INVOCATION_SOURCE", Some("ci.github-actions")),
+                ("ANTHROPIC_BEDROCK_AWS_REGION", Some("us-west-2")),
+            ],
+            || {
+                let sources = detect_invocation_sources();
+                assert!(sources.contains(&"ci.github-actions".to_string()));
+                assert!(sources.contains(&"agentic.unknown".to_string()));
+            },
+        );
     }
 }
