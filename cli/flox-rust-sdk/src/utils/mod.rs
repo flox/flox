@@ -33,25 +33,39 @@ pub static FLOX_INTERPRETER: LazyLock<PathBuf> = LazyLock::new(|| {
 });
 
 /// Heuristics table for inferring invocation sources from environment
-const INFERENCE_HEURISTICS: &[(&str, &str)] = &[
-    // CI environments
-    ("GITHUB_ACTIONS", "ci.github-actions"),
-    ("GITLAB_CI", "ci.gitlab"),
-    ("CIRCLECI", "ci.circleci"),
-    ("JENKINS_HOME", "ci.jenkins"),
-    ("BUILDKITE", "ci.buildkite"),
-    ("TRAVIS", "ci.travis"),
-    // Agentic tooling
-    ("ANTHROPIC_BEDROCK_AWS_REGION", "agentic.unknown"),
-    ("LANGCHAIN_API_KEY", "agentic.unknown"),
-    ("OPENAI_API_KEY", "agentic.unknown"),
+/// Each entry: (env_var_name, expected_value_or_none, invocation_source_tag)
+/// Use None for expected_value to check env var presence only
+const INFERENCE_HEURISTICS: &[(&str, Option<&str>, &str)] = &[
+    // Terminal programs
+    ("TERM_PROGRAM", Some("vscode"), "term.vscode"),
+    ("TERM_PROGRAM", Some("kiro"), "agentic.kiro"),
+    // Claude Code detection
+    (
+        "CLAUDE_CODE_ENTRYPOINT",
+        Some("cli"),
+        "agentic.claude-code.cli",
+    ),
+    ("CLAUDE_CODE_SSE_PORT", None, "agentic.claude-code.plugin"),
+    // Other agentic tools
+    ("ANTIGRAVITY_AGENT", Some("1"), "agentic.antigravity"),
+    ("GEMINI_CLI", None, "agentic.gemini"),
 ];
 
 /// Detect invocation sources from environment heuristics
 fn detect_heuristics() -> impl Iterator<Item = String> {
     INFERENCE_HEURISTICS
         .iter()
-        .filter_map(|(env_var, source)| env::var(env_var).ok().map(|_| source.to_string()))
+        .filter_map(|(env_var, expected_value, source)| {
+            let matches = match expected_value {
+                Some(expected) => env::var(env_var).as_deref() == Ok(expected),
+                None => env::var(env_var).is_ok(),
+            };
+            if matches {
+                Some(source.to_string())
+            } else {
+                None
+            }
+        })
 }
 
 /// Detect all invocation sources for the current CLI invocation
@@ -75,12 +89,12 @@ pub fn detect_invocation_sources() -> Vec<String> {
     }
 
     // CI detection (generic)
-    if *IN_CI {
+    if env::var("CI").is_ok() {
         sources.insert("ci".to_string());
     }
 
     // Containerd detection (backward compatibility)
-    if *IN_CONTAINERD {
+    if env::var("FLOX_CONTAINERD").is_ok() {
         sources.insert("containerd".to_string());
     }
 
@@ -397,10 +411,10 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_invocation_sources_github_actions() {
-        temp_env::with_var("GITHUB_ACTIONS", Some("true"), || {
+    fn test_detect_invocation_sources_vscode_terminal() {
+        temp_env::with_var("TERM_PROGRAM", Some("vscode"), || {
             let sources = detect_invocation_sources();
-            assert!(sources.contains(&"ci.github-actions".to_string()));
+            assert!(sources.contains(&"term.vscode".to_string()));
         });
     }
 
@@ -414,9 +428,9 @@ mod tests {
 
     #[test]
     fn test_detect_invocation_sources_agentic_heuristic() {
-        temp_env::with_var("ANTHROPIC_BEDROCK_AWS_REGION", Some("us-west-2"), || {
+        temp_env::with_var("CLAUDE_CODE_ENTRYPOINT", Some("cli"), || {
             let sources = detect_invocation_sources();
-            assert!(sources.contains(&"agentic.unknown".to_string()));
+            assert!(sources.contains(&"agentic.claude-code.cli".to_string()));
         });
     }
 
@@ -436,13 +450,13 @@ mod tests {
     fn test_detect_invocation_sources_nested() {
         temp_env::with_vars(
             [
-                ("FLOX_INVOCATION_SOURCE", Some("ci.github-actions")),
-                ("ANTHROPIC_BEDROCK_AWS_REGION", Some("us-west-2")),
+                ("FLOX_INVOCATION_SOURCE", Some("vscode.terminal")),
+                ("CLAUDE_CODE_SSE_PORT", Some("12345")),
             ],
             || {
                 let sources = detect_invocation_sources();
-                assert!(sources.contains(&"ci.github-actions".to_string()));
-                assert!(sources.contains(&"agentic.unknown".to_string()));
+                assert!(sources.contains(&"vscode.terminal".to_string()));
+                assert!(sources.contains(&"agentic.claude-code.plugin".to_string()));
             },
         );
     }
