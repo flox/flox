@@ -28,7 +28,7 @@ use crate::models::lockfile::{
     Lockfile,
     PackageToList,
 };
-use crate::models::manifest::typed::{ActivateMode, ManifestError, SelectedOutputs};
+use crate::models::manifest::typed::{ManifestError, SelectedOutputs};
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::providers::auth::{catalog_auth_to_envs, store_needs_auth};
 use crate::providers::catalog::{CatalogClientError, StoreInfo};

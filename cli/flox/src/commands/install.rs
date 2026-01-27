@@ -650,7 +650,9 @@ fn prompt_to_modify_rc_file(env_ref: &RemoteEnvironmentRef) -> Result<bool, anyh
         // There are unicode quoting issues with the current form
         // We can't use <() for zsh because it blocks input which can make it
         // impossible to Ctrl-C
-        ShellWithPath::Bash(_) | ShellWithPath::Zsh(_) => format!(r#"eval "$(flox activate -r {env_ref} -m run)""#),
+        ShellWithPath::Bash(_) | ShellWithPath::Zsh(_) => {
+            format!(r#"eval "$(flox activate -r {env_ref} -m run)""#)
+        },
         ShellWithPath::Tcsh(_) => format!(r#"eval "`flox activate -r {env_ref} -m run`""#),
         ShellWithPath::Fish(_) => format!("flox activate -r {env_ref} -m run | source"),
     };
