@@ -318,50 +318,6 @@ impl NodeVersionSource {
 }
 
 impl Node {
-    /// Determines if a version constraint explicitly targets an odd (non-LTS) major version.
-    ///
-    /// Returns `true` for constraints that explicitly anchor to an odd major version:
-    /// - `17`, `^17`, `~17`, `17.x`, `17.0.0`
-    ///
-    /// Returns `false` for range constraints that could be satisfied by even (LTS) versions:
-    /// - `>=17`, `>16`, `<24`, `<=23`, `17 || 18`, `None`
-    ///
-    /// The key insight: constraints like `>=17` can be satisfied by even versions (18, 20, etc.),
-    /// so we should still prefer LTS versions for those.
-    fn constraint_explicitly_requires_odd_version(version_constraint: Option<&str>) -> bool {
-        let Some(constraint) = version_constraint else {
-            return false; // No constraint, prefer LTS
-        };
-
-        let constraint = constraint.trim();
-
-        // If starts with >= or > or < or <=, it's a range that could include even versions
-        if constraint.starts_with(">=")
-            || constraint.starts_with('>')
-            || constraint.starts_with('<')
-            || constraint.starts_with("<=")
-        {
-            return false;
-        }
-
-        // OR constraints (e.g., "17 || 18") could be satisfied by even versions
-        if constraint.contains("||") {
-            return false;
-        }
-
-        // Extract the major version number
-        // Pattern: optional prefix (^, ~, =, v) followed by major version
-        let major_str = constraint
-            .trim_start_matches(['^', '~', '=', 'v'])
-            .split(['.', ' ', 'x', 'X'])
-            .next();
-
-        major_str
-            .and_then(|s| s.parse::<u32>().ok())
-            .map(|major| major % 2 == 1) // Odd major version
-            .unwrap_or(false)
-    }
-
     /// Reorders node packages so even (LTS) versions come before odd (Current) versions.
     ///
     /// Input: `["nodejs_23", "nodejs_22", "nodejs_21", "nodejs_20"]`
@@ -586,22 +542,7 @@ impl Node {
         versions: Option<&PackageJSONVersionsUnresolved>,
         nvmrc_contents: Result<Option<String>>,
     ) -> Result<Option<(NodeInstall, NodeVersionSource)>> {
-        // Extract version constraint for package ordering.
-        // We prioritize package.json's node version, falling back to .nvmrc if present.
-        let version_constraint: Option<String> =
-            versions.and_then(|v| v.node.clone()).or_else(|| {
-                nvmrc_contents
-                    .as_ref()
-                    .ok()
-                    .and_then(|c| c.as_ref())
-                    .and_then(|contents| match Self::parse_nvmrc_version(contents) {
-                        RequestedNVMRCVersion::Found(v) => Some(v),
-                        _ => None,
-                    })
-            });
-
-        let nodejs_packages =
-            Self::get_available_node_packages(flox, version_constraint.as_deref()).await?;
+        let nodejs_packages = Self::get_available_node_packages(flox).await?;
         debug!("resolving node version from package.json");
         let node_from_package_json =
             Self::node_install_from_package_json(flox, &nodejs_packages, versions).await?;
@@ -755,10 +696,7 @@ impl Node {
         }
     }
 
-    async fn get_available_node_packages(
-        flox: &Flox,
-        version_constraint: Option<&str>,
-    ) -> Result<Vec<String>> {
+    async fn get_available_node_packages(flox: &Flox) -> Result<Vec<String>> {
         let res = flox
             .catalog_client
             .search("nodejs_", flox.system.clone(), None)
@@ -788,11 +726,10 @@ impl Node {
         // one.
         matches.reverse();
 
-        // Unless the constraint explicitly targets an odd (non-LTS) version,
-        // reorder to prefer even (LTS) versions.
-        if !Self::constraint_explicitly_requires_odd_version(version_constraint) {
-            matches = Self::reorder_preferring_lts(matches);
-        }
+        // Reorder to prefer even (LTS) versions. If the constraint requires
+        // an odd (Current) version (e.g., "=23"), LTS versions will be
+        // skipped during resolution.
+        matches = Self::reorder_preferring_lts(matches);
 
         // The search term was specifically "nodejs_" to catch the major version
         // packages. Add generic "nodejs" as fallback.
@@ -1623,69 +1560,6 @@ mod tests {
     ///////////////////////////////////////////////////////////////////////////
     // LTS preference tests
     ///////////////////////////////////////////////////////////////////////////
-
-    #[test]
-    fn test_constraint_explicitly_requires_odd_version() {
-        // Constraints that explicitly target odd versions should return true
-        assert!(Node::constraint_explicitly_requires_odd_version(Some("17")));
-        assert!(Node::constraint_explicitly_requires_odd_version(Some(
-            "^17"
-        )));
-        assert!(Node::constraint_explicitly_requires_odd_version(Some(
-            "~17"
-        )));
-        assert!(Node::constraint_explicitly_requires_odd_version(Some(
-            "17.x"
-        )));
-        assert!(Node::constraint_explicitly_requires_odd_version(Some(
-            "17.0.0"
-        )));
-        assert!(Node::constraint_explicitly_requires_odd_version(Some(
-            "v17"
-        )));
-        assert!(Node::constraint_explicitly_requires_odd_version(Some(
-            "^21"
-        )));
-        assert!(Node::constraint_explicitly_requires_odd_version(Some("23")));
-
-        // Constraints that could be satisfied by even (LTS) versions should return false
-        assert!(!Node::constraint_explicitly_requires_odd_version(None));
-        assert!(!Node::constraint_explicitly_requires_odd_version(Some(
-            ">=17"
-        )));
-        assert!(!Node::constraint_explicitly_requires_odd_version(Some(
-            ">16"
-        )));
-        assert!(!Node::constraint_explicitly_requires_odd_version(Some(
-            "<24"
-        )));
-        assert!(!Node::constraint_explicitly_requires_odd_version(Some(
-            "<=23"
-        )));
-        assert!(!Node::constraint_explicitly_requires_odd_version(Some(
-            "^20"
-        )));
-        assert!(!Node::constraint_explicitly_requires_odd_version(Some(
-            "18"
-        )));
-        assert!(!Node::constraint_explicitly_requires_odd_version(Some(
-            "22.x"
-        )));
-        assert!(!Node::constraint_explicitly_requires_odd_version(Some(
-            ">=18"
-        )));
-
-        // OR constraints could be satisfied by even versions
-        assert!(!Node::constraint_explicitly_requires_odd_version(Some(
-            "17 || 18"
-        )));
-        assert!(!Node::constraint_explicitly_requires_odd_version(Some(
-            "^17 || ^18"
-        )));
-        assert!(!Node::constraint_explicitly_requires_odd_version(Some(
-            "21 || 22"
-        )));
-    }
 
     #[test]
     fn test_reorder_preferring_lts() {
