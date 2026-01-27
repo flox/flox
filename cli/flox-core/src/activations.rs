@@ -402,6 +402,15 @@ impl ActivationState {
         self.attached_pids.is_empty()
     }
 
+    /// Returns all attached PIDs with their expiration times.
+    /// Used by the executive to spawn PID watcher threads.
+    pub fn all_attached_pids_with_expiration(&self) -> Vec<(Pid, Option<OffsetDateTime>)> {
+        self.attached_pids
+            .iter()
+            .map(|(pid, attachment)| (*pid, attachment.expiration))
+            .collect()
+    }
+
     /// Returns the current activation mode
     pub fn mode(&self) -> &ActivateMode {
         &self.mode
