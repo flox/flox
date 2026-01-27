@@ -96,7 +96,7 @@ pub fn old_cli_envs(context: AttachCtx) -> HashMap<&'static str, String> {
         // This is user-facing and documented
         (
             FLOX_ACTIVATE_START_SERVICES_VAR,
-            context.flox_activate_start_services.to_string(),
+            (!context.services_to_start.is_empty()).to_string(),
         ),
     ]);
     if let Some(log_dir) = context.flox_env_log_dir.as_ref() {

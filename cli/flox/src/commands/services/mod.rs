@@ -2,18 +2,16 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use bpaf::Bpaf;
-use flox_core::activate::context::{ActivateMode, InvocationType};
+use flox_core::activate::context::InvocationType;
+use flox_core::activate::mode::ActivateMode;
+use flox_core::activations::{read_activations_json, state_json_path};
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::models::environment::generations::GenerationId;
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::typed::{Inner, Manifest, Services};
-use flox_rust_sdk::providers::services::process_compose::{
-    ProcessState,
-    ProcessStates,
-    new_services_to_start,
-};
+use flox_rust_sdk::providers::services::process_compose::{ProcessState, ProcessStates};
 use tracing::{debug, instrument};
 
 use super::{
@@ -169,10 +167,30 @@ impl ServicesEnvironment {
         &self.socket
     }
 
-    /// Check if services are running, or can at least be expected to be running.
-    /// This is currently determined by the existence of the service manager socket.
-    fn expect_services_running(&self) -> bool {
-        ProcessStates::read(self.socket()).is_ok()
+    /// Check if process-compose is running with the same store path.
+    ///
+    /// NB: This method will lock and build an environment in order to compare its store path.
+    pub fn process_compose_is_current(&mut self, flox: &Flox, mode: &ActivateMode) -> bool {
+        if !self.socket.exists() {
+            return false;
+        }
+
+        let Ok(rendered_env_links) = self.environment.rendered_env_links(flox) else {
+            return false;
+        };
+
+        let rendered_link = rendered_env_links.for_mode(mode);
+        let link_path: &Path = rendered_link.as_ref();
+        let Ok(current_store_path) = std::fs::read_link(link_path) else {
+            return false;
+        };
+
+        let state_path = state_json_path(&flox.runtime_dir, self.environment.dot_flox_path());
+        let Ok((Some(state), _lock)) = read_activations_json(&state_path) else {
+            return false;
+        };
+
+        state.process_compose_is_current(Some(&current_store_path))
     }
 }
 
@@ -294,8 +312,10 @@ fn processes_by_name_or_default_to_all<'a>(
     Ok(states)
 }
 
-/// Note that this must be called within an existing activation, otherwise it
-/// will leave behind a process-compose since it doesn't start an executive.
+/// Run an ephemeral activation to start services with a new process-compose.
+///
+/// This is used by `services start` and `services restart` when a new
+/// process-compose instance is needed.
 pub async fn start_services_with_new_process_compose(
     config: Config,
     flox: Flox,
@@ -308,24 +328,35 @@ pub async fn start_services_with_new_process_compose(
     let lockfile: Lockfile = concrete_environment.lockfile(&flox)?.into();
     let system = flox.system.clone();
 
-    for name in names {
-        // Check any specified names against the locked manifest that we'll use
-        // for starting `process-compose`. This does a similar job as
-        // `processes_by_name_or_default_to_all` where we don't yet have a
-        // running `process-compose` instance.
-        if !lockfile.manifest.services.inner().contains_key(name) {
-            return Err(service_does_not_exist_error(name))?;
-        }
-        if !lockfile
+    let names: Vec<String> = if names.is_empty() {
+        lockfile
             .manifest
             .services
             .copy_for_system(&system)
             .inner()
-            .contains_key(name)
-        {
-            return Err(service_not_available_on_system_error(name, &system))?;
+            .keys()
+            .cloned()
+            .collect()
+    } else {
+        // Check any specified names against the locked manifest that we'll use
+        // for starting `process-compose`. This does a similar job as
+        // `processes_by_name_or_default_to_all` where we don't yet have a
+        // running `process-compose` instance.
+        let all_services = lockfile.manifest.services.inner();
+        let system_services = lockfile.manifest.services.copy_for_system(&system);
+        let system_services = system_services.inner();
+
+        for name in names {
+            if !all_services.contains_key(name) {
+                return Err(service_does_not_exist_error(name))?;
+            }
+            if !system_services.contains_key(name) {
+                return Err(service_not_available_on_system_error(name, &system))?;
+            }
         }
-    }
+        names.to_vec()
+    };
+
     Activate {
         environment: environment_select,
         // We currently only check for trust for remote environments,
@@ -345,25 +376,12 @@ pub async fn start_services_with_new_process_compose(
         flox,
         concrete_environment,
         InvocationType::ExecCommand(vec!["true".to_string()]),
-        true,
-        &new_services_to_start(names),
+        names.to_vec(),
     )
     .await?;
     // We don't know if the service actually started because we don't have
     // healthchecks.
     // But we do know that activate blocks until `process-compose` is running.
-    let names = if names.is_empty() {
-        lockfile
-            .manifest
-            .services
-            .copy_for_system(&system)
-            .inner()
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>()
-    } else {
-        names.to_vec()
-    };
     Ok(names)
 }
 

@@ -48,17 +48,16 @@ pub struct AttachCtx {
     /// Runtime directory
     pub flox_runtime_dir: String,
 
-    /// Services to start
-    pub flox_services_to_start: Option<Vec<String>>,
-
     /// CUDA detection enabled
     pub flox_env_cuda_detection: String,
 
-    /// Whether to start services
-    pub flox_activate_start_services: bool,
-
     /// Services socket path
     pub flox_services_socket: Option<PathBuf>,
+
+    /// Services to start with a new process-compose instance.
+    /// When non-empty, flox-activations will start a new process-compose and start these services.
+    /// The CLI is responsible for deciding when this is needed (staleness checks, etc.)
+    pub services_to_start: Vec<String>,
 
     // Info needed to run the activate script
     pub interpreter_path: PathBuf,

@@ -7,7 +7,7 @@ use fslock::LockFile;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use time::OffsetDateTime;
-use tracing::debug;
+use tracing::{debug, trace};
 
 use crate::activate::mode::ActivateMode;
 use crate::proc_status::pid_is_running;
@@ -567,6 +567,55 @@ impl ActivationState {
         self.executive_started() && pid_is_running(self.executive_pid)
     }
 
+    /// Get the executive PID.
+    pub fn executive_pid(&self) -> Pid {
+        self.executive_pid
+    }
+
+    /// Get the start_id if an activation is currently ready.
+    pub fn ready_start_id(&self) -> Option<&StartIdentifier> {
+        match &self.ready {
+            Ready::True(start_id) => Some(start_id),
+            _ => None,
+        }
+    }
+
+    /// Check if the current process-compose is current (up-to-date).
+    ///
+    /// If `expected_store_path` is provided, compares against that store path.
+    /// Otherwise, compares against the ready activation's store path.
+    ///
+    /// Returns `true` only if:
+    /// - There is an existing process-compose, AND
+    /// - Store paths match (either against expected or ready activation)
+    ///
+    /// Returns `false` if:
+    /// - No existing process-compose, OR
+    /// - No expected store path and activation is not ready, OR
+    /// - Store path has changed
+    pub fn process_compose_is_current(&self, expected_store_path: Option<&Path>) -> bool {
+        let Some(current_start_id) = &self.current_process_compose_store_path else {
+            return false;
+        };
+
+        let expected = match expected_store_path {
+            Some(path) => path,
+            None => {
+                let Some(ready_start_id) = self.ready_start_id() else {
+                    return false;
+                };
+                ready_start_id.store_path.as_path()
+            },
+        };
+
+        current_start_id.store_path == expected
+    }
+
+    /// Set the current process-compose store path.
+    pub fn set_current_process_compose_start_id(&mut self, start_id: StartIdentifier) {
+        self.current_process_compose_store_path = Some(start_id);
+    }
+
     pub fn replace_attachment(
         &mut self,
         start_id: StartIdentifier,
@@ -669,7 +718,7 @@ pub fn read_activations_json(
         return Ok((None, lock_file));
     }
 
-    debug!(?path, "reading state.json");
+    trace!(?path, "reading state.json");
     let contents =
         std::fs::read_to_string(path).context(format!("failed to read file {}", path.display()))?;
 
