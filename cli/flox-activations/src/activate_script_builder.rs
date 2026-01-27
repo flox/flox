@@ -21,18 +21,13 @@ pub const FLOX_SERVICES_SOCKET_VAR: &str = "_FLOX_SERVICES_SOCKET";
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
 pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
 
-pub(super) fn assemble_command_for_start_script(
+pub(super) fn assemble_activate_command(
     context: ActivateCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
     start_id: &StartIdentifier,
 ) -> Command {
-    let mut command = Command::new(
-        context
-            .attach_ctx
-            .interpreter_path
-            .join("activate.d/start.bash"),
-    );
+    let mut command = Command::new(context.attach_ctx.interpreter_path.join("activate"));
     add_old_cli_options(&mut command, &context);
     command.envs(old_cli_envs(context.attach_ctx.clone()));
     add_old_activate_script_exports(
@@ -42,7 +37,7 @@ pub(super) fn assemble_command_for_start_script(
         vars_from_env,
         start_id,
     );
-    add_start_script_options(&mut command, &context.attach_ctx, start_id);
+    add_activate_script_options(&mut command, &context.attach_ctx, start_id);
     command
 }
 
@@ -134,12 +129,10 @@ fn add_old_cli_options(command: &mut Command, context: &ActivateCtx) {
 
     // Pass down the activation mode
     command.arg("--mode").arg(context.mode.to_string());
-
-    command.arg("--shell").arg(context.shell.exe_path());
 }
 
-/// Options parsed by getopt that are only used by start.bash
-fn add_start_script_options(
+/// Options parsed by getopt that are only used by the activate script
+fn add_activate_script_options(
     command: &mut Command,
     context: &AttachCtx,
     start_id: &StartIdentifier,

@@ -26,6 +26,7 @@ fi
 
 _dirname="@coreutils@/bin/dirname"
 _getopt="@getopt@/bin/getopt"
+_jq="@jq@/bin/jq"
 _flox_activations="@flox_activations@"
 
 set -euo pipefail
@@ -49,13 +50,17 @@ env:,\
 env-cache:,\
 env-project:,\
 env-description:,\
-mode:"
+mode:,\
+start-state-dir:,\
+skip-hook-on-activate"
 USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
 [(-e|--env) <env>] \
 [--env-cache <path>] \
 [--env-project <path>] \
 [--env-description <name>] \
-[(-m|--mode) (dev|run)]"
+[(-m|--mode) (dev|run|build)] \
+[--start-state-dir <path>] \
+[--skip-hook-on-activate]"
 
 if ! PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@"); then
   echo "Failed to parse options." >&2
@@ -70,6 +75,7 @@ eval set -- "$PARSED"
 FLOX_CMD=""
 _FLOX_ENV="$($_dirname -- "${BASH_SOURCE[0]}")"
 _FLOX_ENV_ACTIVATION_MODE="dev"
+_skip_hook_on_activate="false"
 while true; do
   case "$1" in
     -c | --command)
@@ -124,12 +130,26 @@ while true; do
       ;;
     -m | --mode)
       shift
-      if [ "$1" != "build" ]; then
-        echo "Option --mode requires 'build' as an argument." >&2
+      if [ -z "${1:-}" ] || ! { [ "$1" == "run" ] || [ "$1" == "dev" ] || [ "$1" == "build" ]; }; then
+        echo "Option --mode requires 'dev', 'run', or 'build' as an argument." >&2
         echo "$USAGE" >&2
         exit 1
       fi
       _FLOX_ENV_ACTIVATION_MODE="$1"
+      shift
+      ;;
+    --start-state-dir)
+      shift
+      if [ -z "${1:-}" ]; then
+        echo "Option --start-state-dir requires a path as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _start_state_dir="$1"
+      shift
+      ;;
+    --skip-hook-on-activate)
+      _skip_hook_on_activate="true"
       shift
       ;;
     --)
@@ -160,42 +180,92 @@ if [ -n "$FLOX_CMD" ]; then
 fi
 
 if [ $# -gt 0 ]; then
-  _flox_invocation_type="command"
-elif [ -t 1 ] || [ -n "${_FLOX_FORCE_INTERACTIVE:-}" ]; then
-  _flox_invocation_type="interactive"
+  _command_mode="true"
 else
-  _flox_invocation_type="inplace"
+  _command_mode="false"
 fi
 
-# Propagate required variables that are documented as exposed.
-export FLOX_ENV="${_FLOX_ENV}"
+if [ "$_command_mode" = "true" ]; then
+  # Propagate required variables that are documented as exposed.
+  export FLOX_ENV="${_FLOX_ENV}"
 
-# Propagate optional variables that are documented as exposed.
-# NB: `generate_*_start_commands()` performs the same logic except for zsh.
-for var_key in FLOX_ENV_CACHE FLOX_ENV_PROJECT FLOX_ENV_DESCRIPTION; do
-  eval "var_val=\${_$var_key-}"
-  if [ -n "$var_val" ]; then
-    export $var_key="${var_val}"
-  else
-    unset $var_key
-  fi
-done
+  # Propagate optional variables that are documented as exposed.
+  # NB: `generate_*_start_commands()` performs the same logic except for zsh.
+  for var_key in FLOX_ENV_CACHE FLOX_ENV_PROJECT FLOX_ENV_DESCRIPTION; do
+    eval "var_val=\${_$var_key-}"
+    if [ -n "$var_val" ]; then
+      export $var_key="${var_val}"
+    else
+      unset $var_key
+    fi
+  done
 
-# shellcheck disable=SC1090
-source <("$_flox_activations" set-env-dirs --shell bash --flox-env "$FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
-# shellcheck disable=SC1090
-source <("$_flox_activations" fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
+  # shellcheck disable=SC1090
+  source <("$_flox_activations" set-env-dirs --shell bash --flox-env "$FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
+  # shellcheck disable=SC1090
+  source <("$_flox_activations" fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
+fi
 
-if [ "$_FLOX_ENV_ACTIVATION_MODE" = "build" ]; then
-  if [ "$_flox_invocation_type" != "command" ]; then
-    echo "build mode is only supported for running a command" >&2
+if [ "$_command_mode" = "false" ]; then
+  # Set umask to ensure files are created with 0600 (may contain secrets)
+  umask 077
+  # First activation of this environment. Snapshot environment to start.
+  _start_env_json="$_start_state_dir/start.env.json"
+  $_jq -nS env > "$_start_env_json"
+fi
+
+case "$_FLOX_ENV_ACTIVATION_MODE" in
+  dev)
+    # shellcheck disable=SC1090 # from rendered environment
+    source_profile_d "$_profile_d" "prepend" "$FLOX_ENV_DIRS"
+    ;;
+  run)
+    # shellcheck disable=SC1091 # from rendered environment
+    source "$_profile_d/0100_common-run-mode-paths.sh"
+    ;;
+  build)
+    # shellcheck disable=SC1090 # from rendered environment
+    source_profile_d "$_profile_d" "set" "$FLOX_ENV_DIRS"
+    ;;
+  *)
+    echo "Invalid activation mode: $_FLOX_ENV_ACTIVATION_MODE" >&2
     exit 1
-  fi
-  # We don't ever need to attach, and we don't want to run hook.on-activate,
-  # so just run the parts of start.bash that we need
-  source_profile_d "$_profile_d" "set" "$FLOX_ENV_DIRS"
-  # Set static environment variables from the manifest
-  set_manifest_vars "$FLOX_ENV"
+    ;;
+esac
 
-  exec "$@"
+# Set static environment variables from the manifest.
+set_manifest_vars "$FLOX_ENV"
+
+if [ "$_skip_hook_on_activate" = "false" ]; then
+  # Source the hook-on-activate script if it exists.
+  if [ -e "$FLOX_ENV/activate.d/hook-on-activate" ]; then
+    # Nothing good can come from output printed to stdout in the
+    # user-provided hook scripts because these can get interpreted
+    # as configuration statements by the "in-place" activation
+    # mode. So, we'll redirect stdout to stderr.
+    set +euo pipefail
+    "$_flox_activate_tracer" "$FLOX_ENV/activate.d/hook-on-activate" START
+    # shellcheck disable=SC1091 # from rendered environment
+    source "$FLOX_ENV/activate.d/hook-on-activate" 1>&2
+    "$_flox_activate_tracer" "$FLOX_ENV/activate.d/hook-on-activate" END
+    set -euo pipefail
+  else
+    "$_flox_activate_tracer" "$FLOX_ENV/activate.d/hook-on-activate" NOT FOUND
+  fi
 fi
+
+if [ "$_command_mode" = "true" ]; then
+  if [ -n "$FLOX_CMD" ]; then
+    exec bash -c "$FLOX_CMD"
+  else
+    exec "$@"
+  fi
+fi
+
+if [ "$_command_mode" = "false" ]; then
+  # Capture ending environment.
+  _end_env_json="$_start_state_dir/end.env.json"
+  $_jq -nS env > "$_end_env_json"
+fi
+
+"$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" END
