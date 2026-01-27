@@ -49,12 +49,12 @@ teardown() {
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
-  assert_output "✅ 'hello' installed to environment 'test'"
+  assert_output "✔ 'hello' installed to environment 'test'"
 
   run "$FLOX_BIN" uninstall hello
   assert_success
   # Note that there's TWO spaces between the emoji and the package name
-  assert_output "🗑️  'hello' uninstalled from environment 'test'"
+  assert_output "━ 'hello' uninstalled from environment 'test'"
 }
 
 @test "uninstall: errors (without proceeding) for already uninstalled packages" {
@@ -66,7 +66,7 @@ teardown() {
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 run "$FLOX_BIN" uninstall hello curl
   assert_failure
-  assert_output "❌ ERROR: no package named 'curl' in the manifest"
+  assert_output "✘ ERROR: no package named 'curl' in the manifest"
 }
 
 @test "uninstall: edits manifest" {
@@ -84,7 +84,7 @@ teardown() {
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 run "$FLOX_BIN" uninstall not-a-package
   assert_failure
-  assert_output "❌ ERROR: no package named 'not-a-package' in the manifest"
+  assert_output "✘ ERROR: no package named 'not-a-package' in the manifest"
 }
 
 @test "uninstall: removes link to installed binary" {
@@ -92,7 +92,7 @@ teardown() {
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
-  assert_output --partial "✅ 'hello' installed to environment"
+  assert_output --partial "✔ 'hello' installed to environment"
   run [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/hello" ]
   assert_success
   run "$FLOX_BIN" uninstall hello
@@ -109,7 +109,7 @@ teardown() {
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 run "$FLOX_BIN" uninstall hello
   assert_failure
-  assert_output "❌ ERROR: no package named 'hello' in the manifest"
+  assert_output "✘ ERROR: no package named 'hello' in the manifest"
 }
 
 @test "uninstall: can uninstall packages with dotted att_paths" {
@@ -155,12 +155,12 @@ EOF
 
   run "$FLOX_BIN" uninstall -d composer hello
   assert_success
-  assert_output "🗑️  'hello' uninstalled from environment 'composer'"
+  assert_output "━ 'hello' uninstalled from environment 'composer'"
 
   run "$FLOX_BIN" list -d composer
   assert_success
   assert_output - << EOF
-⚠️  No packages are installed for your current system ('${NIX_SYSTEM}').
+! No packages are installed for your current system ('${NIX_SYSTEM}').
 
 You can see the whole manifest with 'flox list --config'.
 EOF
@@ -192,7 +192,7 @@ EOF
     run "$FLOX_BIN" uninstall -d composer hello
   assert_failure
   assert_output - << EOF
-❌ ERROR: Cannot remove included package 'hello'
+✘ ERROR: Cannot remove included package 'hello'
 Remove the package from environment 'included' and then run 'flox include upgrade'
 EOF
 }
@@ -224,7 +224,7 @@ EOF
   run "$FLOX_BIN" uninstall -d composer hello
   assert_success
   assert_output - << EOF
-🗑️  'hello' uninstalled from environment 'composer'
-ℹ️  'hello' is still installed by environment 'included'
+━ 'hello' uninstalled from environment 'composer'
+ℹ 'hello' is still installed by environment 'included'
 EOF
 }

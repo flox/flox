@@ -49,7 +49,7 @@ teardown() {
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
-  assert_output "✅ 'hello' installed to environment 'test'"
+  assert_output "✔ 'hello' installed to environment 'test'"
 }
 
 @test "'flox install' warns (preserving order) for already installed packages" {
@@ -61,8 +61,8 @@ teardown() {
     run "$FLOX_BIN" install hello curl
   assert_success
   assert_output <<EOF
-⚠️  Package with id 'hello' already installed to environment 'test'"
-✅ 'curl' installed to environment 'test'
+! Package with id 'hello' already installed to environment 'test'"
+✔ 'curl' installed to environment 'test'
 EOF
 }
 
@@ -124,7 +124,7 @@ EOF
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
-  assert_output --partial "✅ 'hello' installed to environment"
+  assert_output --partial "✔ 'hello' installed to environment"
   run [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/hello" ]
   run [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.run/bin/hello" ]
   assert_success
@@ -229,7 +229,7 @@ EOF
     run "$FLOX_BIN" install tabula
   assert_success
   assert_line --partial "The package 'tabula' is marked as broken, it may not behave as expected during runtime"
-  assert_line --partial "✅ 'tabula' installed to environment"
+  assert_line --partial "✔ 'tabula' installed to environment"
 }
 
 @test "resolution message: single package not found, without curation" {
@@ -243,7 +243,7 @@ EOF
   assert_failure
   assert_output "$(
     cat << EOF
-❌ ERROR: resolution failed: 
+✘ ERROR: resolution failed: 
 Could not find package 'badpkg'.
 Try 'flox search' with a broader search term.
 EOF
@@ -261,7 +261,7 @@ EOF
   assert_failure
   assert_output "$(
     cat << EOF
-❌ ERROR: resolution failed: multiple resolution failures:
+✘ ERROR: resolution failed: multiple resolution failures:
 - Could not find package 'badpkg1'.
   Try 'flox search' with a broader search term.
 - Could not find package 'badpkg2'.
@@ -281,7 +281,7 @@ EOF
   assert_failure
   assert_output --partial "$(
     cat << EOF
-❌ ERROR: resolution failed: 
+✘ ERROR: resolution failed: 
 Could not find package 'node'.
 Try 'flox install nodejs' instead.
 
@@ -338,7 +338,7 @@ EOF
   assert_failure
   assert_output "$(
     cat << EOF
-❌ ERROR: resolution failed: multiple resolution failures:
+✘ ERROR: resolution failed: multiple resolution failures:
 - package 'bpftrace' not available for
       - aarch64-darwin
       - x86_64-darwin
@@ -365,7 +365,7 @@ EOF
   assert_failure
   assert_output "$(
     cat << EOF
-❌ ERROR: resolution failed: 
+✘ ERROR: resolution failed: 
 No version compatible with '14.16.1' found for 'nodejs' on 'aarch64-darwin'.
 EOF
   )"
@@ -382,7 +382,7 @@ EOF
   assert_failure
   assert_output "$(
     cat << EOF
-❌ ERROR: resolution failed: 
+✘ ERROR: resolution failed: 
 The package 'python311Packages.torchvision-bin' is not found for all requested systems on the same page, consider package groups with the following system groupings: (x86_64-darwin), (aarch64-linux), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin).
 EOF
   )"

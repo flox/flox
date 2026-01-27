@@ -97,7 +97,7 @@ teardown() {
   assert_success
 
   assert_output - << EOF
-✨ Created environment 'test' ($NIX_SYSTEM)
+⚡︎ Created environment 'test' ($NIX_SYSTEM)
 
 Next:
   $ flox search <package>    <- Search for a package
@@ -116,7 +116,7 @@ EOF
   assert_success
 
   assert_output - << EOF
-✨ Created environment 'test' ($NIX_SYSTEM)
+⚡︎ Created environment 'test' ($NIX_SYSTEM)
 
 Next:
   $ flox search <package>    <- Search for a package

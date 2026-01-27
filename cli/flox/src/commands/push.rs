@@ -19,7 +19,6 @@ use flox_rust_sdk::models::environment::{
 use indoc::formatdoc;
 use tracing::{debug, instrument};
 
-use crate::commands::check_for_upgrades::invalidate_cached_remote_state;
 use crate::commands::{EnvironmentSelect, ensure_floxhub_token, environment_select};
 use crate::subcommand_metric;
 use crate::utils::errors::format_core_error;
@@ -123,8 +122,9 @@ fn handle_path_environment_push(
 
     let pointer = ManagedPointer::new(owner.clone(), path_environment.name(), &flox.floxhub);
 
-    let managed_environment = ManagedEnvironment::push_new(flox, path_environment, owner, force)
-        .map_err(|err| convert_error(err, pointer, true))?;
+    let managed_environment =
+        ManagedEnvironment::push_new(flox, path_environment, owner, force, false)
+            .map_err(|err| convert_error(err, pointer, true))?;
 
     message::updated(push_message(managed_environment.pointer(), force, true)?);
     Ok(())
@@ -140,12 +140,6 @@ fn handle_managed_environment_push(
     let push_result = environment
         .push(flox, force)
         .map_err(|err| convert_error(err, pointer.clone(), false))?;
-
-    // avoid false environment upgrade notifications after referring to outdated remote state
-    let _ =
-        invalidate_cached_remote_state(&mut environment.into()).inspect_err(|invalidation_error| {
-            debug!(%invalidation_error, "failed to invalidate cached remote state");
-        });
 
     match push_result {
         PushResult::Updated => {
@@ -184,12 +178,6 @@ fn handle_remote_environment_push(
             ", name = remote_env.name()});
         },
     }
-
-    // avoid false environment upgrade notifications after referring to outdated remote state
-    let _ =
-        invalidate_cached_remote_state(&mut remote_env.into()).inspect_err(|invalidation_error| {
-            debug!(%invalidation_error, "failed to invalidate cached remote state");
-        });
 
     Ok(())
 }
@@ -323,7 +311,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(writer.to_string(), indoc! {"
-            ✅ my-env successfully pushed to FloxHub as public
+            ✔ my-env successfully pushed to FloxHub as public
 
             View the environment at: https://hub.flox.dev/owner/my-env
             Use this environment from another machine: 'flox activate -r owner/my-env'
@@ -368,7 +356,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(writer.to_string(), indoc! {"
-            ✅ Updates to my-env successfully pushed to FloxHub
+            ✔ Updates to my-env successfully pushed to FloxHub
 
             View the environment at: https://hub.flox.dev/owner/my-env
             Use this environment from another machine: 'flox activate -r owner/my-env'
@@ -407,7 +395,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(writer.to_string(), indoc! {"
-            ℹ️  No changes to push for my-env.
+            ℹ No changes to push for my-env.
             The environment on FloxHub is already up to date.
 
         "});
@@ -534,7 +522,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(writer.to_string(), indoc! {"
-            ℹ️  No changes to push for my-env.
+            ℹ No changes to push for my-env.
             The environment on FloxHub is already up to date.
 
         "});

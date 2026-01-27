@@ -1,19 +1,21 @@
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
-use flox_core::activate::mode::ActivateMode;
-use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox};
-use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
+use flox_rust_sdk::flox::{DEFAULT_NAME, Flox, RemoteEnvironmentRef};
+use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
+use flox_rust_sdk::models::environment::remote_environment::{
+    RemoteEnvironment,
+    RemoteEnvironmentError,
+};
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     Environment,
     EnvironmentError,
     InstallationAttempt,
-    PathPointer,
+    ManagedPointer,
 };
 use flox_rust_sdk::models::lockfile::{
     LockedPackage,
@@ -169,54 +171,13 @@ impl Install {
                 })
             },
             Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
-                let bail_message = formatdoc! {"
-                    {e}
-
-                    Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'",
-                self.packages.join(" ")};
-                if !Dialog::can_prompt() {
-                    bail!(bail_message);
-                }
-                let user_state_path = user_state_path(&flox);
-                let (lock, mut user_state) = lock_and_read_user_state_file(&user_state_path)?;
-                if user_state.confirmed_create_default_env.is_some() {
-                    bail!(bail_message);
-                }
-                let msg = formatdoc! {"
-                    Packages must be installed into a Flox environment, which can be
-                    a user 'default' environment or attached to a directory.
-                "};
-                message::plain(msg);
-                let package_list = package_list_for_prompt(&packages_to_install)
-                    .context("must specify at least one package to install")?;
-                let (choice_idx, _) = Dialog {
-                    message: &format!(
-                        "Would you like to install {package_list} to the 'default' environment?"
-                    ),
-                    help_message: None,
-                    typed: Select {
-                        options: vec!["Yes", "No"],
-                    },
-                }
-                .raw_prompt()?;
-                let should_install_to_default_env = choice_idx == 0;
-                if !should_install_to_default_env {
-                    user_state.confirmed_create_default_env = Some(false);
-                    write_user_state_file(&user_state, &user_state_path, lock)
-                        .context("failed to save default environment choice")?;
-                    let msg = format!(
-                        "Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'",
-                        self.packages.join(" ")
-                    );
-                    message::plain(msg);
-                    return Err(Exit(1.into()).into());
-                }
-                let env = create_default_env(&flox)?;
-                user_state.confirmed_create_default_env = Some(should_install_to_default_env);
-                write_user_state_file(&user_state, &user_state_path, lock)
-                    .context("failed to save default environment choice")?;
-                prompt_to_modify_rc_file()?;
-                ConcreteEnvironment::Path(env)
+                try_create_default_environment_interactive(
+                    &mut flox,
+                    e,
+                    &self.packages,
+                    &packages_to_install,
+                )
+                .await?
             },
             Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
             Err(e) => Err(e)?,
@@ -572,6 +533,105 @@ impl Install {
     }
 }
 
+async fn try_create_default_environment_interactive(
+    flox: &mut Flox,
+    e: EnvironmentSelectError,
+    packages_arguments: &[String],
+    packages_to_install: &[PackageToInstall],
+) -> Result<ConcreteEnvironment> {
+    let bail_message = formatdoc! {"
+        {e}
+
+        Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'",
+        packages_arguments.join(" ")
+    };
+    if !Dialog::can_prompt() {
+        bail!(bail_message);
+    }
+
+    let user_state_path = user_state_path(flox);
+    let (lock, mut user_state) = lock_and_read_user_state_file(&user_state_path)?;
+
+    // bail if user previously reacted to the onboarding dialog (positive or negative)
+    if user_state.confirmed_create_default_env.is_some() {
+        bail!(bail_message);
+    }
+
+    // prompt user to install to default env
+    let should_install_to_default_env = {
+        let msg = formatdoc! {"
+            Packages must be installed into a Flox environment.
+            A default environment on FloxHub will sync across all your machines.
+        "};
+        message::plain(msg);
+        let package_list = package_list_for_prompt(packages_to_install)
+            .context("must specify at least one package to install")?;
+        let (choice_idx, _) = Dialog {
+            message: &format!(
+                "Would you like to pull or create your 'default' environment and install {package_list} to it?"
+            ),
+            help_message: None,
+            typed: Select {
+                options: vec!["Yes", "No"],
+            },
+        }
+        .raw_prompt()?;
+
+        choice_idx == 0
+    };
+
+    if !should_install_to_default_env {
+        // record that user denied to install to (new) default env
+        user_state.confirmed_create_default_env = Some(false);
+        write_user_state_file(&user_state, &user_state_path, lock)
+            .context("failed to save default environment choice")?;
+        let msg = format!(
+            "Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'",
+            packages_arguments.join(" ")
+        );
+        message::plain(msg);
+        return Err(Exit(1.into()).into());
+    }
+
+    // Creates a default environment for the user, skipping checks for init
+    // customizations and skipping the normal `init` output.
+    let env = {
+        // ensure user is logged in
+        let token = ensure_floxhub_token(flox).await?;
+        let owner = token
+            .handle()
+            .parse()
+            .context("FloxHub token refers to invalid user")?;
+        let name = DEFAULT_NAME
+            .parse()
+            .expect("'default' is a known accepted name");
+
+        let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
+
+        match RemoteEnvironment::new(flox, pointer, None) {
+            Ok(existing_env) => {
+                debug!("environment already exists -- will not init again");
+                existing_env
+            },
+            Err(RemoteEnvironmentError::OpenManagedEnvironment(
+                ManagedEnvironmentError::UpstreamNotFound { env_ref, .. },
+            )) => RemoteEnvironment::init_floxhub_environment(flox, env_ref.clone(), false)
+                .with_context(|| format!("Failed to initialize FloxHub environment '{env_ref}'"))?,
+            Err(e) => Err(e)?,
+        }
+    };
+
+    // record that we created default env
+    // Note: we record this _after_ attempting to create the default env,
+    // to allow a future attempt if the creation failed.
+    user_state.confirmed_create_default_env = Some(should_install_to_default_env);
+    write_user_state_file(&user_state, &user_state_path, lock)
+        .context("failed to save default environment choice")?;
+
+    prompt_to_modify_rc_file(&env.env_ref())?;
+
+    Ok(ConcreteEnvironment::Remote(env))
+}
 /// Returns a formatted string representing a possibly truncated list of
 /// packages to install.
 fn package_list_for_prompt(packages: &[PackageToInstall]) -> Option<String> {
@@ -583,36 +643,16 @@ fn package_list_for_prompt(packages: &[PackageToInstall]) -> Option<String> {
     }
 }
 
-/// Creates a default environment for the user, skipping checks for init
-/// customizations and skipping the normal `init` output.
-fn create_default_env(flox: &Flox) -> Result<PathEnvironment, anyhow::Error> {
-    let home_dir = dirs::home_dir().context("user must have a home directory")?;
-    let customization = InitCustomization {
-        activate_mode: Some(ActivateMode::Run),
-        ..Default::default()
-    };
-    PathEnvironment::init(
-        PathPointer::new(
-            EnvironmentName::from_str(DEFAULT_NAME)
-                .context("'default' is a known-valid environment name")?,
-        ),
-        &home_dir,
-        &customization,
-        flox,
-    )
-    .context("failed to initialize default environment")
-}
-
-fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
+fn prompt_to_modify_rc_file(env_ref: &RemoteEnvironmentRef) -> Result<bool, anyhow::Error> {
     let shell = Activate::detect_shell_for_in_place()?;
     let shell_cmd = match shell {
-        // TODO: should we use source <(flox activate -d ~) for bash?
+        // TODO: should we use source <(flox activate -r <env_ref>) for bash?
         // There are unicode quoting issues with the current form
         // We can't use <() for zsh because it blocks input which can make it
         // impossible to Ctrl-C
-        ShellWithPath::Bash(_) | ShellWithPath::Zsh(_) => r#"eval "$(flox activate -d ~ -m run)""#,
-        ShellWithPath::Tcsh(_) => r#"eval "`flox activate -d ~ -m run`""#,
-        ShellWithPath::Fish(_) => "flox activate -d ~ -m run | source",
+        ShellWithPath::Bash(_) | ShellWithPath::Zsh(_) => format!(r#"eval "$(flox activate -r {env_ref} -m run)""#),
+        ShellWithPath::Tcsh(_) => format!(r#"eval "`flox activate -r {env_ref} -m run`""#),
+        ShellWithPath::Fish(_) => format!("flox activate -r {env_ref} -m run | source"),
     };
     let rc_file_names = match shell {
         ShellWithPath::Bash(_) => vec![".bashrc", ".profile"],
@@ -655,7 +695,7 @@ fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
     for rc_file_name in rc_file_names.iter() {
         let rc_file_path = locate_rc_file(&shell, rc_file_name)?;
         ensure_rc_file_exists(&rc_file_path)?;
-        add_activation_to_rc_file(&rc_file_path, shell_cmd)?;
+        add_activation_to_rc_file(&rc_file_path, &shell_cmd)?;
         message::updated(format!("Configuration added to your {rc_file_name} file."));
     }
     message::plain(&restart_msg);
@@ -931,7 +971,7 @@ mod tests {
             .await
             .expect("installation failed");
         let expected = formatdoc! {"
-            ⚠\u{fe0f}  '{install_id}' installed only for the following systems: {installed_systems}
+             ! '{install_id}' installed only for the following systems: {installed_systems}
         "};
         assert_eq!(writer.to_string(), expected);
     }

@@ -30,17 +30,20 @@ use super::{
     gcroots_dir,
 };
 use crate::flox::{EnvironmentOwner, Flox, RemoteEnvironmentRef};
-use crate::models::environment::RenderedEnvironmentLink;
 use crate::models::environment::floxmeta_branch::{
+    BranchOrd,
     FloxmetaBranch,
     FloxmetaBranchError,
     GenerationLock,
     write_generation_lock,
 };
 use crate::models::environment::managed_environment::GENERATION_LOCK_FILENAME;
+use crate::models::environment::path_environment::{InitCustomization, PathEnvironment};
+use crate::models::environment::{PathPointer, RenderedEnvironmentLink};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::PackageToInstall;
+use crate::models::manifest::typed::ActivateMode;
 
 const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
 
@@ -310,6 +313,44 @@ impl RemoteEnvironment {
         self.inner.fetch_remote_state(flox)?;
         Ok(())
     }
+
+    /// Ensure that the environment `<env_ref>` is initialized on FloxHub.
+    /// That is, attempt to create environment or use the existing one upstream.
+    pub fn init_floxhub_environment(
+        flox: &Flox,
+        env_ref: RemoteEnvironmentRef,
+        bare: bool,
+    ) -> Result<RemoteEnvironment, EnvironmentError> {
+        let temp_env_dir = tempfile::TempDir::new_in(&flox.temp_dir)
+            .map_err(RemoteEnvironmentError::CreateTempDotFlox)?;
+
+        let path_pointer = PathPointer::new(env_ref.name().clone());
+
+        let path_environment = if bare {
+            PathEnvironment::init_bare(path_pointer, temp_env_dir.path(), flox)?
+        } else {
+            let customization = InitCustomization {
+                activate_mode: Some(ActivateMode::Run),
+                ..Default::default()
+            };
+
+            PathEnvironment::init(path_pointer, temp_env_dir.path(), &customization, flox)?
+        };
+
+        let managed = ManagedEnvironment::push_new(
+            flox,
+            path_environment,
+            env_ref.owner().clone(),
+            false,
+            true,
+        )?;
+        let pointer = managed.pointer();
+
+        // validate that the environment exists
+        let validated = RemoteEnvironment::new(flox, pointer.clone(), None)?;
+
+        Ok(validated)
+    }
 }
 
 impl Environment for RemoteEnvironment {
@@ -517,6 +558,10 @@ impl GenerationsExt for RemoteEnvironment {
     ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
         self.inner.remote_generations_metadata()
     }
+
+    fn compare_remote(&self) -> Result<BranchOrd, EnvironmentError> {
+        self.inner.compare_remote()
+    }
 }
 
 #[cfg(any(test, feature = "tests"))]
@@ -552,12 +597,14 @@ pub mod test_helpers {
 #[cfg(test)]
 mod tests {
     use std::os::unix::fs::symlink;
+    use std::str::FromStr;
 
     use indoc::indoc;
 
     use super::test_helpers::mock_remote_environment;
     use super::*;
     use crate::flox::test_helpers::flox_instance_with_optional_floxhub;
+    use crate::models::environment::generations::HistoryKind;
     use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_from_env_files;
     use crate::models::lockfile::RecoverableMergeError;
     use crate::providers::catalog::GENERATED_DATA;
@@ -634,5 +681,68 @@ mod tests {
         else {
             panic!("expected CannotIncludeInRemote error, got: {err:?}");
         };
+    }
+
+    #[test]
+    fn init_floxhub_environment_can_create_bare_env() {
+        let owner = EnvironmentOwner::from_str("test").unwrap();
+        let name = EnvironmentName::from_str("foo").unwrap();
+        let env_ref = RemoteEnvironmentRef::new_from_parts(owner.clone(), name.clone());
+
+        let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+        RemoteEnvironment::init_floxhub_environment(&flox, env_ref.clone(), true).unwrap();
+
+        let env =
+            RemoteEnvironment::new(&flox, ManagedPointer::new(owner, name, &flox.floxhub), None)
+                .expect("find initialized remote environment");
+
+        // TODO: should be changed to version 2 once released!
+        assert_eq!(env.manifest_contents(&flox).unwrap(), "version = 1\n");
+    }
+
+    #[test]
+    fn init_existing_floxhub_environment_fails() {
+        let owner = EnvironmentOwner::from_str("test").unwrap();
+        let name = EnvironmentName::from_str("foo").unwrap();
+        let env_ref = RemoteEnvironmentRef::new_from_parts(owner.clone(), name.clone());
+
+        let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        RemoteEnvironment::init_floxhub_environment(&flox, env_ref.clone(), false)
+            .expect("first init succeeds");
+
+        let err = RemoteEnvironment::init_floxhub_environment(&flox, env_ref.clone(), false)
+            .expect_err("second init should fail");
+
+        assert!(
+            matches!(
+                err,
+                EnvironmentError::ManagedEnvironment(
+                    ManagedEnvironmentError::UpstreamAlreadyExists { .. }
+                ),
+            ),
+            "{err:?}"
+        );
+    }
+
+    /// Prove that initialized environments have a history that starts with `initialized`.
+    #[test]
+    fn init_floxhub_environment_create_initialize_history() {
+        let owner = EnvironmentOwner::from_str("test").unwrap();
+        let name = EnvironmentName::from_str("foo").unwrap();
+        let env_ref = RemoteEnvironmentRef::new_from_parts(owner.clone(), name.clone());
+
+        let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+        RemoteEnvironment::init_floxhub_environment(&flox, env_ref.clone(), true).unwrap();
+
+        let env =
+            RemoteEnvironment::new(&flox, ManagedPointer::new(owner, name, &flox.floxhub), None)
+                .expect("find initialized remote environment");
+
+        let generation_metadata = env.generations_metadata().unwrap();
+        let history = generation_metadata.history();
+        let history_kind = &history.iter().next().unwrap().kind;
+
+        assert_eq!(history_kind, &HistoryKind::Initialize);
     }
 }

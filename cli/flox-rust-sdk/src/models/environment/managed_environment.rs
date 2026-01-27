@@ -41,6 +41,7 @@ use crate::data::CanonicalPath;
 use crate::flox::{Flox, RemoteEnvironmentRef};
 use crate::models::env_registry::{EnvRegistryError, deregister, ensure_registered};
 use crate::models::environment::floxmeta_branch::{
+    BranchOrd,
     FloxmetaBranch,
     FloxmetaBranchError,
     GenerationLock,
@@ -715,6 +716,13 @@ impl GenerationsExt for ManagedEnvironment {
     ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
         self.floxmeta_branch.remote_generations().metadata()
     }
+
+    fn compare_remote(&self) -> Result<BranchOrd, EnvironmentError> {
+        Ok(self
+            .floxmeta_branch
+            .compare_remote()
+            .map_err(ManagedEnvironmentError::FloxmetaBranch)?)
+    }
 }
 
 /// Constructors and related functions
@@ -1218,12 +1226,17 @@ impl ManagedEnvironment {
     /// If access to a remote repository requires authentication,
     /// the FloxHub token must be set in the flox instance.
     /// The caller is responsible for ensuring that the token is present and valid.
+    ///
+    /// `initializing` controls whether the initial history entry is
+    /// [HistoryKind::Import] for pushing existing environments or
+    /// [HistoryKind::Initialize] for environments that are (virtually) created on FloxHub.
     #[instrument(skip(flox), fields(progress = "Pushing new environment to FloxHub"))]
     pub fn push_new(
         flox: &Flox,
         path_environment: PathEnvironment,
         owner: EnvironmentOwner,
         force: bool,
+        initializing: bool,
     ) -> Result<Self, EnvironmentError> {
         // path of the original .flox directory
         let dot_flox_path = path_environment.path.clone();
@@ -1246,7 +1259,15 @@ impl ManagedEnvironment {
         // Ensure that the environment does not include other local ennvironments
         check_for_local_includes(&lockfile)?;
 
-        Self::push_new_without_building(flox, owner, name, force, dot_flox_path, core_environment)
+        Self::push_new_without_building(
+            flox,
+            owner,
+            name,
+            force,
+            initializing,
+            dot_flox_path,
+            core_environment,
+        )
     }
 
     /// Push an environment and open the resulting [ManagedEnvironment],
@@ -1254,11 +1275,16 @@ impl ManagedEnvironment {
     ///
     /// This is split out for the purposes of testing -
     /// some tests need an environment that has build errors.
+    ///
+    /// `initializing` controls whether the initial history entry is
+    /// [HistoryKind::Import] for pushing existing environments or
+    /// [HistoryKind::Initialize] for environments that are (virtually) created on FloxHub.
     fn push_new_without_building(
         flox: &Flox,
         owner: EnvironmentOwner,
         name: EnvironmentName,
         force: bool,
+        initializing: bool,
         dot_flox_path: CanonicalPath,
         mut core_environment: CoreEnvironment,
     ) -> Result<Self, EnvironmentError> {
@@ -1302,8 +1328,13 @@ impl ManagedEnvironment {
 
         // Add this environment as a new generation, which involves pushing to
         // the fake remote.
+        let kind = if initializing {
+            HistoryKind::Initialize
+        } else {
+            HistoryKind::Import
+        };
         generations
-            .add_generation(&mut core_environment, HistoryKind::Import)
+            .add_generation(&mut core_environment, kind)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
         temp_floxmeta_git
@@ -1316,7 +1347,12 @@ impl ManagedEnvironment {
         // Push the branch for this environment to FloxHub
         match temp_floxmeta_git.push_ref("upstream", "HEAD", force) {
             Err(GitRemoteCommandError::AccessDenied) => Err(ManagedEnvironmentError::AccessDenied)?,
-            Err(GitRemoteCommandError::Diverged) => {
+            // If run in close succession, given equal data,
+            // git may produce two identical commits despite different repos.
+            // Therefore the push to "FloxHub" will succeed with [PushFlag::UpToDate].
+            // Since we want to signal that the upstream repo already exists
+            // we need to also catch this success.
+            Err(GitRemoteCommandError::Diverged) | Ok(PushFlag::UptoDate) => {
                 Err(ManagedEnvironmentError::UpstreamAlreadyExists {
                     env_ref: RemoteEnvironmentRef::new_from_parts(owner, name),
                     upstream: flox.floxhub.base_url().to_string(),
@@ -1387,37 +1423,37 @@ impl ManagedEnvironment {
             e @ Err(_) => e?,
         };
 
-        // Check whether we can fast-forward merge the remote branch into the local branch
-        // If "not" the environment has diverged.
-        // if `--force` flag is set we skip this check
-        if !force {
-            let consistent_history = self
-                .floxmeta_branch
-                .git()
-                .branch_contains_commit(sync_branch, project_branch)
-                .map_err(ManagedEnvironmentError::Git)?;
+        let branch_ord = self
+            .floxmeta_branch
+            .compare_remote()
+            .map_err(ManagedEnvironmentError::FloxmetaBranch)?;
 
-            if !consistent_history {
-                let local = generations
-                    .metadata()
-                    .map_err(ManagedEnvironmentError::Generations)?
-                    .into_inner();
-
-                let remote =
-                    Generations::new(self.floxmeta_branch.git().clone(), sync_branch.to_owned())
-                        .metadata()
-                        .map_err(ManagedEnvironmentError::Generations)?
-                        .into_inner();
-
-                Err(ManagedEnvironmentError::Diverged(DivergedMetadata {
-                    local,
-                    remote,
-                }))?;
-            }
+        if matches!(branch_ord, BranchOrd::Equal | BranchOrd::Behind) && !force {
+            return Ok(PushResult::UpToDate);
         }
 
-        let push_flag = self
-            .floxmeta_branch
+        // If the local branch is already ahead, or both branches have changes,
+        // we diverged and need to abort (unless we blot over local state explicitly with `force`)
+        if (matches!(branch_ord, BranchOrd::Diverged)) && !force {
+            let local = generations
+                .metadata()
+                .map_err(ManagedEnvironmentError::Generations)?
+                .into_inner();
+
+            let remote = self
+                .floxmeta_branch
+                .remote_generations()
+                .metadata()
+                .map_err(ManagedEnvironmentError::Generations)?
+                .into_inner();
+
+            Err(ManagedEnvironmentError::Diverged(DivergedMetadata {
+                local,
+                remote,
+            }))?;
+        }
+
+        self.floxmeta_branch
             .git()
             .push_ref(
                 "dynamicorigin",
@@ -1428,10 +1464,6 @@ impl ManagedEnvironment {
                 GitRemoteCommandError::AccessDenied => ManagedEnvironmentError::AccessDenied,
                 _ => ManagedEnvironmentError::Push(err),
             })?;
-
-        if push_flag == PushFlag::UptoDate {
-            return Ok(PushResult::UpToDate);
-        }
 
         // update local environment branch, should be fast-forward and a noop if the branches didn't diverge
         self.pull(flox, force)?;
@@ -1456,7 +1488,7 @@ impl ManagedEnvironment {
         let checkout_valid = Self::validate_checkout(&local_checkout, &generations)?;
 
         // With `force` we pull even if the local checkout is out of sync.
-        if !force && !checkout_valid {
+        if !checkout_valid && !force {
             Err(ManagedEnvironmentError::CheckoutOutOfSync)?
         }
 
@@ -1465,39 +1497,42 @@ impl ManagedEnvironment {
 
         self.fetch_remote_state(flox)?;
 
-        // Check whether we can fast-forward the remote branch to the local branch,
-        // if not the environment has diverged.
-        let consistent_history = self
+        let branch_ord = self
             .floxmeta_branch
-            .git()
-            .branch_contains_commit(project_branch, sync_branch)
-            .map_err(ManagedEnvironmentError::Git)?;
-        if !consistent_history && !force {
+            .compare_remote()
+            .map_err(ManagedEnvironmentError::FloxmetaBranch)?;
+
+        let is_uptodate = matches!(branch_ord, BranchOrd::Equal | BranchOrd::Ahead);
+
+        if is_uptodate && !checkout_valid && force {
+            self.reset_local_env_to_current_generation(flox)?;
+            let store_paths = self.build(flox)?;
+            self.link(&store_paths)?;
+
+            return Ok(PullResult::Updated);
+        } else if is_uptodate {
+            return Ok(PullResult::UpToDate);
+        }
+
+        // If the local branch is already ahead, or both branches have changes,
+        // we diverged and need to abort (unless we blot over local state explicitly with `force`)
+        if (matches!(branch_ord, BranchOrd::Diverged)) && !force {
             let local = generations
                 .metadata()
                 .map_err(ManagedEnvironmentError::Generations)?
                 .into_inner();
 
-            let remote =
-                Generations::new(self.floxmeta_branch.git().clone(), sync_branch.to_owned())
-                    .metadata()
-                    .map_err(ManagedEnvironmentError::Generations)?
-                    .into_inner();
+            let remote = self
+                .floxmeta_branch
+                .remote_generations()
+                .metadata()
+                .map_err(ManagedEnvironmentError::Generations)?
+                .into_inner();
 
             Err(ManagedEnvironmentError::Diverged(DivergedMetadata {
                 local,
                 remote,
             }))?;
-        }
-
-        let sync_branch_commit = self.floxmeta_branch.git().branch_hash(sync_branch).ok();
-        let project_branch_commit = self.floxmeta_branch.git().branch_hash(project_branch).ok();
-
-        // Regardless of whether `--force` is set, we want to accurately return UpToDate
-        // If the checkout is not the same as the current generation, we should
-        // instead reset_local_env_to_current_generation below
-        if checkout_valid && sync_branch_commit == project_branch_commit {
-            return Ok(PullResult::UpToDate);
         }
 
         // update the project branch to the remote branch, using `force` if specified
@@ -1632,6 +1667,7 @@ pub mod test_helpers {
             owner,
             "name".parse().unwrap(),
             false,
+            false,
             CanonicalPath::new(tempdir_in(&flox.temp_dir).unwrap().keep()).unwrap(),
             new_core_environment(flox, contents),
         )
@@ -1656,7 +1692,7 @@ pub mod test_helpers {
         let path_environment =
             new_named_path_environment_in(flox, contents, path, name.unwrap_or("name"));
 
-        ManagedEnvironment::push_new(flox, path_environment, owner, false).unwrap()
+        ManagedEnvironment::push_new(flox, path_environment, owner, false, false).unwrap()
     }
 
     /// Get a [ManagedEnvironment] that has been pushed to (a mock) FloxHub and
@@ -1675,7 +1711,7 @@ pub mod test_helpers {
         let path_environment =
             new_named_path_environment_from_env_files(flox, env_files_dir, "name");
 
-        ManagedEnvironment::push_new(flox, path_environment, owner, false).unwrap()
+        ManagedEnvironment::push_new(flox, path_environment, owner, false, false).unwrap()
     }
 }
 
@@ -2677,5 +2713,142 @@ mod test {
             0,
             "Remote should not yet have hello package"
         );
+    }
+}
+
+#[cfg(test)]
+mod compare_remote_tests {
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::flox::test_helpers::flox_instance_with_optional_floxhub;
+    use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_in;
+    use crate::providers::catalog::MockClient;
+
+    /// Helper to create a pair of environment instances at different paths
+    /// sharing the same remote environment
+    fn setup_env_pair(env_name: &str) -> (Flox, TempDir, ManagedEnvironment, ManagedEnvironment) {
+        let owner = "owner".parse().unwrap();
+        let (mut flox, temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let client = MockClient::new();
+        flox.catalog_client = client.into();
+
+        // Create first instance (env_a)
+        let project_a_path = flox.temp_dir.join("project_a");
+        std::fs::create_dir_all(&project_a_path).unwrap();
+
+        let env_a = mock_managed_environment_in(
+            &flox,
+            "version = 1",
+            owner.clone(),
+            &project_a_path,
+            Some(env_name),
+        );
+
+        // Create second instance (env_b) at different path, same remote
+        let project_b_path = flox.temp_dir.join("project_b");
+        std::fs::create_dir_all(&project_b_path).unwrap();
+        let project_b_path = CanonicalPath::new(project_b_path).unwrap();
+
+        let env_b =
+            ManagedEnvironment::open(&flox, env_a.pointer.clone(), project_b_path, None).unwrap();
+
+        (flox, temp_dir_handle, env_a, env_b)
+    }
+
+    /// Test that compare_remote shows Ahead before push, Equal after push
+    #[test]
+    fn compare_remote_transitions_ahead_to_equal_after_push() {
+        let (flox, _temp_dir_handle, mut env_a, _env_b) = setup_env_pair("test-env");
+
+        assert_eq!(env_a.compare_remote().unwrap(), BranchOrd::Equal);
+
+        env_a
+            .edit(&flox, "version = 1\n\n# local change".to_string())
+            .unwrap();
+        assert_eq!(env_a.compare_remote().unwrap(), BranchOrd::Ahead);
+
+        assert_eq!(env_a.push(&flox, false).unwrap(), PushResult::Updated);
+        assert_eq!(env_a.compare_remote().unwrap(), BranchOrd::Equal);
+    }
+
+    /// Test that push returns UpToDate when already synced
+    #[test]
+    fn push_returns_up_to_date_when_synced() {
+        let (flox, _temp_dir_handle, mut env_a, _env_b) = setup_env_pair("test-env");
+
+        assert_eq!(env_a.push(&flox, false).unwrap(), PushResult::UpToDate);
+        assert_eq!(env_a.compare_remote().unwrap(), BranchOrd::Equal);
+    }
+
+    /// Test that pull returns UpToDate when synced or ahead
+    #[test]
+    fn pull_returns_up_to_date_when_synced_or_ahead() {
+        let (flox, _temp_dir_handle, mut env_a, _env_b) = setup_env_pair("test-env");
+
+        // Synced
+        assert_eq!(env_a.pull(&flox, false).unwrap(), PullResult::UpToDate);
+
+        // Ahead also returns UpToDate
+        env_a
+            .edit(&flox, "version = 1\n\n# local".to_string())
+            .unwrap();
+        assert_eq!(env_a.compare_remote().unwrap(), BranchOrd::Ahead);
+        assert_eq!(env_a.pull(&flox, false).unwrap(), PullResult::UpToDate);
+    }
+
+    /// Test that after pushing from one instance, another instance sees Behind
+    #[test]
+    fn compare_remote_shows_behind_after_other_instance_pushes() {
+        let (flox, _temp_dir_handle, mut env_a, mut env_b) = setup_env_pair("shared-env");
+
+        // Both start synced
+        assert_eq!(env_a.compare_remote().unwrap(), BranchOrd::Equal);
+        assert_eq!(env_b.compare_remote().unwrap(), BranchOrd::Equal);
+
+        // A pushes a change
+        env_a
+            .edit(&flox, "version = 1\n\n# modified by A".to_string())
+            .unwrap();
+        assert_eq!(env_a.push(&flox, false).unwrap(), PushResult::Updated);
+        assert_eq!(env_a.compare_remote().unwrap(), BranchOrd::Equal);
+
+        // B is now behind
+        // Note: B should see its behind without fetching
+        assert_eq!(env_b.compare_remote().unwrap(), BranchOrd::Behind);
+        // Note: Since B is strictly behind, pushing can return uptodate
+        assert_eq!(env_b.push(&flox, false).unwrap(), PushResult::UpToDate);
+
+        // B pulls and syncs
+        assert_eq!(env_b.pull(&flox, false).unwrap(), PullResult::Updated);
+        assert_eq!(env_b.compare_remote().unwrap(), BranchOrd::Equal);
+    }
+
+    /// Test that compare_remote shows Diverged and operations require force
+    #[test]
+    fn compare_remote_diverged_requires_force() {
+        let (flox, _temp_dir_handle, mut env_a, mut env_b) = setup_env_pair("shared-env");
+
+        // Both make conflicting changes
+        env_a
+            .edit(&flox, "version = 1\n\n# change by A".to_string())
+            .unwrap();
+        env_b
+            .edit(&flox, "version = 1\n\n# change by B".to_string())
+            .unwrap();
+
+        env_a.push(&flox, false).unwrap();
+
+        // Note: B should see its behind without fetching
+        assert_eq!(env_b.compare_remote().unwrap(), BranchOrd::Diverged);
+
+        // Operations fail without force
+        assert!(env_b.pull(&flox, false).is_err());
+        assert!(env_b.push(&flox, false).is_err());
+
+        // Force pull succeeds
+        assert_eq!(env_b.pull(&flox, true).unwrap(), PullResult::Updated);
+        assert_eq!(env_b.compare_remote().unwrap(), BranchOrd::Equal);
     }
 }
