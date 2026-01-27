@@ -580,6 +580,14 @@ impl ActivationState {
         }
     }
 
+    /// Get the PID and store path of the activation that's currently starting, if any.
+    pub fn starting_pid_and_store_path(&self) -> Option<(Pid, &Path)> {
+        match &self.ready {
+            Ready::Starting(pid, start_id) => Some((*pid, &start_id.store_path)),
+            _ => None,
+        }
+    }
+
     /// Check if the current process-compose is current (up-to-date).
     ///
     /// If `expected_store_path` is provided, compares against that store path.

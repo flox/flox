@@ -19,6 +19,7 @@ proptest-derive.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 shell_gen = { path = "../shell_gen" }
+sysinfo.workspace = true
 tracing.workspace = true
 tempfile.workspace = true
 time.workspace = true

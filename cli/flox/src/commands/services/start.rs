@@ -10,6 +10,8 @@ use flox_rust_sdk::providers::services::process_compose::{ProcessStates, start_s
 use tracing::{debug, instrument};
 
 use crate::commands::services::{
+    ProcessComposeState,
+    ServicesCommandsError,
     ServicesEnvironment,
     guard_is_within_activation,
     guard_service_commands_available,
@@ -38,7 +40,7 @@ impl Start {
         let (current_mode, generation) = guard_is_within_activation(&env, "start")?;
         guard_service_commands_available(&env, &flox.system)?;
 
-        let is_current = env.process_compose_is_current(&flox, &current_mode);
+        let process_compose_state = env.process_compose_state(&flox, &current_mode);
         let socket = env.socket();
 
         let existing_processes = ProcessStates::read(socket).unwrap_or(ProcessStates::from(vec![]));
@@ -46,35 +48,42 @@ impl Start {
 
         debug!(
             socket_exists = socket.exists(),
-            is_current, all_processes_stopped, "evaluating start conditions"
+            ?process_compose_state,
+            all_processes_stopped,
+            "evaluating start conditions"
         );
 
-        let start_new_process_compose = !is_current && all_processes_stopped;
-        if start_new_process_compose {
-            debug!("starting services in new process-compose instance");
-            let names = start_services_with_new_process_compose(
-                config,
-                flox,
-                self.environment,
-                env.into_inner(),
-                current_mode,
-                &self.names,
-                generation,
-            )
-            .await?;
-            for name in names {
-                message::updated(format!("Service '{name}' started."));
-            }
-            Ok(())
-        } else {
-            debug!("starting services with existing process-compose instance");
-            Self::start_with_existing_process_compose(
-                socket,
-                &env.manifest.services,
-                &flox.system,
-                &self.names,
-                &mut stderr(),
-            )
+        match process_compose_state {
+            ProcessComposeState::ActivationStartingSelf => {
+                Err(ServicesCommandsError::CalledFromActivationHook.into())
+            },
+            ProcessComposeState::NotCurrent if all_processes_stopped => {
+                debug!("starting services in new process-compose instance");
+                let names = start_services_with_new_process_compose(
+                    config,
+                    flox,
+                    self.environment,
+                    env.into_inner(),
+                    current_mode,
+                    &self.names,
+                    generation,
+                )
+                .await?;
+                for name in names {
+                    message::updated(format!("Service '{name}' started."));
+                }
+                Ok(())
+            },
+            ProcessComposeState::Current | ProcessComposeState::NotCurrent => {
+                debug!("starting services with existing process-compose instance");
+                Self::start_with_existing_process_compose(
+                    socket,
+                    &env.manifest.services,
+                    &flox.system,
+                    &self.names,
+                    &mut stderr(),
+                )
+            },
         }
     }
 

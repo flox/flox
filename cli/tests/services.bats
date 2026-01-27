@@ -1085,7 +1085,6 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-
 @test "start: errors if service doesn't exist" {
 
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -1258,6 +1257,72 @@ EOF
   assert_success
   assert_output --partial "Service 'one' started."
   assert_output --regexp "one +(Running|Completed)"
+}
+
+# ---------------------------------------------------------------------------- #
+
+@test "start: errors when called from hook.on-activate" {
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "echo done"
+
+    [hook]
+    on-activate = '''
+      echo "== hook.on-activate: before"
+      "$FLOX_BIN" services start
+      echo "== hook.on-activate: after"
+    '''
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  unset RUST_BACKTRACE
+  run "$FLOX_BIN" activate -- true
+  assert_success # Exit codes in hooks don't fail an activation.
+  assert_output - <<EOF
+== hook.on-activate: before
+❌ ERROR: Cannot start services from 'hook.on-activate'.
+
+Starting services from the activation hook would cause a deadlock.
+Activate the environment with 'flox activate --start-services' instead.
+== hook.on-activate: after
+EOF
+}
+
+@test "restart: errors when called from hook.on-activate" {
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "echo done"
+
+    [hook]
+    on-activate = '''
+      echo "== hook.on-activate: before"
+      "$FLOX_BIN" services restart
+      echo "== hook.on-activate: after"
+    '''
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  unset RUST_BACKTRACE
+  run "$FLOX_BIN" activate -- true
+  assert_success # Exit codes in hooks don't fail an activation.
+  assert_output - <<EOF
+== hook.on-activate: before
+❌ ERROR: Cannot start services from 'hook.on-activate'.
+
+Starting services from the activation hook would cause a deadlock.
+Activate the environment with 'flox activate --start-services' instead.
+== hook.on-activate: after
+EOF
 }
 
 # ---------------------------------------------------------------------------- #
