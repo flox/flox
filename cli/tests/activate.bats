@@ -3399,7 +3399,7 @@ EOF
   assert_failure
   assert_output "Started outer activation..
 Attempting inner activation..
-❌ ERROR: This environment has already been activated with an incompatible version of 'flox'.
+✘ ERROR: This environment has already been activated with an incompatible version of 'flox'.
 
 Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"
@@ -3437,7 +3437,7 @@ EOF
   assert_failure
   assert_output "Started outer activation..
 Attempting inner activation..
-❌ ERROR: Environment can't be activated in 'dev' mode whilst there are existing activations in 'run' mode
+✘ ERROR: Environment can't be activated in 'dev' mode whilst there are existing activations in 'run' mode
 
 Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"
@@ -4076,7 +4076,7 @@ EOF
 
   # All modes unset RUST_BACKTRACE so we don't get the backtrace
   error_text="$(cat << EOF
-❌ ERROR: This environment has already been activated with an incompatible version of 'flox'.
+✘ ERROR: This environment has already been activated with an incompatible version of 'flox'.
 
 Exit all activations of the environment and try again.
 EOF
@@ -4096,7 +4096,7 @@ EOF
       else
         expected_message=="$(cat << EOF
 spawn ${FLOX_BIN} activate --dir ${PROJECT_DIR}
-✅ Attached to existing activation of environment '${PROJECT_NAME}'
+✔ Attached to existing activation of environment '${PROJECT_NAME}'
 To stop using this environment, type 'exit'
 
 ${output_from_rc_files}
@@ -5181,7 +5181,7 @@ EOF
   expected_stderr="$(cat << EOF
 on-activate stdout message
 on-activate stderr message
-❌ ERROR: Running hook.on-activate failed
+✘ ERROR: Running hook.on-activate failed
 EOF
 )"
   assert_equal "$stderr" "$expected_stderr"

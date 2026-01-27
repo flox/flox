@@ -1285,7 +1285,7 @@ EOF
   assert_success # Exit codes in hooks don't fail an activation.
   assert_output - <<EOF
 == hook.on-activate: before
-❌ ERROR: Cannot start services from 'hook.on-activate'.
+✘ ERROR: Cannot start services from 'hook.on-activate'.
 
 Starting services from the activation hook would cause a deadlock.
 Activate the environment with 'flox activate --start-services' instead.
@@ -1317,7 +1317,7 @@ EOF
   assert_success # Exit codes in hooks don't fail an activation.
   assert_output - <<EOF
 == hook.on-activate: before
-❌ ERROR: Cannot start services from 'hook.on-activate'.
+✘ ERROR: Cannot start services from 'hook.on-activate'.
 
 Starting services from the activation hook would cause a deadlock.
 Activate the environment with 'flox activate --start-services' instead.
@@ -1471,7 +1471,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' started"
+  assert_output --partial "✔ Service 'one' started"
   refute_output --partial "Service 'two'"
   refute_output --partial "Service 'sleeping'"
   refute_output --partial "Service 'touch_file'"
@@ -1489,7 +1489,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'touch_file' started"
+  assert_output --partial "✔ Service 'touch_file' started"
   [ -e hello.txt ]
 }
 
@@ -1504,7 +1504,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'touch_file' started"
+  assert_output --partial "✔ Service 'touch_file' started"
   [ -e hello.txt ]
 }
 
@@ -1519,7 +1519,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'touch_file' started"
+  assert_output --partial "✔ Service 'touch_file' started"
   [ -e hello.txt ]
 }
 
@@ -1533,7 +1533,7 @@ EOF
 EOF
 )
   assert_failure
-  assert_output --partial "❌ ERROR: Service 'one' does not exist."
+  assert_output --partial "✘ ERROR: Service 'one' does not exist."
   refute_output --partial "Service 'touch_file'"
   [ ! -e hello.txt ]
 }
