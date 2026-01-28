@@ -7,6 +7,7 @@ use std::{env, thread};
 use anyhow::{Context, Error, bail};
 use flox_core::activate::context::AttachCtx;
 use flox_core::activations::StartIdentifier;
+use flox_core::process_compose::PROCESS_NEVER_EXIT_NAME;
 use time::OffsetDateTime;
 use time::macros::format_description;
 use tracing::{debug, info};
@@ -21,10 +22,6 @@ static PROCESS_COMPOSE_BIN: LazyLock<String> = LazyLock::new(|| {
     std::env::var("PROCESS_COMPOSE_BIN").unwrap_or(env!("PROCESS_COMPOSE_BIN").to_string())
 });
 const BASH_BIN: &str = env!("X_BASH_BIN");
-
-/// Name of the never-exit service that keeps process-compose running.
-// TODO: duplicated from SDK
-const PROCESS_NEVER_EXIT_NAME: &str = "flox_never_exit";
 
 /// Wait for the process-compose socket to become ready.
 ///

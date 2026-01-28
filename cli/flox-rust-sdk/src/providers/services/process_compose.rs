@@ -13,6 +13,7 @@ use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 use std::sync::mpsc::{Receiver, Sender};
 
+use flox_core::process_compose::PROCESS_NEVER_EXIT_NAME;
 use flox_core::traceable_path;
 #[cfg(test)]
 use flox_test_utils::proptest::alphanum_string;
@@ -28,8 +29,6 @@ use crate::flox::Flox;
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::typed::{Inner, ServiceShutdown, Services};
 use crate::utils::CommandExt;
-
-const PROCESS_NEVER_EXIT_NAME: &str = "flox_never_exit";
 /// The path to the nix provided `sleep` binary.
 ///
 /// This is used to prevent `process-compose` from exiting when all services are stopped,
