@@ -1327,6 +1327,7 @@ dependencies = [
  "inquire",
  "itertools",
  "minus",
+ "nef-lock-catalog",
  "nix",
  "oauth2",
  "path-dedot",
@@ -2526,6 +2527,20 @@ dependencies = [
  "security-framework 2.11.1",
  "security-framework-sys",
  "tempfile",
+]
+
+[[package]]
+name = "nef-lock-catalog"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "indexmap 2.13.0",
+ "serde",
+ "serde_json",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "url",
 ]
 
 [[package]]
