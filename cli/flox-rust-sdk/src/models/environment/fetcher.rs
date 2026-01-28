@@ -1,13 +1,14 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use flox_core::data::environment_ref::RemoteEnvironmentRef;
+
 use super::{ConcreteEnvironment, EnvironmentError, open_path};
 use crate::flox::Flox;
 use crate::models::environment::generations::GenerationsExt;
 use crate::models::environment::managed_environment::ManagedEnvironmentError;
 use crate::models::environment::remote_environment::RemoteEnvironment;
 use crate::models::environment::{Environment, ManagedPointer};
-use crate::models::environment_ref::RemoteEnvironmentRef;
 use crate::models::lockfile::{LockedInclude, Lockfile, RecoverableMergeError};
 use crate::models::manifest::typed::{IncludeDescriptor, Manifest};
 

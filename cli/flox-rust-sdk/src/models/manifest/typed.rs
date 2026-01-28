@@ -3,6 +3,7 @@ use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use flox_core::data::environment_ref::RemoteEnvironmentRef;
 #[cfg(test)]
 use flox_test_utils::proptest::{
     alphanum_and_whitespace_string,
@@ -25,7 +26,6 @@ use systemd::unit::ServiceUnit;
 
 use super::raw::RawManifest;
 use crate::data::System;
-use crate::models::environment_ref::RemoteEnvironmentRef;
 use crate::providers::services::process_compose::ServiceError;
 
 pub(crate) const DEFAULT_GROUP_NAME: &str = "toplevel";

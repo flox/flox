@@ -33,16 +33,16 @@ use std::{env, fmt, mem};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
+use flox_core::data::environment_ref::{self, DEFAULT_NAME, RemoteEnvironmentRef};
 use flox_rust_sdk::flox::{
     DEFAULT_FLOXHUB_URL,
-    DEFAULT_NAME,
     FLOX_VERSION,
     Flox,
     Floxhub,
     FloxhubToken,
     FloxhubTokenError,
-    RemoteEnvironmentRef,
 };
+use flox_rust_sdk::models::env_registry;
 use flox_rust_sdk::models::env_registry::{ENV_REGISTRY_FILENAME, EnvRegistry};
 use flox_rust_sdk::models::environment::generations::GenerationId;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
@@ -58,7 +58,6 @@ use flox_rust_sdk::models::environment::{
     open_path,
 };
 use flox_rust_sdk::models::manifest::typed::{Inner, Manifest, ManifestPackageDescriptor};
-use flox_rust_sdk::models::{env_registry, environment_ref};
 use indoc::{formatdoc, indoc};
 use tempfile::TempDir;
 use thiserror::Error;

@@ -5,8 +5,9 @@ use std::{env, fs};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
+use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_core::{WriteError, write_atomically};
-use flox_rust_sdk::flox::{Features, RemoteEnvironmentRef};
+use flox_rust_sdk::flox::Features;
 use flox_rust_sdk::models::search::SearchLimit;
 use itertools::{Either, Itertools};
 use serde::{Deserialize, Serialize};

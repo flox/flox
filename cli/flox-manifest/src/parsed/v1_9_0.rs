@@ -16,8 +16,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
+use crate::ManifestError;
 use crate::parsed::common::{Build, Containerize, Hook, Include, Options, Profile, Services, Vars};
-use crate::parsed::{Inner, ManifestError, SkipSerializing, impl_into_inner};
+use crate::parsed::{Inner, SkipSerializing, impl_into_inner};
 
 /// Not meant for writing manifest files, only for reading them.
 /// Modifications should be made using `manifest::raw`.

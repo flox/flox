@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::Path;
 
+use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use fslock::LockFile;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -8,7 +9,7 @@ use tracing::debug;
 
 use super::{ManagedPointer, path_hash};
 use crate::data::CanonicalPath;
-use crate::flox::{Flox, RemoteEnvironmentRef};
+use crate::flox::Flox;
 use crate::models::environment::generations::Generations;
 use crate::models::floxmeta::{BRANCH_NAME_PATH_SEPARATOR, FloxMeta, FloxMetaError, floxmeta_dir};
 use crate::providers::git::{

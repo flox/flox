@@ -1,20 +1,17 @@
 use std::collections::{HashMap, HashSet};
-use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::LazyLock;
 
+use flox_core::data::System;
 use indoc::indoc;
 use itertools::Itertools;
 use reqwest::Url;
-use serde::de::Error;
 use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Key, Table, Value};
 use tracing::{debug, trace};
 
-use super::typed::Manifest;
-use crate::data::System;
-use crate::flox::Features;
-use crate::models::environment::path_environment::InitCustomization;
-use crate::models::lockfile::DEFAULT_SYSTEMS_STR;
+use crate::ManifestError;
+use crate::parsed::common::ActivateMode;
 
 /// Represents the `[version]` number key in manifest.toml
 pub const MANIFEST_VERSION_KEY: &str = "version";
@@ -37,473 +34,516 @@ pub const MANIFEST_INCLUDE_KEY: &str = "include";
 /// Represents the `[build]` table key in manifest.toml
 pub const MANIFEST_BUILD_KEY: &str = "build";
 
-/// A wrapper around a [`toml_edit::DocumentMut`]
-/// that allows modifications of the raw manifest document,
-/// while preserving comments and user formatting.
-#[derive(Clone, Debug)]
-pub struct RawManifest(toml_edit::DocumentMut);
-impl RawManifest {
-    /// Creates a new [RawManifest] instance, populating its configuration from
-    /// fields in `customization` [InitCustomization] and systems [System] arguments.
-    ///
-    /// Additionally, this method prefixes each table with documentation on its usage, and
-    /// and inserts commented configuration examples for tables left empty.
-    pub fn new_documented(
-        _features: Features,
-        systems: &[&System],
-        customization: &InitCustomization,
-    ) -> RawManifest {
-        let mut manifest = DocumentMut::new();
+pub const DEFAULT_SYSTEMS_STR: LazyLock<[String; 4]> = LazyLock::new(|| {
+    [
+        "aarch64-darwin".into(),
+        "aarch64-linux".into(),
+        "x86_64-darwin".into(),
+        "x86_64-linux".into(),
+    ]
+});
 
-        Self::add_header(&mut manifest);
-        Self::add_version(&mut manifest);
-        Self::add_install_section(&mut manifest, customization, true);
-        Self::add_vars_section(&mut manifest);
-        Self::add_hook_section(&mut manifest, customization, true);
-        Self::add_profile_section(&mut manifest, customization, true);
-        Self::add_services_section(&mut manifest);
-        Self::add_include_section(&mut manifest);
-        Self::add_build_section(&mut manifest);
-        Self::add_options_section(&mut manifest, systems, customization);
+/// A type holding the different identifiers we've used to represent the schema
+/// version of a manifest.
+///
+/// This is used when we're trying to identify the "shape" of the manifest
+/// while handling its untyped form.
+#[derive(Debug, Clone)]
+pub(crate) enum VersionKind {
+    /// A `version = 1` manifest.
+    Version(u8),
+    /// A `schema-version = "1.9.0"` or later manifest
+    SchemaVersion(String),
+}
 
-        RawManifest(manifest)
-    }
-
-    /// Create a minimal [RawManifest] that is close to what will actually be
-    /// generated, but more concise.
-    /// Note that this isn't a valid TypedManifest because it doesn't include
-    /// version.
-    pub fn new_minimal(customization: &InitCustomization) -> RawManifest {
-        let mut manifest = DocumentMut::new();
-
-        Self::add_install_section(&mut manifest, customization, false);
-        Self::add_hook_section(&mut manifest, customization, false);
-        Self::add_profile_section(&mut manifest, customization, false);
-        // We don't need to call add_options_section because it's only used for
-        // activate mode, which we don't need to print when showing a more
-        // concise manifest to the user
-
-        RawManifest(manifest)
-    }
-
-    /// Get the version of the manifest.
-    fn get_version(&self) -> Option<i64> {
-        self.0.get("version").and_then(Item::as_integer)
-    }
-
-    /// Serde's error messages for _untagged_ enums are rather bad
-    /// and don't appear to become better any time soon:
-    /// - <https://github.com/serde-rs/serde/pull/1544>
-    /// - <https://github.com/serde-rs/serde/pull/2376>
-    ///
-    /// This function aims to provide the intermediate version matching on
-    /// the `version` field, and then deserializes the correct version
-    /// of the Manifest explicitly.
-    ///
-    /// <https://github.com/serde-rs/serde/pull/2525> will allow the use of integers
-    /// (i.e. versions) as enum tags, which will allow us to use `#[serde(tag = "version")]`
-    /// and avoid the [Version] field entirely, where the version field is not optional.
-    ///
-    /// Discussion: using a string field as the version tag `version: "1"` vs `version: 1`
-    /// could work today, but is still limited by the lack of an optional tag.
-    pub fn to_typed(&self) -> Result<Manifest, toml_edit::de::Error> {
-        match self.get_version() {
-            Some(1) | Some(2) => Ok(toml_edit::de::from_document(self.0.clone())?),
-            Some(v) => {
-                let msg = format!("unsupported manifest version: {v}");
-                Err(toml_edit::de::Error::custom(msg))
-            },
-            None => Err(toml_edit::de::Error::custom("unsupported manifest version")),
+pub(crate) fn get_schema_version_ish(toml: &DocumentMut) -> Result<VersionKind, ManifestError> {
+    if let Some(item) = toml.get("version") {
+        if let Some(int) = item.as_integer() {
+            Ok(VersionKind::Version(int as u8))
+        } else {
+            Err(ManifestError::Other(
+                "'version' field must be an integer".into(),
+            ))
         }
+    } else if let Some(item) = toml.get("schema-version") {
+        if let Some(s) = item.as_str() {
+            Ok(VersionKind::SchemaVersion(s.to_string()))
+        } else {
+            Err(ManifestError::Other(
+                "'schema-version' field must be a version string like \"X.Y.Z\"".into(),
+            ))
+        }
+    } else {
+        Err(ManifestError::MissingSchemaVersion)
+    }
+}
+
+#[cfg(test)]
+mod schema_version_tests {
+    use super::*;
+
+    fn parse_toml(s: impl AsRef<str>) -> DocumentMut {
+        s.as_ref().parse::<DocumentMut>().unwrap()
     }
 
-    /// Populates a header at the top of the manifest with a link to
-    /// the documentation.
-    fn add_header(manifest: &mut DocumentMut) {
-        manifest.decor_mut().set_prefix(indoc! {r#"
-            ## Flox Environment Manifest -----------------------------------------
-            ##
-            ##   _Everything_ you need to know about the _manifest_ is here:
-            ##
-            ##   https://flox.dev/docs/reference/command-reference/manifest.toml/
-            ##
-            ## -------------------------------------------------------------------
-            # Flox manifest version managed by Flox CLI
+    #[test]
+    fn missing_schema() {
+        let toml = parse_toml("{}");
+        let err = get_schema_version_ish(&toml).err().unwrap();
+        assert_eq!(err, ManifestError::MissingSchemaVersion);
+    }
+
+    #[test]
+    fn version_wrong_type() {
+        let toml = parse_toml("version = true");
+        let err = get_schema_version_ish(&toml).err().unwrap();
+        assert!(matches!(err, ManifestError::Other(_)));
+    }
+
+    #[test]
+    fn version() {
+        let toml = parse_toml("version = 42");
+        let VersionKind::Version(value) = get_schema_version_ish(&toml).unwrap() else {
+            panic!()
+        };
+        assert_eq!(value, 42);
+    }
+
+    #[test]
+    fn schema_version_wrong_type() {
+        let toml = parse_toml("schema-version = 42");
+        let err = get_schema_version_ish(&toml).err().unwrap();
+        assert!(matches!(err, ManifestError::Other(_)));
+    }
+
+    #[test]
+    fn schema_version() {
+        let toml = parse_toml("version = \"1.9.0\"");
+        let VersionKind::SchemaVersion(value) = get_schema_version_ish(&toml).unwrap() else {
+            panic!()
+        };
+        assert_eq!(value, "1.9.0".to_string());
+    }
+}
+
+/// A profile script or list of packages to install when initializing an environment
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+pub struct InitCustomization {
+    pub hook_on_activate: Option<String>,
+    pub profile_common: Option<String>,
+    pub profile_bash: Option<String>,
+    pub profile_fish: Option<String>,
+    pub profile_tcsh: Option<String>,
+    pub profile_zsh: Option<String>,
+    pub packages: Option<Vec<CatalogPackage>>,
+    pub activate_mode: Option<ActivateMode>,
+}
+
+/// Creates a new [RawManifest] instance, populating its configuration from
+/// fields in `customization` [InitCustomization] and systems [System] arguments.
+///
+/// Additionally, this method prefixes each table with documentation on its usage, and
+/// and inserts commented configuration examples for tables left empty.
+pub fn new_documented(systems: &[&System], customization: &InitCustomization) -> DocumentMut {
+    let mut manifest = DocumentMut::new();
+
+    add_header(&mut manifest);
+    add_version(&mut manifest);
+    add_install_section(&mut manifest, customization, true);
+    add_vars_section(&mut manifest);
+    add_hook_section(&mut manifest, customization, true);
+    add_profile_section(&mut manifest, customization, true);
+    add_services_section(&mut manifest);
+    add_include_section(&mut manifest);
+    add_build_section(&mut manifest);
+    add_options_section(&mut manifest, systems, customization);
+
+    manifest
+}
+
+/// Create a minimal [RawManifest] that is close to what will actually be
+/// generated, but more concise.
+/// Note that this isn't a valid TypedManifest because it doesn't include
+/// version.
+pub fn new_minimal(customization: &InitCustomization) -> DocumentMut {
+    let mut manifest = DocumentMut::new();
+
+    add_install_section(&mut manifest, customization, false);
+    add_hook_section(&mut manifest, customization, false);
+    add_profile_section(&mut manifest, customization, false);
+    // We don't need to call add_options_section because it's only used for
+    // activate mode, which we don't need to print when showing a more
+    // concise manifest to the user
+
+    manifest
+}
+
+/// Get the version of the manifest.
+fn get_version(toml: &DocumentMut) -> Option<i64> {
+    toml.get("version").and_then(Item::as_integer)
+}
+
+/// Populates a header at the top of the manifest with a link to
+/// the documentation.
+fn add_header(manifest: &mut DocumentMut) {
+    manifest.decor_mut().set_prefix(indoc! {r#"
+        ## Flox Environment Manifest -----------------------------------------
+        ##
+        ##   _Everything_ you need to know about the _manifest_ is here:
+        ##
+        ##   https://flox.dev/docs/reference/command-reference/manifest.toml/
+        ##
+        ## -------------------------------------------------------------------
+        # Flox manifest version managed by Flox CLI
+    "#});
+}
+
+/// Populates the manifest schema version.
+fn add_version(manifest: &mut DocumentMut) {
+    // `version` number
+    manifest.insert(MANIFEST_VERSION_KEY, toml_edit::value(1));
+}
+
+/// Populates an example install section with any packages necessary for
+/// init customizations.
+fn add_install_section(
+    manifest: &mut DocumentMut,
+    customization: &InitCustomization,
+    documented: bool,
+) {
+    let packages_vec = vec![];
+    let packages = customization.packages.as_ref().unwrap_or(&packages_vec);
+
+    // We don't want to add an empty [install] table
+    if packages.is_empty() && !documented {
+        return;
+    };
+
+    let mut install_table = if packages.is_empty() {
+        // Add comment with example packages
+        let mut table = Table::new();
+
+        table.decor_mut().set_suffix(indoc! {r#"
+
+            # gum.pkg-path = "gum"
+            # gum.version = "^0.14.5""#
+        });
+
+        table
+    } else {
+        Table::from_iter(packages.iter().map(|pkg| {
+            let mut table = InlineTable::from(pkg);
+            table.set_dotted(true);
+            (&pkg.id, table)
+        }))
+    };
+
+    if documented {
+        install_table.decor_mut().set_prefix(indoc! {r#"
+
+
+        ## Install Packages --------------------------------------------------
+        ##  $ flox install gum  <- puts a package in [install] section below
+        ##  $ flox search gum   <- search for a package
+        ##  $ flox show gum     <- show all versions of a package
+        ## -------------------------------------------------------------------
         "#});
     }
 
-    /// Populates the manifest schema version.
-    fn add_version(manifest: &mut DocumentMut) {
-        // `version` number
-        manifest.insert(MANIFEST_VERSION_KEY, toml_edit::value(1));
+    manifest.insert(MANIFEST_INSTALL_KEY, Item::Table(install_table));
+}
+
+/// Populates an example vars section.
+fn add_vars_section(manifest: &mut DocumentMut) {
+    let mut vars_table = Table::new();
+
+    vars_table.decor_mut().set_prefix(indoc! {r#"
+
+
+        ## Environment Variables ---------------------------------------------
+        ##  ... available for use in the activated environment
+        ##      as well as [hook], [profile] scripts and [services] below.
+        ## -------------------------------------------------------------------
+    "#});
+
+    // [sic]: vars not customized using InitCustomization yet
+    vars_table.decor_mut().set_suffix(indoc! {r#"
+
+        # INTRO_MESSAGE = "It's gettin' Flox in here""#});
+
+    manifest.insert(MANIFEST_VARS_KEY, Item::Table(vars_table));
+}
+
+/// Populates an example hook section with any automatic setup added by
+/// init customizations.
+fn add_hook_section(
+    manifest: &mut DocumentMut,
+    customization: &InitCustomization,
+    documented: bool,
+) {
+    let mut hook_table = Table::new();
+
+    if documented {
+        hook_table.decor_mut().set_prefix(indoc! {r#"
+
+
+            ## Activation Hook ---------------------------------------------------
+            ##  ... run by _bash_ shell when you run 'flox activate'.
+            ## -------------------------------------------------------------------
+        "#});
     }
 
-    /// Populates an example install section with any packages necessary for
-    /// init customizations.
-    fn add_install_section(
-        manifest: &mut DocumentMut,
-        customization: &InitCustomization,
-        documented: bool,
-    ) {
-        let packages_vec = vec![];
-        let packages = customization.packages.as_ref().unwrap_or(&packages_vec);
+    if let Some(ref hook_on_activate_script) = customization.hook_on_activate {
+        let on_activate_content: String = indent::indent_all_by(2, hook_on_activate_script);
 
-        // We don't want to add an empty [install] table
-        if packages.is_empty() && !documented {
+        hook_table.insert("on-activate", toml_edit::value(on_activate_content));
+    } else {
+        // We don't want to add an empty [hook] table
+        if !documented {
             return;
-        };
-
-        let mut install_table = if packages.is_empty() {
-            // Add comment with example packages
-            let mut table = Table::new();
-
-            table.decor_mut().set_suffix(indoc! {r#"
-
-                # gum.pkg-path = "gum"
-                # gum.version = "^0.14.5""#
-            });
-
-            table
-        } else {
-            Table::from_iter(packages.iter().map(|pkg| {
-                let mut table = InlineTable::from(pkg);
-                table.set_dotted(true);
-                (&pkg.id, table)
-            }))
-        };
-
-        if documented {
-            install_table.decor_mut().set_prefix(indoc! {r#"
-
-
-            ## Install Packages --------------------------------------------------
-            ##  $ flox install gum  <- puts a package in [install] section below
-            ##  $ flox search gum   <- search for a package
-            ##  $ flox show gum     <- show all versions of a package
-            ## -------------------------------------------------------------------
-            "#});
         }
+        hook_table.decor_mut().set_suffix(indoc! {r#"
 
-        manifest.insert(MANIFEST_INSTALL_KEY, Item::Table(install_table));
-    }
+            # on-activate = '''
+            #   # -> Set variables, create files and directories
+            #   # -> Perform initialization steps, e.g. create a python venv
+            #   # -> Useful environment variables:
+            #   #      - FLOX_ENV_PROJECT=/home/user/example
+            #   #      - FLOX_ENV=/home/user/example/.flox/run
+            #   #      - FLOX_ENV_CACHE=/home/user/example/.flox/cache
+            # '''"#
+        });
+    };
 
-    /// Populates an example vars section.
-    fn add_vars_section(manifest: &mut DocumentMut) {
-        let mut vars_table = Table::new();
+    manifest.insert(MANIFEST_HOOK_KEY, Item::Table(hook_table));
+}
 
-        vars_table.decor_mut().set_prefix(indoc! {r#"
+/// Populates an example profile section with any automatic setup added by
+/// init customizations.
+fn add_profile_section(
+    manifest: &mut DocumentMut,
+    customization: &InitCustomization,
+    documented: bool,
+) {
+    let mut profile_table = Table::new();
+
+    if documented {
+        profile_table.decor_mut().set_prefix(indoc! {r#"
 
 
-            ## Environment Variables ---------------------------------------------
-            ##  ... available for use in the activated environment
-            ##      as well as [hook], [profile] scripts and [services] below.
+            ## Profile script ----------------------------------------------------
+            ## ... sourced by _your shell_ when you run 'flox activate'.
             ## -------------------------------------------------------------------
         "#});
-
-        // [sic]: vars not customized using InitCustomization yet
-        vars_table.decor_mut().set_suffix(indoc! {r#"
-
-            # INTRO_MESSAGE = "It's gettin' Flox in here""#});
-
-        manifest.insert(MANIFEST_VARS_KEY, Item::Table(vars_table));
     }
 
-    /// Populates an example hook section with any automatic setup added by
-    /// init customizations.
-    fn add_hook_section(
-        manifest: &mut DocumentMut,
-        customization: &InitCustomization,
-        documented: bool,
-    ) {
-        let mut hook_table = Table::new();
-
-        if documented {
-            hook_table.decor_mut().set_prefix(indoc! {r#"
-
-
-                ## Activation Hook ---------------------------------------------------
-                ##  ... run by _bash_ shell when you run 'flox activate'.
-                ## -------------------------------------------------------------------
-            "#});
-        }
-
-        if let Some(ref hook_on_activate_script) = customization.hook_on_activate {
-            let on_activate_content: String = indent::indent_all_by(2, hook_on_activate_script);
-
-            hook_table.insert("on-activate", toml_edit::value(on_activate_content));
-        } else {
-            // We don't want to add an empty [hook] table
+    match customization {
+        InitCustomization {
+            profile_common: None,
+            profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
+            profile_zsh: None,
+            ..
+        } => {
+            // We don't want to add an empty [profile] table
             if !documented {
                 return;
             }
-            hook_table.decor_mut().set_suffix(indoc! {r#"
+            profile_table.decor_mut().set_suffix(indoc! {r#"
 
-                # on-activate = '''
-                #   # -> Set variables, create files and directories
-                #   # -> Perform initialization steps, e.g. create a python venv
-                #   # -> Useful environment variables:
-                #   #      - FLOX_ENV_PROJECT=/home/user/example
-                #   #      - FLOX_ENV=/home/user/example/.flox/run
-                #   #      - FLOX_ENV_CACHE=/home/user/example/.flox/cache
-                # '''"#
+                # common = '''
+                #   gum style \
+                #   --foreground 212 --border-foreground 212 --border double \
+                #   --align center --width 50 --margin "1 2" --padding "2 4" \
+                #     $INTRO_MESSAGE
+                # '''
+                ## Shell-specific customizations such as setting aliases go here:
+                # bash = ...
+                # zsh  = ...
+                # fish = ..."#
             });
-        };
+        },
+        _ => {
+            if let Some(profile_common) = &customization.profile_common {
+                profile_table.insert(
+                    "common",
+                    toml_edit::value(indent::indent_all_by(2, profile_common)),
+                );
+            }
+            if let Some(profile_bash) = &customization.profile_bash {
+                profile_table.insert(
+                    "bash",
+                    toml_edit::value(indent::indent_all_by(2, profile_bash)),
+                );
+            }
+            if let Some(profile_fish) = &customization.profile_fish {
+                profile_table.insert(
+                    "fish",
+                    toml_edit::value(indent::indent_all_by(2, profile_fish)),
+                );
+            }
+            if let Some(profile_tcsh) = &customization.profile_tcsh {
+                profile_table.insert(
+                    "tcsh",
+                    toml_edit::value(indent::indent_all_by(2, profile_tcsh)),
+                );
+            }
+            if let Some(profile_zsh) = &customization.profile_zsh {
+                profile_table.insert(
+                    "zsh",
+                    toml_edit::value(indent::indent_all_by(2, profile_zsh)),
+                );
+            }
+        },
+    };
 
-        manifest.insert(MANIFEST_HOOK_KEY, Item::Table(hook_table));
-    }
+    manifest.insert(MANIFEST_PROFILE_KEY, Item::Table(profile_table));
+}
 
-    /// Populates an example profile section with any automatic setup added by
-    /// init customizations.
-    fn add_profile_section(
-        manifest: &mut DocumentMut,
-        customization: &InitCustomization,
-        documented: bool,
-    ) {
-        let mut profile_table = Table::new();
+/// Populates an example services section.
+fn add_services_section(manifest: &mut DocumentMut) {
+    let mut services_table = Table::new();
 
-        if documented {
-            profile_table.decor_mut().set_prefix(indoc! {r#"
-
-
-                ## Profile script ----------------------------------------------------
-                ## ... sourced by _your shell_ when you run 'flox activate'.
-                ## -------------------------------------------------------------------
-            "#});
-        }
-
-        match customization {
-            InitCustomization {
-                profile_common: None,
-                profile_bash: None,
-                profile_fish: None,
-                profile_tcsh: None,
-                profile_zsh: None,
-                ..
-            } => {
-                // We don't want to add an empty [profile] table
-                if !documented {
-                    return;
-                }
-                profile_table.decor_mut().set_suffix(indoc! {r#"
-
-                    # common = '''
-                    #   gum style \
-                    #   --foreground 212 --border-foreground 212 --border double \
-                    #   --align center --width 50 --margin "1 2" --padding "2 4" \
-                    #     $INTRO_MESSAGE
-                    # '''
-                    ## Shell-specific customizations such as setting aliases go here:
-                    # bash = ...
-                    # zsh  = ...
-                    # fish = ..."#
-                });
-            },
-            _ => {
-                if let Some(profile_common) = &customization.profile_common {
-                    profile_table.insert(
-                        "common",
-                        toml_edit::value(indent::indent_all_by(2, profile_common)),
-                    );
-                }
-                if let Some(profile_bash) = &customization.profile_bash {
-                    profile_table.insert(
-                        "bash",
-                        toml_edit::value(indent::indent_all_by(2, profile_bash)),
-                    );
-                }
-                if let Some(profile_fish) = &customization.profile_fish {
-                    profile_table.insert(
-                        "fish",
-                        toml_edit::value(indent::indent_all_by(2, profile_fish)),
-                    );
-                }
-                if let Some(profile_tcsh) = &customization.profile_tcsh {
-                    profile_table.insert(
-                        "tcsh",
-                        toml_edit::value(indent::indent_all_by(2, profile_tcsh)),
-                    );
-                }
-                if let Some(profile_zsh) = &customization.profile_zsh {
-                    profile_table.insert(
-                        "zsh",
-                        toml_edit::value(indent::indent_all_by(2, profile_zsh)),
-                    );
-                }
-            },
-        };
-
-        manifest.insert(MANIFEST_PROFILE_KEY, Item::Table(profile_table));
-    }
-
-    /// Populates an example services section.
-    fn add_services_section(manifest: &mut DocumentMut) {
-        let mut services_table = Table::new();
-
-        services_table.decor_mut().set_prefix(indoc! {r#"
+    services_table.decor_mut().set_prefix(indoc! {r#"
 
 
-                ## Services ---------------------------------------------------------
-                ##  $ flox services start             <- Starts all services
-                ##  $ flox services status            <- Status of running services
-                ##  $ flox activate --start-services  <- Activates & starts all
-                ## ------------------------------------------------------------------
-            "#});
-
-        services_table.decor_mut().set_suffix(indoc! {r#"
-
-                # myservice.command = "python3 -m http.server""#});
-
-        manifest.insert(MANIFEST_SERVICES_KEY, Item::Table(services_table));
-    }
-
-    /// Populates an example build section.
-    fn add_build_section(manifest: &mut DocumentMut) {
-        let mut build_table = Table::new();
-
-        build_table.decor_mut().set_prefix(indoc! {r#"
-
-
-                 ## Build and publish your own packages ------------------------------
-                 ##  $ flox build
-                 ##  $ flox publish
-                 ## ------------------------------------------------------------------
-            "#});
-
-        build_table.decor_mut().set_suffix(indoc! {r#"
-
-                # [build.myproject]
-                # description = "The coolest project ever"
-                # version = "0.0.1"
-                # command = """
-                #   mkdir -p $out/bin
-                #   cargo build --release
-                #   cp target/release/myproject $out/bin/myproject
-                # """"#});
-
-        manifest.insert(MANIFEST_BUILD_KEY, Item::Table(build_table));
-    }
-
-    /// Populates an example include section.
-    fn add_include_section(manifest: &mut DocumentMut) {
-        let mut include_table = Table::new();
-
-        include_table.decor_mut().set_prefix(indoc! {r#"
-
-
-                 ## Include ----------------------------------------------------------
-                 ## ... environments to create a composed environment
-                 ## ------------------------------------------------------------------
-            "#});
-
-        include_table.decor_mut().set_suffix(indoc! {r#"
-
-                # environments = [
-                #     { dir = "../common" }
-                # ]"#});
-
-        manifest.insert(MANIFEST_INCLUDE_KEY, Item::Table(include_table));
-    }
-
-    /// Populates an example options section.
-    fn add_options_section(
-        manifest: &mut DocumentMut,
-        systems: &[&System],
-        customization: &InitCustomization,
-    ) {
-        let mut options_table = Table::new();
-
-        options_table.decor_mut().set_prefix(indoc! {r#"
-
-
-            ## Other Environment Options -----------------------------------------
+            ## Services ---------------------------------------------------------
+            ##  $ flox services start             <- Starts all services
+            ##  $ flox services status            <- Status of running services
+            ##  $ flox activate --start-services  <- Activates & starts all
+            ## ------------------------------------------------------------------
         "#});
 
-        // `systems` array with custom formatting
-        let these_systems: HashSet<&String> = HashSet::from_iter(systems.iter().cloned());
-        let all_systems = HashSet::from_iter(DEFAULT_SYSTEMS_STR.iter());
-        if these_systems != all_systems {
-            // If somehow we init with something *other* than the default systems,
-            // add those.
-            let mut systems_array = Array::new();
-            for system in systems {
-                let mut item = Value::from(system.to_string());
-                item.decor_mut().set_prefix("\n  "); // Indent each item with two spaces
-                if Some(system) == systems.last() {
-                    item.decor_mut().set_suffix(",\n"); // Add a newline before the first item
-                }
-                systems_array.push_formatted(item);
-            }
+    services_table.decor_mut().set_suffix(indoc! {r#"
 
-            let systems_key = Key::new(MANIFEST_SYSTEMS_KEY);
-            options_table.insert(&systems_key, toml_edit::value(systems_array));
-            if let Some((mut key, _)) = options_table.get_key_value_mut(&systems_key) {
-                key.leaf_decor_mut().set_prefix(indoc! {r#"
-                    # Systems that environment is compatible with
-                    "#});
-            }
-        } else {
-            // If we init with the default systems, we can omit those.
-            options_table.decor_mut().set_suffix(indoc! {r#"
+            # myservice.command = "python3 -m http.server""#});
 
-                # Systems that environment is compatible with
-                # systems = [
-                #   "aarch64-darwin",
-                #   "aarch64-linux",
-                #   "x86_64-darwin",
-                #   "x86_64-linux",
-                # ]"#});
+    manifest.insert(MANIFEST_SERVICES_KEY, Item::Table(services_table));
+}
+
+/// Populates an example build section.
+fn add_build_section(manifest: &mut DocumentMut) {
+    let mut build_table = Table::new();
+
+    build_table.decor_mut().set_prefix(indoc! {r#"
+
+
+             ## Build and publish your own packages ------------------------------
+             ##  $ flox build
+             ##  $ flox publish
+             ## ------------------------------------------------------------------
+        "#});
+
+    build_table.decor_mut().set_suffix(indoc! {r#"
+
+            # [build.myproject]
+            # description = "The coolest project ever"
+            # version = "0.0.1"
+            # command = """
+            #   mkdir -p $out/bin
+            #   cargo build --release
+            #   cp target/release/myproject $out/bin/myproject
+            # """"#});
+
+    manifest.insert(MANIFEST_BUILD_KEY, Item::Table(build_table));
+}
+
+/// Populates an example include section.
+fn add_include_section(manifest: &mut DocumentMut) {
+    let mut include_table = Table::new();
+
+    include_table.decor_mut().set_prefix(indoc! {r#"
+
+
+             ## Include ----------------------------------------------------------
+             ## ... environments to create a composed environment
+             ## ------------------------------------------------------------------
+        "#});
+
+    include_table.decor_mut().set_suffix(indoc! {r#"
+
+            # environments = [
+            #     { dir = "../common" }
+            # ]"#});
+
+    manifest.insert(MANIFEST_INCLUDE_KEY, Item::Table(include_table));
+}
+
+/// Populates an example options section.
+fn add_options_section(
+    manifest: &mut DocumentMut,
+    systems: &[&System],
+    customization: &InitCustomization,
+) {
+    let mut options_table = Table::new();
+
+    options_table.decor_mut().set_prefix(indoc! {r#"
+
+
+        ## Other Environment Options -----------------------------------------
+    "#});
+
+    // `systems` array with custom formatting
+    let these_systems: HashSet<String> = HashSet::from_iter(systems.iter().map(|s| (*s).clone()));
+    let all_systems = HashSet::from_iter(DEFAULT_SYSTEMS_STR.iter().cloned());
+    if these_systems != all_systems {
+        // If somehow we init with something *other* than the default systems,
+        // add those.
+        let mut systems_array = Array::new();
+        for system in systems {
+            let mut item = Value::from(system.to_string());
+            item.decor_mut().set_prefix("\n  "); // Indent each item with two spaces
+            if Some(system) == systems.last() {
+                item.decor_mut().set_suffix(",\n"); // Add a newline before the first item
+            }
+            systems_array.push_formatted(item);
         }
 
-        let cuda_detection_key = Key::new("cuda-detection");
-        options_table.insert(&cuda_detection_key, toml_edit::value(false));
-        if let Some((mut key, _)) = options_table.get_key_value_mut(&cuda_detection_key) {
+        let systems_key = Key::new(MANIFEST_SYSTEMS_KEY);
+        options_table.insert(&systems_key, toml_edit::value(systems_array));
+        if let Some((mut key, _)) = options_table.get_key_value_mut(&systems_key) {
             key.leaf_decor_mut().set_prefix(indoc! {r#"
-            # Uncomment to disable CUDA detection.
-            # "#});
+                # Systems that environment is compatible with
+                "#});
         }
+    } else {
+        // If we init with the default systems, we can omit those.
+        options_table.decor_mut().set_suffix(indoc! {r#"
 
-        // `options.activate.mode`, only when customized.
-        if let Some(activate_mode) = &customization.activate_mode {
-            let activate_key = Key::new("activate");
-            let mut activate_table = Table::new();
-
-            let mode_key = Key::new("mode");
-            activate_table.insert(&mode_key, toml_edit::value(activate_mode.to_string()));
-            options_table.insert(&activate_key, Item::Table(activate_table));
-        }
-
-        manifest.insert(MANIFEST_OPTIONS_KEY, Item::Table(options_table));
+            # Systems that environment is compatible with
+            # systems = [
+            #   "aarch64-darwin",
+            #   "aarch64-linux",
+            #   "x86_64-darwin",
+            #   "x86_64-linux",
+            # ]"#});
     }
+
+    let cuda_detection_key = Key::new("cuda-detection");
+    options_table.insert(&cuda_detection_key, toml_edit::value(false));
+    if let Some((mut key, _)) = options_table.get_key_value_mut(&cuda_detection_key) {
+        key.leaf_decor_mut().set_prefix(indoc! {r#"
+        # Uncomment to disable CUDA detection.
+        # "#});
+    }
+
+    // `options.activate.mode`, only when customized.
+    if let Some(activate_mode) = &customization.activate_mode {
+        let activate_key = Key::new("activate");
+        let mut activate_table = Table::new();
+
+        let mode_key = Key::new("mode");
+        activate_table.insert(&mode_key, toml_edit::value(activate_mode.to_string()));
+        options_table.insert(&activate_key, Item::Table(activate_table));
+    }
+
+    manifest.insert(MANIFEST_OPTIONS_KEY, Item::Table(options_table));
 }
 
-impl FromStr for RawManifest {
-    type Err = toml_edit::de::Error;
-
-    /// Parses a string to a `ManifestMut` and validates that it's a valid manifest
-    /// Validation is currently only checking the structure of the manifest,
-    /// not the precise contents.
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let doc = s.parse::<DocumentMut>()?;
-        let manifest = RawManifest(doc);
-        let _validate = manifest.to_typed()?;
-        Ok(manifest)
-    }
-}
-
-impl Deref for RawManifest {
-    type Target = DocumentMut;
-
-    // Allows accessing the [DocumentMut] instance wrapped by [RawManifest].
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for RawManifest {
-    // Allows accessing the mutable [DocumentMut] instance wrapped by [RawManifest].
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
+// FIXME: need a method for parsing *and* validating the contents of a manifest
+pub fn parse_and_validate(_s: &str) {
+    todo!()
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -522,6 +562,8 @@ pub enum TomlEditError {
     /// The provided string couldn't be parsed into a valid TOML document
     #[error("couldn't parse manifest contents: {0}")]
     ParseManifest(toml_edit::de::Error),
+    #[error("couldn't parse manifest contents: {0}")]
+    ParseToml(toml_edit::TomlError),
     /// The provided string was a valid TOML file, but it didn't have
     /// the format that we anticipated.
     #[error("'install' must be a table, but found {0} instead")]
@@ -1010,11 +1052,9 @@ pub fn insert_packages(
 ) -> Result<PackageInsertion, TomlEditError> {
     debug!("attempting to insert packages into manifest");
     let mut already_installed: HashMap<String, bool> = HashMap::new();
-    let manifest = manifest_contents
-        .parse::<RawManifest>()
-        .map_err(TomlEditError::ParseManifest)?;
-
-    let mut toml = manifest.0;
+    let mut toml = manifest_contents
+        .parse::<DocumentMut>()
+        .map_err(TomlEditError::ParseToml)?;
 
     let install_table = {
         let install_field = toml
@@ -1094,9 +1134,8 @@ pub fn remove_packages(
 ) -> Result<DocumentMut, TomlEditError> {
     debug!("attempting to remove packages from the manifest");
     let mut toml = manifest_contents
-        .parse::<RawManifest>()
-        .map_err(TomlEditError::ParseManifest)?
-        .0;
+        .parse::<DocumentMut>()
+        .map_err(TomlEditError::ParseToml)?;
 
     let installs_table = {
         let installs_field = toml
@@ -1143,9 +1182,8 @@ pub fn contains_package(toml: &DocumentMut, pkg_name: &str) -> Result<bool, Toml
 /// Add a `system` to the `[options.systems]` array of a manifest
 pub fn add_system(toml: &str, system: &str) -> Result<DocumentMut, TomlEditError> {
     let mut doc = toml
-        .parse::<RawManifest>()
-        .map_err(TomlEditError::ParseManifest)?
-        .0;
+        .parse::<DocumentMut>()
+        .map_err(TomlEditError::ParseToml)?;
 
     // extract the `[options]` table
     let options_table = doc
@@ -1191,8 +1229,6 @@ pub(super) mod test {
     use proptest_derive::Arbitrary;
 
     use super::*;
-    use crate::models::lockfile::DEFAULT_SYSTEMS_STR;
-    use crate::models::manifest::typed::ActivateMode;
 
     const DUMMY_MANIFEST: &str = indoc! {r#"
         version = 1
@@ -1220,609 +1256,6 @@ pub(super) mod test {
     const CATALOG_MANIFEST: &str = indoc! {r#"
         version = 1
     "#};
-
-    #[test]
-    fn create_documented_manifest_not_customized() {
-        let systems = &*DEFAULT_SYSTEMS_STR.iter().collect::<Vec<_>>();
-        let customization = InitCustomization {
-            ..Default::default()
-        };
-
-        let expected_string = indoc! {r#"
-            ## Flox Environment Manifest -----------------------------------------
-            ##
-            ##   _Everything_ you need to know about the _manifest_ is here:
-            ##
-            ##   https://flox.dev/docs/reference/command-reference/manifest.toml/
-            ##
-            ## -------------------------------------------------------------------
-            # Flox manifest version managed by Flox CLI
-            version = 1
-
-
-            ## Install Packages --------------------------------------------------
-            ##  $ flox install gum  <- puts a package in [install] section below
-            ##  $ flox search gum   <- search for a package
-            ##  $ flox show gum     <- show all versions of a package
-            ## -------------------------------------------------------------------
-            [install]
-            # gum.pkg-path = "gum"
-            # gum.version = "^0.14.5"
-
-
-            ## Environment Variables ---------------------------------------------
-            ##  ... available for use in the activated environment
-            ##      as well as [hook], [profile] scripts and [services] below.
-            ## -------------------------------------------------------------------
-            [vars]
-            # INTRO_MESSAGE = "It's gettin' Flox in here"
-
-
-            ## Activation Hook ---------------------------------------------------
-            ##  ... run by _bash_ shell when you run 'flox activate'.
-            ## -------------------------------------------------------------------
-            [hook]
-            # on-activate = '''
-            #   # -> Set variables, create files and directories
-            #   # -> Perform initialization steps, e.g. create a python venv
-            #   # -> Useful environment variables:
-            #   #      - FLOX_ENV_PROJECT=/home/user/example
-            #   #      - FLOX_ENV=/home/user/example/.flox/run
-            #   #      - FLOX_ENV_CACHE=/home/user/example/.flox/cache
-            # '''
-
-
-            ## Profile script ----------------------------------------------------
-            ## ... sourced by _your shell_ when you run 'flox activate'.
-            ## -------------------------------------------------------------------
-            [profile]
-            # common = '''
-            #   gum style \
-            #   --foreground 212 --border-foreground 212 --border double \
-            #   --align center --width 50 --margin "1 2" --padding "2 4" \
-            #     $INTRO_MESSAGE
-            # '''
-            ## Shell-specific customizations such as setting aliases go here:
-            # bash = ...
-            # zsh  = ...
-            # fish = ...
-
-
-            ## Services ---------------------------------------------------------
-            ##  $ flox services start             <- Starts all services
-            ##  $ flox services status            <- Status of running services
-            ##  $ flox activate --start-services  <- Activates & starts all
-            ## ------------------------------------------------------------------
-            [services]
-            # myservice.command = "python3 -m http.server"
-
-
-            ## Include ----------------------------------------------------------
-            ## ... environments to create a composed environment
-            ## ------------------------------------------------------------------
-            [include]
-            # environments = [
-            #     { dir = "../common" }
-            # ]
-
-
-            ## Build and publish your own packages ------------------------------
-            ##  $ flox build
-            ##  $ flox publish
-            ## ------------------------------------------------------------------
-            [build]
-            # [build.myproject]
-            # description = "The coolest project ever"
-            # version = "0.0.1"
-            # command = """
-            #   mkdir -p $out/bin
-            #   cargo build --release
-            #   cp target/release/myproject $out/bin/myproject
-            # """
-
-
-            ## Other Environment Options -----------------------------------------
-            [options]
-            # Systems that environment is compatible with
-            # systems = [
-            #   "aarch64-darwin",
-            #   "aarch64-linux",
-            #   "x86_64-darwin",
-            #   "x86_64-linux",
-            # ]
-            # Uncomment to disable CUDA detection.
-            # cuda-detection = false
-        "#};
-
-        let manifest = RawManifest::new_documented(Features::default(), systems, &customization);
-        assert_eq!(manifest.to_string(), expected_string.to_string());
-        manifest.to_typed().expect("should parse as typed");
-    }
-
-    #[test]
-    fn create_documented_manifest_with_packages() {
-        let systems = &*DEFAULT_SYSTEMS_STR.iter().collect::<Vec<_>>();
-        let customization = InitCustomization {
-            packages: Some(vec![CatalogPackage {
-                id: "python3".to_string(),
-                pkg_path: "python3".to_string(),
-                version: Some("3.11.6".to_string()),
-                systems: None,
-                outputs: None,
-            }]),
-            ..Default::default()
-        };
-
-        let expected_string = indoc! {r#"
-            ## Flox Environment Manifest -----------------------------------------
-            ##
-            ##   _Everything_ you need to know about the _manifest_ is here:
-            ##
-            ##   https://flox.dev/docs/reference/command-reference/manifest.toml/
-            ##
-            ## -------------------------------------------------------------------
-            # Flox manifest version managed by Flox CLI
-            version = 1
-
-
-            ## Install Packages --------------------------------------------------
-            ##  $ flox install gum  <- puts a package in [install] section below
-            ##  $ flox search gum   <- search for a package
-            ##  $ flox show gum     <- show all versions of a package
-            ## -------------------------------------------------------------------
-            [install]
-            python3.pkg-path = "python3"
-            python3.version = "3.11.6"
-
-
-            ## Environment Variables ---------------------------------------------
-            ##  ... available for use in the activated environment
-            ##      as well as [hook], [profile] scripts and [services] below.
-            ## -------------------------------------------------------------------
-            [vars]
-            # INTRO_MESSAGE = "It's gettin' Flox in here"
-
-
-            ## Activation Hook ---------------------------------------------------
-            ##  ... run by _bash_ shell when you run 'flox activate'.
-            ## -------------------------------------------------------------------
-            [hook]
-            # on-activate = '''
-            #   # -> Set variables, create files and directories
-            #   # -> Perform initialization steps, e.g. create a python venv
-            #   # -> Useful environment variables:
-            #   #      - FLOX_ENV_PROJECT=/home/user/example
-            #   #      - FLOX_ENV=/home/user/example/.flox/run
-            #   #      - FLOX_ENV_CACHE=/home/user/example/.flox/cache
-            # '''
-
-
-            ## Profile script ----------------------------------------------------
-            ## ... sourced by _your shell_ when you run 'flox activate'.
-            ## -------------------------------------------------------------------
-            [profile]
-            # common = '''
-            #   gum style \
-            #   --foreground 212 --border-foreground 212 --border double \
-            #   --align center --width 50 --margin "1 2" --padding "2 4" \
-            #     $INTRO_MESSAGE
-            # '''
-            ## Shell-specific customizations such as setting aliases go here:
-            # bash = ...
-            # zsh  = ...
-            # fish = ...
-
-
-            ## Services ---------------------------------------------------------
-            ##  $ flox services start             <- Starts all services
-            ##  $ flox services status            <- Status of running services
-            ##  $ flox activate --start-services  <- Activates & starts all
-            ## ------------------------------------------------------------------
-            [services]
-            # myservice.command = "python3 -m http.server"
-
-
-            ## Include ----------------------------------------------------------
-            ## ... environments to create a composed environment
-            ## ------------------------------------------------------------------
-            [include]
-            # environments = [
-            #     { dir = "../common" }
-            # ]
-
-
-            ## Build and publish your own packages ------------------------------
-            ##  $ flox build
-            ##  $ flox publish
-            ## ------------------------------------------------------------------
-            [build]
-            # [build.myproject]
-            # description = "The coolest project ever"
-            # version = "0.0.1"
-            # command = """
-            #   mkdir -p $out/bin
-            #   cargo build --release
-            #   cp target/release/myproject $out/bin/myproject
-            # """
-
-
-            ## Other Environment Options -----------------------------------------
-            [options]
-            # Systems that environment is compatible with
-            # systems = [
-            #   "aarch64-darwin",
-            #   "aarch64-linux",
-            #   "x86_64-darwin",
-            #   "x86_64-linux",
-            # ]
-            # Uncomment to disable CUDA detection.
-            # cuda-detection = false
-        "#};
-
-        let manifest = RawManifest::new_documented(Features::default(), systems, &customization);
-        assert_eq!(manifest.to_string(), expected_string.to_string());
-        manifest.to_typed().expect("should parse as typed");
-    }
-
-    #[test]
-    fn create_documented_manifest_hook() {
-        let systems = [&"x86_64-linux".to_string()];
-        let customization = InitCustomization {
-            hook_on_activate: Some(
-                indoc! {r#"
-                    # Print something
-                    echo "hello world"
-
-                    # Set a environment variable
-                    $FOO="bar"
-                "#}
-                .to_string(),
-            ),
-            ..Default::default()
-        };
-
-        let expected_string = indoc! {r#"
-            ## Flox Environment Manifest -----------------------------------------
-            ##
-            ##   _Everything_ you need to know about the _manifest_ is here:
-            ##
-            ##   https://flox.dev/docs/reference/command-reference/manifest.toml/
-            ##
-            ## -------------------------------------------------------------------
-            # Flox manifest version managed by Flox CLI
-            version = 1
-
-
-            ## Install Packages --------------------------------------------------
-            ##  $ flox install gum  <- puts a package in [install] section below
-            ##  $ flox search gum   <- search for a package
-            ##  $ flox show gum     <- show all versions of a package
-            ## -------------------------------------------------------------------
-            [install]
-            # gum.pkg-path = "gum"
-            # gum.version = "^0.14.5"
-
-
-            ## Environment Variables ---------------------------------------------
-            ##  ... available for use in the activated environment
-            ##      as well as [hook], [profile] scripts and [services] below.
-            ## -------------------------------------------------------------------
-            [vars]
-            # INTRO_MESSAGE = "It's gettin' Flox in here"
-
-
-            ## Activation Hook ---------------------------------------------------
-            ##  ... run by _bash_ shell when you run 'flox activate'.
-            ## -------------------------------------------------------------------
-            [hook]
-            on-activate = """
-              # Print something
-              echo "hello world"
-
-              # Set a environment variable
-              $FOO="bar"
-            """
-
-
-            ## Profile script ----------------------------------------------------
-            ## ... sourced by _your shell_ when you run 'flox activate'.
-            ## -------------------------------------------------------------------
-            [profile]
-            # common = '''
-            #   gum style \
-            #   --foreground 212 --border-foreground 212 --border double \
-            #   --align center --width 50 --margin "1 2" --padding "2 4" \
-            #     $INTRO_MESSAGE
-            # '''
-            ## Shell-specific customizations such as setting aliases go here:
-            # bash = ...
-            # zsh  = ...
-            # fish = ...
-
-
-            ## Services ---------------------------------------------------------
-            ##  $ flox services start             <- Starts all services
-            ##  $ flox services status            <- Status of running services
-            ##  $ flox activate --start-services  <- Activates & starts all
-            ## ------------------------------------------------------------------
-            [services]
-            # myservice.command = "python3 -m http.server"
-
-
-            ## Include ----------------------------------------------------------
-            ## ... environments to create a composed environment
-            ## ------------------------------------------------------------------
-            [include]
-            # environments = [
-            #     { dir = "../common" }
-            # ]
-
-
-            ## Build and publish your own packages ------------------------------
-            ##  $ flox build
-            ##  $ flox publish
-            ## ------------------------------------------------------------------
-            [build]
-            # [build.myproject]
-            # description = "The coolest project ever"
-            # version = "0.0.1"
-            # command = """
-            #   mkdir -p $out/bin
-            #   cargo build --release
-            #   cp target/release/myproject $out/bin/myproject
-            # """
-
-
-            ## Other Environment Options -----------------------------------------
-            [options]
-            # Systems that environment is compatible with
-            systems = [
-              "x86_64-linux",
-            ]
-            # Uncomment to disable CUDA detection.
-            # cuda-detection = false
-        "#};
-
-        let manifest =
-            RawManifest::new_documented(Features::default(), systems.as_slice(), &customization);
-        assert_eq!(manifest.to_string(), expected_string.to_string());
-        manifest.to_typed().expect("should parse as typed");
-    }
-
-    #[test]
-    fn create_documented_profile_script() {
-        let systems = [&"x86_64-linux".to_string()];
-        let customization = InitCustomization {
-            profile_common: Some(
-                indoc! { r#"
-                    echo "Hello from Flox"
-                "#}
-                .to_string(),
-            ),
-            ..Default::default()
-        };
-
-        let expected_string = indoc! {r#"
-            ## Flox Environment Manifest -----------------------------------------
-            ##
-            ##   _Everything_ you need to know about the _manifest_ is here:
-            ##
-            ##   https://flox.dev/docs/reference/command-reference/manifest.toml/
-            ##
-            ## -------------------------------------------------------------------
-            # Flox manifest version managed by Flox CLI
-            version = 1
-
-
-            ## Install Packages --------------------------------------------------
-            ##  $ flox install gum  <- puts a package in [install] section below
-            ##  $ flox search gum   <- search for a package
-            ##  $ flox show gum     <- show all versions of a package
-            ## -------------------------------------------------------------------
-            [install]
-            # gum.pkg-path = "gum"
-            # gum.version = "^0.14.5"
-
-
-            ## Environment Variables ---------------------------------------------
-            ##  ... available for use in the activated environment
-            ##      as well as [hook], [profile] scripts and [services] below.
-            ## -------------------------------------------------------------------
-            [vars]
-            # INTRO_MESSAGE = "It's gettin' Flox in here"
-
-
-            ## Activation Hook ---------------------------------------------------
-            ##  ... run by _bash_ shell when you run 'flox activate'.
-            ## -------------------------------------------------------------------
-            [hook]
-            # on-activate = '''
-            #   # -> Set variables, create files and directories
-            #   # -> Perform initialization steps, e.g. create a python venv
-            #   # -> Useful environment variables:
-            #   #      - FLOX_ENV_PROJECT=/home/user/example
-            #   #      - FLOX_ENV=/home/user/example/.flox/run
-            #   #      - FLOX_ENV_CACHE=/home/user/example/.flox/cache
-            # '''
-
-
-            ## Profile script ----------------------------------------------------
-            ## ... sourced by _your shell_ when you run 'flox activate'.
-            ## -------------------------------------------------------------------
-            [profile]
-            common = """
-              echo "Hello from Flox"
-            """
-
-
-            ## Services ---------------------------------------------------------
-            ##  $ flox services start             <- Starts all services
-            ##  $ flox services status            <- Status of running services
-            ##  $ flox activate --start-services  <- Activates & starts all
-            ## ------------------------------------------------------------------
-            [services]
-            # myservice.command = "python3 -m http.server"
-
-
-            ## Include ----------------------------------------------------------
-            ## ... environments to create a composed environment
-            ## ------------------------------------------------------------------
-            [include]
-            # environments = [
-            #     { dir = "../common" }
-            # ]
-
-
-            ## Build and publish your own packages ------------------------------
-            ##  $ flox build
-            ##  $ flox publish
-            ## ------------------------------------------------------------------
-            [build]
-            # [build.myproject]
-            # description = "The coolest project ever"
-            # version = "0.0.1"
-            # command = """
-            #   mkdir -p $out/bin
-            #   cargo build --release
-            #   cp target/release/myproject $out/bin/myproject
-            # """
-
-
-            ## Other Environment Options -----------------------------------------
-            [options]
-            # Systems that environment is compatible with
-            systems = [
-              "x86_64-linux",
-            ]
-            # Uncomment to disable CUDA detection.
-            # cuda-detection = false
-        "#};
-
-        let manifest =
-            RawManifest::new_documented(Features::default(), systems.as_slice(), &customization);
-        assert_eq!(manifest.to_string(), expected_string.to_string());
-        manifest.to_typed().expect("should parse as typed");
-    }
-
-    #[test]
-    fn create_documented_manifest_with_activate_mode() {
-        let systems = [&"x86_64-linux".to_string()];
-        let customization = InitCustomization {
-            activate_mode: Some(ActivateMode::Run),
-            ..Default::default()
-        };
-
-        let expected_string = indoc! {r#"
-            ## Flox Environment Manifest -----------------------------------------
-            ##
-            ##   _Everything_ you need to know about the _manifest_ is here:
-            ##
-            ##   https://flox.dev/docs/reference/command-reference/manifest.toml/
-            ##
-            ## -------------------------------------------------------------------
-            # Flox manifest version managed by Flox CLI
-            version = 1
-
-
-            ## Install Packages --------------------------------------------------
-            ##  $ flox install gum  <- puts a package in [install] section below
-            ##  $ flox search gum   <- search for a package
-            ##  $ flox show gum     <- show all versions of a package
-            ## -------------------------------------------------------------------
-            [install]
-            # gum.pkg-path = "gum"
-            # gum.version = "^0.14.5"
-
-
-            ## Environment Variables ---------------------------------------------
-            ##  ... available for use in the activated environment
-            ##      as well as [hook], [profile] scripts and [services] below.
-            ## -------------------------------------------------------------------
-            [vars]
-            # INTRO_MESSAGE = "It's gettin' Flox in here"
-
-
-            ## Activation Hook ---------------------------------------------------
-            ##  ... run by _bash_ shell when you run 'flox activate'.
-            ## -------------------------------------------------------------------
-            [hook]
-            # on-activate = '''
-            #   # -> Set variables, create files and directories
-            #   # -> Perform initialization steps, e.g. create a python venv
-            #   # -> Useful environment variables:
-            #   #      - FLOX_ENV_PROJECT=/home/user/example
-            #   #      - FLOX_ENV=/home/user/example/.flox/run
-            #   #      - FLOX_ENV_CACHE=/home/user/example/.flox/cache
-            # '''
-
-
-            ## Profile script ----------------------------------------------------
-            ## ... sourced by _your shell_ when you run 'flox activate'.
-            ## -------------------------------------------------------------------
-            [profile]
-            # common = '''
-            #   gum style \
-            #   --foreground 212 --border-foreground 212 --border double \
-            #   --align center --width 50 --margin "1 2" --padding "2 4" \
-            #     $INTRO_MESSAGE
-            # '''
-            ## Shell-specific customizations such as setting aliases go here:
-            # bash = ...
-            # zsh  = ...
-            # fish = ...
-
-
-            ## Services ---------------------------------------------------------
-            ##  $ flox services start             <- Starts all services
-            ##  $ flox services status            <- Status of running services
-            ##  $ flox activate --start-services  <- Activates & starts all
-            ## ------------------------------------------------------------------
-            [services]
-            # myservice.command = "python3 -m http.server"
-
-
-            ## Include ----------------------------------------------------------
-            ## ... environments to create a composed environment
-            ## ------------------------------------------------------------------
-            [include]
-            # environments = [
-            #     { dir = "../common" }
-            # ]
-
-
-            ## Build and publish your own packages ------------------------------
-            ##  $ flox build
-            ##  $ flox publish
-            ## ------------------------------------------------------------------
-            [build]
-            # [build.myproject]
-            # description = "The coolest project ever"
-            # version = "0.0.1"
-            # command = """
-            #   mkdir -p $out/bin
-            #   cargo build --release
-            #   cp target/release/myproject $out/bin/myproject
-            # """
-
-
-            ## Other Environment Options -----------------------------------------
-            [options]
-            # Systems that environment is compatible with
-            systems = [
-              "x86_64-linux",
-            ]
-            # Uncomment to disable CUDA detection.
-            # cuda-detection = false
-
-            [options.activate]
-            mode = "run"
-        "#};
-
-        let manifest =
-            RawManifest::new_documented(Features::default(), systems.as_slice(), &customization);
-        assert_eq!(manifest.to_string(), expected_string.to_string());
-        manifest.to_typed().expect("should parse as typed");
-    }
 
     #[test]
     fn insert_adds_new_package() {

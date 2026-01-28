@@ -45,6 +45,16 @@ impl ShallowMerger {
     }
 
     #[instrument(skip_all)]
+    fn merge_schema_version(
+        _low_priority: String,
+        high_priority: String,
+    ) -> Result<String, MergeError> {
+        // To be consistent with other "composing manfiest wins" behaviors,
+        // the higher priority manifest determines the manifest schema version.
+        Ok(high_priority)
+    }
+
+    #[instrument(skip_all)]
     fn merge_install(
         low_priority: &Install,
         high_priority: &Install,

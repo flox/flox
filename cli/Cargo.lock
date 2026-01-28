@@ -1317,6 +1317,7 @@ dependencies = [
  "derive_more",
  "dirs",
  "flox-core",
+ "flox-manifest",
  "flox-rust-sdk",
  "flox-test-utils",
  "fslock",
@@ -1416,11 +1417,13 @@ dependencies = [
  "derive_more",
  "flox-core",
  "flox-test-utils",
+ "indent",
  "indoc",
  "itertools",
  "pretty_assertions",
  "proptest",
  "proptest-derive",
+ "reqwest",
  "schemars 1.2.0",
  "serde",
  "serde_json",
@@ -1430,6 +1433,7 @@ dependencies = [
  "toml",
  "toml_edit",
  "tracing",
+ "url-escape",
 ]
 
 [[package]]

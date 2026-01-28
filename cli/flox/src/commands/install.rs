@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
-use flox_rust_sdk::flox::{DEFAULT_NAME, Flox, RemoteEnvironmentRef};
+use flox_core::data::environment_ref::{DEFAULT_NAME, RemoteEnvironmentRef};
+use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::{
     RemoteEnvironment,

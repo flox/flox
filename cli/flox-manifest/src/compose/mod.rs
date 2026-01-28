@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::{self, Display, Formatter};
 mod shallow;
-use enum_dispatch::enum_dispatch;
 #[cfg(test)]
 use proptest::prelude::*;
 use schemars::JsonSchema;
@@ -10,7 +9,9 @@ pub(crate) use shallow::ShallowMerger;
 use thiserror::Error;
 use tracing::{debug, instrument};
 
-use super::typed::{ContainerizeConfig, Inner, Manifest, impl_into_inner};
+use super::parsed::common::ContainerizeConfig;
+use crate::Manifest;
+use crate::parsed::{Inner, impl_into_inner};
 
 // TODO: Pass the actual name in.
 pub static COMPOSER_MANIFEST_ID: &str = "Current manifest";
@@ -104,9 +105,22 @@ pub(crate) struct CompositeManifest {
 }
 
 #[derive(Clone, Debug)]
-#[enum_dispatch(ManifestMergeTrait)]
 pub(crate) enum ManifestMerger {
     Shallow(ShallowMerger),
+}
+
+impl ManifestMergeTrait for ManifestMerger {
+    fn merge(
+        &self,
+        low_priority: &Manifest,
+        high_priority: &Manifest,
+    ) -> Result<(Manifest, Vec<Warning>), MergeError> {
+        match self {
+            ManifestMerger::Shallow(shallow_merger) => {
+                shallow_merger.merge(low_priority, high_priority)
+            },
+        }
+    }
 }
 
 impl CompositeManifest {
@@ -156,7 +170,6 @@ impl CompositeManifest {
 
 /// Strategy for merging two manifests which can then be applied iteratively for
 /// multiple manifests.
-#[enum_dispatch]
 trait ManifestMergeTrait {
     fn merge(
         &self,
@@ -364,7 +377,7 @@ pub fn new_package_overrides(old_ids: &[String], new_ids: &[String]) -> Vec<Stri
 mod tests {
     use super::shallow::ShallowMerger;
     use super::*;
-    use crate::models::manifest::typed::{Inner, Profile, Vars};
+    use crate::parsed::common::Profile;
 
     #[test]
     fn composite_manifest_runs_merger() {

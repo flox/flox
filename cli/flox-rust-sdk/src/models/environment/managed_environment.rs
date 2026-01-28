@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{fs, io};
 
+use flox_core::data::environment_ref::{EnvironmentName, EnvironmentOwner, RemoteEnvironmentRef};
 use thiserror::Error;
 use tracing::{debug, instrument};
 
@@ -38,7 +39,7 @@ use super::{
     services_socket_path,
 };
 use crate::data::CanonicalPath;
-use crate::flox::{Flox, RemoteEnvironmentRef};
+use crate::flox::Flox;
 use crate::models::env_registry::{EnvRegistryError, deregister, ensure_registered};
 use crate::models::environment::floxmeta_branch::{
     BranchOrd,
@@ -49,7 +50,6 @@ use crate::models::environment::floxmeta_branch::{
     write_generation_lock,
 };
 use crate::models::environment::{LOCKFILE_FILENAME, copy_dir_recursive};
-use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmeta::{FloxMetaError, floxmeta_git_options};
 use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, FlakePackage, PackageToInstall, StorePath};

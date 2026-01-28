@@ -16,13 +16,19 @@ systemd.workspace = true
 derive_more.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
+indent.workspace = true
+reqwest.workspace = true
+url-escape.workspace = true
+flox-core.workspace = true
 
 # should be in dev-dependencies but test doesn't apply across crates
 proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
 flox-test-utils = { workspace = true, optional = true }
-flox-core = { workspace = true, optional = true }
 pretty_assertions = { workspace = true, optional = true }
+
+[dev-dependencies]
+flox-core = { workspace = true, features = ["tests"] }
 
 [features]
 tests = [
@@ -30,5 +36,4 @@ tests = [
     "dep:proptest-derive",
     "dep:pretty_assertions",
     "dep:flox-test-utils",
-    "dep:flox-core"
 ]

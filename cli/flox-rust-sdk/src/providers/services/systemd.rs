@@ -2,10 +2,10 @@
 
 use std::io;
 
+use flox_core::data::environment_ref::ActivateEnvironmentRef;
 use shell_escape::escape;
 use systemd::unit::ServiceUnit;
 
-use crate::models::environment_ref::ActivateEnvironmentRef;
 use crate::models::manifest::typed::{Inner, ServiceDescriptor};
 
 /// Wrap a command with Flox activation.
@@ -141,12 +141,12 @@ mod tests {
     use std::collections::BTreeMap;
     use std::path::Path;
 
+    use flox_core::data::environment_ref::RemoteEnvironmentRef;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use systemd::unit::{Service, ServiceType, ServiceUnit, Unit};
 
     use super::*;
-    use crate::models::environment_ref::RemoteEnvironmentRef;
     use crate::models::manifest::typed::{ServiceDescriptor, ServiceShutdown, Vars};
 
     fn project_env_ref() -> ActivateEnvironmentRef {

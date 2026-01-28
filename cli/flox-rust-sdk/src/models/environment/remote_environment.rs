@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use flox_core::data::environment_ref::{EnvironmentName, EnvironmentOwner, RemoteEnvironmentRef};
 use thiserror::Error;
 use tracing::debug;
 
@@ -29,7 +30,7 @@ use super::{
     UninstallationAttempt,
     gcroots_dir,
 };
-use crate::flox::{EnvironmentOwner, Flox, RemoteEnvironmentRef};
+use crate::flox::Flox;
 use crate::models::environment::floxmeta_branch::{
     BranchOrd,
     FloxmetaBranch,
@@ -40,7 +41,6 @@ use crate::models::environment::floxmeta_branch::{
 use crate::models::environment::managed_environment::GENERATION_LOCK_FILENAME;
 use crate::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use crate::models::environment::{PathPointer, RenderedEnvironmentLink};
-use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::PackageToInstall;
 use crate::models::manifest::typed::ActivateMode;

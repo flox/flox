@@ -16,6 +16,7 @@ use flox_test_utils::proptest::{
     optional_vec_of_strings,
 };
 use indoc::formatdoc;
+use itertools::Itertools;
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use schemars::JsonSchema;
@@ -23,7 +24,8 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use systemd::unit::ServiceUnit;
 
-use crate::parsed::{ManifestError, SkipSerializing, impl_into_inner};
+use crate::ManifestError;
+use crate::parsed::{SkipSerializing, impl_into_inner};
 
 pub(crate) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub const DEFAULT_PRIORITY: u64 = 5;

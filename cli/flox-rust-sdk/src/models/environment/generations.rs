@@ -26,6 +26,7 @@ use std::{env, fs};
 use chrono::{DateTime, Utc};
 use enum_dispatch::enum_dispatch;
 use flox_core::Version;
+use flox_core::data::environment_ref::EnvironmentName;
 use itertools::Itertools;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -44,7 +45,7 @@ use super::{
     LOCKFILE_FILENAME,
     copy_dir_recursive,
 };
-use crate::flox::{EnvironmentName, Flox};
+use crate::flox::Flox;
 use crate::models::environment::floxmeta_branch::BranchOrd;
 use crate::models::environment::{MANIFEST_FILENAME, UninitializedEnvironment};
 use crate::providers::git::{
