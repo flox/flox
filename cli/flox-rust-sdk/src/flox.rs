@@ -119,6 +119,8 @@ struct FloxTokenClaims {
     /// The FloxHub handle of the user this token belongs to
     #[serde(rename = "https://flox.dev/handle")]
     handle: String,
+    /// The expiration time of the token (Unix timestamp)
+    exp: usize,
 }
 
 /// A token authenticating a user with FloxHub
@@ -145,6 +147,19 @@ impl FloxhubToken {
     pub fn handle(&self) -> &str {
         &self.token_data.handle
     }
+
+    /// Returns whether the token has expired by checking the `exp` claim
+    /// against the current time.
+    pub fn is_expired(&self) -> bool {
+        let now = {
+            let start = std::time::SystemTime::now();
+            start
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("Time went backwards")
+                .as_secs() as usize
+        };
+        self.token_data.exp < now
+    }
 }
 
 impl Serialize for FloxhubToken {
@@ -162,47 +177,20 @@ impl FromStr for FloxhubToken {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Client side we don't need to verify the signature,
         // as all priviledged access is guarded server side.
-        // It's still convenient to verify common claims e.g. expiration dates.
+        // We still decode the token to extract claims like handle and expiration.
 
-        #[derive(Clone, Debug, Deserialize)]
-        struct ClaimsWithValidation<T> {
-            exp: Option<usize>,
-            #[serde(flatten)]
-            claims: T,
-        }
-
-        let token =
-            jsonwebtoken::dangerous::insecure_decode::<ClaimsWithValidation<FloxTokenClaims>>(s)
-                .map_err(FloxhubTokenError::InvalidToken)?;
-
-        let now = {
-            let start = std::time::SystemTime::now();
-            start
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("Time went backwards")
-                .as_secs() as usize
-        };
-
-        match token.claims.exp {
-            None => Err(FloxhubTokenError::InvalidToken(
-                jsonwebtoken::errors::ErrorKind::InvalidToken.into(),
-            ))?,
-            Some(exp) if exp < now => Err(FloxhubTokenError::Expired)?,
-            Some(_) => {},
-        };
+        let token = jsonwebtoken::dangerous::insecure_decode::<FloxTokenClaims>(s)
+            .map_err(FloxhubTokenError::InvalidToken)?;
 
         Ok(FloxhubToken {
             token: s.to_string(),
-            token_data: token.claims.claims,
+            token_data: token.claims,
         })
     }
 }
 
 #[derive(Debug, Clone, Error, Eq, PartialEq)]
 pub enum FloxhubTokenError {
-    #[error("token expired")]
-    Expired,
-
     #[error("invalid token")]
     InvalidToken(#[source] jsonwebtoken::errors::Error),
 }
@@ -337,17 +325,8 @@ pub mod test_helpers {
             .as_str()
             .unwrap()
             .to_string();
-        let handle = json
-            .get(idx)
-            .and_then(|obj| obj.get("handle"))
-            .expect("couldn't get user handle from test user file")
-            .as_str()
-            .unwrap()
-            .to_string();
-        FloxhubToken {
-            token,
-            token_data: FloxTokenClaims { handle },
-        }
+        // Parse the token to extract claims (including exp) from the JWT
+        FloxhubToken::from_str(&token).expect("couldn't parse test user token")
     }
 
     pub fn flox_instance() -> (Flox, TempDir) {
@@ -457,9 +436,14 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_detect_expired() {
-        let token_error =
-            FloxhubToken::new(FAKE_EXPIRED_TOKEN.to_string()).expect_err("Token should be expired");
-        assert_eq!(token_error, FloxhubTokenError::Expired);
+        let token =
+            FloxhubToken::new(FAKE_EXPIRED_TOKEN.to_string()).expect("Expired token should parse");
+        assert!(token.is_expired(), "Token should be marked as expired");
+        assert_eq!(token.handle(), "test", "Handle should still be accessible");
+        assert!(
+            !token.secret().is_empty(),
+            "secret() should still return the token string for expired tokens"
+        );
     }
 
     #[test]

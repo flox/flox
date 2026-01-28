@@ -306,15 +306,6 @@ impl FloxArgs {
             .transpose();
 
         let floxhub_token = match floxhub_token {
-            Err(FloxhubTokenError::Expired) => {
-                message::warning("Your FloxHub token has expired. You may need to log in again.");
-                if let Err(e) =
-                    update_config(&config.flox.config_dir, "floxhub_token", None::<String>)
-                {
-                    debug!("Could not remove token from user config: {e}");
-                }
-                None
-            },
             Err(FloxhubTokenError::InvalidToken(token_error)) => {
                 message::error(formatdoc! {"
                     Your FloxHub token is invalid: {token_error}
@@ -326,6 +317,12 @@ impl FloxArgs {
                     debug!("Could not remove token from user config: {e}");
                 }
                 None
+            },
+            Ok(Some(token)) if token.is_expired() => {
+                message::warning(
+                    "Your FloxHub token has expired. Run 'flox auth login' to re-authenticate.",
+                );
+                Some(token)
             },
             Ok(token) => token,
         };
@@ -1312,14 +1309,36 @@ pub(super) async fn ensure_environment_trust(
     }
 }
 
-/// Ensure a floxhub_token is present
+/// Ensure a valid (non-expired) floxhub_token is present
 ///
-/// If the token is not present and we can prompt the user,
-/// run the login flow ([auth::login_flox]).
+/// If the token is not present or expired and we can prompt the user,
+/// run the login flow ([auth::login_flox]); otherwise, return an error
+/// explaining how to authenticate in a non-interactive context.
 pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<&FloxhubToken> {
-    match flox.floxhub_token {
-        Some(ref token) => {
-            debug!("floxhub token is present; logged in as {}", token.handle());
+    match &flox.floxhub_token {
+        Some(token) if !token.is_expired() => {
+            debug!(
+                "floxhub token is present and valid; logged in as {}",
+                token.handle()
+            );
+            Ok(flox.floxhub_token.as_ref().unwrap())
+        },
+        Some(_) if !Dialog::can_prompt() => {
+            debug!("floxhub token is expired; can not prompt user for re-authentication");
+            let message = formatdoc! {"
+                Your FloxHub token has expired. To re-authenticate you can either:
+
+                * login to FloxHub with 'flox auth login',
+                * set the 'floxhub_token' field in your config to a fresh token,
+                * set the '$FLOX_FLOXHUB_TOKEN' environment variable"
+            };
+            bail!(message);
+        },
+        Some(_) => {
+            debug!("floxhub token is expired; prompting user for re-authentication");
+
+            message::plain("Your FloxHub token has expired. Re-authenticating...");
+            let token = auth::login_flox(flox).await?;
             Ok(token)
         },
         None if !Dialog::can_prompt() => {
