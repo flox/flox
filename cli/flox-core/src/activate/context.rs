@@ -59,6 +59,9 @@ pub struct AttachCtx {
     /// The CLI is responsible for deciding when this is needed (staleness checks, etc.)
     pub services_to_start: Vec<String>,
 
+    /// Path to process-compose binary.
+    pub process_compose_bin: Option<PathBuf>,
+
     // Info needed to run the activate script
     pub interpreter_path: PathBuf,
 }

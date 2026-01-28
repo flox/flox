@@ -118,6 +118,7 @@ let
       flox_prompt_environments = "floxenv";
       set_prompt = true;
       services_to_start = [ ];
+      process_compose_bin = null;
       flox_services_socket = null;
       flox_env_cuda_detection = "0";
       flox_active_environments = "[]";

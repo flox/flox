@@ -13,6 +13,7 @@ use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 use std::sync::mpsc::{Receiver, Sender};
 
+use flox_core::process_compose::PROCESS_NEVER_EXIT_NAME;
 use flox_core::traceable_path;
 #[cfg(test)]
 use flox_test_utils::proptest::alphanum_string;
@@ -28,8 +29,6 @@ use crate::flox::Flox;
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::typed::{Inner, ServiceShutdown, Services};
 use crate::utils::CommandExt;
-
-const PROCESS_NEVER_EXIT_NAME: &str = "flox_never_exit";
 /// The path to the nix provided `sleep` binary.
 ///
 /// This is used to prevent `process-compose` from exiting when all services are stopped,
@@ -503,25 +502,6 @@ pub fn restart_service(
         Ok(())
     } else {
         tracing::debug!("restarting service failed");
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(ServiceError::from_process_compose_log(stderr))
-    }
-}
-
-pub fn process_compose_down(socket_path: impl AsRef<Path>) -> Result<(), ServiceError> {
-    let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
-    cmd.arg("down");
-    cmd.arg("--unix-socket");
-    cmd.arg(socket_path.as_ref());
-    cmd.env("NO_COLOR", "1");
-
-    debug!(command = %cmd.display(), "running process-compose down");
-
-    let output = cmd.output().map_err(ServiceError::ProcessComposeCmd)?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        tracing::debug!("'process-compose down' failed");
         let stderr = String::from_utf8_lossy(&output.stderr);
         Err(ServiceError::from_process_compose_log(stderr))
     }

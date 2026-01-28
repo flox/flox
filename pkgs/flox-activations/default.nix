@@ -11,7 +11,6 @@
   flox-src,
   rust-external-deps,
   coreutils,
-  process-compose,
 }:
 let
   # crane (<https://crane.dev/>) library for building rust packages
@@ -19,7 +18,6 @@ let
   envs = {
     # used internally to ensure CA certificates are available
     NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
-    PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
     FLOX_ACTIVATIONS_BIN = "${placeholder "out"}/libexec/flox-activations";
     # Nix will ignore this if it starts with just BASH
     X_BASH_BIN = "${bash}/bin/bash";
@@ -54,7 +52,6 @@ craneLib.buildPackage (
     nativeBuildInputs = rust-external-deps.nativeBuildInputs;
 
     propagatedBuildInputs = rust-external-deps.propagatedBuildInputs ++ [
-      process-compose
       coreutils # for `sleep infinity`
     ];
 

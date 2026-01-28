@@ -117,9 +117,16 @@ impl ActivateArgs {
                 .flox_services_socket
                 .as_ref()
                 .expect("flox_services_socket must be set to start services");
+            let process_compose_bin = context
+                .attach_ctx
+                .process_compose_bin
+                .as_ref()
+                .expect("process_compose_bin must be set to start services");
             Self::start_services_with_new_process_compose(
                 &context.attach_ctx.flox_runtime_dir,
                 &context.attach_ctx.dot_flox_path,
+                // Unwrapped values that shouldn't be taken from context again.
+                process_compose_bin,
                 socket_path,
                 &context.attach_ctx.services_to_start,
             )?;
@@ -322,6 +329,7 @@ impl ActivateArgs {
     fn start_services_with_new_process_compose(
         runtime_dir: &str,
         dot_flox_path: &Path,
+        process_compose_bin: &Path,
         socket_path: &Path,
         services: &[String],
     ) -> Result<(), anyhow::Error> {
@@ -333,21 +341,22 @@ impl ActivateArgs {
         drop(lock);
 
         debug!("starting new process-compose for services");
-        Self::signal_new_process_compose(socket_path, executive_pid)?;
-        start_services_via_socket(socket_path, services)?;
+        Self::signal_new_process_compose(process_compose_bin, socket_path, executive_pid)?;
+        start_services_via_socket(process_compose_bin, socket_path, services)?;
 
         Ok(())
     }
 
     /// Start a new process-compose instance by signaling the executive.
     fn signal_new_process_compose(
+        process_compose_bin: &Path,
         socket_path: &Path,
         executive_pid: i32,
     ) -> Result<(), anyhow::Error> {
         // Stop first, if running, to ensure that we wait on the socket from the new instance.
         if socket_path.exists() {
             debug!("shutting down old process-compose");
-            if let Err(err) = process_compose_down(socket_path) {
+            if let Err(err) = process_compose_down(process_compose_bin, socket_path) {
                 error!(%err, "failed to stop process-compose");
             }
         }
@@ -363,7 +372,8 @@ impl ActivateArgs {
             .and_then(|t| t.parse().ok())
             .map(Duration::from_secs_f64)
             .unwrap_or(Duration::from_secs(2));
-        let socket_ready = wait_for_socket_ready(socket_path, activation_timeout)?;
+        let socket_ready =
+            wait_for_socket_ready(process_compose_bin, socket_path, activation_timeout)?;
         if !socket_ready {
             // TODO: We used to print the services log (if it exists) here to
             // help users debug the failure but we no longer have the path
