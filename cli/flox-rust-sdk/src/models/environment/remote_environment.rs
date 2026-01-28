@@ -42,7 +42,7 @@ use crate::models::environment::path_environment::{InitCustomization, PathEnviro
 use crate::models::environment::{PathPointer, RenderedEnvironmentLink};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::{LockResult, Lockfile};
-use crate::models::manifest::raw::PackageToInstall;
+use crate::models::manifest::raw::{PackageToInstall, UninstallSpec};
 use crate::models::manifest::typed::ActivateMode;
 
 const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
@@ -380,7 +380,7 @@ impl Environment for RemoteEnvironment {
     /// Uninstall packages from the environment atomically
     fn uninstall(
         &mut self,
-        packages: Vec<String>,
+        packages: Vec<UninstallSpec>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         let result = self.inner.uninstall(packages, flox)?;

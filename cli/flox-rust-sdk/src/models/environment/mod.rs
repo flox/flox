@@ -25,6 +25,7 @@ use super::manifest::typed::{ActivateMode, ManifestError};
 use crate::data::{CanonicalPath, CanonicalizeError, System};
 use crate::flox::{Flox, Floxhub};
 use crate::models::environment::generations::GenerationsEnvironment;
+use crate::models::manifest::raw::PackageToModify;
 use crate::providers::auth::AuthError;
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{
@@ -103,6 +104,10 @@ pub struct UninstallationAttempt {
     /// Packages that were requested to be uninstalled but are stilled provided
     /// by included environments.
     pub still_included: HashMap<String, LockedInclude>,
+
+    /// Modifications to the manifest (i.e. removal or change of outputs)
+    pub modifications: Vec<PackageToModify>,
+
     /// The store path of environment that was built to validate the uninstall.
     /// This is used as an optimization to skip builds that we've already done.
     pub built_environment_store_paths: Option<BuildEnvOutputs>,
@@ -120,7 +125,7 @@ pub trait Environment: Send {
     /// Uninstall packages from the environment atomically
     fn uninstall(
         &mut self,
-        packages: Vec<String>,
+        packages: Vec<crate::models::manifest::raw::UninstallSpec>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError>;
 
@@ -800,6 +805,12 @@ pub enum UninstallError {
          Remove the package from environment '{1}' and then run 'flox include upgrade'"
     )]
     PackageOnlyIncluded(String, String),
+
+    #[error("'{0}' was not found in Lockfile")]
+    PackageNotInLockfile(String),
+
+    #[error("''{1}' does not have an output '{0}'")]
+    InvalidOutputForPackage(String, String),
 }
 
 /// Open an environment defined in `path` that has a `.flox` within.
