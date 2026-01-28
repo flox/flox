@@ -29,6 +29,7 @@ use tracing::{debug, error};
 use crate::activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_activate_command};
 use crate::attach::{attach, quote_run_args};
 use crate::cli::executive::ExecutiveCtx;
+use crate::message::updated;
 use crate::process_compose::{
     process_compose_down,
     start_services_via_socket,
@@ -275,11 +276,13 @@ impl ActivateArgs {
                 );
                 // TODO: should this be here?
                 if *invocation_type == InvocationType::Interactive {
-                    eprintln!("{}", formatdoc! {"✅ You are now using the environment '{}'
+                    updated(
+                        formatdoc! {"You are now using the environment '{env_description}'
                                      To stop using this environment, type 'exit'
                                      ",
-                    context.attach_ctx.env_description,
-                    });
+                        env_description = context.attach_ctx.env_description,
+                        },
+                    );
                 }
                 debug!("spawning activate script: {:?}", start_command);
                 let status = start_command.spawn()?.wait()?;
@@ -297,13 +300,12 @@ impl ActivateArgs {
             StartOrAttachResult::Attach { .. } => {
                 // TODO: should this be here?
                 if *invocation_type == InvocationType::Interactive {
-                    eprintln!(
-                        "{}",
-                        formatdoc! {"✅ Attached to existing activation of environment '{}'
+                    updated(
+                        formatdoc! {"Attached to existing activation of environment '{env_description}'
                                      To stop using this environment, type 'exit'
                                      ",
-                        context.attach_ctx.env_description,
-                        }
+                        env_description = context.attach_ctx.env_description,
+                        },
                     );
                 }
             },

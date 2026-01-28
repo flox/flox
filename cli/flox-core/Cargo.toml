@@ -9,6 +9,7 @@ ignored = ["proptest"]
 [dependencies]
 anyhow.workspace = true
 blake3.workspace = true
+crossterm.workspace = true
 derive_more.workspace = true
 fslock.workspace = true
 log.workspace = true
@@ -19,6 +20,7 @@ proptest-derive.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 shell_gen = { path = "../shell_gen" }
+supports-color.workspace = true
 sysinfo.workspace = true
 tracing.workspace = true
 tempfile.workspace = true

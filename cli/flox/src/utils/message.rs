@@ -3,6 +3,8 @@ use std::fmt::Display;
 use std::io::Write;
 
 use crossterm::style::Stylize;
+use flox_core::util::message::{format_error, format_updated};
+pub use flox_core::util::message::{stderr_supports_color, stdout_supports_color};
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::composite::{COMPOSER_MANIFEST_ID, Warning};
 use flox_rust_sdk::models::manifest::raw::PackageToInstall;
@@ -26,12 +28,7 @@ pub(crate) fn plain(v: impl Display) {
     print_message(v);
 }
 pub(crate) fn error(v: impl Display) {
-    let icon = if stderr_supports_color() {
-        "✘".red().to_string()
-    } else {
-        "✘".to_string()
-    };
-    print_message(std::format_args!("{icon} ERROR: {v}"));
+    print_message(format_error(v));
 }
 pub(crate) fn created(v: impl Display) {
     let icon = if stderr_supports_color() {
@@ -51,12 +48,7 @@ pub(crate) fn deleted(v: impl Display) {
     print_message(std::format_args!("{icon} {v}"));
 }
 pub(crate) fn updated(v: impl Display) {
-    let icon = if stderr_supports_color() {
-        "✔".green().to_string()
-    } else {
-        "✔".to_string()
-    };
-    print_message(std::format_args!("{icon} {v}"));
+    print_message(format_updated(v));
 }
 /// double width character, add an additional space for alignment
 pub(crate) fn info(v: impl Display) {
@@ -109,14 +101,6 @@ pub(crate) fn page_output(s: impl Into<String>) -> anyhow::Result<()> {
     page_all(pager)?;
 
     Ok(())
-}
-
-pub fn stdout_supports_color() -> bool {
-    supports_color::on(supports_color::Stream::Stdout).is_some()
-}
-
-pub fn stderr_supports_color() -> bool {
-    supports_color::on(supports_color::Stream::Stderr).is_some()
 }
 
 /// Display a message for packages that were successfully installed for all

@@ -1,13 +1,12 @@
 use anyhow::Context;
 use clap::Parser;
 use flox_activations::cli::Cli;
-use flox_activations::{Error, cli, logger};
+use flox_activations::{Error, cli, logger, message};
 use tracing::{debug, debug_span};
 
 fn main() {
     if let Err(e) = try_main() {
-        // TODO: should we share code with CLI formatting?
-        eprintln!("❌ ERROR: {e:#}");
+        message::error(format!("{e:#}"));
         std::process::exit(1);
     }
 }

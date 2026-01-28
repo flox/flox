@@ -1417,6 +1417,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "blake3",
+ "crossterm 0.29.0",
  "derive_more",
  "fslock",
  "indoc",
@@ -1427,6 +1428,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shell_gen",
+ "supports-color",
  "sysinfo",
  "tempfile",
  "thiserror 2.0.18",
