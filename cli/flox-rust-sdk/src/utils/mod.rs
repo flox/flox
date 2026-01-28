@@ -460,4 +460,17 @@ mod tests {
             },
         );
     }
+
+    #[test]
+    fn test_detect_invocation_sources_sorted() {
+        temp_env::with_var("FLOX_INVOCATION_SOURCE", Some("zebra,apple,middle"), || {
+            let sources = detect_invocation_sources();
+            let sorted_sources = {
+                let mut s = sources.clone();
+                s.sort();
+                s
+            };
+            assert_eq!(sources, sorted_sources);
+        });
+    }
 }

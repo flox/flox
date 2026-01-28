@@ -392,7 +392,8 @@ impl CatalogClient {
             let sources_str = INVOCATION_SOURCES.join(",");
             header_map.insert(
                 header::HeaderName::from_static("flox-invocation-source"),
-                header::HeaderValue::from_str(&sources_str).unwrap(),
+                header::HeaderValue::from_str(&sources_str)
+                    .expect("invocation sources should only contain ASCII-safe characters"),
             );
         };
 
