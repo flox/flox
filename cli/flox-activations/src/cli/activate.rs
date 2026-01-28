@@ -17,6 +17,7 @@ use flox_core::activations::{
     state_json_path,
     write_activations_json,
 };
+use fslock::LockFile;
 use indoc::formatdoc;
 use nix::sys::signal::{Signal, kill};
 use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
@@ -248,27 +249,47 @@ impl ActivateArgs {
         }
 
         let pid = std::process::id() as i32;
-        let result = activations.start_or_attach(pid, &context.flox_activate_store_path);
-        let start_id = match &result {
-            StartOrAttachResult::Start { start_id } | StartOrAttachResult::Attach { start_id } => {
-                start_id
+        match activations.start_or_attach(pid, &context.flox_activate_store_path) {
+            StartOrAttachResult::Start { start_id } => Self::start(
+                context,
+                subsystem_verbosity,
+                vars_from_env,
+                start_id,
+                &mut activations,
+                &activations_json_path,
+                lock,
+            ),
+            StartOrAttachResult::Attach { start_id } => {
+                write_activations_json(&activations, &activations_json_path, lock)?;
+                Ok(StartOrAttachResult::Attach { start_id })
             },
-            StartOrAttachResult::AlreadyStarting { .. } => {
+            StartOrAttachResult::AlreadyStarting { pid, start_id } => {
                 drop(lock); // Explicit for clarity only.
-                return Ok(result); // Return early for retry.
+                Ok(StartOrAttachResult::AlreadyStarting { pid, start_id })
             },
-        };
+        }
+    }
 
+    // Start a new activation because we either have a:
+    // - different store path
+    // - fresh state file, which could be caused by no executive
+    fn start(
+        context: &ActivateCtx,
+        subsystem_verbosity: u32,
+        vars_from_env: &VarsFromEnvironment,
+        start_id: StartIdentifier,
+        activations: &mut ActivationState,
+        activations_json_path: &Path,
+        lock: LockFile,
+    ) -> Result<StartOrAttachResult, anyhow::Error> {
         let start_state_dir = start_id.state_dir_path(
             &context.attach_ctx.flox_runtime_dir,
             &context.attach_ctx.dot_flox_path,
         )?;
-        if matches!(result, StartOrAttachResult::Start { .. }) {
-            DirBuilder::new()
-                .recursive(true)
-                .mode(0o700)
-                .create(&start_state_dir)?;
-        }
+        DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&start_state_dir)?;
 
         let new_executive = if !activations.executive_started() {
             // Register signal handler BEFORE spawning executive to avoid race condition
@@ -281,39 +302,32 @@ impl ActivateArgs {
             None
         };
 
-        write_activations_json(&activations, &activations_json_path, lock)?;
+        write_activations_json(activations, activations_json_path, lock)?;
 
         if let Some((exec_pid, signals)) = new_executive {
             Self::wait_for_executive(exec_pid, signals)?;
         }
 
-        match &result {
-            StartOrAttachResult::Start { start_id, .. } => {
-                let mut start_command = assemble_activate_command(
-                    context.clone(),
-                    subsystem_verbosity,
-                    vars_from_env.clone(),
-                    start_id,
-                );
-                debug!("spawning activate script: {:?}", start_command);
-                let status = start_command.spawn()?.wait()?;
-                if !status.success() {
-                    // hook.on-activate may have already printed to stderr
-                    bail!("Running hook.on-activate failed");
-                }
-
-                // Re-acquire lock to mark ready
-                let (activations_opt, lock) = read_activations_json(&activations_json_path)?;
-                let mut activations = activations_opt.expect("activations.json should exist");
-                activations.set_ready(start_id);
-                write_activations_json(&activations, &activations_json_path, lock)?;
-            },
-            StartOrAttachResult::Attach { .. } | StartOrAttachResult::AlreadyStarting { .. } => {
-                unreachable!()
-            },
+        let mut start_command = assemble_activate_command(
+            context.clone(),
+            subsystem_verbosity,
+            vars_from_env.clone(),
+            &start_id,
+        );
+        debug!("spawning activate script: {:?}", start_command);
+        let status = start_command.spawn()?.wait()?;
+        if !status.success() {
+            // hook.on-activate may have already printed to stderr
+            bail!("Running hook.on-activate failed");
         }
 
-        Ok(result)
+        // Re-acquire lock to mark ready
+        let (activations_opt, lock) = read_activations_json(activations_json_path)?;
+        let mut activations = activations_opt.expect("activations.json should exist");
+        activations.set_ready(&start_id);
+        write_activations_json(&activations, activations_json_path, lock)?;
+
+        Ok(StartOrAttachResult::Start { start_id })
     }
 
     /// Start services with a new process-compose instance.
