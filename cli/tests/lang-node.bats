@@ -96,14 +96,14 @@ teardown() {
 @test "auto init installs nodejs version range package" {
   cp -r "$INPUT_DATA/init/node/nodejs_lt_24/." .
   chmod -R +w .
-  # This test ensures that when a package.json has a version requirment,
+  # This test ensures that when a package.json has a version requirement,
   # in this case "<24", we give them the nodejs_* package corresponding
-  # to the nearly-latest version.
+  # to the latest LTS version that satisfies the constraint.
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/nodejs_lt_24.yaml" \
     run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'nodejs' installed"
   run "$FLOX_BIN" list
-  assert_regex "$output" "nodejs: nodejs_23.*"
+  assert_regex "$output" "nodejs: nodejs_22.*"
 }
 
 # bats test_tags=catalog,init

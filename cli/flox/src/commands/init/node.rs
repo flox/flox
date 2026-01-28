@@ -318,6 +318,22 @@ impl NodeVersionSource {
 }
 
 impl Node {
+    /// Reorders node packages so even (LTS) versions come before odd (Current) versions.
+    ///
+    /// Input: `["nodejs_23", "nodejs_22", "nodejs_21", "nodejs_20"]`
+    /// Output: `["nodejs_22", "nodejs_20", "nodejs_23", "nodejs_21"]`
+    ///
+    /// Packages that don't match the `nodejs_XX` pattern are placed at the end.
+    fn reorder_preferring_lts(packages: Vec<String>) -> Vec<String> {
+        let (even, odd): (Vec<_>, Vec<_>) = packages.into_iter().partition(|pkg| {
+            pkg.strip_prefix("nodejs_")
+                .and_then(|v| v.parse::<u32>().ok())
+                .map(|v| v % 2 == 0)
+                .unwrap_or(false)
+        });
+        [even, odd].concat()
+    }
+
     /// Determine the [NodeAction] that should be taken by the node hook.
     /// See tests for more information.
     pub async fn new(flox: &Flox, path: &Path) -> Result<Option<Self>> {
@@ -690,31 +706,34 @@ impl Node {
         //         so if we really screw this up it will be caught before hitting
         //         production.
         let node_pkg_regex = Regex::new(r#"nodejs_\d\d"#).expect("invalid node package regex");
-        let matches = {
-            let mut matches = res
-                .results
-                .into_iter()
-                .filter_map(|search_result| {
-                    let name = search_result.attr_path;
-                    if node_pkg_regex.is_match(&name) {
-                        Some(name)
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>();
-            // This will sort lexically, but lexically sorting also sorts by
-            // version in this case e.g. nodejs_14 comes before nodejs_23 in
-            // both cases.
-            matches.sort();
-            // We want later versions towards the front so we can take the first
-            // one.
-            matches.reverse();
-            // The search term was specifically "nodejs_" to catch the major version
-            // packages.
-            matches.push("nodejs".to_string());
-            matches
-        };
+        let mut matches = res
+            .results
+            .into_iter()
+            .filter_map(|search_result| {
+                let name = search_result.attr_path;
+                if node_pkg_regex.is_match(&name) {
+                    Some(name)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        // This will sort lexically, but lexically sorting also sorts by
+        // version in this case e.g. nodejs_14 comes before nodejs_23 in
+        // both cases.
+        matches.sort();
+        // We want later versions towards the front so we can take the first
+        // one.
+        matches.reverse();
+
+        // Reorder to prefer even (LTS) versions. If the constraint requires
+        // an odd (Current) version (e.g., "=23"), LTS versions will be
+        // skipped during resolution.
+        matches = Self::reorder_preferring_lts(matches);
+
+        // The search term was specifically "nodejs_" to catch the major version
+        // packages. Add generic "nodejs" as fallback.
+        matches.push("nodejs".to_string());
 
         Ok(matches)
     }
@@ -1084,7 +1103,7 @@ mod tests {
         };
         let node_20 = Package {
             name: "nodejs_20".to_string(),
-            version: "20.19.6".to_string(),
+            version: "20.20.0".to_string(),
         };
 
         let test_cases = vec![
@@ -1536,5 +1555,63 @@ mod tests {
         assert!(yarn_install.node.version.unwrap().starts_with("18"));
         assert_eq!(yarn_install.yarn.attr_path, "yarn".into());
         assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // LTS preference tests
+    ///////////////////////////////////////////////////////////////////////////
+
+    #[test]
+    fn test_reorder_preferring_lts() {
+        // Test basic reordering: even versions should come before odd versions
+        let input = vec![
+            "nodejs_23".to_string(),
+            "nodejs_22".to_string(),
+            "nodejs_21".to_string(),
+            "nodejs_20".to_string(),
+        ];
+        let expected = vec![
+            "nodejs_22".to_string(),
+            "nodejs_20".to_string(),
+            "nodejs_23".to_string(),
+            "nodejs_21".to_string(),
+        ];
+        assert_eq!(Node::reorder_preferring_lts(input), expected);
+
+        // Test with only even versions
+        let input = vec![
+            "nodejs_22".to_string(),
+            "nodejs_20".to_string(),
+            "nodejs_18".to_string(),
+        ];
+        let expected = vec![
+            "nodejs_22".to_string(),
+            "nodejs_20".to_string(),
+            "nodejs_18".to_string(),
+        ];
+        assert_eq!(Node::reorder_preferring_lts(input), expected);
+
+        // Test with only odd versions (they go to the "odd" partition)
+        let input = vec!["nodejs_23".to_string(), "nodejs_21".to_string()];
+        let expected = vec!["nodejs_23".to_string(), "nodejs_21".to_string()];
+        assert_eq!(Node::reorder_preferring_lts(input), expected);
+
+        // Test with empty input
+        let input: Vec<String> = vec![];
+        let expected: Vec<String> = vec![];
+        assert_eq!(Node::reorder_preferring_lts(input), expected);
+
+        // Test that non-matching packages (like "nodejs") go to the odd partition
+        let input = vec![
+            "nodejs_23".to_string(),
+            "nodejs_22".to_string(),
+            "nodejs".to_string(),
+        ];
+        let expected = vec![
+            "nodejs_22".to_string(),
+            "nodejs_23".to_string(),
+            "nodejs".to_string(),
+        ];
+        assert_eq!(Node::reorder_preferring_lts(input), expected);
     }
 }
