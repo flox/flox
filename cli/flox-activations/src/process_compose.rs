@@ -12,8 +12,8 @@ use time::macros::format_description;
 use tracing::{debug, info};
 
 use crate::activate_script_builder::apply_activation_env;
-use crate::cli::activate::VarsFromEnvironment;
 use crate::env_diff::EnvDiff;
+use crate::vars_from_env::VarsFromEnvironment;
 
 /// Path to the process-compose binary
 /// TODO: we don't want the dependency here
