@@ -11,7 +11,8 @@ use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Key, Tab
 use tracing::{debug, trace};
 
 use crate::ManifestError;
-use crate::parsed::common::ActivateMode;
+use crate::parsed::common::{ActivateMode, VersionKind};
+use crate::util::is_custom_package;
 
 /// Represents the `[version]` number key in manifest.toml
 pub const MANIFEST_VERSION_KEY: &str = "version";
@@ -42,19 +43,6 @@ pub const DEFAULT_SYSTEMS_STR: LazyLock<[String; 4]> = LazyLock::new(|| {
         "x86_64-linux".into(),
     ]
 });
-
-/// A type holding the different identifiers we've used to represent the schema
-/// version of a manifest.
-///
-/// This is used when we're trying to identify the "shape" of the manifest
-/// while handling its untyped form.
-#[derive(Debug, Clone)]
-pub(crate) enum VersionKind {
-    /// A `version = 1` manifest.
-    Version(u8),
-    /// A `schema-version = "1.9.0"` or later manifest
-    SchemaVersion(String),
-}
 
 pub(crate) fn get_schema_version_ish(toml: &DocumentMut) -> Result<VersionKind, ManifestError> {
     if let Some(item) = toml.get("version") {
@@ -90,7 +78,7 @@ mod schema_version_tests {
     fn missing_schema() {
         let toml = parse_toml("{}");
         let err = get_schema_version_ish(&toml).err().unwrap();
-        assert_eq!(err, ManifestError::MissingSchemaVersion);
+        assert!(matches!(err, ManifestError::MissingSchemaVersion));
     }
 
     #[test]
@@ -696,17 +684,6 @@ pub fn catalog_packages_to_install(packages: &[PackageToInstall]) -> Vec<Catalog
             _ => None,
         })
         .collect()
-}
-
-/// Custom packages are of the form "<prefix>/<suffix>" where the prefix is not
-/// allowed to contain a '.' character. This is a quick and dirty way of
-/// identifying custom packages using that logic.
-///
-/// Favour using CatalogPackage::is_custom_catalog if you already have a CatalogPackage
-pub(super) fn is_custom_package(pkg_path: &str) -> bool {
-    let parts: Vec<&str> = pkg_path.split('/').collect();
-    let is_base_catalog_pkg = parts.len() == 1 || parts.first().is_some_and(|p| p.contains('.'));
-    !is_base_catalog_pkg
 }
 
 /// Represents the outputs to install for a package.

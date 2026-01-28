@@ -31,6 +31,19 @@ pub(crate) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub const DEFAULT_PRIORITY: u64 = 5;
 pub const FILENAME: &str = "manifest.toml";
 
+/// A type holding the different identifiers we've used to represent the schema
+/// version of a manifest.
+///
+/// This is used when we're trying to identify the "shape" of the manifest
+/// while handling its untyped form.
+#[derive(Debug, Clone)]
+pub(crate) enum VersionKind {
+    /// A `version = 1` manifest.
+    Version(u8),
+    /// A `schema-version = "1.9.0"` or later manifest
+    SchemaVersion(String),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct Vars(

@@ -29,6 +29,9 @@ pretty_assertions = { workspace = true, optional = true }
 
 [dev-dependencies]
 flox-core = { workspace = true, features = ["tests"] }
+flox-test-utils = { workspace = true }
+proptest.workspace = true
+proptest-derive.workspace = true
 
 [features]
 tests = [
