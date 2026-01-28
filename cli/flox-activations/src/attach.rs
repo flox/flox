@@ -16,7 +16,7 @@ use shell_gen::{Shell, ShellWithPath};
 use tracing::debug;
 
 use crate::activate_script_builder::{activate_tracer, apply_activation_env, old_cli_envs};
-use crate::cli::activate::{NO_REMOVE_ACTIVATION_FILES, VarsFromEnvironment};
+use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
 use crate::cli::attach::{AttachArgs, AttachExclusiveArgs};
 use crate::env_diff::EnvDiff;
 use crate::gen_rc::bash::{BashStartupArgs, generate_bash_startup_commands};
@@ -24,6 +24,7 @@ use crate::gen_rc::fish::{FishStartupArgs, generate_fish_startup_commands};
 use crate::gen_rc::tcsh::{TcshStartupArgs, generate_tcsh_startup_commands};
 use crate::gen_rc::zsh::{ZshStartupArgs, generate_zsh_startup_commands};
 use crate::gen_rc::{StartupArgs, StartupCtx};
+use crate::vars_from_env::VarsFromEnvironment;
 
 pub const STARTUP_SCRIPT_PATH_OVERRIDE_VAR: &str = "_FLOX_RC_FILE_PATH";
 

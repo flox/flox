@@ -21,12 +21,11 @@ use indoc::formatdoc;
 use nix::sys::signal::{Signal, kill};
 use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::{Pid, getpid};
-use serde::{Deserialize, Serialize};
 use signal_hook::consts::{SIGCHLD, SIGUSR1};
 use signal_hook::iterator::Signals;
 use tracing::{debug, error};
 
-use crate::activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_activate_command};
+use crate::activate_script_builder::assemble_activate_command;
 use crate::attach::{attach, quote_run_args};
 use crate::cli::executive::ExecutiveCtx;
 use crate::process_compose::{
@@ -34,6 +33,7 @@ use crate::process_compose::{
     start_services_via_socket,
     wait_for_socket_ready,
 };
+use crate::vars_from_env::VarsFromEnvironment;
 
 pub const NO_REMOVE_ACTIVATION_FILES: &str = "_FLOX_NO_REMOVE_ACTIVATION_FILES";
 
@@ -484,32 +484,5 @@ impl ActivateArgs {
                 unreachable!("Received unexpected signal or empty iterator over signals");
             }
         }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct VarsFromEnvironment {
-    pub flox_env_dirs: Option<String>,
-    pub path: String,
-    pub manpath: Option<String>,
-}
-
-impl VarsFromEnvironment {
-    // TODO: move now that it's also used by executive
-    pub fn get() -> Result<Self> {
-        let flox_env_dirs = std::env::var(FLOX_ENV_DIRS_VAR).ok();
-        let path = match std::env::var("PATH") {
-            Ok(path) => path,
-            Err(e) => {
-                return Err(anyhow!("failed to get PATH from environment: {}", e));
-            },
-        };
-        let manpath = std::env::var("MANPATH").ok();
-
-        Ok(Self {
-            flox_env_dirs,
-            path,
-            manpath,
-        })
     }
 }

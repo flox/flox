@@ -8,10 +8,10 @@ use flox_core::activations::StartIdentifier;
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
 
-use crate::cli::activate::VarsFromEnvironment;
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
 use crate::env_diff::EnvDiff;
+use crate::vars_from_env::VarsFromEnvironment;
 pub const FLOX_ENV_LOG_DIR_VAR: &str = "_FLOX_ENV_LOG_DIR";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
 /// This variable is used to communicate what socket to use to the activate

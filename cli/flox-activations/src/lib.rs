@@ -5,5 +5,6 @@ pub mod env_diff;
 pub mod gen_rc;
 pub mod logger;
 mod process_compose;
+mod vars_from_env;
 
 pub type Error = anyhow::Error;
