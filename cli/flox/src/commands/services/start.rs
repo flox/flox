@@ -246,6 +246,6 @@ mod tests {
         assert!(three_state.is_running);
 
         let out = String::from_utf8(out).unwrap();
-        assert_eq!(out, "⚠️  Service 'one' is already running.\n");
+        assert_eq!(out, "! Service 'one' is already running.\n");
     }
 }

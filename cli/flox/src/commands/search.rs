@@ -23,8 +23,7 @@ fn missing_search_term<T>() -> Result<T> {
     bail!(indoc! {"
         No search term provided.
 
-        Try searching with a search term. For example, 'flox search curl'
-    "});
+        Try searching with a search term. For example, 'flox search curl'"});
 }
 
 // Search for packages to install

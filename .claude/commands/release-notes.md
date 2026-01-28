@@ -31,8 +31,11 @@ Phrase the items using the following guidelines:
 - Use backticks "`" for command examples, environment variables or arguments.
 - Note any commits that were made by community members (not flox.dev).
 
-Use the following markdown template for formatting (updating the version in the
-link accordingly.:
+Use the following markdown template EXACTLY for formatting (updating the version in the
+link accordingly. Use the exact formatting and markdown annotations, updating
+only the list of features, fixes, community contributions (or removing it if
+there are none), and the version in the links.
+
 ```
 ## Features
 - Running command x will now do something cool
@@ -40,6 +43,9 @@ link accordingly.:
 ## Fixes
 - Some command now properly does that.
 - Using xyz will always do this.
+
+## Thank you to our community contributions this release
+- Some fix (@username)
 
 ## Download Links
 

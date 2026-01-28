@@ -91,7 +91,7 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
-  assert_output "✅ Environment successfully updated."
+  assert_output "✔ Environment successfully updated."
 }
 
 # ---------------------------------------------------------------------------- #
@@ -194,7 +194,11 @@ EOF
 
   run "$FLOX_BIN" edit --reference "owner/name" --name "renamed"
   assert_failure
-  assert_output --partial "Cannot rename environments on FloxHub"
+  assert_output --partial - <<EOF
+✘ ERROR: FloxHub environments must currently be renamed on FloxHub.
+Rename this environment at https://hub.flox.dev/owner/name/settings
+Then pull the renamed environment.
+EOF
 }
 
 # ---------------------------------------------------------------------------- #
@@ -211,7 +215,7 @@ EOF
   # (simulates quitting the editor without saving)
   run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
   assert_success
-  assert_output "⚠️  No changes made to environment."
+  assert_output "! No changes made to environment."
 }
 
 # bats test_tags=edit:unlocked
@@ -226,7 +230,7 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
   assert_success
-  assert_output "✅ Environment successfully updated."
+  assert_output "✔ Environment successfully updated."
 }
 
 # ---------------------------------------------------------------------------- #

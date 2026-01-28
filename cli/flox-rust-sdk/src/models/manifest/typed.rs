@@ -1025,6 +1025,8 @@ pub enum ManifestError {
         "multiple packages match '{0}', please specify an install id from possible matches: {1:?}"
     )]
     MultiplePackagesMatch(String, Vec<String>),
+    #[error("outputs '{0:?}' don't exists for package {1}")]
+    InvalidOutputs(Vec<String>, String),
 }
 
 /// The section where users can declare dependencies on other environments.

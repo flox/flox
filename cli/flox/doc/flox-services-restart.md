@@ -52,15 +52,15 @@ An error is displayed if the specified service does not exist.
 Restart a single service:
 ```
 $ flox services restart myservice
-✅ Service 'myservice' restarted.
+✔ Service 'myservice' restarted.
 ```
 
 Restart all services:
 ```
 $ flox services restart
-✅ Service 'service1' restarted.
-✅ Service 'service2' restarted.
-✅ Service 'service3' restarted.
+✔ Service 'service1' restarted.
+✔ Service 'service2' restarted.
+✔ Service 'service3' restarted.
 ```
 
 # SEE ALSO

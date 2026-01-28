@@ -6,8 +6,9 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_core::activate::mode::ActivateMode;
 use flox_rust_sdk::data::AttrPath;
-use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox};
+use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox, RemoteEnvironmentRef};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
+use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
 use flox_rust_sdk::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
 use flox_rust_sdk::providers::catalog::{
@@ -22,7 +23,7 @@ use indoc::{formatdoc, indoc};
 use path_dedot::ParseDot;
 use tracing::{debug, info_span, instrument};
 
-use crate::commands::{SHELL_COMPLETION_DIR, environment_description};
+use crate::commands::{SHELL_COMPLETION_DIR, ensure_floxhub_token, environment_description};
 use crate::subcommand_metric;
 use crate::utils::dialog::Dialog;
 use crate::utils::message;
@@ -64,28 +65,41 @@ impl InitHook for InitHookType {
     }
 }
 
+#[derive(Bpaf, Clone)]
+enum InitEnvironmentTypeSelect {
+    Path {
+        /// Directory to create the environment in (default: current directory)
+        #[bpaf(long, short, argument("path"), complete_shell(SHELL_COMPLETION_DIR))]
+        dir: Option<PathBuf>,
+
+        /// Name of the environment
+        ///
+        /// "$(basename $PWD)" or "default" if in $HOME
+        #[bpaf(long("name"), short('n'), argument("name"))]
+        env_name: Option<String>,
+
+        /// Apply Flox recommendations for the environment based on what languages
+        /// are being used in the containing directory
+        #[bpaf(long)]
+        auto_setup: bool,
+
+        /// Don't auto-detect language support for a project or
+        /// make suggestions.
+        #[bpaf(long)]
+        no_auto_setup: bool,
+    },
+    FloxHub {
+        /// A FloxHub environment
+        #[bpaf(long("reference"), long("ref"), short('r'), argument("owner>/<name"))]
+        environment_ref: RemoteEnvironmentRef,
+    },
+}
+
 // Create an environment in the current directory
 #[derive(Bpaf, Clone)]
 pub struct Init {
-    /// Directory to create the environment in (default: current directory)
-    #[bpaf(long, short, argument("path"), complete_shell(SHELL_COMPLETION_DIR))]
-    dir: Option<PathBuf>,
-
-    /// Name of the environment
-    ///
-    /// "$(basename $PWD)" or "default" if in $HOME
-    #[bpaf(long("name"), short('n'), argument("name"))]
-    env_name: Option<String>,
-
-    /// Apply Flox recommendations for the environment based on what languages
-    /// are being used in the containing directory
-    #[bpaf(long)]
-    auto_setup: bool,
-
-    /// Don't auto-detect language support for a project or
-    /// make suggestions.
-    #[bpaf(long)]
-    no_auto_setup: bool,
+    #[bpaf(external(init_environment_type_select))]
+    type_select: InitEnvironmentTypeSelect,
 
     /// Set up the environment with the emptiest possible manifest.
     #[bpaf(short, long)]
@@ -97,237 +111,89 @@ impl Init {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("init");
 
-        let dir = match &self.dir {
-            Some(dir) => dir.clone(),
-            None => std::env::current_dir().context("Couldn't determine current directory")?,
-        };
+        match self.type_select {
+            InitEnvironmentTypeSelect::Path {
+                dir,
+                env_name,
+                auto_setup,
+                no_auto_setup,
+            } => {
+                let dir = match dir {
+                    Some(dir) => dir.clone(),
+                    None => {
+                        std::env::current_dir().context("Couldn't determine current directory")?
+                    },
+                };
 
-        let Some(home_dir) = dirs::home_dir() else {
-            bail!("Couldn't determine home directory");
-        };
+                let Some(home_dir) = dirs::home_dir() else {
+                    bail!("Couldn't determine home directory");
+                };
 
-        let default_environment = dir == home_dir;
+                let default_environment = dir == home_dir;
 
-        let env_name = if let Some(ref name) = self.env_name {
-            EnvironmentName::from_str(name)?
-        } else if default_environment {
-            EnvironmentName::from_str(DEFAULT_NAME)?
-        } else {
-            let name = dir
-                .parse_dot()?
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .context("Can't init in root")?;
-            EnvironmentName::from_str(&slug::slugify(name))?
-        };
+                let env_name = if let Some(ref name) = env_name {
+                    EnvironmentName::from_str(name)?
+                } else if default_environment {
+                    EnvironmentName::from_str(DEFAULT_NAME)?
+                } else {
+                    let name = dir
+                        .parse_dot()?
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .context("Can't init in root")?;
+                    EnvironmentName::from_str(&slug::slugify(name))?
+                };
 
-        // Don't run language hooks for "default" environment
-        let should_customize = !default_environment || self.auto_setup;
-        let skip_customize = self.bare || self.no_auto_setup;
-        let customization = if skip_customize {
-            debug!("user asked to skip auto-setup");
-            InitCustomization::default()
-        } else if should_customize {
-            debug!("attempting auto-setup");
-            self.run_language_hooks(&flox, &dir)
-                .await
-                .unwrap_or_else(|e| {
-                    message::warning(format!("Failed to generate init suggestions: {e}"));
-                    InitCustomization::default()
-                })
-        } else {
-            debug!("skipping auto-setup in home directory");
-            InitCustomization {
-                activate_mode: Some(ActivateMode::Run),
-                ..Default::default()
-            }
-        };
+                let do_auto_setup = AutoSetupBehavior::from_arguments(
+                    auto_setup,
+                    no_auto_setup,
+                    default_environment,
+                    self.bare,
+                );
 
-        let path_pointer = PathPointer::new(env_name);
-        let env = if customization.packages.is_some() {
-            info_span!(
-                "init_with_suggested_packages",
-                progress = "Installing Flox suggested packages"
-            )
-            .in_scope(|| PathEnvironment::init(path_pointer, &dir, &customization, &flox))?
-        } else if self.bare {
-            debug!("creating environment with bare manifest");
-            PathEnvironment::init_bare(path_pointer, &dir, &flox)?
-        } else {
-            debug!("creating environment");
-            PathEnvironment::init(path_pointer, &dir, &customization, &flox)?
-        };
-
-        let env_in_git_repo = GitCommandProvider::discover(&dir).is_ok();
-
-        message::created(format!(
-            "Created environment '{name}' ({system})",
-            name = env.name(),
-            system = flox.system
-        ));
-        if let Some(packages) = customization.packages {
-            let description = environment_description(&ConcreteEnvironment::Path(env))?;
-            for package in packages {
-                message::package_installed(&PackageToInstall::Catalog(package), &description);
-            }
+                init_local_environment(&flox, &dir, &env_name, self.bare, do_auto_setup).await?;
+            },
+            InitEnvironmentTypeSelect::FloxHub { environment_ref } => {
+                let mut flox = flox;
+                ensure_floxhub_token(&mut flox).await?;
+                init_floxhub_environment_decorated(&flox, environment_ref, self.bare)?;
+            },
         }
-
-        message::plain(indoc! {"
-
-            Next:
-              $ flox search <package>    <- Search for a package
-              $ flox install <package>   <- Install a package into an environment
-              $ flox activate            <- Enter the environment
-              $ flox edit                <- Add environment variables and shell hooks"
-        });
-
-        // Don't recommend `flox push` if the env is in a git repo because they
-        // can already git track it and there's a higher likelihood of using
-        // build+publish, subsets of which require a git repo, and don't work
-        // with remote environments.
-        if !env_in_git_repo {
-            let hint_indentation = "  ";
-            message::plain(formatdoc! {"
-                {}$ flox push                <- Use the environment from other machines or
-                                                share it with someone on FloxHub"
-            , hint_indentation});
-        }
-
-        message::plain("");
         Ok(())
     }
+}
 
-    /// Run all language hooks and return a single combined customization
-    async fn run_language_hooks(&self, flox: &Flox, path: &Path) -> Result<InitCustomization> {
-        let mut hooks: Vec<InitHookType> = vec![];
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AutoSetupBehavior {
+    Skip,
+    RunAndPrompt,
+    RunAndForce,
+}
 
-        if let Some(node) = Node::new(flox, path).await? {
-            hooks.push(InitHookType::Node(node));
+impl AutoSetupBehavior {
+    /// Derive the setup behavior from the three overlapping flags
+    /// and runtime working dir.
+    ///
+    /// By default we run setup hooks and prompt users for confirmation.
+    /// With `--auto-setup` we always run hooks and apply them without further input.
+    /// Unless `--auto-setup` is present, providing `--no-auto-setup`, or `--bare`,
+    /// or operating in the home directory/creating a local default environment,
+    /// will skip running init hooks.
+    fn from_arguments(
+        auto_setup: bool,
+        no_auto_setup: bool,
+        is_default_environment: bool,
+        is_bare: bool,
+    ) -> Self {
+        if auto_setup {
+            return AutoSetupBehavior::RunAndForce;
         }
 
-        if let Some(python) = Python::new(flox, path).await {
-            hooks.push(InitHookType::Python(python));
+        if no_auto_setup || is_bare || is_default_environment {
+            return AutoSetupBehavior::Skip;
         }
 
-        if let Some(go) = Go::new(flox, path).await? {
-            hooks.push(InitHookType::Go(go));
-        }
-
-        let mut customizations = vec![];
-
-        for mut hook in hooks {
-            // Run hooks if we can't prompt
-            if self.auto_setup || (Dialog::can_prompt() && hook.prompt_user(flox, path).await?) {
-                customizations.push(hook.get_init_customization())
-            }
-        }
-
-        Ok(Self::combine_customizations(customizations))
-    }
-
-    /// Deduplicate packages and concatenate customization scripts into a single string
-    fn combine_customizations(customizations: Vec<InitCustomization>) -> InitCustomization {
-        let mut custom_hook_on_activate_scripts: Vec<String> = vec![];
-        let mut custom_profile_common_scripts: Vec<String> = vec![];
-        let mut custom_profile_bash_scripts: Vec<String> = vec![];
-        let mut custom_profile_fish_scripts: Vec<String> = vec![];
-        let mut custom_profile_tcsh_scripts: Vec<String> = vec![];
-        let mut custom_profile_zsh_scripts: Vec<String> = vec![];
-        // Deduplicate packages with a set
-        let mut packages_set = HashSet::<CatalogPackage>::new();
-        for customization in customizations {
-            if let Some(packages) = customization.packages {
-                packages_set.extend(packages)
-            }
-            if let Some(hook_on_activate_script) = customization.hook_on_activate {
-                custom_hook_on_activate_scripts.push(hook_on_activate_script)
-            }
-            if let Some(profile_common_script) = customization.profile_common {
-                custom_profile_common_scripts.push(profile_common_script)
-            }
-            if let Some(profile_bash_script) = customization.profile_bash {
-                custom_profile_bash_scripts.push(profile_bash_script)
-            }
-            if let Some(profile_fish_script) = customization.profile_fish {
-                custom_profile_fish_scripts.push(profile_fish_script)
-            }
-            if let Some(profile_tcsh_script) = customization.profile_tcsh {
-                custom_profile_tcsh_scripts.push(profile_tcsh_script)
-            }
-            if let Some(profile_zsh_script) = customization.profile_zsh {
-                custom_profile_zsh_scripts.push(profile_zsh_script)
-            }
-        }
-
-        let custom_hook_on_activate = (!custom_hook_on_activate_scripts.is_empty()).then(|| {
-            formatdoc! {"
-                # Autogenerated by Flox
-
-                {}
-
-                # End autogenerated by Flox
-                ", custom_hook_on_activate_scripts.join("\n\n")}
-        });
-
-        let custom_profile_common = (!custom_profile_common_scripts.is_empty()).then(|| {
-            formatdoc! {"
-                # Autogenerated by Flox
-
-                {}
-
-                # End autogenerated by Flox
-                ", custom_profile_common_scripts.join("\n\n")}
-        });
-        let custom_profile_bash = (!custom_profile_bash_scripts.is_empty()).then(|| {
-            formatdoc! {"
-                # Autogenerated by Flox
-
-                {}
-
-                # End autogenerated by Flox
-                ", custom_profile_bash_scripts.join("\n\n")}
-        });
-        let custom_profile_fish = (!custom_profile_fish_scripts.is_empty()).then(|| {
-            formatdoc! {"
-                # Autogenerated by Flox
-
-                {}
-
-                # End autogenerated by Flox
-                ", custom_profile_fish_scripts.join("\n\n")}
-        });
-        let custom_profile_tcsh = (!custom_profile_tcsh_scripts.is_empty()).then(|| {
-            formatdoc! {"
-                # Autogenerated by Flox
-
-                {}
-
-                # End autogenerated by Flox
-                ", custom_profile_tcsh_scripts.join("\n\n")}
-        });
-        let custom_profile_zsh = (!custom_profile_zsh_scripts.is_empty()).then(|| {
-            formatdoc! {"
-                # Autogenerated by Flox
-
-                {}
-
-                # End autogenerated by Flox
-                ", custom_profile_zsh_scripts.join("\n\n")}
-        });
-
-        let packages = (!packages_set.is_empty())
-            .then(|| packages_set.into_iter().collect::<Vec<CatalogPackage>>());
-
-        InitCustomization {
-            hook_on_activate: custom_hook_on_activate,
-            profile_common: custom_profile_common,
-            profile_bash: custom_profile_bash,
-            profile_fish: custom_profile_fish,
-            profile_tcsh: custom_profile_tcsh,
-            profile_zsh: custom_profile_zsh,
-            packages,
-            activate_mode: None, // Language hooks don't touch mode.
-        }
+        AutoSetupBehavior::RunAndPrompt
     }
 }
 
@@ -336,6 +202,242 @@ trait InitHook {
     async fn prompt_user(&mut self, flox: &Flox, path: &Path) -> Result<bool>;
 
     fn get_init_customization(&self) -> InitCustomization;
+}
+
+async fn init_local_environment(
+    flox: &Flox,
+    dir: &Path,
+    name: &EnvironmentName,
+    bare: bool,
+    auto_setup: AutoSetupBehavior,
+) -> Result<()> {
+    let mut customization = if auto_setup != AutoSetupBehavior::Skip {
+        debug!("attempting auto-setup");
+        run_language_hooks(flox, dir, auto_setup == AutoSetupBehavior::RunAndForce)
+            .await
+            .unwrap_or_else(|e| {
+                message::warning(format!("Failed to generate init suggestions: {e}"));
+                InitCustomization::default()
+            })
+    } else {
+        debug!("skipping auto-setup");
+        InitCustomization::default()
+    };
+
+    if Some(dir) == std::env::home_dir().as_deref() {
+        debug!("environment in home-dir initialized in runtime mode");
+        customization.activate_mode = Some(ActivateMode::Run);
+    }
+
+    let path_pointer = PathPointer::new(name.clone());
+    let env = if customization.packages.is_some() {
+        info_span!(
+            "init_with_suggested_packages",
+            progress = "Installing Flox suggested packages"
+        )
+        .in_scope(|| PathEnvironment::init(path_pointer, dir, &customization, flox))?
+    } else if bare {
+        debug!("creating environment with bare manifest");
+        PathEnvironment::init_bare(path_pointer, dir, flox)?
+    } else {
+        debug!("creating environment");
+        PathEnvironment::init(path_pointer, dir, &customization, flox)?
+    };
+
+    let env_in_git_repo = GitCommandProvider::discover(dir).is_ok();
+
+    message::created(format!(
+        "Created environment '{name}' ({system})",
+        name = env.name(),
+        system = flox.system
+    ));
+    if let Some(packages) = customization.packages {
+        let description = environment_description(&ConcreteEnvironment::Path(env))?;
+        for package in packages {
+            message::package_installed(&PackageToInstall::Catalog(package), &description);
+        }
+    }
+
+    message::plain(indoc! {"
+
+        Next:
+          $ flox search <package>    <- Search for a package
+          $ flox install <package>   <- Install a package into an environment
+          $ flox activate            <- Enter the environment
+          $ flox edit                <- Add environment variables and shell hooks"
+    });
+
+    // Don't recommend `flox push` if the env is in a git repo because they
+    // can already git track it and there's a higher likelihood of using
+    // build+publish, subsets of which require a git repo, and don't work
+    // with remote environments.
+    if !env_in_git_repo {
+        let hint_indentation = "  ";
+        message::plain(formatdoc! {"
+            {}$ flox push                <- Use the environment from other machines or
+                                            share it with someone on FloxHub"
+        , hint_indentation});
+    }
+
+    message::plain("");
+    Ok(())
+}
+
+/// Same as [RemoteEnvironment::init_floxhub_environment]
+/// but with added decoration/messaging on success.
+fn init_floxhub_environment_decorated(
+    flox: &Flox,
+    env_ref: RemoteEnvironmentRef,
+    bare: bool,
+) -> Result<()> {
+    RemoteEnvironment::init_floxhub_environment(flox, env_ref.clone(), bare)?;
+    message::created(format!("Created environment '{env_ref}'"));
+    message::plain(formatdoc! {"
+
+        Next:
+          Search for a package                      -> $ flox search <package>
+          Install a package into an environment     -> $ flox install -r {env_ref} <package>
+          Enter the environment                     -> $ flox activate -r {env_ref}
+          Add environment variables and shell hooks -> $ flox edit -r {env_ref}"
+    });
+    Ok(())
+}
+
+/// Run all language hooks and return a single combined customization
+async fn run_language_hooks(
+    flox: &Flox,
+    path: &Path,
+    force_auto_setup: bool,
+) -> Result<InitCustomization> {
+    let mut hooks: Vec<InitHookType> = vec![];
+
+    if let Some(node) = Node::new(flox, path).await? {
+        hooks.push(InitHookType::Node(node));
+    }
+
+    if let Some(python) = Python::new(flox, path).await {
+        hooks.push(InitHookType::Python(python));
+    }
+
+    if let Some(go) = Go::new(flox, path).await? {
+        hooks.push(InitHookType::Go(go));
+    }
+
+    let mut customizations = vec![];
+
+    for mut hook in hooks {
+        // Run hooks if we can't prompt
+        if force_auto_setup || (Dialog::can_prompt() && hook.prompt_user(flox, path).await?) {
+            customizations.push(hook.get_init_customization())
+        }
+    }
+
+    Ok(combine_customizations(customizations))
+}
+
+/// Deduplicate packages and concatenate customization scripts into a single string
+fn combine_customizations(customizations: Vec<InitCustomization>) -> InitCustomization {
+    let mut custom_hook_on_activate_scripts: Vec<String> = vec![];
+    let mut custom_profile_common_scripts: Vec<String> = vec![];
+    let mut custom_profile_bash_scripts: Vec<String> = vec![];
+    let mut custom_profile_fish_scripts: Vec<String> = vec![];
+    let mut custom_profile_tcsh_scripts: Vec<String> = vec![];
+    let mut custom_profile_zsh_scripts: Vec<String> = vec![];
+    // Deduplicate packages with a set
+    let mut packages_set = HashSet::<CatalogPackage>::new();
+    for customization in customizations {
+        if let Some(packages) = customization.packages {
+            packages_set.extend(packages)
+        }
+        if let Some(hook_on_activate_script) = customization.hook_on_activate {
+            custom_hook_on_activate_scripts.push(hook_on_activate_script)
+        }
+        if let Some(profile_common_script) = customization.profile_common {
+            custom_profile_common_scripts.push(profile_common_script)
+        }
+        if let Some(profile_bash_script) = customization.profile_bash {
+            custom_profile_bash_scripts.push(profile_bash_script)
+        }
+        if let Some(profile_fish_script) = customization.profile_fish {
+            custom_profile_fish_scripts.push(profile_fish_script)
+        }
+        if let Some(profile_tcsh_script) = customization.profile_tcsh {
+            custom_profile_tcsh_scripts.push(profile_tcsh_script)
+        }
+        if let Some(profile_zsh_script) = customization.profile_zsh {
+            custom_profile_zsh_scripts.push(profile_zsh_script)
+        }
+    }
+
+    let custom_hook_on_activate = (!custom_hook_on_activate_scripts.is_empty()).then(|| {
+        formatdoc! {"
+            # Autogenerated by Flox
+
+            {}
+
+            # End autogenerated by Flox
+            ", custom_hook_on_activate_scripts.join("\n\n")}
+    });
+
+    let custom_profile_common = (!custom_profile_common_scripts.is_empty()).then(|| {
+        formatdoc! {"
+            # Autogenerated by Flox
+
+            {}
+
+            # End autogenerated by Flox
+            ", custom_profile_common_scripts.join("\n\n")}
+    });
+    let custom_profile_bash = (!custom_profile_bash_scripts.is_empty()).then(|| {
+        formatdoc! {"
+            # Autogenerated by Flox
+
+            {}
+
+            # End autogenerated by Flox
+            ", custom_profile_bash_scripts.join("\n\n")}
+    });
+    let custom_profile_fish = (!custom_profile_fish_scripts.is_empty()).then(|| {
+        formatdoc! {"
+            # Autogenerated by Flox
+
+            {}
+
+            # End autogenerated by Flox
+            ", custom_profile_fish_scripts.join("\n\n")}
+    });
+    let custom_profile_tcsh = (!custom_profile_tcsh_scripts.is_empty()).then(|| {
+        formatdoc! {"
+            # Autogenerated by Flox
+
+            {}
+
+            # End autogenerated by Flox
+            ", custom_profile_tcsh_scripts.join("\n\n")}
+    });
+    let custom_profile_zsh = (!custom_profile_zsh_scripts.is_empty()).then(|| {
+        formatdoc! {"
+            # Autogenerated by Flox
+
+            {}
+
+            # End autogenerated by Flox
+            ", custom_profile_zsh_scripts.join("\n\n")}
+    });
+
+    let packages = (!packages_set.is_empty())
+        .then(|| packages_set.into_iter().collect::<Vec<CatalogPackage>>());
+
+    InitCustomization {
+        hook_on_activate: custom_hook_on_activate,
+        profile_common: custom_profile_common,
+        profile_bash: custom_profile_bash,
+        profile_fish: custom_profile_fish,
+        profile_tcsh: custom_profile_tcsh,
+        profile_zsh: custom_profile_zsh,
+        packages,
+        activate_mode: None, // Language hooks don't touch mode.
+    }
 }
 
 /// Create a temporary TOML document containing just the contents of the passed
@@ -597,6 +699,10 @@ fn group_for_single_package(attr_path: &str, version: Option<&str>) -> PackageGr
 #[cfg(test)]
 mod tests {
 
+    use flox_rust_sdk::flox::EnvironmentOwner;
+    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub;
+    use flox_rust_sdk::models::environment::ManagedPointer;
+    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
@@ -681,7 +787,7 @@ mod tests {
             },
         ];
 
-        let mut combined = Init::combine_customizations(customizations);
+        let mut combined = combine_customizations(customizations);
         combined.packages.as_mut().unwrap().sort();
         assert_eq!(combined, InitCustomization {
             // Yes, this is incredibly brittle, but it's to make sure we get the newlines right
@@ -845,5 +951,35 @@ mod tests {
         let customization = InitCustomization::default();
         let toml_str = format_customization(&customization).unwrap();
         assert_eq!(toml_str, "");
+    }
+
+    #[test]
+    fn init_floxhub_environment_initializes_and_prints_message() {
+        let owner = EnvironmentOwner::from_str("test").unwrap();
+        let name = EnvironmentName::from_str("foo").unwrap();
+        let env_ref = RemoteEnvironmentRef::new_from_parts(owner.clone(), name.clone());
+
+        let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+        let (subscriber, written) = test_subscriber_message_only();
+
+        tracing::subscriber::with_default(subscriber, || {
+            init_floxhub_environment_decorated(&flox, env_ref.clone(), false)
+        })
+        .unwrap();
+
+        assert!(
+            written
+                .to_string()
+                .contains(&format!("Created environment '{env_ref}'"))
+        );
+
+        assert!(
+            written
+                .to_string()
+                .contains("Add environment variables and shell hooks")
+        );
+
+        RemoteEnvironment::new(&flox, ManagedPointer::new(owner, name, &flox.floxhub), None)
+            .expect("find initialized remote environment");
     }
 }

@@ -113,7 +113,7 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
-  assert_output --partial "✅ Environment successfully updated."
+  assert_output --partial "✔ Environment successfully updated."
 }
 
 # ---------------------------------------------------------------------------- #
@@ -126,11 +126,11 @@ EOF
   RUST_BACKTRACE=0 run "$FLOX_BIN" push --owner "$NEW_OWNER"
   assert_failure
   assert_output - << EOF
-⚠️  Using file://${FLOX_FLOXHUB_PATH} as FloxHub host
+! Using file://${FLOX_FLOXHUB_PATH} as FloxHub host
 '\$_FLOX_FLOXHUB_GIT_URL' is used for testing purposes only,
 alternative FloxHub hosts are not yet supported!
 
-❌ ERROR: Cannot change the owner of an environment already pushed to FloxHub.
+✘ ERROR: Cannot change the owner of an environment already pushed to FloxHub.
 
 To push this environment to another owner or org:
 * Push any outstanding changes with 'flox push'
@@ -237,7 +237,7 @@ EOF
   assert_failure
   # assert that the error message includes infomration about the generations/history
   assert_output --regexp "
-❌ ERROR: The environment has diverged from the remote:
+✘ ERROR: The environment has diverged from the remote:
 
 Local:
 
@@ -386,7 +386,7 @@ Upstream:
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" install hello
   assert_failure
-  assert_output --partial "❌ ERROR: Your environment has changes that are not yet synced to a generation."
+  assert_output --partial "✘ ERROR: Your environment has changes that are not yet synced to a generation."
 
   "$FLOX_BIN" edit --sync
 
@@ -406,7 +406,7 @@ Upstream:
 
   run "$FLOX_BIN" uninstall hello
   assert_failure
-  assert_output --partial "❌ ERROR: Your environment has changes that are not yet synced to a generation."
+  assert_output --partial "✘ ERROR: Your environment has changes that are not yet synced to a generation."
 
   "$FLOX_BIN" edit --sync
 
@@ -422,7 +422,7 @@ Upstream:
 
   run "$FLOX_BIN" upgrade
   assert_failure
-  assert_output --partial "❌ ERROR: Your environment has changes that are not yet synced to a generation."
+  assert_output --partial "✘ ERROR: Your environment has changes that are not yet synced to a generation."
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" edit --sync
@@ -453,7 +453,7 @@ Upstream:
 
   run "$FLOX_BIN" push
   assert_failure
-  assert_output --partial "❌ ERROR: Your environment has changes that are not yet synced to a generation."
+  assert_output --partial "✘ ERROR: Your environment has changes that are not yet synced to a generation."
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" edit --sync
@@ -470,7 +470,7 @@ Upstream:
 
   run "$FLOX_BIN" pull
   assert_failure
-  assert_output --partial "❌ ERROR: Your environment has changes that are not yet synced to a generation."
+  assert_output --partial "✘ ERROR: Your environment has changes that are not yet synced to a generation."
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" edit --reset
@@ -487,7 +487,7 @@ Upstream:
 
   run "$FLOX_BIN" pull
   assert_failure
-  assert_output --partial "❌ ERROR: Your environment has changes that are not yet synced to a generation."
+  assert_output --partial "✘ ERROR: Your environment has changes that are not yet synced to a generation."
 
   run "$FLOX_BIN" pull --force
   assert_success

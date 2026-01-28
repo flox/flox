@@ -240,7 +240,7 @@ EOF
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
-  assert_output --partial "✅ 'hello' installed to environment"
+  assert_output --partial "✔ 'hello' installed to environment"
   FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
   assert_output --regexp "bin/hello"
   refute_output "not found"
@@ -263,7 +263,7 @@ EOF
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
-  assert_output --partial "✅ 'hello' installed to environment"
+  assert_output --partial "✔ 'hello' installed to environment"
   FLOX_SHELL="tcsh" run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
   assert_output --regexp "bin/hello"
   refute_output "not found"
@@ -275,7 +275,7 @@ EOF
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
-  assert_output --partial "✅ 'hello' installed to environment"
+  assert_output --partial "✔ 'hello' installed to environment"
 
   FLOX_SHELL="zsh" run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
   assert_output --regexp "bin/hello"
@@ -3348,7 +3348,7 @@ EOF
     eval "$(${FLOX_BIN} activate -d ${PROJECT_DIR})"
   '
   # There should be no errors from the in-place activations.
-  assert_output "✅ 'hello' installed to environment '${PROJECT_NAME}'"
+  assert_output "✔ 'hello' installed to environment '${PROJECT_NAME}'"
   assert_success
 
   # Additional activations of the modified environment should still work.
@@ -3399,7 +3399,7 @@ EOF
   assert_failure
   assert_output "Started outer activation..
 Attempting inner activation..
-❌ ERROR: This environment has already been activated with an incompatible version of 'flox'.
+✘ ERROR: This environment has already been activated with an incompatible version of 'flox'.
 
 Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"
@@ -3437,7 +3437,7 @@ EOF
   assert_failure
   assert_output "Started outer activation..
 Attempting inner activation..
-❌ ERROR: Environment can't be activated in 'dev' mode whilst there are existing activations in 'run' mode
+✘ ERROR: Environment can't be activated in 'dev' mode whilst there are existing activations in 'run' mode
 
 Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"
@@ -4076,7 +4076,7 @@ EOF
 
   # All modes unset RUST_BACKTRACE so we don't get the backtrace
   error_text="$(cat << EOF
-❌ ERROR: This environment has already been activated with an incompatible version of 'flox'.
+✘ ERROR: This environment has already been activated with an incompatible version of 'flox'.
 
 Exit all activations of the environment and try again.
 EOF
@@ -4096,7 +4096,7 @@ EOF
       else
         expected_message=="$(cat << EOF
 spawn ${FLOX_BIN} activate --dir ${PROJECT_DIR}
-✅ Attached to existing activation of environment '${PROJECT_NAME}'
+✔ Attached to existing activation of environment '${PROJECT_NAME}'
 To stop using this environment, type 'exit'
 
 ${output_from_rc_files}
@@ -4665,7 +4665,7 @@ EOF
 
   run --separate-stderr "$FLOX_BIN" activate -d composer -c 'echo "locking"'
   assert_success
-  assert_equal "$stderr" "ℹ️  The following manifest fields were overridden during merging:
+  assert_equal "$stderr" "ℹ The following manifest fields were overridden during merging:
 - This environment set:
   - vars.foo
 Sourcing .bashrc
@@ -5181,7 +5181,7 @@ EOF
   expected_stderr="$(cat << EOF
 on-activate stdout message
 on-activate stderr message
-❌ ERROR: Running hook.on-activate failed
+✘ ERROR: Running hook.on-activate failed
 EOF
 )"
   assert_equal "$stderr" "$expected_stderr"

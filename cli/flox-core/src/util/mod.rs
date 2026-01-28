@@ -1,3 +1,5 @@
+pub mod message;
+
 use std::collections::HashMap;
 use std::env;
 
