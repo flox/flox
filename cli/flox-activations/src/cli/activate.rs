@@ -295,7 +295,7 @@ impl ActivateArgs {
             // Register signal handler BEFORE spawning executive to avoid race condition
             // where SIGUSR1 arrives before handler is registered
             let signals = Signals::new([SIGCHLD, SIGUSR1])?;
-            let exec_pid = self.spawn_executive(context, &start_state_dir)?;
+            let exec_pid = Self::spawn_executive(context, &start_state_dir)?;
             activations.set_executive_pid(exec_pid.as_raw());
             Some((exec_pid, signals))
         } else {
@@ -393,7 +393,6 @@ impl ActivateArgs {
     }
 
     fn spawn_executive(
-        &self,
         context: &ActivateCtx,
         start_state_dir: &Path,
     ) -> Result<Pid, anyhow::Error> {
