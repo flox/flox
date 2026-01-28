@@ -2584,6 +2584,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "nef-lock-catalog"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "indexmap 2.13.0",
+ "serde",
+ "serde_json",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
 name = "nix"
 version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
