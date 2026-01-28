@@ -5,6 +5,7 @@
       extendAttrSet = (self.callPackage ./extendAttrSet.nix { }).extendAttrSet;
       mkOverlay = (self.callPackage ./mkOverlay.nix { }).mkOverlay;
       reflect = self.callPackage ./reflect.nix { };
+      instantiate = self.callPackage ./instantiate.nix { };
     });
   };
 }
