@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::LazyLock;
 
+use flox_core::activate::vars::FLOX_RUNTIME_DIR_VAR;
 use indoc::formatdoc;
 use itertools::Itertools;
 use serde::Deserialize;
@@ -20,8 +21,6 @@ use crate::models::environment::{Environment, EnvironmentError};
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::typed::{DEFAULT_GROUP_NAME, Inner, Manifest};
 use crate::utils::{CommandExt, ReaderExt};
-
-pub const FLOX_RUNTIME_DIR_VAR: &str = "FLOX_RUNTIME_DIR";
 
 static FLOX_BUILD_MK: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::var("FLOX_BUILD_MK")

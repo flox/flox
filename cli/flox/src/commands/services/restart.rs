@@ -9,12 +9,13 @@ use flox_rust_sdk::providers::services::process_compose::{
     LoggedError,
     ProcessStates,
     ServiceError,
-    process_compose_down,
     restart_service,
 };
 use tracing::{debug, instrument};
 
 use crate::commands::services::{
+    ProcessComposeState,
+    ServicesCommandsError,
     ServicesEnvironment,
     guard_is_within_activation,
     guard_service_commands_available,
@@ -38,13 +39,13 @@ pub struct Restart {
 impl Restart {
     #[instrument(name = "restart", skip_all)]
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
-        let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
+        let mut env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
         environment_subcommand_metric!("services::restart", env.environment);
         let (current_mode, generation) = guard_is_within_activation(&env, "restart")?;
         guard_service_commands_available(&env, &flox.system)?;
 
+        let process_compose_state = env.process_compose_state(&flox, &current_mode);
         let socket = env.socket();
-        let existing_process_compose = socket.exists();
 
         let existing_processes = match ProcessStates::read(socket) {
             Ok(process_states) => process_states,
@@ -57,46 +58,53 @@ impl Restart {
         let all_processes_stopped = existing_processes.iter().all(|p| p.is_stopped());
         let restart_all = self.names.is_empty();
 
-        // TODO: We could optimise by checking whether the manifest has actually changed.
-        let start_new_process_compose = restart_all || all_processes_stopped;
+        debug!(
+            socket_exists = socket.exists(),
+            ?process_compose_state,
+            all_processes_stopped,
+            restart_all,
+            "evaluating restart conditions"
+        );
 
-        if start_new_process_compose {
-            if existing_process_compose {
-                debug!("stopping existing process-compose instance");
-                process_compose_down(socket)?;
-            }
-            debug!("restarting services in new process-compose instance");
-            let names = start_services_with_new_process_compose(
-                config,
-                flox,
-                self.environment,
-                env.into_inner(),
-                current_mode,
-                &self.names,
-                generation,
-            )
-            .await?;
-            for name in names {
-                message::updated(format!(
-                    "Service '{name}' {}.",
-                    Self::action_for_service_name(&name, &existing_processes)
-                ));
-            }
-            Ok(())
-        } else {
-            debug!("restarting services with existing process-compose instance");
-            Self::restart_with_existing_process_compose(
-                socket,
-                &env.manifest.services,
-                &flox.system,
-                &self.names,
-                existing_processes,
-            )
+        match process_compose_state {
+            ProcessComposeState::ActivationStartingSelf => {
+                Err(ServicesCommandsError::CalledFromActivationHook.into())
+            },
+            ProcessComposeState::NotCurrent if all_processes_stopped || restart_all => {
+                debug!("restarting services in new process-compose instance");
+                let names = start_services_with_new_process_compose(
+                    config,
+                    flox,
+                    self.environment,
+                    env.into_inner(),
+                    current_mode,
+                    &self.names,
+                    generation,
+                )
+                .await?;
+                for name in names {
+                    message::updated(format!(
+                        "Service '{name}' {}.",
+                        Self::action_for_service_name(&name, &existing_processes)
+                    ));
+                }
+                Ok(())
+            },
+            ProcessComposeState::Current | ProcessComposeState::NotCurrent => {
+                debug!("restarting services with existing process-compose instance");
+                Self::restart_with_existing_process_compose(
+                    socket,
+                    &env.manifest.services,
+                    &flox.system,
+                    &self.names,
+                    existing_processes,
+                )
+            },
         }
     }
 
     // Return a "started" or "restarted" action depending on whether the service
-    // was previous consider running.
+    // was previously considered running.
     fn action_for_service_name(name: &str, processes: &ProcessStates) -> String {
         let process = match processes.process(name) {
             Some(proc) => proc,
@@ -108,7 +116,7 @@ impl Restart {
         }
     }
 
-    // Retarts services using an already running process-compose.
+    // Restarts services using an already running process-compose.
     // Defaults to restarting all services if no services are specified.
     fn restart_with_existing_process_compose(
         socket: impl AsRef<Path>,

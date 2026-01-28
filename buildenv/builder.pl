@@ -567,6 +567,7 @@ if ($manifest) {
 
         # We can have nice names for things.
         my $interpreter_out = $nix_attrs->{"interpreter_out"};
+        my $flox_activations_out = $nix_attrs->{"flox_activations_out"};
         my $interpreter_wrapper = $nix_attrs->{"interpreter_wrapper"};
         my $manifestPackage = $nix_attrs->{"manifestPackage"};
         my $system = $nix_attrs->{"system"};
@@ -582,6 +583,14 @@ if ($manifest) {
             "outputs_to_install" => [ "out" ],
             "outputs" => {
                 "out" => $interpreter_out
+            },
+            priority => 1
+        );
+        my %flox_activations_out_PackageEntry = (
+            "group" => "toplevel", # Want to appear in build closures.
+            "outputs_to_install" => [ "out" ],
+            "outputs" => {
+                "out" => $flox_activations_out
             },
             priority => 1
         );
@@ -609,6 +618,7 @@ if ($manifest) {
         my @developPackages = (
             @outPackages,
             \%interpreter_out_PackageEntry,
+            \%flox_activations_out_PackageEntry,
             \%manifestPackageEntry
         );
 

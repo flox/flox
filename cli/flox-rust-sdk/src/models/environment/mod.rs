@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use enum_dispatch::enum_dispatch;
+use flox_core::activate::mode::ActivateMode;
 pub use flox_core::{Version, path_hash};
 use generations::{GenerationId, GenerationsError};
 use indoc::formatdoc;
@@ -21,7 +22,7 @@ use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::{LockResult, LockedInclude, Lockfile, RecoverableMergeError, ResolveError};
 use super::manifest::raw::PackageToInstall;
-use super::manifest::typed::{ActivateMode, ManifestError};
+use super::manifest::typed::ManifestError;
 use crate::data::{CanonicalPath, CanonicalizeError, System};
 use crate::flox::{Flox, Floxhub};
 use crate::models::environment::generations::GenerationsEnvironment;
@@ -68,18 +69,6 @@ pub const LIB_DIR_NAME: &str = "lib";
 pub const LOG_DIR_NAME: &str = "log";
 pub const ENV_DIR_NAME: &str = "env";
 
-// The FLOX_* variables which follow are currently updated by the CLI as it
-// activates new environments, and they are consequently *not* updated with
-// manual invocations of the activation script. We want the activation script
-// to eventually have feature parity with the CLI, so in future we will need
-// to migrate this logic to the activation script itself.
-
-pub const FLOX_ENV_LOG_DIR_VAR: &str = "_FLOX_ENV_LOG_DIR";
-pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "_FLOX_ACTIVE_ENVIRONMENTS";
-pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
-/// This variable is used to communicate what socket to use to the activate
-/// script.
-pub const FLOX_SERVICES_SOCKET_VAR: &str = "_FLOX_SERVICES_SOCKET";
 /// This variable is used in tests to override what path to use for the socket.
 pub const FLOX_SERVICES_SOCKET_OVERRIDE_VAR: &str = "_FLOX_SERVICES_SOCKET_OVERRIDE";
 
@@ -186,7 +175,7 @@ pub trait Environment: Send {
 
     /// Return a path that environment should use to store logs.
     ///
-    /// New log file patterns need to be added to `flox-watchdog` for garbage collection.
+    /// New log file patterns need to be added to `flox_activations::cli::executive::log_gc` for garbage collection.
     ///
     /// The returned path will exist.
     fn log_path(&self) -> Result<CanonicalPath, EnvironmentError>;

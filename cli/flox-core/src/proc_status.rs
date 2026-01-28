@@ -2,6 +2,7 @@ use std::fs::read_to_string;
 use std::num::ParseIntError;
 use std::process::Command;
 
+use sysinfo::{Pid, ProcessesToUpdate, System};
 use tracing::{debug, trace, warn};
 
 #[derive(Debug, thiserror::Error)]
@@ -120,4 +121,35 @@ pub fn read_pid_status(pid: i32) -> ProcStatus {
 /// Returns whether the process is considered running.
 pub fn pid_is_running(pid: i32) -> bool {
     read_pid_status(pid) == ProcStatus::Running
+}
+
+/// Check if the current process is a descendant of the given PID.
+///
+/// Walks up the process tree from the current process to see if `ancestor_pid`
+/// is in the parent chain.
+pub fn is_descendant_of(ancestor_pid: i32) -> bool {
+    let ancestor = Pid::from_u32(ancestor_pid as u32);
+    let mut system = System::new();
+    let mut check_pid = Pid::from_u32(std::process::id());
+
+    // Safety limit - process trees shouldn't be deeper than this.
+    for _ in 0..256 {
+        // Don't refresh all to avoid unnecessary overhead.
+        system.refresh_processes(ProcessesToUpdate::Some(&[check_pid]), false);
+        let Some(process) = system.process(check_pid) else {
+            return false;
+        };
+        let Some(parent_pid) = process.parent() else {
+            return false;
+        };
+
+        if parent_pid == ancestor {
+            return true;
+        }
+        if parent_pid.as_u32() <= 1 {
+            return false; // Reached init/kernel
+        }
+        check_pid = parent_pid;
+    }
+    false
 }

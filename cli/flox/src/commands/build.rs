@@ -25,7 +25,7 @@ use flox_rust_sdk::providers::catalog::{
 };
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_rust_sdk::providers::nix;
-use flox_rust_sdk::utils::CommandExt;
+use flox_rust_sdk::utils::{CommandExt, FLOX_INTERPRETER};
 use indoc::formatdoc;
 use itertools::Itertools;
 use thiserror::Error;
@@ -33,7 +33,6 @@ use tracing::{debug, instrument, trace};
 use url::Url;
 
 use super::{DirEnvironmentSelect, dir_environment_select};
-use crate::commands::activate::FLOX_INTERPRETER;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
 

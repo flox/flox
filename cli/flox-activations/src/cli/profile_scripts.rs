@@ -1,10 +1,10 @@
 use std::path::Path;
 
 use clap::Args;
-use log::debug;
+use shell_gen::Shell;
+use tracing::debug;
 
 use super::{join_dir_list, separate_dir_list};
-use crate::shell_gen::{Shell, source_file};
 
 #[derive(Debug, Args)]
 pub struct ProfileScriptsArgs {
@@ -70,9 +70,9 @@ fn source_profile_scripts_cmds(
             let shell_specific = dir.join(format!("activate.d/profile-{shell}"));
             for path in [common, shell_specific] {
                 if path_predicate(&path) {
-                    cmds.push(source_file(&path));
+                    cmds.push(format!("source '{}';", path.display()));
                 } else {
-                    debug!(path:display = path.display(); "script did not exist");
+                    debug!(path = %path.display(), "script did not exist");
                 }
             }
             new_sourced_dirs.insert(0, dir)

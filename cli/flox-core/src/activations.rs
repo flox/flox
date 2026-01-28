@@ -1,288 +1,173 @@
+use std::collections::BTreeMap;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use fslock::LockFile;
-use log::debug;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{Value, json};
 use time::OffsetDateTime;
+use tracing::{debug, trace};
 
-use crate::path_hash;
+use crate::activate::mode::ActivateMode;
 use crate::proc_status::pid_is_running;
+use crate::{Version, path_hash};
+
+const EXECUTIVE_NOT_STARTED: Pid = 0;
 
 type Error = anyhow::Error;
+type Pid = i32;
 
-/// Latest supported version for compatibility between:
-/// - `flox` and `flox-interpreter`
-/// - `flox-activations` and `flox-watchdog`
-///
-/// Incrementing this will require existing activations to exit.
-const LATEST_VERSION: u8 = 1;
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct UncheckedVersion(u8);
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct CheckedVersion(u8);
-impl Default for CheckedVersion {
-    fn default() -> Self {
-        Self(LATEST_VERSION)
-    }
+/// Represents running processes attached to an activation.
+/// Attachments take precedence over executive in this representation.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum RunningProcesses {
+    /// One or more shell processes are attached to the activation
+    Attachments(Vec<Pid>),
+    /// No attachments, but the executive process is running
+    Executive(Pid),
 }
 
-/// Deserialized contents of activations.json
-///
-/// This is the state of the activations of the environments.
-/// There is EXACTLY ONE [Activations] file per FLOX_ENV,
-/// which may be rendered at different times with different store paths.
-/// [Activations::activations] is a list of [Activation]s
-/// with AT MOST ONE activation for a given store path.
-/// This latter invariant is enforced by [Activations::create_activation]
-/// being the only way to add an activation.
-/// Activations are identifiable by their [Activation::id], for simpler lookups
-/// and global uniqueness in case the that two environments have the same store path.
-///
-/// [Activations::version] describes both the version of the file format,
-/// and its interpretation, i.e. the version of the `flox-activations` binary that wrote it.
-/// When read, [Activations] will be parsed with an arbitrary [UncheckedVersion],
-/// wich must first be validated or upgraded with [Activations::check_version].
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Activations<VERSION = CheckedVersion> {
-    version: VERSION,
-    activations: Vec<Activation>,
+impl RunningProcesses {
+    /// Construct a RunningProcesses enum from separate PID lists.
+    /// Filters to running PIDs and applies precedence (attachments > executive).
+    fn from_pids(attached_pids: Vec<Pid>, executive_pid: Pid) -> Option<Self> {
+        let running_attached: Vec<Pid> = attached_pids
+            .into_iter()
+            .filter(|pid| pid_is_running(*pid))
+            .collect();
+
+        let running_executive = Some(executive_pid)
+            .filter(|&pid| pid != EXECUTIVE_NOT_STARTED)
+            .filter(|&pid| pid_is_running(pid));
+
+        if !running_attached.is_empty() {
+            Some(RunningProcesses::Attachments(running_attached))
+        } else {
+            running_executive.map(RunningProcesses::Executive)
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
-#[error(
-    "This environment has already been activated with an incompatible version of 'flox'.\n\
-     \n\
-     Exit all activations of the environment and try again.\n\
-     PIDs of the running activations: {pid_list}",
-    pid_list = .pids.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", "))]
-pub struct Unsupported {
-    pub version: UncheckedVersion,
-    pub pids: Vec<i32>,
+pub enum UnsupportedVersion {
+    /// ActivationState of unsupported version with running activations.
+    WithRunningAttachments { pids: Vec<Pid> },
+    /// ActivationState of unsupported version with no running activations but a running executive.
+    WithRunningExecutive { pid: Pid },
 }
 
-impl Activations<UncheckedVersion> {
-    /// Check the version of the activations file, and upgrade it if necessary.
-    ///
-    /// Currently, this only checks if the version is the [LATEST_VERSION].
-    ///
-    /// As we don't yet have any schema changes,
-    /// it only only handles the interpretation of the Activations file,
-    /// i.e. the version of the `flox-activations` binary that wrote it.
-    ///
-    /// If there are no activations, the version will be upgraded to the [LATEST_VERSION].
-    /// If in the future we change the intepretation or schema with a clear migration path,
-    /// this method would also upgrade the [Activations] to the new version.
-    pub fn check_version(self) -> Result<Activations<CheckedVersion>, Unsupported> {
-        if self.activations.is_empty() {
-            return Ok(Activations {
-                version: CheckedVersion(LATEST_VERSION),
-                activations: self.activations,
-            });
+impl UnsupportedVersion {
+    pub fn from_running_processes(running: RunningProcesses) -> Self {
+        match running {
+            RunningProcesses::Attachments(pids) => {
+                UnsupportedVersion::WithRunningAttachments { pids }
+            },
+            RunningProcesses::Executive(pid) => UnsupportedVersion::WithRunningExecutive { pid },
         }
-
-        if self.version.0 == LATEST_VERSION {
-            return Ok(Activations {
-                version: CheckedVersion(self.version.0),
-                activations: self.activations,
-            });
-        }
-
-        Err(Unsupported {
-            version: self.version,
-            pids: self
-                .activations
-                .iter()
-                .flat_map(|activation| {
-                    activation
-                        .attached_pids
-                        .iter()
-                        .map(|attached_pid| attached_pid.pid)
-                })
-                .collect(),
-        })
     }
 }
 
-impl Activations<CheckedVersion> {
-    /// Get a mutable reference to the activation with the given ID.
-    ///
-    /// Used internally to manipulate the state of an activation.
-    pub fn activation_for_id_mut(
-        &mut self,
-        activation_id: impl AsRef<str>,
-    ) -> Option<&mut Activation> {
-        self.activations
-            .iter_mut()
-            .find(|activation| activation.id == activation_id.as_ref())
-    }
+impl std::fmt::Display for UnsupportedVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnsupportedVersion::WithRunningAttachments { pids } => {
+                let pid_list = pids
+                    .iter()
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
 
-    /// Get a mutable reference to the activation with the given store path.
-    pub fn activation_for_store_path(&self, store_path: &str) -> Option<&Activation> {
-        self.activations
-            .iter()
-            .find(|activation| activation.store_path == store_path)
-    }
-
-    /// Get a mutable reference to the activation with the given store path.
-    pub fn activation_for_store_path_mut(&mut self, store_path: &str) -> Option<&mut Activation> {
-        self.activations
-            .iter_mut()
-            .find(|activation| activation.store_path == store_path)
-    }
-
-    /// Create a new activation for the given store path and attach a PID to it.
-    ///
-    /// If an activation for the store path already exists, return an error.
-    pub fn create_activation(
-        &mut self,
-        store_path: &str,
-        pid: i32,
-    ) -> Result<&mut Activation, Error> {
-        if self.activation_for_store_path(store_path).is_some() {
-            anyhow::bail!("activation for store path '{store_path}' already exists");
+                write!(
+                    f,
+                    "This environment has already been activated with an incompatible version of 'flox'.\n\n\
+                     Exit all activations of the environment and try again.\n\
+                     PIDs of the running activations: {pid_list}",
+                )
+            },
+            UnsupportedVersion::WithRunningExecutive { pid: executive_pid } => {
+                write!(
+                    f,
+                    "This environment has already been activated with an incompatible version of 'flox'.\n\n\
+                     The executive process is still running.\n\
+                     Wait for it to finish, or stop it with: 'kill {executive_pid}'",
+                )
+            },
         }
+    }
+}
 
-        let mut chars = blake3::hash(store_path.as_bytes()).to_hex();
-        // We need something short to put in socket paths
-        chars.truncate(8);
-        let id = chars.to_string();
-        let activation = Activation {
-            id,
-            store_path: store_path.to_string(),
-            ready: false,
-            attached_pids: vec![AttachedPid {
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
+pub enum ModeMismatch {
+    /// Mode mismatch with running attachments.
+    WithRunningAttachments {
+        current_mode: crate::activate::mode::ActivateMode,
+        requested_mode: crate::activate::mode::ActivateMode,
+        pids: Vec<Pid>,
+    },
+    /// Mode mismatch with no running attachments but a running executive.
+    WithRunningExecutive {
+        current_mode: crate::activate::mode::ActivateMode,
+        requested_mode: crate::activate::mode::ActivateMode,
+        pid: Pid,
+    },
+}
+
+impl ModeMismatch {
+    pub fn from_running_processes(
+        current_mode: crate::activate::mode::ActivateMode,
+        requested_mode: crate::activate::mode::ActivateMode,
+        running: RunningProcesses,
+    ) -> Self {
+        match running {
+            RunningProcesses::Attachments(pids) => ModeMismatch::WithRunningAttachments {
+                current_mode,
+                requested_mode,
+                pids,
+            },
+            RunningProcesses::Executive(pid) => ModeMismatch::WithRunningExecutive {
+                current_mode,
+                requested_mode,
                 pid,
-                expiration: None,
-            }],
-        };
-
-        self.activations.push(activation);
-
-        Ok(self.activations.last_mut().unwrap())
+            },
+        }
     }
 }
 
-impl<V> Activations<V> {
-    /// Get an immutable reference to the activation with the given ID.
-    ///
-    /// Used internally to manipulate the state of an activation.
-    pub fn activation_for_id_ref(&self, activation_id: impl AsRef<str>) -> Option<&Activation> {
-        self.activations
-            .iter()
-            .find(|activation| activation.id == activation_id.as_ref())
-    }
+impl std::fmt::Display for ModeMismatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ModeMismatch::WithRunningAttachments {
+                current_mode,
+                requested_mode,
+                pids,
+            } => {
+                let pid_list = pids
+                    .iter()
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
 
-    /// Remove an activation.
-    pub fn remove_activation(&mut self, id: impl AsRef<str>) {
-        self.activations
-            .retain(|activation| activation.id != id.as_ref());
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.activations.is_empty()
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Activation {
-    /// Unique identifier for this activation
-    ///
-    /// There should only be a single activation for an environment + store_path
-    /// combination.
-    /// But there may be multiple activations since the environment's store_path
-    /// may change.
-    /// We generate an ID so that we have something convenient to pass around
-    /// and use as a directory name.
-    id: String,
-    /// The store path of the built environment
-    store_path: String,
-    /// Whether the activation of the environment is ready to be attached to.
-    ///
-    /// Since hooks may take an arbitrary amount of time, it takes an arbitrary
-    /// amount of time before an environment is ready.
-    ready: bool,
-    /// PIDs that have registered interest in the activation.
-    ///
-    /// The activation should not be cleaned up until all PIDs have exited or
-    /// expired.
-    attached_pids: Vec<AttachedPid>,
-}
-
-impl Activation {
-    pub fn id(&self) -> String {
-        self.id.clone()
-    }
-
-    /// Whether the activation is ready to be attached to.
-    ///
-    /// "Readiness" is a one way state change, set via [Self::set_ready].
-    pub fn ready(&self) -> bool {
-        self.ready
-    }
-
-    pub fn attached_pids(&self) -> &Vec<AttachedPid> {
-        &self.attached_pids
-    }
-
-    /// Set the activation as ready to be attached to.
-    pub fn set_ready(&mut self) {
-        self.ready = true;
-    }
-
-    /// Whether the process that started the activation is still running.
-    ///
-    /// Used to determine if the attaching processes need to continue to wait,
-    /// for the activation to become ready.
-    pub fn startup_process_running(&self) -> bool {
-        self.attached_pids
-            .first()
-            .map(|attached_pid| pid_is_running(attached_pid.pid))
-            .unwrap_or_default()
-    }
-
-    /// Attach a PID to an activation.
-    ///
-    /// Register another PID that runs the same activation of an environment.
-    /// Registered PIDs are used by the watchdog,
-    /// to determine when an activation can be cleaned up.
-    pub fn attach_pid(&mut self, pid: i32, expiration: Option<OffsetDateTime>) {
-        let attached_pid = AttachedPid { pid, expiration };
-
-        self.attached_pids.push(attached_pid);
-    }
-
-    /// Remove a PID from an activation.
-    ///
-    /// Unregister a PID that has previously been attached to an activation.
-    ///
-    /// Primarily, used as part of the `attach` subcommand to update,
-    /// which PID is attached to an activation.
-    /// I.e. in in-place activations, the process that started the activation will be flox,
-    /// while the process that attaches to the activation will be the `eval`ing shell.
-    pub fn remove_pid(&mut self, pid: i32) {
-        self.attached_pids
-            .retain(|attached_pid| attached_pid.pid != pid);
-    }
-
-    /// Remove any PIDs that are not running, except if they have an expiration in the future.
-    ///
-    /// Returns a boolean indicating whether any PIDs were removed.
-    pub fn remove_terminated_pids(&mut self) -> bool {
-        let now = OffsetDateTime::now_utc();
-        let old_len = self.attached_pids.len();
-        self.attached_pids.retain(|attached_pid| {
-            if let Some(expiration) = attached_pid.expiration {
-                // If the PID has an unreached expiration, retain it even if it
-                // isn't running
-                now < expiration || pid_is_running(attached_pid.pid)
-            } else {
-                pid_is_running(attached_pid.pid)
-            }
-        });
-        old_len != self.attached_pids.len()
+                write!(
+                    f,
+                    "Environment can't be activated in '{requested_mode}' mode whilst there are existing activations in '{current_mode}' mode\n\n\
+                     Exit all activations of the environment and try again.\n\
+                     PIDs of the running activations: {pid_list}",
+                )
+            },
+            ModeMismatch::WithRunningExecutive {
+                current_mode,
+                requested_mode,
+                pid,
+            } => {
+                write!(
+                    f,
+                    "Environment can't be activated in '{requested_mode}' mode whilst there are existing activations in '{current_mode}' mode\n\n\
+                     The executive process is still running.\n\
+                     Wait for it to finish, or stop it with: 'kill {pid}'",
+                )
+            },
+        }
     }
 }
 
@@ -302,58 +187,537 @@ pub struct AttachedPid {
     pub expiration: Option<OffsetDateTime>,
 }
 
-/// Acquires the filesystem-based lock on activations.json
-#[allow(unused)]
+/// Acquires the filesystem-based lock on state.json
 pub fn acquire_activations_json_lock(
     activations_json_path: impl AsRef<Path>,
 ) -> Result<LockFile, Error> {
     let lock_path = activations_json_lock_path(activations_json_path);
     let lock_path_parent = lock_path.parent().expect("lock path has parent");
     if !(lock_path.exists()) {
-        std::fs::create_dir_all(lock_path.parent().unwrap())?;
+        std::fs::create_dir_all(lock_path_parent)?;
     }
     let mut lock = LockFile::open(&lock_path).context("failed to open lockfile")?;
     lock.lock().context("failed to lock lockfile")?;
     Ok(lock)
 }
 
-/// Returns the path to the lock file for activations.json.
+/// Returns the path to the lock file for state.json.
 /// The presence of the lock file does not indicate an active lock because the
 /// file isn't removed after use.
-/// This is a separate file because we replace activations.json on write.
-#[allow(unused)]
+/// This is a separate file because we replace state.json on write.
 fn activations_json_lock_path(activations_json_path: impl AsRef<Path>) -> PathBuf {
     activations_json_path.as_ref().with_extension("lock")
 }
 
-/// {flox_runtime_dir}/{path_hash(flox_env)}/activations.json
-pub fn activations_json_path(runtime_dir: impl AsRef<Path>, flox_env: impl AsRef<Path>) -> PathBuf {
-    runtime_dir
-        .as_ref()
-        .join(path_hash(flox_env))
-        .join("activations.json")
-}
-
-/// {flox_runtime_dir}/{path_hash(flox_env)}/{activation_id}
+/// Base state directory for activations (plural) of the given environment.
+///
+/// `dot_flox_path` should be canonicalized before being passed to this
+/// function. We can't enforce the type here because the `executive` needs to
+/// still be able to read state if the environment has been deleted beneath it.
+///
+/// If there's a FloxHub account `activations` we'll put gcroots in this dir,
+/// but it shouldn't collide with any of the hashed directories we're storing
+///
+/// {flox_runtime_dir}/activations/{path_hash(dot_flox_path)}-{basename(dot_flox_path)}/
 pub fn activation_state_dir_path(
     runtime_dir: impl AsRef<Path>,
-    flox_env: impl AsRef<Path>,
-    activation_id: impl AsRef<str>,
-) -> Result<PathBuf, Error> {
-    Ok(runtime_dir
+    dot_flox_path: impl AsRef<Path>,
+) -> PathBuf {
+    let dot_flox_path = dot_flox_path.as_ref();
+    let hash = path_hash(dot_flox_path);
+    let basename = dot_flox_path
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|name| name.to_str())
+        .unwrap_or("root");
+
+    runtime_dir
         .as_ref()
-        .join(path_hash(flox_env))
-        .join(activation_id.as_ref()))
+        .join("activations")
+        .join(format!("{}-{}", hash, basename))
 }
 
-/// Returns the parsed `activations.json` file or `None` if it doesn't yet exist.
+/// State file for activations (plural) of the given environment.
+///
+/// {activation_state_dir_path}/state.json
+pub fn state_json_path(runtime_dir: impl AsRef<Path>, dot_flox_path: impl AsRef<Path>) -> PathBuf {
+    activation_state_dir_path(runtime_dir, dot_flox_path).join("state.json")
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StartOrAttachResult {
+    /// A new activation was started for the given StartIdentifier
+    Start { start_id: StartIdentifier },
+    /// Attached to an existing ready activation with the given StartIdentifier
+    Attach { start_id: StartIdentifier },
+    /// Another process is currently starting an activation.
+    /// The caller should wait and retry.
+    AlreadyStarting { pid: Pid, start_id: StartIdentifier },
+}
+
+#[derive(
+    Clone, Debug, Deserialize, derive_more::Display, Eq, PartialEq, Serialize, Ord, PartialOrd,
+)]
+pub struct UnixTimestampMillis(i64);
+
+impl UnixTimestampMillis {
+    pub fn now() -> Self {
+        let now = OffsetDateTime::now_utc();
+        let millis = (now.unix_timestamp_nanos() / 1_000_000) as i64;
+        Self(millis)
+    }
+}
+
+impl Deref for UnixTimestampMillis {
+    type Target = i64;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::str::FromStr for UnixTimestampMillis {
+    type Err = std::num::ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse::<i64>().map(UnixTimestampMillis)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Ord, PartialOrd)]
+pub struct StartIdentifier {
+    pub store_path: PathBuf,
+    pub timestamp: UnixTimestampMillis,
+}
+
+impl StartIdentifier {
+    /// Compute start state directory path for this identifier.
+    ///
+    /// Format: {runtime_dir}/activations/{env_hash}-{env_name}/{storepath_basename}.{unix_epoch}/
+    pub fn state_dir_path(
+        &self,
+        runtime_dir: impl AsRef<Path>,
+        dot_flox_path: impl AsRef<Path>,
+    ) -> Result<PathBuf, Error> {
+        let base_dir = activation_state_dir_path(runtime_dir, dot_flox_path);
+        let storepath_basename = self
+            .store_path
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("Invalid store path"))?
+            .to_string_lossy();
+
+        let dir_name = format!("{}.{}", storepath_basename, *self.timestamp);
+
+        Ok(base_dir.join(dir_name))
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Attachment {
+    start_id: StartIdentifier,
+    expiration: Option<OffsetDateTime>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+enum Ready {
+    #[default]
+    False,
+    True(StartIdentifier),
+    Starting(Pid, StartIdentifier),
+}
+
+/// Information about the activated environment.
+///
+/// This is only intended for humans to debug the serialized state.
+/// Fields should be promoted to the top-level if they are later needed
+/// programmatically.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct EnvironmentInfo {
+    /// Path to the activated environment's .flox directory
+    dot_flox_path: PathBuf,
+    /// Path to the activated environment's .flox/run/{symlink} which encapsulates mode and platform
+    flox_env: PathBuf,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ActivationState {
+    version: Version<3>,
+    info: EnvironmentInfo,
+    mode: ActivateMode,
+    ready: Ready,
+    /// Pid must be a non-zero value when writing state to disk.
+    executive_pid: Pid,
+    current_process_compose_store_path: Option<StartIdentifier>,
+    attached_pids: BTreeMap<Pid, Attachment>,
+}
+
+impl ActivationState {
+    pub fn new(
+        mode: &ActivateMode,
+        dot_flox_path: impl AsRef<Path>,
+        flox_env: impl AsRef<Path>,
+    ) -> Self {
+        Self {
+            version: Version,
+            info: EnvironmentInfo {
+                dot_flox_path: dot_flox_path.as_ref().to_path_buf(),
+                flox_env: flox_env.as_ref().to_path_buf(),
+            },
+            mode: mode.clone(),
+            ready: Ready::default(),
+            executive_pid: EXECUTIVE_NOT_STARTED,
+            current_process_compose_store_path: None,
+            attached_pids: BTreeMap::new(),
+        }
+    }
+
+    /// Returns the list of attached PIDs that are still running.
+    pub fn attached_pids_running(&self) -> Vec<Pid> {
+        self.attached_pids
+            .keys()
+            .copied()
+            .filter(|pid| pid_is_running(*pid))
+            .collect()
+    }
+
+    /// Returns a mapping of StartIdentifier to info for each attachment to that StartIdentifier
+    pub fn attachments_by_start_id(
+        &self,
+    ) -> BTreeMap<StartIdentifier, Vec<(Pid, Option<OffsetDateTime>)>> {
+        self.attached_pids
+            .iter()
+            .fold(BTreeMap::new(), |mut acc, (pid, attachment)| {
+                let Attachment {
+                    expiration,
+                    start_id,
+                } = attachment;
+                acc.entry(start_id.clone())
+                    .or_default()
+                    .push((*pid, *expiration));
+                acc
+            })
+    }
+
+    pub fn attached_pids_is_empty(&self) -> bool {
+        self.attached_pids.is_empty()
+    }
+
+    /// Returns the current activation mode
+    pub fn mode(&self) -> &ActivateMode {
+        &self.mode
+    }
+
+    /// Check if the activation state has running processes.
+    pub fn running_processes(&self) -> Option<RunningProcesses> {
+        let attached_pids: Vec<Pid> = self.attached_pids.keys().copied().collect();
+        RunningProcesses::from_pids(attached_pids, self.executive_pid)
+    }
+
+    /// Start or attach to an activation for the given store path.
+    pub fn start_or_attach(
+        &mut self,
+        pid: Pid,
+        store_path: impl AsRef<Path>,
+    ) -> StartOrAttachResult {
+        if let Ready::Starting(starting_pid, ref start_id) = self.ready
+            && pid_is_running(starting_pid)
+        {
+            return StartOrAttachResult::AlreadyStarting {
+                pid: starting_pid,
+                start_id: start_id.clone(),
+            };
+        }
+
+        let ready = self.ready.clone();
+        match ready {
+            Ready::True(start_id) if start_id.store_path == store_path.as_ref() => {
+                self.attach(pid, Attachment {
+                    start_id: start_id.clone(),
+                    expiration: None,
+                });
+                StartOrAttachResult::Attach { start_id }
+            },
+            Ready::False | Ready::True(_) | Ready::Starting(_, _) => {
+                let start_id = self.start(pid, &store_path);
+                StartOrAttachResult::Start { start_id }
+            },
+        }
+    }
+
+    /// Set the executive PID after spawning the executive process
+    pub fn set_executive_pid(&mut self, pid: Pid) {
+        debug!(pid, "setting executive PID");
+        self.executive_pid = pid;
+    }
+
+    /// Mark an activation as ready after hooks have completed
+    pub fn set_ready(&mut self, start_id: &StartIdentifier) {
+        debug!(?start_id, "marking activation as ready");
+        self.ready = Ready::True(start_id.clone());
+    }
+
+    /// Detach a PID from an activation
+    ///
+    /// update_ready_after_detach must be called after calling detach
+    pub fn detach(&mut self, pid: Pid) {
+        let removed = self.attached_pids.remove(&pid);
+        debug!(pid, ?removed, "detaching from activation");
+    }
+
+    /// Clean up terminated PIDs
+    ///
+    /// Returns a list of start IDs that have no more attached PIDs, and a boolean
+    /// indicating if any PIDs were detached.
+    pub fn cleanup_pids(
+        &mut self,
+        pid_is_running: impl Fn(Pid) -> bool,
+        now: OffsetDateTime,
+    ) -> (Vec<StartIdentifier>, bool) {
+        let mut modified = false;
+        let attachments_by_start_id = self.attachments_by_start_id();
+        let mut empty_start_ids = Vec::new();
+
+        for (start_id, attachments) in attachments_by_start_id {
+            let mut all_pids_terminated = true;
+            for (pid, expiration) in attachments {
+                let keep_attachment = if let Some(expiration) = expiration {
+                    // If the PID has an unreached expiration, retain it even if it
+                    // isn't running
+                    now < expiration || pid_is_running(pid)
+                } else {
+                    pid_is_running(pid)
+                };
+
+                if keep_attachment {
+                    // We can skip checking other PIDs for this start_id because
+                    // it still has attachments.
+                    all_pids_terminated = false;
+                    break;
+                } else {
+                    tracing::info!(?pid, ?start_id, "detaching terminated PID");
+                    self.detach(pid);
+                    modified = true;
+                }
+            }
+
+            if all_pids_terminated {
+                empty_start_ids.push(start_id);
+            }
+        }
+        // Only update ready state if there are still attached PIDs
+        if !self.attached_pids.is_empty() {
+            self.update_ready_after_detach();
+        }
+        (empty_start_ids, modified)
+    }
+
+    /// set ready to False if there are no more PIDs attached to the current start
+    /// should only be called when there are some attached PIDs
+    fn update_ready_after_detach(&mut self) {
+        if self.attached_pids.is_empty() {
+            unreachable!("should remove all state when there are no more attached PIDs");
+        }
+        match self.ready {
+            Ready::True(ref start_id) => {
+                if !self.attachments_by_start_id().contains_key(start_id) {
+                    debug!(?start_id, "no more attached PIDs, marking as not ready");
+                    self.ready = Ready::False;
+                }
+            },
+            // we'll let the starting process (or a subsequent start or
+            // attach) handle cleanup for a dead Starting PID
+            Ready::Starting(_, _) => {},
+            Ready::False => {}, // no-op
+        }
+    }
+
+    fn start(&mut self, pid: Pid, store_path: impl AsRef<Path>) -> StartIdentifier {
+        let start_id = StartIdentifier {
+            store_path: store_path.as_ref().to_path_buf(),
+            timestamp: UnixTimestampMillis::now(),
+        };
+        let attachment = Attachment {
+            start_id: start_id.clone(),
+            expiration: None,
+        };
+
+        debug!(pid, ?start_id, "starting new activation");
+        self.ready = Ready::Starting(pid, start_id.clone());
+        self.attached_pids.insert(pid, attachment);
+        start_id
+    }
+
+    fn attach(&mut self, pid: Pid, attachment: Attachment) {
+        let replaced = self.attached_pids.insert(pid, attachment.clone());
+        debug!(
+            pid,
+            ?attachment,
+            ?replaced,
+            "attaching to an existing activation"
+        );
+    }
+
+    /// Check if executive has been started.
+    pub fn executive_started(&self) -> bool {
+        self.executive_pid != EXECUTIVE_NOT_STARTED
+    }
+
+    /// Check if executive was started and is running.
+    pub fn executive_running(&self) -> bool {
+        self.executive_started() && pid_is_running(self.executive_pid)
+    }
+
+    /// Get the executive PID.
+    pub fn executive_pid(&self) -> Pid {
+        self.executive_pid
+    }
+
+    /// Get the start_id if an activation is currently ready.
+    pub fn ready_start_id(&self) -> Option<&StartIdentifier> {
+        match &self.ready {
+            Ready::True(start_id) => Some(start_id),
+            _ => None,
+        }
+    }
+
+    /// Get the PID and store path of the activation that's currently starting, if any.
+    pub fn starting_pid_and_store_path(&self) -> Option<(Pid, &Path)> {
+        match &self.ready {
+            Ready::Starting(pid, start_id) => Some((*pid, &start_id.store_path)),
+            _ => None,
+        }
+    }
+
+    /// Check if the current process-compose is current (up-to-date).
+    ///
+    /// If `expected_store_path` is provided, compares against that store path.
+    /// Otherwise, compares against the ready activation's store path.
+    ///
+    /// Returns `true` only if:
+    /// - There is an existing process-compose, AND
+    /// - Store paths match (either against expected or ready activation)
+    ///
+    /// Returns `false` if:
+    /// - No existing process-compose, OR
+    /// - No expected store path and activation is not ready, OR
+    /// - Store path has changed
+    pub fn process_compose_is_current(&self, expected_store_path: Option<&Path>) -> bool {
+        let Some(current_start_id) = &self.current_process_compose_store_path else {
+            return false;
+        };
+
+        let expected = match expected_store_path {
+            Some(path) => path,
+            None => {
+                let Some(ready_start_id) = self.ready_start_id() else {
+                    return false;
+                };
+                ready_start_id.store_path.as_path()
+            },
+        };
+
+        current_start_id.store_path == expected
+    }
+
+    /// Set the current process-compose store path.
+    pub fn set_current_process_compose_start_id(&mut self, start_id: StartIdentifier) {
+        self.current_process_compose_store_path = Some(start_id);
+    }
+
+    pub fn replace_attachment(
+        &mut self,
+        start_id: StartIdentifier,
+        old_pid: Pid,
+        new_pid: Pid,
+        expiration: Option<OffsetDateTime>,
+    ) -> Result<(), Error> {
+        let old_attachment = self.attached_pids.remove(&old_pid).ok_or(anyhow::anyhow!(
+            "PID {} not attached to activation",
+            old_pid
+        ))?;
+
+        if old_attachment.start_id != start_id {
+            anyhow::bail!("PID {} is not attached to the expected start", old_pid);
+        }
+
+        let new_attachment = Attachment {
+            start_id,
+            expiration,
+        };
+
+        self.attached_pids.insert(new_pid, new_attachment);
+        Ok(())
+    }
+}
+
+/// Best-effort extraction of running PIDs from unknown version JSON.
+/// Returns RunningProcesses if any processes are still running.
+fn extract_running_pids_from_json(content: &str) -> Result<Option<RunningProcesses>, Error> {
+    #[derive(Debug, Deserialize)]
+    struct PidExtractor {
+        #[serde(default)]
+        executive_pid: Pid,
+        #[serde(default)]
+        attached_pids: BTreeMap<Pid, Value>,
+    }
+
+    let extractor: PidExtractor =
+        serde_json::from_str(content).context("Failed to extract PIDs from state.json")?;
+
+    let attached_pids: Vec<Pid> = extractor.attached_pids.keys().copied().collect();
+
+    Ok(RunningProcesses::from_pids(
+        attached_pids,
+        extractor.executive_pid,
+    ))
+}
+
+/// Parse activation state with version checking.
+/// Returns None if state should be discarded (different version and no running PIDs).
+fn parse_versioned_activation_state(content: &str) -> Result<Option<ActivationState>, Error> {
+    #[derive(Debug, Deserialize)]
+    struct VersionOnly {
+        version: Value,
+    }
+
+    let version_check: VersionOnly =
+        serde_json::from_str(content).context("Failed to parse state.json")?;
+
+    match version_check.version.as_u64() {
+        // Current version.
+        Some(3) => {
+            let state: ActivationState =
+                serde_json::from_str(content).context("Failed to parse state.json")?;
+            Ok(Some(state))
+        },
+        // Versions 1 and 2 were stored in a different path so we don't need to handle migrations.
+        // This also handles the case where someone upgrades and then downgrades Flox.
+        _ => {
+            let running = extract_running_pids_from_json(content)?;
+
+            if let Some(running) = running {
+                Err(UnsupportedVersion::from_running_processes(running).into())
+            } else {
+                debug!(
+                    "discarding state.json due to unsupported version with no running attachments or executive"
+                );
+                Ok(None)
+            }
+        },
+    }
+}
+
+/// Returns the parsed `state.json` file or `None` if:
+///
+/// - the file does not exist
+/// - the version is different but there are no running processes
 ///
 /// The file can be written with [write_activations_json].
 /// This function acquires a lock on the file,
 /// which should be reused for writing, to avoid TOCTOU issues.
 pub fn read_activations_json(
     path: impl AsRef<Path>,
-) -> Result<(Option<Activations<UncheckedVersion>>, LockFile), Error> {
+) -> Result<(Option<ActivationState>, LockFile), Error> {
     let path = path.as_ref();
     let lock_file = acquire_activations_json_lock(path).context("failed to acquire lockfile")?;
 
@@ -362,35 +726,82 @@ pub fn read_activations_json(
         return Ok((None, lock_file));
     }
 
+    trace!(?path, "reading state.json");
     let contents =
         std::fs::read_to_string(path).context(format!("failed to read file {}", path.display()))?;
-    let parsed: Activations<UncheckedVersion> = serde_json::from_str(&contents)
-        .context(format!("failed to parse JSON from {}", path.display()))?;
-    Ok((Some(parsed), lock_file))
-}
 
-/// Writes the environment `activations.json` file.
+    let parsed = parse_versioned_activation_state(&contents)?;
+
+    Ok((parsed, lock_file))
+}
+/// Writes the environment `state.json` file.
 /// The file is written atomically.
 /// The lock is released after the write.
 ///
 /// This uses [flox_core::serialize_atomically] to write the file, and inherits its requirements.
 /// * `path` must have a parent directory.
 /// * The lock must correspond to the file being written.
-pub fn write_activations_json<V: Serialize>(
-    activations: &Activations<V>,
+pub fn write_activations_json(
+    activations: &ActivationState,
     path: impl AsRef<Path>,
     lock: LockFile,
 ) -> Result<(), Error> {
+    if activations.executive_pid == EXECUTIVE_NOT_STARTED {
+        anyhow::bail!(
+            "Cannot write activation state without executive PID set (path: {})",
+            path.as_ref().display()
+        );
+    }
     crate::serialize_atomically(&json!(activations), &path, lock)?;
     Ok(())
 }
 
+#[cfg(any(test, feature = "tests"))]
+pub mod test_helpers {
+    use std::path::Path;
+
+    use super::{
+        ActivationState,
+        acquire_activations_json_lock,
+        read_activations_json,
+        state_json_path,
+        write_activations_json,
+    };
+
+    /// Helper to write an ActivationState to disk
+    ///
+    /// Takes ownership of state so we don't accidentally use it after e.g. a
+    /// watcher modifies state on disk
+    pub fn write_activation_state(
+        runtime_dir: &Path,
+        dot_flox_path: &Path,
+        mut state: ActivationState,
+    ) {
+        if !state.executive_started() {
+            state.set_executive_pid(1);
+        }
+        let state_json_path = state_json_path(runtime_dir, dot_flox_path);
+        let lock = acquire_activations_json_lock(&state_json_path).expect("failed to acquire lock");
+        write_activations_json(&state, &state_json_path, lock).expect("failed to write state");
+    }
+
+    /// Helper to read an ActivationState from disk
+    pub fn read_activation_state(runtime_dir: &Path, dot_flox_path: &Path) -> ActivationState {
+        let state_json_path = state_json_path(runtime_dir, dot_flox_path);
+        let (state, _lock) = read_activations_json(&state_json_path).expect("failed to read state");
+        state.unwrap()
+    }
+}
+
 #[cfg(test)]
-mod test {
-    use std::process::{Child, Command};
+mod tests {
+    use std::process::{self, Child, Command};
+    use std::time::Duration;
+
+    use indoc::formatdoc;
+    use tempfile::TempDir;
 
     use super::*;
-
     // NOTE: these two functions are copied from flox-rust-sdk since you can't
     //       share anything behind #[cfg(test)] across crates
 
@@ -410,200 +821,567 @@ mod test {
         child.wait().expect("failed to wait");
     }
 
-    #[test]
-    fn check_version_upgrade() {
-        let activations = Activations::<UncheckedVersion> {
-            version: UncheckedVersion(0),
-            activations: vec![],
-        };
-
-        let checked_activations = activations.check_version().unwrap();
-        assert_eq!(
-            checked_activations.version.0, LATEST_VERSION,
-            "should upgrade version when there are no activations"
-        );
-    }
-
-    #[test]
-    fn activations_latest() {
-        let activations = Activations::<UncheckedVersion> {
-            version: UncheckedVersion(LATEST_VERSION),
-            activations: vec![Activation {
-                id: "1".to_string(),
-                store_path: "/store/path".to_string(),
-                ready: false,
-                attached_pids: vec![
-                    AttachedPid {
-                        pid: 123,
-                        expiration: None,
-                    },
-                    AttachedPid {
-                        pid: 456,
-                        expiration: None,
-                    },
-                ],
-            }],
-        };
-
-        let checked_activations = activations.check_version().unwrap();
-        assert_eq!(
-            checked_activations.version.0, LATEST_VERSION,
-            "should not upgrade version when version is latest"
-        );
-    }
-
-    #[test]
-    fn activations_refuse_upgrade() {
-        let activations = Activations::<UncheckedVersion> {
-            version: UncheckedVersion(0),
-            activations: vec![Activation {
-                id: "1".to_string(),
-                store_path: "/store/path".to_string(),
-                ready: false,
-                attached_pids: vec![
-                    AttachedPid {
-                        pid: 123,
-                        expiration: None,
-                    },
-                    AttachedPid {
-                        pid: 456,
-                        expiration: None,
-                    },
-                ],
-            }],
-        };
-
-        let unsupported = activations.check_version().unwrap_err();
-        assert_eq!(
-            unsupported,
-            Unsupported {
-                version: UncheckedVersion(0),
-                pids: vec![123, 456],
+    fn make_activations(ready: Ready) -> ActivationState {
+        let dot_flox_path = PathBuf::from("/test/.flox");
+        ActivationState {
+            version: Version,
+            info: EnvironmentInfo {
+                flox_env: dot_flox_path.join("run/test"),
+                dot_flox_path,
             },
-            "should return activation PIDs when version is not latest"
-        );
+            mode: ActivateMode::default(),
+            ready,
+            executive_pid: 1, // Not used, but will be running.
+            current_process_compose_store_path: None,
+            attached_pids: BTreeMap::new(),
+        }
     }
 
-    #[test]
-    fn create_activation() {
-        let mut activations = Activations::<CheckedVersion>::default();
-        let store_path = "/store/path";
-        let activation = activations.create_activation(store_path, 123);
-
-        assert!(activation.is_ok(), "{}", activation.unwrap_err());
-        assert_eq!(activations.activations.len(), 1);
-
-        let activation = activations.create_activation(store_path, 123);
-        assert!(
-            activation.is_err(),
-            "adding the same activation twice should fail"
-        );
-        assert_eq!(activations.activations.len(), 1);
+    fn make_start_id(path: &str) -> StartIdentifier {
+        StartIdentifier {
+            store_path: PathBuf::from(path),
+            timestamp: UnixTimestampMillis::now(),
+        }
     }
 
-    #[test]
-    fn get_activation_by_id() {
-        let mut activations = Activations::default();
-        let store_path = "/store/path";
-        let activation = activations.create_activation(store_path, 123).unwrap();
-        let id = activation.id();
-
-        let activation = activations.activation_for_id_ref(&id).unwrap();
-        assert_eq!(activation.id(), id);
-        assert_eq!(activation.store_path, store_path);
-    }
-
-    #[test]
-    fn get_activation_by_id_mut() {
-        let mut activations = Activations::default();
-        let store_path = "/store/path";
-        let activation = activations.create_activation(store_path, 123).unwrap();
-        let id = activation.id();
-
-        let activation = activations.activation_for_id_mut(&id).unwrap();
-        assert_eq!(activation.id(), id);
-        assert_eq!(activation.store_path, store_path);
-    }
-
-    #[test]
-    fn activation_attach_pid() {
-        let mut activation = Activation {
-            id: "1".to_string(),
-            store_path: "/store/path".to_string(),
-            ready: false,
-            attached_pids: vec![],
-        };
-
-        activation.attach_pid(123, None);
-        assert_eq!(activation.attached_pids.len(), 1);
-        assert_eq!(activation.attached_pids[0].pid, 123);
-    }
-
-    #[test]
-    fn activation_remove_pid() {
-        let mut activation = Activation {
-            id: "1".to_string(),
-            store_path: "/store/path".to_string(),
-            ready: false,
-            attached_pids: vec![AttachedPid {
-                pid: 123,
-                expiration: None,
-            }],
-        };
-
-        activation.remove_pid(123);
-        assert_eq!(activation.attached_pids.len(), 0);
-    }
-
-    #[test]
-    fn activation_remove_terminated_pids() {
-        let proc_running = start_process();
-        let pid_running = AttachedPid {
-            pid: proc_running.id() as i32,
+    fn make_attachment(start_id: StartIdentifier) -> Attachment {
+        Attachment {
+            start_id,
             expiration: None,
+        }
+    }
+
+    mod read_and_write_state {
+        use super::*;
+
+        #[test]
+        fn read_and_write_roundtrip() {
+            let temp_dir = TempDir::new().unwrap();
+            let dot_flox_path = temp_dir.path().join(".flox");
+            let state_path = state_json_path(temp_dir.path(), dot_flox_path);
+
+            let write_state = make_activations(Ready::False);
+            let lock = acquire_activations_json_lock(&state_path).unwrap();
+            write_activations_json(&write_state, &state_path, lock).unwrap();
+
+            let (read_state_opt, _lock) = read_activations_json(&state_path).unwrap();
+            let read_state = read_state_opt.expect("state should be present");
+            assert_eq!(
+                write_state, read_state,
+                "written and read states should match"
+            );
+        }
+
+        #[test]
+        fn write_without_executive_pid_fails() {
+            let temp_dir = TempDir::new().unwrap();
+            let dot_flox_path = temp_dir.path().join(".flox");
+            let flox_env = dot_flox_path.join("run/test");
+            let state_path = state_json_path(temp_dir.path(), &dot_flox_path);
+
+            let state = ActivationState::new(&ActivateMode::default(), dot_flox_path, flox_env);
+            assert_eq!(
+                state.executive_pid, EXECUTIVE_NOT_STARTED,
+                "executive PID should be unset"
+            );
+
+            let lock = acquire_activations_json_lock(&state_path).unwrap();
+            let result = write_activations_json(&state, &state_path, lock);
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                format!(
+                    "Cannot write activation state without executive PID set (path: {})",
+                    state_path.display()
+                ),
+                "writing state without executive PID should fail"
+            );
+        }
+    }
+
+    mod attached_pids_getters {
+        use super::*;
+
+        #[test]
+        fn test_attached_pids_running() {
+            let proc_running = start_process();
+            let proc_stopped = start_process();
+
+            let mut activations =
+                ActivationState::new(&ActivateMode::default(), "/test/.flox", "/test/env");
+            let store_path = PathBuf::from("/nix/store/test");
+
+            // Start activation with first PID
+            let result = activations.start_or_attach(proc_running.id() as i32, &store_path);
+            let start_id = match result {
+                StartOrAttachResult::Start { start_id, .. } => start_id,
+                _ => panic!("Expected Start"),
+            };
+
+            // Mark ready so we can attach more PIDs
+            activations.set_ready(&start_id);
+
+            // Attach second PID
+            activations.start_or_attach(proc_stopped.id() as i32, &store_path);
+
+            stop_process(proc_stopped);
+
+            assert_eq!(
+                activations.attached_pids_running(),
+                vec![proc_running.id() as i32],
+                "should only return attached PIDs that are running"
+            );
+
+            stop_process(proc_running);
+        }
+
+        #[test]
+        fn test_attached_pids_by_start_id() {
+            let mut activations =
+                ActivationState::new(&ActivateMode::default(), "/test/.flox", "/test/env");
+            let store_path1 = PathBuf::from("/nix/store/path1");
+            let store_path2 = PathBuf::from("/nix/store/path2");
+
+            // Start activation with first store path
+            let result = activations.start_or_attach(100, &store_path1);
+            let start_id1 = match result {
+                StartOrAttachResult::Start { start_id, .. } => start_id,
+                _ => panic!("Expected Start"),
+            };
+
+            // Mark ready so we can attach more PIDs
+            activations.set_ready(&start_id1);
+
+            // Attach second PID to same start_id
+            activations.start_or_attach(200, &store_path1);
+
+            // Start activation with second store path (creates new start_id)
+            let result = activations.start_or_attach(300, &store_path2);
+            let start_id2 = match result {
+                StartOrAttachResult::Start { start_id, .. } => start_id,
+                _ => panic!("Expected Start"),
+            };
+
+            let expected = BTreeMap::from([
+                (start_id1, vec![(100, None), (200, None)]),
+                (start_id2, vec![(300, None)]),
+            ]);
+            assert_eq!(
+                activations.attachments_by_start_id(),
+                expected,
+                "should return attached PIDs grouped by StartIdentifier"
+            );
+        }
+    }
+
+    mod start_or_attach {
+        use super::*;
+
+        #[test]
+        fn test_start_or_attach_starts_when_ready_false() {
+            let store_path = PathBuf::from("/nix/store/path1");
+            let mut activations = make_activations(Ready::False);
+
+            let pid = 123;
+            let result = activations.start_or_attach(pid, &store_path);
+
+            let start_id = match result {
+                StartOrAttachResult::Start { start_id } => start_id,
+                _ => panic!("Expected StartOrAttachResult::Start, got {:?}", result),
+            };
+
+            let (pid, ready_start_id) = match &activations.ready {
+                Ready::Starting(p, s) => (*p, s.clone()),
+                _ => panic!("Expected Ready::Starting"),
+            };
+            assert_eq!(pid, pid);
+            assert_eq!(start_id.store_path, store_path);
+            assert_eq!(start_id, ready_start_id);
+            assert_eq!(
+                activations.attached_pids,
+                BTreeMap::from([(pid, make_attachment(start_id))])
+            );
+        }
+
+        #[test]
+        fn test_start_or_attach_attaches_when_ready_true_same_path() {
+            let start_id = make_start_id("/nix/store/path1");
+            let mut activations = make_activations(Ready::True(start_id.clone()));
+
+            let pid = 123;
+            let result = activations.start_or_attach(pid, &start_id.store_path);
+
+            match result {
+                StartOrAttachResult::Attach { start_id: id } => {
+                    assert_eq!(id, start_id);
+                },
+                _ => panic!("Expected StartOrAttachResult::Attach, got {:?}", result),
+            }
+
+            assert_eq!(activations.ready, Ready::True(start_id.clone()));
+            assert_eq!(
+                activations.attached_pids,
+                BTreeMap::from([(pid, make_attachment(start_id))])
+            );
+        }
+
+        #[test]
+        fn test_start_or_attach_starts_when_ready_true_different_path() {
+            let existing = make_start_id("/nix/store/path1");
+            let new_path = PathBuf::from("/nix/store/path2");
+            let mut activations = make_activations(Ready::True(existing));
+
+            let pid = 123;
+            let result = activations.start_or_attach(pid, &new_path);
+
+            let start_id = match result {
+                StartOrAttachResult::Start { start_id } => start_id,
+                _ => panic!("Expected StartOrAttachResult::Start, got {:?}", result),
+            };
+
+            let (ready_pid, ready_start_id) = match &activations.ready {
+                Ready::Starting(p, s) => (*p, s.clone()),
+                _ => panic!("Expected Ready::Starting"),
+            };
+            assert_eq!(ready_pid, pid);
+            assert_eq!(start_id.store_path, new_path);
+            assert_eq!(start_id, ready_start_id);
+            assert_eq!(
+                activations.attached_pids,
+                BTreeMap::from([(pid, make_attachment(start_id))])
+            );
+        }
+
+        #[test]
+        fn test_start_or_attach_returns_already_starting_when_process_running() {
+            let proc = start_process();
+            let pid = proc.id() as i32;
+            let start_id = make_start_id("/nix/store/path1");
+            let mut activations = make_activations(Ready::Starting(pid, start_id.clone()));
+
+            let result = activations.start_or_attach(123, &start_id.store_path);
+
+            match result {
+                StartOrAttachResult::AlreadyStarting {
+                    pid: returned_pid,
+                    start_id: returned_start_id,
+                } => {
+                    assert_eq!(returned_pid, pid);
+                    assert_eq!(returned_start_id, start_id);
+                },
+                _ => panic!(
+                    "Expected StartOrAttachResult::AlreadyStarting, got {:?}",
+                    result
+                ),
+            }
+
+            assert_eq!(activations.ready, Ready::Starting(pid, start_id));
+            assert_eq!(activations.attached_pids, BTreeMap::new());
+
+            stop_process(proc);
+        }
+
+        #[test]
+        fn test_start_or_attach_starts_when_starting_process_terminated() {
+            let proc = start_process();
+            let stopped_pid = proc.id() as i32;
+            stop_process(proc);
+
+            let old_start_id = make_start_id("/nix/store/path1");
+            let mut activations =
+                make_activations(Ready::Starting(stopped_pid, old_start_id.clone()));
+
+            let pid = 123;
+            let result = activations.start_or_attach(pid, &old_start_id.store_path);
+
+            let new_start_id = match result {
+                StartOrAttachResult::Start { start_id } => start_id,
+                _ => panic!("Expected StartOrAttachResult::Start, got {:?}", result),
+            };
+
+            let (ready_pid, ready_start_id) = match &activations.ready {
+                Ready::Starting(p, s) => (*p, s.clone()),
+                _ => panic!("Expected Ready::Starting"),
+            };
+            assert_eq!(ready_pid, pid);
+            assert_eq!(new_start_id, ready_start_id);
+            assert!(new_start_id.timestamp >= old_start_id.timestamp);
+            assert_eq!(
+                activations.attached_pids,
+                BTreeMap::from([(pid, make_attachment(new_start_id))])
+            );
+        }
+
+        #[test]
+        fn test_start_or_attach_multiple_attachments() {
+            let start_id = make_start_id("/nix/store/path1");
+            let mut activations = make_activations(Ready::True(start_id.clone()));
+
+            for pid in [100, 200, 300].iter() {
+                let result = activations.start_or_attach(*pid, &start_id.store_path);
+                match result {
+                    StartOrAttachResult::Attach { start_id: id } => {
+                        assert_eq!(id, start_id);
+                    },
+                    _ => panic!(
+                        "Expected StartOrAttachResult::Attach for PID {}, got {:?}",
+                        pid, result
+                    ),
+                }
+            }
+
+            assert_eq!(
+                activations.attached_pids,
+                BTreeMap::from([
+                    (100, make_attachment(start_id.clone())),
+                    (200, make_attachment(start_id.clone())),
+                    (300, make_attachment(start_id.clone())),
+                ])
+            );
+        }
+
+        #[test]
+        fn test_start_or_attach_replaces_existing_pid() {
+            let mut activations =
+                ActivationState::new(&ActivateMode::default(), "/test/.flox", "/test/env");
+            let store_path = PathBuf::from("/nix/store/path1");
+
+            let pid = 123;
+            let result = activations.start_or_attach(pid, &store_path);
+            let start_id = match result {
+                StartOrAttachResult::Start { start_id, .. } => start_id,
+                _ => panic!("Expected Start"),
+            };
+
+            // Set executive PID (PID 1 is always running)
+            activations.set_executive_pid(1);
+
+            // Mark ready so we can attach
+            activations.set_ready(&start_id);
+
+            // Attach same PID again - should replace existing attachment
+            let result = activations.start_or_attach(pid, &start_id.store_path);
+
+            match result {
+                StartOrAttachResult::Attach { start_id: id } => {
+                    assert_eq!(id, start_id);
+                },
+                _ => panic!("Expected StartOrAttachResult::Attach, got {:?}", result),
+            }
+
+            assert_eq!(
+                activations.attached_pids,
+                BTreeMap::from([(pid, make_attachment(start_id))]),
+                "should have only one attachment",
+            );
+        }
+    }
+
+    #[test]
+    fn test_cleanup_pids_keeps_expired_but_running_pids() {
+        // Create an attachment with an expiration in the past
+        let mut activations =
+            ActivationState::new(&ActivateMode::default(), "/test/.flox", "/test/env");
+        let start_id = make_start_id("/nix/store/test");
+        let pid = 0;
+        let now = OffsetDateTime::now_utc();
+        let expiration = now - Duration::from_secs(10);
+        let attachment = Attachment {
+            start_id: start_id.clone(),
+            expiration: Some(expiration),
         };
-        let proc_past = start_process();
-        let pid_past = AttachedPid {
-            pid: proc_past.id() as i32,
-            expiration: Some(OffsetDateTime::now_utc() - time::Duration::days(1)),
+        activations.attach(pid, attachment);
+
+        // Cleanup with PID still running
+        let (empty_starts, modified) = activations.cleanup_pids(|_| true, now);
+        assert!(activations.attached_pids.contains_key(&pid));
+        assert!(!modified);
+        assert!(empty_starts.is_empty());
+    }
+
+    #[test]
+    fn test_cleanup_pids_keeps_not_running_but_not_expired_pids() {
+        // Create an attachment with an expiration in the future
+        let mut activations =
+            ActivationState::new(&ActivateMode::default(), "/test/.flox", "/test/env");
+        let start_id = make_start_id("/nix/store/test");
+        let pid = 0;
+        let now = OffsetDateTime::now_utc();
+        let expiration = now + Duration::from_secs(10);
+        let attachment = Attachment {
+            start_id: start_id.clone(),
+            expiration: Some(expiration),
         };
-        let proc_future = start_process();
-        let pid_future = AttachedPid {
-            pid: proc_future.id() as i32,
-            expiration: Some(OffsetDateTime::now_utc() + time::Duration::days(1)),
-        };
+        activations.attach(pid, attachment);
 
-        let mut activation = Activation {
-            id: "1".to_string(),
-            store_path: "/store/path".to_string(),
-            ready: false,
-            attached_pids: vec![pid_running.clone(), pid_past.clone(), pid_future.clone()],
-        };
+        // Cleanup with PID not running
+        let (empty_starts, modified) = activations.cleanup_pids(|_| false, now);
+        assert!(activations.attached_pids.contains_key(&pid));
+        assert!(!modified);
+        assert!(empty_starts.is_empty());
+    }
 
-        let modified = activation.remove_terminated_pids();
-        assert_eq!(activation.attached_pids().to_vec(), vec![
-            pid_running.clone(),
-            pid_past.clone(),
-            pid_future.clone(),
-        ]);
-        assert!(!modified, "should return false when no PIDs are removed");
+    mod running_processes {
+        use super::*;
 
-        stop_process(proc_running);
-        stop_process(proc_past);
-        stop_process(proc_future);
+        #[test]
+        fn running_processes_none() {
+            let stopped_proc = start_process();
+            let stopped_pid = stopped_proc.id() as Pid;
+            stop_process(stopped_proc);
+            let running = RunningProcesses::from_pids(vec![stopped_pid], stopped_pid);
+            assert_eq!(
+                running, None,
+                "should return none when no attachments or executive are running"
+            );
+        }
 
-        let modified = activation.remove_terminated_pids();
-        assert_eq!(
-            activation.attached_pids().to_owned(),
-            vec![pid_future.clone()],
-            "should remove PIDs that are not running AND expired"
-        );
-        assert!(modified, "should return true when PIDs are removed");
+        #[test]
+        fn running_processes_attachments() {
+            let pid_self = process::id() as Pid;
+            let running = RunningProcesses::from_pids(vec![pid_self, pid_self], pid_self);
+            assert_eq!(
+                running,
+                Some(RunningProcesses::Attachments(vec![pid_self, pid_self])),
+                "should return attachments when any are running",
+            );
+        }
 
-        let removed = activation.remove_terminated_pids();
-        assert!(
-            !removed,
-            "should return false when there are still no changes"
-        );
+        #[test]
+        fn running_processes_executive() {
+            let pid_self = process::id() as Pid;
+            let stopped_proc = start_process();
+            let stopped_pid = stopped_proc.id() as Pid;
+            stop_process(stopped_proc);
+
+            let running = RunningProcesses::from_pids(vec![stopped_pid], pid_self);
+            assert_eq!(
+                running,
+                Some(RunningProcesses::Executive(pid_self)),
+                "should return executive when no attachments are running and executive is"
+            );
+        }
+    }
+
+    mod version_handling {
+        use super::*;
+
+        // Technically we'd never encounter this exact Version because we
+        // changed the path of the state file during the 2025-12/2026-01
+        // activation rewrite.
+        const OLD_VERSION: Version<2> = Version;
+
+        #[test]
+        fn parse_versioned_activation_state_roundtrip() {
+            let start_id = make_start_id("/nix/store/path");
+            let mut state = make_activations(Ready::True(start_id.clone()));
+            state.attached_pids = BTreeMap::from([(123, make_attachment(start_id))]);
+            let json = serde_json::to_string(&state).unwrap();
+
+            let parsed = parse_versioned_activation_state(&json).unwrap();
+            assert!(parsed.is_some());
+            assert_eq!(parsed.unwrap().version, Version);
+        }
+
+        #[test]
+        fn parse_versioned_activation_state_malformed() {
+            let json = "{not valid json}";
+
+            let err = parse_versioned_activation_state(json).unwrap_err();
+            assert_eq!(err.to_string(), "Failed to parse state.json");
+        }
+
+        #[test]
+        fn parse_versioned_activation_state_different_version_incompatible_structure() {
+            let json = json!({
+                "version": OLD_VERSION,
+                "mode": "dev",
+                "ready": false,
+                "executive_pid": EXECUTIVE_NOT_STARTED,
+                "attached_pids": [123, 456], // hypothetical change of structure
+            })
+            .to_string();
+
+            let err = parse_versioned_activation_state(&json).unwrap_err();
+            assert_eq!(err.to_string(), "Failed to extract PIDs from state.json",);
+        }
+
+        #[test]
+        fn parse_versioned_activation_state_different_version_pids_not_running() {
+            let proc_stopped = start_process();
+            let pid_stopped = proc_stopped.id().to_string();
+            stop_process(proc_stopped);
+
+            let json = json!({
+                "version": OLD_VERSION,
+                "mode": "dev",
+                "ready": false,
+                "executive_pid": EXECUTIVE_NOT_STARTED,
+                "attached_pids": {
+                    pid_stopped.to_string(): {},
+                }
+            })
+            .to_string();
+
+            let result = parse_versioned_activation_state(&json).unwrap();
+            assert_eq!(result, None, "should discard existing state");
+        }
+
+        #[test]
+        fn parse_versioned_activation_state_different_version_pids_running() {
+            let proc1 = start_process();
+            let proc2 = start_process();
+            let pid1 = proc1.id() as i32;
+            let pid2 = proc2.id() as i32;
+
+            let json = json!({
+                "version": OLD_VERSION,
+                "mode": "dev",
+                "ready": false,
+                "executive_pid": EXECUTIVE_NOT_STARTED,
+                "attached_pids": {
+                    pid1.to_string(): {},
+                    pid2.to_string(): {},
+                },
+            })
+            .to_string();
+
+            let err = parse_versioned_activation_state(&json).unwrap_err();
+            let expected_msg = formatdoc! {"
+                This environment has already been activated with an incompatible version of 'flox'.
+
+                Exit all activations of the environment and try again.
+                PIDs of the running activations: {pid1}, {pid2}",
+            };
+            assert_eq!(err.to_string(), expected_msg);
+
+            stop_process(proc1);
+            stop_process(proc2);
+        }
+
+        #[test]
+        fn parse_versioned_activation_state_different_version_only_executive() {
+            let exec_proc = start_process();
+            let exec_pid = exec_proc.id() as i32;
+
+            let json = json!({
+                "version": OLD_VERSION,
+                "mode": "dev",
+                "ready": false,
+                "executive_pid": exec_pid,
+                "attached_pids": {},
+            })
+            .to_string();
+
+            let err = parse_versioned_activation_state(&json).unwrap_err();
+            let expected_msg = formatdoc! {"
+                This environment has already been activated with an incompatible version of 'flox'.
+
+                The executive process is still running.
+                Wait for it to finish, or stop it with: 'kill {exec_pid}'",
+            };
+            assert_eq!(err.to_string(), expected_msg);
+
+            stop_process(exec_proc);
+        }
     }
 }

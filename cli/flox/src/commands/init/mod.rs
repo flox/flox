@@ -4,13 +4,13 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use flox_core::activate::mode::ActivateMode;
 use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox, RemoteEnvironmentRef};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
 use flox_rust_sdk::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
-use flox_rust_sdk::models::manifest::typed::ActivateMode;
 use flox_rust_sdk::providers::catalog::{
     ALL_SYSTEMS,
     ClientTrait,

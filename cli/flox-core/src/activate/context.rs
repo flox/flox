@@ -1,0 +1,102 @@
+use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
+use shell_gen::ShellWithPath;
+
+pub use super::mode::ActivateMode;
+
+/// Context needed to attach to a start of an environment
+/// Note that store path is not included, as the executive needs to attach to
+/// the latest ready store path when starting process-compose
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttachCtx {
+    // Command arguments (from command.arg() calls in cli/flox/src/commands/activate.rs:437-462)
+    /// The path to the environment .flox directory
+    pub dot_flox_path: PathBuf,
+
+    /// The path to the environment symlink
+    pub env: String,
+
+    /// The project path for the environment
+    pub env_project: Option<PathBuf>,
+
+    /// The cache path for the environment
+    pub env_cache: PathBuf,
+
+    /// The environment description
+    pub env_description: String,
+
+    // Environment variable exports (from exports HashMap in cli/flox/src/commands/activate.rs:332-428)
+    /// Active environments tracking
+    pub flox_active_environments: String,
+
+    /// Environment log directory
+    pub flox_env_log_dir: Option<PathBuf>,
+
+    /// Prompt color 1
+    pub prompt_color_1: String,
+
+    /// Prompt color 2
+    pub prompt_color_2: String,
+
+    /// Prompt environments string
+    pub flox_prompt_environments: String,
+
+    /// Whether to set prompt
+    pub set_prompt: bool,
+
+    /// Runtime directory
+    pub flox_runtime_dir: String,
+
+    /// CUDA detection enabled
+    pub flox_env_cuda_detection: String,
+
+    /// Services socket path
+    pub flox_services_socket: Option<PathBuf>,
+
+    /// Services to start with a new process-compose instance.
+    /// When non-empty, flox-activations will start a new process-compose and start these services.
+    /// The CLI is responsible for deciding when this is needed (staleness checks, etc.)
+    pub services_to_start: Vec<String>,
+
+    /// Path to process-compose binary.
+    pub process_compose_bin: Option<PathBuf>,
+
+    // Info needed to run the activate script
+    pub interpreter_path: PathBuf,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActivateCtx {
+    /// Store path for activation
+    pub flox_activate_store_path: String,
+
+    pub attach_ctx: AttachCtx,
+
+    /// The activation mode (dev or run)
+    pub mode: ActivateMode,
+
+    /// Path to the shell executable
+    pub shell: ShellWithPath,
+
+    pub invocation_type: Option<InvocationType>,
+
+    /// Whether to run the monitoring loop
+    pub run_monitoring_loop: bool,
+
+    /// Whether to clean up the context file after reading it.
+    pub remove_after_reading: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, derive_more::Display, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum InvocationType {
+    #[display("inplace")]
+    InPlace,
+    #[display("interactive")]
+    Interactive,
+    #[display("command")]
+    ShellCommand(String),
+    #[display("execcommand")]
+    ExecCommand(Vec<String>),
+}

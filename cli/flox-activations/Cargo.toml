@@ -12,16 +12,34 @@ clap = { version = "4.5.54", default-features = false, features = [
     "error-context",
     "derive",
 ] }
-env_logger = { version = "0.11.8", default-features = false }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "ansi"] }
+tracing-appender = "0.2"
 flox-core.workspace = true
 fslock.workspace = true
-log.workspace = true
-time.workspace = true
+glob = "0.3.3"
+nix.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+shell-escape.workspace = true
+signal-hook.workspace = true
+time = { workspace = true, features = ["macros"] }
 indoc.workspace = true
+is_executable.workspace = true
+itertools.workspace = true
+shell_gen = { path = "../shell_gen" }
+dirs.workspace = true
+tempfile.workspace = true
 
+[target.'cfg(target_os = "macos")'.dependencies]
+kqueue.workspace = true
 
 [dev-dependencies]
+flox-core = { workspace = true, features = ["tests"] }
 nix.workspace = true
-tempfile.workspace = true
 temp-env.workspace = true
 pretty_assertions.workspace = true
+expect-test.workspace = true
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+procfs = "0.18.0"

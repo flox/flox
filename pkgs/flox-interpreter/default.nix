@@ -59,10 +59,8 @@ let
     inherit
       bash
       coreutils
-      daemonize
       findutils
       getopt
-      gnused
       jq
       nawk
       ;
@@ -72,12 +70,7 @@ let
     # If the flox-activations package is available, use it,
     # otherwise copy the binary from the environment into the store,
     # so that sandboxed builds and flox built containers can access it.
-    flox_activations =
-      if flox-activations != null then
-        "${flox-activations}/bin/flox-activations"
-      else
-        "${builtins.path { path = builtins.getEnv "FLOX_ACTIVATIONS_BIN"; }}";
-    util_linux = util-linuxMinimal;
+    flox_activations = "${flox-activations}/libexec/flox-activations";
     # Make clear when packages are not available on Darwin.
     ld_floxlib = if stdenv.isLinux then ld-floxlib else "__LINUX_ONLY__";
     iconv = if stdenv.isLinux then iconv else "__LINUX_ONLY__";
@@ -119,9 +112,6 @@ runCommand "flox-interpreter"
     # That's the build done, now shellcheck the results.
     ${shellcheck}/bin/shellcheck --external-sources --check-sourced \
       $out/activate \
-      $out/activate.d/generate-bash-startup-commands.bash \
-      $out/activate.d/generate-fish-startup-commands.bash \
-      $out/activate.d/generate-tcsh-startup-commands.bash \
       $out/activate.d/set-prompt.bash \
       $out/activate.d/helpers.bash \
       $out/etc/profile.d/*

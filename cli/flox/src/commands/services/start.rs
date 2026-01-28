@@ -6,14 +6,12 @@ use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::manifest::typed::Services;
-use flox_rust_sdk::providers::services::process_compose::{
-    ProcessStates,
-    shutdown_process_compose_if_all_processes_stopped,
-    start_service,
-};
+use flox_rust_sdk::providers::services::process_compose::{ProcessStates, start_service};
 use tracing::{debug, instrument};
 
 use crate::commands::services::{
+    ProcessComposeState,
+    ServicesCommandsError,
     ServicesEnvironment,
     guard_is_within_activation,
     guard_service_commands_available,
@@ -37,43 +35,55 @@ pub struct Start {
 impl Start {
     #[instrument(name = "start", skip_all)]
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
-        let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
+        let mut env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
         environment_subcommand_metric!("services::start", env.environment);
         let (current_mode, generation) = guard_is_within_activation(&env, "start")?;
         guard_service_commands_available(&env, &flox.system)?;
 
-        let start_new_process_compose = if !env.expect_services_running() {
-            true
-        } else {
-            // Returns `Ok(true)` if `process-compose` was shutdown
-            shutdown_process_compose_if_all_processes_stopped(env.socket())?
-        };
+        let process_compose_state = env.process_compose_state(&flox, &current_mode);
+        let socket = env.socket();
 
-        if start_new_process_compose {
-            debug!("starting services in new process-compose instance");
-            let names = start_services_with_new_process_compose(
-                config,
-                flox,
-                self.environment,
-                env.into_inner(),
-                current_mode,
-                &self.names,
-                generation,
-            )
-            .await?;
-            for name in names {
-                message::updated(format!("Service '{name}' started."));
-            }
-            Ok(())
-        } else {
-            debug!("starting services with existing process-compose instance");
-            Self::start_with_existing_process_compose(
-                env.socket(),
-                &env.manifest.services,
-                &flox.system,
-                &self.names,
-                &mut stderr(),
-            )
+        let existing_processes = ProcessStates::read(socket).unwrap_or(ProcessStates::from(vec![]));
+        let all_processes_stopped = existing_processes.iter().all(|p| p.is_stopped());
+
+        debug!(
+            socket_exists = socket.exists(),
+            ?process_compose_state,
+            all_processes_stopped,
+            "evaluating start conditions"
+        );
+
+        match process_compose_state {
+            ProcessComposeState::ActivationStartingSelf => {
+                Err(ServicesCommandsError::CalledFromActivationHook.into())
+            },
+            ProcessComposeState::NotCurrent if all_processes_stopped => {
+                debug!("starting services in new process-compose instance");
+                let names = start_services_with_new_process_compose(
+                    config,
+                    flox,
+                    self.environment,
+                    env.into_inner(),
+                    current_mode,
+                    &self.names,
+                    generation,
+                )
+                .await?;
+                for name in names {
+                    message::updated(format!("Service '{name}' started."));
+                }
+                Ok(())
+            },
+            ProcessComposeState::Current | ProcessComposeState::NotCurrent => {
+                debug!("starting services with existing process-compose instance");
+                Self::start_with_existing_process_compose(
+                    socket,
+                    &env.manifest.services,
+                    &flox.system,
+                    &self.names,
+                    &mut stderr(),
+                )
+            },
         }
     }
 

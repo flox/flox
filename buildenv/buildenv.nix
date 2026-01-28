@@ -1,5 +1,6 @@
 {
   interpreter_out_storePath ? "@interpreter_out@",
+  flox_activations_out_storePath ? "@flox_activations_out@",
   interpreter_wrapper_storePath ? "@interpreter_wrapper@",
   defaultEnvrc_storePath ? "@defaultEnvrc@",
   coreutils_storePath ? "@coreutils@",
@@ -20,6 +21,7 @@ let
   #
   # [1]: <https://nix.dev/manual/nix/2.24/language/string-context>
   interpreter_out = builtins.storePath interpreter_out_storePath;
+  flox_activations_out = builtins.storePath flox_activations_out_storePath;
   interpreter_wrapper = builtins.storePath interpreter_wrapper_storePath;
   defaultEnvrc = builtins.storePath defaultEnvrc_storePath;
   floxBuildEnv = builtins.storePath floxBuildenv_storePath;
@@ -283,6 +285,7 @@ builtins.derivation {
   # Pull in external attributes and those calculated above.
   inherit
     interpreter_out
+    flox_activations_out
     interpreter_wrapper
     inputSrcs
     manifestPackage
@@ -351,6 +354,7 @@ builtins.derivation {
   # the contents of requisites.txt for each output.
   exportReferencesGraph.graph = inputSrcs ++ [
     interpreter_out
+    flox_activations_out
     interpreter_wrapper
     manifestPackage
   ];

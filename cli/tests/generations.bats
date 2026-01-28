@@ -62,7 +62,7 @@ EOF
   export FLOXHUB_GIT_WARNING
 }
 teardown() {
-  wait_for_watchdogs "$PROJECT_DIR" || return 1
+  wait_for_activations "$PROJECT_DIR" || return 1
   project_teardown
   common_test_teardown
 }
@@ -89,7 +89,7 @@ teardown() {
   # Guard against using 'hello' from the live generation.
   "$FLOX_BIN" generations switch 1
 
-  RUST_BACKTRACE=0 run -127 "$FLOX_BIN" activate --generation 2 -- hello
+  RUST_BACKTRACE=0 run -1 "$FLOX_BIN" activate --generation 2 -- hello
   assert_failure
   assert_output --partial "hello: command not found"
 

@@ -37,7 +37,7 @@ setup() {
 }
 
 teardown() {
-  wait_for_watchdogs "$PROJECT_DIR" || return 1
+  wait_for_activations "$PROJECT_DIR" || return 1
   project_teardown
   common_test_teardown
 }
@@ -225,8 +225,8 @@ EOF
   "$FLOX_BIN" init --auto-setup --name "$NAME"
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 
-  FLOX_SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
-  FLOX_SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=bash "$FLOX_BIN" activate -c "python -c 'import requests'"
+  FLOX_SHELL=zsh "$FLOX_BIN" activate -c "python -c 'import requests'"
 
   floxhub_setup "$OWNER"
 
@@ -236,13 +236,13 @@ EOF
 
   "$FLOX_BIN" pull "$OWNER/$NAME"
 
-  FLOX_SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
-  FLOX_SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=bash "$FLOX_BIN" activate -c "python -c 'import requests'"
+  FLOX_SHELL=zsh "$FLOX_BIN" activate -c "python -c 'import requests'"
 
   "$FLOX_BIN" delete -f
 
-  FLOX_SHELL=bash "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
-  FLOX_SHELL=zsh "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
+  FLOX_SHELL=bash "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -c "python -c 'import requests'"
+  FLOX_SHELL=zsh "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -c "python -c 'import requests'"
 }
 
 @test "inits with bare manifest" {

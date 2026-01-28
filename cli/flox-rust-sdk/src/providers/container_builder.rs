@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 
+use flox_core::activate::mode::ActivateMode;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use thiserror::Error;
@@ -11,11 +12,11 @@ use tracing::{debug, info, instrument};
 
 use super::buildenv::BuiltStorePath;
 use crate::flox::Flox;
-use crate::models::manifest::typed::{ActivateMode, ContainerizeConfig};
+use crate::models::manifest::typed::ContainerizeConfig;
 use crate::providers::build::COMMON_NIXPKGS_URL;
 use crate::providers::nix::nix_base_command;
 use crate::utils::gomap::GoMap;
-use crate::utils::{CommandExt, ReaderExt};
+use crate::utils::{CommandExt, FLOX_INTERPRETER, ReaderExt};
 
 static MK_CONTAINER_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::var("FLOX_MK_CONTAINER_NIX")
@@ -156,6 +157,11 @@ impl ContainerBuilder for MkContainerNix {
             "--argstr",
             "activationMode",
             &self.activation_mode.to_string(),
+        ]);
+        command.args([
+            "--argstr",
+            "interpreterPath",
+            (*FLOX_INTERPRETER).to_string_lossy().as_ref(),
         ]);
         command.args(["--argstr", "containerName", name.as_ref()]);
         command.args(["--argstr", "containerTag", tag.as_ref()]);

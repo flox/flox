@@ -3,15 +3,15 @@ members = [
     "catalog-api-v1",
     "flox",
     "flox-rust-sdk",
-    "flox-watchdog",
     "flox-activations",
     "flox-core",
     "flox-test-utils",
     "mk_data",
+    "shell_gen",
     "systemd",
     "xtask",
 ]
-default-members = ["flox", "flox-watchdog", "flox-activations"]
+default-members = ["flox", "flox-activations"]
 
 resolver = "2"
 
@@ -49,10 +49,11 @@ indexmap = { version = "2.13.0", features = ["serde"] }
 indoc = "2.0.7"
 inquire = "0.9.2"
 indicatif = "0.18"
+is_executable = "1.0.5"
 itertools = "0.14.0"
 jsonwebtoken = { version = "10.2", features = ["rust_crypto"] }
 log = { version = "0.4.29", features = ["kv"] }
-nix = { version = "0.31", features = ["signal", "process", "user"] }
+nix = { version = "0.31", features = ["signal", "process", "user", "fs"] }
 oauth2 = "5.0"
 path-dedot = "3.1.1"
 pollster = "0.4.0"
@@ -88,7 +89,7 @@ tar = "0.4"
 tempfile = "3.24.0"
 textwrap = { version = "0.16.2", features = ["terminal_size"] }
 thiserror = "2"
-time = { version = "0.3", features = ["serde", "formatting"] }
+time = { version = "0.3", features = ["serde", "formatting", "local-offset"] }
 tokio = { version = "1", features = ["full"] }
 toml = "0.9.8"
 toml_edit = { version = "0.23", features = ["serde"] }
@@ -107,8 +108,9 @@ xdg = "3.0"
 pretty_assertions = "1.4"
 serial_test = "3.3.1"
 temp-env = "0.3.2"
+expect-test = "1"
 
-# watchdog dependencies
+# executive/monitoring dependencies
 kqueue = "1.1.1"
 signal-hook = "0.4.1"
 

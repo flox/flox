@@ -1,4 +1,5 @@
 mod activate;
+mod activation_state;
 mod auth;
 mod build;
 mod check_for_upgrades;
@@ -15,7 +16,6 @@ mod init;
 mod install;
 mod list;
 mod lock_manifest;
-mod path_hash;
 mod publish;
 mod pull;
 mod push;
@@ -33,6 +33,7 @@ use std::{env, fmt, mem};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
+use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 use flox_rust_sdk::flox::{
     DEFAULT_FLOXHUB_URL,
     DEFAULT_NAME,
@@ -70,13 +71,7 @@ use xdg::BaseDirectories;
 
 use self::envs::DisplayEnvironments;
 use crate::commands::general::update_config;
-use crate::config::{
-    Config,
-    EnvironmentTrust,
-    FLOX_CONFIG_FILE,
-    FLOX_DIR_NAME,
-    FLOX_DISABLE_METRICS_VAR,
-};
+use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE, FLOX_DIR_NAME};
 use crate::utils::active_environments::{
     ActiveEnvironments,
     activated_environments,
@@ -797,10 +792,12 @@ enum InternalCommands {
     #[bpaf(command, long("exit"), long("deactivate"), hide)]
     Exit(#[bpaf(external(exit::exit))] exit::Exit),
 
-    /// Print the hash of a filesystem path. Useful for determining which
-    /// activation state directory to look at while debugging.
-    #[bpaf(command, long("path-hash"), hide)]
-    PathHash(#[bpaf(external(path_hash::path_hash))] path_hash::PathHash),
+    /// Print the activation state directory path for an environment.
+    /// Useful for debugging activation state.
+    #[bpaf(command, long("activation-state"), hide)]
+    ActivationState(
+        #[bpaf(external(activation_state::activation_state))] activation_state::ActivationState,
+    ),
 }
 
 impl InternalCommands {
@@ -811,7 +808,7 @@ impl InternalCommands {
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
             InternalCommands::Exit(args) => args.handle(flox)?,
-            InternalCommands::PathHash(args) => args.handle()?,
+            InternalCommands::ActivationState(args) => args.handle(flox)?,
         }
         Ok(())
     }

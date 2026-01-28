@@ -123,6 +123,7 @@ floxhub_setup() {
 #   + git concurrency
 #
 # nix caches and pkgdb caches remain shared, since they are effectively read-only.
+# XDG_RUNTIME_DIR is also shared since everything in there should be unique
 setup_isolated_flox() {
   export FLOX_CONFIG_DIR="${BATS_TEST_TMPDIR?}/flox-config"
   export FLOX_DATA_DIR="${BATS_TEST_TMPDIR?}/flox-data"
@@ -174,8 +175,11 @@ common_file_teardown() {
 
 teardown_file() { common_file_teardown; }
 
-# Wait for all watchdogs called with `project_dir` as part of one of their
-# arguments.
+# Wait for all activations started by the current test to be cleaned up by the
+# executive. Detects activations from the per-test `FLOX_CACHE_DIR`
+# that is created by `setup_isolated_flox`. This is safe to call before the
+# executive has started. The `project_dir` argument is only used to
+# report logs.
 #
 # This is primarily used in `teardown()` to prevent us leaving stray
 # activations, services, and other processes running after a test has finished.
@@ -185,58 +189,51 @@ teardown_file() { common_file_teardown; }
 #
 # NB1: It must be appended with `|| return 1` to fail the offending test and
 # preserve other output, at the expense of aborting any other cleanup.
-#
-# NB2: It cannot be reliably used inlined of tests to wait for activations or
-# services to be cleaned up because it can exit before a watchdog has started.
-wait_for_watchdogs() {
+wait_for_activations() {
   project_dir="${1?}"
   if [ -z "$project_dir" ]; then
-    echo "ERROR: cannot wait for watchdogs with empty project_dir" >&3
+    echo "ERROR: cannot wait for executives with empty project_dir" >&3
     return 1
   fi
-  # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
-  # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
-  # grep command itself doesn't get listed when we search for the data dir.
-  # The `sed` removes any leading whitespace,
-  # that is present in the output of `ps` on linux apparently?!.
-  # The `cut` just extracts the PID.
 
-  local pids
-  pids="$(
-    ps -Ao pid,args \
-    | grep flox-watchdog \
-    | grep "$project_dir" \
-    | sed 's/^[[:blank:]]*//' \
-    | cut -d' ' -f1)"
+  activation_state_dir="$("$FLOX_BIN" activation-state -d "$project_dir")"
 
-  # Uncomment to debug which watchdogs are running.
-  #
-  # echo "project_dir => ${project_dir}" >&3
-  # ps -Ao pid,args \
-  #  | grep flox-watchdog \
-  #  >&3
-
-  if [ -n "${pids?}" ]; then
-    tries=0
-    while true; do
-      tries=$((tries + 1))
-      if ! kill -0 $pids > /dev/null 2>&1; then
-        break
-      else
-        if [[ $tries -gt 1000 ]]; then
-          echo "ERROR: flox-watchdog processes did not finish after 10 seconds" >&3
-          echo "Watchdog logs:" >&3
-          cat "${project_dir}"/.flox/log/watchdog.* >&3
-          echo "Bats processes:" >&3
-          pstree -ws "$BATS_RUN_TMPDIR" >&3
-          # This will fail the test giving us a better idea of which watchdog
-          # didn't get cleaned up
-          return 1
-        fi
-        sleep 0.01;
-      fi
-    done
+  # This could cause false-positives if there are no activations at
+  # all but we have some tests in suites that use `wait_for_activations` and
+  # don't perform activations.
+  if [ ! -d "$activation_state_dir" ]; then
+    echo "wait_for_activations: activation state dir $activation_state_dir is not a directory" >&2
+    return 0
   fi
+
+  # Wait for all state.json files to be empty
+  local tries=0
+  while true; do
+    if [ ! -d "$activation_state_dir" ]; then
+      echo "wait_for_activations: all activations cleaned up, exiting" >&2
+      break
+    fi
+
+    tries=$((tries + 1))
+    if [[ $tries -gt 1000 ]]; then
+      echo "ERROR: activations not get cleaned up activations after 10 seconds" >&3
+
+      echo "Activation state dir: $activation_state_dir" >&3
+
+      echo "state.json"
+      cat "${activation_state_dir}"/state.json >&3
+
+      echo "Executive logs:" >&3
+      cat "${project_dir}"/.flox/log/executive.* >&3
+
+      echo "Bats processes:" >&3
+      pstree -ws "$BATS_RUN_TMPDIR" >&3
+
+      return 1
+    fi
+
+    sleep 0.01
+  done
 }
 
 common_test_teardown() {

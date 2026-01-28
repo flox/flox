@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, LazyLock, Mutex};
 
+use flox_core::activate::mode::ActivateMode;
 use flox_core::canonical_path::CanonicalPath;
 use pollster::FutureExt as _;
 use rsevents_extra::Semaphore;
@@ -27,7 +28,7 @@ use crate::models::lockfile::{
     Lockfile,
     PackageToList,
 };
-use crate::models::manifest::typed::{ActivateMode, ManifestError, SelectedOutputs};
+use crate::models::manifest::typed::{ManifestError, SelectedOutputs};
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::providers::auth::{catalog_auth_to_envs, store_needs_auth};
 use crate::providers::catalog::{CatalogClientError, StoreInfo};
@@ -1991,12 +1992,12 @@ mod buildenv_tests {
     fn build_contains_activate_files() {
         let result = &*BUILDENV_RESULT_SIMPLE_PACKAGE;
         let runtime = &result.runtime;
-        assert!(runtime.join("activate.d/start.bash").exists());
+        assert!(runtime.join("activate").exists());
         assert!(runtime.join("activate.d/zsh").exists());
         assert!(runtime.join("etc/profile.d").is_dir());
 
         let develop = &result.develop;
-        assert!(develop.join("activate.d/start.bash").exists());
+        assert!(develop.join("activate").exists());
         assert!(develop.join("activate.d/zsh").exists());
         assert!(develop.join("etc/profile.d").is_dir());
     }

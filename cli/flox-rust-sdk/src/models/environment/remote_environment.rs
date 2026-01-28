@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use flox_core::activate::mode::ActivateMode;
 use thiserror::Error;
 use tracing::debug;
 
@@ -43,7 +44,6 @@ use crate::models::environment::{PathPointer, RenderedEnvironmentLink};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::PackageToInstall;
-use crate::models::manifest::typed::ActivateMode;
 
 const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
 

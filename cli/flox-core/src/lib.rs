@@ -1,7 +1,11 @@
+pub mod activate;
 pub mod activations;
 pub mod canonical_path;
 #[cfg(feature = "proc_status")]
 pub mod proc_status;
+pub mod process_compose;
+pub mod util;
+pub mod vars;
 mod version;
 
 use std::fmt::Display;
@@ -102,6 +106,15 @@ pub fn write_atomically(
 pub fn traceable_path(p: impl AsRef<Path>) -> impl tracing::Value {
     let path = p.as_ref();
     path.display().to_string()
+}
+
+/// Returns a `tracing`-compatible form of an `Option<PathBuf>`
+pub fn maybe_traceable_path(maybe_path: &Option<PathBuf>) -> impl tracing::Value {
+    if let Some(p) = maybe_path {
+        p.display().to_string()
+    } else {
+        String::from("null")
+    }
 }
 
 /// Returns a log file name, or glob pattern, for upgrade-check logs.

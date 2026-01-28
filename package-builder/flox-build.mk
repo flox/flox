@@ -427,7 +427,7 @@ define BUILD_local_template =
 	$(_V_) $(_env) $$(QUOTED_ENV_DISALLOW_ARGS) out=$($(_pvarname)_out) \
 	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$(PWD) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
 	  $(FLOX_INTERPRETER)/activate --env $$($(_pvarname)_develop_copy_env) \
-	    --mode build --env-project $(PWD) -- \
+	    --mode build --skip-hook-on-activate --env-project $(PWD) -- \
 	    $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $$<
 	@#
 	@# Finally, rewrite references to temporary build wrapper in "out",
@@ -713,7 +713,7 @@ define JSON_VERSION_TO_COMMAND_jq =
       to_entries[] | \
       if .key == "file" then "$(_cat) \(.value)" else (
         if .key == "command" then (
-          "$(FLOX_ENV)/activate -c \(.value | @sh)"
+          "$(FLOX_ENV)/activate --mode build --skip-hook-on-activate -- \(.value)"
         ) else (
           "unknown version type: \(.key)" | halt_error(1)
         ) end

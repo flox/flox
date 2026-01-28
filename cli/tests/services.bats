@@ -68,10 +68,10 @@ setup() {
 
 teardown() {
   cat_teardown_fifo
-  # Wait for watchdogs before project teardown, otherwise some tests will hang
+  # Wait for executives before project teardown, otherwise some tests will hang
   # forever.
   #
-  # I'm guessing this is because the watchdog and process-compose have logfiles
+  # I'm guessing this is because the executive and process-compose have logfiles
   # in the project directory,
   # so maybe one of them tries to log something and hangs.
   # ps output is showing a process-compose down hanging forever,
@@ -80,14 +80,14 @@ teardown() {
   # I'd check the logs to confirm what's happening...
   # ...if only the reproducer wasn't to delete the logs.
   #
-  # When running in parallel `wait_for_watchdogs`
-  # may wait for watchdog processes of unrelated tests.
+  # When running in parallel `wait_for_activations`
+  # may wait for executive processes of unrelated tests.
   # It tries to avoid non-test processes by looking for the data dir argument,
-  # passed to the watchdog process.
+  # passed to the executive process.
   # Within the `services` tests, we call `setup_isolated_flox` during `setup()`,
   # which sets the data dir to a unique value for every test,
-  # thus avoiding waiting for unrelated watchdog processes.
-  wait_for_watchdogs "$PROJECT_DIR" || return 1
+  # thus avoiding waiting for unrelated executive processes.
+  wait_for_activations "$PROJECT_DIR" || return 1
   project_teardown
   common_test_teardown
 }
@@ -133,6 +133,7 @@ setup_start_counter_services() {
   run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
   assert_success
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    "${TESTS_DIR}"/services/wait_for_service_status.sh touch_file:Completed
 EOF
 )
   assert_success
@@ -163,8 +164,16 @@ EOF
 @test "services aren't started unless requested" {
   setup_sleeping_services
 
-  RUST_LOG=debug run "$FLOX_BIN" activate -- true
-  assert_output --partial "setting service variables should_have_services=false start_new_process_compose=false"
+  # NB: No --start-services
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    echo "FLOX_ACTIVATE_START_SERVICES=${FLOX_ACTIVATE_START_SERVICES}"
+    "$FLOX_BIN" services status
+EOF
+)
+  assert_success
+  assert_line "FLOX_ACTIVATE_START_SERVICES=false"
+  assert_output --regexp "one +Stopped"
+  assert_output --regexp "two +Stopped"
 }
 
 @test "help for the command is displayed with no args" {
@@ -455,86 +464,6 @@ EOF
   wait_for_file_content start_counter.sleeping 1
 }
 
-# bats test_tags=services:restart
-@test "restart: does not reload config when some services are still running" {
-  setup_start_counter_services
-
-  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    # Wait for completion so that we indicate "start" instead of "restart"
-    "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
-    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
-    "$FLOX_BIN" services restart one
-EOF
-)
-  assert_success
-  assert_output --partial "✔ Service 'one' started"
-  refute_output --partial "Service 'two'"
-  refute_output --partial "Service 'sleeping'"
-  refute_output --partial "Service 'touch_file'"
-
-  wait_for_file_content start_counter.one 2
-}
-
-# bats test_tags=services:restart
-@test "restart: reloads config when all services are restarted" {
-  setup_start_counter_services
-
-  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
-    "$FLOX_BIN" services restart
-EOF
-)
-  assert_success
-  assert_output --partial "✔ Service 'touch_file' started"
-  [ -e hello.txt ]
-}
-
-# bats test_tags=services:restart
-@test "restart: reloads config when given no service and all services are stopped" {
-  setup_start_counter_services
-
-  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    "$FLOX_BIN" services stop
-    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
-    "$FLOX_BIN" services restart
-EOF
-)
-  assert_success
-  assert_output --partial "✔ Service 'touch_file' started"
-  [ -e hello.txt ]
-}
-
-# bats test_tags=services:restart
-@test "restart: reloads config when given single service and all services are stopped" {
-  setup_start_counter_services
-
-  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    "$FLOX_BIN" services stop
-    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
-    "$FLOX_BIN" services restart touch_file
-EOF
-)
-  assert_success
-  assert_output --partial "✔ Service 'touch_file' started"
-  [ -e hello.txt ]
-}
-
-# bats test_tags=services:restart
-@test "restart: errors when given service isn't in reloaded config" {
-  setup_start_counter_services
-
-  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    "$FLOX_BIN" services stop
-    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
-    "$FLOX_BIN" services restart one
-EOF
-)
-  assert_failure
-  assert_output --partial "✘ ERROR: Service 'one' does not exist."
-  refute_output --partial "Service 'touch_file'"
-  [ ! -e hello.txt ]
-}
-
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=services:stop
@@ -601,13 +530,13 @@ EOF
 )
     assert_success
 
-    # give the watchdog a chance to clean up the services before the next iteration
-    wait_for_watchdogs "$PROJECT_DIR"
+    # give the executive a chance to clean up the services before the next iteration
+    wait_for_activations "$PROJECT_DIR"
   done
 }
 
 # NB: There is a corresponding test in `activate.bats`.
-@test "start, restart: refuses to attach to an older activations.json version" {
+@test "start, restart: handles differences in state.json version" {
   setup_sleeping_services
 
   # Prevent backtraces from `flox-activations` leaking into output.
@@ -619,31 +548,44 @@ EOF
     echo "Testing: flox services $command"
     command="$command" run "$FLOX_BIN" activate -- bash <(
       cat << 'EOF'
-        echo "$PPID" > activation_pid
+        echo "Started outer activation.."
+        echo "$$" > activation_pid
 
-        ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
-        ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
-        echo "$ACTIVATIONS_JSON" > activations_json
+        ACTIVATIONS_DIR=$(dirname "$_FLOX_START_STATE_DIR")
+        STATE_PATH="${ACTIVATIONS_DIR}/state.json"
 
-        jq_edit "$ACTIVATIONS_JSON" '.version = 0'
+        # Stop the executive before making changes to state.json which will
+        # cause it to exit with an error on the next polling loop.
+        EXECUTIVE_PID=$(jq --exit-status --raw-output '.executive_pid' "$STATE_PATH")
+        kill -9 "$EXECUTIVE_PID"
+
+        # Fake an older version.
+        jq_edit "$STATE_PATH" '.version = 0'
+
+        # This should fail because the outer activation is still attached and running.
+        echo "Attempting inner activation.."
         "$FLOX_BIN" services "$command"
 EOF
     )
 
     # Capture from the previous activation.
     ACTIVATION_PID=$(cat activation_pid)
-    ACTIVATIONS_JSON=$(cat activations_json)
 
     assert_failure
-    assert_output "✘ ERROR: failed to run activation script: Error: This environment has already been activated with an incompatible version of 'flox'.
+    assert_output "Started outer activation..
+Attempting inner activation..
+✘ ERROR: This environment has already been activated with an incompatible version of 'flox'.
 
 Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"
 
-    # give the watchdog a chance to clean up the services before the next iteration
-    wait_for_watchdogs "$PROJECT_DIR"
-    rm "$ACTIVATIONS_JSON"
+    # Verify that a subsequent activation succeeds because the state is ignored
+    # and reset when the attached pid and executive are no longer running.
+    # This also ensures that wait_for_activations will succeed.
+    FLOX_SHELL=bash run "$FLOX_BIN" activate -- true
+    assert_success
   done
+
 }
 
 # bats test_tags=services:stop
@@ -949,15 +891,15 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-@test "blocking: error message when startup times out" {
+@test "blocking: error messages when startup times out" {
   setup_sleeping_services
   export _FLOX_SERVICES_ACTIVATE_TIMEOUT=0.1
+
   # process-compose will never be able to create this socket,
   # which looks the same as taking a long time to create the socket
   export _FLOX_SERVICES_SOCKET_OVERRIDE="/no_permission.sock"
-
   run "$FLOX_BIN" activate -s -- true
-  assert_output --partial "✘ Failed to start services"
+  assert_output "✘ ERROR: Failed to start services: process-compose socket not ready"
 }
 
 @test "blocking: activation blocks on process list" {
@@ -986,13 +928,9 @@ EOF
   run grep "process=flox_never_exit" "${PROJECT_DIR}"/.flox/log/services.*.log
   assert_success
 
-  # Poll because watchdog may not have started by the time the activation finishes.
-  run timeout 1s bash -c "
-    while ! grep 'flox_watchdog: starting' \"$PROJECT_DIR\"/.flox/log/watchdog.*.log*; do
-      sleep 0.1
-    done
-  "
-  assert_success
+  # Poll because executive may not have started by the time the activation finishes.
+  executive_log="$(echo $PROJECT_DIR/.flox/log/executive.*.log.*)"
+  wait_for_partial_file_content "$executive_log" "woof"
 }
 
 @test "activate: --start-services warns if environment does not have services" {
@@ -1012,15 +950,13 @@ EOF
   assert_success
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    "${TESTS_DIR}/services/echo_activate_vars.sh" outer
-    "$FLOX_BIN" activate -d "$INNER_PROJECT_DIR" -- bash "${TESTS_DIR}/services/echo_activate_vars.sh" inner
+    echo "outer FLOX_ACTIVATE_START_SERVICES=${FLOX_ACTIVATE_START_SERVICES}"
+    "$FLOX_BIN" activate -d "$INNER_PROJECT_DIR" -- bash -c 'echo "inner FLOX_ACTIVATE_START_SERVICES=${FLOX_ACTIVATE_START_SERVICES}"'
 EOF
 )
   assert_success
   assert_line "outer FLOX_ACTIVATE_START_SERVICES=true"
-  assert_line "outer _FLOX_SERVICES_TO_START=unset"
   assert_line "inner FLOX_ACTIVATE_START_SERVICES=false"
-  assert_line "inner _FLOX_SERVICES_TO_START=unset"
 }
 
 @test "activate: outer activation imperatively starts services and inner activation doesn't" {
@@ -1033,15 +969,13 @@ EOF
   # NB: no --start-services
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
     "$FLOX_BIN" services start
-    "${TESTS_DIR}/services/echo_activate_vars.sh" outer
-    "$FLOX_BIN" activate -d "$INNER_PROJECT_DIR" -- bash "${TESTS_DIR}/services/echo_activate_vars.sh" inner
+    echo "outer FLOX_ACTIVATE_START_SERVICES=${FLOX_ACTIVATE_START_SERVICES}"
+    "$FLOX_BIN" activate -d "$INNER_PROJECT_DIR" -- bash -c 'echo "inner FLOX_ACTIVATE_START_SERVICES=${FLOX_ACTIVATE_START_SERVICES}"'
 EOF
 )
   assert_success
   assert_line "outer FLOX_ACTIVATE_START_SERVICES=false"
-  assert_line "outer _FLOX_SERVICES_TO_START=unset"
   assert_line "inner FLOX_ACTIVATE_START_SERVICES=false"
-  assert_line "inner _FLOX_SERVICES_TO_START=unset"
 }
 
 @test "activate: services can be layered" {
@@ -1090,7 +1024,7 @@ EOF
 @test "activate: starts services for in-place activations" {
   setup_sleeping_services
 
-  # Run in a sub-shell so that `wait_for_watchdogs` in `teardown` can verify
+  # Run in a sub-shell so that `wait_for_activations` in `teardown` can verify
   # that the activation is cleaned up on exit and implicitly that services are
   # shutdown.
   run bash -c '
@@ -1150,7 +1084,6 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
-
 
 @test "start: errors if service doesn't exist" {
 
@@ -1326,9 +1259,75 @@ EOF
   assert_output --regexp "one +(Running|Completed)"
 }
 
-@test "start: picks up changes after environment modification when all services have stopped" {
+# ---------------------------------------------------------------------------- #
 
+@test "start: errors when called from hook.on-activate" {
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
 
+    [services]
+    one.command = "echo done"
+
+    [hook]
+    on-activate = '''
+      echo "== hook.on-activate: before"
+      "$FLOX_BIN" services start
+      echo "== hook.on-activate: after"
+    '''
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  unset RUST_BACKTRACE
+  run "$FLOX_BIN" activate -- true
+  assert_success # Exit codes in hooks don't fail an activation.
+  assert_output - <<EOF
+== hook.on-activate: before
+✘ ERROR: Cannot start services from 'hook.on-activate'.
+
+Starting services from the activation hook would cause a deadlock.
+Activate the environment with 'flox activate --start-services' instead.
+== hook.on-activate: after
+EOF
+}
+
+@test "restart: errors when called from hook.on-activate" {
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "echo done"
+
+    [hook]
+    on-activate = '''
+      echo "== hook.on-activate: before"
+      "$FLOX_BIN" services restart
+      echo "== hook.on-activate: after"
+    '''
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  unset RUST_BACKTRACE
+  run "$FLOX_BIN" activate -- true
+  assert_success # Exit codes in hooks don't fail an activation.
+  assert_output - <<EOF
+== hook.on-activate: before
+✘ ERROR: Cannot start services from 'hook.on-activate'.
+
+Starting services from the activation hook would cause a deadlock.
+Activate the environment with 'flox activate --start-services' instead.
+== hook.on-activate: after
+EOF
+}
+
+# ---------------------------------------------------------------------------- #
+
+@test "config reload: start: picks up environment modifications when all services have stopped" {
   MANIFEST_CONTENTS_1="$(cat << "EOF"
     version = 1
 
@@ -1345,7 +1344,31 @@ EOF
 
   # Edit the manifest adding a second service and changing the value of FOO.
   # Then start services again.
-  run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/start_picks_up_modifications.sh"
+  run "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
+    set -euo pipefail
+
+    MANIFEST_CONTENTS_2="$(cat << "MANIFEST"
+      version = 1
+
+      [services]
+      one.command = "echo $FOO"
+      two.command = "sleep infinity"
+
+      [hook]
+      on-activate = "export FOO=foo_two"
+MANIFEST
+    )"
+
+    echo "$MANIFEST_CONTENTS_2" | "$FLOX_BIN" edit -f -
+
+    # Make sure we avoid a race of service one failing to complete
+    "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
+
+    "$FLOX_BIN" services start
+    "$FLOX_BIN" services status
+    "$FLOX_BIN" services logs one
+EOF
+  )
   assert_success
 
   # The added service should be running.
@@ -1354,9 +1377,7 @@ EOF
   assert_output --partial "foo_two"
 }
 
-@test "start: does not pick up changes after environment modification when some services still running" {
-
-
+@test "config reload: start: does not pick up changes after environment modification when some services still running" {
   MANIFEST_CONTENTS_1="$(cat << "EOF"
     version = 1
 
@@ -1370,10 +1391,154 @@ EOF
 
   # Edit the manifest adding a second service.
   # Then try to start the second service.
-  run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/start_does_not_pick_up_modifications.sh"
+  run "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
+    set -euo pipefail
+
+    MANIFEST_CONTENTS_2="$(cat << "MANIFEST"
+      version = 1
+
+      [services]
+      one.command = "sleep infinity"
+      two.command = "sleep infinity"
+MANIFEST
+    )"
+
+    echo "$MANIFEST_CONTENTS_2" | "$FLOX_BIN" edit -f -
+
+    "$FLOX_BIN" services start two
+EOF
+  )
   assert_failure
   assert_output --partial "Service 'two' was defined after services were started."
 }
+
+@test "config reload: activate: picks up environment modifications when all services have stopped" {
+  MANIFEST_CONTENTS_1="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "echo $FOO > out"
+
+    [hook]
+    on-activate = "export FOO=foo_one"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS_1" | "$FLOX_BIN" edit -f -
+
+  # Start a background activation with an initial value of FOO.
+  TEARDOWN_FIFO="$PROJECT_DIR/finished"
+  mkfifo "$TEARDOWN_FIFO"
+  "$FLOX_BIN" activate -s -c "echo > \"$TEARDOWN_FIFO\"" &
+
+  # The initial value of FOO should be written.
+  wait_for_file_content out foo_one
+
+  MANIFEST_CONTENTS_2="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "echo $FOO > out"
+    two.command = "sleep infinity"
+
+    [hook]
+    on-activate = "export FOO=foo_two"
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENTS_2" | "$FLOX_BIN" edit -f -
+
+  # Start a new and concurrent activation and services with a modified value of FOO.
+  "$FLOX_BIN" activate -s -- true
+
+  # The modified value of FOO should be written.
+  wait_for_file_content out foo_two
+
+  # The added service should be running.
+  "${TESTS_DIR}"/services/wait_for_service_status.sh two:Running
+
+}
+
+@test "config reload: restart: does not pick up environment modifications when some services still running" {
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    # Wait for completion so that we indicate "start" instead of "restart"
+    "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
+    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
+    "$FLOX_BIN" services restart one
+EOF
+)
+  assert_success
+  assert_output --partial "✔ Service 'one' started"
+  refute_output --partial "Service 'two'"
+  refute_output --partial "Service 'sleeping'"
+  refute_output --partial "Service 'touch_file'"
+
+  wait_for_file_content start_counter.one 2
+}
+
+@test "config reload: restart: picks up environment modifications when all services are restarted" {
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
+    "$FLOX_BIN" services restart
+    "${TESTS_DIR}"/services/wait_for_service_status.sh touch_file:Completed
+EOF
+)
+  assert_success
+  assert_output --partial "✔ Service 'touch_file' started"
+  [ -e hello.txt ]
+}
+
+@test "config reload: restart: picks up environment modifications when all services are stopped" {
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    "$FLOX_BIN" services stop
+    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
+    "$FLOX_BIN" services restart
+    "${TESTS_DIR}"/services/wait_for_service_status.sh touch_file:Completed
+EOF
+)
+  assert_success
+  assert_output --partial "✔ Service 'touch_file' started"
+  [ -e hello.txt ]
+}
+
+@test "config reload: restart <service>: picks up environment modifications when all services are stopped" {
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    "$FLOX_BIN" services stop
+    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
+    "$FLOX_BIN" services restart touch_file
+    "${TESTS_DIR}"/services/wait_for_service_status.sh touch_file:Completed
+EOF
+)
+  assert_success
+  assert_output --partial "✔ Service 'touch_file' started"
+  [ -e hello.txt ]
+}
+
+@test "config reload: restart <service>: errors when given service isn't in reloaded config" {
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    "$FLOX_BIN" services stop
+    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
+    "$FLOX_BIN" services restart one
+EOF
+)
+  assert_failure
+  assert_output --partial "✘ ERROR: Service 'one' does not exist."
+  refute_output --partial "Service 'touch_file'"
+  [ ! -e hello.txt ]
+}
+
+# ---------------------------------------------------------------------------- #
 
 @test "start: respects activation mode" {
   # Run a service that checks if CPATH is set
@@ -1404,7 +1569,7 @@ EOF
   assert_success
   assert_output --partial '"exit_code": 0'
 
-  wait_for_watchdogs "$PROJECT_DIR"
+  wait_for_activations "$PROJECT_DIR"
 
   CPATH= \
     run "$FLOX_BIN" activate --mode run -- bash -c "$SCRIPT"
@@ -1413,23 +1578,33 @@ EOF
 }
 
 
-@test "start: shuts down existing process-compose" {
-
-  MANIFEST_CONTENTS_1="$(cat << "EOF"
+@test "start: shuts down process-compose started by imperative start" {
+  MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
 
     [services]
-    one.command = "true"
+    one.command = "sleep infinity"
 EOF
   )"
 
   "$FLOX_BIN" init
-  echo "$MANIFEST_CONTENTS_1" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
-  # Call flox services start and check if the prior process-compose gets shutdown
-  # This also appears to hang forever if process-compose doesn't get shutdown
-  run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/start_shuts_down_process_compose.sh"
+  SCRIPT="$(cat << "EOF"
+    set -euo pipefail
+
+    "$FLOX_BIN" services start
+EOF
+  )"
+
+  run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
   assert_success
+  assert_output --partial "Service 'one' started."
+
+
+  executive_log="$(echo $PROJECT_DIR/.flox/log/executive.*.log.*)"
+  wait_for_partial_file_content "$executive_log" "woof"
+  wait_for_partial_file_content "$executive_log" "finished cleanup"
 }
 
 @test "kills daemon process" {
@@ -1455,58 +1630,20 @@ EOF
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/daemonize.yaml"
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
-  run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/check_daemon_process.sh"
+  run "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
+    set -euxo pipefail
+
+    timeout 2 bash -c 'set -x; while [ ! -e "$(pwd)/pidfile" ]; do sleep .1; done'
+
+    "$FLOX_BIN" services status
+    "$FLOX_BIN" services stop
+
+    timeout 2 bash -c 'set -x; while kill -0 "$(cat "$(pwd)/pidfile")"; do sleep .1; done'
+EOF
+  )
   assert_success
 }
 
-@test "activate: picks up changes after environment modification when all services have stopped" {
-
-  MANIFEST_CONTENTS_1="$(cat << "EOF"
-    version = 1
-
-    [services]
-    one.command = "echo $FOO > out"
-
-    [hook]
-    on-activate = "export FOO=foo_one"
-EOF
-  )"
-
-  "$FLOX_BIN" init
-  echo "$MANIFEST_CONTENTS_1" | "$FLOX_BIN" edit -f -
-
-  # Start a background activation with an initial value of FOO.
-  TEARDOWN_FIFO="$PROJECT_DIR/finished"
-  mkfifo "$TEARDOWN_FIFO"
-  "$FLOX_BIN" activate -s -- echo \> "$TEARDOWN_FIFO" &
-
-  # The initial value of FOO should be written.
-  wait_for_file_content out foo_one
-
-  MANIFEST_CONTENTS_2="$(cat << "EOF"
-    version = 1
-
-    [services]
-    one.command = "echo $FOO > out"
-    two.command = "sleep infinity"
-
-    [hook]
-    on-activate = "export FOO=foo_two"
-EOF
-  )"
-
-  echo "$MANIFEST_CONTENTS_2" | "$FLOX_BIN" edit -f -
-
-  # Start a new and concurrent activation and services with a modified value of FOO.
-  "$FLOX_BIN" activate -s -- true
-
-  # The modified value of FOO should be written.
-  wait_for_file_content out foo_two
-
-  # The added service should be running.
-  "${TESTS_DIR}"/services/wait_for_service_status.sh two:Running
-
-}
 
 @test "services stop after multiple activations of an environment exit" {
   setup_sleeping_services
@@ -1519,10 +1656,10 @@ EOF
   "$FLOX_BIN" activate --start-services -- bash -c "echo > started_1 && echo > $TEARDOWN_FIFO" &
   timeout 2 cat started_1
 
-  # Check that services and watchdog are both running
+  # Check that services and executive are both running
   "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
-  watchdog_1_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log.*)"
-  run cat "$watchdog_1_log"
+  executive_log="$(echo $PROJECT_DIR/.flox/log/executive.*.log.*)"
+  run cat "$executive_log"
   assert_success
   assert_output --partial "woof"
 
@@ -1553,25 +1690,14 @@ EOF
   run cat output
   assert_output --partial "! Skipped starting services, services are already running"
 
-  # Check that watchdog 1 has finished cleanup
-  run cat "$watchdog_1_log"
-  assert_output --partial "woof"
-  wait_for_partial_file_content "$watchdog_1_log" "finished cleanup"
-  rm "$watchdog_1_log"
-
-  # Check that watchdog 2 is running
-  watchdog_2_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log.*)"
-  run cat "$watchdog_2_log"
-  assert_output --partial "woof"
-  refute_output "finished cleanup"
-
-  # Even though watchdog 1 cleaned up, services should still be running
+  # Services should still be running after the 1st activation exited.
+  wait_for_partial_file_content "$executive_log" "detaching terminated PID"
   "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
 
-  # Teardown 2nd activation and wait for watchdog to cleanup
+  # Teardown 2nd activation and wait for executive to cleanup
   cat finished_2
   unset TEARDOWN_FIFO
-  wait_for_partial_file_content "$watchdog_2_log" "finished cleanup"
+  wait_for_partial_file_content "$executive_log" "finished cleanup"
 
   # Make sure services have stopped
   timeout 1s bash -c '
@@ -1640,4 +1766,64 @@ EOF
   assert_success
   assert_output --partial "Service 'one' started."
   assert_output --partial "right_value"
+}
+
+# The base environment is captured at the time the executive is started from the
+# initial activation, not for subsequent activations and [re]starts, in order to
+# provide as much determinism as possible.
+@test "vars: don't leak from outer shells of subsequent starts" {
+  MANIFEST_CONTENTS_INITIAL="$(cat << "EOF"
+    version = 1
+
+    [hook]
+    on-activate = '''
+      export MANIFEST_VAR="initial_manifest_value"
+    '''
+
+    [services]
+    initial.command = 'echo "OUTER_VAR=$OUTER_VAR MANIFEST_VAR=$MANIFEST_VAR" > initial_values'
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS_INITIAL" | "$FLOX_BIN" edit -f -
+
+  mkfifo started
+  TEARDOWN_FIFO="$PROJECT_DIR/finished"
+  mkfifo "$TEARDOWN_FIFO"
+  OUTER_VAR="initial_outer_value" "$FLOX_BIN" activate --start-services -- bash <(cat << EOF
+    echo > started
+    echo > "$TEARDOWN_FIFO"
+EOF
+  ) &
+  timeout 2 cat started
+
+  "${TESTS_DIR}"/services/wait_for_service_status.sh initial:Completed
+  run cat initial_values
+  assert_success
+  assert_output "OUTER_VAR=initial_outer_value MANIFEST_VAR=initial_manifest_value"
+
+  MANIFEST_CONTENTS_UPDATED="$(cat << "EOF"
+    version = 1
+
+    [hook]
+    on-activate = '''
+      export MANIFEST_VAR="updated_manifest_value"
+    '''
+
+    [services]
+    updated.command = 'echo "OUTER_VAR=$OUTER_VAR MANIFEST_VAR=$MANIFEST_VAR" > updated_values'
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_UPDATED" | "$FLOX_BIN" edit -f -
+
+  # Start a second activation with different outer and inner variables and restart services
+  OUTER_VAR="updated_outer_value" "$FLOX_BIN" activate -- bash <(cat << EOF
+    "$FLOX_BIN" services restart
+EOF
+  )
+
+  "${TESTS_DIR}"/services/wait_for_service_status.sh updated:Completed
+  run cat updated_values
+  assert_output "OUTER_VAR=initial_outer_value MANIFEST_VAR=updated_manifest_value"
 }

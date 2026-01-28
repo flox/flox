@@ -79,8 +79,8 @@ version:
         -o "$FLOX_PACKAGE_BUILDER"
 
 # Build the flox buildenv
-# `pure-eval` is disabled because `FLOX_INTERPRETER`
-# is read from the environment.
+# `pure-eval` is disabled because `FLOX_INTERPRETER` and `FLOX_ACTIVATIONS_BIN`
+# are read from the environment.
 @build-buildenv:
     nix {{nix_options}} build \
         --option pure-eval false \
@@ -94,30 +94,24 @@ version:
 @build-activations:
     pushd cli; cargo build -p flox-activations
 
-# Build the flox watchdog binary
-@build-watchdog:
-    pushd cli; cargo build -p flox-watchdog
 
 # Build the flox activations binary
 @build-activations-release:
     pushd cli; cargo build -p flox-activations -r
 
-# Build the flox watchdog binary
-@build-watchdog-release:
-    pushd cli; cargo build -p flox-watchdog -r
 
 
 # ---------------------------------------------------------------------------- #
 # Build the flox binary
 
-@build-cli: build-nix-plugins build-package-builder build-activation-scripts build-watchdog build-buildenv
+@build-cli: build-nix-plugins build-package-builder build-activation-scripts build-buildenv
     pushd cli; cargo build -p flox
 
 # Build the binaries
 @build: build-cli
 
 # Build flox with release profile
-@build-release: build-nix-plugins build-package-builder build-activation-scripts build-watchdog-release build-buildenv
+@build-release: build-nix-plugins build-package-builder build-activation-scripts build-buildenv
     pushd cli; cargo build -p flox -r
 
 # Remove build artifacts

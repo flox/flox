@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use flox_core::{Version, WriteError, serialize_atomically};
+use flox_core::{Version, WriteError, serialize_atomically, traceable_path};
 use fslock::LockFile;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
@@ -11,7 +11,6 @@ use super::floxmeta::{FloxMeta, FloxMetaError};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::floxmeta_branch::prune_branches_from_floxmeta_by_pointer;
-use crate::utils::logging::traceable_path;
 
 pub const ENV_REGISTRY_FILENAME: &str = "env-registry.json";
 

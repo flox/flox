@@ -13,6 +13,8 @@ use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 use std::sync::mpsc::{Receiver, Sender};
 
+use flox_core::process_compose::PROCESS_NEVER_EXIT_NAME;
+use flox_core::traceable_path;
 #[cfg(test)]
 use flox_test_utils::proptest::alphanum_string;
 #[cfg(test)]
@@ -27,9 +29,6 @@ use crate::flox::Flox;
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::typed::{Inner, ServiceShutdown, Services};
 use crate::utils::CommandExt;
-use crate::utils::logging::traceable_path;
-
-const PROCESS_NEVER_EXIT_NAME: &str = "flox_never_exit";
 /// The path to the nix provided `sleep` binary.
 ///
 /// This is used to prevent `process-compose` from exiting when all services are stopped,
@@ -207,18 +206,6 @@ fn arbitrary_process_config_environment()
         alphanum_string(4),
         0..=3,
     ))
-}
-
-/// Appends the `flox_never_exit` service to a non-empty list of services that
-/// will be started by a new `process-compose` instance in order to prevent it
-/// from exiting (and no longer serving `logs`, `status`, etc) if the specified
-/// services finish of their own accord.
-pub fn new_services_to_start(names: &[String]) -> Vec<String> {
-    let mut names_modified = names.to_vec();
-    if !names.is_empty() {
-        names_modified.push(PROCESS_NEVER_EXIT_NAME.to_string());
-    }
-    names_modified
 }
 
 /// Cre
@@ -518,41 +505,6 @@ pub fn restart_service(
         let stderr = String::from_utf8_lossy(&output.stderr);
         Err(ServiceError::from_process_compose_log(stderr))
     }
-}
-
-pub fn process_compose_down(socket_path: impl AsRef<Path>) -> Result<(), ServiceError> {
-    let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
-    cmd.arg("down");
-    cmd.arg("--unix-socket");
-    cmd.arg(socket_path.as_ref());
-    cmd.env("NO_COLOR", "1");
-
-    debug!(command = %cmd.display(), "running process-compose down");
-
-    let output = cmd.output().map_err(ServiceError::ProcessComposeCmd)?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        tracing::debug!("'process-compose down' failed");
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(ServiceError::from_process_compose_log(stderr))
-    }
-}
-
-/// Check if all processes are stopped and shutdown `process-compose` if they
-/// are.
-///
-/// Returns true if process-compose was shutdown.
-pub fn shutdown_process_compose_if_all_processes_stopped(
-    socket: impl AsRef<Path>,
-) -> Result<bool, ServiceError> {
-    let processes = ProcessStates::read(&socket)?;
-    let all_processes_stopped = processes.iter().all(|p| p.is_stopped());
-    if all_processes_stopped {
-        tracing::debug!("all processes stopped; shutting down 'process-compose'");
-        process_compose_down(socket)?;
-    }
-    Ok(all_processes_stopped)
 }
 
 /// Strings extracted from a process-compose error log.

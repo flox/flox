@@ -1,12 +1,17 @@
 {
+  cacert,
   coreutils,
+  flox-activations,
   flox-buildenv,
   flox-package-builder,
   flox-mk-container ? ../../mkContainer,
   flox-nix-plugins,
+  flox-interpreter,
   flox-src,
   gitMinimal,
+  glibcLocalesUtf8,
   gnumake,
+  hostPlatform,
   inputs,
   lib,
   nixpkgsInputLockedURL,
@@ -36,6 +41,9 @@ let
       GNUMAKE_BIN = "${gnumake}/bin/make";
       SLEEP_BIN = "${coreutils}/bin/sleep";
       PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
+      FLOX_ACTIVATIONS_BIN = "${flox-activations}/libexec/flox-activations";
+      # used internally to ensure CA certificates are available
+      NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
       # Used by `flox build' to access `stdenv` at a known version
       # When utilities from nixpkgs are used by flox at runtime,
@@ -48,6 +56,9 @@ let
 
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = stdenv.targetPlatform.system;
+    }
+    // lib.optionalAttrs hostPlatform.isLinux {
+      LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
     }
     # Our own tools
     # In the dev shell these will be set dynamically
@@ -63,6 +74,9 @@ let
     }
     // lib.optionalAttrs (flox-mk-container != null) {
       FLOX_MK_CONTAINER_NIX = "${flox-mk-container}/mkContainer.nix";
+    }
+    // lib.optionalAttrs (flox-interpreter != null) {
+      FLOX_INTERPRETER = flox-interpreter;
     };
 
 in
@@ -77,14 +91,14 @@ in
     # The effect is that cargo will build all required dependencies
     # but not the actual crates in the workspace -- hence "depsOnly".
     # In this case we do want to build some of the crates in the workspace,
-    # i.e. flox-rust-sdk, catalog-api-v1, and shared as dependencies of flox
-    # and flox-watchdog.
+    # i.e. flox-rust-sdk, catalog-api-v1, and shared as dependencies of flox.
     # To achieve this, we copy the source of these crates back into the workspace.
-    cargoExtraArgs = "--locked -p flox -p flox-watchdog";
+    cargoExtraArgs = "--locked -p flox";
     postPatch = ''
       cp -rf --no-preserve=mode ${flox-src}/flox-rust-sdk/* ./flox-rust-sdk
       cp -rf --no-preserve=mode ${flox-src}/catalog-api-v1/* ./catalog-api-v1
       cp -rf --no-preserve=mode ${flox-src}/flox-core/* ./flox-core
+      cp -rf --no-preserve=mode ${flox-src}/shell_gen/* ./shell_gen
       cp -rf --no-preserve=mode ${flox-src}/flox-test-utils/* ./flox-test-utils
       cp -rf --no-preserve=mode ${flox-src}/systemd/* ./systemd
     '';

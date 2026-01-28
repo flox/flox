@@ -27,6 +27,10 @@ pub static IN_CI: LazyLock<bool> = LazyLock::new(|| env::var("CI").is_ok());
 /// Whether the CLI is being run in a flox containerd context
 pub static IN_CONTAINERD: LazyLock<bool> = LazyLock::new(|| env::var("FLOX_CONTAINERD").is_ok());
 
+pub static FLOX_INTERPRETER: LazyLock<PathBuf> = LazyLock::new(|| {
+    PathBuf::from(env::var("FLOX_INTERPRETER").unwrap_or(env!("FLOX_INTERPRETER").to_string()))
+});
+
 #[derive(Error, Debug)]
 pub enum FindAndReplaceError {
     #[error("walkdir error: {0}")]
@@ -242,15 +246,6 @@ where
         F: Fn(&str) + Send + 'static,
     {
         WireTap::tap_lines(self, tap_fn)
-    }
-}
-
-/// Returns a `tracing`-compatible form of an `Option<PathBuf>`
-pub fn maybe_traceable_path(maybe_path: &Option<PathBuf>) -> impl tracing::Value {
-    if let Some(p) = maybe_path {
-        p.display().to_string()
-    } else {
-        String::from("null")
     }
 }
 

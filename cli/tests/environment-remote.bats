@@ -39,7 +39,7 @@ setup() {
 
 teardown() {
   cat_teardown_fifo
-  wait_for_watchdogs "$PROJECT_DIR" || return 1
+  wait_for_activations "$PROJECT_DIR" || return 1
   project_teardown
   common_test_teardown
 }
@@ -163,7 +163,7 @@ EOF
   "$FLOX_BIN" install hello --reference "$OWNER/test"
 
   export FLOX_CACHE_DIR="$(realpath $FLOX_CACHE_DIR)"
-  run "$FLOX_BIN" activate --trust --reference "$OWNER/test" -- command -v hello
+  run "$FLOX_BIN" activate --trust --reference "$OWNER/test" -c 'command -v hello'
   assert_success
   assert_output --partial "$FLOX_CACHE_DIR/run/owner/$NIX_SYSTEM.test.dev/bin/hello"
 }

@@ -1182,6 +1182,7 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     use catalog::{GENERATED_DATA, MANUALLY_GENERATED};
+    use flox_core::activate::mode::ActivateMode;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use tempfile::{TempDir, tempdir_in};
@@ -1192,7 +1193,6 @@ mod tests {
     use super::*;
     use crate::flox::test_helpers::flox_instance;
     use crate::models::manifest::raw::CatalogPackage;
-    use crate::models::manifest::typed::ActivateMode;
     use crate::providers::catalog;
     use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::services::process_compose::SERVICE_CONFIG_FILENAME;

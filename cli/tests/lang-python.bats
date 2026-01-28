@@ -61,7 +61,7 @@ teardown() {
   assert_success
   assert_output --partial "✔ 'python3', 'pip' installed to environment"
 
-  "$FLOX_BIN" activate -- bash "$INPUT_DATA/init/python/requests-with-pip.sh"
+  "$FLOX_BIN" activate -c "bash \"$INPUT_DATA/init/python/requests-with-pip.sh\""
 }
 
 # bats test_tags=python:activate:poetry,catalog
@@ -84,7 +84,7 @@ teardown() {
       "$FLOX_BIN" install zlib
   fi
 
-  run "$FLOX_BIN" activate -- python -m project
+  run "$FLOX_BIN" activate -c "python -m project"
   assert_success
   assert_line "<class 'numpy.ndarray'>"
 }
@@ -108,7 +108,7 @@ teardown() {
       "$FLOX_BIN" install zlib
   fi
 
-  run "$FLOX_BIN" activate -- python -m project
+  run "$FLOX_BIN" activate -c "python -m project"
   assert_success
   assert_line "<class 'numpy.ndarray'>"
 }
@@ -132,7 +132,7 @@ teardown() {
       "$FLOX_BIN" install zlib
   fi
 
-  run "$FLOX_BIN" activate -- python -m project
+  run "$FLOX_BIN" activate -c "python -m project"
   assert_success
   assert_line "<class 'numpy.ndarray'>"
 }
@@ -145,7 +145,7 @@ teardown() {
   [ ! -e .flox ] || "$FLOX_BIN" delete -f
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests.yaml" \
     "$FLOX_BIN" init --auto-setup --name "$NAME"
-  FLOX_SHELL="bash" run "$FLOX_BIN" activate -- type deactivate
+  FLOX_SHELL="bash" run "$FLOX_BIN" activate -c "type deactivate"
   assert_success
   assert_line --partial "deactivate is a function"
 }
@@ -158,7 +158,7 @@ teardown() {
   [ ! -e .flox ] || "$FLOX_BIN" delete -f
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests.yaml" \
     "$FLOX_BIN" init --auto-setup --name "$NAME"
-  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -- type deactivate
+  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -c "type deactivate"
   assert_success
   assert_line --partial "deactivate is a shell function"
 }
@@ -171,7 +171,7 @@ teardown() {
   [ ! -e .flox ] || "$FLOX_BIN" delete -f
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests.yaml" \
     "$FLOX_BIN" init --auto-setup --name "$NAME"
-  FLOX_SHELL="fish" run "$FLOX_BIN" activate -- type deactivate
+  FLOX_SHELL="fish" run "$FLOX_BIN" activate -c "type deactivate"
   assert_success
   assert_line --partial "deactivate is a function with definition"
 }
@@ -184,7 +184,7 @@ teardown() {
   [ ! -e .flox ] || "$FLOX_BIN" delete -f
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests.yaml" \
     "$FLOX_BIN" init --auto-setup --name "$NAME"
-  FLOX_SHELL="tcsh" run "$FLOX_BIN" activate -- which deactivate
+  FLOX_SHELL="tcsh" run "$FLOX_BIN" activate -c "which deactivate"
   assert_success
   assert_line --partial "aliased to test \$?_OLD_VIRTUAL_PATH != 0 && setenv PATH "
   # ... and a bunch of other stuff ending with:

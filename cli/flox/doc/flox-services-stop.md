@@ -30,11 +30,10 @@ one of the specified services, the remaining services will still be stopped
 a warning will be displayed for the services that failed to stop, and a
 non-zero exit code will be returned.
 
-
 # OPTIONS
 
 `<name>`
-:   The name(s) of the services to stop.
+: The name(s) of the services to stop.
 
 ```{.include}
 ./include/environment-options.md
@@ -56,17 +55,20 @@ $ flox services stop
 ```
 
 Attempt to stop a service that doesn't exist:
+
 ```
 $ flox services stop myservice doesnt_exist
-❌ ERROR: Service 'doesnt_exist' not found.
+✘ ERROR: Service 'doesnt_exist' not found.
 ```
 
 Attempt to stop a service that isn't running:
+
 ```
 $ flox services stop running not_running
 ⚠️  Service 'not_running' is not running
-✅ Service 'running' stopped
+✔ Service 'running' stopped
 ```
 
 # SEE ALSO
+
 [`flox-activate(1)`](./flox-activate.md)

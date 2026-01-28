@@ -6,7 +6,6 @@
   flox-cli-tests,
   flox-cli,
   flox-nix-plugins,
-  flox-watchdog,
   hivemind,
   just,
   lib,
@@ -88,7 +87,6 @@ mkShell (
     inputsFrom = [
       flox-nix-plugins
       flox-cli
-      flox-watchdog
       flox-activations
     ];
 
@@ -124,7 +122,6 @@ mkShell (
 
       # cargo built binaries
       define_dev_env_var FLOX_BIN "''${REPO_ROOT}/cli/target/debug/flox";
-      define_dev_env_var WATCHDOG_BIN "''${REPO_ROOT}/cli/target/debug/flox-watchdog";
       define_dev_env_var FLOX_ACTIVATIONS_BIN "''${REPO_ROOT}/cli/target/debug/flox-activations";
 
       # make built binaries
@@ -150,8 +147,7 @@ mkShell (
       define_dev_env_var MANUALLY_GENERATED "''${REPO_ROOT}/test_data/manually_generated";
 
       # Add all internal rust crates to the PATH.
-      # That's `flox` itself as well as the `flox-watchdog`
-      # and `flox-activations` subsystems.
+      # That's `flox` itself as well as the `flox-activations` subsystem.
       export PATH="''${REPO_ROOT}/cli/target/debug":$PATH;
       echo -n "''${REPO_ROOT}/cli/target/debug:" >> "$REPO_ROOT/build/.PATH";
 
@@ -167,6 +163,6 @@ mkShell (
       echo "run 'just build' to build flox and all its subsystems";
     '';
   }
-  // flox-watchdog.devEnvs
   // flox-cli.devEnvs
+  // flox-activations.devEnvs
 )

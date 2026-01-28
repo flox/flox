@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 
+use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox};
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSource};
 use flox_rust_sdk::providers::nix::NIX_VERSION;
@@ -13,7 +14,7 @@ use thiserror::Error;
 use tracing::{debug, info, instrument};
 
 use super::Runtime;
-use crate::config::{FLOX_CONFIG_FILE, FLOX_DISABLE_METRICS_VAR};
+use crate::config::FLOX_CONFIG_FILE;
 
 const NIX_PROXY_IMAGE: &str = "nixos/nix";
 static NIX_PROXY_IMAGE_REF: LazyLock<Option<String>> =
