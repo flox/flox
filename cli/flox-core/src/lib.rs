@@ -3,6 +3,7 @@ pub mod activations;
 pub mod canonical_path;
 #[cfg(feature = "proc_status")]
 pub mod proc_status;
+pub mod process_compose;
 pub mod util;
 pub mod vars;
 mod version;

@@ -24,7 +24,7 @@ use flox_rust_sdk::models::environment::{
 };
 use flox_rust_sdk::models::lockfile::LockResult;
 use flox_rust_sdk::models::manifest::typed::{IncludeDescriptor, Inner, Manifest};
-use flox_rust_sdk::providers::services::process_compose::ProcessStates;
+use flox_rust_sdk::providers::services::process_compose::{PROCESS_COMPOSE_BIN, ProcessStates};
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use indoc::{formatdoc, indoc};
@@ -401,6 +401,7 @@ impl Activate {
             flox_env_cuda_detection,
             flox_services_socket: Some(socket_path),
             services_to_start,
+            process_compose_bin: Some(PathBuf::from(&*PROCESS_COMPOSE_BIN)),
             interpreter_path,
         };
 

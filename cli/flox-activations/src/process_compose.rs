@@ -1,8 +1,7 @@
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::sync::LazyLock;
+use std::thread;
 use std::time::{Duration, Instant};
-use std::{env, thread};
 
 use anyhow::{Context, Error, bail};
 use flox_core::activate::context::AttachCtx;
@@ -16,21 +15,20 @@ use crate::activate_script_builder::apply_activation_env;
 use crate::cli::activate::VarsFromEnvironment;
 use crate::env_diff::EnvDiff;
 
-/// Path to the process-compose binary
-/// TODO: we don't want the dependency here
-static PROCESS_COMPOSE_BIN: LazyLock<String> = LazyLock::new(|| {
-    std::env::var("PROCESS_COMPOSE_BIN").unwrap_or(env!("PROCESS_COMPOSE_BIN").to_string())
-});
 const BASH_BIN: &str = env!("X_BASH_BIN");
 
 /// Wait for the process-compose socket to become ready.
 ///
 /// Returns `true` if socket is ready, `false` if timeout, and Error for other failures.
-pub fn wait_for_socket_ready(socket_file: &Path, timeout: Duration) -> Result<bool, Error> {
+pub fn wait_for_socket_ready(
+    process_compose_bin: &Path,
+    socket_file: &Path,
+    timeout: Duration,
+) -> Result<bool, Error> {
     let start = Instant::now();
     let poll_interval = Duration::from_millis(20);
 
-    let mut command = Command::new(&*PROCESS_COMPOSE_BIN);
+    let mut command = Command::new(process_compose_bin);
     command
         .env("NO_COLOR", "1")
         .arg("process")
@@ -72,12 +70,13 @@ pub fn wait_for_socket_ready(socket_file: &Path, timeout: Duration) -> Result<bo
 /// Start process-compose with only the flox_never_exit service.
 /// This allows services to be started later via the socket API.
 pub fn start_process_compose_no_services(
+    process_compose_bin: &Path,
     socket_path: &Path,
     log_dir: &Path,
     subsystem_verbosity: u32,
     attach_ctx: &AttachCtx,
     start_id: &StartIdentifier,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), Error> {
     let runtime_dir: &Path = attach_ctx.flox_runtime_dir.as_ref();
     let dot_flox_path = &attach_ctx.dot_flox_path;
     let start_state_dir = start_id.state_dir_path(runtime_dir, dot_flox_path)?;
@@ -91,7 +90,7 @@ pub fn start_process_compose_no_services(
         .context("failed to format timestamp")?;
     let log_file = log_dir.join(format!("services.{}.log", timestamp));
 
-    let mut command = Command::new(&*PROCESS_COMPOSE_BIN);
+    let mut command = Command::new(process_compose_bin);
 
     // The executive inherits the pre-activation environment from activate,
     // so these values are the same as what the initial activation captured.
@@ -141,15 +140,16 @@ pub fn start_process_compose_no_services(
 /// Start specific services via the process-compose socket API.
 /// This should be called after process-compose is ready.
 pub fn start_services_via_socket(
+    process_compose_bin: &Path,
     socket_path: &Path,
     services: &[String],
-) -> Result<(), anyhow::Error> {
+) -> Result<(), Error> {
     for service in services {
         if service == PROCESS_NEVER_EXIT_NAME {
             continue;
         }
 
-        let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
+        let mut cmd = Command::new(process_compose_bin);
         cmd.env("NO_COLOR", "1")
             .arg("--unix-socket")
             .arg(socket_path)
@@ -176,21 +176,18 @@ pub fn start_services_via_socket(
 }
 
 /// Shuts down process-compose by running `process-compose down` via the unix socket.
-///
-/// This is a variation of `providers::services::process_compose_down` to avoid
-/// the dependency on `flox-rust-sdk`.
-pub fn process_compose_down(socket_path: impl AsRef<Path>) -> Result<(), Error> {
-    let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
+pub fn process_compose_down(process_compose_bin: &Path, socket_path: &Path) -> Result<(), Error> {
+    let mut cmd = Command::new(process_compose_bin);
     cmd.arg("down");
     cmd.arg("--unix-socket");
-    cmd.arg(socket_path.as_ref());
+    cmd.arg(socket_path);
     cmd.env("NO_COLOR", "1");
 
     debug!(
         command = format!(
             "{} down --unix-socket {}",
-            *PROCESS_COMPOSE_BIN,
-            socket_path.as_ref().display()
+            process_compose_bin.display(),
+            socket_path.display()
         ),
         "running process-compose down"
     );

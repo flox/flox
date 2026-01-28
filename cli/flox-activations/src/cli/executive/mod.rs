@@ -115,6 +115,9 @@ impl ExecutiveArgs {
         let Some(socket_path) = context.attach_ctx.flox_services_socket.clone() else {
             unreachable!("flox_services_socket must be set in activation context");
         };
+        let Some(process_compose_bin) = context.attach_ctx.process_compose_bin.clone() else {
+            unreachable!("process_compose_bin must be set in activation context");
+        };
 
         spawn_heartbeat_log();
         spawn_logs_gc_threads(&log_dir);
@@ -123,6 +126,8 @@ impl ExecutiveArgs {
         run_monitoring_loop(
             context.attach_ctx,
             signals,
+            // Unwrapped values that shouldn't be taken from context again.
+            process_compose_bin,
             socket_path,
             log_dir,
             subsystem_verbosity.unwrap_or(0),
@@ -233,6 +238,7 @@ fn run_monitoring_loop(
     // Does NOT represent the most recent attach.
     initial_attach_ctx: AttachCtx,
     mut signals: SignalHandlers,
+    process_compose_bin: PathBuf,
     socket_path: PathBuf,
     log_dir: PathBuf,
     subsystem_verbosity: u32,
@@ -263,6 +269,7 @@ fn run_monitoring_loop(
                 info!("running cleanup after all PIDs terminated");
                 cleanup_all(
                     locked_activations,
+                    &process_compose_bin,
                     &socket_path,
                     activation_state_dir_path(&runtime_dir, &dot_flox_path),
                 )
@@ -277,6 +284,7 @@ fn run_monitoring_loop(
                 };
                 let _ = cleanup_all(
                     (activations, lock),
+                    &process_compose_bin,
                     &socket_path,
                     activation_state_dir_path(&runtime_dir, &dot_flox_path),
                 );
@@ -302,6 +310,7 @@ fn run_monitoring_loop(
 
             match handle_start_services_signal(
                 (activations, lock),
+                &process_compose_bin,
                 &socket_path,
                 &log_dir,
                 subsystem_verbosity,
@@ -331,6 +340,7 @@ fn run_monitoring_loop(
 /// - `None` if there were no changes and the lock was dropped
 fn handle_start_services_signal(
     locked_activations: LockedActivationState,
+    process_compose_bin: &Path,
     socket_path: &Path,
     log_dir: &Path,
     subsystem_verbosity: u32,
@@ -357,6 +367,7 @@ fn handle_start_services_signal(
     }
 
     start_process_compose_no_services(
+        process_compose_bin,
         socket_path,
         log_dir,
         subsystem_verbosity,
@@ -373,6 +384,7 @@ fn handle_start_services_signal(
 /// To be called when there are no longer any PIDs attached.
 fn cleanup_all(
     locked_activations: LockedActivationState,
+    process_compose_bin: &Path,
     socket_path: impl AsRef<Path>,
     activation_state_dir_path: impl AsRef<Path>,
 ) -> Result<()> {
@@ -385,7 +397,7 @@ fn cleanup_all(
     }
     let socket_path = socket_path.as_ref();
     if socket_path.exists() {
-        if let Err(err) = process_compose_down(socket_path) {
+        if let Err(err) = process_compose_down(process_compose_bin, socket_path) {
             error!(%err, "failed to run process-compose shutdown command");
         }
         info!("shut down process-compose");
@@ -439,6 +451,7 @@ mod test {
             flox_services_socket: None,
             services_to_start: Vec::new(),
             interpreter_path: PathBuf::from("/nix/store/fake"),
+            process_compose_bin: Some(PathBuf::from("/nix/store/fake-process-compose")),
         }
     }
 
@@ -477,6 +490,7 @@ mod test {
         run_monitoring_loop(
             attach_ctx,
             SignalHandlers::new_for_test().unwrap(),
+            PathBuf::from("/nix/store/fake-process-compose"),
             PathBuf::from("/does_not_exist"),
             PathBuf::from("/tmp/test_log_dir"),
             0,
@@ -527,6 +541,7 @@ mod test {
         let result = run_monitoring_loop(
             attach_ctx,
             signals,
+            PathBuf::from("/nix/store/fake-process-compose"),
             PathBuf::from("/does_not_exist"),
             PathBuf::from("/tmp/test_log_dir"),
             0,
