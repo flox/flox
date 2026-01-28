@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := all
 
 ALL = validate-build flox-build.mk build-manifest.nix nef/default.nix \
-  $(addprefix nef/lib/,default.nix dirToAttrs.nix extendAttrSet.nix mkOverlay.nix reflect.nix)
+  $(addprefix nef/lib/,default.nix dirToAttrs.nix extendAttrSet.nix instantiate.nix mkOverlay.nix reflect.nix)
 
 OS := $(shell uname -s)
 ifeq (Linux,$(OS))
