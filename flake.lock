@@ -17,9 +17,7 @@
     },
     "fenix": {
       "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ],
+        "nixpkgs": ["nixpkgs"],
         "rust-analyzer-src": "rust-analyzer-src"
       },
       "locked": {
@@ -54,10 +52,7 @@
     },
     "gitignore": {
       "inputs": {
-        "nixpkgs": [
-          "pre-commit-hooks",
-          "nixpkgs"
-        ]
+        "nixpkgs": ["pre-commit-hooks", "nixpkgs"]
       },
       "locked": {
         "lastModified": 1709087332,
@@ -93,9 +88,7 @@
       "inputs": {
         "flake-compat": "flake-compat",
         "gitignore": "gitignore",
-        "nixpkgs": [
-          "nixpkgs"
-        ]
+        "nixpkgs": ["nixpkgs"]
       },
       "locked": {
         "lastModified": 1765911976,
