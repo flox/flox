@@ -34,7 +34,7 @@ use super::publish::CheckedEnvironmentMetadata;
 use crate::data::System;
 use crate::flox::{FLOX_VERSION, Flox};
 use crate::models::search::{PackageDetails, ResultCount, SearchLimit, SearchResults};
-use crate::utils::{IN_CI, IN_CONTAINERD, INVOCATION_SOURCES};
+use crate::utils::INVOCATION_SOURCES;
 
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
 pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
@@ -371,21 +371,6 @@ impl CatalogClient {
     fn build_header_map(config: &CatalogClientConfig) -> HeaderMap {
         // let mut headers: BTreeMap<String, String> = BTreeMap::new();
         let mut header_map = HeaderMap::new();
-
-        // Pass in a bool if we are running in CI, so requests can reflect this in the headers
-        if *IN_CI {
-            header_map.insert(
-                header::HeaderName::from_static("flox-ci"),
-                header::HeaderValue::from_static("true"),
-            );
-        };
-
-        if *IN_CONTAINERD {
-            header_map.insert(
-                header::HeaderName::from_static("flox-containerd"),
-                header::HeaderValue::from_static("true"),
-            );
-        };
 
         // Add invocation sources header if any sources are detected
         if !INVOCATION_SOURCES.is_empty() {

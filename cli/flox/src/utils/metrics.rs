@@ -472,9 +472,6 @@ impl Connection for AWSDatalakeConnection {
                         "kernel_version": entry.os_family_release,
 
                         "invocation_sources": entry.invocation_sources,
-                        // Backward-compatible booleans derived from invocation_sources
-                        "ci": entry.invocation_sources.iter().any(|s| s.starts_with("ci")),
-                        "containerd": entry.invocation_sources.iter().any(|s| s == "containerd"),
 
                         "$set_once": {
                             "initial_flox_version": entry.flox_version,

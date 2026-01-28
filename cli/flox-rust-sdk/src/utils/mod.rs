@@ -20,14 +20,6 @@ use walkdir;
 
 use self::errors::IoError;
 
-/// Whether the CLI is being run in CI
-/// We could probably be more thorough about what we're checking,
-/// but for now just use the `CI` environment variable
-pub static IN_CI: LazyLock<bool> = LazyLock::new(|| env::var("CI").is_ok());
-
-/// Whether the CLI is being run in a flox containerd context
-pub static IN_CONTAINERD: LazyLock<bool> = LazyLock::new(|| env::var("FLOX_CONTAINERD").is_ok());
-
 pub static FLOX_INTERPRETER: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(env::var("FLOX_INTERPRETER").unwrap_or(env!("FLOX_INTERPRETER").to_string()))
 });
@@ -36,6 +28,9 @@ pub static FLOX_INTERPRETER: LazyLock<PathBuf> = LazyLock::new(|| {
 /// Each entry: (env_var_name, expected_value_or_none, invocation_source_tag)
 /// Use None for expected_value to check env var presence only
 const INFERENCE_HEURISTICS: &[(&str, Option<&str>, &str)] = &[
+    // CI and containerd contexts
+    ("CI", None, "ci"),
+    ("FLOX_CONTAINERD", None, "containerd"),
     // Terminal programs
     ("TERM_PROGRAM", Some("vscode"), "term.vscode"),
     ("TERM_PROGRAM", Some("kiro"), "agentic.kiro"),
@@ -73,9 +68,7 @@ fn detect_heuristics() -> impl Iterator<Item = String> {
 /// Returns a deduplicated vector of invocation source identifiers.
 /// Sources are detected from:
 /// 1. Explicit FLOX_INVOCATION_SOURCE environment variable (comma-separated)
-/// 2. CI environment (CI=true or specific CI platform env vars)
-/// 3. Containerd context (FLOX_CONTAINERD env var)
-/// 4. Inference heuristics for agentic tooling and other contexts
+/// 2. Inference heuristics for CI, containerd, agentic tooling, and other contexts
 pub fn detect_invocation_sources() -> Vec<String> {
     let mut sources = HashSet::new();
 
@@ -88,17 +81,7 @@ pub fn detect_invocation_sources() -> Vec<String> {
         }
     }
 
-    // CI detection (generic)
-    if env::var("CI").is_ok() {
-        sources.insert("ci".to_string());
-    }
-
-    // Containerd detection (backward compatibility)
-    if env::var("FLOX_CONTAINERD").is_ok() {
-        sources.insert("containerd".to_string());
-    }
-
-    // Apply inference heuristics
+    // Apply all inference heuristics (CI, containerd, agentic tools, etc.)
     sources.extend(detect_heuristics());
 
     // Convert to sorted vec for consistent ordering
