@@ -153,14 +153,29 @@ impl ActivateArgs {
         let mut last_warning: Option<Instant> = None;
 
         loop {
-            match self.try_start_or_attach(
-                context,
-                invocation_type,
-                subsystem_verbosity,
-                vars_from_env,
-            )? {
-                StartOrAttachResult::Start { start_id, .. }
-                | StartOrAttachResult::Attach { start_id, .. } => {
+            match self.try_start_or_attach(context, subsystem_verbosity, vars_from_env)? {
+                StartOrAttachResult::Start { start_id, .. } => {
+                    if *invocation_type == InvocationType::Interactive {
+                        updated(
+                            formatdoc! {"You are now using the environment '{env_description}'
+                                     To stop using this environment, type 'exit'
+                                     ",
+                            env_description = context.attach_ctx.env_description,
+                            },
+                        );
+                    }
+                    return Ok(start_id);
+                },
+                StartOrAttachResult::Attach { start_id, .. } => {
+                    if *invocation_type == InvocationType::Interactive {
+                        updated(
+                            formatdoc! {"Attached to existing activation of environment '{env_description}'
+                                     To stop using this environment, type 'exit'
+                                     ",
+                            env_description = context.attach_ctx.env_description,
+                            },
+                        );
+                    }
                     return Ok(start_id);
                 },
                 StartOrAttachResult::AlreadyStarting {
@@ -190,7 +205,6 @@ impl ActivateArgs {
     fn try_start_or_attach(
         &self,
         context: &ActivateCtx,
-        invocation_type: &InvocationType,
         subsystem_verbosity: u32,
         vars_from_env: &VarsFromEnvironment,
     ) -> Result<StartOrAttachResult, anyhow::Error> {
@@ -281,16 +295,6 @@ impl ActivateArgs {
                     vars_from_env.clone(),
                     start_id,
                 );
-                // TODO: should this be here?
-                if *invocation_type == InvocationType::Interactive {
-                    updated(
-                        formatdoc! {"You are now using the environment '{env_description}'
-                                     To stop using this environment, type 'exit'
-                                     ",
-                        env_description = context.attach_ctx.env_description,
-                        },
-                    );
-                }
                 debug!("spawning activate script: {:?}", start_command);
                 let status = start_command.spawn()?.wait()?;
                 if !status.success() {
@@ -304,19 +308,9 @@ impl ActivateArgs {
                 activations.set_ready(start_id);
                 write_activations_json(&activations, &activations_json_path, lock)?;
             },
-            StartOrAttachResult::Attach { .. } => {
-                // TODO: should this be here?
-                if *invocation_type == InvocationType::Interactive {
-                    updated(
-                        formatdoc! {"Attached to existing activation of environment '{env_description}'
-                                     To stop using this environment, type 'exit'
-                                     ",
-                        env_description = context.attach_ctx.env_description,
-                        },
-                    );
-                }
+            StartOrAttachResult::Attach { .. } | StartOrAttachResult::AlreadyStarting { .. } => {
+                unreachable!()
             },
-            StartOrAttachResult::AlreadyStarting { .. } => unreachable!(),
         }
 
         Ok(result)

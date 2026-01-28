@@ -2301,6 +2301,9 @@ EOF
   # Inner interactive activation.
   assert_output --partial - <<EOF
 nested hook.on-activate
+✔ You are now using the environment 'nested'
+To stop using this environment, type 'exit'
+
 sourcing profile.common for first time
 sourcing profile.zsh for first time
 nested profile.common
