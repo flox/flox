@@ -5221,3 +5221,59 @@ Setting PATH from .bashrc
 Completed successfully
 EOF
 }
+
+# These are not exported (or unexported) but they shouldn't leak out of the hook
+# and into other userShells. Profile scripts should be used for userShell
+# specific exported functions.
+activate_succeeds_with_exported_functions_in_hook() {
+  local shell="${1?}"
+
+  project_setup
+
+  function _func_to_unexport() { true; }
+  export -f _func_to_unexport
+
+  MANIFEST_CONTENTS="$(cat << EOF
+    version = 1
+    [hook]
+    on-activate = """
+      function _func_to_export() { true; }
+      export -f _func_to_export
+      unset -f _func_to_unexport
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  local rc_file
+  case "$shell" in
+    bash) rc_file=".bashrc" ;;
+    fish) rc_file="config.fish" ;;
+    tcsh) rc_file=".tcshrc" ;;
+    zsh)  rc_file=".zshenv" ;;
+    *) fail "Unknown shell: $shell" ;;
+  esac
+
+  _FLOX_SHELL_FORCE="$shell" \
+    run "$FLOX_BIN" activate -c 'echo success'
+  assert_success
+  assert_output "Sourcing ${rc_file}
+Setting PATH from ${rc_file}
+success"
+}
+
+@test "bash: activate succeeds with exported functions in hook" {
+  activate_succeeds_with_exported_functions_in_hook bash
+}
+
+@test "fish: activate succeeds with exported functions in hook" {
+  activate_succeeds_with_exported_functions_in_hook fish
+}
+
+@test "tcsh: activate succeeds with exported functions in hook" {
+  activate_succeeds_with_exported_functions_in_hook tcsh
+}
+
+@test "zsh: activate succeeds with exported functions in hook" {
+  activate_succeeds_with_exported_functions_in_hook zsh
+}
