@@ -53,7 +53,17 @@ pub struct ActivateArgs {
 
 impl ActivateArgs {
     pub fn handle(self, subsystem_verbosity: u32) -> Result<(), anyhow::Error> {
+        // Common setup: read file, detect run_args, get environment vars
         let contents = fs::read_to_string(&self.activate_data)?;
+        let run_args = self
+            .cmd
+            .as_ref()
+            .and_then(|args| if args.is_empty() { None } else { Some(args) });
+        let vars_from_env = VarsFromEnvironment::get()?;
+
+        // Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
+        unsafe { std::env::remove_var("FLOX_SHELL") };
+
         let mut context: ActivateCtx = serde_json::from_str(&contents)?;
 
         if context.remove_after_reading
@@ -67,43 +77,10 @@ impl ActivateArgs {
             );
         }
 
-        // In the case of containerize, you can't bake-in the invocation type or the
-        // `run_args`, so you need to do that detection at runtime. Here we do that
-        // by modifying the `ActivateCtx` passed to us in the container's
-        // EntryPoint.
-        let run_args = self
-            .cmd
-            .as_ref()
-            .and_then(|args| if args.is_empty() { None } else { Some(args) });
+        // Detect invocation type from context or run_args
+        let invocation_type = Self::resolve_invocation_type(&mut context.invocation_type, run_args);
 
-        match (context.invocation_type.as_ref(), run_args) {
-            // This is a container invocation, and we need to set the invocation type
-            // based on the presence of command arguments.
-            (None, None) => context.invocation_type = Some(InvocationType::Interactive),
-            // This is a container invocation, and we need to set the invocation type
-            // based on the presence of command arguments.
-            (None, Some(args)) => {
-                context.invocation_type = Some(InvocationType::ShellCommand(quote_run_args(args)));
-            },
-            // The following two cases are normal shell activations, and don't need
-            // to modify the activation context.
-            (Some(_), None) => {},
-            (Some(_), Some(_)) => {},
-        }
-        // For any case where `invocation_type` is None, we should have detected that above
-        // and set it to Some.
-        let invocation_type = context
-            .invocation_type
-            .clone()
-            .expect("invocation type should have been some");
-
-        if let Ok(shell_force) = std::env::var("_FLOX_SHELL_FORCE") {
-            context.shell = PathBuf::from(shell_force).as_path().try_into()?;
-        }
-        // Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
-        unsafe { std::env::remove_var("FLOX_SHELL") };
-
-        let vars_from_env = VarsFromEnvironment::get()?;
+        Self::apply_shell_override(&mut context.shell)?;
 
         let start_id = self.start_or_attach(
             &context,
@@ -140,6 +117,40 @@ impl ActivateArgs {
             vars_from_env,
             start_id,
         )
+    }
+
+    /// Apply shell override from `_FLOX_SHELL_FORCE` environment variable.
+    fn apply_shell_override(shell: &mut shell_gen::ShellWithPath) -> Result<(), anyhow::Error> {
+        if let Ok(shell_force) = std::env::var("_FLOX_SHELL_FORCE") {
+            *shell = PathBuf::from(shell_force).as_path().try_into()?;
+        }
+        Ok(())
+    }
+
+    /// Compute invocation type from run_args (for containers or when context has None).
+    fn invocation_type_from_args(run_args: Option<&Vec<String>>) -> InvocationType {
+        match run_args {
+            None => InvocationType::Interactive,
+            Some(args) => InvocationType::ShellCommand(quote_run_args(args)),
+        }
+    }
+
+    /// Resolve invocation type from context or run_args.
+    /// Updates context.invocation_type if it was None.
+    fn resolve_invocation_type(
+        ctx_invocation_type: &mut Option<InvocationType>,
+        run_args: Option<&Vec<String>>,
+    ) -> InvocationType {
+        match (ctx_invocation_type.as_ref(), run_args) {
+            // Context has None - detect from run_args (container-like behavior)
+            (None, _) => {
+                let invocation_type = Self::invocation_type_from_args(run_args);
+                *ctx_invocation_type = Some(invocation_type.clone());
+                invocation_type
+            },
+            // Context already has invocation type - use it
+            (Some(invocation_type), _) => invocation_type.clone(),
+        }
     }
 
     fn start_or_attach(
