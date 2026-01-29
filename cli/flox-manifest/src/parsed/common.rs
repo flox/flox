@@ -44,6 +44,27 @@ pub(crate) enum VersionKind {
     SchemaVersion(String),
 }
 
+#[derive(Debug, Clone)]
+pub(crate) enum KnownSchemaVersion {
+    V1,
+    V1_9_0,
+}
+
+impl TryFrom<VersionKind> for KnownSchemaVersion {
+    type Error = ManifestError;
+
+    fn try_from(value: VersionKind) -> Result<Self, Self::Error> {
+        match value {
+            VersionKind::Version(1) => Ok(KnownSchemaVersion::V1),
+            VersionKind::Version(v) => Err(ManifestError::InvalidSchemaVersion(format!("{v}"))),
+            VersionKind::SchemaVersion(v) => match v.as_str() {
+                "1.9.0" => Ok(KnownSchemaVersion::V1_9_0),
+                _ => Err(ManifestError::InvalidSchemaVersion(format!("{v}"))),
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct Vars(

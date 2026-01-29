@@ -8,7 +8,6 @@ members = [
     "flox-core",
     "flox-test-utils",
     "flox-manifest",
-    "flox-lockfile",
     "mk_data",
     "systemd",
     "xtask"

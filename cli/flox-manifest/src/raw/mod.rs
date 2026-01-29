@@ -44,7 +44,31 @@ pub const DEFAULT_SYSTEMS_STR: LazyLock<[String; 4]> = LazyLock::new(|| {
     ]
 });
 
-pub(crate) fn get_schema_version_ish(toml: &DocumentMut) -> Result<VersionKind, ManifestError> {
+pub(crate) fn get_schema_version_kind(toml: &DocumentMut) -> Result<VersionKind, ManifestError> {
+    if let Some(item) = toml.get("version") {
+        if let Some(int) = item.as_integer() {
+            Ok(VersionKind::Version(int as u8))
+        } else {
+            Err(ManifestError::Other(
+                "'version' field must be an integer".into(),
+            ))
+        }
+    } else if let Some(item) = toml.get("schema-version") {
+        if let Some(s) = item.as_str() {
+            Ok(VersionKind::SchemaVersion(s.to_string()))
+        } else {
+            Err(ManifestError::Other(
+                "'schema-version' field must be a version string like \"X.Y.Z\"".into(),
+            ))
+        }
+    } else {
+        Err(ManifestError::MissingSchemaVersion)
+    }
+}
+
+pub(crate) fn get_toml_schema_version_kind(
+    toml: &toml::Value,
+) -> Result<VersionKind, ManifestError> {
     if let Some(item) = toml.get("version") {
         if let Some(int) = item.as_integer() {
             Ok(VersionKind::Version(int as u8))
@@ -77,21 +101,21 @@ mod schema_version_tests {
     #[test]
     fn missing_schema() {
         let toml = parse_toml("{}");
-        let err = get_schema_version_ish(&toml).err().unwrap();
+        let err = get_schema_version_kind(&toml).err().unwrap();
         assert!(matches!(err, ManifestError::MissingSchemaVersion));
     }
 
     #[test]
     fn version_wrong_type() {
         let toml = parse_toml("version = true");
-        let err = get_schema_version_ish(&toml).err().unwrap();
+        let err = get_schema_version_kind(&toml).err().unwrap();
         assert!(matches!(err, ManifestError::Other(_)));
     }
 
     #[test]
     fn version() {
         let toml = parse_toml("version = 42");
-        let VersionKind::Version(value) = get_schema_version_ish(&toml).unwrap() else {
+        let VersionKind::Version(value) = get_schema_version_kind(&toml).unwrap() else {
             panic!()
         };
         assert_eq!(value, 42);
@@ -100,14 +124,14 @@ mod schema_version_tests {
     #[test]
     fn schema_version_wrong_type() {
         let toml = parse_toml("schema-version = 42");
-        let err = get_schema_version_ish(&toml).err().unwrap();
+        let err = get_schema_version_kind(&toml).err().unwrap();
         assert!(matches!(err, ManifestError::Other(_)));
     }
 
     #[test]
     fn schema_version() {
         let toml = parse_toml("version = \"1.9.0\"");
-        let VersionKind::SchemaVersion(value) = get_schema_version_ish(&toml).unwrap() else {
+        let VersionKind::SchemaVersion(value) = get_schema_version_kind(&toml).unwrap() else {
             panic!()
         };
         assert_eq!(value, "1.9.0".to_string());

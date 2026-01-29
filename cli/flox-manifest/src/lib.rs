@@ -1,116 +1,210 @@
 use std::path::Path;
+use std::str::FromStr;
 
+use serde::de::IntoDeserializer;
+use serde::{Deserialize, Serialize};
 use toml_edit::DocumentMut;
 
-use crate::parsed::common::VersionKind;
+use crate::lockfile::{Lockfile, LockfileError};
+use crate::parsed::common::KnownSchemaVersion;
 use crate::parsed::v1::ManifestV1;
 use crate::parsed::v1_9_0::ManifestV1_9_0;
-use crate::raw::get_schema_version_ish;
+use crate::raw::{get_schema_version_kind, get_toml_schema_version_kind};
 
-mod compose;
-mod parsed;
-mod raw;
-mod util;
+pub mod compose;
+pub mod lockfile;
+pub mod parsed;
+pub mod raw;
+pub mod util;
 
-
+// There's a well-defined state machine for loading, parsing, and migrating
+// manifests that we need to enforce.
 #[derive(Debug, Clone)]
-pub struct Manifest {
-    original: InnerOriginal,
-    migrated: Option<InnerMigrated>,
+pub struct Init;
+#[derive(Debug, Clone)]
+pub struct TomlParsed {
+    raw: DocumentMut,
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct ManifestParsed {
+    #[serde(skip)]
+    raw: DocumentMut,
+    #[serde(flatten)]
+    parsed: Parsed,
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct Migrated {
+    #[serde(skip)]
+    original_raw: DocumentMut,
+    #[serde(skip)]
+    original_parsed: Parsed,
+    #[serde(skip)]
+    migrated_raw: DocumentMut,
+    #[serde(flatten)]
+    migrated_parsed: ManifestV1_9_0,
+    #[serde(skip)]
+    lockfile: Lockfile,
 }
 
-impl Manifest {
-    pub fn migrated(&self) -> Result<ManifestV1_9_0, ManifestError> {
-        // FIXME: handle this unwrap before the PR
-        Ok(self
-            .migrated
-            .clone()
-            .and_then(|inner| inner.parsed.clone())
-            .unwrap())
+// In this state we never had access to the raw contents of the manifest,
+// so there's no way we could parse into a `DocumentMut`. You'll see this
+// when you need to parse a `Manifest` out of a `Lockfile`. You can't properly
+// migrate this manifest because we don't have a `DocumentMut` to make edits to.
+#[derive(Debug, Clone, Serialize)]
+pub struct Deserialized {
+    #[serde(flatten)]
+    original_parsed: Parsed,
+}
+
+pub trait ManifestState {}
+impl ManifestState for Init {}
+impl ManifestState for TomlParsed {}
+impl ManifestState for ManifestParsed {}
+impl ManifestState for Migrated {}
+impl ManifestState for Deserialized {}
+
+#[derive(Debug, Clone)]
+pub struct Manifest<S = Init> {
+    inner: S,
+}
+
+impl Manifest<Init> {
+    pub fn parse_untyped(s: impl AsRef<str>) -> Result<Manifest<TomlParsed>, ManifestError> {
+        let toml = s
+            .as_ref()
+            .parse::<toml_edit::DocumentMut>()
+            .map_err(ManifestError::ParseToml)?;
+        Ok(Manifest {
+            inner: TomlParsed { raw: toml },
+        })
     }
 
-    fn migrate(&mut self) -> Result<(), ManifestError> {
-        // TODO: skip the migration if we have a cached copy
-        todo!()
-    }
-
-    fn migrated_untyped(&mut self) -> Result<DocumentMut, ManifestError> {
-        self.migrate()?;
-        Ok(self.migrated.as_ref().ok_or(ManifestError::Other("internal error: migrated manifest was missing".into()))?.raw.clone())
-    }
-
-    pub fn read_untyped(p: impl AsRef<Path>) -> Result<Self, ManifestError> {
+    pub fn read_untyped(p: impl AsRef<Path>) -> Result<Manifest<TomlParsed>, ManifestError> {
         let contents = std::fs::read_to_string(p).map_err(ManifestError::IORead)?;
         Self::parse_untyped(contents)
     }
 
-    pub fn parse_untyped(s: impl AsRef<str>) -> Result<Self, ManifestError> {
-        let toml = s
-            .as_ref()
-            .parse::<toml_edit::DocumentMut>()
-            .map_err(ManifestError::ParseToml)?;
-        Ok(Self {
-            original: InnerOriginal {
-                raw: toml,
-                parsed: None,
-            },
-            migrated: None,
-        })
+    pub fn parse_typed(s: impl AsRef<str>) -> Result<Manifest<ManifestParsed>, ManifestError> {
+        Self::parse_untyped(s)?.validate_toml()
     }
 
-    pub fn parse(s: impl AsRef<str>) -> Result<Self, ManifestError> {
-        let toml = s
-            .as_ref()
-            .parse::<toml_edit::DocumentMut>()
-            .map_err(ManifestError::ParseToml)?;
-        match get_schema_version_ish(&toml)? {
-            VersionKind::Version(_) => {
-                let typed: ManifestV1 =
-                    toml_edit::de::from_document(toml.clone()).map_err(ManifestError::Invalid)?;
-                Ok(Self {
-                    original: InnerOriginal {
-                        raw: toml,
-                        parsed: Some(Parsed::V1(typed)),
+    pub fn read_typed(p: impl AsRef<Path>) -> Result<Manifest<ManifestParsed>, ManifestError> {
+        Self::read_untyped(p)?.validate_toml()
+    }
+
+    pub fn parse_and_migrate(
+        manifest_contents: impl AsRef<str>,
+        lockfile_contents: impl AsRef<str>,
+    ) -> Result<Manifest<Migrated>, ManifestError> {
+        let lockfile =
+            Lockfile::from_str(lockfile_contents.as_ref()).map_err(ManifestError::Lockfile)?;
+        Self::parse_untyped(manifest_contents)?
+            .validate_toml()?
+            .migrate(&lockfile)
+    }
+}
+
+impl Manifest<TomlParsed> {
+    pub fn validate_toml(&self) -> Result<Manifest<ManifestParsed>, ManifestError> {
+        let schema_version: KnownSchemaVersion =
+            get_schema_version_kind(&self.inner.raw)?.try_into()?;
+        let parsed = Manifest::<Init>::parse_with_schema(&self.inner.raw, schema_version)?;
+        Ok(Manifest {
+            inner: ManifestParsed {
+                raw: self.inner.raw.clone(),
+                parsed,
+            },
+        })
+    }
+}
+
+impl Manifest<ManifestParsed> {
+    pub fn migrate(&self, _lockfile: &Lockfile) -> Result<Manifest<Migrated>, ManifestError> {
+        todo!()
+    }
+}
+
+impl<S: ManifestState> Manifest<S> {
+    fn parse_with_schema(
+        toml: &DocumentMut,
+        schema: KnownSchemaVersion,
+    ) -> Result<Parsed, ManifestError> {
+        match schema {
+            KnownSchemaVersion::V1 => {
+                let manifest = toml_edit::de::from_document::<ManifestV1>(toml.clone())
+                    .map_err(ManifestError::Invalid)?;
+                Ok(Parsed::V1(manifest))
+            },
+            KnownSchemaVersion::V1_9_0 => {
+                let manifest = toml_edit::de::from_document::<ManifestV1_9_0>(toml.clone())
+                    .map_err(ManifestError::Invalid)?;
+                Ok(Parsed::V1_9_0(manifest))
+            },
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Manifest<Deserialized> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let untyped = toml::Value::deserialize(deserializer)?;
+        let version: KnownSchemaVersion = get_toml_schema_version_kind(&untyped)
+            .map_err(|err| serde::de::Error::custom(err.to_string()))?
+            .try_into()
+            .map_err(|err: ManifestError| serde::de::Error::custom(err.to_string()))?;
+        match version {
+            KnownSchemaVersion::V1 => {
+                let d = untyped.into_deserializer();
+                let manifest = ManifestV1::deserialize(d)
+                    .map_err(|err| serde::de::Error::custom(err.to_string()))?;
+                Ok(Manifest {
+                    inner: Deserialized {
+                        original_parsed: Parsed::V1(manifest),
                     },
-                    migrated: None,
                 })
             },
-            VersionKind::SchemaVersion(_) => {
-                // TODO: once we add a new schema version, we'll want to match
-                //       on the schema version string here instead of assuming
-                //       that it's v1.9.0.
-                let typed: ManifestV1_9_0 =
-                    toml_edit::de::from_document(toml.clone()).map_err(ManifestError::Invalid)?;
-                Ok(Self {
-                    original: InnerOriginal {
-                        raw: toml,
-                        parsed: Some(Parsed::V1_9_0(typed)),
+            KnownSchemaVersion::V1_9_0 => {
+                let d = untyped.into_deserializer();
+                let manifest = ManifestV1_9_0::deserialize(d)
+                    .map_err(|err| serde::de::Error::custom(err.to_string()))?;
+                Ok(Manifest {
+                    inner: Deserialized {
+                        original_parsed: Parsed::V1_9_0(manifest),
                     },
-                    migrated: None,
                 })
             },
         }
     }
+}
 
-    pub fn read(p: impl AsRef<Path>) -> Result<Self, ManifestError> {
-        let contents = std::fs::read_to_string(p).map_err(ManifestError::IORead)?;
-        Self::parse_untyped(contents)
-    }
-
-    pub fn original_untyped_to_string(&self) -> String {
-        self.original.raw.to_string()
-    }
-
-    pub fn write_migrated(&self, p: impl AsRef<Path>) -> Result<(), ManifestError> {
-        let contents = self.migrated()?
+impl Serialize for Manifest<ManifestParsed> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.inner.serialize(serializer)
     }
 }
 
-// pub trait IsManifest {}
+impl Serialize for Manifest<Migrated> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.inner.serialize(serializer)
+    }
+}
 
-// pub trait<T: IsManifest> ParseManifest {
-//     pub fn
-// }
+impl Serialize for Manifest<Deserialized> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.inner.serialize(serializer)
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
@@ -143,6 +237,9 @@ pub enum ManifestError {
 
     #[error("{0}")]
     Other(String),
+
+    #[error(transparent)]
+    Lockfile(LockfileError),
 
     // ====================================================================== //
     // Looking up packages and package groups
@@ -177,7 +274,8 @@ struct InnerOriginal {
     parsed: Option<Parsed>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
 enum Parsed {
     V1(ManifestV1),
     V1_9_0(ManifestV1_9_0),

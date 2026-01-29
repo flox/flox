@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::{self, Display, Formatter};
 mod shallow;
-#[cfg(test)]
+#[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

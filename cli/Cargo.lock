@@ -1407,13 +1407,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "flox-lockfile"
-version = "0.1.0"
-
-[[package]]
 name = "flox-manifest"
 version = "0.1.0"
 dependencies = [
+ "catalog-api-v1",
+ "chrono",
  "derive_more",
  "flox-core",
  "flox-test-utils",
@@ -1447,6 +1445,7 @@ dependencies = [
  "derive_more",
  "enum_dispatch",
  "flox-core",
+ "flox-manifest",
  "flox-test-utils",
  "fslock",
  "futures",
