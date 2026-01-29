@@ -291,6 +291,14 @@ pub struct StartIdentifier {
 }
 
 impl StartIdentifier {
+    /// Create a new StartIdentifier with the given store path and current timestamp.
+    pub fn new(store_path: impl AsRef<Path>) -> Self {
+        StartIdentifier {
+            store_path: store_path.as_ref().to_path_buf(),
+            timestamp: UnixTimestampMillis::now(),
+        }
+    }
+
     /// Compute start state directory path for this identifier.
     ///
     /// Format: {runtime_dir}/activations/{env_hash}-{env_name}/{storepath_basename}.{unix_epoch}/
@@ -532,10 +540,7 @@ impl ActivationState {
     }
 
     fn start(&mut self, pid: Pid, store_path: impl AsRef<Path>) -> StartIdentifier {
-        let start_id = StartIdentifier {
-            store_path: store_path.as_ref().to_path_buf(),
-            timestamp: UnixTimestampMillis::now(),
-        };
+        let start_id = StartIdentifier::new(store_path);
         let attachment = Attachment {
             start_id: start_id.clone(),
             expiration: None,
@@ -837,13 +842,6 @@ mod tests {
         }
     }
 
-    fn make_start_id(path: &str) -> StartIdentifier {
-        StartIdentifier {
-            store_path: PathBuf::from(path),
-            timestamp: UnixTimestampMillis::now(),
-        }
-    }
-
     fn make_attachment(start_id: StartIdentifier) -> Attachment {
         Attachment {
             start_id,
@@ -1004,7 +1002,7 @@ mod tests {
 
         #[test]
         fn test_start_or_attach_attaches_when_ready_true_same_path() {
-            let start_id = make_start_id("/nix/store/path1");
+            let start_id = StartIdentifier::new("/nix/store/path1");
             let mut activations = make_activations(Ready::True(start_id.clone()));
 
             let pid = 123;
@@ -1026,7 +1024,7 @@ mod tests {
 
         #[test]
         fn test_start_or_attach_starts_when_ready_true_different_path() {
-            let existing = make_start_id("/nix/store/path1");
+            let existing = StartIdentifier::new("/nix/store/path1");
             let new_path = PathBuf::from("/nix/store/path2");
             let mut activations = make_activations(Ready::True(existing));
 
@@ -1055,7 +1053,7 @@ mod tests {
         fn test_start_or_attach_returns_already_starting_when_process_running() {
             let proc = start_process();
             let pid = proc.id() as i32;
-            let start_id = make_start_id("/nix/store/path1");
+            let start_id = StartIdentifier::new("/nix/store/path1");
             let mut activations = make_activations(Ready::Starting(pid, start_id.clone()));
 
             let result = activations.start_or_attach(123, &start_id.store_path);
@@ -1086,7 +1084,7 @@ mod tests {
             let stopped_pid = proc.id() as i32;
             stop_process(proc);
 
-            let old_start_id = make_start_id("/nix/store/path1");
+            let old_start_id = StartIdentifier::new("/nix/store/path1");
             let mut activations =
                 make_activations(Ready::Starting(stopped_pid, old_start_id.clone()));
 
@@ -1113,7 +1111,7 @@ mod tests {
 
         #[test]
         fn test_start_or_attach_multiple_attachments() {
-            let start_id = make_start_id("/nix/store/path1");
+            let start_id = StartIdentifier::new("/nix/store/path1");
             let mut activations = make_activations(Ready::True(start_id.clone()));
 
             for pid in [100, 200, 300].iter() {
@@ -1181,7 +1179,7 @@ mod tests {
         // Create an attachment with an expiration in the past
         let mut activations =
             ActivationState::new(&ActivateMode::default(), "/test/.flox", "/test/env");
-        let start_id = make_start_id("/nix/store/test");
+        let start_id = StartIdentifier::new("/nix/store/test");
         let pid = 0;
         let now = OffsetDateTime::now_utc();
         let expiration = now - Duration::from_secs(10);
@@ -1203,7 +1201,7 @@ mod tests {
         // Create an attachment with an expiration in the future
         let mut activations =
             ActivationState::new(&ActivateMode::default(), "/test/.flox", "/test/env");
-        let start_id = make_start_id("/nix/store/test");
+        let start_id = StartIdentifier::new("/nix/store/test");
         let pid = 0;
         let now = OffsetDateTime::now_utc();
         let expiration = now + Duration::from_secs(10);
@@ -1272,7 +1270,7 @@ mod tests {
 
         #[test]
         fn parse_versioned_activation_state_roundtrip() {
-            let start_id = make_start_id("/nix/store/path");
+            let start_id = StartIdentifier::new("/nix/store/path");
             let mut state = make_activations(Ready::True(start_id.clone()));
             state.attached_pids = BTreeMap::from([(123, make_attachment(start_id))]);
             let json = serde_json::to_string(&state).unwrap();
