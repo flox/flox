@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::str::FromStr;
 
+use schemars::{JsonSchema, schema_for};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Serialize};
 use toml_edit::DocumentMut;
@@ -50,7 +51,7 @@ pub struct Migrated {
 // so there's no way we could parse into a `DocumentMut`. You'll see this
 // when you need to parse a `Manifest` out of a `Lockfile`. You can't properly
 // migrate this manifest because we don't have a `DocumentMut` to make edits to.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, JsonSchema)]
 pub struct Deserialized {
     #[serde(flatten)]
     original_parsed: Parsed,
@@ -119,6 +120,14 @@ impl Manifest<TomlParsed> {
 }
 
 impl Manifest<ManifestParsed> {
+    pub fn to_deserialized(&self) -> Manifest<Deserialized> {
+        Manifest {
+            inner: Deserialized {
+                original_parsed: self.inner.parsed.clone(),
+            },
+        }
+    }
+
     pub fn migrate(&self, _lockfile: &Lockfile) -> Result<Manifest<Migrated>, ManifestError> {
         todo!()
     }
@@ -206,6 +215,32 @@ impl Serialize for Manifest<Deserialized> {
     }
 }
 
+impl Default for Manifest<Deserialized> {
+    fn default() -> Self {
+        Manifest {
+            inner: Deserialized {
+                original_parsed: Parsed::V1_9_0(ManifestV1_9_0::default()),
+            },
+        }
+    }
+}
+
+impl PartialEq for Manifest<Deserialized> {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
+
+impl JsonSchema for Manifest<Deserialized> {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Manifest".into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schema_for!(Parsed)
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
     // ====================================================================== //
@@ -274,7 +309,7 @@ struct InnerOriginal {
     parsed: Option<Parsed>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
 #[serde(untagged)]
 enum Parsed {
     V1(ManifestV1),

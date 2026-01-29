@@ -20,11 +20,11 @@ use std::str::FromStr;
 
 use flox_core::Version;
 
-use crate::Manifest;
 use crate::lockfile::catalog::LockedPackageCatalog;
 use crate::lockfile::compose::Compose;
 use crate::lockfile::flake::LockedPackageFlake;
 use crate::lockfile::store_path::LockedPackageStorePath;
+use crate::{Deserialized, Manifest};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LockfileError {
@@ -62,7 +62,7 @@ pub struct Lockfile {
     /// For an environment that doesn't include any others, this is the `manifest.toml`
     /// on disk at lock-time. For an environment that *does* include others, this is
     /// the merged manifest that was locked.
-    pub manifest: Manifest,
+    pub manifest: Manifest<Deserialized>,
     /// Locked packages
     pub packages: Vec<LockedPackage>,
     /// Composition information. This will be `None` when there are no includes.
@@ -78,88 +78,6 @@ impl Lockfile {
 
     pub fn version(&self) -> u8 {
         1
-    }
-}
-
-impl FromStr for Lockfile {
-    type Err = LockfileError;
-
-    fn from_str(contents: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(contents).map_err(LockfileError::ParseJson)
-    }
-}
-
-impl Display for Lockfile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", serde_json::json!(self))
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, derive_more::From, JsonSchema)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[serde(untagged)]
-pub enum LockedPackage {
-    Catalog(LockedPackageCatalog),
-    Flake(LockedPackageFlake),
-    StorePath(LockedPackageStorePath),
-}
-
-impl LockedPackage {
-    pub(crate) fn as_catalog_package_ref(&self) -> Option<&LockedPackageCatalog> {
-        match self {
-            LockedPackage::Catalog(pkg) => Some(pkg),
-            _ => None,
-        }
-    }
-
-    pub fn install_id(&self) -> &str {
-        match self {
-            LockedPackage::Catalog(pkg) => &pkg.install_id,
-            LockedPackage::Flake(pkg) => &pkg.install_id,
-            LockedPackage::StorePath(pkg) => &pkg.install_id,
-        }
-    }
-
-    pub(crate) fn system(&self) -> &System {
-        match self {
-            LockedPackage::Catalog(pkg) => &pkg.system,
-            LockedPackage::Flake(pkg) => &pkg.locked_installable.system,
-            LockedPackage::StorePath(pkg) => &pkg.system,
-        }
-    }
-
-    pub fn broken(&self) -> Option<bool> {
-        match self {
-            LockedPackage::Catalog(pkg) => pkg.broken,
-            LockedPackage::Flake(pkg) => pkg.locked_installable.broken,
-            LockedPackage::StorePath(_) => None,
-        }
-    }
-
-    pub fn unfree(&self) -> Option<bool> {
-        match self {
-            LockedPackage::Catalog(pkg) => pkg.unfree,
-            LockedPackage::Flake(pkg) => pkg.locked_installable.unfree,
-            LockedPackage::StorePath(_) => None,
-        }
-    }
-
-    pub fn derivation(&self) -> Option<&str> {
-        match self {
-            LockedPackage::Catalog(pkg) => Some(&pkg.derivation),
-            LockedPackage::Flake(pkg) => Some(&pkg.locked_installable.derivation),
-            // Technically store paths _may_ have a derivation,
-            // but it's not quite relevant yet for us to record it in the lockfile.
-            LockedPackage::StorePath(_) => None,
-        }
-    }
-
-    pub fn version(&self) -> Option<&str> {
-        match self {
-            LockedPackage::Catalog(pkg) => Some(&pkg.version),
-            LockedPackage::Flake(pkg) => pkg.locked_installable.version.as_deref(),
-            LockedPackage::StorePath(_) => None,
-        }
     }
 
     /// Convert a locked manifest to a list of installed packages for a given system.
@@ -365,6 +283,88 @@ impl LockedPackage {
             }
         }
         Ok(map.into_values())
+    }
+}
+
+impl FromStr for Lockfile {
+    type Err = LockfileError;
+
+    fn from_str(contents: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(contents).map_err(LockfileError::ParseJson)
+    }
+}
+
+impl Display for Lockfile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", serde_json::json!(self))
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, derive_more::From, JsonSchema)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(untagged)]
+pub enum LockedPackage {
+    Catalog(LockedPackageCatalog),
+    Flake(LockedPackageFlake),
+    StorePath(LockedPackageStorePath),
+}
+
+impl LockedPackage {
+    pub(crate) fn as_catalog_package_ref(&self) -> Option<&LockedPackageCatalog> {
+        match self {
+            LockedPackage::Catalog(pkg) => Some(pkg),
+            _ => None,
+        }
+    }
+
+    pub fn install_id(&self) -> &str {
+        match self {
+            LockedPackage::Catalog(pkg) => &pkg.install_id,
+            LockedPackage::Flake(pkg) => &pkg.install_id,
+            LockedPackage::StorePath(pkg) => &pkg.install_id,
+        }
+    }
+
+    pub(crate) fn system(&self) -> &System {
+        match self {
+            LockedPackage::Catalog(pkg) => &pkg.system,
+            LockedPackage::Flake(pkg) => &pkg.locked_installable.system,
+            LockedPackage::StorePath(pkg) => &pkg.system,
+        }
+    }
+
+    pub fn broken(&self) -> Option<bool> {
+        match self {
+            LockedPackage::Catalog(pkg) => pkg.broken,
+            LockedPackage::Flake(pkg) => pkg.locked_installable.broken,
+            LockedPackage::StorePath(_) => None,
+        }
+    }
+
+    pub fn unfree(&self) -> Option<bool> {
+        match self {
+            LockedPackage::Catalog(pkg) => pkg.unfree,
+            LockedPackage::Flake(pkg) => pkg.locked_installable.unfree,
+            LockedPackage::StorePath(_) => None,
+        }
+    }
+
+    pub fn derivation(&self) -> Option<&str> {
+        match self {
+            LockedPackage::Catalog(pkg) => Some(&pkg.derivation),
+            LockedPackage::Flake(pkg) => Some(&pkg.locked_installable.derivation),
+            // Technically store paths _may_ have a derivation,
+            // but it's not quite relevant yet for us to record it in the lockfile.
+            LockedPackage::StorePath(_) => None,
+        }
+    }
+
+    pub fn version(&self) -> Option<&str> {
+        match self {
+            LockedPackage::Catalog(pkg) => Some(&pkg.version),
+            LockedPackage::Flake(pkg) => pkg.locked_installable.version.as_deref(),
+            LockedPackage::StorePath(_) => None,
+        }
     }
 }
 
