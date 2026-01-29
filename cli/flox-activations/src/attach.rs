@@ -119,7 +119,7 @@ fn startup_ctx(
         None
     };
 
-    let s_ctx = match ctx.shell {
+    let args = match ctx.shell {
         ShellWithPath::Bash(_) => {
             let bashrc_path = if let Some(home_dir) = dirs::home_dir() {
                 let bashrc_path = home_dir.join(".bashrc");
@@ -131,7 +131,7 @@ fn startup_ctx(
             } else {
                 return Err(anyhow!("failed to get home directory"));
             };
-            let startup_args = BashStartupArgs {
+            StartupArgs::Bash(BashStartupArgs {
                 flox_activate_tracelevel: subsystem_verbosity,
                 activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
                 flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
@@ -144,79 +144,52 @@ fn startup_ctx(
                 flox_activate_tracer: activate_tracer.to_string(),
                 flox_activations,
                 clean_up,
-            };
-            StartupCtx {
-                args: StartupArgs::Bash(startup_args),
-                state_dir: state_dir.to_path_buf(),
-                env_diff,
-                rc_path,
-                act_ctx: ctx,
-            }
+            })
         },
-        ShellWithPath::Fish(_) => {
-            let startup_args = FishStartupArgs {
-                flox_activate_tracelevel: subsystem_verbosity,
-                activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
-                flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-                flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-                flox_env_project: ctx.attach_ctx.env_project.clone(),
-                flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
-                is_in_place: invocation_type == InvocationType::InPlace,
-                flox_sourcing_rc: is_sourcing_rc,
-                flox_activate_tracer: activate_tracer.to_string(),
-                flox_activations,
-                clean_up,
-            };
-            StartupCtx {
-                args: StartupArgs::Fish(startup_args),
-                state_dir: state_dir.to_path_buf(),
-                env_diff,
-                rc_path,
-                act_ctx: ctx,
-            }
-        },
-        ShellWithPath::Tcsh(_) => {
-            let startup_args = TcshStartupArgs {
-                flox_activate_tracelevel: subsystem_verbosity,
-                activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
-                flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-                flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-                flox_env_project: ctx.attach_ctx.env_project.clone(),
-                flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
-                is_in_place: invocation_type == InvocationType::InPlace,
-                flox_sourcing_rc: is_sourcing_rc,
-                flox_activate_tracer: activate_tracer.to_string(),
-                flox_activations,
-                clean_up,
-            };
-            StartupCtx {
-                args: StartupArgs::Tcsh(startup_args),
-                state_dir: state_dir.to_path_buf(),
-                env_diff,
-                rc_path,
-                act_ctx: ctx,
-            }
-        },
-        ShellWithPath::Zsh(_) => {
-            let startup_args = ZshStartupArgs {
-                flox_activate_tracelevel: subsystem_verbosity,
-                activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
-                flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-                flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-                flox_env_project: ctx.attach_ctx.env_project.clone(),
-                flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
-                clean_up,
-            };
-            StartupCtx {
-                args: StartupArgs::Zsh(startup_args),
-                state_dir: state_dir.to_path_buf(),
-                env_diff,
-                rc_path,
-                act_ctx: ctx,
-            }
-        },
+        ShellWithPath::Fish(_) => StartupArgs::Fish(FishStartupArgs {
+            flox_activate_tracelevel: subsystem_verbosity,
+            activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
+            flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
+            flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
+            flox_env_project: ctx.attach_ctx.env_project.clone(),
+            flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
+            is_in_place: invocation_type == InvocationType::InPlace,
+            flox_sourcing_rc: is_sourcing_rc,
+            flox_activate_tracer: activate_tracer.to_string(),
+            flox_activations,
+            clean_up,
+        }),
+        ShellWithPath::Tcsh(_) => StartupArgs::Tcsh(TcshStartupArgs {
+            flox_activate_tracelevel: subsystem_verbosity,
+            activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
+            flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
+            flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
+            flox_env_project: ctx.attach_ctx.env_project.clone(),
+            flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
+            is_in_place: invocation_type == InvocationType::InPlace,
+            flox_sourcing_rc: is_sourcing_rc,
+            flox_activate_tracer: activate_tracer.to_string(),
+            flox_activations,
+            clean_up,
+        }),
+        ShellWithPath::Zsh(_) => StartupArgs::Zsh(ZshStartupArgs {
+            flox_activate_tracelevel: subsystem_verbosity,
+            activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
+            flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
+            flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
+            flox_env_project: ctx.attach_ctx.env_project.clone(),
+            flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
+            clean_up,
+        }),
     };
-    Ok(s_ctx)
+
+    Ok(StartupCtx {
+        args,
+        state_dir: state_dir.to_path_buf(),
+        env_diff,
+        rc_path,
+        act_ctx: ctx,
+    })
 }
 
 fn write_to_path(ctx: &StartupCtx, path: &Path) -> Result<()> {
