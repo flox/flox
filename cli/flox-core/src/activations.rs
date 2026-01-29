@@ -318,6 +318,25 @@ impl StartIdentifier {
 
         Ok(base_dir.join(dir_name))
     }
+
+    /// Compute container-specific state directory path for this identifier.
+    /// Containers don't have a `.flox` directory, so we use the store path basename.
+    ///
+    /// Format: {runtime_dir}/container-activations/{store_path_basename}/
+    pub fn container_state_dir_path(
+        &self,
+        runtime_dir: impl AsRef<Path>,
+    ) -> Result<PathBuf, Error> {
+        let storepath_basename = self
+            .store_path
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("Invalid store path: no basename"))?
+            .to_string_lossy();
+        Ok(runtime_dir
+            .as_ref()
+            .join("container-activations")
+            .join(storepath_basename.as_ref()))
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

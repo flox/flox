@@ -4,14 +4,14 @@
 //! including spawning the executive process, running hooks, and
 //! managing process-compose for services.
 
-use std::fs::DirBuilder;
+use std::fs::{self, DirBuilder};
 use std::os::unix::fs::DirBuilderExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use anyhow::{Result, anyhow, bail};
-use flox_core::activate::context::ActivateCtx;
+use flox_core::activate::context::{ActivateCoreCtx, ActivateCtx};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use flox_core::activations::{
     ActivationState,
@@ -77,7 +77,8 @@ pub fn start(
     }
 
     let mut start_command = assemble_activate_command(
-        context.clone(),
+        &context.core,
+        Some(&context.project),
         subsystem_verbosity,
         vars_from_env.clone(),
         &start_state_dir,
@@ -119,6 +120,64 @@ pub fn start_services_with_new_process_compose(
     debug!("starting new process-compose for services");
     signal_new_process_compose(process_compose_bin, socket_path, executive_pid)?;
     start_services_via_socket(process_compose_bin, socket_path, services)?;
+
+    Ok(())
+}
+
+/// Start a container activation.
+///
+/// Creates the state directory atomically using a temp directory and rename,
+/// then runs hooks. The caller should check if state_dir exists before calling
+/// this function to enable snapshot reuse.
+///
+/// This is a simplified start path for containers:
+/// - No executive process
+/// - No state.json management
+/// - No file locking
+/// - Atomic directory creation for concurrent safety
+pub fn start_container(
+    core: &ActivateCoreCtx,
+    state_dir: &Path,
+    subsystem_verbosity: u32,
+    vars_from_env: VarsFromEnvironment,
+) -> Result<(), anyhow::Error> {
+    debug!(
+        "creating new container activation with state_dir: {:?}",
+        state_dir
+    );
+
+    // Ensure parent directory exists for both temp dir and final location
+    let parent_dir = state_dir
+        .parent()
+        .ok_or_else(|| anyhow!("state_dir has no parent"))?;
+    DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(parent_dir)?;
+
+    // Create temp directory in the same parent (required for atomic rename)
+    let temp_dir = tempfile::TempDir::with_prefix_in("activation_", parent_dir)?;
+    let temp_path = temp_dir.path().to_path_buf();
+
+    // Run hooks in temp directory
+    let mut activate_cmd =
+        assemble_activate_command(core, None, subsystem_verbosity, vars_from_env, &temp_path);
+    debug!("spawning activate script: {:?}", activate_cmd);
+    let status = activate_cmd.spawn()?.wait()?;
+    if !status.success() {
+        bail!("Running hook.on-activate failed");
+    }
+
+    // Atomically rename temp dir to final location.
+    let temp_path = temp_dir.keep();
+    fs::rename(&temp_path, state_dir).map_err(|e| {
+        anyhow!(
+            "failed to rename temp activation dir {:?} to {:?}: {}",
+            temp_path,
+            state_dir,
+            e
+        )
+    })?;
 
     Ok(())
 }

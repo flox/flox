@@ -2,9 +2,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use clap::Args;
-use flox_core::activate::context::{ActivateCtx, InvocationType};
+use flox_core::activate::context::{ActivateCoreCtx, ActivateCtx, InvocationType};
 use flox_core::activations::{
     ActivationState,
     ModeMismatch,
@@ -19,7 +19,7 @@ use tracing::debug;
 
 use crate::attach::{attach, quote_run_args};
 use crate::message::updated;
-use crate::start::{start, start_services_with_new_process_compose};
+use crate::start::{start, start_container, start_services_with_new_process_compose};
 use crate::vars_from_env::VarsFromEnvironment;
 
 pub const NO_REMOVE_ACTIVATION_FILES: &str = "_FLOX_NO_REMOVE_ACTIVATION_FILES";
@@ -29,6 +29,11 @@ pub struct ActivateArgs {
     /// Path to JSON file containing activation data
     #[arg(long)]
     pub activate_data: PathBuf,
+
+    /// Container activation mode - skips executive, state management, and locking.
+    /// This is used for ephemeral container activations.
+    #[arg(long, hide = true)]
+    pub container: bool,
 
     /// Additional arguments used to provide a command to run.
     /// NOTE: this is only relevant for containerize activations.
@@ -49,6 +54,21 @@ impl ActivateArgs {
         // Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
         unsafe { std::env::remove_var("FLOX_SHELL") };
 
+        if self.container {
+            Self::handle_container(contents, run_args, vars_from_env, subsystem_verbosity)
+        } else {
+            self.handle_project(contents, run_args, vars_from_env, subsystem_verbosity)
+        }
+    }
+
+    /// Handle project-based activation using full `ActivateCtx`.
+    fn handle_project(
+        &self,
+        contents: String,
+        run_args: Option<&Vec<String>>,
+        vars_from_env: VarsFromEnvironment,
+        subsystem_verbosity: u32,
+    ) -> Result<(), anyhow::Error> {
         let mut context: ActivateCtx = serde_json::from_str(&contents)?;
 
         if context.remove_after_reading
@@ -84,12 +104,71 @@ impl ActivateArgs {
             )?;
         }
 
+        let state_dir = start_id.state_dir_path(
+            &context.core.flox_runtime_dir,
+            &context.project.dot_flox_path,
+        )?;
         attach(
-            context,
+            context.core,
+            Some(context.project),
             invocation_type,
             subsystem_verbosity,
             vars_from_env,
-            start_id,
+            state_dir,
+            Some(start_id),
+        )
+    }
+
+    /// Handle core-only activation using `ActivateCoreCtx`.
+    ///
+    /// Simplified path without executive, state management, or locking.
+    /// Used for containers which are ephemeral and use atomic snapshot creation.
+    ///
+    /// This function reuses existing activation snapshots when possible. The state
+    /// directory is created atomically after hooks complete, so its existence
+    /// indicates a valid snapshot that can be reused without re-running hooks.
+    fn handle_container(
+        contents: String,
+        run_args: Option<&Vec<String>>,
+        vars_from_env: VarsFromEnvironment,
+        subsystem_verbosity: u32,
+    ) -> Result<(), anyhow::Error> {
+        let mut core: ActivateCoreCtx = serde_json::from_str(&contents)?;
+
+        // Containers always detect invocation type at runtime from run_args
+        let invocation_type = Self::invocation_type_from_args(run_args);
+
+        Self::apply_shell_override(&mut core.shell)?;
+
+        // Compute the state directory path (no timestamp - store path is unique)
+        let start_id = StartIdentifier::new(&core.flox_activate_store_path);
+        let state_dir = start_id.container_state_dir_path(&core.flox_runtime_dir)?;
+
+        // Reuse existing snapshot if available, otherwise create new one.
+        // Directory existence indicates hooks have completed successfully.
+        if !state_dir.exists() {
+            start_container(
+                &core,
+                &state_dir,
+                subsystem_verbosity,
+                vars_from_env.clone(),
+            )?;
+        }
+
+        if invocation_type == InvocationType::InPlace {
+            return Err(anyhow!(
+                "In-place activation is not supported in containers"
+            ));
+        }
+
+        attach(
+            core,
+            None, // No project context for containers
+            invocation_type,
+            subsystem_verbosity,
+            vars_from_env,
+            state_dir,
+            None, // No start_id for containers
         )
     }
 

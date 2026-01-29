@@ -6,12 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Result, anyhow};
-use flox_core::activate::context::{
-    ActivateCoreCtx,
-    ActivateCtx,
-    ActivateProjectCtx,
-    InvocationType,
-};
+use flox_core::activate::context::{ActivateCoreCtx, ActivateProjectCtx, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use flox_core::activations::StartIdentifier;
 use indoc::formatdoc;
@@ -33,18 +28,20 @@ use crate::vars_from_env::VarsFromEnvironment;
 
 pub const STARTUP_SCRIPT_PATH_OVERRIDE_VAR: &str = "_FLOX_RC_FILE_PATH";
 
+/// Attach to an activation.
+///
+/// For normal activations, both `project` and `start_id` are required.
+/// For container activations, both are None.
 pub fn attach(
-    context: ActivateCtx,
+    core: ActivateCoreCtx,
+    project: Option<ActivateProjectCtx>,
     invocation_type: InvocationType,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
-    start_id: StartIdentifier,
+    state_dir: PathBuf,
+    start_id: Option<StartIdentifier>,
 ) -> Result<(), anyhow::Error> {
-    let start_state_dir = start_id.state_dir_path(
-        &context.core.flox_runtime_dir,
-        &context.project.dot_flox_path,
-    )?;
-    let diff = EnvDiff::from_files(&start_state_dir)?;
+    let diff = EnvDiff::from_files(&state_dir)?;
 
     // Create the path if we're going to need it (we won't for in-place).
     // We're doing this ahead of time here because it's shell-agnostic and the `match`
@@ -54,22 +51,24 @@ pub fn attach(
         let path = if let Ok(rc_path_str) = std::env::var(STARTUP_SCRIPT_PATH_OVERRIDE_VAR) {
             PathBuf::from(rc_path_str)
         } else {
-            let prefix = format!("flox_rc_{}_", context.core.shell.name());
-            let tmp = tempfile::NamedTempFile::with_prefix_in(prefix, &start_state_dir)?;
+            let prefix = format!("flox_rc_{}_", core.shell.name());
+            let tmp = tempfile::NamedTempFile::with_prefix_in(prefix, &state_dir)?;
             let rc_path = tmp.path().to_path_buf();
             tmp.keep()?;
             rc_path
         };
         rc_path = Some(path);
     }
+
+    let tracer = activate_tracer(&core.interpreter_path);
     let startup_ctx = startup_ctx(
-        context.core.clone(),
-        Some(context.project.clone()),
+        core,
+        project,
         invocation_type.clone(),
         rc_path,
-        diff.clone(),
-        &start_state_dir,
-        &activate_tracer(&context.core.interpreter_path),
+        diff,
+        &state_dir,
+        &tracer,
         subsystem_verbosity,
     )?;
 
@@ -82,6 +81,8 @@ pub fn attach(
         //
         //    eval "$(flox activate)"
         InvocationType::InPlace => {
+            let start_id =
+                start_id.ok_or_else(|| anyhow!("In-place activation requires start_id"))?;
             activate_in_place(startup_ctx, start_id)?;
             Ok(())
         },

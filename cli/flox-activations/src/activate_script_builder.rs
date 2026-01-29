@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 
-use flox_core::activate::context::{ActivateCoreCtx, ActivateCtx, ActivateProjectCtx};
+use flox_core::activate::context::{ActivateCoreCtx, ActivateProjectCtx};
 use flox_core::activate::vars::{FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_VAR};
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
@@ -20,19 +20,20 @@ pub const FLOX_SERVICES_SOCKET_VAR: &str = "_FLOX_SERVICES_SOCKET";
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
 pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
 
-pub(super) fn assemble_activate_command(
-    context: ActivateCtx,
+pub(crate) fn assemble_activate_command(
+    core: &ActivateCoreCtx,
+    project: Option<&ActivateProjectCtx>,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
     state_dir: &Path,
 ) -> Command {
-    let mut command = Command::new(context.core.interpreter_path.join("activate"));
-    add_old_cli_options(&mut command, &context);
-    command.envs(old_cli_envs(&context.core, Some(&context.project)));
+    let mut command = Command::new(core.interpreter_path.join("activate"));
+    add_old_cli_options(&mut command, core, project);
+    command.envs(old_cli_envs(core, project));
     add_old_activate_script_exports(
         &mut command,
-        &context.core,
-        Some(&context.project),
+        core,
+        project,
         subsystem_verbosity,
         vars_from_env,
         state_dir,
@@ -126,19 +127,26 @@ pub fn old_cli_envs(
 
 /// Prior to the refactor, these options were passed by the CLI to the activate
 /// script
-fn add_old_cli_options(command: &mut Command, context: &ActivateCtx) {
-    command
-        .arg("--env-project")
-        .arg(context.project.env_project.to_string_lossy().to_string());
+fn add_old_cli_options(
+    command: &mut Command,
+    core: &ActivateCoreCtx,
+    project: Option<&ActivateProjectCtx>,
+) {
+    // Only add --env-project when project context exists
+    if let Some(proj) = project {
+        command
+            .arg("--env-project")
+            .arg(proj.env_project.to_string_lossy().to_string());
+    }
     command
         .arg("--env-cache")
-        .arg(context.core.env_cache.to_string_lossy().to_string());
+        .arg(core.env_cache.to_string_lossy().to_string());
     command
         .arg("--env-description")
-        .arg(context.core.env_description.clone());
+        .arg(core.env_description.clone());
 
     // Pass down the activation mode
-    command.arg("--mode").arg(context.core.mode.to_string());
+    command.arg("--mode").arg(core.mode.to_string());
 }
 
 /// Options parsed by getopt that are only used by the activate script
