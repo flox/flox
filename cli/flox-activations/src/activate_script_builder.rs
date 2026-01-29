@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 
-use flox_core::activate::context::{ActivateCtx, AttachCtx};
+use flox_core::activate::context::{ActivateCoreCtx, ActivateCtx, ActivateProjectCtx};
 use flox_core::activate::vars::{FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_VAR};
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
@@ -26,12 +26,13 @@ pub(super) fn assemble_activate_command(
     vars_from_env: VarsFromEnvironment,
     state_dir: &Path,
 ) -> Command {
-    let mut command = Command::new(context.attach_ctx.interpreter_path.join("activate"));
+    let mut command = Command::new(context.core.interpreter_path.join("activate"));
     add_old_cli_options(&mut command, &context);
-    command.envs(old_cli_envs(context.attach_ctx.clone()));
+    command.envs(old_cli_envs(&context.core, Some(&context.project)));
     add_old_activate_script_exports(
         &mut command,
-        &context.attach_ctx,
+        &context.core,
+        Some(&context.project),
         subsystem_verbosity,
         vars_from_env,
         state_dir,
@@ -40,19 +41,22 @@ pub(super) fn assemble_activate_command(
     command
 }
 
-/// Set (and unset) environment variables needed to be activated
+/// Set (and unset) environment variables needed to be activated.
+/// If project is provided, also includes service-related variables.
 pub fn apply_activation_env(
     command: &mut Command,
-    context: AttachCtx,
+    core: &ActivateCoreCtx,
+    project: Option<&ActivateProjectCtx>,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
     env_diff: &EnvDiff,
     state_dir: &Path,
 ) {
-    command.envs(old_cli_envs(context.clone()));
+    command.envs(old_cli_envs(core, project));
     add_old_activate_script_exports(
         command,
-        &context,
+        core,
+        project,
         subsystem_verbosity,
         vars_from_env,
         state_dir,
@@ -63,46 +67,55 @@ pub fn apply_activation_env(
     }
 }
 
-pub fn old_cli_envs(context: AttachCtx) -> HashMap<&'static str, String> {
+/// Build environment variables from core context.
+/// If project is provided, also includes service-related variables.
+pub fn old_cli_envs(
+    core: &ActivateCoreCtx,
+    project: Option<&ActivateProjectCtx>,
+) -> HashMap<&'static str, String> {
     let mut exports = HashMap::from([
         (
             FLOX_ACTIVE_ENVIRONMENTS_VAR,
-            context.flox_active_environments,
+            core.flox_active_environments.clone(),
         ),
-        ("FLOX_PROMPT_COLOR_1", context.prompt_color_1),
-        ("FLOX_PROMPT_COLOR_2", context.prompt_color_2),
+        ("FLOX_PROMPT_COLOR_1", core.prompt_color_1.clone()),
+        ("FLOX_PROMPT_COLOR_2", core.prompt_color_2.clone()),
         // Set `FLOX_PROMPT_ENVIRONMENTS` to the constructed prompt string,
         // which may be ""
         // This is used by set-prompt script, and tcsh in particular does not
         // tolerate references to undefined variables.
         (
             FLOX_PROMPT_ENVIRONMENTS_VAR,
-            context.flox_prompt_environments,
+            core.flox_prompt_environments.clone(),
         ),
-        ("_FLOX_SET_PROMPT", context.set_prompt.to_string()),
+        ("_FLOX_SET_PROMPT", core.set_prompt.to_string()),
         (
             // TODO: we should probably figure out a more consistent way to
             // pass this since it's also passed for `flox build`
             FLOX_RUNTIME_DIR_VAR,
-            context.flox_runtime_dir,
+            core.flox_runtime_dir.clone(),
         ),
-        ("_FLOX_ENV_CUDA_DETECTION", context.flox_env_cuda_detection),
+        (
+            "_FLOX_ENV_CUDA_DETECTION",
+            core.flox_env_cuda_detection.clone(),
+        ),
         // This is user-facing and documented
         (
             FLOX_ACTIVATE_START_SERVICES_VAR,
-            (!context.services_to_start.is_empty()).to_string(),
+            project
+                .is_some_and(|p| !p.services_to_start.is_empty())
+                .to_string(),
         ),
     ]);
-    if let Some(log_dir) = context.flox_env_log_dir.as_ref() {
+
+    if let Some(project) = project {
         exports.insert(
             FLOX_ENV_LOG_DIR_VAR,
-            log_dir.clone().to_string_lossy().to_string(),
+            project.flox_env_log_dir.to_string_lossy().to_string(),
         );
-    }
-    if let Some(socket_path) = context.flox_services_socket.as_ref() {
         exports.insert(
             FLOX_SERVICES_SOCKET_VAR,
-            socket_path.clone().to_string_lossy().to_string(),
+            project.flox_services_socket.to_string_lossy().to_string(),
         );
     }
 
@@ -114,20 +127,18 @@ pub fn old_cli_envs(context: AttachCtx) -> HashMap<&'static str, String> {
 /// Prior to the refactor, these options were passed by the CLI to the activate
 /// script
 fn add_old_cli_options(command: &mut Command, context: &ActivateCtx) {
-    if let Some(env_project) = context.attach_ctx.env_project.as_ref() {
-        command
-            .arg("--env-project")
-            .arg(env_project.to_string_lossy().to_string());
-    }
+    command
+        .arg("--env-project")
+        .arg(context.project.env_project.to_string_lossy().to_string());
     command
         .arg("--env-cache")
-        .arg(context.attach_ctx.env_cache.to_string_lossy().to_string());
+        .arg(context.core.env_cache.to_string_lossy().to_string());
     command
         .arg("--env-description")
-        .arg(context.attach_ctx.env_description.clone());
+        .arg(context.core.env_description.clone());
 
     // Pass down the activation mode
-    command.arg("--mode").arg(context.mode.to_string());
+    command.arg("--mode").arg(context.core.mode.to_string());
 }
 
 /// Options parsed by getopt that are only used by the activate script
@@ -139,9 +150,10 @@ fn add_activate_script_options(command: &mut Command, state_dir: &Path) {
 // TODO: we still use std::env::var in this function,
 // so we should either drop those uses and get those vars in VarsFromEnvironment,
 // or we should completely drop VarsFromEnvironment .
-fn add_old_activate_script_exports(
+pub fn add_old_activate_script_exports(
     command: &mut Command,
-    context: &AttachCtx,
+    core: &ActivateCoreCtx,
+    project: Option<&ActivateProjectCtx>,
     subsystem_verbosity: u32,
     vars_from_environment: VarsFromEnvironment,
     state_dir: &Path,
@@ -150,12 +162,12 @@ fn add_old_activate_script_exports(
     let mut exports = HashMap::from([
         ("_flox_activate_tracelevel", subsystem_verbosity.to_string()),
         // Propagate required variables that are documented as exposed.
-        ("FLOX_ENV", context.env.clone()),
+        ("FLOX_ENV", core.env.clone()),
         (
             "FLOX_ENV_CACHE",
-            context.env_cache.to_string_lossy().to_string(),
+            core.env_cache.to_string_lossy().to_string(),
         ),
-        ("FLOX_ENV_DESCRIPTION", context.env_description.clone()),
+        ("FLOX_ENV_DESCRIPTION", core.env_description.clone()),
         (
             "_FLOX_START_STATE_DIR",
             state_dir.to_string_lossy().to_string(),
@@ -164,12 +176,11 @@ fn add_old_activate_script_exports(
         // .tcshrc
         (
             "_flox_activate_tracer",
-            activate_tracer(&context.interpreter_path),
+            activate_tracer(&core.interpreter_path),
         ),
         (
             "_activate_d",
-            context
-                .interpreter_path
+            core.interpreter_path
                 .join("activate.d")
                 .to_string_lossy()
                 .to_string(),
@@ -177,16 +188,16 @@ fn add_old_activate_script_exports(
     ]);
     // Propagate optional variables that are documented as exposed.
     // NB: `generate_*_start_commands()` performs the same logic except for zsh.
-    if let Some(env_project) = context.env_project.as_ref() {
+    if let Some(project) = project {
         exports.insert(
             "FLOX_ENV_PROJECT",
-            env_project.to_string_lossy().to_string(),
+            project.env_project.to_string_lossy().to_string(),
         );
     } else {
         removals.push("FLOX_ENV_PROJECT");
     }
 
-    exports.extend(fixed_vars_to_export(&context.env, vars_from_environment));
+    exports.extend(fixed_vars_to_export(&core.env, vars_from_environment));
 
     command.envs(&exports);
     for var in &removals {

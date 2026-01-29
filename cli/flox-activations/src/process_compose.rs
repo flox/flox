@@ -4,7 +4,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Error, bail};
-use flox_core::activate::context::AttachCtx;
+use flox_core::activate::context::{ActivateCoreCtx, ActivateProjectCtx};
 use flox_core::activations::StartIdentifier;
 use flox_core::process_compose::PROCESS_NEVER_EXIT_NAME;
 use time::OffsetDateTime;
@@ -74,11 +74,12 @@ pub fn start_process_compose_no_services(
     socket_path: &Path,
     log_dir: &Path,
     subsystem_verbosity: u32,
-    attach_ctx: &AttachCtx,
+    core: &ActivateCoreCtx,
+    project: &ActivateProjectCtx,
     start_id: &StartIdentifier,
 ) -> Result<(), Error> {
-    let runtime_dir: &Path = attach_ctx.flox_runtime_dir.as_ref();
-    let dot_flox_path = &attach_ctx.dot_flox_path;
+    let runtime_dir: &Path = core.flox_runtime_dir.as_ref();
+    let dot_flox_path = &project.dot_flox_path;
     let start_state_dir = start_id.state_dir_path(runtime_dir, dot_flox_path)?;
     let config_file = start_id.store_path.join("service-config.yaml");
 
@@ -99,7 +100,8 @@ pub fn start_process_compose_no_services(
     let env_diff = EnvDiff::from_files(&start_state_dir)?;
     apply_activation_env(
         &mut command,
-        attach_ctx.clone(),
+        core,
+        Some(project),
         subsystem_verbosity,
         vars_from_env,
         &env_diff,

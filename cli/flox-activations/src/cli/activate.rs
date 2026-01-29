@@ -28,7 +28,7 @@ use tracing::{debug, error};
 
 use crate::activate_script_builder::assemble_activate_command;
 use crate::attach::{attach, quote_run_args};
-use crate::cli::executive::ExecutiveCtx;
+use crate::cli::executive::ExecutiveStartupCtx;
 use crate::message::updated;
 use crate::process_compose::{
     process_compose_down,
@@ -80,7 +80,7 @@ impl ActivateArgs {
         // Detect invocation type from context or run_args
         let invocation_type = Self::resolve_invocation_type(&mut context.invocation_type, run_args);
 
-        Self::apply_shell_override(&mut context.shell)?;
+        Self::apply_shell_override(&mut context.core.shell)?;
 
         let start_id = self.start_or_attach(
             &context,
@@ -89,24 +89,13 @@ impl ActivateArgs {
             &vars_from_env,
         )?;
 
-        if !context.attach_ctx.services_to_start.is_empty() {
-            let socket_path = context
-                .attach_ctx
-                .flox_services_socket
-                .as_ref()
-                .expect("flox_services_socket must be set to start services");
-            let process_compose_bin = context
-                .attach_ctx
-                .process_compose_bin
-                .as_ref()
-                .expect("process_compose_bin must be set to start services");
+        if !context.project.services_to_start.is_empty() {
             Self::start_services_with_new_process_compose(
-                &context.attach_ctx.flox_runtime_dir,
-                &context.attach_ctx.dot_flox_path,
-                // Unwrapped values that shouldn't be taken from context again.
-                process_compose_bin,
-                socket_path,
-                &context.attach_ctx.services_to_start,
+                &context.core.flox_runtime_dir,
+                &context.project.dot_flox_path,
+                &context.project.process_compose_bin,
+                &context.project.flox_services_socket,
+                &context.project.services_to_start,
             )?;
         }
 
@@ -172,7 +161,7 @@ impl ActivateArgs {
                             formatdoc! {"You are now using the environment '{env_description}'
                                      To stop using this environment, type 'exit'
                                      ",
-                            env_description = context.attach_ctx.env_description,
+                            env_description = context.core.env_description,
                             },
                         );
                     }
@@ -184,7 +173,7 @@ impl ActivateArgs {
                             formatdoc! {"Attached to existing activation of environment '{env_description}'
                                      To stop using this environment, type 'exit'
                                      ",
-                            env_description = context.attach_ctx.env_description,
+                            env_description = context.core.env_description,
                             },
                         );
                     }
@@ -221,17 +210,17 @@ impl ActivateArgs {
         vars_from_env: &VarsFromEnvironment,
     ) -> Result<StartOrAttachResult, anyhow::Error> {
         let activations_json_path = state_json_path(
-            &context.attach_ctx.flox_runtime_dir,
-            &context.attach_ctx.dot_flox_path,
+            &context.core.flox_runtime_dir,
+            &context.project.dot_flox_path,
         );
 
         let (activations_opt, lock) = read_activations_json(&activations_json_path)?;
         let mut activations = activations_opt.unwrap_or_else(|| {
             debug!("no existing activation state, creating new one");
             ActivationState::new(
-                &context.mode,
-                &context.attach_ctx.dot_flox_path,
-                &context.attach_ctx.env,
+                &context.core.mode,
+                &context.project.dot_flox_path,
+                &context.core.env,
             )
         });
 
@@ -239,13 +228,13 @@ impl ActivateArgs {
         if !activations.executive_running() {
             debug!("discarding activation state due to executive not running");
             activations = ActivationState::new(
-                &context.mode,
-                &context.attach_ctx.dot_flox_path,
-                &context.attach_ctx.env,
+                &context.core.mode,
+                &context.project.dot_flox_path,
+                &context.core.env,
             );
         }
 
-        if activations.mode() != &context.mode {
+        if activations.mode() != &context.core.mode {
             let running = activations
                 .running_processes()
                 // State (and thus mode) would have been reset if there was no executive.
@@ -253,14 +242,14 @@ impl ActivateArgs {
 
             return Err(ModeMismatch::from_running_processes(
                 activations.mode().clone(),
-                context.mode.clone(),
+                context.core.mode.clone(),
                 running,
             )
             .into());
         }
 
         let pid = std::process::id() as i32;
-        match activations.start_or_attach(pid, &context.flox_activate_store_path) {
+        match activations.start_or_attach(pid, &context.core.flox_activate_store_path) {
             StartOrAttachResult::Start { start_id } => Self::start(
                 context,
                 subsystem_verbosity,
@@ -294,8 +283,8 @@ impl ActivateArgs {
         lock: LockFile,
     ) -> Result<StartOrAttachResult, anyhow::Error> {
         let start_state_dir = start_id.state_dir_path(
-            &context.attach_ctx.flox_runtime_dir,
-            &context.attach_ctx.dot_flox_path,
+            &context.core.flox_runtime_dir,
+            &context.project.dot_flox_path,
         )?;
         DirBuilder::new()
             .recursive(true)
@@ -409,8 +398,8 @@ impl ActivateArgs {
     ) -> Result<Pid, anyhow::Error> {
         let parent_pid = getpid();
 
-        // Serialize ExecutiveCtx
-        let executive_ctx = ExecutiveCtx {
+        // Serialize ExecutiveStartupCtx
+        let executive_ctx = ExecutiveStartupCtx {
             context: context.clone(),
             parent_pid: parent_pid.as_raw(),
         };
@@ -425,7 +414,7 @@ impl ActivateArgs {
         executive.args([
             "executive",
             "--dot-flox-path",
-            &context.attach_ctx.dot_flox_path.to_string_lossy(),
+            &context.project.dot_flox_path.to_string_lossy(),
             "--executive-ctx",
             &executive_ctx_path.to_string_lossy(),
         ]);

@@ -6,7 +6,12 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Result, anyhow};
-use flox_core::activate::context::{ActivateCtx, InvocationType};
+use flox_core::activate::context::{
+    ActivateCoreCtx,
+    ActivateCtx,
+    ActivateProjectCtx,
+    InvocationType,
+};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use flox_core::activations::StartIdentifier;
 use indoc::formatdoc;
@@ -36,8 +41,8 @@ pub fn attach(
     start_id: StartIdentifier,
 ) -> Result<(), anyhow::Error> {
     let start_state_dir = start_id.state_dir_path(
-        &context.attach_ctx.flox_runtime_dir,
-        &context.attach_ctx.dot_flox_path,
+        &context.core.flox_runtime_dir,
+        &context.project.dot_flox_path,
     )?;
     let diff = EnvDiff::from_files(&start_state_dir)?;
 
@@ -49,7 +54,7 @@ pub fn attach(
         let path = if let Ok(rc_path_str) = std::env::var(STARTUP_SCRIPT_PATH_OVERRIDE_VAR) {
             PathBuf::from(rc_path_str)
         } else {
-            let prefix = format!("flox_rc_{}_", context.shell.name());
+            let prefix = format!("flox_rc_{}_", context.core.shell.name());
             let tmp = tempfile::NamedTempFile::with_prefix_in(prefix, &start_state_dir)?;
             let rc_path = tmp.path().to_path_buf();
             tmp.keep()?;
@@ -58,12 +63,13 @@ pub fn attach(
         rc_path = Some(path);
     }
     let startup_ctx = startup_ctx(
-        context.clone(),
+        context.core.clone(),
+        Some(context.project.clone()),
         invocation_type.clone(),
         rc_path,
         diff.clone(),
         &start_state_dir,
-        &activate_tracer(&context.attach_ctx.interpreter_path),
+        &activate_tracer(&context.core.interpreter_path),
         subsystem_verbosity,
     )?;
 
@@ -98,8 +104,12 @@ pub fn attach(
     }
 }
 
+/// Build startup context for shell configuration.
+/// Used by both normal activations (with project context) and containers (without).
+#[allow(clippy::too_many_arguments)]
 fn startup_ctx(
-    ctx: ActivateCtx,
+    core: ActivateCoreCtx,
+    project: Option<ActivateProjectCtx>,
     invocation_type: InvocationType,
     rc_path: Option<PathBuf>,
     env_diff: EnvDiff,
@@ -117,7 +127,10 @@ fn startup_ctx(
         None
     };
 
-    let args = match ctx.shell {
+    // Get env_project from project context if present (None for containers)
+    let env_project = project.as_ref().map(|e| e.env_project.clone());
+
+    let args = match core.shell {
         ShellWithPath::Bash(_) => {
             let bashrc_path = if let Some(home_dir) = dirs::home_dir() {
                 let bashrc_path = home_dir.join(".bashrc");
@@ -131,11 +144,11 @@ fn startup_ctx(
             };
             StartupArgs::Bash(BashStartupArgs {
                 flox_activate_tracelevel: subsystem_verbosity,
-                activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
-                flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-                flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-                flox_env_project: ctx.attach_ctx.env_project.clone(),
-                flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
+                activate_d: core.interpreter_path.join("activate.d"),
+                flox_env: PathBuf::from(core.env.clone()),
+                flox_env_cache: Some(core.env_cache.clone()),
+                flox_env_project: env_project.clone(),
+                flox_env_description: Some(core.env_description.clone()),
                 is_in_place: invocation_type == InvocationType::InPlace,
                 bashrc_path,
                 flox_sourcing_rc: is_sourcing_rc,
@@ -146,11 +159,11 @@ fn startup_ctx(
         },
         ShellWithPath::Fish(_) => StartupArgs::Fish(FishStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
-            activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
-            flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-            flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-            flox_env_project: ctx.attach_ctx.env_project.clone(),
-            flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
+            activate_d: core.interpreter_path.join("activate.d"),
+            flox_env: PathBuf::from(core.env.clone()),
+            flox_env_cache: Some(core.env_cache.clone()),
+            flox_env_project: env_project.clone(),
+            flox_env_description: Some(core.env_description.clone()),
             is_in_place: invocation_type == InvocationType::InPlace,
             flox_sourcing_rc: is_sourcing_rc,
             flox_activate_tracer: activate_tracer.to_string(),
@@ -159,11 +172,11 @@ fn startup_ctx(
         }),
         ShellWithPath::Tcsh(_) => StartupArgs::Tcsh(TcshStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
-            activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
-            flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-            flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-            flox_env_project: ctx.attach_ctx.env_project.clone(),
-            flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
+            activate_d: core.interpreter_path.join("activate.d"),
+            flox_env: PathBuf::from(core.env.clone()),
+            flox_env_cache: Some(core.env_cache.clone()),
+            flox_env_project: env_project.clone(),
+            flox_env_description: Some(core.env_description.clone()),
             is_in_place: invocation_type == InvocationType::InPlace,
             flox_sourcing_rc: is_sourcing_rc,
             flox_activate_tracer: activate_tracer.to_string(),
@@ -172,11 +185,11 @@ fn startup_ctx(
         }),
         ShellWithPath::Zsh(_) => StartupArgs::Zsh(ZshStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
-            activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
-            flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-            flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-            flox_env_project: ctx.attach_ctx.env_project.clone(),
-            flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
+            activate_d: core.interpreter_path.join("activate.d"),
+            flox_env: PathBuf::from(core.env.clone()),
+            flox_env_cache: Some(core.env_cache.clone()),
+            flox_env_project: env_project.clone(),
+            flox_env_description: Some(core.env_description.clone()),
             clean_up,
         }),
     };
@@ -186,7 +199,8 @@ fn startup_ctx(
         state_dir: state_dir.to_path_buf(),
         env_diff,
         rc_path,
-        act_ctx: ctx,
+        core,
+        project,
     })
 }
 
@@ -249,7 +263,8 @@ fn activate_exec_command(
     };
     apply_activation_env(
         &mut command,
-        startup_ctx.act_ctx.attach_ctx.clone(),
+        &startup_ctx.core,
+        startup_ctx.project.as_ref(),
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
@@ -273,10 +288,11 @@ fn activate_shell_command(
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
 ) -> Result<()> {
-    let mut command = Command::new(startup_ctx.act_ctx.shell.exe_path());
+    let mut command = Command::new(startup_ctx.core.shell.exe_path());
     apply_activation_env(
         &mut command,
-        startup_ctx.act_ctx.attach_ctx.clone(),
+        &startup_ctx.core,
+        startup_ctx.project.as_ref(),
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
@@ -290,7 +306,7 @@ fn activate_shell_command(
     write_to_path(&startup_ctx, &rcfile)?;
     let rcfile = rcfile.to_string_lossy();
 
-    match startup_ctx.act_ctx.shell {
+    match startup_ctx.core.shell {
         ShellWithPath::Bash(_) => {
             // TODO: I think we need to be checking standard input and error, not stdout
             // Per man bash:
@@ -349,8 +365,7 @@ fn activate_shell_command(
             let home = std::env::var("HOME").unwrap_or("".to_string());
             command.env("FLOX_ORIG_HOME", home);
             let tcsh_home = startup_ctx
-                .act_ctx
-                .attach_ctx
+                .core
                 .interpreter_path
                 .join("activate.d/tcsh_home");
             command.env("HOME", tcsh_home.to_string_lossy().to_string());
@@ -367,11 +382,7 @@ fn activate_shell_command(
             {
                 command.env("FLOX_ORIG_ZDOTDIR", zdotdir);
             }
-            let zdotdir = startup_ctx
-                .act_ctx
-                .attach_ctx
-                .interpreter_path
-                .join("activate.d/zdotdir");
+            let zdotdir = startup_ctx.core.interpreter_path.join("activate.d/zdotdir");
             command.env("ZDOTDIR", zdotdir.to_string_lossy().to_string());
             command.env("FLOX_ZSH_INIT_SCRIPT", &*rcfile);
 
@@ -396,10 +407,11 @@ fn activate_interactive(
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
 ) -> Result<()> {
-    let mut command = Command::new(startup_ctx.act_ctx.shell.exe_path());
+    let mut command = Command::new(startup_ctx.core.shell.exe_path());
     apply_activation_env(
         &mut command,
-        startup_ctx.act_ctx.attach_ctx.clone(),
+        &startup_ctx.core,
+        startup_ctx.project.as_ref(),
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
@@ -413,7 +425,7 @@ fn activate_interactive(
     write_to_path(&startup_ctx, &rcfile)?;
     let rcfile = rcfile.to_string_lossy();
 
-    match startup_ctx.act_ctx.shell {
+    match startup_ctx.core.shell {
         ShellWithPath::Bash(_) => {
             if std::io::stdout().is_terminal() {
                 command.args(["--noprofile", "--rcfile", &rcfile]);
@@ -453,8 +465,7 @@ fn activate_interactive(
             let home = std::env::var("HOME").unwrap_or("".to_string());
             command.env("FLOX_ORIG_HOME", home);
             let tcsh_home = startup_ctx
-                .act_ctx
-                .attach_ctx
+                .core
                 .interpreter_path
                 .join("activate.d/tcsh_home");
             command.env("HOME", tcsh_home.to_string_lossy().to_string());
@@ -471,11 +482,7 @@ fn activate_interactive(
             {
                 command.env("FLOX_ORIG_ZDOTDIR", zdotdir);
             }
-            let zdotdir = startup_ctx
-                .act_ctx
-                .attach_ctx
-                .interpreter_path
-                .join("activate.d/zdotdir");
+            let zdotdir = startup_ctx.core.interpreter_path.join("activate.d/zdotdir");
             command.env("ZDOTDIR", zdotdir.to_string_lossy().to_string());
             command.env("FLOX_ZSH_INIT_SCRIPT", &*rcfile);
 
@@ -493,29 +500,29 @@ fn activate_interactive(
 
 /// Used for `eval "$(flox activate)"`
 fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Result<()> {
+    let project = startup_ctx
+        .project
+        .as_ref()
+        .expect("In-place activation requires project context");
     let attach_command = AttachArgs {
         pid: std::process::id() as i32,
-        dot_flox_path: (&startup_ctx.act_ctx.attach_ctx.dot_flox_path).into(),
+        dot_flox_path: (&project.dot_flox_path).into(),
         store_path: start_id.store_path.clone(),
         timestamp: start_id.timestamp.clone(),
         exclusive: AttachExclusiveArgs {
             timeout_ms: Some(5000),
             remove_pid: None,
         },
-        runtime_dir: (&startup_ctx.act_ctx.attach_ctx.flox_runtime_dir).into(),
+        runtime_dir: (&startup_ctx.core.flox_runtime_dir).into(),
     };
 
     // Put a 5 second timeout on the activation
     attach_command.handle()?;
 
-    let legacy_exports = render_legacy_exports(startup_ctx.act_ctx.clone());
+    let legacy_exports = render_legacy_exports(&startup_ctx);
 
-    let exports_for_zsh = if matches!(startup_ctx.act_ctx.shell, ShellWithPath::Zsh(_)) {
-        let zdotdir_path = startup_ctx
-            .act_ctx
-            .attach_ctx
-            .interpreter_path
-            .join("activate.d/zdotdir");
+    let exports_for_zsh = if matches!(startup_ctx.core.shell, ShellWithPath::Zsh(_)) {
+        let zdotdir_path = startup_ctx.core.interpreter_path.join("activate.d/zdotdir");
         let mut exports = String::new();
 
         // TODO: it would probably be better to just not touch ZDOTDIR in
@@ -532,7 +539,7 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
 
         exports.push_str(&format!(
             "export _flox_activate_tracer=\"{}\";\n",
-            activate_tracer(&startup_ctx.act_ctx.attach_ctx.interpreter_path)
+            activate_tracer(&startup_ctx.core.interpreter_path)
         ));
 
         exports
@@ -546,9 +553,9 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
             {exports_for_zsh}
         "#,
         flox_activations = (*FLOX_ACTIVATIONS_BIN).to_string_lossy(),
-        dot_flox_path = startup_ctx.act_ctx.attach_ctx.dot_flox_path.to_string_lossy(),
-        runtime_dir = startup_ctx.act_ctx.attach_ctx.flox_runtime_dir,
-        self_pid_var = Shell::from(startup_ctx.act_ctx.shell.clone()).self_pid_var(),
+        dot_flox_path = project.dot_flox_path.to_string_lossy(),
+        runtime_dir = startup_ctx.core.flox_runtime_dir,
+        self_pid_var = Shell::from(startup_ctx.core.shell.clone()).self_pid_var(),
         store_path = start_id.store_path.to_string_lossy(),
         timestamp = start_id.timestamp,
         pid = std::process::id(),
@@ -566,16 +573,16 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
 
 /// The CLI used to print export statements for in-place activations for
 /// every environment variable set prior to invoking the activate script
-fn render_legacy_exports(context: ActivateCtx) -> String {
+fn render_legacy_exports(ctx: &StartupCtx) -> String {
     // Render the exports in the correct shell dialect.
-    old_cli_envs(context.attach_ctx.clone()).iter()
+    old_cli_envs(&ctx.core, ctx.project.as_ref()).iter()
         .map(|(key, value)| {
             (key, shell_escape::escape(Cow::Borrowed(value)))
             })
             // TODO: we should use a method on Shell here, possibly using
             // shell_escape in the Shell method?
             // But not quoting here is intentional because we already use shell_escape
-            .map(|(key, value)| match context.shell {
+            .map(|(key, value)| match ctx.core.shell {
                 ShellWithPath::Bash(_) => format!("export {key}={value};",),
                 ShellWithPath::Fish(_) => format!("set -gx {key} {value};",),
                 ShellWithPath::Tcsh(_) => format!("setenv {key} {value};",),

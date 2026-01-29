@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
-use flox_core::activate::context::{ActivateCtx, AttachCtx};
+use flox_core::activate::context::{ActivateCoreCtx, ActivateCtx, ActivateProjectCtx};
 use flox_core::activations::{
     activation_state_dir_path,
     read_activations_json,
@@ -42,7 +42,7 @@ use reaper::linux::SubreaperGuard;
 const MONITORING_LOOP_INTERVAL: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExecutiveCtx {
+pub struct ExecutiveStartupCtx {
     pub context: ActivateCtx,
     pub parent_pid: i32,
 }
@@ -63,7 +63,7 @@ pub struct ExecutiveArgs {
 impl ExecutiveArgs {
     pub fn handle(self, subsystem_verbosity: Option<u32>) -> Result<(), anyhow::Error> {
         let contents = fs::read_to_string(&self.executive_ctx)?;
-        let ExecutiveCtx {
+        let ExecutiveStartupCtx {
             context,
             parent_pid,
         } = serde_json::from_str(&contents)?;
@@ -86,9 +86,7 @@ impl ExecutiveArgs {
         debug!("sending SIGUSR1 to parent {}", parent_pid);
         kill(Pid::from_raw(parent_pid), SIGUSR1)?;
 
-        let Some(log_dir) = context.attach_ctx.flox_env_log_dir.clone() else {
-            unreachable!("flox_env_log_dir must be set in activation context");
-        };
+        let log_dir = context.project.flox_env_log_dir.clone();
         let log_file = format!("executive.{}.log", std::process::id());
         logger::init_file_logger(subsystem_verbosity, log_file, &log_dir)
             .context("failed to initialize logger")?;
@@ -107,24 +105,16 @@ impl ExecutiveArgs {
         // let disable_metrics = env::var(FLOX_DISABLE_METRICS_VAR).is_ok();
         // let _sentry_guard = (!disable_metrics).then(sentry::init_sentry);
 
-        // TODO: Use types to group the mutually optional fields for containers.
-        if !context.run_monitoring_loop {
-            debug!("monitoring loop disabled, exiting executive");
-            return Ok(());
-        }
-        let Some(socket_path) = context.attach_ctx.flox_services_socket.clone() else {
-            unreachable!("flox_services_socket must be set in activation context");
-        };
-        let Some(process_compose_bin) = context.attach_ctx.process_compose_bin.clone() else {
-            unreachable!("process_compose_bin must be set in activation context");
-        };
+        let socket_path = context.project.flox_services_socket.clone();
+        let process_compose_bin = context.project.process_compose_bin.clone();
 
         spawn_heartbeat_log();
         spawn_logs_gc_threads(&log_dir);
 
         debug!("starting monitoring loop");
         run_monitoring_loop(
-            context.attach_ctx,
+            context.core.clone(),
+            context.project.clone(),
             signals,
             // Unwrapped values that shouldn't be taken from context again.
             process_compose_bin,
@@ -234,17 +224,18 @@ fn ensure_process_group_leader() -> Result<(), anyhow::Error> {
 /// Monitoring loop that watches activation processes and performs cleanup.
 #[instrument("monitoring", err(Debug), skip_all)]
 fn run_monitoring_loop(
-    // AttachCtx from when the Executive was started.
+    // Core activation context from when the Executive was started.
     // Does NOT represent the most recent attach.
-    initial_attach_ctx: AttachCtx,
+    core: ActivateCoreCtx,
+    project: ActivateProjectCtx,
     mut signals: SignalHandlers,
     process_compose_bin: PathBuf,
     socket_path: PathBuf,
     log_dir: PathBuf,
     subsystem_verbosity: u32,
 ) -> Result<()> {
-    let dot_flox_path = initial_attach_ctx.dot_flox_path.clone();
-    let runtime_dir: PathBuf = initial_attach_ctx.flox_runtime_dir.clone().into();
+    let dot_flox_path = project.dot_flox_path.clone();
+    let runtime_dir: PathBuf = core.flox_runtime_dir.clone().into();
     let state_json_path = state_json_path(&runtime_dir, &dot_flox_path);
 
     let mut watcher = PidWatcher::new(
@@ -314,7 +305,8 @@ fn run_monitoring_loop(
                 &socket_path,
                 &log_dir,
                 subsystem_verbosity,
-                &initial_attach_ctx,
+                &core,
+                &project,
             ) {
                 Ok(Some((activations, lock))) => {
                     write_activations_json(&activations, &state_json_path, lock)?;
@@ -344,7 +336,8 @@ fn handle_start_services_signal(
     socket_path: &Path,
     log_dir: &Path,
     subsystem_verbosity: u32,
-    attach_ctx: &AttachCtx,
+    core: &ActivateCoreCtx,
+    project: &ActivateProjectCtx,
 ) -> Result<Option<LockedActivationState>> {
     let (mut activations, lock) = locked_activations;
 
@@ -371,7 +364,8 @@ fn handle_start_services_signal(
         socket_path,
         log_dir,
         subsystem_verbosity,
-        attach_ctx,
+        core,
+        project,
         &ready_start_id,
     )?;
 
@@ -431,28 +425,38 @@ mod test {
     use super::watcher::test::{start_process, stop_process};
     use super::*;
 
-    /// Create a minimal AttachCtx for testing.
+    /// Create minimal context for testing.
     /// The actual values don't matter since tests don't trigger SIGUSR1.
-    fn test_attach_ctx(dot_flox_path: &Path, runtime_dir: &Path, flox_env: &str) -> AttachCtx {
-        AttachCtx {
-            dot_flox_path: dot_flox_path.to_path_buf(),
+    fn test_context(
+        dot_flox_path: &Path,
+        runtime_dir: &Path,
+        flox_env: &str,
+    ) -> (ActivateCoreCtx, ActivateProjectCtx) {
+        let core = ActivateCoreCtx {
+            flox_activate_store_path: "store_path".to_string(),
+            mode: ActivateMode::default(),
+            shell: shell_gen::ShellWithPath::Bash(PathBuf::from("/bin/bash")),
             env: flox_env.to_string(),
-            env_project: None,
-            env_cache: dot_flox_path.join("cache"),
             env_description: "test".to_string(),
-            flox_active_environments: "".to_string(),
-            flox_env_log_dir: None,
+            env_cache: dot_flox_path.join("cache"),
+            flox_runtime_dir: runtime_dir.to_string_lossy().to_string(),
+            interpreter_path: PathBuf::from("/nix/store/fake"),
             prompt_color_1: "".to_string(),
             prompt_color_2: "".to_string(),
             flox_prompt_environments: "".to_string(),
             set_prompt: false,
-            flox_runtime_dir: runtime_dir.to_string_lossy().to_string(),
             flox_env_cuda_detection: "".to_string(),
-            flox_services_socket: None,
+            flox_active_environments: "".to_string(),
+        };
+        let project = ActivateProjectCtx {
+            dot_flox_path: dot_flox_path.to_path_buf(),
+            env_project: dot_flox_path.to_path_buf(),
+            flox_env_log_dir: PathBuf::from("/tmp/test_log_dir"),
+            flox_services_socket: PathBuf::from("/does_not_exist"),
+            process_compose_bin: PathBuf::from("/nix/store/fake-process-compose"),
             services_to_start: Vec::new(),
-            interpreter_path: PathBuf::from("/nix/store/fake"),
-            process_compose_bin: Some(PathBuf::from("/nix/store/fake-process-compose")),
-        }
+        };
+        (core, project)
     }
 
     #[test]
@@ -485,14 +489,16 @@ mod test {
 
         stop_process(proc);
 
-        let attach_ctx = test_attach_ctx(&dot_flox_path, runtime_dir, &flox_env.to_string_lossy());
+        let (core, executive) =
+            test_context(&dot_flox_path, runtime_dir, &flox_env.to_string_lossy());
 
         run_monitoring_loop(
-            attach_ctx,
+            core,
+            executive.clone(),
             SignalHandlers::new_for_test().unwrap(),
-            PathBuf::from("/nix/store/fake-process-compose"),
-            PathBuf::from("/does_not_exist"),
-            PathBuf::from("/tmp/test_log_dir"),
+            executive.process_compose_bin.clone(),
+            executive.flox_services_socket.clone(),
+            executive.flox_env_log_dir.clone(),
             0,
         )
         .unwrap();
@@ -536,14 +542,16 @@ mod test {
         let signals = SignalHandlers::new_for_test().unwrap();
         signals.trigger_termination();
 
-        let attach_ctx = test_attach_ctx(&dot_flox_path, runtime_dir, &flox_env.to_string_lossy());
+        let (core, executive) =
+            test_context(&dot_flox_path, runtime_dir, &flox_env.to_string_lossy());
 
         let result = run_monitoring_loop(
-            attach_ctx,
+            core,
+            executive.clone(),
             signals,
-            PathBuf::from("/nix/store/fake-process-compose"),
-            PathBuf::from("/does_not_exist"),
-            PathBuf::from("/tmp/test_log_dir"),
+            executive.process_compose_bin.clone(),
+            executive.flox_services_socket.clone(),
+            executive.flox_env_log_dir.clone(),
             0,
         );
 

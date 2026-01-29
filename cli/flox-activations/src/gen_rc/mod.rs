@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use flox_core::activate::context::ActivateCtx;
+use flox_core::activate::context::{ActivateCoreCtx, ActivateProjectCtx};
 
 use crate::env_diff::EnvDiff;
 use crate::gen_rc::bash::BashStartupArgs;
@@ -21,11 +21,15 @@ pub enum StartupArgs {
     Zsh(ZshStartupArgs),
 }
 
+/// Context for shell startup, shared between normal and container activations.
 #[derive(Debug)]
 pub struct StartupCtx {
     pub args: StartupArgs,
     pub rc_path: Option<PathBuf>,
     pub env_diff: EnvDiff,
     pub state_dir: PathBuf,
-    pub act_ctx: ActivateCtx,
+    /// Core activation context (always present)
+    pub core: ActivateCoreCtx,
+    /// Project context (None for containers)
+    pub project: Option<ActivateProjectCtx>,
 }
