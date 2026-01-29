@@ -103,27 +103,22 @@ let
     };
     invocation_type = null;
     remove_after_reading = false;
-    run_monitoring_loop = false;
     flox_activate_store_path = "${environment}";
     attach_ctx = {
-      dot_flox_path = "${environment}"; # FIXME: Incorrect for containers.
+      dot_flox_path = "${environment}"; # FIXME: Move to project.
       env = "${environment}"; # FIXME: Incorrect for containers.
       env_description = "${containerName}";
       env_cache = "/tmp";
-      flox_env_log_dir = null;
       flox_runtime_dir = "/run/flox";
       prompt_color_1 = "99";
       prompt_color_2 = "141";
       interpreter_path = "${interpreterPath}";
       flox_prompt_environments = "floxenv";
       set_prompt = true;
-      services_to_start = [ ];
-      process_compose_bin = null;
-      flox_services_socket = null;
       flox_env_cuda_detection = "0";
       flox_active_environments = "[]";
-      env_project = null;
     };
+    project_ctx = null;
   };
 
   activateCtxJson = builtins.toJSON activateCtx;

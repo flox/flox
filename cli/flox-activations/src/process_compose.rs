@@ -4,7 +4,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Error, bail};
-use flox_core::activate::context::AttachCtx;
+use flox_core::activate::context::{AttachCtx, AttachProjectCtx};
 use flox_core::activations::StartIdentifier;
 use flox_core::process_compose::PROCESS_NEVER_EXIT_NAME;
 use time::OffsetDateTime;
@@ -70,17 +70,16 @@ pub fn wait_for_socket_ready(
 /// Start process-compose with only the flox_never_exit service.
 /// This allows services to be started later via the socket API.
 pub fn start_process_compose_no_services(
-    process_compose_bin: &Path,
-    socket_path: &Path,
-    log_dir: &Path,
     subsystem_verbosity: u32,
     attach_ctx: &AttachCtx,
+    project: &AttachProjectCtx,
     start_id: &StartIdentifier,
 ) -> Result<(), Error> {
     let runtime_dir: &Path = attach_ctx.flox_runtime_dir.as_ref();
     let dot_flox_path = &attach_ctx.dot_flox_path;
     let start_state_dir = start_id.state_dir_path(runtime_dir, dot_flox_path)?;
     let config_file = start_id.store_path.join("service-config.yaml");
+    let socket_path = project.flox_services_socket.as_path();
 
     // Generate timestamped log file name
     let format =
@@ -88,9 +87,11 @@ pub fn start_process_compose_no_services(
     let timestamp = OffsetDateTime::now_local()?
         .format(&format)
         .context("failed to format timestamp")?;
-    let log_file = log_dir.join(format!("services.{}.log", timestamp));
+    let log_file = project
+        .flox_env_log_dir
+        .join(format!("services.{}.log", timestamp));
 
-    let mut command = Command::new(process_compose_bin);
+    let mut command = Command::new(&project.process_compose_bin);
 
     // The executive inherits the pre-activation environment from activate,
     // so these values are the same as what the initial activation captured.
@@ -99,7 +100,8 @@ pub fn start_process_compose_no_services(
     let env_diff = EnvDiff::from_files(&start_state_dir)?;
     apply_activation_env(
         &mut command,
-        attach_ctx.clone(),
+        attach_ctx,
+        Some(project),
         subsystem_verbosity,
         vars_from_env,
         &env_diff,

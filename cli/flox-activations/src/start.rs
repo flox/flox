@@ -77,7 +77,7 @@ pub fn start(
     }
 
     let mut start_command = assemble_activate_command(
-        context.clone(),
+        context,
         subsystem_verbosity,
         vars_from_env.clone(),
         &start_state_dir,
@@ -162,7 +162,7 @@ fn signal_new_process_compose(
 fn spawn_executive(context: &ActivateCtx, start_state_dir: &Path) -> Result<Pid, anyhow::Error> {
     let parent_pid = getpid();
 
-    // Serialize ExecutiveCtx
+    // Serialize ExecutiveStartupCtx
     let executive_ctx = ExecutiveCtx {
         context: context.clone(),
         parent_pid: parent_pid.as_raw(),

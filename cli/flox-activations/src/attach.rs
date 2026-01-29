@@ -57,13 +57,14 @@ pub fn attach(
         };
         rc_path = Some(path);
     }
+    let tracer = activate_tracer(&context.attach_ctx.interpreter_path);
     let startup_ctx = startup_ctx(
-        context.clone(),
+        context,
         invocation_type.clone(),
         rc_path,
         diff.clone(),
         &start_state_dir,
-        &activate_tracer(&context.attach_ctx.interpreter_path),
+        &tracer,
         subsystem_verbosity,
     )?;
 
@@ -98,6 +99,8 @@ pub fn attach(
     }
 }
 
+/// Build startup context for shell configuration.
+/// Used by both normal activations (with project context) and containers (without).
 fn startup_ctx(
     ctx: ActivateCtx,
     invocation_type: InvocationType,
@@ -117,6 +120,9 @@ fn startup_ctx(
         None
     };
 
+    // Get env_project from project context if present (None for containers)
+    let env_project = ctx.project_ctx.as_ref().map(|e| e.env_project.clone());
+
     let args = match ctx.shell {
         ShellWithPath::Bash(_) => {
             let bashrc_path = if let Some(home_dir) = dirs::home_dir() {
@@ -134,7 +140,7 @@ fn startup_ctx(
                 activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
                 flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
                 flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-                flox_env_project: ctx.attach_ctx.env_project.clone(),
+                flox_env_project: env_project.clone(),
                 flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
                 is_in_place: invocation_type == InvocationType::InPlace,
                 bashrc_path,
@@ -149,7 +155,7 @@ fn startup_ctx(
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
             flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-            flox_env_project: ctx.attach_ctx.env_project.clone(),
+            flox_env_project: env_project.clone(),
             flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
             is_in_place: invocation_type == InvocationType::InPlace,
             flox_sourcing_rc: is_sourcing_rc,
@@ -162,7 +168,7 @@ fn startup_ctx(
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
             flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-            flox_env_project: ctx.attach_ctx.env_project.clone(),
+            flox_env_project: env_project.clone(),
             flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
             is_in_place: invocation_type == InvocationType::InPlace,
             flox_sourcing_rc: is_sourcing_rc,
@@ -175,7 +181,7 @@ fn startup_ctx(
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
             flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-            flox_env_project: ctx.attach_ctx.env_project.clone(),
+            flox_env_project: env_project.clone(),
             flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
             clean_up,
         }),
@@ -249,7 +255,8 @@ fn activate_exec_command(
     };
     apply_activation_env(
         &mut command,
-        startup_ctx.act_ctx.attach_ctx.clone(),
+        &startup_ctx.act_ctx.attach_ctx,
+        startup_ctx.act_ctx.project_ctx.as_ref(),
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
@@ -276,7 +283,8 @@ fn activate_shell_command(
     let mut command = Command::new(startup_ctx.act_ctx.shell.exe_path());
     apply_activation_env(
         &mut command,
-        startup_ctx.act_ctx.attach_ctx.clone(),
+        &startup_ctx.act_ctx.attach_ctx,
+        startup_ctx.act_ctx.project_ctx.as_ref(),
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
@@ -399,7 +407,8 @@ fn activate_interactive(
     let mut command = Command::new(startup_ctx.act_ctx.shell.exe_path());
     apply_activation_env(
         &mut command,
-        startup_ctx.act_ctx.attach_ctx.clone(),
+        &startup_ctx.act_ctx.attach_ctx,
+        startup_ctx.act_ctx.project_ctx.as_ref(),
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
@@ -508,7 +517,7 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
     // Put a 5 second timeout on the activation
     attach_command.handle()?;
 
-    let legacy_exports = render_legacy_exports(startup_ctx.act_ctx.clone());
+    let legacy_exports = render_legacy_exports(&startup_ctx.act_ctx);
 
     let exports_for_zsh = if matches!(startup_ctx.act_ctx.shell, ShellWithPath::Zsh(_)) {
         let zdotdir_path = startup_ctx
@@ -566,22 +575,21 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
 
 /// The CLI used to print export statements for in-place activations for
 /// every environment variable set prior to invoking the activate script
-fn render_legacy_exports(context: ActivateCtx) -> String {
+fn render_legacy_exports(context: &ActivateCtx) -> String {
     // Render the exports in the correct shell dialect.
-    old_cli_envs(context.attach_ctx.clone()).iter()
-        .map(|(key, value)| {
-            (key, shell_escape::escape(Cow::Borrowed(value)))
-            })
-            // TODO: we should use a method on Shell here, possibly using
-            // shell_escape in the Shell method?
-            // But not quoting here is intentional because we already use shell_escape
-            .map(|(key, value)| match context.shell {
-                ShellWithPath::Bash(_) => format!("export {key}={value};",),
-                ShellWithPath::Fish(_) => format!("set -gx {key} {value};",),
-                ShellWithPath::Tcsh(_) => format!("setenv {key} {value};",),
-                ShellWithPath::Zsh(_) => format!("export {key}={value};",),
-            })
-            .join("\n")
+    old_cli_envs(&context.attach_ctx, context.project_ctx.as_ref())
+        .iter()
+        .map(|(key, value)| (key, shell_escape::escape(Cow::Borrowed(value))))
+        // TODO: we should use a method on Shell here, possibly using
+        // shell_escape in the Shell method?
+        // But not quoting here is intentional because we already use shell_escape
+        .map(|(key, value)| match context.shell {
+            ShellWithPath::Bash(_) => format!("export {key}={value};",),
+            ShellWithPath::Fish(_) => format!("set -gx {key} {value};",),
+            ShellWithPath::Tcsh(_) => format!("setenv {key} {value};",),
+            ShellWithPath::Zsh(_) => format!("export {key}={value};",),
+        })
+        .join("\n")
 }
 
 /// Quote run args so that words don't get split,

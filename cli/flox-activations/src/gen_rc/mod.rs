@@ -21,6 +21,7 @@ pub enum StartupArgs {
     Zsh(ZshStartupArgs),
 }
 
+/// Context for shell startup, shared between normal and container activations.
 #[derive(Debug)]
 pub struct StartupCtx {
     pub args: StartupArgs,

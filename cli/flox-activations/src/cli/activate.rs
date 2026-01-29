@@ -97,24 +97,16 @@ impl ActivateArgs {
             &vars_from_env,
         )?;
 
-        if !context.attach_ctx.services_to_start.is_empty() {
-            let socket_path = context
-                .attach_ctx
-                .flox_services_socket
-                .as_ref()
-                .expect("flox_services_socket must be set to start services");
-            let process_compose_bin = context
-                .attach_ctx
-                .process_compose_bin
-                .as_ref()
-                .expect("process_compose_bin must be set to start services");
+        // Only start services if project context exists
+        if let Some(project) = &context.project_ctx
+            && !project.services_to_start.is_empty()
+        {
             start_services_with_new_process_compose(
                 &context.attach_ctx.flox_runtime_dir,
                 &context.attach_ctx.dot_flox_path,
-                // Unwrapped values that shouldn't be taken from context again.
-                process_compose_bin,
-                socket_path,
-                &context.attach_ctx.services_to_start,
+                &project.process_compose_bin,
+                &project.flox_services_socket,
+                &project.services_to_start,
             )?;
         }
 
