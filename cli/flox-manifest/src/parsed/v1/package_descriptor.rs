@@ -2,7 +2,6 @@ use flox_core::data::System;
 #[cfg(any(test, feature = "tests"))]
 use flox_test_utils::proptest::{
     alphanum_string,
-    btree_map_strategy,
     optional_string,
     optional_vec_of_strings,
     vec_of_strings,

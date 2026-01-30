@@ -8,6 +8,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::compose::WarningWithContext;
+use crate::parsed::PackageLookup;
 use crate::parsed::common::IncludeDescriptor;
 use crate::{Deserialized, Manifest, ManifestError};
 
@@ -47,7 +48,12 @@ impl Compose {
     ) -> Result<Option<LockedInclude>, ManifestError> {
         // Reverse of merge order so that we return the highest priority match.
         for include in includes.iter().rev() {
-            match include.manifest.get_install_ids(vec![package.to_string()]) {
+            let pkgs = vec![package.to_string()];
+            let res = match &include.manifest.inner.original_parsed {
+                crate::Parsed::V1(manifest) => manifest.get_install_ids(pkgs),
+                crate::Parsed::V1_9_0(manifest) => manifest.get_install_ids(pkgs),
+            };
+            match res {
                 Ok(_) => return Ok(Some(include.clone())),
                 Err(ManifestError::PackageNotFound(_)) => continue,
                 Err(ManifestError::MultiplePackagesMatch(_, _)) => continue,
@@ -63,7 +69,10 @@ impl Compose {
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct LockedInclude {
     pub manifest: Manifest<Deserialized>,
-    #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "alphanum_string(5)")
+    )]
     pub name: String,
     pub descriptor: IncludeDescriptor,
     // TODO: Record generation if/when:

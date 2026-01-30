@@ -114,7 +114,7 @@ pub struct Hook {
     /// A script that is run at activation time,
     /// in a flox provided bash shell
     #[cfg_attr(
-        test,
+        any(test, feature = "tests"),
         proptest(strategy = "proptest::option::of(alphanum_and_whitespace_string(5))")
     )]
     pub(crate) on_activate: Option<String>,

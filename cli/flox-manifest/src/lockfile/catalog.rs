@@ -13,7 +13,7 @@ use crate::parsed::latest::PackageDescriptorCatalog;
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct LockedPackageCatalog {
     // region: original fields from the service
     // These fields are copied from the generated struct.
@@ -28,9 +28,9 @@ pub struct LockedPackageCatalog {
     pub pname: String,
     pub rev: String,
     pub rev_count: i64,
-    #[cfg_attr(test, proptest(strategy = "chrono_strat()"))]
+    #[cfg_attr(any(test, feature = "tests"), proptest(strategy = "chrono_strat()"))]
     pub rev_date: chrono::DateTime<chrono::offset::Utc>,
-    #[cfg_attr(test, proptest(strategy = "chrono_strat()"))]
+    #[cfg_attr(any(test, feature = "tests"), proptest(strategy = "chrono_strat()"))]
     pub scrape_date: chrono::DateTime<chrono::offset::Utc>,
     pub stabilities: Option<Vec<String>>,
     pub unfree: Option<bool>,
