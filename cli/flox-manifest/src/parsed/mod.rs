@@ -43,37 +43,100 @@ pub(crate) trait SkipSerializing {
     fn skip_serializing(&self) -> bool;
 }
 
+// The following trait and macro need explanation.
+//
+// When we deserialize a lockfile, we then sometimes query the manifests contained
+// within it (e.g. for composition). The different manifest schemas are so
+// painfully similar, and yet because they're different types we can't just
+// write a single method that does e.g. `mymanifest.install.inner().some_operation()`.
+//
+// The options are:
+// - Require a lockfile be present for every single operation so that we can
+//   migrate in all cases and therefore be able to rely on a single manifest
+//   schema. Painful. Bad. Not good.
+// - Create some kind of generic interface that is able to use the fact that
+//   the structure is extremely similar between manifest schemas, while papering
+//   over the fact that they're actually different types.
+//
+// We're opting to do the latter option via this trait and a macro. The macro
+// takes a module path as the first argument, and the manifest type name as the
+// second argument. Then it relies on the fact that (so far) all of the manifest
+// modules have a consistent layout:
+// - <schema module>
+//   - <manifest type>
+//   - `package_descriptor` (module)
+//     - `ManifestPackageDescriptor` (type)
+//     - `PackageDescriptorCatalog` (type)
+//     - `PackageDescriptorFlake` (type)
+//
+// If we know the module path and the manifest type, we can interpolate them
+// into the trait implementation via the macro. Yes it's gross, but it's better
+// than the alternative.
+
+/// An interface for looking up packages in a manifest.
 pub trait PackageLookup {
     type PkgDescriptor;
     type CatalogDescriptor;
     type FlakeDescriptor;
 
+    /// Locates the package descriptor with the provided install ID.
     fn pkg_descriptor_with_id(&self, id: impl AsRef<str>) -> Option<Self::PkgDescriptor>;
+
+    /// Locates the catalog package descriptor with the provided install ID,
+    /// returning `None` if there was a package descriptor of another kind
+    /// with the desired install ID.
     fn catalog_descriptor_with_id(&self, id: impl AsRef<str>) -> Option<Self::CatalogDescriptor>;
+
+    /// Locates the flake package descriptor with the provided install ID,
+    /// returning `None` if there was a package descriptor of another kind
+    /// with the desired install ID.
     fn flake_pkg_descriptor_with_id(&self, id: impl AsRef<str>) -> Option<Self::PkgDescriptor>;
+
+    /// Returns a sequence of install IDs and associated package descriptors
+    /// that are in the `toplevel` group of the manifest.
     fn pkg_descriptors_in_toplevel_group(&self) -> Vec<(String, Self::PkgDescriptor)>;
+
+    /// Returns a sequence of install IDs and associated package descriptors
+    /// that are in a package group with the provided name.
     fn pkg_descriptors_in_named_group(
         &self,
         name: impl AsRef<str>,
     ) -> Vec<(String, Self::PkgDescriptor)>;
+
+    /// Returns `true` if an install ID or package group is found with the
+    /// provided name.
     fn pkg_or_group_found_in_manifest(&self, name: impl AsRef<str>) -> bool;
+
+    /// Returns `true` if the package belongs to a non-empty package group
+    /// other than `toplevel`.
     fn pkg_belongs_to_non_empty_named_group(
         &self,
         pkg: impl AsRef<str>,
     ) -> Result<Option<String>, ManifestError>;
+
+    /// Returns `true` if the `toplevel` package group is non-empty and contains
+    /// the provided package name.
     fn pkg_belongs_to_non_empty_toplevel_group(
         &self,
         pkg: impl AsRef<str>,
     ) -> Result<bool, ManifestError>;
+
+    /// Who knows what this does
     fn get_install_ids(&self, packages: Vec<String>) -> Result<Vec<String>, ManifestError>;
 }
 
 macro_rules! impl_pkg_lookup {
-    ($manifest_type:ty, $pkg_descriptor_type:ty, $catalog_descriptor_type:ty, $flake_descriptor_type:ty) => {
-        impl crate::parsed::PackageLookup for $manifest_type {
-            type CatalogDescriptor = $catalog_descriptor_type;
-            type FlakeDescriptor = $flake_descriptor_type;
-            type PkgDescriptor = $pkg_descriptor_type;
+    ($manifest_module:path, $manifest:ty) => {
+        // This `use` is necessary because you can't interpolate on either side
+        // of a `path` fragment (you'll get an error). So, in order to be able
+        // to refer to things inside the schema module we need to create an
+        // alias (`concrete`) that we _can_ put `::` next to without the
+        // compiler complaining.
+        use $manifest_module as concrete;
+        impl crate::parsed::PackageLookup for $manifest {
+            type CatalogDescriptor = concrete::package_descriptor::PackageDescriptorCatalog;
+            type FlakeDescriptor = concrete::package_descriptor::PackageDescriptorFlake;
+            type PkgDescriptor = concrete::package_descriptor::ManifestPackageDescriptor;
 
             /// Get the package descriptor with the specified install_id.
             fn pkg_descriptor_with_id(&self, id: impl AsRef<str>) -> Option<Self::PkgDescriptor> {
@@ -108,7 +171,7 @@ macro_rules! impl_pkg_lookup {
                     .inner()
                     .iter()
                     .filter(|(_, desc)| {
-                        let ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
+                        let ManifestPackageDescriptor::Catalog(Self::CatalogDescriptor {
                             pkg_group,
                             ..
                         }) = desc
@@ -131,7 +194,7 @@ macro_rules! impl_pkg_lookup {
                     .inner()
                     .iter()
                     .filter(|(_, desc)| {
-                        let ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
+                        let ManifestPackageDescriptor::Catalog(Self::CatalogDescriptor {
                             pkg_group,
                             ..
                         }) = desc
@@ -150,7 +213,8 @@ macro_rules! impl_pkg_lookup {
             /// Check whether the specified name is either an install_id or group name.
             fn pkg_or_group_found_in_manifest(&self, name: impl AsRef<str>) -> bool {
                 self.install.inner().iter().any(|(id, desc)| {
-                    let group = if let $pkg_descriptor_type::Catalog(catalog) = desc {
+                    let group = if let concrete::ManifestPackageDescriptor::Catalog(catalog) = desc
+                    {
                         catalog.pkg_group.as_deref()
                     } else {
                         None
@@ -174,7 +238,7 @@ macro_rules! impl_pkg_lookup {
                     .get(pkg)
                     .ok_or(ManifestError::PkgOrGroupNotFound(pkg.to_string()))?;
 
-                let ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
+                let ManifestPackageDescriptor::Catalog(Self::CatalogDescriptor {
                     pkg_group, ..
                 }) = descriptor
                 else {
@@ -184,7 +248,7 @@ macro_rules! impl_pkg_lookup {
                 let Some(group) = pkg_group else {
                     return Ok(None);
                 };
-                let pkgs = pkg_descriptors_in_named_group(group, descriptors);
+                let pkgs = self.pkg_descriptors_in_named_group(group);
                 let other_pkgs_in_group = pkgs.iter().any(|(id, _)| id != pkg);
                 if other_pkgs_in_group {
                     Ok(Some(group.clone()))
@@ -204,7 +268,7 @@ macro_rules! impl_pkg_lookup {
                 descriptors
                     .get(pkg)
                     .ok_or(ManifestError::PkgOrGroupNotFound(pkg.to_string()))?;
-                let pkgs = pkg_descriptors_in_toplevel_group(descriptors);
+                let pkgs = self.pkg_descriptors_in_toplevel_group();
                 let self_in_toplevel_group = pkgs.iter().any(|(id, _)| id == pkg);
                 let other_toplevel_packages_exist = pkgs.iter().any(|(id, _)| id != pkg);
                 Ok(self_in_toplevel_group && other_toplevel_packages_exist)
