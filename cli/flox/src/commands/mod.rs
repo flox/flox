@@ -388,21 +388,17 @@ impl FloxArgs {
         };
 
         // Wait for either an interrupting signal or completion of the cli work
-        let result = tokio::task::LocalSet::new()
-            .run_until(async {
-                tokio::select! {
-                    _ = tokio::task::spawn_local(signal_handler) => {
-                        // TODO:
-                        // For now we rely on subprocesses to inherit `flox` process group
-                        // and thus being sent ctrl_c signals in sync with flox itself.
-                        // If we do need more control here,
-                        // we can find process children and propagate signals manually.
-                        Err(anyhow!("user interrupted process"))
-                    }
-                    result = tokio::task::spawn_local(cli_worker) => result?
-                }
-            })
-            .await;
+        let result = tokio::select! {
+            _ = tokio::task::spawn(signal_handler) => {
+                // TODO:
+                // For now we rely on subprocesses to inherit `flox` process group
+                // and thus being sent ctrl_c signals in sync with flox itself.
+                // If we do need more control here,
+                // we can find process children and propagate signals manually.
+                Err(anyhow!("user interrupted process"))
+            }
+            result = tokio::task::spawn(cli_worker) => result?
+        };
 
         // Remove tempdirs
         if (self.debug || matches!(self.verbosity, Verbosity::Verbose(1..))) && keep_tempfiles {
