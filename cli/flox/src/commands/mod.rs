@@ -397,6 +397,8 @@ impl FloxArgs {
 
         // Wait for either an interrupting signal or completion of the cli work
         let result =
+            // tokio::task::LocalSet::new()
+            // .run_until(async {
                 tokio::select! {
                     _ = tokio::task::spawn(signal_handler) => {
                         // TODO:
@@ -408,6 +410,8 @@ impl FloxArgs {
                     }
                     result = tokio::task::spawn(cli_worker) => result?
                 };
+
+        // .await;
 
         // Remove tempdirs
         if (self.debug || matches!(self.verbosity, Verbosity::Verbose(1..))) && keep_tempfiles {
@@ -727,7 +731,7 @@ enum ShareCommands {
 impl ShareCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
-            ShareCommands::Build(args) => args.handle(flox).await?,
+            ShareCommands::Build(args) => args.handle(config, flox).await?,
             ShareCommands::Publish(args) => args.handle(config, flox).await?,
             ShareCommands::Push(args) => args.handle(flox).await?,
             ShareCommands::Pull(args) => args.handle(flox).await?,

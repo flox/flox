@@ -56,6 +56,24 @@ let
         }
       );
 
+      fetchFloxHubCatalog = lib.mapAttrsRecursiveCond (as: (as ? "type")) (
+        path: lock:
+        let
+          tree = builtins.fetchTree lock.locked_url;
+          dotFlox = ".flox";
+          pkgsDir = "${tree.outPath}/${dotFlox}/pkgs";
+
+          instantiated = lib.nef.instantiate {
+            inherit nixpkgs;
+            pkgsDir = pkgsDir;
+          };
+
+          package = lib.getAttrFromPath path instantiated.reflect.packages;
+
+        in
+        package
+      ) lockedCatalogSpec.packages;
+
     in
     {
       inherit (lockedCatalogSpec) type;
@@ -63,6 +81,7 @@ let
     // (
       {
         "nix" = fetchNixCatalog;
+        "floxhub".packages = fetchFloxHubCatalog;
       }
       .${lockedCatalogSpec.type}
     )
@@ -73,6 +92,7 @@ let
       _: catalogInstance:
       {
         "nix" = catalogInstance.reflect.packages;
+        "floxhub" = catalogInstance.packages;
       }
       .${catalogInstance.type}
     ) catalogInstances;

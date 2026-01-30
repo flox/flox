@@ -1,9 +1,11 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
+use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use indexmap::IndexMap;
+use serde::de::Visitor;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -13,11 +15,13 @@ use crate::{Name, nix};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 enum CatalogType {
+    #[serde(rename = "floxhub")]
+    FloxHub,
     #[serde(untagged)]
     Nix(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 enum CatalogSpec {
     Full {
@@ -120,6 +124,18 @@ pub fn lock_config(
         .entered();
 
         let locked_catalog = match catalog {
+            CatalogSpec::Full {
+                type_: CatalogType::FloxHub,
+                ..
+            } => {
+                let snapshot = tokio::task::block_in_place(|| {
+                    let rt = tokio::runtime::Handle::current();
+
+                    rt.block_on(crate::catalog::lock_catalog(name, catalog_url, auth_token))
+                })?;
+
+                LockedCatalog::FloxHub(snapshot)
+            },
             nix_spec => {
                 let catalog_url = nix_spec.to_url()?;
                 let locked_catalog = lock_url(&catalog_url)?;

@@ -10,6 +10,8 @@ use crate::Name;
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type")]
 pub(crate) enum LockedCatalog {
+    #[serde(rename = "floxhub")]
+    FloxHub(crate::catalog::CatalogSnapshot),
     #[serde(rename = "nix")]
     Nix(serde_json::Value),
 }
