@@ -1,6 +1,7 @@
 pub mod errors;
 pub mod gomap;
 pub mod guard;
+pub mod invocation_sources;
 pub mod logging;
 
 use std::fmt::{Display, Write};
@@ -12,20 +13,14 @@ use std::time::SystemTime;
 use std::{env, fs, io};
 
 pub use flox_core::traceable_path;
+// Re-export invocation sources for backward compatibility
+pub use invocation_sources::INVOCATION_SOURCES;
 use serde::Serialize;
 use thiserror::Error;
 use tracing::{debug, trace};
 use walkdir;
 
 use self::errors::IoError;
-
-/// Whether the CLI is being run in CI
-/// We could probably be more thorough about what we're checking,
-/// but for now just use the `CI` environment variable
-pub static IN_CI: LazyLock<bool> = LazyLock::new(|| env::var("CI").is_ok());
-
-/// Whether the CLI is being run in a flox containerd context
-pub static IN_CONTAINERD: LazyLock<bool> = LazyLock::new(|| env::var("FLOX_CONTAINERD").is_ok());
 
 pub static FLOX_INTERPRETER: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(env::var("FLOX_INTERPRETER").unwrap_or(env!("FLOX_INTERPRETER").to_string()))
