@@ -287,6 +287,25 @@ impl FloxmetaBranch {
     pub fn compare_remote(&self) -> Result<BranchOrd, FloxmetaBranchError> {
         compare_branches(&self.floxmeta.git, self.branch(), self.remote_branch())
     }
+
+    /// Fetch the remote state and compare it with the local branch.
+    ///
+    /// This combines [`Self::fetch_remote_state`] and [`Self::compare_remote`].
+    /// If the upstream is not found, returns [`BranchOrd::Ahead`] since push will recreate it.
+    pub fn fetch_and_compare_remote(
+        &self,
+        flox: &Flox,
+        pointer: &ManagedPointer,
+    ) -> Result<BranchOrd, FloxmetaBranchError> {
+        match self.fetch_remote_state(flox, pointer) {
+            Err(FloxmetaBranchError::UpstreamNotFound { .. }) => {
+                debug!("Upstream environment was deleted.");
+                Ok(BranchOrd::Ahead)
+            },
+            Err(e) => Err(e),
+            Ok(_) => self.compare_remote(),
+        }
+    }
 }
 
 /// Acquire exclusive lock on floxmeta directory
