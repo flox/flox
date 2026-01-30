@@ -166,10 +166,6 @@ fn add_old_activate_script_exports(
         ),
         ("FLOX_ENV_DESCRIPTION", context.env_description.clone()),
         (
-            "_FLOX_DOT_FLOX_PATH",
-            context.dot_flox_path.to_string_lossy().to_string(),
-        ),
-        (
             "_FLOX_START_STATE_DIR",
             start_id
                 .state_dir_path(&context.flox_runtime_dir, &context.dot_flox_path)
