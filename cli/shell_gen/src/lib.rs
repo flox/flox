@@ -120,11 +120,12 @@ impl Display for Shell {
 impl Shell {
     /// Set a shell variable that is not exported
     pub fn set_var_not_exported(&self, var: &str, value: &str) -> String {
+        let escaped_value = shell_escape::escape(Cow::Borrowed(value));
         match self {
-            Self::Bash => format!("{var}='{value}';"),
-            Self::Fish => format!("set -g {var} '{value}';"),
-            Self::Tcsh => format!("set {var} = '{value}';"),
-            Self::Zsh => format!("typeset -g {var}='{value}';"),
+            Self::Bash => format!("{var}={escaped_value};"),
+            Self::Fish => format!("set -g {var} {escaped_value};"),
+            Self::Tcsh => format!("set {var} = {escaped_value};"),
+            Self::Zsh => format!("typeset -g {var}={escaped_value};"),
         }
     }
 
