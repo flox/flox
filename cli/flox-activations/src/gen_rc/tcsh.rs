@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -144,7 +145,9 @@ pub fn generate_tcsh_startup_commands(
     }
 
     if let Some(path) = args.clean_up.as_ref() {
-        stmts.push(format!("rm '{}';", path.display()).to_stmt());
+        let path_str = path.to_string_lossy();
+        let escaped_path = shell_escape::escape(Cow::Borrowed(path_str.as_ref()));
+        stmts.push(format!("rm {};", escaped_path).to_stmt());
     }
 
     for stmt in stmts {
@@ -213,7 +216,7 @@ mod tests {
             eval "`'/flox_activations' profile-scripts --shell tcsh --env-dirs $FLOX_ENV_DIRS:q $_already_sourced_args:q`";
             unhash;
             unset verbose;
-            rm '/path/to/rc/file';
+            rm /path/to/rc/file;
         "#]].assert_eq(&output);
     }
 }

@@ -313,7 +313,9 @@ impl Source {
 
 impl GenerateShell for Source {
     fn generate(&self, _shell: Shell, writer: &mut impl Write) -> Result<(), Error> {
-        write!(writer, "source '{}';", self.path.display())?;
+        let path_str = self.path.to_string_lossy();
+        let escaped_path = shell_escape::escape(Cow::Borrowed(path_str.as_ref()));
+        write!(writer, "source {};", escaped_path)?;
         Ok(())
     }
 

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -140,7 +141,9 @@ pub fn generate_bash_startup_commands(
     }
 
     if let Some(path) = args.clean_up.as_ref() {
-        stmts.push(format!("rm '{}';", path.display()).to_stmt());
+        let path_str = path.to_string_lossy();
+        let escaped_path = shell_escape::escape(Cow::Borrowed(path_str.as_ref()));
+        stmts.push(format!("rm {};", escaped_path).to_stmt());
     }
 
     for stmt in stmts {
@@ -191,7 +194,7 @@ mod tests {
         expect![[r#"
             set -x
             export _flox_sourcing_rc=true;
-            source '/home/user/.bashrc';
+            source /home/user/.bashrc;
             unset _flox_sourcing_rc;
             export ADDED_VAR=ADDED_VALUE;
             export QUOTED_VAR='QUOTED'\''VALUE';
@@ -209,7 +212,7 @@ mod tests {
             eval "$('/flox_activations' profile-scripts --shell bash --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "${FLOX_ENV_DIRS:-}")";
             set +h
             set +x
-            rm '/path/to/rc/file';
+            rm /path/to/rc/file;
         "#]].assert_eq(&output);
     }
 }

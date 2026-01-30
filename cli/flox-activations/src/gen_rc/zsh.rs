@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -61,7 +62,9 @@ pub fn generate_zsh_startup_commands(
     stmts.push(source_file(args.activate_d.join("zsh")));
 
     if let Some(path) = args.clean_up.as_ref() {
-        stmts.push(format!("rm '{}';", path.display()).to_stmt());
+        let path_str = path.to_string_lossy();
+        let escaped_path = shell_escape::escape(Cow::Borrowed(path_str.as_ref()));
+        stmts.push(format!("rm {};", escaped_path).to_stmt());
     }
 
     // N.B. the output of these scripts may be eval'd with backticks which have
@@ -117,8 +120,8 @@ mod tests {
             typeset -g _FLOX_ENV_CACHE=/flox_env_cache;
             typeset -g _FLOX_ENV_PROJECT=/flox_env_project;
             typeset -g _FLOX_ENV_DESCRIPTION=env_description;
-            source '/activate_d/zsh';
-            rm '/path/to/rc/file';
+            source /activate_d/zsh;
+            rm /path/to/rc/file;
         "#]]
         .assert_eq(&output);
     }
