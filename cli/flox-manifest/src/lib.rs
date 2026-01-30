@@ -1,6 +1,8 @@
 use std::path::Path;
 use std::str::FromStr;
 
+#[cfg(any(test, feature = "tests"))]
+use proptest::prelude::*;
 use schemars::{JsonSchema, schema_for};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Serialize};
@@ -8,6 +10,7 @@ use toml_edit::DocumentMut;
 
 use crate::lockfile::{Lockfile, LockfileError};
 use crate::parsed::common::KnownSchemaVersion;
+use crate::parsed::latest::ManifestLatest;
 use crate::parsed::v1::ManifestV1;
 use crate::parsed::v1_9_0::ManifestV1_9_0;
 use crate::raw::{get_schema_version_kind, get_toml_schema_version_kind};
@@ -18,21 +21,95 @@ pub mod parsed;
 pub mod raw;
 pub mod util;
 
-// There's a well-defined state machine for loading, parsing, and migrating
-// manifests that we need to enforce.
+#[derive(Debug, thiserror::Error)]
+pub enum ManifestError {
+    // =========================================================================
+    // Parsing manifests
+    // =========================================================================
+    /// We failed to read a manifest from disk.
+    #[error("failed to read manifest file: {0}")]
+    IORead(#[source] std::io::Error),
+
+    /// We failed to read a manifest from disk.
+    #[error("failed to write manifest file: {0}")]
+    IOWrite(#[source] std::io::Error),
+
+    /// The provided string failed to parse as valid TOML of any kind.
+    #[error("manifest contents were not valid TOML: {0}")]
+    ParseToml(#[source] toml_edit::TomlError),
+
+    #[error("manifest had invalid schema version '{0}'")]
+    InvalidSchemaVersion(String),
+
+    #[error("manifest 'schema-version' field is missing")]
+    MissingSchemaVersion,
+
+    #[error("invalid manifest: {0}")]
+    Invalid(#[source] toml_edit::de::Error),
+
+    #[error("failed to serialize manifest: {0}")]
+    Serialize(#[source] toml_edit::ser::Error),
+
+    #[error("{0}")]
+    Other(String),
+
+    #[error(transparent)]
+    Lockfile(Box<LockfileError>),
+
+    // =========================================================================
+    // Looking up packages and package groups
+    // =========================================================================
+    #[error("no package or group named '{0}' in the manifest")]
+    PkgOrGroupNotFound(String),
+
+    #[error("no package named '{0}' in the manifest")]
+    PackageNotFound(String),
+
+    #[error(
+        "multiple packages match '{0}', please specify an install id from possible matches: {1:?}"
+    )]
+    MultiplePackagesMatch(String, Vec<String>),
+
+    // =========================================================================
+    // Everything else
+    // =========================================================================
+    #[error("not a valid activation mode")]
+    ActivateModeInvalid,
+
+    #[error("outputs '{0:?}' don't exists for package {1}")]
+    InvalidOutputs(Vec<String>, String),
+
+    #[error("{0}")]
+    InvalidServiceConfig(String),
+}
+
+// =============================================================================
+// State machine
+// =============================================================================
+
+/// The initial state of a manifest (e.g. nothing).
 #[derive(Debug, Clone)]
 pub struct Init;
+
+/// String contents that have successfully parsed as TOML, but that we don't
+/// know is a valid manifest yet.
 #[derive(Debug, Clone)]
 pub struct TomlParsed {
     raw: DocumentMut,
 }
+
+/// A manifest that has successfully been loaded from disk, parsed as valid
+/// TOML, and validated as a manifest with a known schema version.
 #[derive(Debug, Clone, Serialize)]
-pub struct ManifestParsed {
+pub struct Validated {
     #[serde(skip)]
     raw: DocumentMut,
     #[serde(flatten)]
     parsed: Parsed,
 }
+
+/// A manifest that has successfully migrated forwards, but has not been
+/// checked as to whether we can preserve the original schema version.
 #[derive(Debug, Clone, Serialize)]
 pub struct Migrated {
     #[serde(skip)]
@@ -42,27 +119,87 @@ pub struct Migrated {
     #[serde(skip)]
     migrated_raw: DocumentMut,
     #[serde(flatten)]
-    migrated_parsed: ManifestV1_9_0,
+    migrated_parsed: ManifestLatest,
     #[serde(skip)]
     lockfile: Lockfile,
 }
 
-// In this state we never had access to the raw contents of the manifest,
-// so there's no way we could parse into a `DocumentMut`. You'll see this
-// when you need to parse a `Manifest` out of a `Lockfile`. You can't properly
-// migrate this manifest because we don't have a `DocumentMut` to make edits to.
+/// A manifest that has been deserialized directly into its typed form rather
+/// than going through a format-preserving intermediate step like `DocumentMut`.
+///
+/// In this state we never had access to the raw contents of the manifest,
+/// so there's no way we could parse into a `DocumentMut`. You'll see this
+/// when you need to parse a `Manifest` out of a `Lockfile`. You can't properly
+/// migrate this manifest because we don't have a `DocumentMut` to make edits to.
 #[derive(Debug, Clone, Serialize, PartialEq, JsonSchema)]
 pub struct Deserialized {
     #[serde(flatten)]
     original_parsed: Parsed,
 }
 
+/// A migrated manifest that started out as a deserialized manifest.
+///
+/// This manifest has been internally migrated, but can never be written to
+/// disk as TOML because it didn't start out as TOML and therefore has none
+/// of the comments or formatting that would typically be present in the user's
+/// manifest. In other words, writing this manifest to disk would delete all of
+/// a user's formatting and comments.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeserializedMigrated {
+    original_parsed: Parsed,
+    migrated_parsed: ManifestLatest,
+}
+
+/// A validated, typed manifest with a known schema.
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(untagged)]
+enum Parsed {
+    V1(ManifestV1),
+    V1_9_0(ManifestV1_9_0),
+}
+
+impl Parsed {
+    /// A helper function for creating a [`Parsed`] from whatever the latest
+    /// manifest schema version happens to be.
+    pub(crate) fn from_latest(manifest: ManifestLatest) -> Self {
+        Self::V1_9_0(manifest)
+    }
+}
+
+/// Type states for the state machine that represents loading, parsing,
+/// validating, and migrating manifests.
 pub trait ManifestState {}
 impl ManifestState for Init {}
 impl ManifestState for TomlParsed {}
-impl ManifestState for ManifestParsed {}
+impl ManifestState for Validated {}
 impl ManifestState for Migrated {}
 impl ManifestState for Deserialized {}
+impl ManifestState for DeserializedMigrated {}
+
+/// A trait implemented by states that have access to a typed, migrated manifest.
+///
+/// This is helpful in cases where you don't care where the manifest came from
+/// (migrating from on-disk manifest vs. from a lockfile).
+pub trait MigratedManifest {
+    fn migrated_manifest(&self) -> &ManifestLatest;
+}
+
+impl MigratedManifest for Manifest<Migrated> {
+    fn migrated_manifest(&self) -> &ManifestLatest {
+        &self.inner.migrated_parsed
+    }
+}
+
+impl MigratedManifest for Manifest<DeserializedMigrated> {
+    fn migrated_manifest(&self) -> &ManifestLatest {
+        &self.inner.migrated_parsed
+    }
+}
+
+// =============================================================================
+// Implementation
+// =============================================================================
 
 #[derive(Debug, Clone)]
 pub struct Manifest<S = Init> {
@@ -70,6 +207,7 @@ pub struct Manifest<S = Init> {
 }
 
 impl Manifest<Init> {
+    /// Parse the given TOML into an untyped manifest.
     pub fn parse_untyped(s: impl AsRef<str>) -> Result<Manifest<TomlParsed>, ManifestError> {
         let toml = s
             .as_ref()
@@ -80,38 +218,56 @@ impl Manifest<Init> {
         })
     }
 
+    /// Read the TOML file at the given path and parse it into an untyped manifest.
     pub fn read_untyped(p: impl AsRef<Path>) -> Result<Manifest<TomlParsed>, ManifestError> {
         let contents = std::fs::read_to_string(p).map_err(ManifestError::IORead)?;
         Self::parse_untyped(contents)
     }
 
-    pub fn parse_typed(s: impl AsRef<str>) -> Result<Manifest<ManifestParsed>, ManifestError> {
+    /// Parse the given TOML into a typed and validated manifest.
+    pub fn parse_typed(s: impl AsRef<str>) -> Result<Manifest<Validated>, ManifestError> {
         Self::parse_untyped(s)?.validate_toml()
     }
 
-    pub fn read_typed(p: impl AsRef<Path>) -> Result<Manifest<ManifestParsed>, ManifestError> {
+    /// Read the TOML file at the given path, parse it into a typed and validated manifest.
+    pub fn read_typed(p: impl AsRef<Path>) -> Result<Manifest<Validated>, ManifestError> {
         Self::read_untyped(p)?.validate_toml()
     }
 
+    /// Use the provided TOML manifest contents and JSON lockfile contents to
+    /// parse a manifest and migrate it to the latest schema version.
     pub fn parse_and_migrate(
         manifest_contents: impl AsRef<str>,
         lockfile_contents: impl AsRef<str>,
     ) -> Result<Manifest<Migrated>, ManifestError> {
-        let lockfile =
-            Lockfile::from_str(lockfile_contents.as_ref()).map_err(ManifestError::Lockfile)?;
+        let lockfile = Lockfile::from_str(lockfile_contents.as_ref())
+            .map_err(|err| ManifestError::Lockfile(Box::new(err)))?;
         Self::parse_untyped(manifest_contents)?
             .validate_toml()?
             .migrate(&lockfile)
     }
+
+    /// Read the TOML manifest and JSON lockfile at the provided paths, then
+    /// parse a manifest and migrate it to the latest schema version.
+    pub fn read_and_migrate(
+        manifest_path: impl AsRef<Path>,
+        lockfile_path: impl AsRef<Path>,
+    ) -> Result<Manifest<Migrated>, ManifestError> {
+        let manifest_contents =
+            std::fs::read_to_string(manifest_path).map_err(ManifestError::IORead)?;
+        let lockfile_contents = std::fs::read_to_string(lockfile_path)
+            .map_err(|err| ManifestError::Lockfile(Box::new(LockfileError::IORead(err))))?;
+        Self::parse_and_migrate(manifest_contents, lockfile_contents)
+    }
 }
 
 impl Manifest<TomlParsed> {
-    pub fn validate_toml(&self) -> Result<Manifest<ManifestParsed>, ManifestError> {
+    pub fn validate_toml(&self) -> Result<Manifest<Validated>, ManifestError> {
         let schema_version: KnownSchemaVersion =
             get_schema_version_kind(&self.inner.raw)?.try_into()?;
         let parsed = Manifest::<Init>::parse_with_schema(&self.inner.raw, schema_version)?;
         Ok(Manifest {
-            inner: ManifestParsed {
+            inner: Validated {
                 raw: self.inner.raw.clone(),
                 parsed,
             },
@@ -119,7 +275,7 @@ impl Manifest<TomlParsed> {
     }
 }
 
-impl Manifest<ManifestParsed> {
+impl Manifest<Validated> {
     pub fn to_deserialized(&self) -> Manifest<Deserialized> {
         Manifest {
             inner: Deserialized {
@@ -129,6 +285,15 @@ impl Manifest<ManifestParsed> {
     }
 
     pub fn migrate(&self, _lockfile: &Lockfile) -> Result<Manifest<Migrated>, ManifestError> {
+        todo!()
+    }
+}
+
+impl Manifest<Deserialized> {
+    pub fn migrate_deserialized(
+        &self,
+        _lockfile: &Lockfile,
+    ) -> Result<Manifest<DeserializedMigrated>, ManifestError> {
         todo!()
     }
 }
@@ -152,6 +317,26 @@ impl<S: ManifestState> Manifest<S> {
         }
     }
 }
+
+#[cfg(any(test, feature = "tests"))]
+impl Arbitrary for Manifest<Deserialized> {
+    type Parameters = ();
+    type Strategy = BoxedStrategy<Self>;
+
+    fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+        any::<Parsed>()
+            .prop_map(|parsed| Manifest {
+                inner: Deserialized {
+                    original_parsed: parsed,
+                },
+            })
+            .boxed()
+    }
+}
+
+// =============================================================================
+// (De)serialization and JSON schema
+// =============================================================================
 
 impl<'de> Deserialize<'de> for Manifest<Deserialized> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -188,7 +373,7 @@ impl<'de> Deserialize<'de> for Manifest<Deserialized> {
     }
 }
 
-impl Serialize for Manifest<ManifestParsed> {
+impl Serialize for Manifest<Validated> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -239,87 +424,4 @@ impl JsonSchema for Manifest<Deserialized> {
     fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
         schema_for!(Parsed)
     }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum ManifestError {
-    // ====================================================================== //
-    // Parsing manifests
-    // ====================================================================== //
-    /// We failed to read a manifest from disk.
-    #[error("failed to read manifest file: {0}")]
-    IORead(#[source] std::io::Error),
-
-    /// We failed to read a manifest from disk.
-    #[error("failed to write manifest file: {0}")]
-    IOWrite(#[source] std::io::Error),
-
-    /// The provided string failed to parse as valid TOML of any kind.
-    #[error("manifest contents were not valid TOML: {0}")]
-    ParseToml(#[source] toml_edit::TomlError),
-
-    #[error("manifest had invalid schema version '{0}'")]
-    InvalidSchemaVersion(String),
-
-    #[error("manifest 'schema-version' field is missing")]
-    MissingSchemaVersion,
-
-    #[error("invalid manifest: {0}")]
-    Invalid(#[source] toml_edit::de::Error),
-
-    #[error("failed to serialize manifest: {0}")]
-    Serialize(#[source] toml_edit::ser::Error),
-
-    #[error("{0}")]
-    Other(String),
-
-    #[error(transparent)]
-    Lockfile(LockfileError),
-
-    // ====================================================================== //
-    // Looking up packages and package groups
-    // ====================================================================== //
-    #[error("no package or group named '{0}' in the manifest")]
-    PkgOrGroupNotFound(String),
-
-    #[error("no package named '{0}' in the manifest")]
-    PackageNotFound(String),
-
-    #[error(
-        "multiple packages match '{0}', please specify an install id from possible matches: {1:?}"
-    )]
-    MultiplePackagesMatch(String, Vec<String>),
-
-    // ====================================================================== //
-    // Everything else
-    // ====================================================================== //
-    #[error("not a valid activation mode")]
-    ActivateModeInvalid,
-
-    #[error("outputs '{0:?}' don't exists for package {1}")]
-    InvalidOutputs(Vec<String>, String),
-
-    #[error("{0}")]
-    InvalidServiceConfig(String),
-}
-
-#[derive(Debug, Clone)]
-struct InnerOriginal {
-    raw: toml_edit::DocumentMut,
-    parsed: Option<Parsed>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
-#[serde(untagged)]
-enum Parsed {
-    V1(ManifestV1),
-    V1_9_0(ManifestV1_9_0),
-}
-
-// This is different from `InnerOriginal` in that the parsed type can _only_
-// be the latest manifest version as opposed to _any_ manifest version.
-#[derive(Debug, Clone)]
-struct InnerMigrated {
-    raw: toml_edit::DocumentMut,
-    parsed: Option<ManifestV1_9_0>,
 }

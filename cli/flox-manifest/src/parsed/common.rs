@@ -65,6 +65,29 @@ impl TryFrom<VersionKind> for KnownSchemaVersion {
     }
 }
 
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct PackageDescriptorStorePath {
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "alphanum_string(5)")
+    )]
+    pub(crate) store_path: String,
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "optional_vec_of_strings(3, 4)")
+    )]
+    pub(crate) systems: Option<Vec<System>>,
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "proptest::option::of(0..10u64)")
+    )]
+    pub(crate) priority: Option<u64>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct Vars(

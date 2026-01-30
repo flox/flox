@@ -9,13 +9,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::compose::WarningWithContext;
 use crate::parsed::common::IncludeDescriptor;
-use crate::{Manifest, ManifestError};
+use crate::{Deserialized, Manifest, ManifestError};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct Compose {
     /// The composing environment's manifest that was on disk at lock-time.
-    pub composer: Manifest,
+    pub composer: Manifest<Deserialized>,
     /// Metadata and manifests for the included environments in the order
     /// that they were specified in the composing environment's manifest.
     pub include: Vec<LockedInclude>,
@@ -60,9 +60,9 @@ impl Compose {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct LockedInclude {
-    pub manifest: Manifest,
+    pub manifest: Manifest<Deserialized>,
     #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
     pub name: String,
     pub descriptor: IncludeDescriptor,

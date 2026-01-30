@@ -18,6 +18,7 @@ use serde_with::skip_serializing_none;
 
 use crate::ManifestError;
 use crate::parsed::common::{Build, Containerize, Hook, Include, Options, Profile, Services, Vars};
+use crate::parsed::v1::package_descriptor::{ManifestPackageDescriptor, PackageDescriptorCatalog};
 use crate::parsed::{Inner, SkipSerializing, impl_into_inner};
 
 pub mod package_descriptor;
@@ -353,6 +354,10 @@ pub mod test {
 
     use super::*;
     use crate::parsed::common::{BuildDescriptor, BuildVersion, IncludeDescriptor};
+    use crate::parsed::v1::package_descriptor::{
+        PackageDescriptorFlake,
+        PackageDescriptorStorePath,
+    };
 
     const CATALOG_MANIFEST: &str = indoc! {r#"
         version = 1
@@ -784,35 +789,5 @@ pub mod test {
         // Test non-catalog descriptors always return false
         assert!(!create_flake_descriptor("github:owner/repo").is_from_custom_catalog());
         assert!(!create_store_path_descriptor("/nix/store/abc123-hello").is_from_custom_catalog());
-    }
-
-    #[test]
-    fn deserializes_manifest_with_outputs() {
-        let contents_default = r#"
-            version = 1
-
-            [install]
-            hello.pkg-path = "hello"
-        "#;
-
-        let contents_all = r#"
-            version = 1
-
-            [install]
-            hello.pkg-path = "hello"
-            hello.outputs = "all"
-        "#;
-
-        let contents_specific = r#"
-            version = 1
-
-            [install]
-            hello.pkg-path = "hello"
-            hello.outputs = ["foo", "bar"]
-        "#;
-
-        let _ = ManifestV1::from_str(contents_default).unwrap();
-        let _ = ManifestV1::from_str(contents_all).unwrap();
-        let _ = ManifestV1::from_str(contents_specific).unwrap();
     }
 }

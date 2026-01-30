@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
 use crate::parsed::common::{DEFAULT_GROUP_NAME, DEFAULT_PRIORITY};
-use crate::parsed::v1_9_0::PackageDescriptorCatalog;
+use crate::parsed::latest::PackageDescriptorCatalog;
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]

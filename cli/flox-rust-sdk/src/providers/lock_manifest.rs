@@ -1560,3 +1560,181 @@ fn format_multiple_resolution_failures(failures: &[ResolutionFailure]) -> String
         .join("\n");
     format!("multiple resolution failures:\n{msgs}")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::providers::flake_installable_locker::InstallableLocker;
+
+    struct PanickingLocker;
+    impl InstallableLocker for PanickingLocker {
+        fn lock_flake_installable(
+            &self,
+            _: impl AsRef<str>,
+            _: &PackageDescriptorFlake,
+        ) -> Result<LockedInstallable, FlakeInstallableError> {
+            panic!("this flake locker always panics")
+        }
+    }
+
+    #[test]
+    fn make_params_smoke() {
+        let manifest = &*TEST_TYPED_MANIFEST;
+
+        let params = Lockfile::collect_package_groups(manifest, None)
+            .unwrap()
+            .collect::<Vec<_>>();
+        assert_eq!(&params, &*TEST_RESOLUTION_PARAMS);
+    }
+
+    /// When `options.systems` defines multiple systems,
+    /// request groups for each system separately.
+    #[test]
+    fn make_params_multiple_systems() {
+        let manifest_str = indoc! {r#"
+            version = 1
+
+            [install]
+            vim.pkg-path = "vim"
+            emacs.pkg-path = "emacs"
+
+            [options]
+            systems = ["aarch64-darwin", "x86_64-linux"]
+        "#};
+        let manifest = toml::from_str(manifest_str).unwrap();
+
+        let expected_params = vec![PackageGroup {
+            name: DEFAULT_GROUP_NAME.to_string(),
+            descriptors: vec![
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "emacs".to_string(),
+                    derivation: None,
+                    install_id: "emacs".to_string(),
+                    version: None,
+                    allow_broken: None,
+                    allow_insecure: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    allow_missing_builds: None,
+                    systems: vec![PackageSystem::Aarch64Darwin],
+                },
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "emacs".to_string(),
+                    derivation: None,
+                    install_id: "emacs".to_string(),
+                    version: None,
+                    allow_broken: None,
+                    allow_insecure: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    allow_missing_builds: None,
+                    systems: vec![PackageSystem::X8664Linux],
+                },
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "vim".to_string(),
+                    derivation: None,
+                    install_id: "vim".to_string(),
+                    version: None,
+                    allow_broken: None,
+                    allow_insecure: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    allow_missing_builds: None,
+                    systems: vec![PackageSystem::Aarch64Darwin],
+                },
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "vim".to_string(),
+                    derivation: None,
+                    install_id: "vim".to_string(),
+                    version: None,
+                    allow_broken: None,
+                    allow_insecure: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    allow_missing_builds: None,
+                    systems: vec![PackageSystem::X8664Linux],
+                },
+            ],
+        }];
+
+        let actual_params = Lockfile::collect_package_groups(&manifest, None)
+            .unwrap()
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual_params, expected_params);
+    }
+
+    /// When `options.systems` defines multiple systems,
+    /// request groups for each system separately.
+    /// If a package specifies systems, use those instead.
+    #[test]
+    fn make_params_limit_systems() {
+        let manifest_str = indoc! {r#"
+            version = 1
+
+            [install]
+            vim.pkg-path = "vim"
+            emacs.pkg-path = "emacs"
+            emacs.systems = ["aarch64-darwin" ]
+
+            [options]
+            systems = ["aarch64-darwin", "x86_64-linux"]
+        "#};
+        let manifest = toml::from_str(manifest_str).unwrap();
+
+        let expected_params = vec![PackageGroup {
+            name: DEFAULT_GROUP_NAME.to_string(),
+            descriptors: vec![
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "emacs".to_string(),
+                    install_id: "emacs".to_string(),
+                    derivation: None,
+                    version: None,
+                    allow_broken: None,
+                    allow_insecure: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    allow_missing_builds: None,
+                    systems: vec![PackageSystem::Aarch64Darwin],
+                },
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "vim".to_string(),
+                    derivation: None,
+                    install_id: "vim".to_string(),
+                    version: None,
+                    allow_broken: None,
+                    allow_insecure: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    allow_missing_builds: None,
+                    systems: vec![PackageSystem::Aarch64Darwin],
+                },
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "vim".to_string(),
+                    derivation: None,
+                    install_id: "vim".to_string(),
+                    version: None,
+                    allow_broken: None,
+                    allow_insecure: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    allow_missing_builds: None,
+                    systems: vec![PackageSystem::X8664Linux],
+                },
+            ],
+        }];
+
+        let actual_params = Lockfile::collect_package_groups(&manifest, None)
+            .unwrap()
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual_params, expected_params);
+    }
+}

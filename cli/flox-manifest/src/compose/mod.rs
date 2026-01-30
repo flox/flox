@@ -29,7 +29,7 @@ pub enum MergeError {}
 #[derive(
     Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, JsonSchema,
 )]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct KeyPath(Vec<String>);
 impl KeyPath {
     /// Create a new empty `KeyPath`.
@@ -71,7 +71,7 @@ impl_into_inner!(KeyPath, Vec<String>);
 /// Warnings are not errors, but they may indicate
 /// that the user should review the merged manifest or its dependencies.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 #[must_use]
 // Currently, the only warning is that a value is being overridden,
 // but more warnings may be added in the future.
@@ -83,7 +83,7 @@ pub enum Warning {
 /// A warning that occurred during the merge of two manifests,
 /// along with the names of the overriding manifest.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct WarningWithContext {
     pub warning: Warning,
     /// The name of the manifest that did the overriding.

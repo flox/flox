@@ -18,13 +18,15 @@ use std::fmt::Display;
 use std::fs;
 use std::str::FromStr;
 
+use catalog_api_v1::types as catalog_types;
 use flox_core::Version;
 
 use crate::lockfile::catalog::LockedPackageCatalog;
 use crate::lockfile::compose::Compose;
 use crate::lockfile::flake::LockedPackageFlake;
 use crate::lockfile::store_path::LockedPackageStorePath;
-use crate::{Deserialized, Manifest};
+use crate::parsed::v1_9_0::{ManifestV1_9_0, PackageDescriptorCatalog, PackageDescriptorFlake};
+use crate::{Deserialized, Manifest, ManifestError, MigratedManifest};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LockfileError {
@@ -36,6 +38,12 @@ pub enum LockfileError {
 
     #[error("failed to write lockfile: {0}")]
     IOWrite(#[source] std::io::Error),
+
+    #[error("corrupt manifest; couldn't find package descriptor for locked install_id '{0}'")]
+    MissingPackageDescriptor(String),
+
+    #[error(transparent)]
+    Manifest(#[source] ManifestError),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -81,22 +89,24 @@ impl Lockfile {
     }
 
     /// Convert a locked manifest to a list of installed packages for a given system.
-    pub fn list_packages(&self, system: &System) -> Result<Vec<PackageToList>, ResolveError> {
+    pub fn list_packages(&self, system: &System) -> Result<Vec<PackageToList>, LockfileError> {
+        let manifest = self
+            .manifest
+            .migrate_deserialized(&self)
+            .map_err(LockfileError::Manifest)?
+            .migrated_manifest();
         self.packages
             .iter()
             .filter(|package| package.system() == system)
             .cloned()
             .map(|package| match package {
                 LockedPackage::Catalog(pkg) => {
-                    let descriptor = self
-                        .manifest
-                        .pkg_descriptor_with_id(&pkg.install_id)
-                        .ok_or(ResolveError::MissingPackageDescriptor(
-                            pkg.install_id.clone(),
-                        ))?;
+                    let descriptor = manifest.pkg_descriptor_with_id(&pkg.install_id).ok_or(
+                        LockfileError::MissingPackageDescriptor(pkg.install_id.clone()),
+                    )?;
 
                     let Some(descriptor) = descriptor.unwrap_catalog_descriptor() else {
-                        Err(ResolveError::MissingPackageDescriptor(
+                        Err(LockfileError::MissingPackageDescriptor(
                             pkg.install_id.clone(),
                         ))?
                     };
@@ -104,15 +114,14 @@ impl Lockfile {
                     Ok(PackageToList::Catalog(descriptor, pkg))
                 },
                 LockedPackage::Flake(locked_package) => {
-                    let descriptor = self
-                        .manifest
+                    let descriptor = manifest
                         .pkg_descriptor_with_id(&locked_package.install_id)
-                        .ok_or(ResolveError::MissingPackageDescriptor(
+                        .ok_or(LockfileError::MissingPackageDescriptor(
                             locked_package.install_id.clone(),
                         ))?;
 
                     let Some(descriptor) = descriptor.unwrap_flake_descriptor() else {
-                        Err(ResolveError::MissingPackageDescriptor(
+                        Err(LockfileError::MissingPackageDescriptor(
                             locked_package.install_id.clone(),
                         ))?
                     };
@@ -121,11 +130,11 @@ impl Lockfile {
                 },
                 LockedPackage::StorePath(locked) => Ok(PackageToList::StorePath(locked)),
             })
-            .collect::<Result<Vec<_>, ResolveError>>()
+            .collect::<Result<Vec<_>, LockfileError>>()
     }
 
     /// The manifest the user edits (i.e. not merged)
-    pub fn user_manifest(&self) -> &Manifest {
+    pub fn user_manifest(&self) -> &Manifest<Deserialized> {
         match &self.compose {
             Some(compose) => &compose.composer,
             None => &self.manifest,
@@ -170,7 +179,7 @@ impl Lockfile {
     /// fallible conversions like that would be unnecessary,
     /// or would be pushed higher up.
     fn collect_package_groups(
-        manifest: &Manifest,
+        manifest: &ManifestV1_9_0,
         seed_lockfile: Option<&Lockfile>,
     ) -> Result<impl Iterator<Item = PackageGroup>, ResolveError> {
         let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
@@ -378,8 +387,16 @@ pub enum PackageToList {
 }
 
 pub mod test_helpers {
+    use catalog_api_v1::types as catalog_types;
+
     use super::*;
-    use crate::models::manifest::typed::PackageDescriptorStorePath;
+    use crate::lockfile::flake::LockedInstallable;
+    use crate::parsed::common::{DEFAULT_GROUP_NAME, DEFAULT_PRIORITY};
+    use crate::parsed::v1_9_0::{
+        ManifestPackageDescriptor,
+        PackageDescriptorCatalog,
+        PackageDescriptorStorePath,
+    };
 
     pub fn fake_catalog_package_lock(
         name: &str,
@@ -390,7 +407,9 @@ pub mod test_helpers {
         let descriptor = PackageDescriptorCatalog {
             pkg_path: name.to_string(),
             pkg_group: group.map(|s| s.to_string()),
-            systems: Some(vec![PackageSystem::Aarch64Darwin.to_string()]),
+            systems: Some(vec![
+                catalog_types::PackageSystem::Aarch64Darwin.to_string(),
+            ]),
             version: None,
             priority: None,
             outputs: None,
@@ -420,7 +439,7 @@ pub mod test_helpers {
             stabilities: None,
             unfree: None,
             version: "".to_string(),
-            system: PackageSystem::Aarch64Darwin.to_string(),
+            system: catalog_types::PackageSystem::Aarch64Darwin.to_string(),
             group: group.unwrap_or(DEFAULT_GROUP_NAME).to_string(),
             priority: 5,
         };
@@ -474,14 +493,16 @@ pub mod test_helpers {
 
         let descriptor = PackageDescriptorStorePath {
             store_path: format!("/nix/store/{}", name),
-            systems: Some(vec![PackageSystem::Aarch64Darwin.to_string()]),
+            systems: Some(vec![
+                catalog_types::PackageSystem::Aarch64Darwin.to_string(),
+            ]),
             priority: None,
         };
 
         let locked = LockedPackageStorePath {
             install_id: install_id.clone(),
             store_path: format!("/nix/store/{}", name),
-            system: PackageSystem::Aarch64Darwin.to_string(),
+            system: catalog_types::PackageSystem::Aarch64Darwin.to_string(),
             priority: DEFAULT_PRIORITY,
         };
         (install_id, descriptor, locked)
@@ -536,7 +557,7 @@ pub(crate) mod tests {
     use std::vec;
 
     use catalog::MsgUnknown;
-    use catalog_api_v1::types::{PackageOutput, PackageOutputs};
+    use catalog_api_v1::types::{PackageGroup, PackageOutput, PackageOutputs, PackageSystem};
     use indoc::indoc;
     use pollster::FutureExt;
     use pretty_assertions::assert_eq;
@@ -571,17 +592,6 @@ pub(crate) mod tests {
         FlakeInstallableError,
         InstallableLockerMock,
     };
-
-    struct PanickingLocker;
-    impl InstallableLocker for PanickingLocker {
-        fn lock_flake_installable(
-            &self,
-            _: impl AsRef<str>,
-            _: &PackageDescriptorFlake,
-        ) -> Result<LockedInstallable, FlakeInstallableError> {
-            panic!("this flake locker always panics")
-        }
-    }
 
     static TEST_RAW_MANIFEST: LazyLock<RawManifest> = LazyLock::new(|| {
         indoc! {r#"
@@ -659,167 +669,6 @@ pub(crate) mod tests {
         compose: None,
     });
 
-    #[test]
-    fn make_params_smoke() {
-        let manifest = &*TEST_TYPED_MANIFEST;
-
-        let params = Lockfile::collect_package_groups(manifest, None)
-            .unwrap()
-            .collect::<Vec<_>>();
-        assert_eq!(&params, &*TEST_RESOLUTION_PARAMS);
-    }
-
-    /// When `options.systems` defines multiple systems,
-    /// request groups for each system separately.
-    #[test]
-    fn make_params_multiple_systems() {
-        let manifest_str = indoc! {r#"
-            version = 1
-
-            [install]
-            vim.pkg-path = "vim"
-            emacs.pkg-path = "emacs"
-
-            [options]
-            systems = ["aarch64-darwin", "x86_64-linux"]
-        "#};
-        let manifest = toml::from_str(manifest_str).unwrap();
-
-        let expected_params = vec![PackageGroup {
-            name: DEFAULT_GROUP_NAME.to_string(),
-            descriptors: vec![
-                PackageDescriptor {
-                    allow_pre_releases: None,
-                    attr_path: "emacs".to_string(),
-                    derivation: None,
-                    install_id: "emacs".to_string(),
-                    version: None,
-                    allow_broken: None,
-                    allow_insecure: None,
-                    allow_unfree: None,
-                    allowed_licenses: None,
-                    allow_missing_builds: None,
-                    systems: vec![PackageSystem::Aarch64Darwin],
-                },
-                PackageDescriptor {
-                    allow_pre_releases: None,
-                    attr_path: "emacs".to_string(),
-                    derivation: None,
-                    install_id: "emacs".to_string(),
-                    version: None,
-                    allow_broken: None,
-                    allow_insecure: None,
-                    allow_unfree: None,
-                    allowed_licenses: None,
-                    allow_missing_builds: None,
-                    systems: vec![PackageSystem::X8664Linux],
-                },
-                PackageDescriptor {
-                    allow_pre_releases: None,
-                    attr_path: "vim".to_string(),
-                    derivation: None,
-                    install_id: "vim".to_string(),
-                    version: None,
-                    allow_broken: None,
-                    allow_insecure: None,
-                    allow_unfree: None,
-                    allowed_licenses: None,
-                    allow_missing_builds: None,
-                    systems: vec![PackageSystem::Aarch64Darwin],
-                },
-                PackageDescriptor {
-                    allow_pre_releases: None,
-                    attr_path: "vim".to_string(),
-                    derivation: None,
-                    install_id: "vim".to_string(),
-                    version: None,
-                    allow_broken: None,
-                    allow_insecure: None,
-                    allow_unfree: None,
-                    allowed_licenses: None,
-                    allow_missing_builds: None,
-                    systems: vec![PackageSystem::X8664Linux],
-                },
-            ],
-        }];
-
-        let actual_params = Lockfile::collect_package_groups(&manifest, None)
-            .unwrap()
-            .collect::<Vec<_>>();
-
-        assert_eq!(actual_params, expected_params);
-    }
-
-    /// When `options.systems` defines multiple systems,
-    /// request groups for each system separately.
-    /// If a package specifies systems, use those instead.
-    #[test]
-    fn make_params_limit_systems() {
-        let manifest_str = indoc! {r#"
-            version = 1
-
-            [install]
-            vim.pkg-path = "vim"
-            emacs.pkg-path = "emacs"
-            emacs.systems = ["aarch64-darwin" ]
-
-            [options]
-            systems = ["aarch64-darwin", "x86_64-linux"]
-        "#};
-        let manifest = toml::from_str(manifest_str).unwrap();
-
-        let expected_params = vec![PackageGroup {
-            name: DEFAULT_GROUP_NAME.to_string(),
-            descriptors: vec![
-                PackageDescriptor {
-                    allow_pre_releases: None,
-                    attr_path: "emacs".to_string(),
-                    install_id: "emacs".to_string(),
-                    derivation: None,
-                    version: None,
-                    allow_broken: None,
-                    allow_insecure: None,
-                    allow_unfree: None,
-                    allowed_licenses: None,
-                    allow_missing_builds: None,
-                    systems: vec![PackageSystem::Aarch64Darwin],
-                },
-                PackageDescriptor {
-                    allow_pre_releases: None,
-                    attr_path: "vim".to_string(),
-                    derivation: None,
-                    install_id: "vim".to_string(),
-                    version: None,
-                    allow_broken: None,
-                    allow_insecure: None,
-                    allow_unfree: None,
-                    allowed_licenses: None,
-                    allow_missing_builds: None,
-                    systems: vec![PackageSystem::Aarch64Darwin],
-                },
-                PackageDescriptor {
-                    allow_pre_releases: None,
-                    attr_path: "vim".to_string(),
-                    derivation: None,
-                    install_id: "vim".to_string(),
-                    version: None,
-                    allow_broken: None,
-                    allow_insecure: None,
-                    allow_unfree: None,
-                    allowed_licenses: None,
-                    allow_missing_builds: None,
-                    systems: vec![PackageSystem::X8664Linux],
-                },
-            ],
-        }];
-
-        let actual_params = Lockfile::collect_package_groups(&manifest, None)
-            .unwrap()
-            .collect::<Vec<_>>();
-
-        assert_eq!(actual_params, expected_params);
-    }
-
     /// If a package specifies a system not in `options.systems`,
     /// return an error.
     #[test]
@@ -836,8 +685,7 @@ pub(crate) mod tests {
             systems = ["x86_64-linux"]
         "#};
 
-        // todo: ideally the manifest would not even parse if it has an unavailable system
-        let manifest = toml::from_str(manifest_str).unwrap();
+        let manifest = Manifest::parse_typed(manifest_str).unwrap();
 
         let actual_result = Lockfile::collect_package_groups(&manifest, None);
 
