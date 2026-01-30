@@ -81,21 +81,19 @@ pub fn attach(
         },
         // All other invocation types only return if exec fails
         InvocationType::Interactive => {
-            activate_interactive(startup_ctx, subsystem_verbosity, vars_from_env, &start_id)
+            activate_interactive(startup_ctx, subsystem_verbosity, vars_from_env)
         },
         InvocationType::ShellCommand(shell_command) => activate_shell_command(
             shell_command,
             startup_ctx,
             subsystem_verbosity,
             vars_from_env,
-            &start_id,
         ),
         InvocationType::ExecCommand(exec_command) => activate_exec_command(
             exec_command,
             startup_ctx,
             subsystem_verbosity,
             vars_from_env,
-            &start_id,
         ),
     }
 }
@@ -241,7 +239,6 @@ fn activate_exec_command(
     startup_ctx: StartupCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
-    start_id: &StartIdentifier,
 ) -> Result<()> {
     if exec_command.is_empty() {
         return Err(anyhow!("empty command provided"));
@@ -256,7 +253,7 @@ fn activate_exec_command(
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
-        start_id,
+        &startup_ctx.state_dir,
     );
 
     debug!("executing command directly: {:?}", command);
@@ -275,7 +272,6 @@ fn activate_shell_command(
     startup_ctx: StartupCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
-    start_id: &StartIdentifier,
 ) -> Result<()> {
     let mut command = Command::new(startup_ctx.act_ctx.shell.exe_path());
     apply_activation_env(
@@ -284,7 +280,7 @@ fn activate_shell_command(
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
-        start_id,
+        &startup_ctx.state_dir,
     );
 
     let rcfile = startup_ctx
@@ -399,7 +395,6 @@ fn activate_interactive(
     startup_ctx: StartupCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
-    start_id: &StartIdentifier,
 ) -> Result<()> {
     let mut command = Command::new(startup_ctx.act_ctx.shell.exe_path());
     apply_activation_env(
@@ -408,7 +403,7 @@ fn activate_interactive(
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
-        start_id,
+        &startup_ctx.state_dir,
     );
 
     let rcfile = startup_ctx
