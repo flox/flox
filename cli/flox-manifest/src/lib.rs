@@ -132,20 +132,23 @@ pub struct Migrated {
 /// when you need to parse a `Manifest` out of a `Lockfile`. You can't properly
 /// migrate this manifest because we don't have a `DocumentMut` to make edits to.
 #[derive(Debug, Clone, Serialize, PartialEq, JsonSchema)]
-pub struct Deserialized {
+pub struct TypedOnly {
     #[serde(flatten)]
-    original_parsed: Parsed,
+    parsed: Parsed,
 }
 
 /// A migrated manifest that started out as a deserialized manifest.
 ///
-/// This manifest has been internally migrated, but can never be written to
-/// disk as TOML because it didn't start out as TOML and therefore has none
+/// This manifest has been internally migrated, but can never be directly written to
+/// disk itself as TOML because it didn't start out as TOML, and therefore has none
 /// of the comments or formatting that would typically be present in the user's
 /// manifest. In other words, writing this manifest to disk would delete all of
 /// a user's formatting and comments.
+///
+/// That said, you could still update a `DocumentMut` with the _contents_ of this
+/// manifest in order to write a manifest to disk.
 #[derive(Debug, Clone, PartialEq)]
-pub struct DeserializedMigrated {
+pub struct MigratedTypedOnly {
     original_parsed: Parsed,
     migrated_parsed: ManifestLatest,
 }
@@ -165,6 +168,17 @@ impl Parsed {
     pub(crate) fn from_latest(manifest: ManifestLatest) -> Self {
         Self::V1_9_0(manifest)
     }
+
+    /// Returns the known schema version of the contained manifest.
+    // This is pub(crate) because this type is kind of an implementation detail,
+    // and you should probably access schema version information from a
+    // `Manifest` instead.
+    pub(crate) fn schema_version(&self) -> KnownSchemaVersion {
+        match self {
+            Parsed::V1(_) => KnownSchemaVersion::V1,
+            Parsed::V1_9_0(_) => KnownSchemaVersion::V1_9_0,
+        }
+    }
 }
 
 /// Type states for the state machine that represents loading, parsing,
@@ -174,8 +188,17 @@ impl ManifestState for Init {}
 impl ManifestState for TomlParsed {}
 impl ManifestState for Validated {}
 impl ManifestState for Migrated {}
-impl ManifestState for Deserialized {}
-impl ManifestState for DeserializedMigrated {}
+impl ManifestState for TypedOnly {}
+impl ManifestState for MigratedTypedOnly {}
+
+#[derive(Debug, Clone)]
+pub struct Manifest<S = Init> {
+    inner: S,
+}
+
+// =============================================================================
+// Implementation
+// =============================================================================
 
 /// A trait implemented by states that have access to a typed, migrated manifest.
 ///
@@ -191,19 +214,72 @@ impl MigratedManifest for Manifest<Migrated> {
     }
 }
 
-impl MigratedManifest for Manifest<DeserializedMigrated> {
+impl MigratedManifest for Manifest<MigratedTypedOnly> {
     fn migrated_manifest(&self) -> &ManifestLatest {
         &self.inner.migrated_parsed
     }
 }
 
-// =============================================================================
-// Implementation
-// =============================================================================
+/// A trait for retrieving a `TypedOnly` manifest from states that possess one.
+///
+/// For states that have not yet been migrated, this will return the "original"
+/// manifest. For states that _have_ been migrated, this SHOULD return the
+/// migrated manifest.
+pub trait AsTypedOnlyManifest {
+    fn as_typed_only(&self) -> Manifest<TypedOnly>;
+}
 
-#[derive(Debug, Clone)]
-pub struct Manifest<S = Init> {
-    inner: S,
+impl AsTypedOnlyManifest for Manifest<Validated> {
+    fn as_typed_only(&self) -> Manifest<TypedOnly> {
+        Manifest {
+            inner: TypedOnly {
+                parsed: self.inner.parsed.clone(),
+            },
+        }
+    }
+}
+
+impl AsTypedOnlyManifest for Manifest<MigratedTypedOnly> {
+    fn as_typed_only(&self) -> Manifest<TypedOnly> {
+        Manifest {
+            inner: TypedOnly {
+                parsed: Parsed::from_latest(self.inner.migrated_parsed.clone()),
+            },
+        }
+    }
+}
+
+impl AsTypedOnlyManifest for Manifest<Migrated> {
+    fn as_typed_only(&self) -> Manifest<TypedOnly> {
+        Manifest {
+            inner: TypedOnly {
+                parsed: Parsed::from_latest(self.inner.migrated_parsed.clone()),
+            },
+        }
+    }
+}
+
+/// A trait for retrieving the schema version from typed manifests.
+pub trait SchemaVersion {
+    fn get_schema_version(&self) -> KnownSchemaVersion;
+}
+
+impl SchemaVersion for Manifest<TypedOnly> {
+    fn get_schema_version(&self) -> KnownSchemaVersion {
+        self.inner.parsed.schema_version()
+    }
+}
+
+impl SchemaVersion for Manifest<MigratedTypedOnly> {
+    fn get_schema_version(&self) -> KnownSchemaVersion {
+        self.inner.migrated_parsed.get_schema_version()
+    }
+}
+
+impl SchemaVersion for Manifest<Migrated> {
+    fn get_schema_version(&self) -> KnownSchemaVersion {
+        self.inner.migrated_parsed.get_schema_version()
+    }
 }
 
 impl Manifest<Init> {
@@ -276,10 +352,10 @@ impl Manifest<TomlParsed> {
 }
 
 impl Manifest<Validated> {
-    pub fn to_deserialized(&self) -> Manifest<Deserialized> {
+    pub fn to_deserialized(&self) -> Manifest<TypedOnly> {
         Manifest {
-            inner: Deserialized {
-                original_parsed: self.inner.parsed.clone(),
+            inner: TypedOnly {
+                parsed: self.inner.parsed.clone(),
             },
         }
     }
@@ -289,19 +365,19 @@ impl Manifest<Validated> {
     }
 }
 
-impl Manifest<Deserialized> {
+impl Manifest<TypedOnly> {
     pub fn migrate_deserialized(
         &self,
         _lockfile: &Lockfile,
-    ) -> Result<Manifest<DeserializedMigrated>, ManifestError> {
+    ) -> Result<Manifest<MigratedTypedOnly>, ManifestError> {
         todo!()
     }
 
     /// Bootstrap a [`Manifest<Deserialized>`] from the inner [`ManifestLatest`].
     pub(crate) fn from_latest(manifest: ManifestLatest) -> Self {
         Manifest {
-            inner: Deserialized {
-                original_parsed: Parsed::from_latest(manifest),
+            inner: TypedOnly {
+                parsed: Parsed::from_latest(manifest),
             },
         }
     }
@@ -328,16 +404,14 @@ impl<S: ManifestState> Manifest<S> {
 }
 
 #[cfg(any(test, feature = "tests"))]
-impl Arbitrary for Manifest<Deserialized> {
+impl Arbitrary for Manifest<TypedOnly> {
     type Parameters = ();
     type Strategy = BoxedStrategy<Self>;
 
     fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
         any::<Parsed>()
             .prop_map(|parsed| Manifest {
-                inner: Deserialized {
-                    original_parsed: parsed,
-                },
+                inner: TypedOnly { parsed },
             })
             .boxed()
     }
@@ -347,7 +421,7 @@ impl Arbitrary for Manifest<Deserialized> {
 // (De)serialization and JSON schema
 // =============================================================================
 
-impl<'de> Deserialize<'de> for Manifest<Deserialized> {
+impl<'de> Deserialize<'de> for Manifest<TypedOnly> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -363,8 +437,8 @@ impl<'de> Deserialize<'de> for Manifest<Deserialized> {
                 let manifest = ManifestV1::deserialize(d)
                     .map_err(|err| serde::de::Error::custom(err.to_string()))?;
                 Ok(Manifest {
-                    inner: Deserialized {
-                        original_parsed: Parsed::V1(manifest),
+                    inner: TypedOnly {
+                        parsed: Parsed::V1(manifest),
                     },
                 })
             },
@@ -373,8 +447,8 @@ impl<'de> Deserialize<'de> for Manifest<Deserialized> {
                 let manifest = ManifestV1_9_0::deserialize(d)
                     .map_err(|err| serde::de::Error::custom(err.to_string()))?;
                 Ok(Manifest {
-                    inner: Deserialized {
-                        original_parsed: Parsed::V1_9_0(manifest),
+                    inner: TypedOnly {
+                        parsed: Parsed::V1_9_0(manifest),
                     },
                 })
             },
@@ -400,7 +474,7 @@ impl Serialize for Manifest<Migrated> {
     }
 }
 
-impl Serialize for Manifest<Deserialized> {
+impl Serialize for Manifest<TypedOnly> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -409,23 +483,23 @@ impl Serialize for Manifest<Deserialized> {
     }
 }
 
-impl Default for Manifest<Deserialized> {
+impl Default for Manifest<TypedOnly> {
     fn default() -> Self {
         Manifest {
-            inner: Deserialized {
-                original_parsed: Parsed::V1_9_0(ManifestV1_9_0::default()),
+            inner: TypedOnly {
+                parsed: Parsed::V1_9_0(ManifestV1_9_0::default()),
             },
         }
     }
 }
 
-impl PartialEq for Manifest<Deserialized> {
+impl PartialEq for Manifest<TypedOnly> {
     fn eq(&self, other: &Self) -> bool {
         self.inner == other.inner
     }
 }
 
-impl JsonSchema for Manifest<Deserialized> {
+impl JsonSchema for Manifest<TypedOnly> {
     fn schema_name() -> std::borrow::Cow<'static, str> {
         "Manifest".into()
     }

@@ -10,13 +10,13 @@ use serde::{Deserialize, Serialize};
 use crate::compose::WarningWithContext;
 use crate::parsed::PackageLookup;
 use crate::parsed::common::IncludeDescriptor;
-use crate::{Deserialized, Manifest, ManifestError};
+use crate::{TypedOnly, Manifest, ManifestError};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct Compose {
     /// The composing environment's manifest that was on disk at lock-time.
-    pub composer: Manifest<Deserialized>,
+    pub composer: Manifest<TypedOnly>,
     /// Metadata and manifests for the included environments in the order
     /// that they were specified in the composing environment's manifest.
     pub include: Vec<LockedInclude>,
@@ -49,7 +49,7 @@ impl Compose {
         // Reverse of merge order so that we return the highest priority match.
         for include in includes.iter().rev() {
             let pkgs = vec![package.to_string()];
-            let res = match &include.manifest.inner.original_parsed {
+            let res = match &include.manifest.inner.parsed {
                 crate::Parsed::V1(manifest) => manifest.get_install_ids(pkgs),
                 crate::Parsed::V1_9_0(manifest) => manifest.get_install_ids(pkgs),
             };
@@ -68,7 +68,7 @@ impl Compose {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct LockedInclude {
-    pub manifest: Manifest<Deserialized>,
+    pub manifest: Manifest<TypedOnly>,
     #[cfg_attr(
         any(test, feature = "tests"),
         proptest(strategy = "alphanum_string(5)")

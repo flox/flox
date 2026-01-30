@@ -29,7 +29,7 @@ use crate::parsed::latest::{
     PackageDescriptorFlake,
 };
 use crate::parsed::{Inner, PackageLookup};
-use crate::{Deserialized, Manifest, ManifestError, MigratedManifest};
+use crate::{TypedOnly, Manifest, ManifestError, MigratedManifest};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LockfileError {
@@ -73,7 +73,7 @@ pub struct Lockfile {
     /// For an environment that doesn't include any others, this is the `manifest.toml`
     /// on disk at lock-time. For an environment that *does* include others, this is
     /// the merged manifest that was locked.
-    pub manifest: Manifest<Deserialized>,
+    pub manifest: Manifest<TypedOnly>,
     /// Locked packages
     pub packages: Vec<LockedPackage>,
     /// Composition information. This will be `None` when there are no includes.
@@ -137,7 +137,7 @@ impl Lockfile {
     }
 
     /// The manifest the user edits (i.e. not merged)
-    pub fn user_manifest(&self) -> &Manifest<Deserialized> {
+    pub fn user_manifest(&self) -> &Manifest<TypedOnly> {
         match &self.compose {
             Some(compose) => &compose.composer,
             None => &self.manifest,
@@ -463,7 +463,7 @@ pub(crate) mod tests {
         .unwrap()
     });
 
-    static TEST_TYPED_MANIFEST: LazyLock<Manifest<Deserialized>> =
+    static TEST_TYPED_MANIFEST: LazyLock<Manifest<TypedOnly>> =
         LazyLock::new(|| toml_edit::de::from_str(TEST_MANIFEST_CONTENTS).unwrap());
 
     static TEST_LOCKED_MANIFEST: LazyLock<Lockfile> = LazyLock::new(|| Lockfile {
@@ -534,7 +534,7 @@ pub(crate) mod tests {
             .install
             .inner_mut()
             .insert(baz_iid.clone(), baz_descriptor.clone());
-        let manifest = Manifest::<Deserialized>::from_latest(manifest);
+        let manifest = Manifest::<TypedOnly>::from_latest(manifest);
 
         let locked = Lockfile {
             version: Version::<1>,
@@ -581,7 +581,7 @@ pub(crate) mod tests {
             .install
             .inner_mut()
             .insert(baz_iid.clone(), baz_descriptor.into());
-        let manifest = Manifest::<Deserialized>::from_latest(manifest);
+        let manifest = Manifest::<TypedOnly>::from_latest(manifest);
 
         let locked = Lockfile {
             version: Version::<1>,
@@ -616,7 +616,7 @@ pub(crate) mod tests {
             .install
             .inner_mut()
             .insert(baz_iid.clone(), baz_descriptor.into());
-        let manifest = Manifest::<Deserialized>::from_latest(manifest);
+        let manifest = Manifest::<TypedOnly>::from_latest(manifest);
 
         let locked = Lockfile {
             version: Version::<1>,

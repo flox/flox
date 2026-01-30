@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use flox_manifest::Migrated;
 use flox_manifest::lockfile::LockfileError;
 use flox_manifest::parsed::PackageLookup;
 use flox_manifest::parsed::latest::{ManifestLatest, PackageDescriptorCatalog};
@@ -229,7 +230,7 @@ impl LockManifest {
     /// and already fetched includes will not be re-fetched.
     pub async fn lock_manifest(
         flox: &Flox,
-        manifest: &Manifest,
+        manifest: &Manifest<Migrated>,
         seed_lockfile: Option<&Lockfile>,
         include_fetcher: &IncludeFetcher,
     ) -> Result<Lockfile, EnvironmentError> {
@@ -252,7 +253,7 @@ impl LockManifest {
     /// are fetched.
     pub async fn lock_manifest_with_include_upgrades(
         flox: &Flox,
-        manifest: &Manifest,
+        manifest: &Manifest<Migrated>,
         seed_lockfile: Option<&Lockfile>,
         include_fetcher: &IncludeFetcher,
         to_upgrade: Option<Vec<String>>,
@@ -303,7 +304,7 @@ impl LockManifest {
     #[instrument(skip_all, fields(progress = "Composing environments"))]
     fn merge_manifest(
         flox: &Flox,
-        manifest: &Manifest,
+        manifest: &Manifest<Migrated>,
         seed_lockfile: Option<&Lockfile>,
         include_fetcher: &IncludeFetcher,
         merger: ManifestMerger,
@@ -438,7 +439,7 @@ impl LockManifest {
 
         // Call the merger with all the manifests
         let composite = CompositeManifest {
-            composer: manifest.clone(),
+            composer: manifest.migrated_manifest().clone(),
             deps: locked_includes
                 .iter()
                 .map(|include| (include.name.clone(), include.manifest.clone()))

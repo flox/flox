@@ -8,10 +8,20 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-use crate::ManifestError;
-use crate::parsed::common::{Build, Containerize, Hook, Include, Options, Profile, Services, Vars};
+use crate::parsed::common::{
+    Build,
+    Containerize,
+    Hook,
+    Include,
+    KnownSchemaVersion,
+    Options,
+    Profile,
+    Services,
+    Vars,
+};
 use crate::parsed::v1_9_0::package_descriptor::ManifestPackageDescriptor;
 use crate::parsed::{Inner, SkipSerializing, impl_into_inner, impl_pkg_lookup};
+use crate::{AsTypedOnlyManifest, Manifest, ManifestError, Parsed, SchemaVersion, TypedOnly};
 
 pub mod package_descriptor;
 
@@ -65,6 +75,22 @@ pub struct ManifestV1_9_0 {
     pub include: Include,
 }
 impl_pkg_lookup!(crate::parsed::v1_9_0, ManifestV1_9_0);
+
+impl AsTypedOnlyManifest for ManifestV1_9_0 {
+    fn as_typed_only(&self) -> crate::Manifest<TypedOnly> {
+        Manifest {
+            inner: TypedOnly {
+                parsed: Parsed::V1_9_0(self.clone()),
+            },
+        }
+    }
+}
+
+impl SchemaVersion for ManifestV1_9_0 {
+    fn get_schema_version(&self) -> KnownSchemaVersion {
+        KnownSchemaVersion::V1_9_0
+    }
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct ManifestVersion(u8);

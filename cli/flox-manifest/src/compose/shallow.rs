@@ -25,6 +25,7 @@ use crate::parsed::common::{
     Vars,
 };
 use crate::parsed::v1::{Install, ManifestV1, ManifestVersion};
+use crate::{Manifest, TypedOnly};
 
 /// Merges two manifests by applying `manifest2` on top of `manifest1` and
 /// overwriting any conflicts for keys within the top-level of each `ManifestV1`
@@ -274,9 +275,9 @@ impl ShallowMerger {
 impl ManifestMergeTrait for ShallowMerger {
     fn merge(
         &self,
-        low_priority: &Manifest<Migrated>,
-        high_priority: &Manifest<Migrated>,
-    ) -> Result<(ManifestV1, Vec<Warning>), MergeError> {
+        low_priority: &Manifest<TypedOnly>,
+        high_priority: &Manifest<TypedOnly>,
+    ) -> Result<(Manifest<TypedOnly>, Vec<Warning>), MergeError> {
         trace!(section = "versions", "merging manifest section");
         let version = Self::merge_version(low_priority.version, high_priority.version)?;
         trace!(section = "install", "merging manifest section");

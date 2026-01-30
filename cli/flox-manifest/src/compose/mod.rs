@@ -10,8 +10,9 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 
 use super::parsed::common::ContainerizeConfig;
-use crate::Manifest;
+use crate::parsed::latest::ManifestLatest;
 use crate::parsed::{Inner, impl_into_inner};
+use crate::{AsTypedOnlyManifest, Manifest, TypedOnly};
 
 // TODO: Pass the actual name in.
 pub static COMPOSER_MANIFEST_ID: &str = "Current manifest";
@@ -90,20 +91,6 @@ pub struct WarningWithContext {
     pub higher_priority_name: String,
 }
 
-/// A collection of manifests to be merged with a `ManifestMergeTrait`.
-#[derive(Debug, Clone, Default)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(crate) struct CompositeManifest {
-    pub(crate) composer: Manifest,
-    #[cfg_attr(
-        test,
-        proptest(strategy = "proptest::collection::vec(any::<(String, Manifest)>(), 0..=2)")
-    )]
-    /// (name, manifest)
-    /// The order is significant; later manifests have higher priority.
-    pub(crate) deps: Vec<(String, Manifest)>,
-}
-
 #[derive(Clone, Debug)]
 pub(crate) enum ManifestMerger {
     Shallow(ShallowMerger),
@@ -112,9 +99,9 @@ pub(crate) enum ManifestMerger {
 impl ManifestMergeTrait for ManifestMerger {
     fn merge(
         &self,
-        low_priority: &Manifest,
-        high_priority: &Manifest,
-    ) -> Result<(Manifest, Vec<Warning>), MergeError> {
+        low_priority: &Manifest<TypedOnly>,
+        high_priority: &Manifest<TypedOnly>,
+    ) -> Result<(Manifest<TypedOnly>, Vec<Warning>), MergeError> {
         match self {
             ManifestMerger::Shallow(shallow_merger) => {
                 shallow_merger.merge(low_priority, high_priority)
@@ -123,13 +110,34 @@ impl ManifestMergeTrait for ManifestMerger {
     }
 }
 
+/// A collection of manifests to be merged with a `ManifestMergeTrait`.
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+pub(crate) struct CompositeManifest {
+    /// The user's manifest that is including the other manifests.
+    pub(crate) composer: ManifestLatest,
+
+    /// (name, manifest)
+    /// The order is significant; later manifests have higher priority.
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(
+            strategy = "proptest::collection::vec(any::<(String, Manifest<TypedOnly>)>(), 0..=2)"
+        )
+    )]
+    pub(crate) deps: Vec<(String, Manifest<TypedOnly>)>,
+}
+
 impl CompositeManifest {
     #[instrument(skip_all)]
     pub(crate) fn merge_all(
         &self,
         merger: ManifestMerger,
-    ) -> Result<(Manifest, Vec<WarningWithContext>), MergeError> {
-        let current_manifest = &(COMPOSER_MANIFEST_ID.to_string(), self.composer.clone());
+    ) -> Result<(Manifest<TypedOnly>, Vec<WarningWithContext>), MergeError> {
+        let current_manifest = &(
+            COMPOSER_MANIFEST_ID.to_string(),
+            self.composer.as_typed_only(),
+        );
 
         let mut merges = self.deps.iter().chain([current_manifest]);
         let (_, mut merged_manifest) = merges
@@ -173,9 +181,9 @@ impl CompositeManifest {
 trait ManifestMergeTrait {
     fn merge(
         &self,
-        low_priority: &Manifest,
-        high_priority: &Manifest,
-    ) -> Result<(Manifest, Vec<Warning>), MergeError>;
+        low_priority: &Manifest<TypedOnly>,
+        high_priority: &Manifest<TypedOnly>,
+    ) -> Result<(Manifest<TypedOnly>, Vec<Warning>), MergeError>;
 }
 
 /// Given two optional strings, append them if they're present, return the present one or `None` if not.
@@ -377,11 +385,13 @@ pub fn new_package_overrides(old_ids: &[String], new_ids: &[String]) -> Vec<Stri
 mod tests {
     use super::shallow::ShallowMerger;
     use super::*;
-    use crate::parsed::common::Profile;
+    use crate::Parsed;
+    use crate::parsed::common::{Profile, Vars};
+    use crate::parsed::v1::ManifestV1;
 
     #[test]
     fn composite_manifest_runs_merger() {
-        let composer = Manifest {
+        let composer = ManifestLatest {
             profile: Some(Profile {
                 common: Some("composer".to_string()),
                 ..Default::default()
@@ -389,14 +399,14 @@ mod tests {
             ..Default::default()
         };
         let manifest1 = {
-            let mut manifest = Manifest::default();
+            let mut manifest = ManifestV1::default();
             manifest
                 .vars
                 .inner_mut()
                 .insert("var1".to_string(), "manifest1".to_string());
-            manifest
+            manifest.as_typed_only()
         };
-        let manifest2 = Manifest {
+        let manifest2 = ManifestV1 {
             vars: Vars(BTreeMap::from([(
                 "var2".to_string(),
                 "manifest2".to_string(),
@@ -406,7 +416,8 @@ mod tests {
                 ..Default::default()
             }),
             ..Default::default()
-        };
+        }
+        .as_typed_only();
         let composite = CompositeManifest {
             composer,
             deps: vec![
@@ -417,10 +428,19 @@ mod tests {
         let (merged, _warnings) = composite
             .merge_all(ManifestMerger::Shallow(ShallowMerger))
             .unwrap();
-        assert_eq!(merged.vars.inner()["var1"], "manifest1");
-        assert_eq!(merged.vars.inner()["var2"], "manifest2");
+        let Manifest {
+            inner:
+                TypedOnly {
+                    parsed: Parsed::V1_9_0(merged_manifest),
+                },
+        } = merged
+        else {
+            panic!()
+        };
+        assert_eq!(merged_manifest.vars.inner()["var1"], "manifest1");
+        assert_eq!(merged_manifest.vars.inner()["var2"], "manifest2");
         assert_eq!(
-            merged.profile,
+            merged_manifest.profile,
             Some(Profile {
                 common: Some("manifest2\ncomposer".to_string()),
                 ..Default::default()
