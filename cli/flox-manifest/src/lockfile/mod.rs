@@ -25,7 +25,14 @@ use crate::lockfile::catalog::LockedPackageCatalog;
 use crate::lockfile::compose::Compose;
 use crate::lockfile::flake::LockedPackageFlake;
 use crate::lockfile::store_path::LockedPackageStorePath;
-use crate::parsed::v1_9_0::{ManifestV1_9_0, PackageDescriptorCatalog, PackageDescriptorFlake};
+use crate::parsed::Inner;
+use crate::parsed::common::DEFAULT_GROUP_NAME;
+use crate::parsed::latest::{
+    ManifestLatest,
+    ManifestPackageDescriptor,
+    PackageDescriptorCatalog,
+    PackageDescriptorFlake,
+};
 use crate::{Deserialized, Manifest, ManifestError, MigratedManifest};
 
 #[derive(Debug, thiserror::Error)]
@@ -43,7 +50,7 @@ pub enum LockfileError {
     MissingPackageDescriptor(String),
 
     #[error(transparent)]
-    Manifest(#[source] ManifestError),
+    Manifest(#[from] ManifestError),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -145,13 +152,19 @@ impl Lockfile {
     /// Lockfile -> { (install_id, system): (package_descriptor, locked_package) }
     fn make_seed_mapping(
         seed: &Lockfile,
-    ) -> HashMap<(&str, &str), (&ManifestPackageDescriptor, &LockedPackage)> {
+    ) -> Result<HashMap<(&str, &str), (&ManifestPackageDescriptor, &LockedPackage)>, LockfileError>
+    {
+        let manifest = seed
+            .manifest
+            .migrate_deserialized(&seed)
+            .map_err(LockfileError::Manifest)?
+            .migrated_manifest();
         seed.packages
             .iter()
             .filter_map(|locked| {
                 let system = locked.system().as_str();
                 let install_id = locked.install_id();
-                let descriptor = seed.manifest.install.inner().get(locked.install_id())?;
+                let descriptor = manifest.install.inner().get(locked.install_id())?;
                 Some(((install_id, system), (descriptor, locked)))
             })
             .collect()
@@ -179,10 +192,13 @@ impl Lockfile {
     /// fallible conversions like that would be unnecessary,
     /// or would be pushed higher up.
     fn collect_package_groups(
-        manifest: &ManifestV1_9_0,
+        manifest: &ManifestLatest,
         seed_lockfile: Option<&Lockfile>,
-    ) -> Result<impl Iterator<Item = PackageGroup>, ResolveError> {
-        let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
+    ) -> Result<impl Iterator<Item = catalog_types::PackageGroup>, LockfileError> {
+        let seed_locked_packages = seed_lockfile
+            .map(Self::make_seed_mapping)
+            .transpose()?
+            .unwrap_or_default();
 
         // Using a btree map to ensure consistent ordering
         let mut map = BTreeMap::new();
@@ -202,13 +218,14 @@ impl Lockfile {
                 }
             });
 
-        for (install_id, manifest_descriptor) in manifest.install.inner().iter() {
+        let install: &BTreeMap<String, ManifestPackageDescriptor> = manifest.install.inner();
+        for (install_id, manifest_descriptor) in install.iter() {
             // package groups are only relevant to catalog descriptors
             let Some(manifest_descriptor) = manifest_descriptor.as_catalog_descriptor_ref() else {
                 continue;
             };
 
-            let resolved_descriptor_base = PackageDescriptor {
+            let resolved_descriptor_base = catalog_types::PackageDescriptor {
                 install_id: install_id.clone(),
                 attr_path: manifest_descriptor.pkg_path.clone(),
                 derivation: None,

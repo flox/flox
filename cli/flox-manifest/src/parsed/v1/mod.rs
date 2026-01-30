@@ -18,8 +18,12 @@ use serde_with::skip_serializing_none;
 
 use crate::ManifestError;
 use crate::parsed::common::{Build, Containerize, Hook, Include, Options, Profile, Services, Vars};
-use crate::parsed::v1::package_descriptor::{ManifestPackageDescriptor, PackageDescriptorCatalog};
-use crate::parsed::{Inner, SkipSerializing, impl_into_inner};
+use crate::parsed::v1::package_descriptor::{
+    ManifestPackageDescriptor,
+    PackageDescriptorCatalog,
+    PackageDescriptorFlake,
+};
+use crate::parsed::{Inner, SkipSerializing, impl_into_inner, impl_pkg_lookup};
 
 pub mod package_descriptor;
 
@@ -72,132 +76,138 @@ pub struct ManifestV1 {
     #[serde(skip_serializing_if = "Include::skip_serializing")]
     pub include: Include,
 }
+impl_pkg_lookup!(
+    ManifestV1,
+    ManifestPackageDescriptor,
+    PackageDescriptorCatalog,
+    PackageDescriptorFlake
+);
 
-impl ManifestV1 {
-    /// Get the package descriptor with the specified install_id.
-    pub fn pkg_descriptor_with_id(&self, id: impl AsRef<str>) -> Option<ManifestPackageDescriptor> {
-        self.install.0.get(id.as_ref()).cloned()
-    }
+// impl ManifestV1 {
+//     /// Get the package descriptor with the specified install_id.
+//     pub fn pkg_descriptor_with_id(&self, id: impl AsRef<str>) -> Option<ManifestPackageDescriptor> {
+//         self.install.0.get(id.as_ref()).cloned()
+//     }
 
-    /// Get the package descriptor with the specified install_id.
-    pub fn catalog_pkg_descriptor_with_id(
-        &self,
-        id: impl AsRef<str>,
-    ) -> Option<PackageDescriptorCatalog> {
-        self.install
-            .0
-            .get(id.as_ref())
-            .and_then(ManifestPackageDescriptor::as_catalog_descriptor_ref)
-            .cloned()
-    }
+//     /// Get the package descriptor with the specified install_id.
+//     pub fn catalog_pkg_descriptor_with_id(
+//         &self,
+//         id: impl AsRef<str>,
+//     ) -> Option<PackageDescriptorCatalog> {
+//         self.install
+//             .0
+//             .get(id.as_ref())
+//             .and_then(ManifestPackageDescriptor::as_catalog_descriptor_ref)
+//             .cloned()
+//     }
 
-    /// Get the package descriptor with the specified install_id.
-    pub fn flake_pkg_descriptor_with_id(
-        &self,
-        id: impl AsRef<str>,
-    ) -> Option<ManifestPackageDescriptor> {
-        self.install.0.get(id.as_ref()).cloned()
-    }
+//     /// Get the package descriptor with the specified install_id.
+//     pub fn flake_pkg_descriptor_with_id(
+//         &self,
+//         id: impl AsRef<str>,
+//     ) -> Option<ManifestPackageDescriptor> {
+//         self.install.0.get(id.as_ref()).cloned()
+//     }
 
-    /// Get the package descriptors in the "toplevel" group.
-    pub fn pkg_descriptors_in_toplevel_group(&self) -> Vec<(String, ManifestPackageDescriptor)> {
-        pkg_descriptors_in_toplevel_group(&self.install.0)
-    }
+//     /// Get the package descriptors in the "toplevel" group.
+//     pub fn pkg_descriptors_in_toplevel_group(&self) -> Vec<(String, ManifestPackageDescriptor)> {
+//         pkg_descriptors_in_toplevel_group(&self.install.0)
+//     }
 
-    /// Get the package descriptors in a named group.
-    pub fn pkg_descriptors_in_named_group(
-        &self,
-        name: impl AsRef<str>,
-    ) -> Vec<(String, ManifestPackageDescriptor)> {
-        pkg_descriptors_in_named_group(name, &self.install.0)
-    }
+//     /// Get the package descriptors in a named group.
+//     pub fn pkg_descriptors_in_named_group(
+//         &self,
+//         name: impl AsRef<str>,
+//     ) -> Vec<(String, ManifestPackageDescriptor)> {
+//         pkg_descriptors_in_named_group(name, &self.install.0)
+//     }
 
-    /// Check whether the specified name is either an install_id or group name.
-    pub fn pkg_or_group_found_in_manifest(&self, name: impl AsRef<str>) -> bool {
-        pkg_or_group_found_in_manifest(name.as_ref(), &self.install.0)
-    }
+//     /// Check whether the specified name is either an install_id or group name.
+//     pub fn pkg_or_group_found_in_manifest(&self, name: impl AsRef<str>) -> bool {
+//         pkg_or_group_found_in_manifest(name.as_ref(), &self.install.0)
+//     }
 
-    /// Check whether the specified package belongs to a named group
-    /// with additional packages.
-    pub fn pkg_belongs_to_non_empty_named_group(
-        &self,
-        pkg: impl AsRef<str>,
-    ) -> Result<Option<String>, ManifestError> {
-        pkg_belongs_to_non_empty_named_group(pkg.as_ref(), &self.install.0)
-    }
+//     /// Check whether the specified package belongs to a named group
+//     /// with additional packages.
+//     pub fn pkg_belongs_to_non_empty_named_group(
+//         &self,
+//         pkg: impl AsRef<str>,
+//     ) -> Result<Option<String>, ManifestError> {
+//         pkg_belongs_to_non_empty_named_group(pkg.as_ref(), &self.install.0)
+//     }
 
-    /// Check whether the specified package belongs to the "toplevel" group
-    /// with additional packages.
-    pub fn pkg_belongs_to_non_empty_toplevel_group(
-        &self,
-        pkg: impl AsRef<str>,
-    ) -> Result<bool, ManifestError> {
-        pkg_belongs_to_non_empty_toplevel_group(pkg.as_ref(), &self.install.0)
-    }
+//     /// Check whether the specified package belongs to the "toplevel" group
+//     /// with additional packages.
+//     pub fn pkg_belongs_to_non_empty_toplevel_group(
+//         &self,
+//         pkg: impl AsRef<str>,
+//     ) -> Result<bool, ManifestError> {
+//         pkg_belongs_to_non_empty_toplevel_group(pkg.as_ref(), &self.install.0)
+//     }
 
-    /// Resolve "loose" package references (e.g. pkg-paths),
-    /// to `install_ids` if unambiguous
-    /// so that installation references remain valid for other package operations.
-    pub fn get_install_ids(&self, packages: Vec<String>) -> Result<Vec<String>, ManifestError> {
-        let mut install_ids = Vec::new();
-        for pkg in packages {
-            // User passed an install id directly
-            if self.install.inner().contains_key(&pkg) {
-                install_ids.push(pkg);
-                continue;
-            }
+//     /// Resolve "loose" package references (e.g. pkg-paths),
+//     /// to `install_ids` if unambiguous
+//     /// so that installation references remain valid for other package operations.
+//     pub fn get_install_ids(&self, packages: Vec<String>) -> Result<Vec<String>, ManifestError> {
+//         let mut install_ids = Vec::new();
+//         for pkg in packages {
+//             // User passed an install id directly
+//             if self.install.inner().contains_key(&pkg) {
+//                 install_ids.push(pkg);
+//                 continue;
+//             }
 
-            // User passed a package path to uninstall
-            // To support version constraints, we match the provided value against
-            // `<pkg-path>` and `<pkg-path>@<version>`.
-            let matching_iids_by_pkg_path = self
-                .install
-                .inner()
-                .iter()
-                .filter(|(_iid, descriptor)| {
-                    // Find matching pkg-paths and select for uninstall
+//             // User passed a package path to uninstall
+//             // To support version constraints, we match the provided value against
+//             // `<pkg-path>` and `<pkg-path>@<version>`.
+//             let matching_iids_by_pkg_path = self
+//                 .install
+//                 .inner()
+//                 .iter()
+//                 .filter(|(_iid, descriptor)| {
+//                     // Find matching pkg-paths and select for uninstall
 
-                    // If the descriptor is not a catalog descriptor, skip.
-                    // flakes descriptors are only matched by install_id.
-                    let ManifestPackageDescriptor::Catalog(des) = descriptor else {
-                        return false;
-                    };
+//                     // If the descriptor is not a catalog descriptor, skip.
+//                     // flakes descriptors are only matched by install_id.
+//                     let ManifestPackageDescriptor::Catalog(des) = descriptor else {
+//                         return false;
+//                     };
 
-                    // Select if the descriptor's pkg_path matches the user's input
-                    if des.pkg_path == pkg {
-                        return true;
-                    }
+//                     // Select if the descriptor's pkg_path matches the user's input
+//                     if des.pkg_path == pkg {
+//                         return true;
+//                     }
 
-                    // Select if the descriptor matches the user's input when the version is included
-                    // Future: if we want to allow uninstalling a specific outputs as well,
-                    //         parsing of uninstall specs will need to be more sophisticated.
-                    //         For now going with a simple check for pkg-path@version.
-                    if let Some(version) = &des.version {
-                        format!("{}@{}", des.pkg_path, version) == pkg
-                    } else {
-                        false
-                    }
-                })
-                .map(|(iid, _)| iid.to_owned())
-                .collect::<Vec<String>>();
+//                     // Select if the descriptor matches the user's input when the version is included
+//                     // Future: if we want to allow uninstalling a specific outputs as well,
+//                     //         parsing of uninstall specs will need to be more sophisticated.
+//                     //         For now going with a simple check for pkg-path@version.
+//                     if let Some(version) = &des.version {
+//                         format!("{}@{}", des.pkg_path, version) == pkg
+//                     } else {
+//                         false
+//                     }
+//                 })
+//                 .map(|(iid, _)| iid.to_owned())
+//                 .collect::<Vec<String>>();
 
-            // Extend the install_ids with the matching install id from pkg-path
-            match matching_iids_by_pkg_path.len() {
-                0 => return Err(ManifestError::PackageNotFound(pkg)),
-                // if there is only one package with the given pkg-path, uninstall it
-                1 => install_ids.extend(matching_iids_by_pkg_path),
-                // if there are multiple packages with the given pkg-path, ask for a specific install id
-                _ => {
-                    return Err(ManifestError::MultiplePackagesMatch(
-                        pkg,
-                        matching_iids_by_pkg_path,
-                    ));
-                },
-            }
-        }
-        Ok(install_ids)
-    }
-}
+//             // Extend the install_ids with the matching install id from pkg-path
+//             match matching_iids_by_pkg_path.len() {
+//                 0 => return Err(ManifestError::PackageNotFound(pkg)),
+//                 // if there is only one package with the given pkg-path, uninstall it
+//                 1 => install_ids.extend(matching_iids_by_pkg_path),
+//                 // if there are multiple packages with the given pkg-path, ask for a specific install id
+//                 _ => {
+//                     return Err(ManifestError::MultiplePackagesMatch(
+//                         pkg,
+//                         matching_iids_by_pkg_path,
+//                     ));
+//                 },
+//             }
+//         }
+//         Ok(install_ids)
+//     }
+// }
 
 pub(crate) fn pkg_descriptors_in_toplevel_group(
     descriptors: &BTreeMap<String, ManifestPackageDescriptor>,
