@@ -43,13 +43,15 @@ fn detect_heuristics() -> impl Iterator<Item = String> {
 
 /// Detect all invocation sources for the current CLI invocation
 ///
-/// Returns a deduplicated vector of invocation source identifiers.
-/// Sources are detected from:
+/// Returns a deduplicated vector of invocation source identifiers, sorted
+/// for deterministic output. Sources are detected from:
 /// 1. Explicit FLOX_INVOCATION_SOURCE environment variable (comma-separated)
 /// 2. Inference heuristics for CI, containerd, agentic tooling, and other contexts
 ///
-/// Applies hierarchical deduplication: if both "ci" and "ci.github-actions" exist,
-/// only "ci.github-actions" is kept (more specific supersedes less specific).
+/// Only exact duplicates are removed (via HashSet). The full set of detected
+/// sources is preserved — no hierarchical deduplication is applied.
+/// Double-counting prevention for aggregation queries is handled in the
+/// metrics materialized view using COUNT(DISTINCT uuid).
 pub fn detect_invocation_sources() -> Vec<String> {
     let mut sources = HashSet::new();
 
@@ -65,24 +67,8 @@ pub fn detect_invocation_sources() -> Vec<String> {
     // Apply all inference heuristics (CI, containerd, agentic tools, etc.)
     sources.extend(detect_heuristics());
 
-    // Convert to vec for hierarchical deduplication
-    let sources_vec: Vec<String> = sources.into_iter().collect();
-
-    // Apply hierarchical deduplication: remove any source if a more specific version exists
-    // e.g., if both "ci" and "ci.github-actions" exist, remove "ci"
-    let mut result: Vec<String> = sources_vec
-        .iter()
-        .filter(|source| {
-            // Keep this source only if NO other source is more specific
-            // A source is "more specific" if it starts with this source + "."
-            !sources_vec
-                .iter()
-                .any(|other| other != *source && other.starts_with(&format!("{}.", source)))
-        })
-        .cloned()
-        .collect();
-
     // Sort for consistent ordering
+    let mut result: Vec<String> = sources.into_iter().collect();
     result.sort();
     result
 }
@@ -188,9 +174,10 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_invocation_sources_hierarchical_deduplication() {
-        // Test case: both "ci" (inferred from CI env var) and "ci.github-actions" (explicit)
-        // Should only keep "ci.github-actions" because it's more specific
+    fn test_detect_invocation_sources_preserves_all_hierarchy_levels() {
+        // Both "ci" (inferred from CI env var) and "ci.github-actions" (explicit)
+        // should be preserved — no hierarchical deduplication.
+        // Double-counting prevention is handled in the metrics materialized view.
         temp_env::with_vars(
             [
                 ("FLOX_INVOCATION_SOURCE", Some("ci.github-actions")),
@@ -198,58 +185,42 @@ mod tests {
             ],
             || {
                 let sources = detect_invocation_sources();
-                println!("Sources detected: {:?}", sources);
-                assert!(sources.contains(&"ci.github-actions".to_string()));
                 assert!(
-                    !sources.contains(&"ci".to_string()),
-                    "Generic 'ci' should be removed when 'ci.github-actions' exists"
+                    sources.contains(&"ci".to_string()),
+                    "Generic 'ci' should be preserved"
+                );
+                assert!(
+                    sources.contains(&"ci.github-actions".to_string()),
+                    "Specific 'ci.github-actions' should be preserved"
                 );
             },
         );
     }
 
     #[test]
-    fn test_detect_invocation_sources_hierarchical_multiple_levels() {
-        // Test case: "ci", "ci.github", "ci.github.actions"
-        // Should only keep "ci.github.actions" (most specific)
+    fn test_detect_invocation_sources_preserves_multiple_levels() {
+        // All hierarchy levels should be preserved in the output
         temp_env::with_var(
             "FLOX_INVOCATION_SOURCE",
             Some("ci,ci.github,ci.github.actions"),
             || {
                 let sources = detect_invocation_sources();
-                println!("Sources detected: {:?}", sources);
+                assert!(sources.contains(&"ci".to_string()));
+                assert!(sources.contains(&"ci.github".to_string()));
                 assert!(sources.contains(&"ci.github.actions".to_string()));
-                assert!(
-                    !sources.contains(&"ci".to_string()),
-                    "'ci' should be removed"
-                );
-                assert!(
-                    !sources.contains(&"ci.github".to_string()),
-                    "'ci.github' should be removed"
-                );
-                // Count only ci-related sources, there may be other detected sources from env
-                let ci_sources: Vec<_> = sources.iter().filter(|s| s.starts_with("ci")).collect();
-                assert_eq!(
-                    ci_sources.len(),
-                    1,
-                    "Should only contain one ci-related source: ci.github.actions"
-                );
             },
         );
     }
 
     #[test]
-    fn test_detect_invocation_sources_hierarchical_different_roots() {
-        // Test case: "ci" and "containerd" are different hierarchies
-        // Both should be kept since neither is more specific than the other
+    fn test_detect_invocation_sources_multiple_roots() {
+        // Sources from different hierarchies are all preserved
         temp_env::with_vars(
             [("CI", Some("true")), ("FLOX_CONTAINERD", Some("1"))],
             || {
                 let sources = detect_invocation_sources();
-                println!("Sources detected: {:?}", sources);
                 assert!(sources.contains(&"ci".to_string()));
                 assert!(sources.contains(&"containerd".to_string()));
-                // Note: May also contain other detected sources, so don't check exact count
                 assert!(
                     sources.len() >= 2,
                     "Should contain at least ci and containerd"
@@ -259,23 +230,38 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_invocation_sources_hierarchical_mixed() {
-        // Test case: "ci.github-actions", "containerd", "agentic" (if agentic.claude-code exists)
-        // Should keep "ci.github-actions", "containerd", but remove "agentic" if "agentic.X" exists
+    fn test_detect_invocation_sources_agentic_chain() {
+        // Agentic call chain: Claude Code calling MCP server
+        // All sources preserved for full context
+        temp_env::with_vars(
+            [
+                ("FLOX_INVOCATION_SOURCE", Some("agentic.flox-mcp")),
+                ("CLAUDE_CODE_SSE_PORT", Some("12345")),
+            ],
+            || {
+                let sources = detect_invocation_sources();
+                assert!(sources.contains(&"agentic.flox-mcp".to_string()));
+                assert!(sources.contains(&"agentic.claude-code.plugin".to_string()));
+            },
+        );
+    }
+
+    #[test]
+    fn test_detect_invocation_sources_mixed_contexts() {
+        // CI + containerd + agentic — all preserved
         temp_env::with_vars(
             [
                 ("FLOX_INVOCATION_SOURCE", Some("ci.github-actions")),
+                ("CI", Some("true")),
                 ("FLOX_CONTAINERD", Some("1")),
                 ("CLAUDE_CODE_SSE_PORT", Some("12345")),
             ],
             || {
                 let sources = detect_invocation_sources();
+                assert!(sources.contains(&"ci".to_string()));
                 assert!(sources.contains(&"ci.github-actions".to_string()));
                 assert!(sources.contains(&"containerd".to_string()));
                 assert!(sources.contains(&"agentic.claude-code.plugin".to_string()));
-                // No generic "ci" or "agentic" should be present
-                assert!(!sources.contains(&"ci".to_string()));
-                assert!(!sources.contains(&"agentic".to_string()));
             },
         );
     }
