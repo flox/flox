@@ -10,9 +10,12 @@ let
     let
       catalogLock = "${pkgsDir}/../nix-builds.lock";
       catalogs =
-        if builtins.pathExists (lib.traceVal catalogLock) then lib.importJSON catalogLock else { catalogs = {}; };
+        if builtins.pathExists catalogLock then
+          (lib.importJSON catalogLock).catalogs
+        else
+          { };
     in
-    builtins.trace catalogLock catalogs;
+    catalogs;
 
   catalogInstances = lib.mapAttrs (
     name: lockedCatalogSpec:
@@ -36,26 +39,43 @@ let
     #   },
     #   [...]
     # }
+    let
+      fetchNixCatalog = builtins.addErrorContext "while fetching catalog '${name}'" (
+        let
+          lockedRefWithoutDir = builtins.removeAttrs lockedCatalogSpec.locked [ "dir" ];
 
-    builtins.addErrorContext "while fetching catalog '${name}'" (
-      let
-        lockedRefWithoutDir = builtins.removeAttrs lockedCatalogSpec.locked [ "dir" ];
+          tree = builtins.fetchTree lockedRefWithoutDir;
+          catalogDotFlox = "${lockedCatalogSpec.locked.dir or ""}/.flox";
 
-        tree = builtins.fetchTree lockedRefWithoutDir;
-        catalogDotFlox = "${lockedCatalogSpec.locked.dir or ""}/.flox";
+          catalogPkgsDir = "${tree.outPath}/${catalogDotFlox}/pkgs";
 
-        catalogPkgsDir = "${tree.outPath}/${catalogDotFlox}/pkgs";
+        in
+        lib.nef.instantiate {
+          inherit nixpkgs;
+          pkgsDir = catalogPkgsDir;
+        }
+      );
 
-      in
-      lib.nef.instantiate {
-        inherit nixpkgs;
-        pkgsDir = catalogPkgsDir;
+    in
+    {
+      inherit (lockedCatalogSpec) type;
+    }
+    // (
+      {
+        "nix" = fetchNixCatalog;
       }
+      .${lockedCatalogSpec.type}
     )
-  ) catalogs.catalogs;
+  ) catalogs;
 
   catalogOverlay = final: prev: {
-    catalogs = lib.mapAttrs (_: catalogInstance: catalogInstance.reflect.packages) catalogInstances;
+    catalogs = lib.mapAttrs (
+      _: catalogInstance:
+      {
+        "nix" = catalogInstance.reflect.packages;
+      }
+      .${catalogInstance.type}
+    ) catalogInstances;
   };
 
   nixpkgsWithCatalogs = nixpkgs.extend catalogOverlay;
