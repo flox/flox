@@ -26,6 +26,6 @@ pub struct StartupCtx {
     pub args: StartupArgs,
     pub rc_path: Option<PathBuf>,
     pub env_diff: EnvDiff,
-    pub state_dir: PathBuf,
+    pub start_state_dir: PathBuf,
     pub act_ctx: ActivateCtx,
 }

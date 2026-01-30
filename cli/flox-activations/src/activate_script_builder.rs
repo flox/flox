@@ -4,7 +4,6 @@ use std::process::Command;
 
 use flox_core::activate::context::{ActivateCtx, AttachCtx};
 use flox_core::activate::vars::{FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_VAR};
-use flox_core::activations::StartIdentifier;
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
 
@@ -25,7 +24,7 @@ pub(super) fn assemble_activate_command(
     context: ActivateCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
-    start_id: &StartIdentifier,
+    start_state_dir: &Path,
 ) -> Command {
     let mut command = Command::new(context.attach_ctx.interpreter_path.join("activate"));
     add_old_cli_options(&mut command, &context);
@@ -35,9 +34,9 @@ pub(super) fn assemble_activate_command(
         &context.attach_ctx,
         subsystem_verbosity,
         vars_from_env,
-        start_id,
+        start_state_dir,
     );
-    add_activate_script_options(&mut command, &context.attach_ctx, start_id);
+    add_activate_script_options(&mut command, start_state_dir);
     command
 }
 
@@ -48,7 +47,7 @@ pub fn apply_activation_env(
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
     env_diff: &EnvDiff,
-    start_id: &StartIdentifier,
+    start_state_dir: &Path,
 ) {
     command.envs(old_cli_envs(context.clone()));
     add_old_activate_script_exports(
@@ -56,7 +55,7 @@ pub fn apply_activation_env(
         &context,
         subsystem_verbosity,
         vars_from_env,
-        start_id,
+        start_state_dir,
     );
     command.envs(&env_diff.additions);
     for var in &env_diff.deletions {
@@ -132,16 +131,8 @@ fn add_old_cli_options(command: &mut Command, context: &ActivateCtx) {
 }
 
 /// Options parsed by getopt that are only used by the activate script
-fn add_activate_script_options(
-    command: &mut Command,
-    context: &AttachCtx,
-    start_id: &StartIdentifier,
-) {
-    let state_dir_path = start_id
-        .state_dir_path(&context.flox_runtime_dir, &context.dot_flox_path)
-        .expect("Failed to compute state dir path");
-
-    command.args(["--start-state-dir", &state_dir_path.to_string_lossy()]);
+fn add_activate_script_options(command: &mut Command, start_state_dir: &Path) {
+    command.args(["--start-state-dir", &start_state_dir.to_string_lossy()]);
 }
 
 /// Prior to the refactor, these variables were exported in the activate script
@@ -153,7 +144,7 @@ fn add_old_activate_script_exports(
     context: &AttachCtx,
     subsystem_verbosity: u32,
     vars_from_environment: VarsFromEnvironment,
-    start_id: &StartIdentifier,
+    start_state_dir: &Path,
 ) {
     let mut removals = Vec::new();
     let mut exports = HashMap::from([
@@ -167,11 +158,7 @@ fn add_old_activate_script_exports(
         ("FLOX_ENV_DESCRIPTION", context.env_description.clone()),
         (
             "_FLOX_START_STATE_DIR",
-            start_id
-                .state_dir_path(&context.flox_runtime_dir, &context.dot_flox_path)
-                .expect("Failed to compute state dir path")
-                .to_string_lossy()
-                .to_string(),
+            start_state_dir.to_string_lossy().to_string(),
         ),
         // These are used by various scripts...custom ZDOTDIR files, set-prompt,
         // .tcshrc

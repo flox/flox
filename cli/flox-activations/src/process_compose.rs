@@ -96,14 +96,14 @@ pub fn start_process_compose_no_services(
     // so these values are the same as what the initial activation captured.
     let vars_from_env = VarsFromEnvironment::get()?;
     // Load the environment diff for the activation that we're attaching to.
-    let env_diff = EnvDiff::from_files(start_state_dir)?;
+    let env_diff = EnvDiff::from_files(&start_state_dir)?;
     apply_activation_env(
         &mut command,
         attach_ctx.clone(),
         subsystem_verbosity,
         vars_from_env,
         &env_diff,
-        start_id,
+        &start_state_dir,
     );
 
     command

@@ -312,7 +312,7 @@ impl ActivateArgs {
             context.clone(),
             subsystem_verbosity,
             vars_from_env.clone(),
-            &start_id,
+            &start_state_dir,
         );
         debug!("spawning activate script: {:?}", start_command);
         let status = start_command.spawn()?.wait()?;
