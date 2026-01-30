@@ -274,8 +274,8 @@ impl ShallowMerger {
 impl ManifestMergeTrait for ShallowMerger {
     fn merge(
         &self,
-        low_priority: &ManifestV1,
-        high_priority: &ManifestV1,
+        low_priority: &Manifest<Migrated>,
+        high_priority: &Manifest<Migrated>,
     ) -> Result<(ManifestV1, Vec<Warning>), MergeError> {
         trace!(section = "versions", "merging manifest section");
         let version = Self::merge_version(low_priority.version, high_priority.version)?;

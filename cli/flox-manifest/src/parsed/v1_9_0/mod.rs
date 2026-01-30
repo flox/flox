@@ -9,17 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
 use crate::ManifestError;
-use crate::parsed::common::{
-    Build,
-    Containerize,
-    Hook,
-    Include,
-    Options,
-    PackageDescriptorStorePath,
-    Profile,
-    Services,
-    Vars,
-};
+use crate::parsed::common::{Build, Containerize, Hook, Include, Options, Profile, Services, Vars};
 use crate::parsed::v1_9_0::package_descriptor::ManifestPackageDescriptor;
 use crate::parsed::{Inner, SkipSerializing, impl_into_inner, impl_pkg_lookup};
 
@@ -132,7 +122,12 @@ pub mod test {
 
     use super::*;
     use crate::parsed::PackageLookup;
-    use crate::parsed::common::{BuildDescriptor, BuildVersion, IncludeDescriptor};
+    use crate::parsed::common::{
+        BuildDescriptor,
+        BuildVersion,
+        IncludeDescriptor,
+        PackageDescriptorStorePath,
+    };
     use crate::parsed::v1_9_0::package_descriptor::{
         PackageDescriptorCatalog,
         PackageDescriptorFlake,
