@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -140,7 +141,9 @@ pub fn generate_bash_startup_commands(
     }
 
     if let Some(path) = args.clean_up.as_ref() {
-        stmts.push(format!("rm '{}';", path.display()).to_stmt());
+        let path_str = path.to_string_lossy();
+        let escaped_path = shell_escape::escape(Cow::Borrowed(path_str.as_ref()));
+        stmts.push(format!("rm {};", escaped_path).to_stmt());
     }
 
     for stmt in stmts {
@@ -165,6 +168,7 @@ mod tests {
     fn test_generate_bash_startup_commands_basic() {
         let additions = {
             let mut map = HashMap::new();
+            map.insert("QUOTED_VAR".to_string(), "QUOTED'VALUE".to_string());
             map.insert("ADDED_VAR".to_string(), "ADDED_VALUE".to_string());
             map
         };
@@ -189,25 +193,26 @@ mod tests {
         let output = String::from_utf8_lossy(&buf);
         expect![[r#"
             set -x
-            export _flox_sourcing_rc='true';
-            source '/home/user/.bashrc';
+            export _flox_sourcing_rc=true;
+            source /home/user/.bashrc;
             unset _flox_sourcing_rc;
-            export ADDED_VAR='ADDED_VALUE';
+            export ADDED_VAR=ADDED_VALUE;
+            export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
-            export FLOX_ENV='/flox_env';
-            export FLOX_ENV_CACHE='/flox_env_cache';
-            export FLOX_ENV_PROJECT='/flox_env_project';
-            export FLOX_ENV_DESCRIPTION='env_description';
-            export _activate_d='/activate_d';
-            export _flox_activations='/flox_activations';
-            export _flox_activate_tracer='TRACER';
+            export FLOX_ENV=/flox_env;
+            export FLOX_ENV_CACHE=/flox_env_cache;
+            export FLOX_ENV_PROJECT=/flox_env_project;
+            export FLOX_ENV_DESCRIPTION=env_description;
+            export _activate_d=/activate_d;
+            export _flox_activations=/flox_activations;
+            export _flox_activate_tracer=TRACER;
             if [ -t 1 ]; then source '/activate_d/set-prompt.bash'; fi;
             eval "$('/flox_activations' set-env-dirs --shell bash --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}")";
             eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")";
             eval "$('/flox_activations' profile-scripts --shell bash --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "${FLOX_ENV_DIRS:-}")";
             set +h
             set +x
-            rm '/path/to/rc/file';
+            rm /path/to/rc/file;
         "#]].assert_eq(&output);
     }
 }

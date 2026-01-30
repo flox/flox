@@ -4137,6 +4137,7 @@ name = "shell_gen"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "shell-escape",
  "thiserror 2.0.18",
 ]
 
