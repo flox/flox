@@ -2554,9 +2554,13 @@ name = "nef-lock-catalog"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "catalog-api-v1",
  "indexmap 2.13.0",
+ "pollster",
+ "reqwest",
  "serde",
  "serde_json",
+ "tokio",
  "toml",
  "tracing",
  "tracing-subscriber",

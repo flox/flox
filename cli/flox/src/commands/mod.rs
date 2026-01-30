@@ -722,7 +722,7 @@ enum ShareCommands {
 impl ShareCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
-            ShareCommands::Build(args) => args.handle(flox).await?,
+            ShareCommands::Build(args) => args.handle(config, flox).await?,
             ShareCommands::Publish(args) => args.handle(config, flox).await?,
             ShareCommands::Push(args) => args.handle(flox).await?,
             ShareCommands::Pull(args) => args.handle(flox).await?,

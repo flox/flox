@@ -12,3 +12,7 @@ serde.workspace = true
 indexmap.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+catalog-api-v1 = { path = "../catalog-api-v1" }
+reqwest = { workspace = true }
+tokio.workspace = true
+pollster.workspace = true

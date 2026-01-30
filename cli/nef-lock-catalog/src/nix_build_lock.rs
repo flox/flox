@@ -19,6 +19,8 @@ use crate::CatalogId;
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type")]
 pub(crate) enum CatalogLock {
+    #[serde(rename = "floxhub")]
+    FloxHub(crate::catalog::CatalogSnapshot),
     #[serde(rename = "nix")]
     Nix(serde_json::Value),
 }

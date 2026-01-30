@@ -13,6 +13,8 @@ use crate::{CatalogId, nix};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 enum CatalogType {
+    #[serde(rename = "floxhub")]
+    FloxHub,
     #[serde(untagged)]
     Nix(String),
 }
@@ -59,6 +61,12 @@ impl CatalogSpec {
         if let CatalogSpec::Url { url } = self {
             return Ok(url.clone());
         };
+
+        if let CatalogSpec::Full { type_, .. } = self
+            && type_ == &CatalogType::FloxHub
+        {
+            panic!("don't use to_url on catalog")
+        }
 
         let catalog_json = serde_json::to_string(&self)?;
 
@@ -156,7 +164,11 @@ fn lock_url(url: &Url) -> Result<serde_json::Value> {
 }
 
 #[tracing::instrument(skip_all)]
-pub fn lock_config(config: &BuildConfig) -> Result<BuildLock> {
+pub fn lock_config(
+    config: &BuildConfig,
+    catalog_url: &Url,
+    auth_token: &Option<String>,
+) -> Result<BuildLock> {
     let BuildConfig {
         catalogs: catalog_spec,
     } = config;
@@ -172,6 +184,18 @@ pub fn lock_config(config: &BuildConfig) -> Result<BuildLock> {
 
         #[allow(clippy::match_single_binding)] // extension point for floxhub catalogs
         let locked_catalog = match catalog {
+            CatalogSpec::Full {
+                type_: CatalogType::FloxHub,
+                ..
+            } => {
+                let snapshot = tokio::task::block_in_place(|| {
+                    let rt = tokio::runtime::Handle::current();
+
+                    rt.block_on(crate::catalog::lock_catalog(name, catalog_url, auth_token))
+                })?;
+
+                CatalogLock::FloxHub(snapshot)
+            },
             nix_spec => {
                 let catalog_url = nix_spec.to_url()?;
                 let locked_catalog = lock_url(&catalog_url)?;

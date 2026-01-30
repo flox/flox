@@ -21,6 +21,7 @@ use flox_rust_sdk::providers::build::{
 use flox_rust_sdk::providers::catalog::{
     BaseCatalogUrl,
     ClientTrait,
+    DEFAULT_CATALOG_URL,
     base_catalog_url_for_stability_arg,
 };
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
@@ -34,6 +35,7 @@ use tracing::{debug, instrument, trace};
 use url::Url;
 
 use super::{DirEnvironmentSelect, dir_environment_select};
+use crate::config::Config;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
 
@@ -128,7 +130,7 @@ enum SubcommandOrBuildTargets {
 }
 
 impl Build {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self.subcommand_or_targets {
             SubcommandOrBuildTargets::Clean { targets } => {
                 let env = self
@@ -152,7 +154,7 @@ impl Build {
                     .detect_concrete_environment(&flox, "Clean build files of")?;
                 environment_subcommand_metric!("build::update-catalogs", env);
 
-                Self::update_catalogs(&flox, env).await
+                Self::update_catalogs(&config, &flox, env).await
             },
             SubcommandOrBuildTargets::BuildTargets {
                 targets,
@@ -399,7 +401,7 @@ impl Build {
         Ok(())
     }
 
-    async fn update_catalogs(_flox: &Flox, env: ConcreteEnvironment) -> Result<()> {
+    async fn update_catalogs(config: &Config, flox: &Flox, env: ConcreteEnvironment) -> Result<()> {
         match &env {
             ConcreteEnvironment::Path(_) => (),
             ConcreteEnvironment::Managed(_) => {
@@ -423,8 +425,20 @@ impl Build {
             return Ok(());
         };
 
-        let config = read_config(&config_path)?;
-        let lockfile = lock_config(&config)?;
+        let build_config = read_config(&config_path)?;
+        let lockfile = lock_config(
+            &build_config,
+            &config
+                .flox
+                .catalog_url
+                .as_deref()
+                .unwrap_or(DEFAULT_CATALOG_URL)
+                .parse()?,
+            &flox
+                .floxhub_token
+                .clone()
+                .map(|token| token.secret().to_string()),
+        )?;
 
         write_lock(&lockfile, config_path.with_extension("lock"))?;
 
