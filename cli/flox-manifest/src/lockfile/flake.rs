@@ -8,7 +8,7 @@ use crate::parsed::common::DEFAULT_PRIORITY;
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct LockedPackageFlake {
     pub install_id: String,
     /// Unaltered lock information as returned by `lock-flake-installable`.
@@ -40,7 +40,7 @@ impl LockedPackageFlake {
 // [sic] this is inconsistent with the naming of all other structs in the lockfile
 // and a relict of different naming conventions in the pkgdb/C++ code.
 #[serde(rename_all = "kebab-case")]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct LockedInstallable {
     /// locked url of the flakeref component of the installable
     pub locked_url: String,

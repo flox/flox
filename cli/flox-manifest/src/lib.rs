@@ -296,6 +296,15 @@ impl Manifest<Deserialized> {
     ) -> Result<Manifest<DeserializedMigrated>, ManifestError> {
         todo!()
     }
+
+    /// Bootstrap a [`Manifest<Deserialized>`] from the inner [`ManifestLatest`].
+    pub(crate) fn from_latest(manifest: ManifestLatest) -> Self {
+        Manifest {
+            inner: Deserialized {
+                original_parsed: Parsed::from_latest(manifest),
+            },
+        }
+    }
 }
 
 impl<S: ManifestState> Manifest<S> {

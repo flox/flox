@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::ManifestError;
 pub mod common;
 pub mod latest;
@@ -79,6 +81,11 @@ pub trait PackageLookup {
     type CatalogDescriptor;
     type FlakeDescriptor;
 
+    /// Returns a map of package group name to a collection of package descriptors in that group.
+    /// The collection of packages in the package group are stored in a map indexed by their
+    /// install IDs.
+    fn catalog_pkgs_by_group(&self) -> BTreeMap<String, BTreeMap<String, Self::CatalogDescriptor>>;
+
     /// Locates the package descriptor with the provided install ID.
     fn pkg_descriptor_with_id(&self, id: impl AsRef<str>) -> Option<Self::PkgDescriptor>;
 
@@ -137,6 +144,27 @@ macro_rules! impl_pkg_lookup {
             type CatalogDescriptor = concrete::package_descriptor::PackageDescriptorCatalog;
             type FlakeDescriptor = concrete::package_descriptor::PackageDescriptorFlake;
             type PkgDescriptor = concrete::package_descriptor::ManifestPackageDescriptor;
+
+            /// Returns a map of package group name to a collection of package descriptors in that group.
+            /// The collection of packages in the package group are stored in a map indexed by their
+            /// install IDs.
+            fn catalog_pkgs_by_group(
+                &self,
+            ) -> BTreeMap<String, BTreeMap<String, Self::CatalogDescriptor>> {
+                let mut groups = BTreeMap::new();
+                for (id, descriptor) in self.install.inner().iter() {
+                    if let Some(catalog_descriptor) = descriptor.as_catalog_descriptor_ref() {
+                        let group_name = catalog_descriptor
+                            .pkg_group
+                            .clone()
+                            .unwrap_or(crate::parsed::common::DEFAULT_GROUP_NAME.to_string());
+                        let group_map: &mut BTreeMap<String, Self::CatalogDescriptor> =
+                            groups.entry(group_name).or_default();
+                        group_map.insert(id.clone(), catalog_descriptor.clone());
+                    }
+                }
+                groups
+            }
 
             /// Get the package descriptor with the specified install_id.
             fn pkg_descriptor_with_id(&self, id: impl AsRef<str>) -> Option<Self::PkgDescriptor> {

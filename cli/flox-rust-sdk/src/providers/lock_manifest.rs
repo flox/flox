@@ -1,4 +1,9 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
+
+use flox_manifest::lockfile::LockfileError;
+use flox_manifest::parsed::PackageLookup;
+use flox_manifest::parsed::latest::{ManifestLatest, PackageDescriptorCatalog};
 
 use crate::models::environment::EnvironmentError;
 use crate::providers::catalog;
@@ -109,6 +114,115 @@ impl From<LockResult> for Lockfile {
 struct LockManifest;
 
 impl LockManifest {
+    /// Creates package groups from a flat map of (catalog) install descriptors
+    ///
+    /// A group is created for each unique combination of (`descriptor.package_group` ｘ `descriptor.systems``).
+    /// If descriptor.systems is [None], a group with `default_system` is created for each `package_group`.
+    /// Each group contains a list of package descriptors that belong to that group.
+    ///
+    /// `seed_lockfile` is used to provide existing derivations for packages that are already locked,
+    /// e.g. by a previous lockfile.
+    /// These packages are used to constrain the resolution.
+    /// If a package in `manifest` does not have a corresponding package in `seed_lockfile`,
+    /// that package will be unconstrained, allowing a first install.
+    ///
+    /// As package groups only apply to catalog descriptors,
+    /// this function **ignores other [ManifestPackageDescriptor] variants**.
+    /// Those are expected to be locked separately.
+    ///
+    /// Greenkeeping: this function seem to return a [Result]
+    /// only due to parsing [System] strings to [PackageSystem].
+    /// If we restricted systems earlier with a common `System` type,
+    /// fallible conversions like that would be unnecessary,
+    /// or would be pushed higher up.
+    fn collect_resolution_package_groups(
+        manifest: &ManifestLatest,
+        seed: &Lockfile,
+    ) -> Result<impl Iterator<Item = catalog_types::PackageGroup>, ResolveError> {
+        let pkgs_by_group = manifest.catalog_pkgs_by_group();
+        let manifest_systems = manifest.options.systems.as_deref();
+        let maybe_licenses = manifest
+            .options
+            .allow
+            .licenses
+            .clone()
+            .and_then(|licenses| {
+                if licenses.is_empty() {
+                    None
+                } else {
+                    Some(licenses)
+                }
+            });
+        let pkg_systems = |pkg: &PackageDescriptorCatalog| {
+            let available_systems = manifest_systems.unwrap_or(&*DEFAULT_SYSTEMS_STR);
+            let package_systems = pkg.systems.as_deref();
+            for system in package_systems.into_iter().flatten() {
+                if !available_systems.contains(system) {
+                    return Err(ResolveError::SystemUnavailableInManifest {
+                        install_id: install_id.clone(),
+                        system: system.to_string(),
+                        enabled_systems: available_systems.iter().map(|s| s.to_string()).collect(),
+                    });
+                }
+            }
+            package_systems
+                .or(manifest_systems)
+                .unwrap_or(&*DEFAULT_SYSTEMS_STR)
+                .iter()
+                .sorted()
+                .map(|s| {
+                    PackageSystem::from_str(s)
+                        .map_err(|_| ResolveError::UnrecognizedSystem(s.to_string()))
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        };
+
+        let mut map: BTreeMap<String, Vec<catalog_types::PackageDescriptor>> = BTreeMap::new();
+
+        for (group_name, pkgs) in pkgs_by_group.iter() {
+            let mut group_descriptors = vec![];
+            for (id, desc) in pkgs.iter() {
+                let systems = pkg_systems(desc)?;
+                for system in systems {
+                    // If the package was just added to the manifest, it will be missing in the seed,
+                    // which is derived from the _previous_ lockfile.
+                    // In this case, the derivation will be None, and the package will be unconstrained.
+                    //
+                    // If the package was already locked, but the descriptor has changed in a way
+                    // that invalidates the existing resolution, the derivation will be None.
+                    //
+                    // If the package was locked from a flake installable before
+                    // it needs to be re-resolved with the catalog, so the derivation will be None.
+                    let locked_derivation = seed_locked_packages
+                        .get(&(id, &system.to_string()))
+                        .filter(|(descriptor, _)| {
+                            !descriptor.invalidates_existing_resolution(&manifest_descriptor.into())
+                        })
+                        .and_then(|(_, locked_package)| locked_package.as_catalog_package_ref())
+                        .map(|locked_package| locked_package.derivation.clone());
+
+                    let descriptor = catalog_types::PackageDescriptor {
+                        install_id: id.clone(),
+                        attr_path: desc.pkg_path.clone(),
+                        derivation: locked_derivation,
+                        version: desc.version.clone(),
+                        allow_pre_releases: manifest.options.semver.allow_pre_releases,
+                        allow_broken: manifest.options.allow.broken,
+                        // TODO: add support for insecure
+                        allow_insecure: None,
+                        allow_unfree: manifest.options.allow.unfree,
+                        allow_missing_builds: None,
+                        allowed_licenses: maybe_licenses.clone(),
+                        systems: vec![system],
+                    };
+
+                    map.entry(group_name.clone()).or_default().push(descriptor);
+                }
+            }
+        }
+        Ok(map.into_values())
+    }
+
     /// Merge included environments, resolve the merged manifest, and return the resulting lockfile
     ///
     /// Already resolved packages will not be re-resolved,
@@ -931,7 +1045,7 @@ impl LockManifest {
     /// Already locked flake installables are split from the list in the second step using
     /// [Self::split_locked_flake_installables], based on the descriptor alone,
     /// no additional "marking" is needed.
-    fn collect_flake_installables(
+    fn collect_flake_installables_to_lock(
         manifest: &Manifest,
     ) -> impl Iterator<Item = FlakeInstallableToLock> + '_ {
         manifest
@@ -1577,6 +1691,25 @@ mod tests {
         }
     }
 
+    static TEST_RESOLUTION_PARAMS: LazyLock<Vec<PackageGroup>> = LazyLock::new(|| {
+        vec![PackageGroup {
+            name: "group".to_string(),
+            descriptors: vec![PackageDescriptor {
+                install_id: "hello_install_id".to_string(),
+                attr_path: "hello".to_string(),
+                derivation: None,
+                version: None,
+                allow_pre_releases: None,
+                allow_broken: None,
+                allow_insecure: None,
+                allow_unfree: None,
+                allowed_licenses: None,
+                allow_missing_builds: None,
+                systems: vec![PackageSystem::Aarch64Darwin],
+            }],
+        }]
+    });
+
     #[test]
     fn make_params_smoke() {
         let manifest = &*TEST_TYPED_MANIFEST;
@@ -1736,5 +1869,1571 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(actual_params, expected_params);
+    }
+
+    /// If a package specifies a system not in `options.systems`,
+    /// return an error.
+    #[test]
+    fn descriptor_system_required_in_options() {
+        let manifest_str = indoc! {r#"
+            version = 1
+
+            [install]
+            vim.pkg-path = "vim"
+            emacs.pkg-path = "emacs"
+            emacs.systems = ["aarch64-darwin" ]
+
+            [options]
+            systems = ["x86_64-linux"]
+        "#};
+
+        let manifest = Manifest::parse_typed(manifest_str).unwrap();
+
+        let actual_result = LockManifest::collect_resolution_package_groups(&manifest, None);
+
+        assert!(
+            matches!(actual_result, Err(ResolveError::SystemUnavailableInManifest {
+                install_id,
+                system,
+                enabled_systems
+            }) if install_id == "emacs" && system == "aarch64-darwin" && enabled_systems == vec!["x86_64-linux"])
+        );
+    }
+
+    /// If packages specify different groups,
+    /// create request groups for each group.
+    #[test]
+    fn make_params_groups() {
+        let manifest_str = indoc! {r#"
+            version = 1
+
+            [install]
+            vim.pkg-path = "vim"
+            vim.pkg-group = "group1"
+
+            emacs.pkg-path = "emacs"
+            emacs.pkg-group = "group2"
+
+            [options]
+            systems = ["aarch64-darwin"]
+        "#};
+
+        let manifest = toml::from_str(manifest_str).unwrap();
+
+        let expected_params = vec![
+            PackageGroup {
+                name: "group1".to_string(),
+                descriptors: vec![PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "vim".to_string(),
+                    derivation: None,
+                    install_id: "vim".to_string(),
+                    version: None,
+                    allow_broken: None,
+                    allow_insecure: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    allow_missing_builds: None,
+                    systems: vec![PackageSystem::Aarch64Darwin],
+                }],
+            },
+            PackageGroup {
+                name: "group2".to_string(),
+                descriptors: vec![PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "emacs".to_string(),
+                    derivation: None,
+                    install_id: "emacs".to_string(),
+                    version: None,
+                    allow_broken: None,
+                    allow_insecure: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    allow_missing_builds: None,
+                    systems: vec![PackageSystem::Aarch64Darwin],
+                }],
+            },
+        ];
+
+        let actual_params = Lockfile::collect_package_groups(&manifest, None)
+            .unwrap()
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual_params, expected_params);
+    }
+
+    /// If a seed mapping is provided, use the derivations from the seed where possible
+    #[test]
+    fn make_params_seeded() {
+        let mut manifest = TEST_TYPED_MANIFEST.clone();
+
+        // Add a package to the manifest that is not already locked
+        manifest.install.inner_mut().insert(
+            "unlocked".to_string(),
+            PackageDescriptorCatalog {
+                pkg_path: "unlocked".to_string(),
+                pkg_group: Some("group".to_string()),
+                systems: None,
+                version: None,
+                priority: None,
+                outputs: None,
+            }
+            .into(),
+        );
+
+        let actual_params =
+            Lockfile::collect_package_groups(&manifest, Some(&*TEST_LOCKED_MANIFEST))
+                .unwrap()
+                .collect::<Vec<_>>();
+
+        let expected_params = vec![PackageGroup {
+            name: "group".to_string(),
+            descriptors: vec![
+                // 'hello' was already locked, so it should have a derivation
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "hello".to_string(),
+                    derivation: Some("derivation".to_string()),
+                    install_id: "hello_install_id".to_string(),
+                    version: None,
+                    allow_broken: None,
+                    allow_insecure: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    allow_missing_builds: None,
+                    systems: vec![PackageSystem::Aarch64Darwin],
+                },
+                // The unlocked package should not have a derivation
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "unlocked".to_string(),
+                    derivation: None,
+                    install_id: "unlocked".to_string(),
+                    version: None,
+                    allow_broken: None,
+                    allow_insecure: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    allow_missing_builds: None,
+                    systems: vec![PackageSystem::Aarch64Darwin],
+                },
+            ],
+        }];
+
+        assert_eq!(actual_params, expected_params);
+    }
+
+    /// If a seed mapping is provided, use the derivations from the seed where possible
+    /// 1) If the package is unchanged, it should not be re-resolved.
+    #[test]
+    fn make_params_seeded_unchanged() {
+        let (foo_before_iid, foo_before_descriptor, foo_before_locked) =
+            fake_catalog_package_lock("foo", None);
+        let mut manifest_before = Manifest::default();
+        manifest_before
+            .install
+            .inner_mut()
+            .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
+
+        let seed = Lockfile {
+            version: Version::<1>,
+            manifest: manifest_before.clone(),
+            packages: vec![foo_before_locked.clone().into()],
+            compose: None,
+        };
+
+        // ---------------------------------------------------------------------
+
+        let actual_params = Lockfile::collect_package_groups(&manifest_before, Some(&seed))
+            .unwrap()
+            .collect::<Vec<_>>();
+
+        // the original derivation should be present and unchanged
+        assert_eq!(
+            actual_params[0].descriptors[0].derivation.as_ref(),
+            Some(&foo_before_locked.derivation)
+        );
+    }
+
+    /// If a seed mapping is provided, use the derivations from the seed where possible
+    /// 2) Changes that invalidate the locked package should cause it to be re-resolved.
+    ///    Here, the package path is changed.
+    #[test]
+    fn make_params_seeded_unlock_if_invalidated() {
+        let (foo_before_iid, foo_before_descriptor, foo_before_locked) =
+            fake_catalog_package_lock("foo", None);
+        let mut manifest_before = Manifest::default();
+        manifest_before
+            .install
+            .inner_mut()
+            .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
+
+        let seed = Lockfile {
+            version: Version::<1>,
+            manifest: manifest_before.clone(),
+            packages: vec![foo_before_locked.into()],
+            compose: None,
+        };
+
+        // ---------------------------------------------------------------------
+
+        let (foo_after_iid, mut foo_after_descriptor, _) = fake_catalog_package_lock("foo", None);
+
+        if let ManifestPackageDescriptor::Catalog(ref mut descriptor) = foo_after_descriptor {
+            descriptor.pkg_path = "bar".to_string();
+        } else {
+            panic!("Expected a catalog descriptor");
+        };
+
+        assert!(foo_after_descriptor.invalidates_existing_resolution(&foo_before_descriptor));
+
+        let mut manifest_after = Manifest::default();
+        manifest_after
+            .install
+            .inner_mut()
+            .insert(foo_after_iid.clone(), foo_after_descriptor.clone());
+
+        let actual_params = Lockfile::collect_package_groups(&manifest_after, Some(&seed))
+            .unwrap()
+            .collect::<Vec<_>>();
+
+        // if the package changed, it should be re-resolved
+        // i.e. the derivation should be None
+        assert_eq!(actual_params[0].descriptors[0].derivation.as_ref(), None);
+    }
+
+    /// If a seed mapping is provided, use the derivations from the seed where possible
+    /// 3) Changes to the descriptor that do not invalidate the derivation
+    ///    should not cause it to be re-resolved.
+    ///    Here, the priority is changed.
+    #[test]
+    fn make_params_seeded_changed_no_invalidation() {
+        let (foo_before_iid, foo_before_descriptor, foo_before_locked) =
+            fake_catalog_package_lock("foo", None);
+        let mut manifest_before = Manifest::default();
+        manifest_before
+            .install
+            .inner_mut()
+            .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
+
+        let seed = Lockfile {
+            version: Version::<1>,
+            manifest: manifest_before.clone(),
+            packages: vec![foo_before_locked.clone().into()],
+            compose: None,
+        };
+
+        // ---------------------------------------------------------------------
+
+        let (foo_after_iid, mut foo_after_descriptor, _) = fake_catalog_package_lock("foo", None);
+        if let ManifestPackageDescriptor::Catalog(ref mut descriptor) = foo_after_descriptor {
+            descriptor.priority = Some(10);
+        } else {
+            panic!("Expected a catalog descriptor");
+        };
+
+        assert!(!foo_after_descriptor.invalidates_existing_resolution(&foo_before_descriptor));
+
+        let mut manifest_after = Manifest::default();
+        manifest_after
+            .install
+            .inner_mut()
+            .insert(foo_after_iid.clone(), foo_after_descriptor.clone());
+
+        let actual_params = Lockfile::collect_package_groups(&manifest_after, Some(&seed))
+            .unwrap()
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            actual_params[0].descriptors[0].derivation.as_ref(),
+            Some(&foo_before_locked.derivation)
+        );
+    }
+
+    /// If flake installables and catalog packages are mixed,
+    /// [Lockfile::collect_package_groups]
+    /// should only return [PackageGroup]s for the catalog descriptors.
+    #[test]
+    fn make_params_filters_installables() {
+        let manifest_str = indoc! {r#"
+            version = 1
+
+            [install]
+            vim.pkg-path = "vim"
+            emacs.flake = "github:nixos/nixpkgs#emacs"
+
+            [options]
+            systems = ["aarch64-darwin", "x86_64-linux"]
+        "#};
+        let manifest = toml::from_str(manifest_str).unwrap();
+
+        let expected_params = vec![PackageGroup {
+            name: DEFAULT_GROUP_NAME.to_string(),
+            descriptors: [PackageSystem::Aarch64Darwin, PackageSystem::X8664Linux]
+                .map(|system| {
+                    [PackageDescriptor {
+                        allow_pre_releases: None,
+                        attr_path: "vim".to_string(),
+                        derivation: None,
+                        install_id: "vim".to_string(),
+                        version: None,
+                        allow_broken: None,
+                        allow_insecure: None,
+                        allow_unfree: None,
+                        allowed_licenses: None,
+                        allow_missing_builds: None,
+                        systems: vec![system],
+                    }]
+                })
+                .into_iter()
+                .flatten()
+                .collect(),
+        }];
+
+        let actual_params = Lockfile::collect_package_groups(&manifest, None)
+            .unwrap()
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual_params, expected_params);
+    }
+
+    /// [Lockfile::collect_package_groups] generates [FlakeInstallableToLock]
+    /// for each default system.
+    #[test]
+    fn make_installables_to_lock_for_default_systems() {
+        let mut manifest = Manifest::default();
+        let (foo_install_id, foo_descriptor, _) = fake_flake_installable_lock("foo");
+
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_install_id.clone(), foo_descriptor.clone().into());
+
+        let expected = DEFAULT_SYSTEMS_STR
+            .clone()
+            .map(|system| FlakeInstallableToLock {
+                install_id: foo_install_id.clone(),
+                descriptor: foo_descriptor.clone(),
+                system: system.to_string(),
+            });
+
+        let actual: Vec<_> = Lockfile::collect_flake_installables(&manifest).collect();
+
+        assert_eq!(actual, expected);
+    }
+
+    /// [Lockfile::collect_package_groups] generates [FlakeInstallableToLock]
+    /// for each system in the manifest.
+    #[test]
+    fn make_installables_to_lock_for_manifest_systems() {
+        let system = "aarch64-darwin";
+
+        let mut manifest = Manifest::default();
+        manifest.options.systems = Some(vec![system.to_string()]);
+
+        let (foo_install_id, foo_descriptor, _) = fake_flake_installable_lock("foo");
+
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_install_id.clone(), foo_descriptor.clone().into());
+
+        let expected = [FlakeInstallableToLock {
+            install_id: foo_install_id.clone(),
+            descriptor: foo_descriptor.clone(),
+            system: system.to_string(),
+        }];
+
+        let actual: Vec<_> = Lockfile::collect_flake_installables(&manifest).collect();
+
+        assert_eq!(actual, expected);
+    }
+
+    /// If flake installables and catalog packages are mixed,
+    /// [Lockfile::collect_flake_installables]
+    /// should only return [FlakeInstallableToLock] for the flake installables.
+    #[test]
+    fn make_installables_to_lock_filter_catalog() {
+        let mut manifest = Manifest::default();
+        let (foo_install_id, foo_descriptor, _) = fake_flake_installable_lock("foo");
+        let (bar_install_id, bar_descriptor, _) = fake_catalog_package_lock("bar", None);
+
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_install_id.clone(), foo_descriptor.clone().into());
+        manifest
+            .install
+            .inner_mut()
+            .insert(bar_install_id.clone(), bar_descriptor.clone());
+
+        let expected = DEFAULT_SYSTEMS_STR
+            .clone()
+            .map(|system| FlakeInstallableToLock {
+                install_id: foo_install_id.clone(),
+                descriptor: foo_descriptor.clone(),
+                system: system.to_string(),
+            });
+
+        let actual: Vec<_> = Lockfile::collect_flake_installables(&manifest).collect();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn ungroup_response() {
+        let groups = vec![ResolvedPackageGroup {
+            page: Some(CatalogPage {
+                page: 1,
+                complete: true,
+                url: "url".to_string(),
+                packages: Some(vec![PackageResolutionInfo {
+                    catalog: None,
+                    attr_path: "hello".to_string(),
+                    pkg_path: "hello".to_string(),
+                    broken: Some(false),
+                    derivation: "derivation".to_string(),
+                    description: Some("description".to_string()),
+                    insecure: Some(false),
+                    install_id: "hello_install_id".to_string(),
+                    license: Some("license".to_string()),
+                    locked_url: "locked_url".to_string(),
+                    name: "hello".to_string(),
+                    outputs: PackageOutputs(vec![PackageOutput {
+                        name: "name".to_string(),
+                        store_path: "store_path".to_string(),
+                    }]),
+                    outputs_to_install: Some(vec!["name".to_string()]),
+                    pname: "pname".to_string(),
+                    rev: "rev".to_string(),
+                    rev_count: 1,
+                    rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                        .unwrap()
+                        .with_timezone(&chrono::offset::Utc),
+                    scrape_date: Some(
+                        chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                            .unwrap()
+                            .with_timezone(&chrono::offset::Utc),
+                    ),
+                    stabilities: Some(vec!["stability".to_string()]),
+                    unfree: Some(false),
+                    version: "version".to_string(),
+                    system: PackageSystem::Aarch64Darwin,
+                    cache_uri: None,
+                    missing_builds: None,
+                }]),
+                msgs: vec![],
+            }),
+            name: "group".to_string(),
+            msgs: vec![],
+        }];
+
+        let manifest = &*TEST_TYPED_MANIFEST;
+
+        let locked_packages = Lockfile::locked_packages_from_resolution(manifest, groups.clone())
+            .unwrap()
+            .collect::<Vec<_>>();
+
+        let descriptor = manifest
+            .install
+            .inner()
+            .get(&groups[0].page.as_ref().unwrap().packages.as_ref().unwrap()[0].install_id)
+            .and_then(ManifestPackageDescriptor::as_catalog_descriptor_ref)
+            .expect("expected a catalog descriptor")
+            .clone();
+
+        assert_eq!(locked_packages.len(), 1);
+        assert_eq!(
+            locked_packages[0],
+            LockedPackageCatalog::from_parts(
+                groups[0].page.as_ref().unwrap().packages.as_ref().unwrap()[0].clone(),
+                descriptor,
+            )
+        );
+    }
+
+    /// Unlocking by iid should remove only the package with that iid.
+    /// Both catalog packages and flake installables should be removed.
+    #[test]
+    fn unlock_by_iid() {
+        let mut manifest = Manifest::default();
+        let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
+        let (bar_iid, bar_descriptor, bar_locked) = fake_catalog_package_lock("bar", None);
+        let (baz_iid, baz_descriptor, baz_locked) = fake_flake_installable_lock("baz");
+        let (qux_iid, qux_descriptor, qux_locked) = fake_flake_installable_lock("qux");
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid.clone(), foo_descriptor);
+        manifest
+            .install
+            .inner_mut()
+            .insert(bar_iid.clone(), bar_descriptor);
+        manifest
+            .install
+            .inner_mut()
+            .insert(baz_iid.clone(), baz_descriptor.into());
+        manifest
+            .install
+            .inner_mut()
+            .insert(qux_iid.clone(), qux_descriptor.into());
+        let mut lockfile = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![
+                foo_locked.into(),
+                bar_locked.clone().into(),
+                baz_locked.into(),
+                qux_locked.clone().into(),
+            ],
+            compose: None,
+        };
+
+        lockfile.unlock_packages_by_group_or_iid(&[&foo_iid, &baz_iid]);
+
+        assert_eq!(lockfile.packages, vec![
+            bar_locked.into(),
+            qux_locked.into()
+        ]);
+    }
+
+    /// Unlocking by group should remove all packages in that group
+    #[test]
+    fn unlock_by_group() {
+        let mut manifest = Manifest::default();
+        let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", Some("group"));
+        let (bar_iid, bar_descriptor, bar_locked) = fake_catalog_package_lock("bar", Some("group"));
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid.clone(), foo_descriptor);
+        manifest
+            .install
+            .inner_mut()
+            .insert(bar_iid.clone(), bar_descriptor);
+        let mut lockfile = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.into(), bar_locked.into()],
+            compose: None,
+        };
+
+        lockfile.unlock_packages_by_group_or_iid(&["group"]);
+
+        assert_eq!(lockfile.packages, vec![]);
+    }
+
+    /// If an unlocked iid is also used as a group, remove both the group
+    /// and the package
+    #[test]
+    fn unlock_by_iid_and_group() {
+        let mut manifest = Manifest::default();
+        let (foo_iid, foo_descriptor, foo_locked) =
+            fake_catalog_package_lock("foo", Some("foo_install_id"));
+        let (bar_iid, bar_descriptor, bar_locked) =
+            fake_catalog_package_lock("bar", Some("foo_install_id"));
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid.clone(), foo_descriptor);
+        manifest
+            .install
+            .inner_mut()
+            .insert(bar_iid.clone(), bar_descriptor);
+        let mut lockfile = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.into(), bar_locked.into()],
+            compose: None,
+        };
+
+        lockfile.unlock_packages_by_group_or_iid(&[&foo_iid]);
+
+        assert_eq!(lockfile.packages, vec![]);
+    }
+
+    #[test]
+    fn unlock_by_iid_noop_if_already_unlocked() {
+        let mut seed = TEST_LOCKED_MANIFEST.clone();
+
+        // If the package is not in the seed, the lockfile should be unchanged
+        let expected = seed.packages.clone();
+
+        seed.unlock_packages_by_group_or_iid(&["not in here"]);
+
+        assert_eq!(seed.packages, expected,);
+    }
+
+    #[tokio::test]
+    async fn locking_unknown_message() {
+        let manifest = Manifest::from_str(indoc! {r#"
+                version = 1
+
+                [install]
+                ps.pkg-path = "darwin.ps"
+
+                [options]
+                systems = [ "x86_64-darwin", "aarch64-linux" ]
+            "#})
+        .unwrap();
+
+        let client = catalog_replay_client(
+            GENERATED_DATA.join("resolve/darwin_ps_incompatible_transform_error_to_unknown.yaml"),
+        )
+        .await;
+
+        let locked_manifest =
+            Lockfile::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
+                .await;
+        if let Err(ResolveError::ResolutionFailed(res_failures)) = locked_manifest {
+            assert_eq!(res_failures.to_string(), format!("\n{}", "unknown message"));
+            if let [ResolutionFailure::UnknownServiceMessage(MsgUnknown { msg, .. })] =
+                res_failures.0.as_slice()
+            {
+                assert_eq!(msg, "unknown message");
+            } else {
+                panic!(
+                    "expected a single UnknownServiceMessage, got {:?}",
+                    res_failures.0.as_slice()
+                );
+            }
+        } else {
+            panic!("expected resolution failure, got {:?}", locked_manifest);
+        }
+    }
+
+    #[tokio::test]
+    async fn locking_general_message() {
+        let manifest = Manifest::from_str(indoc! {r#"
+                version = 1
+
+                [install]
+                ps.pkg-path = "darwin.ps"
+
+                [options]
+                systems = [ "x86_64-darwin", "aarch64-linux" ]
+            "#})
+        .unwrap();
+
+        let client = catalog_replay_client(
+            GENERATED_DATA.join("resolve/darwin_ps_incompatible_transform_error_to_general.yaml"),
+        )
+        .await;
+
+        let locked_manifest =
+            Lockfile::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
+                .await;
+        if let Err(ResolveError::ResolutionFailed(res_failures)) = locked_manifest {
+            assert_eq!(res_failures.to_string(), format!("\n{}", "general message"));
+            if let [ResolutionFailure::FallbackMessage { msg, .. }] = res_failures.0.as_slice() {
+                assert_eq!(msg, "general message");
+            } else {
+                panic!(
+                    "expected a single FallbackMessage, got {:?}",
+                    res_failures.0.as_slice()
+                );
+            }
+        } else {
+            panic!("expected resolution failure, got {:?}", locked_manifest);
+        }
+    }
+
+    /// Test the server generated message is passed through for systems not on same page
+    #[tokio::test]
+    async fn locking_message_is_passed_through_for_systems_not_on_same_page() {
+        let manifest = Manifest::from_str(indoc! {r#"
+                version = 1
+
+                [install]
+                ps.pkg-path = "darwin.ps"
+
+                [options]
+                systems = [ "x86_64-darwin", "aarch64-linux" ]
+            "#})
+        .unwrap();
+        let client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/darwin_ps_incompatible.yaml")).await;
+
+        let locked_manifest =
+            Lockfile::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
+                .await;
+        if let Err(ResolveError::ResolutionFailed(res_failures)) = locked_manifest {
+            // A newline is added for formatting when it's a single message
+            assert_eq!(res_failures.to_string(), indoc! {"
+                package 'darwin.ps' not available for
+                    - aarch64-linux
+                  but it is available for
+                    - x86_64-darwin
+
+                For more on managing system-specific packages, visit the documentation:
+                https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages"});
+        } else {
+            panic!("expected resolution failure, got {:?}", locked_manifest);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_locking_with_store_paths() {
+        let (foo_iid, foo_descriptor, foo_locked) = fake_store_path_lock("foo");
+        let store_path = &foo_descriptor.store_path;
+        let system = &foo_descriptor.systems.as_ref().unwrap()[0];
+
+        let manifest: Manifest = toml::from_str(&formatdoc! {r#"
+            version = 1
+            [install]
+            {foo_iid}.store-path = "{store_path}"
+            {foo_iid}.systems = ["{system}"]
+        "#})
+        .unwrap();
+
+        let client = catalog::MockClient::new();
+
+        let resolved_packages =
+            Lockfile::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
+                .await
+                .unwrap();
+
+        assert_eq!(&resolved_packages, &[foo_locked.into()]);
+    }
+
+    /// If a manifest doesn't have `options.systems`, it defaults to locking for
+    /// 4 default systems
+    #[test]
+    fn collect_package_groups_defaults_to_four_systems() {
+        let manifest_str = indoc! {r#"
+            version = 1
+
+            [install]
+            hello_install_id.pkg-path = "hello"
+        "#};
+        let manifest: Manifest = toml::from_str(manifest_str).unwrap();
+        let package_groups: Vec<_> = Lockfile::collect_package_groups(&manifest, None)
+            .unwrap()
+            .collect();
+
+        assert_eq!(package_groups.len(), 1);
+
+        // each system is represented by a separate package descriptor
+        let systems = package_groups[0]
+            .descriptors
+            .iter()
+            .flat_map(|d| d.systems.clone())
+            .collect::<Vec<_>>();
+
+        let expected_systems = [
+            PackageSystem::Aarch64Darwin,
+            PackageSystem::Aarch64Linux,
+            PackageSystem::X8664Darwin,
+            PackageSystem::X8664Linux,
+        ];
+
+        assert_eq!(&*systems, expected_systems.as_slice());
+    }
+
+    #[test]
+    fn test_split_out_fully_locked_packages() {
+        let (foo_iid, foo_descriptor, foo_locked) =
+            fake_catalog_package_lock("foo", Some("group1"));
+        let (bar_iid, bar_descriptor, bar_locked) =
+            fake_catalog_package_lock("bar", Some("group1"));
+        let (baz_iid, baz_descriptor, baz_locked) =
+            fake_catalog_package_lock("baz", Some("group2"));
+        let (yeet_iid, yeet_descriptor, _) = fake_catalog_package_lock("yeet", Some("group2"));
+
+        let mut manifest = Manifest::default();
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid, foo_descriptor.clone());
+        manifest
+            .install
+            .inner_mut()
+            .insert(bar_iid, bar_descriptor.clone());
+        manifest
+            .install
+            .inner_mut()
+            .insert(baz_iid.clone(), baz_descriptor.clone());
+
+        let locked = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: [&foo_locked, &bar_locked, &baz_locked]
+                .map(|p| p.clone().into())
+                .to_vec(),
+            compose: None,
+        };
+
+        manifest
+            .install
+            .inner_mut()
+            .insert(yeet_iid.clone(), yeet_descriptor.clone());
+
+        let groups = Lockfile::collect_package_groups(&manifest, Some(&locked)).unwrap();
+
+        let (fully_locked, to_resolve): (Vec<_>, Vec<_>) =
+            Lockfile::split_fully_locked_groups(groups, Some(&locked));
+
+        // All packages of group1 are locked
+        assert_eq!(&fully_locked, &[bar_locked, foo_locked].map(Into::into));
+
+        // Only one package of group2 is locked, so it should be in to_resolve as a group
+        assert_eq!(to_resolve, vec![PackageGroup {
+            name: "group2".to_string(),
+            descriptors: vec![
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "baz".to_string(),
+                    derivation: Some(baz_locked.derivation.clone()),
+                    install_id: baz_iid,
+                    version: None,
+                    allow_broken: None,
+                    allow_insecure: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    allow_missing_builds: None,
+                    systems: vec![PackageSystem::Aarch64Darwin,],
+                },
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "yeet".to_string(),
+                    derivation: None,
+                    install_id: yeet_iid,
+                    version: None,
+                    allow_broken: None,
+                    allow_insecure: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    allow_missing_builds: None,
+                    systems: vec![PackageSystem::Aarch64Darwin,],
+                }
+            ],
+        }]);
+    }
+
+    /// When packages are locked for multiple systems,
+    /// locking the same package for fewer systems should drop the extra systems
+    #[test]
+    fn drop_packages_for_removed_systems() {
+        let (foo_iid, foo_descriptor_one_system, foo_locked) =
+            fake_catalog_package_lock("foo", Some("group1"));
+
+        let systems = &foo_descriptor_one_system
+            .as_catalog_descriptor_ref()
+            .expect("expected a catalog descriptor")
+            .systems;
+
+        assert_eq!(
+            systems,
+            &Some(vec![PackageSystem::Aarch64Darwin.to_string()]),
+            "`fake_package` should set the system to [`Aarch64Darwin`]"
+        );
+
+        let mut foo_descriptor_two_systems = foo_descriptor_one_system.clone();
+
+        if let ManifestPackageDescriptor::Catalog(descriptor) = &mut foo_descriptor_two_systems {
+            descriptor
+                .systems
+                .as_mut()
+                .unwrap()
+                .push(PackageSystem::Aarch64Linux.to_string());
+        } else {
+            panic!("Expected a catalog descriptor");
+        };
+
+        let foo_locked_second_system = LockedPackageCatalog {
+            system: PackageSystem::Aarch64Linux.to_string(),
+            ..foo_locked.clone()
+        };
+
+        let mut manifest = Manifest::default();
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid.clone(), foo_descriptor_two_systems.clone());
+
+        let locked = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![
+                foo_locked.clone().into(),
+                foo_locked_second_system.clone().into(),
+            ],
+            compose: None,
+        };
+
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid, foo_descriptor_one_system.clone());
+
+        let groups = Lockfile::collect_package_groups(&manifest, Some(&locked))
+            .unwrap()
+            .collect::<Vec<_>>();
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].descriptors.len(), 1, "Expected only 1 descriptor");
+        assert_eq!(
+            groups[0].descriptors[0].systems,
+            vec![PackageSystem::Aarch64Darwin,],
+            "Expected only the Darwin system to be present"
+        );
+
+        let (fully_locked, to_resolve): (Vec<_>, Vec<_>) =
+            Lockfile::split_fully_locked_groups(groups, Some(&locked));
+
+        assert_eq!(fully_locked, vec![foo_locked.into()]);
+        assert_eq!(to_resolve, vec![]);
+    }
+
+    /// Adding another system to a package should invalidate the entire group
+    /// such that new systems are resolved with the derivation constraints
+    /// of already installed systems
+    #[test]
+    fn invalidate_group_if_system_added() {
+        let (foo_iid, foo_descriptor_one_system, foo_locked) =
+            fake_catalog_package_lock("foo", Some("group1"));
+
+        // `fake_package` sets the system to [`Aarch64Darwin`]
+        let mut foo_descriptor_two_systems = foo_descriptor_one_system.clone();
+        if let ManifestPackageDescriptor::Catalog(descriptor) = &mut foo_descriptor_two_systems {
+            descriptor
+                .systems
+                .as_mut()
+                .unwrap()
+                .push(PackageSystem::Aarch64Linux.to_string());
+        } else {
+            panic!("Expected a catalog descriptor");
+        };
+
+        let mut manifest = Manifest::default();
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid.clone(), foo_descriptor_one_system.clone());
+
+        let locked = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.into()],
+            compose: None,
+        };
+
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid, foo_descriptor_two_systems.clone());
+
+        let groups = Lockfile::collect_package_groups(&manifest, Some(&locked))
+            .unwrap()
+            .collect::<Vec<_>>();
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(
+            groups[0].descriptors.len(),
+            2,
+            "Expected descriptors for two systems"
+        );
+        assert_eq!(groups[0].descriptors[0].systems, vec![
+            PackageSystem::Aarch64Darwin
+        ]);
+        assert_eq!(groups[0].descriptors[1].systems, vec![
+            PackageSystem::Aarch64Linux
+        ]);
+
+        let (fully_locked, to_resolve): (Vec<_>, Vec<_>) =
+            Lockfile::split_fully_locked_groups(groups, Some(&locked));
+
+        assert_eq!(fully_locked, vec![]);
+        assert_eq!(to_resolve.len(), 1);
+    }
+
+    /// If a flake installable is already locked, it should not be resolved again.
+    /// Test that the locked package and unlocked package are correctly partitioned.
+    #[test]
+    fn split_out_locked_installables() {
+        let system = "aarch64-darwin";
+        let (foo_iid, foo_descriptor, _) = fake_flake_installable_lock("foo");
+        let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
+
+        let mut manifest = Manifest::default();
+        manifest.options.systems = Some(vec![system.to_string()]);
+
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid.clone(), foo_descriptor.clone().into());
+        manifest
+            .install
+            .inner_mut()
+            .insert(bar_iid.clone(), bar_descriptor.clone().into());
+
+        let locked = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![bar_locked.clone().into()],
+            compose: None,
+        };
+
+        let flake_installables = Lockfile::collect_flake_installables(&manifest);
+
+        let (locked, to_resolve): (Vec<_>, Vec<_>) =
+            Lockfile::split_locked_flake_installables(flake_installables, Some(&locked));
+
+        assert_eq!(locked, vec![bar_locked.into()]);
+        assert_eq!(&to_resolve, &[FlakeInstallableToLock {
+            install_id: foo_iid.clone(),
+            descriptor: foo_descriptor.clone(),
+            system: system.to_string(),
+        }]);
+    }
+
+    /// If the lockfile contains a package that is not in the manifest,
+    /// the lock is removed.
+    #[test]
+    fn remove_stale_locked_installables() {
+        let system = "aarch64-darwin";
+        let (_, _, bar_locked) = fake_flake_installable_lock("bar");
+
+        let mut manifest = Manifest::default();
+        manifest.options.systems = Some(vec![system.to_string()]);
+
+        let locked = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![bar_locked.clone().into()],
+            compose: None,
+        };
+
+        let flake_installables = Lockfile::collect_flake_installables(&manifest);
+
+        let (locked, to_resolve): (Vec<_>, Vec<_>) =
+            Lockfile::split_locked_flake_installables(flake_installables, Some(&locked));
+
+        assert_eq!(locked, vec![]);
+        assert_eq!(&to_resolve, &[]);
+    }
+
+    /// If a system is removed from the manifest,
+    /// the locked package for that system should be removed.
+    #[test]
+    fn drop_locked_installable_for_removed_systems() {
+        let system = "aarch64-darwin";
+        let (foo_iid, foo_descriptor, foo_locked) = fake_flake_installable_lock("foo");
+
+        let foo_locked_system_1 = foo_locked.clone();
+        let mut foo_locked_system_2 = foo_locked;
+        foo_locked_system_2.locked_installable.system = PackageSystem::Aarch64Linux.to_string();
+
+        let mut manifest = Manifest::default();
+        manifest.options.systems = Some(vec![system.to_string()]);
+
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid.clone(), foo_descriptor.clone().into());
+
+        let locked = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![
+                foo_locked_system_1.clone().into(),
+                foo_locked_system_2.into(),
+            ],
+            compose: None,
+        };
+
+        let flake_installables = Lockfile::collect_flake_installables(&manifest);
+
+        let (locked, to_resolve): (Vec<_>, Vec<_>) =
+            Lockfile::split_locked_flake_installables(flake_installables, Some(&locked));
+
+        assert_eq!(locked, vec![foo_locked_system_1.into()]);
+        assert_eq!(&to_resolve, &[]);
+    }
+
+    /// If a system is added to the manifest, the package should be reresolved for all systems
+    #[test]
+    fn invalidate_locked_flake_if_system_added() {
+        let system_1 = "aarch64-darwin";
+        let system_2 = "aarch64-linux";
+        let (foo_iid, foo_descriptor, foo_locked) = fake_flake_installable_lock("foo");
+
+        let mut manifest = Manifest::default();
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid.clone(), foo_descriptor.clone().into());
+
+        // lockfile for only system_1
+        let locked = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.clone().into()],
+            compose: None,
+        };
+
+        // system_2 is added to the manifest
+        manifest.options.systems = Some(vec![system_1.to_string(), system_2.to_string()]);
+
+        let flake_installables = Lockfile::collect_flake_installables(&manifest);
+
+        let (locked, to_resolve): (Vec<_>, Vec<_>) =
+            Lockfile::split_locked_flake_installables(flake_installables, Some(&locked));
+
+        assert_eq!(locked, vec![]);
+        assert_eq!(
+            to_resolve,
+            [system_1, system_2].map(|system| FlakeInstallableToLock {
+                install_id: foo_iid.clone(),
+                descriptor: foo_descriptor.clone(),
+                system: system.to_string(),
+            })
+        );
+    }
+
+    /// If all packages are already locked, return without locking/resolution
+    #[tokio::test]
+    async fn lock_manifest_noop_if_fully_locked() {
+        let (flox, _tempdir) = flox_instance();
+        let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
+        let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
+
+        let mut manifest = Manifest::default();
+        manifest.options.systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid.clone(), foo_descriptor.clone());
+        manifest
+            .install
+            .inner_mut()
+            .insert(bar_iid.clone(), bar_descriptor.clone().into());
+
+        let locked = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.into(), bar_locked.into()],
+            compose: None,
+        };
+
+        let locked_manifest =
+            Lockfile::lock_manifest(&flox, &manifest, Some(&locked), &IncludeFetcher {
+                base_directory: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(locked_manifest, locked);
+    }
+    proptest! {
+        // This probably isn't the best suited for proptest as there are lots of
+        // writes to disk.
+        // 32 cases takes .1-.2 seconds for me
+        #![proptest_config(ProptestConfig::with_cases(32))]
+        /// If we lock twice, the second lockfile should be the same as the first
+        /// Use manifests without [install] sections so we don't have to
+        /// generate resolution responses
+        #[test]
+        fn lock_manifest_noop_if_locked_without_install_section((flox, tempdir, environments_to_include) in generate_path_environments_without_install_or_include(3)) {
+            let manifest = Manifest {
+                version: 1.into(),
+                include: Include {
+                    environments: environments_to_include
+                        .into_iter()
+                        .map(|(dir, _)| IncludeDescriptor::Local {
+                            dir,
+                            name: None,
+                        })
+                        .collect(),
+                },
+                ..Default::default()
+            };
+
+            // Lock
+            let lockfile = Lockfile::lock_manifest(&flox, &manifest, None, &IncludeFetcher {
+                base_directory: Some(tempdir.path().to_path_buf()),
+            })
+            .block_on()
+            .unwrap();
+
+            // Lock again with a mock_include_fetcher
+            let lockfile_2 =
+                Lockfile::lock_manifest(&flox, &manifest, Some(&lockfile), &mock_include_fetcher())
+                    .block_on()
+                    .unwrap();
+
+            prop_assert_eq!(lockfile, lockfile_2);
+        }
+    }
+
+    /// If flake installables are already locked, no locking should occur.
+    /// Catalog packages are still being resolved if not locked.
+    #[tokio::test]
+    async fn skip_flake_installables_noop_if_fully_locked() {
+        let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
+
+        let mut manifest = Manifest::default();
+        manifest.options.systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
+        manifest.install.inner_mut().insert(
+            "hello".to_string(),
+            ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
+                pkg_path: "hello".to_string(),
+                pkg_group: None,
+                priority: None,
+                version: None,
+                systems: None,
+                outputs: None,
+            }),
+        );
+        manifest
+            .install
+            .inner_mut()
+            .insert(bar_iid.clone(), bar_descriptor.clone().into());
+
+        let locked = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![bar_locked.into()],
+            compose: None,
+        };
+
+        // TODO: it would probably be better to tweak
+        // fake_flake_installable_lock to return a system specific descriptor
+        // and use plain hello mock
+        let client_mock = auto_recording_catalog_client("hello_aarch64-darwin");
+
+        let resolved_packages =
+            Lockfile::resolve_manifest(&manifest, Some(&locked), &client_mock, &PanickingLocker)
+                .await
+                .unwrap();
+
+        assert_eq!(resolved_packages.len(), 2, "{:#?}", resolved_packages);
+    }
+
+    /// If catalog packages are already locked, no locking should occur.
+    /// Installables are still being resolved if not locked.
+    #[tokio::test]
+    async fn skip_catatalog_package_if_fully_locked() {
+        let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
+        let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
+
+        let mut manifest = Manifest::default();
+        manifest.options.systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid.clone(), foo_descriptor.clone());
+        manifest
+            .install
+            .inner_mut()
+            .insert(bar_iid.clone(), bar_descriptor.clone().into());
+
+        let locked = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.into()],
+            compose: None,
+        };
+
+        let locker_mock = InstallableLockerMock::new();
+        locker_mock.push_lock_result(Ok(bar_locked.locked_installable));
+
+        let resolved_packages = Lockfile::resolve_manifest(
+            &manifest,
+            Some(&locked),
+            &MockClient::default(),
+            &locker_mock,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(resolved_packages.len(), 2, "{:#?}", resolved_packages);
+    }
+
+    /// If catalog packages are already locked, no locking should occur.
+    /// Installables are still being resolved if not locked.
+    #[tokio::test]
+    async fn update_priority_if_fully_locked() {
+        let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
+
+        let mut manifest = Manifest::default();
+        manifest.options.systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid.clone(), foo_descriptor.clone());
+
+        let locked = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.clone().into()],
+            compose: None,
+        };
+
+        let mut foo_descriptor_priority_after = foo_descriptor.unwrap_catalog_descriptor().unwrap();
+        foo_descriptor_priority_after.priority = Some(1);
+
+        let mut foo_locked_priority_after = foo_locked.clone();
+        foo_locked_priority_after.priority = 1;
+
+        let mut manifest_pririty_after = manifest.clone();
+        manifest_pririty_after.install.inner_mut().insert(
+            foo_iid.clone(),
+            foo_descriptor_priority_after.clone().into(),
+        );
+
+        let locker_mock = InstallableLockerMock::new();
+        let resolved_packages = Lockfile::resolve_manifest(
+            &manifest_pririty_after,
+            Some(&locked),
+            &MockClient::default(),
+            &locker_mock,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(resolved_packages.as_slice(), &[
+            foo_locked_priority_after.into()
+        ]);
+    }
+
+    /// [Lockfile::lock_manifest] returns an error if an already
+    /// locked package is no longer allowed
+    #[tokio::test]
+    async fn lock_manifest_catches_not_allowed_package() {
+        // Create a manifest and lockfile with an unfree package foo.
+        // Don't set `options.allow.unfree`
+        let (foo_iid, foo_descriptor_one_system, mut foo_locked) =
+            fake_catalog_package_lock("foo", None);
+        foo_locked.unfree = Some(true);
+        let mut manifest = Manifest::default();
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid.clone(), foo_descriptor_one_system.clone());
+
+        let locked = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.into()],
+            compose: None,
+        };
+
+        // Set `options.allow.unfree = false` in the manifest, but not the lockfile
+        manifest.options.allow.unfree = Some(false);
+
+        let client = catalog::MockClient::new();
+        assert!(matches!(
+            Lockfile::resolve_manifest(
+                &manifest,
+                Some(&locked),
+                &client,
+                &InstallableLockerMock::new()
+            )
+            .await
+            .unwrap_err(),
+            ResolveError::UnfreeNotAllowed { .. }
+        ));
+    }
+
+    /// [Lockfile::lock_manifest] returns an error if the server
+    /// returns a package that is not allowed.
+    #[tokio::test]
+    async fn lock_manifest_catches_not_allowed_package_from_server() {
+        let manifest = Manifest::from_str(indoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+
+            [options]
+            allow.unfree = false
+        "#})
+        .unwrap();
+
+        // Return a response that says foo is unfree.
+        // If this happens, it's a bug in the server, which is why we don't use
+        // a mock for this test.
+        let client = catalog_replay_client(
+            GENERATED_DATA.join("resolve/hello_buggy_unfree_server_response.yaml"),
+        )
+        .await;
+        assert!(matches!(
+            Lockfile::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
+                .await
+                .unwrap_err(),
+            ResolveError::UnfreeNotAllowed { .. }
+        ));
+    }
+
+    /// [Lockfile::check_packages_are_allowed] returns an error
+    /// when it finds a disallowed license
+    #[test]
+    fn check_packages_are_allowed_disallowed_license() {
+        let (_, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
+        foo_locked.license = Some("disallowed".to_string());
+
+        assert!(matches!(
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: None,
+                broken: None,
+                licenses: Some(vec!["allowed".to_string()])
+            }),
+            Err(ResolveError::LicenseNotAllowed { .. })
+        ));
+    }
+
+    /// [Lockfile::check_packages_are_allowed] does not error when
+    /// a package's license is allowed
+    #[test]
+    fn check_packages_are_allowed_allowed_license() {
+        let (_, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
+        foo_locked.license = Some("allowed".to_string());
+
+        assert!(
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: None,
+                broken: None,
+                licenses: Some(vec!["allowed".to_string()])
+            })
+            .is_ok()
+        );
+    }
+
+    /// [Lockfile::check_packages_are_allowed] allows any license if allowed
+    /// licenses is empty
+    #[test]
+    fn check_packages_are_allowed_for_empty_licenses() {
+        let (_, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
+        foo_locked.license = Some("allowed".to_string());
+
+        assert!(
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: None,
+                broken: None,
+                licenses: Some(vec![]),
+            })
+            .is_ok()
+        );
+    }
+
+    /// [Lockfile::check_packages_are_allowed] returns an error
+    /// when a package is broken even if `allow.broken` is unset
+    #[test]
+    fn check_packages_are_allowed_broken_default() {
+        let (_, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
+        foo_locked.broken = Some(true);
+
+        assert!(matches!(
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: None,
+                broken: None,
+                licenses: None
+            }),
+            Err(ResolveError::BrokenNotAllowed { .. })
+        ));
+    }
+
+    /// [Lockfile::check_packages_are_allowed] does not error for a
+    /// broken package when `allow.broken = true`
+    #[test]
+    fn check_packages_are_allowed_broken_true() {
+        let (_, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
+        foo_locked.broken = Some(true);
+
+        assert!(
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: None,
+                broken: Some(true),
+                licenses: None
+            })
+            .is_ok()
+        );
+    }
+
+    /// [Lockfile::check_packages_are_allowed] returns an error
+    /// when a package is broken and `allow.broken = false`
+    #[test]
+    fn check_packages_are_allowed_broken_false() {
+        let (_, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
+        foo_locked.broken = Some(true);
+
+        assert!(matches!(
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: None,
+                broken: Some(false),
+                licenses: None
+            }),
+            Err(ResolveError::BrokenNotAllowed { .. })
+        ));
+    }
+
+    /// [Lockfile::check_packages_are_allowed] does not error for
+    /// an unfree package when `allow.unfree` is unset
+    #[test]
+    fn check_packages_are_allowed_unfree_default() {
+        let (_, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
+        foo_locked.unfree = Some(true);
+
+        assert!(
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: None,
+                broken: None,
+                licenses: None
+            })
+            .is_ok()
+        );
+    }
+
+    /// [Lockfile::check_packages_are_allowed] does not error for a
+    /// an unfree package when `allow.unfree = true`
+    #[test]
+    fn check_packages_are_allowed_unfree_true() {
+        let (_, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
+        foo_locked.unfree = Some(true);
+
+        assert!(
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: Some(true),
+                broken: None,
+                licenses: None
+            })
+            .is_ok()
+        );
+    }
+
+    /// [Lockfile::check_packages_are_allowed] returns an error
+    /// when a package is unfree and `allow.unfree = false`
+    #[test]
+    fn check_packages_are_allowed_unfree_false() {
+        let (_, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
+        foo_locked.unfree = Some(true);
+
+        assert!(matches!(
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: Some(false),
+                broken: None,
+                licenses: None
+            }),
+            Err(ResolveError::UnfreeNotAllowed { .. })
+        ));
+    }
+
+    #[test]
+    fn respects_flake_descriptor_systems() {
+        let manifest_contents = formatdoc! {r#"
+        version = 1
+
+        [install]
+        bpftrace.flake = "github:NixOS/nixpkgs#bpftrace"
+        bpftrace.systems = ["x86_64-linux"]
+
+        [options]
+        systems = ["aarch64-linux", "x86_64-linux"]
+        "#};
+        let manifest = toml_edit::de::from_str(&manifest_contents).unwrap();
+        let installables = Lockfile::collect_flake_installables(&manifest).collect::<Vec<_>>();
+        assert_eq!(installables.len(), 1);
+        assert_eq!(installables[0].system.as_str(), "x86_64-linux");
     }
 }
