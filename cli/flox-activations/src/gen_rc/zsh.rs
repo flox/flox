@@ -89,6 +89,7 @@ mod tests {
     fn test_generate_zsh_startup_commands_basic() {
         let additions = {
             let mut map = HashMap::new();
+            map.insert("QUOTED_VAR".to_string(), "QUOTED'VALUE".to_string());
             map.insert("ADDED_VAR".to_string(), "ADDED_VALUE".to_string());
             map
         };
@@ -107,14 +108,15 @@ mod tests {
         generate_zsh_startup_commands(&args, &env_diff, &mut buf).unwrap();
         let output = String::from_utf8_lossy(&buf);
         expect![[r#"
-            typeset -g _flox_activate_tracelevel='3';
-            typeset -g _activate_d='/activate_d';
-            export ADDED_VAR='ADDED_VALUE';
+            typeset -g _flox_activate_tracelevel=3;
+            typeset -g _activate_d=/activate_d;
+            export ADDED_VAR=ADDED_VALUE;
+            export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
-            typeset -g _FLOX_ENV='/flox_env';
-            typeset -g _FLOX_ENV_CACHE='/flox_env_cache';
-            typeset -g _FLOX_ENV_PROJECT='/flox_env_project';
-            typeset -g _FLOX_ENV_DESCRIPTION='env_description';
+            typeset -g _FLOX_ENV=/flox_env;
+            typeset -g _FLOX_ENV_CACHE=/flox_env_cache;
+            typeset -g _FLOX_ENV_PROJECT=/flox_env_project;
+            typeset -g _FLOX_ENV_DESCRIPTION=env_description;
             source '/activate_d/zsh';
             rm '/path/to/rc/file';
         "#]]

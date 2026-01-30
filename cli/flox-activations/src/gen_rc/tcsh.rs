@@ -169,6 +169,7 @@ mod tests {
     fn test_generate_tcsh_startup_commands_basic() {
         let additions = {
             let mut map = HashMap::new();
+            map.insert("QUOTED_VAR".to_string(), "QUOTED'VALUE".to_string());
             map.insert("ADDED_VAR".to_string(), "ADDED_VALUE".to_string());
             map
         };
@@ -192,15 +193,16 @@ mod tests {
         let output = String::from_utf8_lossy(&buf);
         expect![[r#"
             set verbose
-            setenv ADDED_VAR 'ADDED_VALUE';
+            setenv ADDED_VAR ADDED_VALUE;
+            setenv QUOTED_VAR 'QUOTED'\''VALUE';
             unsetenv DELETED_VAR;
-            setenv FLOX_ENV '/flox_env';
-            setenv FLOX_ENV_CACHE '/flox_env_cache';
-            setenv FLOX_ENV_PROJECT '/flox_env_project';
-            setenv FLOX_ENV_DESCRIPTION 'env_description';
-            setenv _activate_d '/activate_d';
-            setenv _flox_activations '/flox_activations';
-            setenv _flox_activate_tracer 'TRACER';
+            setenv FLOX_ENV /flox_env;
+            setenv FLOX_ENV_CACHE /flox_env_cache;
+            setenv FLOX_ENV_PROJECT /flox_env_project;
+            setenv FLOX_ENV_DESCRIPTION env_description;
+            setenv _activate_d /activate_d;
+            setenv _flox_activations /flox_activations;
+            setenv _flox_activate_tracer TRACER;
             if ( $?tty ) then; source '/activate_d/set-prompt.tcsh'; endif;
             if (! $?FLOX_ENV_DIRS) setenv FLOX_ENV_DIRS "empty";
             eval "`'/flox_activations' set-env-dirs --shell tcsh --flox-env '/flox_env' --env-dirs $FLOX_ENV_DIRS:q`";

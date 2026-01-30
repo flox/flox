@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Display;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -201,54 +202,55 @@ impl SetVar {
 
 impl GenerateShell for SetVar {
     fn generate(&self, shell: Shell, writer: &mut impl Write) -> Result<(), Error> {
+        let escaped_value = shell_escape::escape(Cow::Borrowed(&self.value));
         match (shell, self.exported, self.allow_expansion) {
             (Shell::Bash, true, true) => {
                 write!(writer, "export {}=\"{}\";", self.name, self.value)?;
             },
             (Shell::Bash, true, false) => {
-                write!(writer, "export {}='{}\';", self.name, self.value)?;
+                write!(writer, "export {}={};", self.name, escaped_value)?;
             },
             (Shell::Bash, false, true) => {
                 write!(writer, "{}=\"{}\";", self.name, self.value)?;
             },
             (Shell::Bash, false, false) => {
-                write!(writer, "{}='{}\';", self.name, self.value)?;
+                write!(writer, "{}={};", self.name, escaped_value)?;
             },
             (Shell::Zsh, true, true) => {
                 write!(writer, "export {}=\"{}\";", self.name, self.value)?;
             },
             (Shell::Zsh, true, false) => {
-                write!(writer, "export {}='{}\';", self.name, self.value)?;
+                write!(writer, "export {}={};", self.name, escaped_value)?;
             },
             (Shell::Zsh, false, true) => {
                 write!(writer, "typeset -g {}=\"{}\";", self.name, self.value)?;
             },
             (Shell::Zsh, false, false) => {
-                write!(writer, "typeset -g {}='{}';", self.name, self.value)?;
+                write!(writer, "typeset -g {}={};", self.name, escaped_value)?;
             },
             (Shell::Tcsh, true, true) => {
                 write!(writer, "setenv {} \"{}\";", self.name, self.value)?;
             },
             (Shell::Tcsh, true, false) => {
-                write!(writer, "setenv {} '{}';", self.name, self.value)?;
+                write!(writer, "setenv {} {};", self.name, escaped_value)?;
             },
             (Shell::Tcsh, false, true) => {
                 write!(writer, "set {} = \"{}\";", self.name, self.value)?;
             },
             (Shell::Tcsh, false, false) => {
-                write!(writer, "set {} = '{}';", self.name, self.value)?;
+                write!(writer, "set {} = {};", self.name, escaped_value)?;
             },
             (Shell::Fish, true, true) => {
                 write!(writer, "set -gx {} \"{}\";", self.name, self.value)?;
             },
             (Shell::Fish, true, false) => {
-                write!(writer, "set -gx {} '{}';", self.name, self.value)?;
+                write!(writer, "set -gx {} {};", self.name, escaped_value)?;
             },
             (Shell::Fish, false, true) => {
                 write!(writer, "set -g {} \"{}\";", self.name, self.value)?;
             },
             (Shell::Fish, false, false) => {
-                write!(writer, "set -g {} '{}';", self.name, self.value)?;
+                write!(writer, "set -g {} {};", self.name, escaped_value)?;
             },
         }
         Ok(())

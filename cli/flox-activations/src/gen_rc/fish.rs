@@ -167,6 +167,7 @@ mod tests {
     fn test_generate_zsh_startup_commands_basic() {
         let additions = {
             let mut map = HashMap::new();
+            map.insert("QUOTED_VAR".to_string(), "QUOTED'VALUE".to_string());
             map.insert("ADDED_VAR".to_string(), "ADDED_VALUE".to_string());
             map
         };
@@ -189,16 +190,17 @@ mod tests {
         generate_fish_startup_commands(&args, &env_diff, &mut buf).unwrap();
         let output = String::from_utf8_lossy(&buf);
         expect![[r#"
-            set -gx fish_trace '1';
-            set -gx ADDED_VAR 'ADDED_VALUE';
+            set -gx fish_trace 1;
+            set -gx ADDED_VAR ADDED_VALUE;
+            set -gx QUOTED_VAR 'QUOTED'\''VALUE';
             set -e DELETED_VAR;
-            set -gx FLOX_ENV '/flox_env';
-            set -gx FLOX_ENV_CACHE '/flox_env_cache';
-            set -gx FLOX_ENV_PROJECT '/flox_env_project';
-            set -gx FLOX_ENV_DESCRIPTION 'env_description';
-            set -gx _activate_d '/activate_d';
-            set -gx _flox_activations '/flox_activations';
-            set -gx _flox_activate_tracer 'TRACER';
+            set -gx FLOX_ENV /flox_env;
+            set -gx FLOX_ENV_CACHE /flox_env_cache;
+            set -gx FLOX_ENV_PROJECT /flox_env_project;
+            set -gx FLOX_ENV_DESCRIPTION env_description;
+            set -gx _activate_d /activate_d;
+            set -gx _flox_activations /flox_activations;
+            set -gx _flox_activate_tracer TRACER;
             if isatty 1; source '/activate_d/set-prompt.fish'; end;
             set -gx FLOX_ENV_DIRS (if set -q FLOX_ENV_DIRS; echo "$FLOX_ENV_DIRS"; else; echo empty; end);
             /flox_activations set-env-dirs --shell fish --flox-env "/flox_env" --env-dirs "$FLOX_ENV_DIRS" | source;
