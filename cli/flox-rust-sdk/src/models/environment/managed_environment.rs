@@ -1413,19 +1413,11 @@ impl ManagedEnvironment {
             check_for_local_includes(&lockfile)?;
         }
 
-        // Fetch the remote branch into sync branch,
-        // we can ignore if the upstream was deleted since we are going to create it on push anyway.
-        match self.fetch_remote_state(flox) {
-            Ok(_) => {},
-            Err(ManagedEnvironmentError::UpstreamNotFound { .. }) => {
-                debug!("Upstream environment was deleted.")
-            },
-            e @ Err(_) => e?,
-        };
-
+        // Fetch the remote branch into sync branch.
+        // If upstream was deleted, treat as "ahead" since push will recreate it.
         let branch_ord = self
             .floxmeta_branch
-            .compare_remote()
+            .fetch_and_compare_remote(flox, &self.pointer)
             .map_err(ManagedEnvironmentError::FloxmetaBranch)?;
 
         if matches!(branch_ord, BranchOrd::Equal | BranchOrd::Behind) && !force {
