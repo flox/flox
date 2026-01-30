@@ -7,7 +7,12 @@ use serde::Serialize;
 
 use crate::Name;
 
-pub(crate) type LockedCatalog = serde_json::Value;
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type")]
+pub(crate) enum LockedCatalog {
+    #[serde(rename = "nix")]
+    Nix(serde_json::Value),
+}
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct BuildLock {

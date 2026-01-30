@@ -12,8 +12,8 @@ use crate::nix_build_lock::{BuildLock, LockedCatalog};
 use crate::{Name, nix};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(untagged)]
 enum CatalogType {
+    #[serde(untagged)]
     Nix(String),
 }
 
@@ -36,6 +36,12 @@ impl CatalogSpec {
         if let CatalogSpec::Url { url } = self {
             return Ok(url.clone());
         };
+
+        if let CatalogSpec::Full { type_, .. } = self
+            && type_ == &CatalogType::FloxHub
+        {
+            panic!("don't use to_url on catalog")
+        }
 
         let catalog_json = serde_json::to_string(&self)?;
 
@@ -72,7 +78,7 @@ pub fn read_config(path: impl AsRef<Path>) -> Result<BuildConfig> {
 }
 
 #[tracing::instrument(fields(%url))]
-fn lock_url(url: &Url) -> Result<LockedCatalog> {
+fn lock_url(url: &Url) -> Result<serde_json::Value> {
     let mut command = nix_base_command();
     command
         .arg("flake")
@@ -95,7 +101,11 @@ fn lock_url(url: &Url) -> Result<LockedCatalog> {
 }
 
 #[tracing::instrument(skip_all)]
-pub fn lock_config(config: &BuildConfig) -> Result<BuildLock> {
+pub fn lock_config(
+    config: &BuildConfig,
+    catalog_url: &Url,
+    auth_token: &Option<String>,
+) -> Result<BuildLock> {
     let BuildConfig {
         catalogs: catalog_spec,
     } = config;
@@ -109,8 +119,14 @@ pub fn lock_config(config: &BuildConfig) -> Result<BuildLock> {
         )
         .entered();
 
-        let catalog_url = catalog.to_url()?;
-        let locked_catalog = lock_url(&catalog_url)?;
+        let locked_catalog = match catalog {
+            nix_spec => {
+                let catalog_url = nix_spec.to_url()?;
+                let locked_catalog = lock_url(&catalog_url)?;
+                LockedCatalog::Nix(locked_catalog)
+            },
+        };
+
         locked_catalogs.insert(name.clone(), locked_catalog);
     }
 
