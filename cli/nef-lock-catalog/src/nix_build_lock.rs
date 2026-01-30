@@ -8,7 +8,20 @@ use tracing::debug;
 
 use crate::CatalogId;
 
-pub(crate) type LockedCatalog = serde_json::Value;
+/// Locked source information to nix expression catalog.
+/// That is either:
+/// 1. a locked source-type [1], referencing a source + optional (sub)
+///    with `.flox/pkgs`
+/// 2. a package attribute hierarchy with a locked source per package
+///    at its leaves (phase 3, WIP)
+///
+/// [1]: https://nix.dev/manual/nix/2.31/language/builtins.html#source-types
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type")]
+pub(crate) enum CatalogLock {
+    #[serde(rename = "nix")]
+    Nix(serde_json::Value),
+}
 
 /// A `BuildLock` is a collection of locked sources for each catalog.
 /// It is used to ensure reproducibility of builds by locking the

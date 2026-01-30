@@ -12,8 +12,8 @@ use crate::nix_build_lock::{BuildLock, CatalogLock};
 use crate::{CatalogId, nix};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(untagged)]
 enum CatalogType {
+    #[serde(untagged)]
     Nix(String),
 }
 
@@ -98,8 +98,41 @@ pub fn read_config(path: impl AsRef<Path>) -> Result<BuildConfig> {
     Ok(config)
 }
 
-#[tracing::instrument(fields(%url))]
-fn lock_url(url: &Url) -> Result<LockedCatalog> {
+/// Lock a flakeref url using `nix flake prefetch`.
+/// This resolves urls, downloads the source and returns
+/// a locked source type as well as source information,
+/// such as hash and storePath.
+///
+///
+/// Example:
+///
+/// ```shell
+/// $ nix flake prefetch git+ssh://git@github.com/flox/flox --json
+/// {
+///   "hash": "sha256-LdMMBff1PCXQQl3I5Dvg5U2s4l+7l9lemAncUCjJUY8=",
+///   "locked": {
+///     "lastModified": 1770220825,
+///     "ref": "refs/heads/main",
+///     "rev": "a6250c34313d184c5c5be7ad824ad0bbc7610e38",
+///     "revCount": 4546,
+///     "type": "git",
+///     "url": "ssh://git@github.com/flox/flox"
+///   },
+///   "original": {
+///     "type": "git",
+///     "url": "ssh://git@github.com/flox/flox"
+///   },
+///   "storePath": "/nix/store/pihgq0g5vnrzlx2g5lzdn7dh7aqfbl7g-source"
+/// }
+/// ```
+///
+/// The url is either provided by the user directly
+/// or computed using [CatalogSpec::to_url].
+///
+/// The lock result above is stored _as is_ in the lockfile,
+/// the NEF expects the `.locked` subset of this structure
+/// as the input to `builtins.fetchTree`.
+fn lock_url(url: &Url) -> Result<serde_json::Value> {
     let mut command = nix_base_command();
     command
         .arg("flake")
@@ -137,8 +170,15 @@ pub fn lock_config(config: &BuildConfig) -> Result<BuildLock> {
         )
         .entered();
 
-        let catalog_url = catalog.to_url()?;
-        let locked_catalog = lock_url(&catalog_url)?;
+        #[allow(clippy::match_single_binding)] // extension point for floxhub catalogs
+        let locked_catalog = match catalog {
+            nix_spec => {
+                let catalog_url = nix_spec.to_url()?;
+                let locked_catalog = lock_url(&catalog_url)?;
+                CatalogLock::Nix(locked_catalog)
+            },
+        };
+
         locked_catalogs.insert(name.clone(), locked_catalog);
     }
 

@@ -1,5 +1,5 @@
 use std::env::args;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Result;
 use nef_lock_catalog::{lock_config, read_config, write_lock};
