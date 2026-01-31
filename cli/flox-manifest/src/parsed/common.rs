@@ -24,8 +24,8 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use systemd::unit::ServiceUnit;
 
-use crate::ManifestError;
 use crate::parsed::{SkipSerializing, impl_into_inner};
+use crate::{ManifestError, SchemaVersion};
 
 pub(crate) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub const DEFAULT_PRIORITY: u64 = 5;
@@ -44,7 +44,7 @@ pub(crate) enum VersionKind {
     SchemaVersion(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub(crate) enum KnownSchemaVersion {
     V1,
     V1_9_0,
@@ -61,6 +61,51 @@ impl TryFrom<VersionKind> for KnownSchemaVersion {
                 "1.9.0" => Ok(KnownSchemaVersion::V1_9_0),
                 _ => Err(ManifestError::InvalidSchemaVersion(format!("{v}"))),
             },
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum VersionedContainer<T, U> {
+    V1(T),
+    V1_9_0(U),
+}
+
+impl<T, U> VersionedContainer<T, U> {
+    pub(crate) fn get_v1(&self) -> Option<&T> {
+        match self {
+            VersionedContainer::V1(inner) => Some(&inner),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn into_v1(self) -> Option<T> {
+        match self {
+            VersionedContainer::V1(inner) => Some(inner),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn get_v1_9_0(&self) -> Option<&U> {
+        match self {
+            VersionedContainer::V1_9_0(inner) => Some(&inner),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn into_v1_9_0(self) -> Option<U> {
+        match self {
+            VersionedContainer::V1_9_0(inner) => Some(inner),
+            _ => None,
+        }
+    }
+}
+
+impl<T, U> SchemaVersion for VersionedContainer<T, U> {
+    fn get_schema_version(&self) -> KnownSchemaVersion {
+        match self {
+            VersionedContainer::V1(_) => KnownSchemaVersion::V1,
+            VersionedContainer::V1_9_0(_) => KnownSchemaVersion::V1_9_0,
         }
     }
 }

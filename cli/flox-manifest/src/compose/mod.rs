@@ -18,7 +18,10 @@ use crate::{AsTypedOnlyManifest, Manifest, TypedOnly};
 pub static COMPOSER_MANIFEST_ID: &str = "Current manifest";
 
 #[derive(Error, Debug)]
-pub enum MergeError {}
+pub enum MergeError {
+    #[error("internal error: {0}")]
+    InternalError(String),
+}
 
 /// A key path to a value in a manifest.
 /// This is used to provide the location for warnings.

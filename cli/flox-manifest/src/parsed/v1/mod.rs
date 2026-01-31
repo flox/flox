@@ -21,7 +21,15 @@ use crate::parsed::common::{
 };
 use crate::parsed::v1::package_descriptor::ManifestPackageDescriptor;
 use crate::parsed::{Inner, SkipSerializing, impl_into_inner, impl_pkg_lookup};
-use crate::{AsTypedOnlyManifest, Manifest, ManifestError, Parsed, SchemaVersion, TypedOnly};
+use crate::{
+    AsTypedOnlyManifest,
+    CommonFields,
+    Manifest,
+    ManifestError,
+    Parsed,
+    SchemaVersion,
+    TypedOnly,
+};
 
 pub mod package_descriptor;
 
@@ -89,6 +97,72 @@ impl AsTypedOnlyManifest for ManifestV1 {
 impl SchemaVersion for ManifestV1 {
     fn get_schema_version(&self) -> KnownSchemaVersion {
         KnownSchemaVersion::V1
+    }
+}
+
+impl CommonFields for ManifestV1 {
+    fn vars(&self) -> &Vars {
+        &self.vars
+    }
+
+    fn hook(&self) -> Option<&Hook> {
+        self.hook.as_ref()
+    }
+
+    fn profile(&self) -> Option<&Profile> {
+        self.profile.as_ref()
+    }
+
+    fn services(&self) -> &Services {
+        &self.services
+    }
+
+    fn include(&self) -> &Include {
+        &self.include
+    }
+
+    fn build(&self) -> &Build {
+        &self.build
+    }
+
+    fn containerize(&self) -> Option<&super::common::Containerize> {
+        self.containerize.as_ref()
+    }
+
+    fn options(&self) -> &super::common::Options {
+        &self.options
+    }
+
+    fn vars_mut(&mut self) -> &mut super::common::Vars {
+        &mut self.vars
+    }
+
+    fn hook_mut(&mut self) -> Option<&mut super::common::Hook> {
+        self.hook.as_mut()
+    }
+
+    fn profile_mut(&mut self) -> Option<&mut super::common::Profile> {
+        self.profile.as_mut()
+    }
+
+    fn services_mut(&mut self) -> &mut super::common::Services {
+        &mut self.services
+    }
+
+    fn include_mut(&mut self) -> &mut super::common::Include {
+        &mut self.include
+    }
+
+    fn build_mut(&mut self) -> &mut super::common::Build {
+        &mut self.build
+    }
+
+    fn containerize_mut(&mut self) -> Option<&mut super::common::Containerize> {
+        self.containerize.as_mut()
+    }
+
+    fn options_mut(&mut self) -> &mut super::common::Options {
+        &mut self.options
     }
 }
 

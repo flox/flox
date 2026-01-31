@@ -10,7 +10,7 @@ toml_edit.workspace = true
 serde.workspace = true
 indoc.workspace = true
 itertools.workspace = true
-schemars.workspace = true
+schemars = { workspace = true, features = ["chrono04"] }
 serde_with.workspace = true
 systemd.workspace = true
 derive_more.workspace = true

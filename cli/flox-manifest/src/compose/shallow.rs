@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use tracing::{debug, instrument, trace};
 
 use super::{
@@ -10,7 +12,6 @@ use super::{
     map_union,
     shallow_merge_options,
 };
-use crate::parsed::Inner;
 use crate::parsed::common::{
     ActivateOptions,
     Allows,
@@ -18,14 +19,18 @@ use crate::parsed::common::{
     Containerize,
     Hook,
     Include,
+    KnownSchemaVersion,
     Options,
     Profile,
     SemverOptions,
     Services,
     Vars,
+    VersionedContainer,
 };
-use crate::parsed::v1::{Install, ManifestV1, ManifestVersion};
-use crate::{Manifest, TypedOnly};
+use crate::parsed::v1::{ManifestV1, ManifestVersion};
+use crate::parsed::v1_9_0::ManifestV1_9_0;
+use crate::parsed::{self, Inner};
+use crate::{CommonFields, Manifest, Parsed, SchemaVersion, TypedOnly};
 
 /// Merges two manifests by applying `manifest2` on top of `manifest1` and
 /// overwriting any conflicts for keys within the top-level of each `ManifestV1`
@@ -36,9 +41,9 @@ pub(crate) struct ShallowMerger;
 impl ShallowMerger {
     #[instrument(skip_all)]
     fn merge_version(
-        _low_priority: ManifestVersion,
-        high_priority: ManifestVersion,
-    ) -> Result<ManifestVersion, MergeError> {
+        _low_priority: KnownSchemaVersion,
+        high_priority: KnownSchemaVersion,
+    ) -> Result<KnownSchemaVersion, MergeError> {
         // To be consistent with other "composing manfiest wins" behaviors,
         // the higher priority manifest determines the manifest version
         // and therefore 'outputs' behavior.
@@ -57,15 +62,121 @@ impl ShallowMerger {
 
     #[instrument(skip_all)]
     fn merge_install(
-        low_priority: &Install,
-        high_priority: &Install,
-    ) -> Result<(Install, Vec<Warning>), MergeError> {
-        let (merged, warnings) = map_union(
-            KeyPath::from_iter(["install"]),
-            low_priority.inner(),
-            high_priority.inner(),
-        );
-        Ok((Install(merged), warnings))
+        low_priority: VersionedContainer<&parsed::v1::Install, &parsed::v1_9_0::Install>,
+        high_priority: VersionedContainer<&parsed::v1::Install, &parsed::v1_9_0::Install>,
+    ) -> Result<
+        (
+            VersionedContainer<parsed::v1::Install, parsed::v1_9_0::Install>,
+            Vec<Warning>,
+        ),
+        MergeError,
+    > {
+        // Implementation strategy:
+        // - Determine schema version of high_priority
+        // - Convert all package descriptors to untyped TOML values
+        // - Make maps of the untyped TOML values
+        // - Merge the untyped maps
+        // - Convert back to typed map
+        let untyped_low = match low_priority {
+            VersionedContainer::V1(install) => install
+                .inner()
+                .iter()
+                .map(|(key, value)| {
+                    toml::Value::try_from(value)
+                        .map_err(|_| {
+                            MergeError::InternalError(
+                                "failed to serialize package descriptor".into(),
+                            )
+                        })
+                        .map(|toml_value| (key.clone(), toml_value))
+                })
+                .collect::<Result<BTreeMap<String, toml::Value>, MergeError>>()?,
+            VersionedContainer::V1_9_0(install) => install
+                .inner()
+                .iter()
+                .map(|(key, value)| {
+                    toml::Value::try_from(value)
+                        .map_err(|_| {
+                            MergeError::InternalError(
+                                "failed to serialize package descriptor".into(),
+                            )
+                        })
+                        .map(|toml_value| (key.clone(), toml_value))
+                })
+                .collect::<Result<BTreeMap<String, toml::Value>, MergeError>>()?,
+        };
+
+        let untyped_high = match high_priority {
+            VersionedContainer::V1(install) => install
+                .inner()
+                .iter()
+                .map(|(key, value)| {
+                    toml::Value::try_from(value)
+                        .map_err(|_| {
+                            MergeError::InternalError(
+                                "failed to serialize package descriptor".into(),
+                            )
+                        })
+                        .map(|toml_value| (key.clone(), toml_value))
+                })
+                .collect::<Result<BTreeMap<String, toml::Value>, MergeError>>()?,
+            VersionedContainer::V1_9_0(install) => install
+                .inner()
+                .iter()
+                .map(|(key, value)| {
+                    toml::Value::try_from(value)
+                        .map_err(|_| {
+                            MergeError::InternalError(
+                                "failed to serialize package descriptor".into(),
+                            )
+                        })
+                        .map(|toml_value| (key.clone(), toml_value))
+                })
+                .collect::<Result<BTreeMap<String, toml::Value>, MergeError>>()?,
+        };
+
+        let (merged, warnings) =
+            map_union(KeyPath::from_iter(["install"]), &untyped_low, &untyped_high);
+
+        let merged_container = match high_priority.get_schema_version() {
+            KnownSchemaVersion::V1 => {
+                let map = merged
+                    .into_iter()
+                    .map(|(key, value)| {
+                        value.try_into().map(|typed| (key, typed)).map_err(|_| {
+                            MergeError::InternalError(
+                                "failed to deserialize package descriptor".into(),
+                            )
+                        })
+                    })
+                    .collect::<Result<
+                        BTreeMap<String, parsed::v1::package_descriptor::ManifestPackageDescriptor>,
+                        MergeError,
+                    >>()?;
+                VersionedContainer::V1(parsed::v1::Install(map))
+            },
+            KnownSchemaVersion::V1_9_0 => {
+                let map = merged
+                    .into_iter()
+                    .map(|(key, value)| {
+                        value.try_into().map(|typed| (key, typed)).map_err(|_| {
+                            MergeError::InternalError(
+                                "failed to deserialize package descriptor".into(),
+                            )
+                        })
+                    })
+                    .collect::<Result<
+                        BTreeMap<
+                            String,
+                            parsed::v1_9_0::package_descriptor::ManifestPackageDescriptor,
+                        >,
+                        MergeError,
+                    >>()?;
+                VersionedContainer::V1_9_0(parsed::v1_9_0::Install(map))
+            },
+        };
+
+        Ok((merged_container, warnings))
     }
 
     /// Keys in `manifest2` overwrite keys in `manifest1`.
@@ -279,48 +390,104 @@ impl ManifestMergeTrait for ShallowMerger {
         high_priority: &Manifest<TypedOnly>,
     ) -> Result<(Manifest<TypedOnly>, Vec<Warning>), MergeError> {
         trace!(section = "versions", "merging manifest section");
-        let version = Self::merge_version(low_priority.version, high_priority.version)?;
+        let schema_high = high_priority.get_schema_version();
+        let schema_low = low_priority.get_schema_version();
+        let schema_version = Self::merge_version(schema_low, schema_high)?;
+
         trace!(section = "install", "merging manifest section");
-        let (install, install_warnings) =
-            Self::merge_install(&low_priority.install, &high_priority.install)?;
+        // Yeah, this sucks
+        let install_low = match schema_low {
+            KnownSchemaVersion::V1 => {
+                if let Manifest {
+                    inner:
+                        TypedOnly {
+                            parsed: Parsed::V1(m),
+                        },
+                } = low_priority
+                {
+                    VersionedContainer::V1(&m.install)
+                } else {
+                    return Err(MergeError::InternalError(
+                        "schema version mismatch during merging".into(),
+                    ));
+                }
+            },
+            KnownSchemaVersion::V1_9_0 => {
+                if let Manifest {
+                    inner:
+                        TypedOnly {
+                            parsed: Parsed::V1_9_0(m),
+                        },
+                } = low_priority
+                {
+                    VersionedContainer::V1_9_0(&m.install)
+                } else {
+                    return Err(MergeError::InternalError(
+                        "schema version mismatch during merging".into(),
+                    ));
+                }
+            },
+        };
+        let install_high = match schema_high {
+            KnownSchemaVersion::V1 => {
+                if let Manifest {
+                    inner:
+                        TypedOnly {
+                            parsed: Parsed::V1(m),
+                        },
+                } = high_priority
+                {
+                    VersionedContainer::V1(&m.install)
+                } else {
+                    return Err(MergeError::InternalError(
+                        "schema version mismatch during merging".into(),
+                    ));
+                }
+            },
+            KnownSchemaVersion::V1_9_0 => {
+                if let Manifest {
+                    inner:
+                        TypedOnly {
+                            parsed: Parsed::V1_9_0(m),
+                        },
+                } = high_priority
+                {
+                    VersionedContainer::V1_9_0(&m.install)
+                } else {
+                    return Err(MergeError::InternalError(
+                        "schema version mismatch during merging".into(),
+                    ));
+                }
+            },
+        };
+        let (install_container, install_warnings) = Self::merge_install(install_low, install_high)?;
+
         trace!(section = "vars", "merging manifest section");
-        let (vars, vars_warnings) = Self::merge_vars(&low_priority.vars, &high_priority.vars)?;
+        let (vars, vars_warnings) = Self::merge_vars(&low_priority.vars(), &high_priority.vars())?;
+
         trace!(section = "hook", "merging manifest section");
-        let hook = Self::merge_hook(low_priority.hook.as_ref(), high_priority.hook.as_ref())?;
+        let hook = Self::merge_hook(low_priority.hook(), high_priority.hook())?;
+
         trace!(section = "profile", "merging manifest section");
-        let profile = Self::merge_profile(
-            low_priority.profile.as_ref(),
-            high_priority.profile.as_ref(),
-        )?;
+        let profile = Self::merge_profile(low_priority.profile(), high_priority.profile())?;
+
         trace!(section = "options", "merging manifest section");
         let (options, options_warnings) =
-            Self::merge_options(&low_priority.options, &high_priority.options)?;
+            Self::merge_options(&low_priority.options(), &high_priority.options())?;
+
         trace!(section = "services", "merging manifest section");
         let (services, services_warnings) =
-            Self::merge_services(&low_priority.services, &high_priority.services)?;
-        trace!(section = "build", "merging manifest section");
-        let (build, build_warnings) = Self::merge_build(&low_priority.build, &high_priority.build)?;
-        trace!(section = "containerize", "merging manifest section");
-        let (containerize, containerize_warnings) = Self::merge_containerize(
-            low_priority.containerize.as_ref(),
-            high_priority.containerize.as_ref(),
-        )?;
-        debug!("manifest pair merged successfully");
+            Self::merge_services(&low_priority.services(), &high_priority.services())?;
 
-        let manifest = ManifestV1 {
-            version,
-            install,
-            vars,
-            hook,
-            profile,
-            options,
-            services,
-            build,
-            containerize,
-            // Intentionally blank out the includes since the includes are
-            // inputs to the merge operation.
-            include: Include::default(),
-        };
+        trace!(section = "build", "merging manifest section");
+        let (build, build_warnings) =
+            Self::merge_build(&low_priority.build(), &high_priority.build())?;
+
+        trace!(section = "containerize", "merging manifest section");
+        let (containerize, containerize_warnings) =
+            Self::merge_containerize(low_priority.containerize(), high_priority.containerize())?;
+
+        debug!("manifest pair merged successfully");
 
         let warnings = [
             install_warnings,
@@ -334,7 +501,62 @@ impl ManifestMergeTrait for ShallowMerger {
         .flatten()
         .collect::<Vec<_>>();
 
-        Ok((manifest, warnings))
+        let merged_manifest = match schema_version {
+            KnownSchemaVersion::V1 => {
+                let install = install_container
+                    .into_v1()
+                    .ok_or(MergeError::InternalError(
+                        "unexpected schema version mismatch".into(),
+                    ))?;
+                let manifest = ManifestV1 {
+                    version: ManifestVersion::from(1),
+                    install,
+                    vars,
+                    hook,
+                    profile,
+                    options,
+                    services,
+                    build,
+                    containerize,
+                    // Intentionally blank out the includes since the includes are
+                    // inputs to the merge operation.
+                    include: Include::default(),
+                };
+                Manifest {
+                    inner: TypedOnly {
+                        parsed: Parsed::V1(manifest),
+                    },
+                }
+            },
+            KnownSchemaVersion::V1_9_0 => {
+                let install = install_container
+                    .into_v1_9_0()
+                    .ok_or(MergeError::InternalError(
+                        "unexpected schema version mismatch".into(),
+                    ))?;
+                let manifest = ManifestV1_9_0 {
+                    version: parsed::v1_9_0::ManifestVersion::from(1),
+                    install,
+                    vars,
+                    hook,
+                    profile,
+                    options,
+                    services,
+                    build,
+                    containerize,
+                    // Intentionally blank out the includes since the includes are
+                    // inputs to the merge operation.
+                    include: Include::default(),
+                };
+                Manifest {
+                    inner: TypedOnly {
+                        parsed: Parsed::V1_9_0(manifest),
+                    },
+                }
+            },
+        };
+
+        Ok((merged_manifest, warnings))
     }
 }
 
@@ -353,7 +575,8 @@ mod tests {
         SemverOptions,
         ServiceDescriptor,
     };
-    use crate::parsed::v1::ManifestPackageDescriptor;
+    use crate::parsed::v1::Install;
+    use crate::parsed::v1::package_descriptor::ManifestPackageDescriptor;
 
     proptest! {
         // Ensures that the vars unique to each manifest are present in the merged output,
@@ -385,9 +608,10 @@ mod tests {
         // in the merged output.
         #[test]
         fn merges_install_section(maps in btree_maps_overlapping_keys::<ManifestPackageDescriptor>(1, 3)) {
-            let install1 = Install(maps.map1.clone());
-            let install2 = Install(maps.map2.clone());
-            let (merged, warnings) = ShallowMerger::merge_install(&install1, &install2).unwrap();
+            let install1 = VersionedContainer::V1(&Install(maps.map1.clone()));
+            let install2 = VersionedContainer::V1(&Install(maps.map2.clone()));
+            let (merged, warnings) = ShallowMerger::merge_install(install1, install2).unwrap();
+            let merged = merged.into_v1().unwrap();
             let merged = merged.inner();
             for key in maps.unique_keys_map1.iter() {
                 prop_assert_eq!(maps.map1.get(key), merged.get(key));
