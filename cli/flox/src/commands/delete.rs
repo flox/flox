@@ -5,8 +5,7 @@ use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use indoc::formatdoc;
 use tracing::instrument;
 
-use super::{EnvironmentSelect, environment_select};
-use crate::commands::environment_description;
+use crate::commands::{DirEnvironmentSelect, dir_environment_select, environment_description};
 use crate::environment_subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::message;
@@ -18,8 +17,10 @@ pub struct Delete {
     #[bpaf(short, long)]
     force: bool,
 
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
+    // TODO: switch back to `EnvironmentSelect` once we implement
+    // <https://github.com/flox/flox/issues/3391>
+    #[bpaf(external(dir_environment_select), fallback(Default::default()))]
+    environment: DirEnvironmentSelect,
 }
 
 impl Delete {
@@ -42,7 +43,7 @@ impl Delete {
             bail!("{message}")
         }
 
-        let message = if let EnvironmentSelect::Unspecified = self.environment {
+        let message = if let DirEnvironmentSelect::Unspecified = self.environment {
             format!("You are about to delete your environment {description}. Are you sure?")
         } else {
             "Are you sure?".to_string()

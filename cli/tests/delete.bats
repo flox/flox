@@ -70,6 +70,7 @@ dot_flox_exists() {
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=delete-detect
 @test "error message when called without .flox directory" {
   run dot_flox_exists
   assert_failure
