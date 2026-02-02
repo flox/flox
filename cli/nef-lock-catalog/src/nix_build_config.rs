@@ -104,6 +104,7 @@ fn lock_url(url: &Url) -> Result<LockedCatalog> {
     command
         .arg("flake")
         .arg("prefetch")
+        .arg("--refresh")
         .arg("--json")
         .arg(url.as_str());
 
