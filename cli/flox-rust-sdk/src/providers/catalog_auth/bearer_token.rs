@@ -1,6 +1,7 @@
 //! Bearer token authentication strategy
 
 use reqwest::header::{self, HeaderMap, HeaderValue};
+use tracing::debug;
 
 use super::AuthStrategy;
 use crate::providers::catalog::CatalogClientConfig;
@@ -17,7 +18,11 @@ impl AuthStrategy for BearerTokenAuthStrategy {
         };
 
         let auth_value = format!("bearer {}", token);
-        let value = HeaderValue::from_str(&auth_value).unwrap();
+        let Ok(value) = HeaderValue::from_str(&auth_value) else {
+            tracing::warn!("Failed to create header value from bearer token");
+            return;
+        };
         header_map.insert(header::AUTHORIZATION, value);
+        debug!("Added bearer token authorization header");
     }
 }

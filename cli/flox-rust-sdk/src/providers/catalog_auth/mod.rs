@@ -36,19 +36,19 @@ use gssapi::GssapiAuthStrategy;
 #[serde(rename_all = "lowercase")]
 pub enum AuthMethod {
     #[default]
-    /// Bearer token authentication (default)
-    Bearer,
-    /// GSSAPI/Kerberos authentication
+    /// Auth0 authentication (default)
+    Auth0,
+    /// Kerberos authentication
     #[cfg(feature = "catalog-auth-gssapi")]
-    Gssapi,
+    Kerberos,
 }
 
 impl AuthStrategy for AuthMethod {
     fn add_auth_headers(header_map: &mut HeaderMap, config: &CatalogClientConfig) {
         match &config.auth_method {
-            AuthMethod::Bearer => BearerTokenAuthStrategy::add_auth_headers(header_map, config),
+            AuthMethod::Auth0 => BearerTokenAuthStrategy::add_auth_headers(header_map, config),
             #[cfg(feature = "catalog-auth-gssapi")]
-            AuthMethod::Gssapi => GssapiAuthStrategy::add_auth_headers(header_map, config),
+            AuthMethod::Kerberos => GssapiAuthStrategy::add_auth_headers(header_map, config),
         }
     }
 }

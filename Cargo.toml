@@ -117,8 +117,6 @@ libgssapi = "0.9"
 base64 = "0.22"
 
 # executive/monitoring dependencies
-
-# watchdog dependencies
 kqueue = "1.1.1"
 signal-hook = "0.4.3"
 
