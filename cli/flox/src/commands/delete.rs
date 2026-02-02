@@ -43,6 +43,21 @@ impl Delete {
             bail!("{message}")
         }
 
+        // TODO: Inform about `--upstream` option once we implement
+        // <https://github.com/flox/flox/issues/3391>
+        if let ConcreteEnvironment::Managed(ref env) = environment {
+            let dot_flox = env.dot_flox_path();
+            let dot_flox = dot_flox.display();
+
+            let message = formatdoc! {"
+                Environment {description} is linked with a FloxHub environment.
+
+                FloxHub environments can not yet be deleted.
+                This command will only delete the local link in '{dot_flox}'.
+            "};
+            message::warning(message);
+        }
+
         let message = if let DirEnvironmentSelect::Unspecified = self.environment {
             format!("You are about to delete your environment {description}. Are you sure?")
         } else {
