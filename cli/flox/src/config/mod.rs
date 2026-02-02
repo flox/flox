@@ -82,9 +82,9 @@ pub struct FloxConfig {
     // so just use a String.
     pub catalog_url: Option<String>,
 
-    /// Authentication method for catalog requests
+    /// Authentication mode for FloxHub
     #[serde(default)]
-    pub catalog_auth_method: AuthMethod,
+    pub floxhub_authn_mode: AuthMethod,
 
     /// Rule whether to change the shell prompt in activated environments.
     /// Deprecated in favor of set_prompt and hide_default_prompt.
