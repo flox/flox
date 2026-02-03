@@ -5,8 +5,7 @@ use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use indoc::formatdoc;
 use tracing::instrument;
 
-use super::{EnvironmentSelect, environment_select};
-use crate::commands::environment_description;
+use crate::commands::{DirEnvironmentSelect, dir_environment_select, environment_description};
 use crate::environment_subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::message;
@@ -18,8 +17,10 @@ pub struct Delete {
     #[bpaf(short, long)]
     force: bool,
 
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
+    // TODO: switch back to `EnvironmentSelect` once we implement
+    // <https://github.com/flox/flox/issues/3391>
+    #[bpaf(external(dir_environment_select), fallback(Default::default()))]
+    environment: DirEnvironmentSelect,
 }
 
 impl Delete {
@@ -42,7 +43,22 @@ impl Delete {
             bail!("{message}")
         }
 
-        let message = if let EnvironmentSelect::Unspecified = self.environment {
+        // TODO: Inform about `--upstream` option once we implement
+        // <https://github.com/flox/flox/issues/3391>
+        if let ConcreteEnvironment::Managed(ref env) = environment {
+            let dot_flox = env.dot_flox_path();
+            let dot_flox = dot_flox.display();
+
+            let message = formatdoc! {"
+                Environment {description} is linked with a FloxHub environment.
+
+                FloxHub environments can not yet be deleted.
+                This command will only delete the local link in '{dot_flox}'.
+            "};
+            message::warning(message);
+        }
+
+        let message = if let DirEnvironmentSelect::Unspecified = self.environment {
             format!("You are about to delete your environment {description}. Are you sure?")
         } else {
             "Are you sure?".to_string()
