@@ -237,11 +237,11 @@ pub fn activation_state_dir_path(
         .join(format!("{}-{}", hash, basename))
 }
 
-/// State file for activations (plural) of the given environment.
+/// State file path within an activation state directory.
 ///
-/// {activation_state_dir_path}/state.json
-pub fn state_json_path(runtime_dir: impl AsRef<Path>, dot_flox_path: impl AsRef<Path>) -> PathBuf {
-    activation_state_dir_path(runtime_dir, dot_flox_path).join("state.json")
+/// {activation_state_dir}/state.json
+pub fn state_json_path(activation_state_dir: impl AsRef<Path>) -> PathBuf {
+    activation_state_dir.as_ref().join("state.json")
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -291,15 +291,24 @@ pub struct StartIdentifier {
 }
 
 impl StartIdentifier {
+    /// Create a new StartIdentifier with the given store path and current timestamp.
+    pub fn new(store_path: impl AsRef<Path>) -> Self {
+        StartIdentifier {
+            store_path: store_path.as_ref().to_path_buf(),
+            timestamp: UnixTimestampMillis::now(),
+        }
+    }
+
     /// Compute start state directory path for this identifier.
     ///
-    /// Format: {runtime_dir}/activations/{env_hash}-{env_name}/{storepath_basename}.{unix_epoch}/
-    pub fn state_dir_path(
+    /// Format: {activation_state_dir}/{storepath_basename}.{unix_epoch}/
+    ///
+    /// This is the unified method that works for both project and container activations.
+    /// The `activation_state_dir` should be pre-computed based on the activation type.
+    pub fn start_state_dir(
         &self,
-        runtime_dir: impl AsRef<Path>,
-        dot_flox_path: impl AsRef<Path>,
+        activation_state_dir: impl AsRef<Path>,
     ) -> Result<PathBuf, Error> {
-        let base_dir = activation_state_dir_path(runtime_dir, dot_flox_path);
         let storepath_basename = self
             .store_path
             .file_name()
@@ -308,7 +317,7 @@ impl StartIdentifier {
 
         let dir_name = format!("{}.{}", storepath_basename, *self.timestamp);
 
-        Ok(base_dir.join(dir_name))
+        Ok(activation_state_dir.as_ref().join(dir_name))
     }
 }
 
@@ -333,8 +342,8 @@ enum Ready {
 /// programmatically.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct EnvironmentInfo {
-    /// Path to the activated environment's .flox directory
-    dot_flox_path: PathBuf,
+    /// Path to the activated environment's .flox directory (None for containers)
+    dot_flox_path: Option<PathBuf>,
     /// Path to the activated environment's .flox/run/{symlink} which encapsulates mode and platform
     flox_env: PathBuf,
 }
@@ -354,13 +363,13 @@ pub struct ActivationState {
 impl ActivationState {
     pub fn new(
         mode: &ActivateMode,
-        dot_flox_path: impl AsRef<Path>,
+        dot_flox_path: Option<impl AsRef<Path>>,
         flox_env: impl AsRef<Path>,
     ) -> Self {
         Self {
             version: Version,
             info: EnvironmentInfo {
-                dot_flox_path: dot_flox_path.as_ref().to_path_buf(),
+                dot_flox_path: dot_flox_path.map(|p| p.as_ref().to_path_buf()),
                 flox_env: flox_env.as_ref().to_path_buf(),
             },
             mode: mode.clone(),
@@ -532,10 +541,7 @@ impl ActivationState {
     }
 
     fn start(&mut self, pid: Pid, store_path: impl AsRef<Path>) -> StartIdentifier {
-        let start_id = StartIdentifier {
-            store_path: store_path.as_ref().to_path_buf(),
-            timestamp: UnixTimestampMillis::now(),
-        };
+        let start_id = StartIdentifier::new(store_path);
         let attachment = Attachment {
             start_id: start_id.clone(),
             expiration: None,
@@ -763,6 +769,7 @@ pub mod test_helpers {
     use super::{
         ActivationState,
         acquire_activations_json_lock,
+        activation_state_dir_path,
         read_activations_json,
         state_json_path,
         write_activations_json,
@@ -780,14 +787,16 @@ pub mod test_helpers {
         if !state.executive_started() {
             state.set_executive_pid(1);
         }
-        let state_json_path = state_json_path(runtime_dir, dot_flox_path);
+        let activation_state_dir = activation_state_dir_path(runtime_dir, dot_flox_path);
+        let state_json_path = state_json_path(&activation_state_dir);
         let lock = acquire_activations_json_lock(&state_json_path).expect("failed to acquire lock");
         write_activations_json(&state, &state_json_path, lock).expect("failed to write state");
     }
 
     /// Helper to read an ActivationState from disk
     pub fn read_activation_state(runtime_dir: &Path, dot_flox_path: &Path) -> ActivationState {
-        let state_json_path = state_json_path(runtime_dir, dot_flox_path);
+        let activation_state_dir = activation_state_dir_path(runtime_dir, dot_flox_path);
+        let state_json_path = state_json_path(&activation_state_dir);
         let (state, _lock) = read_activations_json(&state_json_path).expect("failed to read state");
         state.unwrap()
     }
@@ -827,20 +836,13 @@ mod tests {
             version: Version,
             info: EnvironmentInfo {
                 flox_env: dot_flox_path.join("run/test"),
-                dot_flox_path,
+                dot_flox_path: Some(dot_flox_path),
             },
             mode: ActivateMode::default(),
             ready,
             executive_pid: 1, // Not used, but will be running.
             current_process_compose_store_path: None,
             attached_pids: BTreeMap::new(),
-        }
-    }
-
-    fn make_start_id(path: &str) -> StartIdentifier {
-        StartIdentifier {
-            store_path: PathBuf::from(path),
-            timestamp: UnixTimestampMillis::now(),
         }
     }
 
@@ -858,7 +860,8 @@ mod tests {
         fn read_and_write_roundtrip() {
             let temp_dir = TempDir::new().unwrap();
             let dot_flox_path = temp_dir.path().join(".flox");
-            let state_path = state_json_path(temp_dir.path(), dot_flox_path);
+            let activation_state_dir = activation_state_dir_path(temp_dir.path(), &dot_flox_path);
+            let state_path = state_json_path(&activation_state_dir);
 
             let write_state = make_activations(Ready::False);
             let lock = acquire_activations_json_lock(&state_path).unwrap();
@@ -877,9 +880,11 @@ mod tests {
             let temp_dir = TempDir::new().unwrap();
             let dot_flox_path = temp_dir.path().join(".flox");
             let flox_env = dot_flox_path.join("run/test");
-            let state_path = state_json_path(temp_dir.path(), &dot_flox_path);
+            let activation_state_dir = activation_state_dir_path(temp_dir.path(), &dot_flox_path);
+            let state_path = state_json_path(&activation_state_dir);
 
-            let state = ActivationState::new(&ActivateMode::default(), dot_flox_path, flox_env);
+            let state =
+                ActivationState::new(&ActivateMode::default(), Some(dot_flox_path), flox_env);
             assert_eq!(
                 state.executive_pid, EXECUTIVE_NOT_STARTED,
                 "executive PID should be unset"
@@ -907,7 +912,7 @@ mod tests {
             let proc_stopped = start_process();
 
             let mut activations =
-                ActivationState::new(&ActivateMode::default(), "/test/.flox", "/test/env");
+                ActivationState::new(&ActivateMode::default(), Some("/test/.flox"), "/test/env");
             let store_path = PathBuf::from("/nix/store/test");
 
             // Start activation with first PID
@@ -937,7 +942,7 @@ mod tests {
         #[test]
         fn test_attached_pids_by_start_id() {
             let mut activations =
-                ActivationState::new(&ActivateMode::default(), "/test/.flox", "/test/env");
+                ActivationState::new(&ActivateMode::default(), Some("/test/.flox"), "/test/env");
             let store_path1 = PathBuf::from("/nix/store/path1");
             let store_path2 = PathBuf::from("/nix/store/path2");
 
@@ -1004,7 +1009,7 @@ mod tests {
 
         #[test]
         fn test_start_or_attach_attaches_when_ready_true_same_path() {
-            let start_id = make_start_id("/nix/store/path1");
+            let start_id = StartIdentifier::new("/nix/store/path1");
             let mut activations = make_activations(Ready::True(start_id.clone()));
 
             let pid = 123;
@@ -1026,7 +1031,7 @@ mod tests {
 
         #[test]
         fn test_start_or_attach_starts_when_ready_true_different_path() {
-            let existing = make_start_id("/nix/store/path1");
+            let existing = StartIdentifier::new("/nix/store/path1");
             let new_path = PathBuf::from("/nix/store/path2");
             let mut activations = make_activations(Ready::True(existing));
 
@@ -1055,7 +1060,7 @@ mod tests {
         fn test_start_or_attach_returns_already_starting_when_process_running() {
             let proc = start_process();
             let pid = proc.id() as i32;
-            let start_id = make_start_id("/nix/store/path1");
+            let start_id = StartIdentifier::new("/nix/store/path1");
             let mut activations = make_activations(Ready::Starting(pid, start_id.clone()));
 
             let result = activations.start_or_attach(123, &start_id.store_path);
@@ -1086,7 +1091,7 @@ mod tests {
             let stopped_pid = proc.id() as i32;
             stop_process(proc);
 
-            let old_start_id = make_start_id("/nix/store/path1");
+            let old_start_id = StartIdentifier::new("/nix/store/path1");
             let mut activations =
                 make_activations(Ready::Starting(stopped_pid, old_start_id.clone()));
 
@@ -1113,7 +1118,7 @@ mod tests {
 
         #[test]
         fn test_start_or_attach_multiple_attachments() {
-            let start_id = make_start_id("/nix/store/path1");
+            let start_id = StartIdentifier::new("/nix/store/path1");
             let mut activations = make_activations(Ready::True(start_id.clone()));
 
             for pid in [100, 200, 300].iter() {
@@ -1142,7 +1147,7 @@ mod tests {
         #[test]
         fn test_start_or_attach_replaces_existing_pid() {
             let mut activations =
-                ActivationState::new(&ActivateMode::default(), "/test/.flox", "/test/env");
+                ActivationState::new(&ActivateMode::default(), Some("/test/.flox"), "/test/env");
             let store_path = PathBuf::from("/nix/store/path1");
 
             let pid = 123;
@@ -1180,8 +1185,8 @@ mod tests {
     fn test_cleanup_pids_keeps_expired_but_running_pids() {
         // Create an attachment with an expiration in the past
         let mut activations =
-            ActivationState::new(&ActivateMode::default(), "/test/.flox", "/test/env");
-        let start_id = make_start_id("/nix/store/test");
+            ActivationState::new(&ActivateMode::default(), Some("/test/.flox"), "/test/env");
+        let start_id = StartIdentifier::new("/nix/store/test");
         let pid = 0;
         let now = OffsetDateTime::now_utc();
         let expiration = now - Duration::from_secs(10);
@@ -1202,8 +1207,8 @@ mod tests {
     fn test_cleanup_pids_keeps_not_running_but_not_expired_pids() {
         // Create an attachment with an expiration in the future
         let mut activations =
-            ActivationState::new(&ActivateMode::default(), "/test/.flox", "/test/env");
-        let start_id = make_start_id("/nix/store/test");
+            ActivationState::new(&ActivateMode::default(), Some("/test/.flox"), "/test/env");
+        let start_id = StartIdentifier::new("/nix/store/test");
         let pid = 0;
         let now = OffsetDateTime::now_utc();
         let expiration = now + Duration::from_secs(10);
@@ -1272,7 +1277,7 @@ mod tests {
 
         #[test]
         fn parse_versioned_activation_state_roundtrip() {
-            let start_id = make_start_id("/nix/store/path");
+            let start_id = StartIdentifier::new("/nix/store/path");
             let mut state = make_activations(Ready::True(start_id.clone()));
             state.attached_pids = BTreeMap::from([(123, make_attachment(start_id))]);
             let json = serde_json::to_string(&state).unwrap();

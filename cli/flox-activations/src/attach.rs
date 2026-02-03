@@ -35,10 +35,8 @@ pub fn attach(
     vars_from_env: VarsFromEnvironment,
     start_id: StartIdentifier,
 ) -> Result<(), anyhow::Error> {
-    let start_state_dir = start_id.state_dir_path(
-        &context.attach_ctx.flox_runtime_dir,
-        &context.attach_ctx.dot_flox_path,
-    )?;
+    // Use pre-computed activation_state_dir to get start state directory
+    let start_state_dir = start_id.start_state_dir(&context.activation_state_dir)?;
     let diff = EnvDiff::from_files(&start_state_dir)?;
 
     // Create the path if we're going to need it (we won't for in-place).
@@ -57,13 +55,14 @@ pub fn attach(
         };
         rc_path = Some(path);
     }
+    let tracer = activate_tracer(&context.attach_ctx.interpreter_path);
     let startup_ctx = startup_ctx(
-        context.clone(),
+        context,
         invocation_type.clone(),
         rc_path,
         diff.clone(),
         &start_state_dir,
-        &activate_tracer(&context.attach_ctx.interpreter_path),
+        &tracer,
         subsystem_verbosity,
     )?;
 
@@ -81,31 +80,31 @@ pub fn attach(
         },
         // All other invocation types only return if exec fails
         InvocationType::Interactive => {
-            activate_interactive(startup_ctx, subsystem_verbosity, vars_from_env, &start_id)
+            activate_interactive(startup_ctx, subsystem_verbosity, vars_from_env)
         },
         InvocationType::ShellCommand(shell_command) => activate_shell_command(
             shell_command,
             startup_ctx,
             subsystem_verbosity,
             vars_from_env,
-            &start_id,
         ),
         InvocationType::ExecCommand(exec_command) => activate_exec_command(
             exec_command,
             startup_ctx,
             subsystem_verbosity,
             vars_from_env,
-            &start_id,
         ),
     }
 }
 
+/// Build startup context for shell configuration.
+/// Used by both normal activations (with project context) and containers (without).
 fn startup_ctx(
     ctx: ActivateCtx,
     invocation_type: InvocationType,
     rc_path: Option<PathBuf>,
     env_diff: EnvDiff,
-    state_dir: &Path,
+    start_state_dir: &Path,
     activate_tracer: &str,
     subsystem_verbosity: u32,
 ) -> Result<StartupCtx> {
@@ -119,7 +118,10 @@ fn startup_ctx(
         None
     };
 
-    let s_ctx = match ctx.shell {
+    // Get env_project from project context if present (None for containers)
+    let env_project = ctx.project_ctx.as_ref().map(|e| e.env_project.clone());
+
+    let args = match ctx.shell {
         ShellWithPath::Bash(_) => {
             let bashrc_path = if let Some(home_dir) = dirs::home_dir() {
                 let bashrc_path = home_dir.join(".bashrc");
@@ -131,12 +133,12 @@ fn startup_ctx(
             } else {
                 return Err(anyhow!("failed to get home directory"));
             };
-            let startup_args = BashStartupArgs {
+            StartupArgs::Bash(BashStartupArgs {
                 flox_activate_tracelevel: subsystem_verbosity,
                 activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
                 flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
                 flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-                flox_env_project: ctx.attach_ctx.env_project.clone(),
+                flox_env_project: env_project.clone(),
                 flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
                 is_in_place: invocation_type == InvocationType::InPlace,
                 bashrc_path,
@@ -144,79 +146,52 @@ fn startup_ctx(
                 flox_activate_tracer: activate_tracer.to_string(),
                 flox_activations,
                 clean_up,
-            };
-            StartupCtx {
-                args: StartupArgs::Bash(startup_args),
-                state_dir: state_dir.to_path_buf(),
-                env_diff,
-                rc_path,
-                act_ctx: ctx,
-            }
+            })
         },
-        ShellWithPath::Fish(_) => {
-            let startup_args = FishStartupArgs {
-                flox_activate_tracelevel: subsystem_verbosity,
-                activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
-                flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-                flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-                flox_env_project: ctx.attach_ctx.env_project.clone(),
-                flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
-                is_in_place: invocation_type == InvocationType::InPlace,
-                flox_sourcing_rc: is_sourcing_rc,
-                flox_activate_tracer: activate_tracer.to_string(),
-                flox_activations,
-                clean_up,
-            };
-            StartupCtx {
-                args: StartupArgs::Fish(startup_args),
-                state_dir: state_dir.to_path_buf(),
-                env_diff,
-                rc_path,
-                act_ctx: ctx,
-            }
-        },
-        ShellWithPath::Tcsh(_) => {
-            let startup_args = TcshStartupArgs {
-                flox_activate_tracelevel: subsystem_verbosity,
-                activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
-                flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-                flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-                flox_env_project: ctx.attach_ctx.env_project.clone(),
-                flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
-                is_in_place: invocation_type == InvocationType::InPlace,
-                flox_sourcing_rc: is_sourcing_rc,
-                flox_activate_tracer: activate_tracer.to_string(),
-                flox_activations,
-                clean_up,
-            };
-            StartupCtx {
-                args: StartupArgs::Tcsh(startup_args),
-                state_dir: state_dir.to_path_buf(),
-                env_diff,
-                rc_path,
-                act_ctx: ctx,
-            }
-        },
-        ShellWithPath::Zsh(_) => {
-            let startup_args = ZshStartupArgs {
-                flox_activate_tracelevel: subsystem_verbosity,
-                activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
-                flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-                flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-                flox_env_project: ctx.attach_ctx.env_project.clone(),
-                flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
-                clean_up,
-            };
-            StartupCtx {
-                args: StartupArgs::Zsh(startup_args),
-                state_dir: state_dir.to_path_buf(),
-                env_diff,
-                rc_path,
-                act_ctx: ctx,
-            }
-        },
+        ShellWithPath::Fish(_) => StartupArgs::Fish(FishStartupArgs {
+            flox_activate_tracelevel: subsystem_verbosity,
+            activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
+            flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
+            flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
+            flox_env_project: env_project.clone(),
+            flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
+            is_in_place: invocation_type == InvocationType::InPlace,
+            flox_sourcing_rc: is_sourcing_rc,
+            flox_activate_tracer: activate_tracer.to_string(),
+            flox_activations,
+            clean_up,
+        }),
+        ShellWithPath::Tcsh(_) => StartupArgs::Tcsh(TcshStartupArgs {
+            flox_activate_tracelevel: subsystem_verbosity,
+            activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
+            flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
+            flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
+            flox_env_project: env_project.clone(),
+            flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
+            is_in_place: invocation_type == InvocationType::InPlace,
+            flox_sourcing_rc: is_sourcing_rc,
+            flox_activate_tracer: activate_tracer.to_string(),
+            flox_activations,
+            clean_up,
+        }),
+        ShellWithPath::Zsh(_) => StartupArgs::Zsh(ZshStartupArgs {
+            flox_activate_tracelevel: subsystem_verbosity,
+            activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
+            flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
+            flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
+            flox_env_project: env_project.clone(),
+            flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
+            clean_up,
+        }),
     };
-    Ok(s_ctx)
+
+    Ok(StartupCtx {
+        args,
+        start_state_dir: start_state_dir.to_path_buf(),
+        env_diff,
+        rc_path,
+        act_ctx: ctx,
+    })
 }
 
 fn write_to_path(ctx: &StartupCtx, path: &Path) -> Result<()> {
@@ -268,7 +243,6 @@ fn activate_exec_command(
     startup_ctx: StartupCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
-    start_id: &StartIdentifier,
 ) -> Result<()> {
     if exec_command.is_empty() {
         return Err(anyhow!("empty command provided"));
@@ -279,11 +253,12 @@ fn activate_exec_command(
     };
     apply_activation_env(
         &mut command,
-        startup_ctx.act_ctx.attach_ctx.clone(),
+        &startup_ctx.act_ctx.attach_ctx,
+        startup_ctx.act_ctx.project_ctx.as_ref(),
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
-        start_id,
+        &startup_ctx.start_state_dir,
     );
 
     debug!("executing command directly: {:?}", command);
@@ -302,16 +277,16 @@ fn activate_shell_command(
     startup_ctx: StartupCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
-    start_id: &StartIdentifier,
 ) -> Result<()> {
     let mut command = Command::new(startup_ctx.act_ctx.shell.exe_path());
     apply_activation_env(
         &mut command,
-        startup_ctx.act_ctx.attach_ctx.clone(),
+        &startup_ctx.act_ctx.attach_ctx,
+        startup_ctx.act_ctx.project_ctx.as_ref(),
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
-        start_id,
+        &startup_ctx.start_state_dir,
     );
 
     let rcfile = startup_ctx
@@ -426,16 +401,16 @@ fn activate_interactive(
     startup_ctx: StartupCtx,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
-    start_id: &StartIdentifier,
 ) -> Result<()> {
     let mut command = Command::new(startup_ctx.act_ctx.shell.exe_path());
     apply_activation_env(
         &mut command,
-        startup_ctx.act_ctx.attach_ctx.clone(),
+        &startup_ctx.act_ctx.attach_ctx,
+        startup_ctx.act_ctx.project_ctx.as_ref(),
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
-        start_id,
+        &startup_ctx.start_state_dir,
     );
 
     let rcfile = startup_ctx
@@ -527,20 +502,19 @@ fn activate_interactive(
 fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Result<()> {
     let attach_command = AttachArgs {
         pid: std::process::id() as i32,
-        dot_flox_path: (&startup_ctx.act_ctx.attach_ctx.dot_flox_path).into(),
+        activation_state_dir: startup_ctx.act_ctx.activation_state_dir.clone(),
         store_path: start_id.store_path.clone(),
         timestamp: start_id.timestamp.clone(),
         exclusive: AttachExclusiveArgs {
             timeout_ms: Some(5000),
             remove_pid: None,
         },
-        runtime_dir: (&startup_ctx.act_ctx.attach_ctx.flox_runtime_dir).into(),
     };
 
     // Put a 5 second timeout on the activation
     attach_command.handle()?;
 
-    let legacy_exports = render_legacy_exports(startup_ctx.act_ctx.clone());
+    let legacy_exports = render_legacy_exports(&startup_ctx.act_ctx);
 
     let exports_for_zsh = if matches!(startup_ctx.act_ctx.shell, ShellWithPath::Zsh(_)) {
         let zdotdir_path = startup_ctx
@@ -574,12 +548,11 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
 
     let script = formatdoc! {r#"
             {legacy_exports}
-            {flox_activations} attach --dot-flox-path "{dot_flox_path}" --runtime-dir "{runtime_dir}" --pid {self_pid_var} --store-path "{store_path}" --timestamp "{timestamp}" --remove-pid "{pid}";
+            {flox_activations} attach --activation-state-dir "{activation_state_dir}" --pid {self_pid_var} --store-path "{store_path}" --timestamp "{timestamp}" --remove-pid "{pid}";
             {exports_for_zsh}
         "#,
         flox_activations = (*FLOX_ACTIVATIONS_BIN).to_string_lossy(),
-        dot_flox_path = startup_ctx.act_ctx.attach_ctx.dot_flox_path.to_string_lossy(),
-        runtime_dir = startup_ctx.act_ctx.attach_ctx.flox_runtime_dir,
+        activation_state_dir = startup_ctx.act_ctx.activation_state_dir.to_string_lossy(),
         self_pid_var = Shell::from(startup_ctx.act_ctx.shell.clone()).self_pid_var(),
         store_path = start_id.store_path.to_string_lossy(),
         timestamp = start_id.timestamp,
@@ -598,22 +571,21 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
 
 /// The CLI used to print export statements for in-place activations for
 /// every environment variable set prior to invoking the activate script
-fn render_legacy_exports(context: ActivateCtx) -> String {
+fn render_legacy_exports(context: &ActivateCtx) -> String {
     // Render the exports in the correct shell dialect.
-    old_cli_envs(context.attach_ctx.clone()).iter()
-        .map(|(key, value)| {
-            (key, shell_escape::escape(Cow::Borrowed(value)))
-            })
-            // TODO: we should use a method on Shell here, possibly using
-            // shell_escape in the Shell method?
-            // But not quoting here is intentional because we already use shell_escape
-            .map(|(key, value)| match context.shell {
-                ShellWithPath::Bash(_) => format!("export {key}={value};",),
-                ShellWithPath::Fish(_) => format!("set -gx {key} {value};",),
-                ShellWithPath::Tcsh(_) => format!("setenv {key} {value};",),
-                ShellWithPath::Zsh(_) => format!("export {key}={value};",),
-            })
-            .join("\n")
+    old_cli_envs(&context.attach_ctx, context.project_ctx.as_ref())
+        .iter()
+        .map(|(key, value)| (key, shell_escape::escape(Cow::Borrowed(value))))
+        // TODO: we should use a method on Shell here, possibly using
+        // shell_escape in the Shell method?
+        // But not quoting here is intentional because we already use shell_escape
+        .map(|(key, value)| match context.shell {
+            ShellWithPath::Bash(_) => format!("export {key}={value};",),
+            ShellWithPath::Fish(_) => format!("set -gx {key} {value};",),
+            ShellWithPath::Tcsh(_) => format!("setenv {key} {value};",),
+            ShellWithPath::Zsh(_) => format!("export {key}={value};",),
+        })
+        .join("\n")
 }
 
 /// Quote run args so that words don't get split,

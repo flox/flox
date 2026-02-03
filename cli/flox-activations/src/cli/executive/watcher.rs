@@ -28,17 +28,15 @@ pub type LockedActivationState = (ActivationState, LockFile);
 #[derive(Debug)]
 pub struct PidWatcher {
     state_json_path: PathBuf,
-    dot_flox_path: PathBuf,
-    runtime_dir: PathBuf,
+    activation_state_dir: PathBuf,
 }
 
 impl PidWatcher {
     /// Creates a new watcher for the given activation.
-    pub fn new(state_json_path: PathBuf, dot_flox_path: PathBuf, runtime_dir: PathBuf) -> Self {
+    pub fn new(state_json_path: PathBuf, activation_state_dir: PathBuf) -> Self {
         Self {
             state_json_path,
-            dot_flox_path,
-            runtime_dir,
+            activation_state_dir,
         }
     }
 
@@ -71,7 +69,7 @@ impl PidWatcher {
         // 2. The environment was not modified
         // But I think for now it's simpler to just treat all start_ids the same.
         for start_id in empty_start_ids {
-            let state_dir = start_id.state_dir_path(&self.runtime_dir, &self.dot_flox_path)?;
+            let state_dir = start_id.start_state_dir(&self.activation_state_dir)?;
             trace!(?state_dir, "removing empty activation state dir");
             std::fs::remove_dir_all(state_dir).context("failed to remove start state dir")?;
         }
@@ -102,7 +100,7 @@ pub mod test {
 
     use flox_core::activate::mode::ActivateMode;
     use flox_core::activations::test_helpers::{read_activation_state, write_activation_state};
-    use flox_core::activations::{StartOrAttachResult, state_json_path};
+    use flox_core::activations::{StartOrAttachResult, activation_state_dir_path, state_json_path};
     use flox_core::proc_status::{ProcStatus, pid_is_running, read_pid_status};
 
     use super::*;
@@ -174,7 +172,8 @@ pub mod test {
         let pid2 = proc2.id() as i32;
 
         // Create an ActivationState with two PIDs attached to the same start_id
-        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
+        let mut state =
+            ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
         let result = state.start_or_attach(pid1, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
@@ -185,13 +184,9 @@ pub mod test {
 
         write_activation_state(runtime_dir.path(), &dot_flox_path, state);
 
-        let state_json_path =
-            flox_core::activations::state_json_path(runtime_dir.path(), &dot_flox_path);
-        let mut watcher = PidWatcher::new(
-            state_json_path,
-            dot_flox_path.clone(),
-            runtime_dir.path().to_path_buf(),
-        );
+        let activation_state_dir = activation_state_dir_path(runtime_dir.path(), &dot_flox_path);
+        let state_json_path = state_json_path(&activation_state_dir);
+        let mut watcher = PidWatcher::new(state_json_path, activation_state_dir);
 
         // Terminate both processes
         stop_process(proc1);
@@ -220,7 +215,8 @@ pub mod test {
         // Start and set ready pid1
         let proc1 = start_process();
         let pid1 = proc1.id() as i32;
-        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
+        let mut state =
+            ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
         let result = state.start_or_attach(pid1, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
@@ -245,12 +241,9 @@ pub mod test {
         // so proc2 wouldn't be cleaned up if we stopped it instead of proc1
         stop_process(proc1);
 
-        let state_json_path = state_json_path(runtime_dir.path(), &dot_flox_path);
-        let mut watcher = PidWatcher::new(
-            state_json_path,
-            dot_flox_path.clone(),
-            runtime_dir.path().to_path_buf(),
-        );
+        let activation_state_dir = activation_state_dir_path(runtime_dir.path(), &dot_flox_path);
+        let state_json_path = state_json_path(&activation_state_dir);
+        let mut watcher = PidWatcher::new(state_json_path, activation_state_dir);
 
         // Call cleanup_pids to process the terminated PID
         let result = watcher.cleanup_pids().unwrap();
@@ -293,7 +286,8 @@ pub mod test {
         let pid2 = proc2.id() as i32;
 
         // Start and set ready for store_path_1
-        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
+        let mut state =
+            ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
         let result = state.start_or_attach(pid1, &store_path_1);
         let StartOrAttachResult::Start {
             start_id: start_id_1,
@@ -318,23 +312,16 @@ pub mod test {
         write_activation_state(runtime_dir.path(), &dot_flox_path, state);
 
         // Create both state directories
-        let state_dir_1 = start_id_1
-            .state_dir_path(runtime_dir.path(), &dot_flox_path)
-            .unwrap();
-        let state_dir_2 = start_id_2
-            .state_dir_path(runtime_dir.path(), &dot_flox_path)
-            .unwrap();
+        let activation_state_dir = activation_state_dir_path(runtime_dir.path(), &dot_flox_path);
+        let state_dir_1 = start_id_1.start_state_dir(&activation_state_dir).unwrap();
+        let state_dir_2 = start_id_2.start_state_dir(&activation_state_dir).unwrap();
         std::fs::create_dir_all(&state_dir_1).unwrap();
         std::fs::create_dir_all(&state_dir_2).unwrap();
         assert!(state_dir_1.exists());
         assert!(state_dir_2.exists());
 
-        let state_json_path = state_json_path(runtime_dir.path(), &dot_flox_path);
-        let mut watcher = PidWatcher::new(
-            state_json_path,
-            dot_flox_path.clone(),
-            runtime_dir.path().to_path_buf(),
-        );
+        let state_json_path = state_json_path(&activation_state_dir);
+        let mut watcher = PidWatcher::new(state_json_path, activation_state_dir);
 
         // Terminate proc1 and call cleanup_pids
         stop_process(proc1);

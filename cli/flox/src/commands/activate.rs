@@ -8,8 +8,15 @@ use std::{env, fs};
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
-use flox_core::activate::context::{ActivateCtx, ActivateMode, AttachCtx, InvocationType};
+use flox_core::activate::context::{
+    ActivateCtx,
+    ActivateMode,
+    AttachCtx,
+    AttachProjectCtx,
+    InvocationType,
+};
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY_VAR};
+use flox_core::activations::activation_state_dir_path;
 use flox_core::traceable_path;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
@@ -380,17 +387,14 @@ impl Activate {
         };
         subcommand_metric!("activate", "shell" = shell.to_string());
 
-        let attach_ctx = AttachCtx {
-            dot_flox_path: concrete_environment.dot_flox_path().to_path_buf(),
+        let core = AttachCtx {
             // Don't rely on FLOX_ENV in the environment when we explicitly know
             // what it should be. This is necessary for nested activations where an
             // outer export of FLOX_ENV would be inherited by the inner activation.
             env: mode_link_path.to_string_lossy().to_string(),
-            env_project: Some(concrete_environment.project_path()?),
             env_cache: concrete_environment.cache_path()?.into_inner(),
             env_description: now_active.bare_description(),
             flox_active_environments: flox_active_environments.to_string(),
-            flox_env_log_dir: Some(concrete_environment.log_path()?.to_path_buf()),
             prompt_color_1,
             prompt_color_2,
             flox_prompt_environments,
@@ -399,19 +403,30 @@ impl Activate {
             // pass this since it's also passed for `flox build`
             flox_runtime_dir: flox.runtime_dir.to_string_lossy().to_string(),
             flox_env_cuda_detection,
-            flox_services_socket: Some(socket_path),
-            services_to_start,
-            process_compose_bin: Some(PathBuf::from(&*PROCESS_COMPOSE_BIN)),
             interpreter_path,
         };
 
+        let dot_flox_path = concrete_environment.dot_flox_path().to_path_buf();
+
+        let project = AttachProjectCtx {
+            env_project: concrete_environment.project_path()?,
+            dot_flox_path: dot_flox_path.clone(),
+            flox_env_log_dir: concrete_environment.log_path()?.to_path_buf(),
+            flox_services_socket: socket_path,
+            process_compose_bin: PathBuf::from(&*PROCESS_COMPOSE_BIN),
+            services_to_start,
+        };
+
+        let activation_state_dir = activation_state_dir_path(&flox.runtime_dir, &dot_flox_path);
+
         let activate_data = ActivateCtx {
             flox_activate_store_path: store_path.to_string_lossy().to_string(),
-            attach_ctx,
+            attach_ctx: core,
+            project_ctx: Some(project),
+            activation_state_dir,
             mode,
             shell,
             invocation_type: Some(invocation_type),
-            run_monitoring_loop: true,
             remove_after_reading: true,
         };
 
