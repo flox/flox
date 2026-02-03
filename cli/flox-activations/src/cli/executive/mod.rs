@@ -7,6 +7,7 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use clap::Args;
 use flox_core::activate::context::{AttachCtx, AttachProjectCtx};
+use flox_core::activate::vars::FLOX_EXECUTIVE_VERBOSITY_VAR;
 use flox_core::activations::{read_activations_json, state_json_path, write_activations_json};
 use flox_core::traceable_path;
 use log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
@@ -58,7 +59,7 @@ pub struct ExecutiveArgs {
 }
 
 impl ExecutiveArgs {
-    pub fn handle(self, subsystem_verbosity: Option<u32>) -> Result<(), anyhow::Error> {
+    pub fn handle(self) -> Result<(), anyhow::Error> {
         let contents = fs::read_to_string(&self.executive_ctx)?;
         let ExecutiveCtx {
             attach_ctx,
@@ -87,6 +88,12 @@ impl ExecutiveArgs {
 
         let log_dir = project_ctx.flox_env_log_dir.clone();
         let log_file = format!("executive.{}.log", std::process::id());
+        // Read verbosity from dedicated executive variable, not `activate -v`
+        // Only takes numeric values like its `FLOX_ACTIVATIONS_VERBOSITY` counterpart.
+        let subsystem_verbosity = std::env::var(FLOX_EXECUTIVE_VERBOSITY_VAR)
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
         logger::init_file_logger(subsystem_verbosity, log_file, &log_dir)
             .context("failed to initialize logger")?;
 
@@ -113,7 +120,7 @@ impl ExecutiveArgs {
             project_ctx,
             activation_state_dir,
             signals,
-            subsystem_verbosity.unwrap_or(0),
+            subsystem_verbosity,
         )?;
         Ok(())
     }
