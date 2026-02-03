@@ -1945,6 +1945,69 @@
         }
       }
     },
+    "/api/v1/catalog/sbom/environment": {
+      "post": {
+        "tags": [
+          "sbom"
+        ],
+        "summary": "Get SBOM for an environment",
+        "description": "Get SBOM (Software Bill of Materials) for an environment.\n\nArgs:\n    body: Request body containing lockfile and environment metadata\n    format: SBOM format (defaults to SbomFormat.SPDX_2_3_JSON)\n    auth_result: Authentication payload\n    cache: Request-scoped dependency cache (injected)\n\nReturns:\n    SBOM document in the requested format\n\nRaises:\n    HTTPException: If lockfile is malformed, system is invalid, or SBOM generation fails",
+        "operationId": "environment_sbom_api_v1_catalog_sbom_environment_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SbomFormat",
+              "default": "spdx-2.3-json"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnvironmentSbomRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "SBOM for the given environment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response 200 Environment Sbom Api V1 Catalog Sbom Environment Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request could not be processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalog/store": {
       "post": {
         "tags": [
@@ -2333,6 +2396,40 @@
         },
         "type": "object",
         "title": "CatalogStoreConfigPublisher"
+      },
+      "EnvironmentSbomRequest": {
+        "properties": {
+          "lockfile": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Lockfile"
+          },
+          "system": {
+            "$ref": "#/components/schemas/PackageSystem"
+          },
+          "environment_name": {
+            "type": "string",
+            "title": "Environment Name"
+          },
+          "environment_owner": {
+            "type": "string",
+            "title": "Environment Owner"
+          },
+          "generation": {
+            "title": "Generation",
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lockfile",
+          "system",
+          "environment_name",
+          "environment_owner"
+        ],
+        "title": "EnvironmentSbomRequest",
+        "description": "Request body for environment SBOM endpoint.\n\nThe environment SBOM endpoint generates a Software Bill of Materials\nfor a Flox environment by analyzing its lockfile and dependencies.\n\nAttributes:\n    lockfile: The environment's lockfile dictionary (v0 or v1 format)\n    system: Target system architecture (e.g., \"x86_64-linux\", \"aarch64-darwin\")\n    environment_name: Name of the environment (for informational purposes in SBOM)\n    environment_owner: Owner of the environment (for informational purposes in SBOM)\n    generation: Optional generation number (for informational purposes in SBOM)"
       },
       "ErrorResponse": {
         "properties": {
