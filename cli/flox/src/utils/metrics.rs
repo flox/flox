@@ -9,7 +9,7 @@ use std::time::Duration as TimeoutDuration;
 
 use anyhow::{Context, Result, bail};
 use flox_rust_sdk::flox::FLOX_VERSION;
-use flox_rust_sdk::utils::{IN_CI, IN_CONTAINERD};
+use flox_rust_sdk::utils::INVOCATION_SOURCES;
 use fslock::LockFile;
 use indoc::indoc;
 use serde::{Deserialize, Serialize};
@@ -152,6 +152,7 @@ pub struct MetricEntry {
     os: Option<String>,
     os_version: Option<String>,
     empty_flags: Vec<String>,
+    invocation_sources: Vec<String>,
 }
 
 impl MetricEntry {
@@ -175,6 +176,7 @@ impl MetricEntry {
             os: linux_release.as_ref().and_then(|r| r.id.clone()),
             os_version: linux_release.and_then(|r| r.version_id),
             empty_flags: vec![],
+            invocation_sources: INVOCATION_SOURCES.clone(),
         }
     }
 }
@@ -469,8 +471,7 @@ impl Connection for AWSDatalakeConnection {
                         "$os": entry.os_family,
                         "kernel_version": entry.os_family_release,
 
-                        "ci": *IN_CI,
-                        "containerd": *IN_CONTAINERD,
+                        "invocation_sources": entry.invocation_sources,
 
                         "$set_once": {
                             "initial_flox_version": entry.flox_version,
@@ -703,6 +704,7 @@ mod tests {
             os: Some("ubuntu".to_string()),
             os_version: Some("20.04".to_string()),
             empty_flags: vec![],
+            invocation_sources: vec![],
         }
     }
 

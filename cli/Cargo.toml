@@ -22,7 +22,7 @@ blake3 = "1.8.2"
 bpaf = { version = "0.9.22", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
 chrono = { version = "0.4.43", features = ["serde"] }
-clap = { version = "4.5.54", features = ["derive"] }
+clap = { version = "4.5.56", features = ["derive"] }
 close_fds = "0.3"
 config = { version = "0.15", default-features = false, features = ["toml"] }
 crossterm = "0.29"
@@ -51,7 +51,7 @@ inquire = "0.9.2"
 indicatif = "0.18"
 is_executable = "1.0.5"
 itertools = "0.14.0"
-jsonwebtoken = { version = "10.2", features = ["rust_crypto"] }
+jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
 log = { version = "0.4.29", features = ["kv"] }
 nix = { version = "0.31", features = ["signal", "process", "user", "fs"] }
 oauth2 = "5.0"
@@ -80,7 +80,7 @@ shell-escape = "0.1.5"
 slug = "0.1"
 supports-color = "3.0.2"
 # provides process tools for shell detection
-sysinfo = "0.37.2"
+sysinfo = "0.38.0"
 # provide system version information for metric
 # TODO: review if we need this
 sys-info = "0.9"
@@ -112,7 +112,7 @@ expect-test = "1"
 
 # executive/monitoring dependencies
 kqueue = "1.1.1"
-signal-hook = "0.4.1"
+signal-hook = "0.4.3"
 
 # build(.rs) dependencies
 openapiv3 = "2.2"

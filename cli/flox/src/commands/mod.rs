@@ -903,6 +903,8 @@ pub enum EnvironmentSelectError {
     EnvironmentError(#[from] EnvironmentError),
     #[error("Did not find an environment in the current directory.")]
     EnvNotFoundInCurrentDirectory,
+    #[error("Did not find an active environment or an environment in the current directory.")]
+    EnvNotFound,
     #[error("Remote environments not supported for this operation")]
     RemoteNotSupported,
     #[error(transparent)]
@@ -977,8 +979,12 @@ impl EnvironmentSelect {
         let env = match self {
             EnvironmentSelect::Dir(path) => DirEnvironmentSelect::Dir(path.clone())
                 .detect_concrete_environment(flox, message)?,
-            EnvironmentSelect::Unspecified => {
-                DirEnvironmentSelect::Unspecified.detect_concrete_environment(flox, message)?
+            EnvironmentSelect::Unspecified => match detect_environment(message)? {
+                Some(env) => {
+                    let generation = activated_environments().is_active_with_generation(&env);
+                    env.into_concrete_environment(flox, generation)?
+                },
+                None => Err(EnvironmentSelectError::EnvNotFound)?,
             },
             EnvironmentSelect::Remote(env_ref) => {
                 let pointer = ManagedPointer::new(

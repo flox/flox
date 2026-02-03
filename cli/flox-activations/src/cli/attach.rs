@@ -2,10 +2,10 @@ use std::path::PathBuf;
 
 use clap::Args;
 use flox_core::activations::{
-    self,
     StartIdentifier,
     UnixTimestampMillis,
     read_activations_json,
+    state_json_path,
     write_activations_json,
 };
 use time::{Duration, OffsetDateTime};
@@ -17,14 +17,11 @@ pub struct AttachArgs {
     #[arg(help = "The PID of the shell registering interest in the activation.")]
     #[arg(short, long, value_name = "PID")]
     pub pid: i32,
-    #[arg(help = "The path to the .flox directory for the environment.")]
+    #[arg(help = "The base directory for activation state.")]
     #[arg(long, value_name = "PATH")]
-    pub dot_flox_path: PathBuf,
+    pub activation_state_dir: PathBuf,
     #[command(flatten)]
     pub exclusive: AttachExclusiveArgs,
-    /// The path to the runtime directory keeping activation data.
-    #[arg(long, value_name = "PATH")]
-    pub runtime_dir: PathBuf,
     #[arg(help = "Together with timestamp this identifies the activation to attach to.")]
     #[arg(long, value_name = "PATH")]
     pub store_path: PathBuf,
@@ -56,8 +53,7 @@ impl AttachArgs {
             store_path: self.store_path,
             timestamp: self.timestamp,
         };
-        let activations_json_path =
-            activations::state_json_path(&self.runtime_dir, &self.dot_flox_path);
+        let activations_json_path = state_json_path(&self.activation_state_dir);
 
         let (activation_state, lock) = read_activations_json(&activations_json_path)?;
         let Some(mut activation_state) = activation_state else {
@@ -105,7 +101,7 @@ mod test {
 
     use flox_core::activate::mode::ActivateMode;
     use flox_core::activations::test_helpers::*;
-    use flox_core::activations::{ActivationState, StartOrAttachResult};
+    use flox_core::activations::{ActivationState, StartOrAttachResult, activation_state_dir_path};
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
     use time::OffsetDateTime;
@@ -122,7 +118,8 @@ mod test {
         let store_path = PathBuf::from("/nix/store/test");
 
         // Create an activation with a PID attached
-        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
+        let mut state =
+            ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
         let result = state.start_or_attach(pid, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
@@ -130,9 +127,11 @@ mod test {
         state.set_ready(&start_id);
         write_activation_state(runtime_dir.path(), &dot_flox_path, state);
 
+        let activation_state_dir = activation_state_dir_path(runtime_dir.path(), &dot_flox_path);
+
         // Attach the same PID with a timeout (replaces itself with expiration)
         let args = AttachArgs {
-            dot_flox_path: dot_flox_path.clone(),
+            activation_state_dir: activation_state_dir.clone(),
             pid,
             store_path: start_id.store_path.clone(),
             timestamp: start_id.timestamp.clone(),
@@ -140,7 +139,6 @@ mod test {
                 timeout_ms: Some(1000),
                 remove_pid: None,
             },
-            runtime_dir: runtime_dir.path().to_path_buf(),
         };
 
         let now = OffsetDateTime::now_utc();
@@ -166,7 +164,8 @@ mod test {
         let store_path = PathBuf::from("store_path");
 
         // Create an activation with the old PID attached
-        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
+        let mut state =
+            ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
         let result = state.start_or_attach(old_pid, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
@@ -174,9 +173,11 @@ mod test {
         state.set_ready(&start_id);
         write_activation_state(runtime_dir.path(), &dot_flox_path, state);
 
+        let activation_state_dir = activation_state_dir_path(runtime_dir.path(), &dot_flox_path);
+
         // Replace old PID with new PID
         let args = AttachArgs {
-            dot_flox_path: dot_flox_path.clone(),
+            activation_state_dir: activation_state_dir.clone(),
             pid: new_pid,
             store_path: start_id.store_path.clone(),
             timestamp: start_id.timestamp.clone(),
@@ -184,7 +185,6 @@ mod test {
                 timeout_ms: None,
                 remove_pid: Some(old_pid),
             },
-            runtime_dir: runtime_dir.path().to_path_buf(),
         };
 
         args.handle().unwrap();

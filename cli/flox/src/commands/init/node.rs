@@ -64,35 +64,38 @@ pub(super) struct Node {
     /// [Self::nodejs_message_and_version]
     /// TODO: should this be stored on [NodeAction::InstallNode]?
     ///
-    /// Node version as specified in .nvmrc if it exists
+    /// Node version as specified in a version file (`.nvmrc` or `.node-version`) if one exists
     /// If action is set to [NodeAction::InstallYarn], this is left
     /// uninitialized as [None].
-    nvmrc_version: Option<NVMRCVersion>,
+    version_file_version: Option<VersionFileVersion>,
 }
 
-/// Information about the version specifier found in the `.nvmrc` file
+/// Information about the version specifier found in a version file (`.nvmrc` or `.node-version`)
 #[derive(Debug, PartialEq)]
-enum RequestedNVMRCVersion {
-    /// .nvmrc not present or empty
+enum ParsedVersionFile {
+    /// Version file first line is empty or whitespace-only
     None,
-    /// .nvmrc contains an alias or something we can't parse as a version.
+    /// Version file contains an alias or something we can't parse as a version.
     Unsure,
-    /// The version specifier in the .nvmrc file
+    /// The version specifier in the version file
     Found(String),
 }
 
-/// Information about the result of finding a node version compatible with what the `.nvmrc` file
-/// requested
+/// Information about the result of finding a node version compatible with what the version file
+/// (`.nvmrc` or `.node-version`) requested
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum NVMRCVersion {
-    /// .nvmrc exists but doesn't specify a version
-    Unspecified,
-    /// .nvmrc contains a version, but flox doesn't provide it.
-    Unavailable,
-    /// .nvmrc contains an alias or something we can't parse as a version.
-    Unsure,
-    /// An available version of nodejs that matches the version specifier in the .nvmrc file
-    Found(ProvidedPackage),
+pub(crate) enum VersionFileVersion {
+    /// Version file exists but doesn't specify a version
+    Unspecified { source_file: String },
+    /// Version file contains a version, but flox doesn't provide it.
+    Unavailable { source_file: String },
+    /// Version file contains an alias or something we can't parse as a version.
+    Unsure { source_file: String },
+    /// An available version of nodejs that matches the version specifier in the version file
+    Found {
+        package: ProvidedPackage,
+        source_file: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -155,10 +158,12 @@ struct NodeCtx {
     /// True when `package-lock.json` exists. It's an ambiguous state if both
     /// `yarn.lock` and `package-lock.json` exist.
     package_lock_exists: bool,
-    /// The raw contents of the `.nvmrc` file. We store this as a `Result`
+    /// The raw contents of the version file (`.nvmrc` or `.node-version`). We store this as a `Result`
     /// so that if an error occurs while reading it we don't bail immediately
     /// if it turns out we weren't going to need it.
-    nvmrc_contents: Result<Option<String>>,
+    version_file_contents: Result<Option<String>>,
+    /// The name of the version file that was found (".nvmrc" or ".node-version"), if any.
+    version_file_name: Option<String>,
 }
 
 impl NodeCtx {
@@ -169,6 +174,7 @@ impl NodeCtx {
         let package_lock_path = path.join("package-lock.json");
         let yarn_lock_path = path.join("yarn.lock");
         let nvmrc_path = path.join(".nvmrc");
+        let node_version_path = path.join(".node-version");
 
         let package_json_versions = Self::get_package_json_versions(&package_json_path)?;
         debug!(path = %package_json_path.display(), "read package.json");
@@ -176,14 +182,27 @@ impl NodeCtx {
         debug!(path = %yarn_lock_path.display(), exists = yarn_lock_exists, "searched for yarn.lock");
         let package_lock_exists = package_lock_path.exists();
         debug!(path = %package_lock_path.display(), exists = package_lock_exists, "searched for package-lock.json");
-        let nvmrc_contents = Self::get_nvmrc_version(&nvmrc_path);
-        debug!(path = %nvmrc_path.display(), success = nvmrc_contents.is_ok(), "attempted read of .nvmrc");
+
+        // Check .nvmrc first, then fall back to .node-version
+        let (version_file_contents, version_file_name) = if nvmrc_path.exists() {
+            let contents = Self::get_version_file_contents(&nvmrc_path);
+            debug!(path = %nvmrc_path.display(), success = contents.is_ok(), "read .nvmrc");
+            (contents, Some(".nvmrc".to_string()))
+        } else if node_version_path.exists() {
+            let contents = Self::get_version_file_contents(&node_version_path);
+            debug!(path = %node_version_path.display(), success = contents.is_ok(), "read .node-version");
+            (contents, Some(".node-version".to_string()))
+        } else {
+            debug!("no .nvmrc or .node-version found");
+            (Ok(None), None)
+        };
 
         let ctx = Self {
             package_json_versions,
             yarn_lock_exists,
             package_lock_exists,
-            nvmrc_contents,
+            version_file_contents,
+            version_file_name,
         };
         Ok(ctx)
     }
@@ -225,10 +244,10 @@ impl NodeCtx {
         }
     }
 
-    /// Look for a Node version specified in a possibly-nonexistent .nvmrc file.
-    fn get_nvmrc_version(path: &Path) -> Result<Option<String>> {
+    /// Look for a Node version specified in a possibly-nonexistent version file (`.nvmrc` or `.node-version`).
+    fn get_version_file_contents(path: &Path) -> Result<Option<String>> {
         if !path.exists() {
-            debug!(path = %path.display(), ".nvmrc didn't exist");
+            debug!(path = %path.display(), "version file didn't exist");
             return Ok(None);
         }
 
@@ -237,9 +256,11 @@ impl NodeCtx {
             .as_ref()
             .map(|s| s.as_str())
             .unwrap_or("read_error");
-        debug!(contents = debug_contents, "read .nvmrc");
+        debug!(contents = debug_contents, "read version file");
 
-        contents.context("failed to read .nvmrc file").map(Some)
+        contents
+            .with_context(|| format!("failed to read version file at {}", path.display()))
+            .map(Some)
     }
 
     /// Returns whether this state is even valid before we start looking for
@@ -249,7 +270,7 @@ impl NodeCtx {
         // these things will get you some kind of Node installation:
         // - A valid `package.json` even if it doesn't contain versions.
         // - The presence of a `yarn.lock` file.
-        // - The presence of a `.nvmrc` file.
+        // - The presence of an `.nvmrc` or a `.node-version` file.
         //
         // TODO(zmitchell, 2025-08-01): the previous iteration of this setup
         // code didn't really use `package-lock.json` to inform whether we
@@ -257,7 +278,10 @@ impl NodeCtx {
         // to do that in the future.
         self.package_json_versions.is_some()
             || self.yarn_lock_exists
-            || self.nvmrc_contents.as_ref().is_ok_and(|c| c.is_some())
+            || self
+                .version_file_contents
+                .as_ref()
+                .is_ok_and(|c| c.is_some())
     }
 
     /// Returns whether we should install both `yarn` and a matching `node`.
@@ -291,7 +315,7 @@ impl NodeCtx {
         // The bar here is pretty low
         self.package_json_versions.is_some()
             || self
-                .nvmrc_contents
+                .version_file_contents
                 .as_ref()
                 .is_ok_and(|contents| contents.is_some())
     }
@@ -300,7 +324,7 @@ impl NodeCtx {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum NodeVersionSource {
     PackageJson(PackageJSONVersion),
-    Nvmrc(NVMRCVersion),
+    VersionFile(VersionFileVersion),
 }
 
 impl NodeVersionSource {
@@ -310,8 +334,8 @@ impl NodeVersionSource {
         if let NodeVersionSource::PackageJson(PackageJSONVersion::Found(pkg)) = self {
             return pkg.version.clone();
         }
-        if let NodeVersionSource::Nvmrc(NVMRCVersion::Found(pkg)) = self {
-            return pkg.version.clone();
+        if let NodeVersionSource::VersionFile(VersionFileVersion::Found { package, .. }) = self {
+            return package.version.clone();
         }
         None
     }
@@ -341,7 +365,8 @@ impl Node {
         // - package.json: config file for npm/node
         // - package-lock.json: this person is using npm/node instead of yarn
         // - yarn.lock: lockfile for packages in package.json via yarn
-        // - .nvmrc: this persion is using nvm to manage node versions
+        // - .nvmrc / .node-version: this person is using nvm or a similar tool
+        //   to manage node versions
         //
         // The `yarn` package brings a `node` dependency along with it.
         // The yarn version is specified in `package.json`.
@@ -370,7 +395,7 @@ impl Node {
                 Node {
                     action: node_install_action,
                     package_json_node_version: Some(PackageJSONVersion::Found(action.node.clone())),
-                    nvmrc_version: None,
+                    version_file_version: None,
                 }
             });
             Ok(node)
@@ -388,28 +413,32 @@ impl Node {
                 Node {
                     action: node_install_action,
                     package_json_node_version: None,
-                    nvmrc_version: None,
+                    version_file_version: None,
                 }
             });
             Ok(node)
         } else if ctx.should_install_node_only() {
             debug!("finding node version");
             let versions = ctx.package_json_versions.clone();
-            let res =
-                Self::try_find_compatible_node_only(flox, versions.as_ref(), ctx.nvmrc_contents)
-                    .await?;
+            let res = Self::try_find_compatible_node_only(
+                flox,
+                versions.as_ref(),
+                ctx.version_file_contents,
+                ctx.version_file_name.as_deref(),
+            )
+            .await?;
             let node = res.map(|(action, version_source)| {
                 let node_install_action = NodeInstallAction::Node(action.clone());
                 match version_source {
                     NodeVersionSource::PackageJson(version) => Node {
                         action: node_install_action,
                         package_json_node_version: Some(version),
-                        nvmrc_version: None,
+                        version_file_version: None,
                     },
-                    NodeVersionSource::Nvmrc(version) => Node {
+                    NodeVersionSource::VersionFile(version) => Node {
                         action: node_install_action,
                         package_json_node_version: None,
-                        nvmrc_version: Some(version),
+                        version_file_version: Some(version),
                     },
                 }
             });
@@ -540,7 +569,8 @@ impl Node {
     async fn try_find_compatible_node_only(
         flox: &Flox,
         versions: Option<&PackageJSONVersionsUnresolved>,
-        nvmrc_contents: Result<Option<String>>,
+        version_file_contents: Result<Option<String>>,
+        version_file_name: Option<&str>,
     ) -> Result<Option<(NodeInstall, NodeVersionSource)>> {
         let nodejs_packages = Self::get_available_node_packages(flox).await?;
         debug!("resolving node version from package.json");
@@ -554,16 +584,23 @@ impl Node {
             );
             return Ok(Some((node_install, source)));
         }
-        debug!("resolving node version from .nvmrc");
-        let node_from_nvmrc =
-            Self::node_install_from_nvmrc(flox, &nodejs_packages, nvmrc_contents).await?;
-        if let Some((node_install, version)) = node_from_nvmrc {
-            let source = NodeVersionSource::Nvmrc(version);
-            debug!(
-                version = source.version_found().unwrap_or("null".to_string()),
-                "found node version from .nvmrc"
-            );
-            return Ok(Some((node_install, source)));
+        debug!("resolving node version from version file");
+        if let Some(source_file) = version_file_name {
+            let node_from_version_file = Self::node_install_from_version_file(
+                flox,
+                &nodejs_packages,
+                version_file_contents,
+                source_file,
+            )
+            .await?;
+            if let Some((node_install, version)) = node_from_version_file {
+                let source = NodeVersionSource::VersionFile(version);
+                debug!(
+                    version = source.version_found().unwrap_or("null".to_string()),
+                    "found node version from version file"
+                );
+                return Ok(Some((node_install, source)));
+            }
         }
         Ok(None)
     }
@@ -626,36 +663,41 @@ impl Node {
         Ok(node_from_package_json)
     }
 
-    /// Tries to get a Node installation from .nvmrc, which may itself be missing
-    /// or have invalid contents.
-    async fn node_install_from_nvmrc(
+    /// Tries to get a Node installation from a version file (`.nvmrc` or `.node-version`),
+    /// which may itself be missing or have invalid contents.
+    async fn node_install_from_version_file(
         flox: &Flox,
         node_pkgs: &[String],
-        nvmrc_contents: Result<Option<String>>,
-    ) -> Result<Option<(NodeInstall, NVMRCVersion)>> {
-        match nvmrc_contents {
-            // The .nvmrc file existed and we successfully read it.
+        version_file_contents: Result<Option<String>>,
+        source_file: &str,
+    ) -> Result<Option<(NodeInstall, VersionFileVersion)>> {
+        match version_file_contents {
+            // The version file existed and we successfully read it.
             Ok(Some(contents)) => {
-                let node_from_nvmrc = match Self::parse_nvmrc_version(&contents) {
+                let node_from_version_file = match Self::parse_version_file_contents(&contents) {
                     // The file was empty
-                    RequestedNVMRCVersion::None => {
+                    ParsedVersionFile::None => {
                         let node_install = NodeInstall {
                             node: None,
                             npm_hook: false,
                         };
-                        Some((node_install, NVMRCVersion::Unspecified))
+                        Some((node_install, VersionFileVersion::Unspecified {
+                            source_file: source_file.to_string(),
+                        }))
                     },
                     // The file contained an alias (e.g. "stable") or something else
                     // that we don't know how to translate to a version.
-                    RequestedNVMRCVersion::Unsure => {
+                    ParsedVersionFile::Unsure => {
                         let node_install = NodeInstall {
                             node: None,
                             npm_hook: false,
                         };
-                        Some((node_install, NVMRCVersion::Unsure))
+                        Some((node_install, VersionFileVersion::Unsure {
+                            source_file: source_file.to_string(),
+                        }))
                     },
                     // The file contained a version we can search for.
-                    RequestedNVMRCVersion::Found(version) => {
+                    ParsedVersionFile::Found(version) => {
                         let resolved_groups = try_find_compatible_major_version_package(
                             flox,
                             "nodejs",
@@ -669,7 +711,10 @@ impl Node {
                                     node: Some(pkg.clone()),
                                     npm_hook: false,
                                 };
-                                let version = NVMRCVersion::Found(pkg.clone());
+                                let version = VersionFileVersion::Found {
+                                    package: pkg.clone(),
+                                    source_file: source_file.to_string(),
+                                };
                                 Some((node_install, version))
                             },
                             None => {
@@ -677,17 +722,19 @@ impl Node {
                                     node: None,
                                     npm_hook: false,
                                 };
-                                Some((node_install, NVMRCVersion::Unavailable))
+                                Some((node_install, VersionFileVersion::Unavailable {
+                                    source_file: source_file.to_string(),
+                                }))
                             },
                         }
                     },
                 };
-                Ok(node_from_nvmrc)
+                Ok(node_from_version_file)
             },
-            // The .nvmrc file didn't exist, so we didn't encounter an error
+            // The version file didn't exist, so we didn't encounter an error
             // while trying to read it (e.g. we successfully did...nothing).
             Ok(None) => Ok(None),
-            // The .nvmrc file existed and we encountered an error trying to read it.
+            // The version file existed and we encountered an error trying to read it.
             Err(err) => {
                 // This is necessary to make it compile since the Ok variant has
                 // a completely different type.
@@ -738,38 +785,36 @@ impl Node {
         Ok(matches)
     }
 
-    /// Translate the contents of a `.nvmrc` file into a [RequestedNVMRCVersion]
-    fn parse_nvmrc_version(nvmrc_contents: &str) -> RequestedNVMRCVersion {
+    /// Translate the contents of a version file (`.nvmrc` or `.node-version`) into a [ParsedVersionFile]
+    fn parse_version_file_contents(contents: &str) -> ParsedVersionFile {
         // When reading from a file, nvm runs:
         // "$(command head -n 1 "${NVMRC_PATH}" | command tr -d '\r')" || command printf ''
         // https://github.com/nvm-sh/nvm/blob/294ff9e3aa8ce02bbf8d83fa235a363d9560a179/nvm.sh#L481
-        let first_line = nvmrc_contents.lines().next();
+        let first_line = contents.lines().next();
         // From nvm --help:
         // <version> refers to any version-like string nvm understands. This includes:
         //   - full or partial version numbers, starting with an optional "v" (0.10, v0.1.2, v1)
         //   - default (built-in) aliases: node, stable, unstable, iojs, system
         //   - custom aliases you define with `nvm alias foo`
         match first_line {
-            None => RequestedNVMRCVersion::None,
+            None => ParsedVersionFile::None,
             Some(first_line) => {
                 // nvm will fail if there's trailing whitespace,
                 // so trimming whitespace is technically inconsistent,
                 // but it's still probably a good recommendation from flox.
                 let trimmed_first_line = first_line.trim();
                 match trimmed_first_line {
-                    "" => RequestedNVMRCVersion::None,
-                    "node" | "stable" | "unstable" | "iojs" | "system" => {
-                        RequestedNVMRCVersion::Unsure
-                    },
+                    "" => ParsedVersionFile::None,
+                    "node" | "stable" | "unstable" | "iojs" | "system" => ParsedVersionFile::Unsure,
                     _ if trimmed_first_line.starts_with('v')
                         && VersionReq::parse(&trimmed_first_line[1..]).is_ok() =>
                     {
-                        RequestedNVMRCVersion::Found(trimmed_first_line[1..].to_string())
+                        ParsedVersionFile::Found(trimmed_first_line[1..].to_string())
                     },
                     _ if VersionReq::parse(trimmed_first_line).is_ok() => {
-                        RequestedNVMRCVersion::Found(trimmed_first_line.to_string())
+                        ParsedVersionFile::Found(trimmed_first_line.to_string())
                     },
-                    _ => RequestedNVMRCVersion::Unsure,
+                    _ => ParsedVersionFile::Unsure,
                 }
             },
         }
@@ -788,9 +833,9 @@ impl Node {
         let mut mentions_package_json = false;
         let (message, version) = match (
             &self.package_json_node_version,
-            self.nvmrc_version.as_ref(),
+            self.version_file_version.as_ref(),
         ) {
-            // package.json takes precedence over .nvmrc
+            // package.json takes precedence over version file
             (Some(PackageJSONVersion::Found(result)), _) => {
                 let message = format!(
                     "Flox detected a package.json compatible with node{}",
@@ -804,17 +849,25 @@ impl Node {
             (Some(PackageJSONVersion::Unavailable), _) => unreachable!(
                 "shouldn't run setup hook when package.json node version is unavailable"
             ),
-            (_, Some(NVMRCVersion::Found(result))) => {
+            (
+                _,
+                Some(VersionFileVersion::Found {
+                    package,
+                    source_file,
+                }),
+            ) => {
+                let article = Self::article_for_file(source_file);
                 let message = format!(
-                    "Flox detected an .nvmrc{}",
-                    Self::format_version_or_empty(result.version.as_ref())
+                    "Flox detected {article} {source_file}{}",
+                    Self::format_version_or_empty(package.version.as_ref())
                 );
-                (message, result.version.clone())
+                (message, package.version.clone())
             },
-            (_, Some(NVMRCVersion::Unsure)) => {
+            (_, Some(VersionFileVersion::Unsure { source_file })) => {
                 let result = find_compatible_package(flox, "nodejs", None).await?;
+                let article = Self::article_for_file(source_file);
                 let message = format!(
-                    "Flox detected an .nvmrc with a version specifier not understood by Flox, but Flox can provide {}",
+                    "Flox detected {article} {source_file} with a version specifier not understood by Flox, but Flox can provide {}",
                     result
                         .version
                         .as_ref()
@@ -823,10 +876,11 @@ impl Node {
                 );
                 (message, result.version)
             },
-            (_, Some(NVMRCVersion::Unavailable)) => {
+            (_, Some(VersionFileVersion::Unavailable { source_file })) => {
                 let result = find_compatible_package(flox, "nodejs", None).await?;
+                let article = Self::article_for_file(source_file);
                 let message = format!(
-                    "Flox detected an .nvmrc with a version of nodejs not provided by Flox, but Flox can provide {}",
+                    "Flox detected {article} {source_file} with a version of nodejs not provided by Flox, but Flox can provide {}",
                     result
                         .version
                         .as_ref()
@@ -840,18 +894,25 @@ impl Node {
                 mentions_package_json = true;
                 ("Flox detected a package.json".to_string(), result.version)
             },
-            (None, Some(NVMRCVersion::Unspecified)) => {
+            (None, Some(VersionFileVersion::Unspecified { source_file })) => {
                 let result = find_compatible_package(flox, "nodejs", None).await?;
-                ("Flox detected an .nvmrc".to_string(), result.version)
+                let article = Self::article_for_file(source_file);
+                (
+                    format!("Flox detected {article} {source_file}"),
+                    result.version,
+                )
             },
-            (Some(PackageJSONVersion::Unspecified), Some(NVMRCVersion::Unspecified)) => {
+            (
+                Some(PackageJSONVersion::Unspecified),
+                Some(VersionFileVersion::Unspecified { .. }),
+            ) => {
                 // This is unreachable because we only set the source to `Some` that we
                 // eventually used to find the package. In other words, if we had a
                 // `package.json` and failed to locate a suitable package, we still
                 // return `Some(_)` for the `package.json` one, and don't even look at
-                // .nvmrc.
+                // the version file.
                 unreachable!(
-                    "shouldn't run a setup hook that uses both package.json and .nvmrc version"
+                    "shouldn't run a setup hook that uses both package.json and version file"
                 )
             },
             // get_action() returns NodeAction::Nothing for this case so it's unreachable
@@ -953,6 +1014,16 @@ impl Node {
         version
             .map(|version| format!(" {version}"))
             .unwrap_or("".to_string())
+    }
+
+    /// Returns the appropriate article ("a" or "an") for a version file name.
+    /// ".nvmrc" → "an" ("an nvmrc")
+    /// ".node-version" → "a" ("a node-version")
+    fn article_for_file(file_name: &str) -> &'static str {
+        match file_name {
+            ".nvmrc" => "an",
+            _ => "a",
+        }
     }
 }
 
@@ -1138,7 +1209,7 @@ mod tests {
                     package_json_node_version: Some(PackageJSONVersion::Found(
                         (&node_package).into(),
                     )),
-                    nvmrc_version: None,
+                    version_file_version: None,
                 }),
                 needs_client: true,
             },
@@ -1167,7 +1238,7 @@ mod tests {
                         npm_hook: true,
                     }),
                     package_json_node_version: Some(PackageJSONVersion::Found((&node_20).into())),
-                    nvmrc_version: None,
+                    version_file_version: None,
                 }),
                 needs_client: true,
             },
@@ -1183,7 +1254,54 @@ mod tests {
                         npm_hook: false,
                     }),
                     package_json_node_version: None,
-                    nvmrc_version: Some(NVMRCVersion::Found((&node_20).into())),
+                    version_file_version: Some(VersionFileVersion::Found {
+                        package: (&node_20).into(),
+                        source_file: ".nvmrc".to_string(),
+                    }),
+                }),
+                needs_client: true,
+            },
+            TestCase {
+                description: ".node-version with satisfied version",
+                files: vec![File {
+                    name: ".node-version".to_string(),
+                    content: "v20".to_string(),
+                }],
+                expected: Some(Node {
+                    action: NodeInstallAction::Node(NodeInstall {
+                        node: Some((&node_20).into()),
+                        npm_hook: false,
+                    }),
+                    package_json_node_version: None,
+                    version_file_version: Some(VersionFileVersion::Found {
+                        package: (&node_20).into(),
+                        source_file: ".node-version".to_string(),
+                    }),
+                }),
+                needs_client: true,
+            },
+            TestCase {
+                description: ".nvmrc takes precedence over .node-version",
+                files: vec![
+                    File {
+                        name: ".nvmrc".to_string(),
+                        content: "v20".to_string(),
+                    },
+                    File {
+                        name: ".node-version".to_string(),
+                        content: "v18".to_string(),
+                    },
+                ],
+                expected: Some(Node {
+                    action: NodeInstallAction::Node(NodeInstall {
+                        node: Some((&node_20).into()),
+                        npm_hook: false,
+                    }),
+                    package_json_node_version: None,
+                    version_file_version: Some(VersionFileVersion::Found {
+                        package: (&node_20).into(),
+                        source_file: ".nvmrc".to_string(),
+                    }),
                 }),
                 needs_client: true,
             },
@@ -1199,7 +1317,7 @@ mod tests {
                         npm_hook: true,
                     }),
                     package_json_node_version: Some(PackageJSONVersion::Unspecified),
-                    nvmrc_version: None,
+                    version_file_version: None,
                 }),
                 needs_client: true,
             },
@@ -1232,7 +1350,7 @@ mod tests {
                         npm_hook: true,
                     }),
                     package_json_node_version: Some(PackageJSONVersion::Found((&node_20).into())),
-                    nvmrc_version: None,
+                    version_file_version: None,
                 }),
                 needs_client: true,
             },
@@ -1265,7 +1383,7 @@ mod tests {
                         npm_hook: false,
                     }),
                     package_json_node_version: Some(PackageJSONVersion::Unavailable),
-                    nvmrc_version: None,
+                    version_file_version: None,
                 }),
                 needs_client: true,
             },
@@ -1295,53 +1413,59 @@ mod tests {
     }
 
     #[test]
-    fn parse_nvmrc_version_some() {
+    fn parse_version_file_contents_some() {
         assert_eq!(
-            Node::parse_nvmrc_version("v0.1.14"),
-            RequestedNVMRCVersion::Found("0.1.14".to_string())
+            Node::parse_version_file_contents("v0.1.14"),
+            ParsedVersionFile::Found("0.1.14".to_string())
         );
         assert_eq!(
-            Node::parse_nvmrc_version("v20.11.1"),
-            RequestedNVMRCVersion::Found("20.11.1".to_string())
+            Node::parse_version_file_contents("v20.11.1"),
+            ParsedVersionFile::Found("20.11.1".to_string())
         );
         assert_eq!(
-            Node::parse_nvmrc_version("0.1.14"),
-            RequestedNVMRCVersion::Found("0.1.14".to_string())
+            Node::parse_version_file_contents("0.1.14"),
+            ParsedVersionFile::Found("0.1.14".to_string())
         );
         assert_eq!(
-            Node::parse_nvmrc_version("0"),
-            RequestedNVMRCVersion::Found("0".to_string())
+            Node::parse_version_file_contents("0"),
+            ParsedVersionFile::Found("0".to_string())
         );
         assert_eq!(
-            Node::parse_nvmrc_version("0.1"),
-            RequestedNVMRCVersion::Found("0.1".to_string())
+            Node::parse_version_file_contents("0.1"),
+            ParsedVersionFile::Found("0.1".to_string())
         );
         assert_eq!(
-            Node::parse_nvmrc_version("0.1.14\n"),
-            RequestedNVMRCVersion::Found("0.1.14".to_string())
+            Node::parse_version_file_contents("0.1.14\n"),
+            ParsedVersionFile::Found("0.1.14".to_string())
         );
         assert_eq!(
-            Node::parse_nvmrc_version("0.1.14   "),
-            RequestedNVMRCVersion::Found("0.1.14".to_string())
-        );
-    }
-
-    #[test]
-    fn parse_nvmrc_version_unsure() {
-        assert_eq!(
-            Node::parse_nvmrc_version("node"),
-            RequestedNVMRCVersion::Unsure
-        );
-        assert_eq!(
-            Node::parse_nvmrc_version("0.1.14 blah blah"),
-            RequestedNVMRCVersion::Unsure
+            Node::parse_version_file_contents("0.1.14   "),
+            ParsedVersionFile::Found("0.1.14".to_string())
         );
     }
 
     #[test]
-    fn parse_nvmrc_version_none() {
-        assert_eq!(Node::parse_nvmrc_version(""), RequestedNVMRCVersion::None);
-        assert_eq!(Node::parse_nvmrc_version("\n"), RequestedNVMRCVersion::None);
+    fn parse_version_file_contents_unsure() {
+        assert_eq!(
+            Node::parse_version_file_contents("node"),
+            ParsedVersionFile::Unsure
+        );
+        assert_eq!(
+            Node::parse_version_file_contents("0.1.14 blah blah"),
+            ParsedVersionFile::Unsure
+        );
+    }
+
+    #[test]
+    fn parse_version_file_contents_none() {
+        assert_eq!(
+            Node::parse_version_file_contents(""),
+            ParsedVersionFile::None
+        );
+        assert_eq!(
+            Node::parse_version_file_contents("\n"),
+            ParsedVersionFile::None
+        );
     }
 
     /// Test get_init_customization() for action InstallYarn
@@ -1350,7 +1474,7 @@ mod tests {
         assert_eq!(
             Node {
                 package_json_node_version: None,
-                nvmrc_version: None,
+                version_file_version: None,
                 action: NodeInstallAction::YarnAndNode(YarnAndNodeInstall {
                     yarn: ProvidedPackage {
                         attr_path: "yarn.path".into(),
@@ -1396,7 +1520,7 @@ mod tests {
         assert_eq!(
             Node {
                 package_json_node_version: None,
-                nvmrc_version: None,
+                version_file_version: None,
                 action: NodeInstallAction::Node(NodeInstall {
                     node: Some(ProvidedPackage {
                         attr_path: "nodejs.path".into(),
