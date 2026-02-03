@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
-use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
+use flox_core::activate::context::{AttachCtx, AttachProjectCtx};
 use flox_core::activations::{read_activations_json, state_json_path, write_activations_json};
 use flox_core::traceable_path;
 use log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
@@ -38,7 +38,9 @@ const MONITORING_LOOP_INTERVAL: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutiveCtx {
-    pub context: ActivateCtx,
+    pub attach_ctx: AttachCtx,
+    pub project_ctx: AttachProjectCtx,
+    pub activation_state_dir: std::path::PathBuf,
     pub parent_pid: i32,
 }
 
@@ -59,7 +61,9 @@ impl ExecutiveArgs {
     pub fn handle(self, subsystem_verbosity: Option<u32>) -> Result<(), anyhow::Error> {
         let contents = fs::read_to_string(&self.executive_ctx)?;
         let ExecutiveCtx {
-            context,
+            attach_ctx,
+            project_ctx,
+            activation_state_dir,
             parent_pid,
         } = serde_json::from_str(&contents)?;
         if !std::env::var(NO_REMOVE_ACTIVATION_FILES).is_ok_and(|val| val == "true") {
@@ -81,13 +85,7 @@ impl ExecutiveArgs {
         debug!("sending SIGUSR1 to parent {}", parent_pid);
         kill(Pid::from_raw(parent_pid), SIGUSR1)?;
 
-        // TODO: Don't even start an executive if no project context.
-        let Some(project) = context.project_ctx else {
-            debug!("monitoring loop disabled, exiting executive");
-            return Ok(());
-        };
-
-        let log_dir = project.flox_env_log_dir.clone();
+        let log_dir = project_ctx.flox_env_log_dir.clone();
         let log_file = format!("executive.{}.log", std::process::id());
         logger::init_file_logger(subsystem_verbosity, log_file, &log_dir)
             .context("failed to initialize logger")?;
@@ -111,9 +109,9 @@ impl ExecutiveArgs {
 
         debug!("starting monitoring loop");
         run_monitoring_loop(
-            context.attach_ctx,
-            project,
-            context.activation_state_dir,
+            attach_ctx,
+            project_ctx,
+            activation_state_dir,
             signals,
             subsystem_verbosity.unwrap_or(0),
         )?;

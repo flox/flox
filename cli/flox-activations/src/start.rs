@@ -11,7 +11,7 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use anyhow::{Result, anyhow, bail};
-use flox_core::activate::context::ActivateCtx;
+use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use flox_core::activations::{
     ActivationState,
@@ -50,6 +50,12 @@ pub fn start(
     activations_json_path: &Path,
     lock: LockFile,
 ) -> Result<StartOrAttachResult, anyhow::Error> {
+    let attach = &context.attach_ctx;
+    let project = context
+        .project_ctx
+        .as_ref()
+        .expect("start() requires project context");
+
     let start_state_dir = start_id.start_state_dir(&context.activation_state_dir)?;
     DirBuilder::new()
         .recursive(true)
@@ -60,7 +66,12 @@ pub fn start(
         // Register signal handler BEFORE spawning executive to avoid race condition
         // where SIGUSR1 arrives before handler is registered
         let signals = Signals::new([SIGCHLD, SIGUSR1])?;
-        let exec_pid = spawn_executive(context, &start_state_dir)?;
+        let exec_pid = spawn_executive(
+            attach,
+            project,
+            &context.activation_state_dir,
+            &start_state_dir,
+        )?;
         activations.set_executive_pid(exec_pid.as_raw());
         Some((exec_pid, signals))
     } else {
@@ -89,6 +100,50 @@ pub fn start(
     // Re-acquire lock to mark ready
     let (activations_opt, lock) = read_activations_json(activations_json_path)?;
     let mut activations = activations_opt.expect("activations.json should exist");
+    activations.set_ready(&start_id);
+    write_activations_json(&activations, activations_json_path, lock)?;
+
+    Ok(StartOrAttachResult::Start { start_id })
+}
+
+/// Start activation without executive (for containers).
+/// Uses own PID as an "executive" to indicate container lifecycle.
+pub fn start_without_executive(
+    context: &ActivateCtx,
+    subsystem_verbosity: u32,
+    vars_from_env: &VarsFromEnvironment,
+    start_id: StartIdentifier,
+    activations: &mut ActivationState,
+    activations_json_path: &Path,
+    lock: LockFile,
+) -> Result<StartOrAttachResult, anyhow::Error> {
+    let start_state_dir = start_id.start_state_dir(&context.activation_state_dir)?;
+    DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(&start_state_dir)?;
+
+    let pid_self = std::process::id() as i32;
+    activations.set_executive_pid(pid_self);
+    write_activations_json(activations, activations_json_path, lock)?;
+
+    // Run activation hooks (same as normal)
+    let mut start_command = assemble_activate_command(
+        context,
+        subsystem_verbosity,
+        vars_from_env.clone(),
+        &start_state_dir,
+    );
+    debug!("spawning activate script (container): {:?}", start_command);
+    let status = start_command.spawn()?.wait()?;
+    if !status.success() {
+        // hook.on-activate may have already printed to stderr
+        bail!("Running hook.on-activate failed");
+    }
+
+    // Mark ready
+    let (activations_opt, lock) = read_activations_json(activations_json_path)?;
+    let mut activations = activations_opt.expect("state.json should exist");
     activations.set_ready(&start_id);
     write_activations_json(&activations, activations_json_path, lock)?;
 
@@ -155,12 +210,18 @@ fn signal_new_process_compose(
     Ok(())
 }
 
-fn spawn_executive(context: &ActivateCtx, start_state_dir: &Path) -> Result<Pid, anyhow::Error> {
+fn spawn_executive(
+    attach: &AttachCtx,
+    project: &AttachProjectCtx,
+    activation_state_dir: &Path,
+    start_state_dir: &Path,
+) -> Result<Pid, anyhow::Error> {
     let parent_pid = getpid();
 
-    // Serialize ExecutiveCtx
     let executive_ctx = ExecutiveCtx {
-        context: context.clone(),
+        attach_ctx: attach.clone(),
+        project_ctx: project.clone(),
+        activation_state_dir: activation_state_dir.to_path_buf(),
         parent_pid: parent_pid.as_raw(),
     };
 
@@ -169,20 +230,14 @@ fn spawn_executive(context: &ActivateCtx, start_state_dir: &Path) -> Result<Pid,
     let executive_ctx_path = temp_file.path().to_path_buf();
     temp_file.keep()?;
 
-    // TODO: Fallback not required when we don't start an executive for containers.
-    let dot_flox_path = context
-        .project_ctx
-        .as_ref()
-        .map_or_else(|| "unknown".to_string(), |p| {
-            p.dot_flox_path.to_string_lossy().into_owned()
-        });
-
     // Spawn executive
     let mut executive = Command::new((*FLOX_ACTIVATIONS_BIN).clone());
     executive.args([
         "executive",
+        // This is ony provided for the purpose of humans identifying the
+        // process from args.
         "--dot-flox-path",
-        &dot_flox_path,
+        &project.dot_flox_path.to_string_lossy(),
         "--executive-ctx",
         &executive_ctx_path.to_string_lossy(),
     ]);
