@@ -105,7 +105,7 @@ ContainerizeConfig ::= {
     These values act as defaults and may be replaced by any specified when creating a container.
     Flox sets an entrypoint to activate the containerized environment,
     and `cmd` is then run inside the activation, similar to
-    `flox activate -- cmd`.
+    `flox activate -c cmd`.
 
 `volumes`
 :   A set of directories describing where the process is

@@ -188,7 +188,7 @@
       "description": "Container config derived from\nhttps://github.com/opencontainers/image-spec/blob/main/config.md\n\nEnv and Entrypoint are left out since they interfere with our activation implementation\nDeprecated and reserved keys are also left out",
       "properties": {
         "cmd": {
-          "description": "Default arguments to the entrypoint of the container.\nThese values act as defaults and may be replaced by any specified when creating a container.\nFlox sets an entrypoint to activate the containerized environment,\nand `cmd` is then run inside the activation, similar to\n`flox activate -- cmd`.",
+          "description": "Default arguments to the entrypoint of the container.\nThese values act as defaults and may be replaced by any specified when creating a container.\nFlox sets an entrypoint to activate the containerized environment,\nand `cmd` is then run inside the activation, similar to\n`flox activate -c cmd`.",
           "items": {
             "type": "string"
           },
