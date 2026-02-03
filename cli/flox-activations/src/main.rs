@@ -15,7 +15,7 @@ fn try_main() -> Result<(), Error> {
     let args = Cli::parse();
 
     if let cli::Command::Executive(executive_args) = args.command {
-        return executive_args.handle(args.verbosity);
+        return executive_args.handle();
     };
 
     let subsystem_verbosity =
