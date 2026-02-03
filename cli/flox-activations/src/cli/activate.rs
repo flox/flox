@@ -102,8 +102,7 @@ impl ActivateArgs {
             && !project.services_to_start.is_empty()
         {
             start_services_with_new_process_compose(
-                &context.attach_ctx.flox_runtime_dir,
-                &context.attach_ctx.dot_flox_path,
+                &context.activation_state_dir,
                 &project.process_compose_bin,
                 &project.flox_services_socket,
                 &project.services_to_start,
@@ -186,29 +185,26 @@ impl ActivateArgs {
         subsystem_verbosity: u32,
         vars_from_env: &VarsFromEnvironment,
     ) -> Result<StartOrAttachResult, anyhow::Error> {
-        let activations_json_path = state_json_path(
-            &context.attach_ctx.flox_runtime_dir,
-            &context.attach_ctx.dot_flox_path,
-        );
+        // Use the pre-computed activation state directory
+        let activations_json_path = state_json_path(&context.activation_state_dir);
 
         let (activations_opt, lock) = read_activations_json(&activations_json_path)?;
+
+        // Get dot_flox_path for ActivationState.info (human debugging)
+        // - Project activations: actual .flox path
+        // - Containers: None
+        let dot_flox_path = context.project_ctx.as_ref().map(|p| &p.dot_flox_path);
+
         let mut activations = activations_opt.unwrap_or_else(|| {
             debug!("no existing activation state, creating new one");
-            ActivationState::new(
-                &context.mode,
-                &context.attach_ctx.dot_flox_path,
-                &context.attach_ctx.env,
-            )
+            ActivationState::new(&context.mode, dot_flox_path, &context.attach_ctx.env)
         });
 
         // Reset state (but leave start state dirs) if executive is not running.
         if !activations.executive_running() {
             debug!("discarding activation state due to executive not running");
-            activations = ActivationState::new(
-                &context.mode,
-                &context.attach_ctx.dot_flox_path,
-                &context.attach_ctx.env,
-            );
+            activations =
+                ActivationState::new(&context.mode, dot_flox_path, &context.attach_ctx.env);
         }
 
         if activations.mode() != &context.mode {

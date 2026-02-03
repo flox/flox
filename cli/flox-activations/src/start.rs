@@ -50,10 +50,7 @@ pub fn start(
     activations_json_path: &Path,
     lock: LockFile,
 ) -> Result<StartOrAttachResult, anyhow::Error> {
-    let start_state_dir = start_id.state_dir_path(
-        &context.attach_ctx.flox_runtime_dir,
-        &context.attach_ctx.dot_flox_path,
-    )?;
+    let start_state_dir = start_id.start_state_dir(&context.activation_state_dir)?;
     DirBuilder::new()
         .recursive(true)
         .mode(0o700)
@@ -103,13 +100,12 @@ pub fn start(
 /// The CLI has already decided that a new process-compose is needed.
 /// This function starts process-compose and then starts the specified services.
 pub fn start_services_with_new_process_compose(
-    runtime_dir: &str,
-    dot_flox_path: &Path,
+    activation_state_dir: &Path,
     process_compose_bin: &Path,
     socket_path: &Path,
     services: &[String],
 ) -> Result<(), anyhow::Error> {
-    let activations_json_path = state_json_path(runtime_dir, dot_flox_path);
+    let activations_json_path = state_json_path(activation_state_dir);
     let (activations_opt, lock) = read_activations_json(&activations_json_path)?;
     let activations = activations_opt.expect("state.json should exist");
     let executive_pid = activations.executive_pid();
@@ -162,7 +158,7 @@ fn signal_new_process_compose(
 fn spawn_executive(context: &ActivateCtx, start_state_dir: &Path) -> Result<Pid, anyhow::Error> {
     let parent_pid = getpid();
 
-    // Serialize ExecutiveStartupCtx
+    // Serialize ExecutiveCtx
     let executive_ctx = ExecutiveCtx {
         context: context.clone(),
         parent_pid: parent_pid.as_raw(),
@@ -173,12 +169,20 @@ fn spawn_executive(context: &ActivateCtx, start_state_dir: &Path) -> Result<Pid,
     let executive_ctx_path = temp_file.path().to_path_buf();
     temp_file.keep()?;
 
+    // TODO: Fallback not required when we don't start an executive for containers.
+    let dot_flox_path = context
+        .project_ctx
+        .as_ref()
+        .map_or_else(|| "unknown".to_string(), |p| {
+            p.dot_flox_path.to_string_lossy().into_owned()
+        });
+
     // Spawn executive
     let mut executive = Command::new((*FLOX_ACTIVATIONS_BIN).clone());
     executive.args([
         "executive",
         "--dot-flox-path",
-        &context.attach_ctx.dot_flox_path.to_string_lossy(),
+        &dot_flox_path,
         "--executive-ctx",
         &executive_ctx_path.to_string_lossy(),
     ]);

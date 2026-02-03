@@ -7,12 +7,7 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
-use flox_core::activations::{
-    activation_state_dir_path,
-    read_activations_json,
-    state_json_path,
-    write_activations_json,
-};
+use flox_core::activations::{read_activations_json, state_json_path, write_activations_json};
 use flox_core::traceable_path;
 use log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::libc::{SIGCHLD, SIGINT, SIGQUIT, SIGTERM};
@@ -118,9 +113,11 @@ impl ExecutiveArgs {
         run_monitoring_loop(
             context.attach_ctx,
             project,
+            context.activation_state_dir,
             signals,
             subsystem_verbosity.unwrap_or(0),
-        )
+        )?;
+        Ok(())
     }
 }
 
@@ -227,18 +224,13 @@ fn run_monitoring_loop(
     // Does NOT represent the most recent attach.
     initial_attach_ctx: AttachCtx,
     project_ctx: AttachProjectCtx,
+    activation_state_dir: PathBuf,
     mut signals: SignalHandlers,
     subsystem_verbosity: u32,
 ) -> Result<()> {
-    let dot_flox_path = initial_attach_ctx.dot_flox_path.clone();
-    let runtime_dir: PathBuf = initial_attach_ctx.flox_runtime_dir.clone().into();
-    let state_json_path = state_json_path(&runtime_dir, &dot_flox_path);
+    let state_json_path = state_json_path(&activation_state_dir);
 
-    let mut watcher = PidWatcher::new(
-        state_json_path.clone(),
-        dot_flox_path.clone(),
-        runtime_dir.clone(),
-    );
+    let mut watcher = PidWatcher::new(state_json_path.clone(), activation_state_dir.clone());
 
     let process_compose_bin = project_ctx.process_compose_bin.to_path_buf();
     let socket_path = project_ctx.flox_services_socket.to_path_buf();
@@ -260,7 +252,7 @@ fn run_monitoring_loop(
                     locked_activations,
                     &process_compose_bin,
                     &socket_path,
-                    activation_state_dir_path(&runtime_dir, &dot_flox_path),
+                    &activation_state_dir,
                 )
                 .context("cleanup failed")?;
                 return Ok(());
@@ -275,7 +267,7 @@ fn run_monitoring_loop(
                     (activations, lock),
                     &process_compose_bin,
                     &socket_path,
-                    activation_state_dir_path(&runtime_dir, &dot_flox_path),
+                    &activation_state_dir,
                 );
                 bail!(err.context("failed while waiting for termination"))
             },
@@ -302,6 +294,7 @@ fn run_monitoring_loop(
                 subsystem_verbosity,
                 &initial_attach_ctx,
                 &project_ctx,
+                &activation_state_dir,
             ) {
                 Ok(Some((activations, lock))) => {
                     write_activations_json(&activations, &state_json_path, lock)?;
@@ -330,6 +323,7 @@ fn handle_start_services_signal(
     subsystem_verbosity: u32,
     attach_ctx: &AttachCtx,
     project_ctx: &AttachProjectCtx,
+    activation_state_dir: &Path,
 ) -> Result<Option<LockedActivationState>> {
     let (mut activations, lock) = locked_activations;
 
@@ -356,6 +350,7 @@ fn handle_start_services_signal(
         attach_ctx,
         project_ctx,
         &ready_start_id,
+        activation_state_dir,
     )?;
 
     activations.set_current_process_compose_start_id(ready_start_id);
@@ -409,7 +404,7 @@ fn cleanup_all(
 mod test {
     use flox_core::activate::mode::ActivateMode;
     use flox_core::activations::test_helpers::write_activation_state;
-    use flox_core::activations::{ActivationState, StartOrAttachResult};
+    use flox_core::activations::{ActivationState, StartOrAttachResult, activation_state_dir_path};
 
     use super::watcher::test::{start_process, stop_process};
     use super::*;
@@ -422,7 +417,6 @@ mod test {
         flox_env: &str,
     ) -> (AttachCtx, AttachProjectCtx) {
         let attach = AttachCtx {
-            dot_flox_path: dot_flox_path.to_path_buf(),
             env: flox_env.to_string(),
             env_description: "test".to_string(),
             env_cache: dot_flox_path.join("cache"),
@@ -437,6 +431,7 @@ mod test {
         };
         let project = AttachProjectCtx {
             env_project: dot_flox_path.to_path_buf(),
+            dot_flox_path: dot_flox_path.to_path_buf(),
             flox_env_log_dir: PathBuf::from("/tmp/test_log_dir"),
             flox_services_socket: PathBuf::from("/does_not_exist"),
             process_compose_bin: PathBuf::from("/nix/store/fake-process-compose"),
@@ -457,7 +452,8 @@ mod test {
         let pid = proc.id() as i32;
 
         // Create an ActivationState with one PID attached
-        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
+        let mut state =
+            ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
         let result = state.start_or_attach(pid, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
@@ -478,7 +474,14 @@ mod test {
         let (attach, project) =
             test_context(&dot_flox_path, runtime_dir, &flox_env.to_string_lossy());
 
-        run_monitoring_loop(attach, project, SignalHandlers::new_for_test().unwrap(), 0).unwrap();
+        run_monitoring_loop(
+            attach,
+            project,
+            activation_state_directory.clone(),
+            SignalHandlers::new_for_test().unwrap(),
+            0,
+        )
+        .unwrap();
 
         // Verify state directory is completely removed after cleanup
         assert!(
@@ -499,7 +502,8 @@ mod test {
         let pid = proc.id() as i32;
 
         // Create an ActivationState with one PID attached
-        let mut state = ActivationState::new(&ActivateMode::default(), &dot_flox_path, &flox_env);
+        let mut state =
+            ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
         let result = state.start_or_attach(pid, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
@@ -522,7 +526,13 @@ mod test {
         let (attach, project) =
             test_context(&dot_flox_path, runtime_dir, &flox_env.to_string_lossy());
 
-        let result = run_monitoring_loop(attach, project, signals, 0);
+        let result = run_monitoring_loop(
+            attach,
+            project,
+            activation_state_directory.clone(),
+            signals,
+            0,
+        );
 
         // Verify the loop exited with the expected error
         let err = result.expect_err("should return error on termination signal");

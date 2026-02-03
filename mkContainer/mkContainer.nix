@@ -104,8 +104,8 @@ let
     invocation_type = null;
     remove_after_reading = false;
     flox_activate_store_path = "${environment}";
+    activation_state_dir = "/run/flox/container-activations/${baseNameOf environment}";
     attach_ctx = {
-      dot_flox_path = "${environment}"; # FIXME: Move to project.
       env = "${environment}"; # FIXME: Incorrect for containers.
       env_description = "${containerName}";
       env_cache = "/tmp";

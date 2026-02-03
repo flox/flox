@@ -16,6 +16,7 @@ use flox_core::activate::context::{
     InvocationType,
 };
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY_VAR};
+use flox_core::activations::activation_state_dir_path;
 use flox_core::traceable_path;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
@@ -387,7 +388,6 @@ impl Activate {
         subcommand_metric!("activate", "shell" = shell.to_string());
 
         let core = AttachCtx {
-            dot_flox_path: concrete_environment.dot_flox_path().to_path_buf(),
             // Don't rely on FLOX_ENV in the environment when we explicitly know
             // what it should be. This is necessary for nested activations where an
             // outer export of FLOX_ENV would be inherited by the inner activation.
@@ -406,18 +406,24 @@ impl Activate {
             interpreter_path,
         };
 
+        let dot_flox_path = concrete_environment.dot_flox_path().to_path_buf();
+
         let project = AttachProjectCtx {
             env_project: concrete_environment.project_path()?,
+            dot_flox_path: dot_flox_path.clone(),
             flox_env_log_dir: concrete_environment.log_path()?.to_path_buf(),
             flox_services_socket: socket_path,
             process_compose_bin: PathBuf::from(&*PROCESS_COMPOSE_BIN),
             services_to_start,
         };
 
+        let activation_state_dir = activation_state_dir_path(&flox.runtime_dir, &dot_flox_path);
+
         let activate_data = ActivateCtx {
             flox_activate_store_path: store_path.to_string_lossy().to_string(),
             attach_ctx: core,
             project_ctx: Some(project),
+            activation_state_dir,
             mode,
             shell,
             invocation_type: Some(invocation_type),

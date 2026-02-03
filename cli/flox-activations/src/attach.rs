@@ -35,10 +35,8 @@ pub fn attach(
     vars_from_env: VarsFromEnvironment,
     start_id: StartIdentifier,
 ) -> Result<(), anyhow::Error> {
-    let start_state_dir = start_id.state_dir_path(
-        &context.attach_ctx.flox_runtime_dir,
-        &context.attach_ctx.dot_flox_path,
-    )?;
+    // Use pre-computed activation_state_dir to get start state directory
+    let start_state_dir = start_id.start_state_dir(&context.activation_state_dir)?;
     let diff = EnvDiff::from_files(&start_state_dir)?;
 
     // Create the path if we're going to need it (we won't for in-place).
@@ -504,14 +502,13 @@ fn activate_interactive(
 fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Result<()> {
     let attach_command = AttachArgs {
         pid: std::process::id() as i32,
-        dot_flox_path: (&startup_ctx.act_ctx.attach_ctx.dot_flox_path).into(),
+        activation_state_dir: startup_ctx.act_ctx.activation_state_dir.clone(),
         store_path: start_id.store_path.clone(),
         timestamp: start_id.timestamp.clone(),
         exclusive: AttachExclusiveArgs {
             timeout_ms: Some(5000),
             remove_pid: None,
         },
-        runtime_dir: (&startup_ctx.act_ctx.attach_ctx.flox_runtime_dir).into(),
     };
 
     // Put a 5 second timeout on the activation
@@ -551,12 +548,11 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
 
     let script = formatdoc! {r#"
             {legacy_exports}
-            {flox_activations} attach --dot-flox-path "{dot_flox_path}" --runtime-dir "{runtime_dir}" --pid {self_pid_var} --store-path "{store_path}" --timestamp "{timestamp}" --remove-pid "{pid}";
+            {flox_activations} attach --activation-state-dir "{activation_state_dir}" --pid {self_pid_var} --store-path "{store_path}" --timestamp "{timestamp}" --remove-pid "{pid}";
             {exports_for_zsh}
         "#,
         flox_activations = (*FLOX_ACTIVATIONS_BIN).to_string_lossy(),
-        dot_flox_path = startup_ctx.act_ctx.attach_ctx.dot_flox_path.to_string_lossy(),
-        runtime_dir = startup_ctx.act_ctx.attach_ctx.flox_runtime_dir,
+        activation_state_dir = startup_ctx.act_ctx.activation_state_dir.to_string_lossy(),
         self_pid_var = Shell::from(startup_ctx.act_ctx.shell.clone()).self_pid_var(),
         store_path = start_id.store_path.to_string_lossy(),
         timestamp = start_id.timestamp,

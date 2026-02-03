@@ -10,10 +10,6 @@ pub use super::mode::ActivateMode;
 /// the latest ready store path when starting process-compose
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttachCtx {
-    /// The path to the environment .flox directory
-    // FIXME: Move to project
-    pub dot_flox_path: PathBuf,
-
     /// The path to the environment symlink
     pub env: String,
 
@@ -55,6 +51,9 @@ pub struct AttachProjectCtx {
     /// The project path for the environment
     pub env_project: PathBuf,
 
+    /// The path to the environment .flox directory
+    pub dot_flox_path: PathBuf,
+
     /// Environment log directory
     pub flox_env_log_dir: PathBuf,
 
@@ -69,8 +68,8 @@ pub struct AttachProjectCtx {
     pub services_to_start: Vec<String>,
 }
 
-/// Full activation context for normal (non-container) activations.
-/// This includes the project context for logging and services.
+/// Full activation context for activations.
+/// For containers, project is None; for normal activations, it includes logging and services.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActivateCtx {
     /// Store path for activation
@@ -80,6 +79,9 @@ pub struct ActivateCtx {
 
     /// Project context for logging and services
     pub project_ctx: Option<AttachProjectCtx>,
+
+    /// Base directory for this environment's activation state.
+    pub activation_state_dir: PathBuf,
 
     /// The activation mode (dev or run)
     pub mode: ActivateMode,

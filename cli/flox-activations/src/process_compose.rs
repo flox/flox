@@ -74,10 +74,9 @@ pub fn start_process_compose_no_services(
     attach_ctx: &AttachCtx,
     project: &AttachProjectCtx,
     start_id: &StartIdentifier,
+    activation_state_dir: &Path,
 ) -> Result<(), Error> {
-    let runtime_dir: &Path = attach_ctx.flox_runtime_dir.as_ref();
-    let dot_flox_path = &attach_ctx.dot_flox_path;
-    let start_state_dir = start_id.state_dir_path(runtime_dir, dot_flox_path)?;
+    let start_state_dir = start_id.start_state_dir(activation_state_dir)?;
     let config_file = start_id.store_path.join("service-config.yaml");
     let socket_path = project.flox_services_socket.as_path();
 

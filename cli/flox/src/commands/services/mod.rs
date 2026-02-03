@@ -4,7 +4,7 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use flox_core::activate::context::InvocationType;
 use flox_core::activate::mode::ActivateMode;
-use flox_core::activations::{read_activations_json, state_json_path};
+use flox_core::activations::{activation_state_dir_path, read_activations_json, state_json_path};
 use flox_core::proc_status::is_descendant_of;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
@@ -193,7 +193,9 @@ impl ServicesEnvironment {
         flox: &Flox,
         mode: &ActivateMode,
     ) -> ProcessComposeState {
-        let state_path = state_json_path(&flox.runtime_dir, self.environment.dot_flox_path());
+        let activation_state_dir =
+            activation_state_dir_path(&flox.runtime_dir, self.environment.dot_flox_path());
+        let state_path = state_json_path(&activation_state_dir);
         let Ok((Some(state), lock)) = read_activations_json(&state_path) else {
             return ProcessComposeState::NotCurrent;
         };
