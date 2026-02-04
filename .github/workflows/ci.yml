@@ -16,6 +16,7 @@ on:
           - "nix-plugins-dev"
           - "cli-unit"
           - "nix-build"
+          - "nix-build-kerberos"
           - "trigger-flox-installers-workflow"
           - "report-failure"
           - "nix-build-bats-tests"
@@ -288,6 +289,74 @@ jobs:
           FLOX_VERSION="${FLOX_VERSION:1}"
           echo "flox-version=$FLOX_VERSION" >> $GITHUB_OUTPUT
 
+  nix-build-kerberos:
+    name: "Verify Kerberos CLI build"
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 60
+
+    permissions:
+      id-token: write # Needed for AWS Creds
+
+    strategy:
+      fail-fast: false
+      matrix:
+        system:
+          - "x86_64-linux"
+          - "aarch64-linux"
+
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v6"
+        with:
+          fetch-depth: 0
+
+      - name: "Setup upterm session"
+        if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
+        uses: owenthereal/action-upterm@v1
+        with:
+          limit-access-to-actor: true
+          limit-access-to-users: ${{ inputs.allowedUptermUsers }}
+          wait-timeout-minutes: 15
+
+      - name: "Setup"
+        uses: "./.github/actions/common-setup"
+        with:
+          GITHUB_ACCESS_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
+          SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
+          SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
+          AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
+          TAILSCALE_URL: "${{ vars.MANAGED_TAILSCALE_URL }}"
+          TAILSCALE_AUTH_KEY: "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"
+          REMOTE_BUILDERS: "${{ vars.MANAGED_REMOTE_BUILDERS }}"
+          SYSTEM: "${{ matrix.system }}"
+          SETUP_NIX: "false"
+
+      - name: "Configure AWS Credentials"
+        uses: "aws-actions/configure-aws-credentials@v5"
+        with:
+          role-to-assume: "arn:aws:iam::759020684799:role/github-oidc-role-flox-cache-public"
+          role-session-name: "${{ github.run_id }}"
+          aws-region: "us-east-1"
+          output-env-credentials: true
+          unset-current-credentials: true
+
+      - name: "Build flox-cli-kerberos"
+        id: "build-kerberos"
+        env:
+          NIX_SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
+          NIX_SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
+        run: |
+          export AWS_ACCESS_KEY_ID
+          export AWS_SECRET_ACCESS_KEY
+          export AWS_SESSION_TOKEN
+          export NIX_SUBSTITUTER_KEY
+
+          echo "::group::Building packages.${{ matrix.system }}.flox-cli-kerberos"
+          ./.github/scripts/remote-execute-nix-build.sh "packages.${{ matrix.system }}.flox-cli-kerberos" "$NIX_SUBSTITUTER"
+          echo "::endgroup::"
+
   trigger-flox-installers-workflow:
     name: "Build installers"
     if: ${{ (github.base_ref == 'refs/heads/main' || github.ref == 'refs/heads/main') && github.event_name == 'push' }}
@@ -351,6 +420,7 @@ jobs:
 
     needs:
       - "nix-build"
+      - "nix-build-kerberos"
       - "nix-plugins-dev"
       - "cli-unit"
       - "nix-build-bats-tests"
