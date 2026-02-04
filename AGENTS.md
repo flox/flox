@@ -92,8 +92,12 @@ FLOX_ACTIVATE_TRACE=1 result/bin/flox activate [args]
 
 - **Rust style:**
   - Follow existing style and Rust idioms
-  - Favor early returns from functions and functional programming style over nested conditionals-
+  - Use early returns from functions and functional programming style; don't use nested conditionals
   - Structs should derive `Clone` and `Debug`
+  - Use structured log and tracing fields; don't interpolate variables into single strings
+  - Use `assert_eq!` on entire structs in tests so that it's easier to debug failures and catch new fields; don't `assert!` or `assert_eq!` on individual fields
+  - Add `use` statements to modules; don't inline absolute paths and don't add to nearest function
+  - Always update `use` statements when moving code between modules; don't re-export existing names
 - **Commits:** Conventional commits format (`feat:`, `fix:`, `chore:`, etc.). Use `cz commit` for interactive commits
 - **Rust 2024 edition** for main crates
 
