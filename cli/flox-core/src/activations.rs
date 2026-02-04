@@ -17,6 +17,7 @@ const EXECUTIVE_NOT_STARTED: Pid = 0;
 
 type Error = anyhow::Error;
 type Pid = i32;
+pub type PidWithExpiration = (Pid, Option<OffsetDateTime>);
 
 /// Represents running processes attached to an activation.
 /// Attachments take precedence over executive in this representation.
@@ -412,6 +413,14 @@ impl ActivationState {
         self.attached_pids.is_empty()
     }
 
+    /// Returns all attached PIDs and their expirations, flattened from all start IDs
+    pub fn all_attached_pids_and_expiration(&self) -> Vec<PidWithExpiration> {
+        self.attached_pids
+            .iter()
+            .map(|(pid, attachment)| (*pid, attachment.expiration))
+            .collect()
+    }
+
     /// Returns the current activation mode
     pub fn mode(&self) -> &ActivateMode {
         &self.mode
@@ -474,51 +483,64 @@ impl ActivationState {
         debug!(pid, ?removed, "detaching from activation");
     }
 
-    /// Clean up terminated PIDs
+    /// Clean up a specific terminated PID
     ///
-    /// Returns a list of start IDs that have no more attached PIDs, and a boolean
-    /// indicating if any PIDs were detached.
-    pub fn cleanup_pids(
+    /// Note: This function still verifies the PID is not running via `pid_is_running`
+    /// because the information that triggered this cleanup (e.g., a ProcessExited event)
+    /// is not protected by the state.json lock. Between detecting the exit and acquiring
+    /// the lock, the PID could have been reused by another process.
+    ///
+    /// Returns the start ID that needs to be cleaned up if it has no more attached PIDs
+    /// and a boolean indicating if the PID was detached.
+    pub fn cleanup_pid(
         &mut self,
+        pid: Pid,
         pid_is_running: impl Fn(Pid) -> bool,
         now: OffsetDateTime,
-    ) -> (Vec<StartIdentifier>, bool) {
-        let mut modified = false;
-        let attachments_by_start_id = self.attachments_by_start_id();
-        let mut empty_start_ids = Vec::new();
+    ) -> (Option<StartIdentifier>, bool) {
+        // Get the attachment for this PID
+        let attachment = self.attached_pids.get(&pid).cloned();
 
-        for (start_id, attachments) in attachments_by_start_id {
-            let mut all_pids_terminated = true;
-            for (pid, expiration) in attachments {
-                let keep_attachment = if let Some(expiration) = expiration {
-                    // If the PID has an unreached expiration, retain it even if it
-                    // isn't running
-                    now < expiration || pid_is_running(pid)
-                } else {
-                    pid_is_running(pid)
-                };
+        let Some(attachment) = attachment else {
+            debug!(pid, "PID not found in attached_pids");
+            return (None, false);
+        };
 
-                if keep_attachment {
-                    // We can skip checking other PIDs for this start_id because
-                    // it still has attachments.
-                    all_pids_terminated = false;
-                    break;
-                } else {
-                    tracing::info!(?pid, ?start_id, "detaching terminated PID");
-                    self.detach(pid);
-                    modified = true;
-                }
-            }
+        // Check if we should keep this attachment
+        let keep_attachment = if let Some(expiration) = attachment.expiration {
+            // If the PID has an unreached expiration, retain it even if it isn't running
+            now < expiration || pid_is_running(pid)
+        } else {
+            pid_is_running(pid)
+        };
 
-            if all_pids_terminated {
-                empty_start_ids.push(start_id);
-            }
+        if keep_attachment {
+            debug!(pid, "keeping attached PID");
+            return (None, false);
         }
+
+        let start_id = attachment.start_id;
+        tracing::info!(pid, ?start_id, "detaching terminated PID");
+        self.detach(pid);
+
+        // Check if this start_id now has no more attachments
+        let has_attachments = self
+            .attached_pids
+            .iter()
+            .any(|(_, attachment)| attachment.start_id == start_id);
+
+        let empty_start_id = if !has_attachments {
+            Some(start_id)
+        } else {
+            None
+        };
+
         // Only update ready state if there are still attached PIDs
         if !self.attached_pids.is_empty() {
             self.update_ready_after_detach();
         }
-        (empty_start_ids, modified)
+
+        (empty_start_id, true)
     }
 
     /// set ready to False if there are no more PIDs attached to the current start
@@ -1183,7 +1205,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cleanup_pids_keeps_expired_but_running_pids() {
+    fn test_cleanup_pid_keeps_expired_but_running_pid() {
         // Create an attachment with an expiration in the past
         let mut activations =
             ActivationState::new(&ActivateMode::default(), Some("/test/.flox"), "/test/env");
@@ -1197,11 +1219,11 @@ mod tests {
         };
         activations.attach(pid, attachment);
 
-        // Cleanup with PID still running
-        let (empty_starts, modified) = activations.cleanup_pids(|_| true, now);
+        // Cleanup with PID still running - should be kept
+        let (empty_start, modified) = activations.cleanup_pid(pid, |_| true, now);
         assert!(activations.attached_pids.contains_key(&pid));
         assert!(!modified);
-        assert!(empty_starts.is_empty());
+        assert!(empty_start.is_none());
     }
 
     #[test]
@@ -1219,11 +1241,11 @@ mod tests {
         };
         activations.attach(pid, attachment);
 
-        // Cleanup with PID not running
-        let (empty_starts, modified) = activations.cleanup_pids(|_| false, now);
+        // Cleanup with PID not running but unexpired expiration - should be kept
+        let (empty_start, modified) = activations.cleanup_pid(pid, |_| false, now);
         assert!(activations.attached_pids.contains_key(&pid));
         assert!(!modified);
-        assert!(empty_starts.is_empty());
+        assert!(empty_start.is_none());
     }
 
     mod running_processes {

@@ -30,6 +30,8 @@ itertools.workspace = true
 shell_gen = { path = "../shell_gen" }
 dirs.workspace = true
 tempfile.workspace = true
+waitpid-any = "0.3.0"
+notify = "6"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 kqueue.workspace = true
