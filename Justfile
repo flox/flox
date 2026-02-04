@@ -10,6 +10,8 @@
 #
 # ---------------------------------------------------------------------------- #
 
+set positional-arguments
+
 nix_options := "--extra-experimental-features nix-command \
                 --extra-experimental-features flakes"
 INPUT_DATA := "${PWD}/test_data/input_data"
@@ -214,8 +216,7 @@ gen-unit-data-for-publish floxhub_repo_path force="":
 # Run the CLI integration test suite using locally built binaries
 # This is equivalent to the "local" jobs in CI.
 @integ-tests +bats_args="": build
-    flox-cli-tests \
-        {{bats_args}}
+    flox-cli-tests "$@"
 
 # Run the CLI integration test suite using Nix-built binaries
 # This is equivalent to the "remote" jobs in CI.
@@ -223,8 +224,7 @@ gen-unit-data-for-publish floxhub_repo_path force="":
     nix run \
         --accept-flake-config \
         --extra-experimental-features 'nix-command flakes' \
-        .#flox-cli-tests \
-        {{bats_args}}
+        .#flox-cli-tests -- "$@"
 
 @ut regex="" record="false":
     _FLOX_UNIT_TEST_RECORD={{record}} {{cargo_test_invocation}} {{regex}}
