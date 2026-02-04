@@ -40,19 +40,19 @@ impl PidWatcher {
         }
     }
 
-    /// Reload and check the list of PIDs for an activation.
+    /// Check if the provided PID is still running and clean it up if not.
     ///
     /// Returns `Some(LockedActivationState)` if all PIDs have terminated and
     /// cleanup should proceed.
     /// Returns `None` if there are still active PIDs.
-    pub fn cleanup_pids(&mut self) -> Result<Option<LockedActivationState>, Error> {
+    pub fn cleanup_pid(&mut self, pid: i32) -> Result<Option<LockedActivationState>, Error> {
         let (activations_json, lock) = read_activations_json(&self.state_json_path)?;
         let Some(mut activations) = activations_json else {
             bail!("executive shouldn't be running when state.json doesn't exist");
         };
 
         let now = OffsetDateTime::now_utc();
-        let (empty_start_ids, modified) = activations.cleanup_pids(pid_is_running, now);
+        let (empty_start_id, modified) = activations.cleanup_pid(pid, pid_is_running, now);
 
         // If there are no more attached PIDs for any start, return early and
         // cleanup the entirety of the activation state directory
@@ -60,7 +60,7 @@ impl PidWatcher {
             return Ok(Some((activations, lock)));
         }
 
-        // Cleanup empty start IDs
+        // Cleanup empty start ID
         //
         // We might want to skip this if start_id is the same as that in ready,
         // since otherwise we'll do another start of the same environment when:
@@ -68,7 +68,7 @@ impl PidWatcher {
         // and
         // 2. The environment was not modified
         // But I think for now it's simpler to just treat all start_ids the same.
-        for start_id in empty_start_ids {
+        if let Some(start_id) = empty_start_id {
             let state_dir = start_id.start_state_dir(&self.activation_state_dir)?;
             trace!(?state_dir, "removing empty activation state dir");
             std::fs::remove_dir_all(state_dir).context("failed to remove start state dir")?;
@@ -99,7 +99,7 @@ pub mod test {
     use std::time::Duration;
 
     use flox_core::activate::mode::ActivateMode;
-    use flox_core::activations::test_helpers::{read_activation_state, write_activation_state};
+    use flox_core::activations::test_helpers::write_activation_state;
     use flox_core::activations::{StartOrAttachResult, activation_state_dir_path, state_json_path};
     use flox_core::proc_status::{ProcStatus, pid_is_running, read_pid_status};
 
@@ -188,86 +188,21 @@ pub mod test {
         let state_json_path = state_json_path(&activation_state_dir);
         let mut watcher = PidWatcher::new(state_json_path, activation_state_dir);
 
-        // Terminate both processes
+        // Clean up first PID - should not trigger full cleanup yet
         stop_process(proc1);
-        stop_process(proc2);
+        let result = watcher.cleanup_pid(pid1).unwrap();
+        assert!(result.is_none(), "should not cleanup after first PID");
 
+        // Clean up second PID - should trigger full cleanup
+        stop_process(proc2);
         let (state, _lock) = watcher
-            .cleanup_pids()
+            .cleanup_pid(pid2)
             .unwrap()
             .expect("should return cleanup result");
         assert_eq!(
             state.attachments_by_start_id(),
             BTreeMap::new(),
-            "should return empty state for cleanup"
-        );
-    }
-
-    /// When an attachment to a start exits, its PID is removed if its the first
-    /// PID in the list
-    #[test]
-    fn terminated_pid_removed_if_first() {
-        let runtime_dir = tempfile::tempdir().unwrap();
-        let dot_flox_path = PathBuf::from(".flox");
-        let flox_env = dot_flox_path.join("run/test");
-        let store_path = "store_path".to_string();
-
-        // Start and set ready pid1
-        let proc1 = start_process();
-        let pid1 = proc1.id() as i32;
-        let mut state =
-            ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
-        let result = state.start_or_attach(pid1, &store_path);
-        let StartOrAttachResult::Start { start_id, .. } = result else {
-            panic!("Expected Start")
-        };
-
-        state.set_ready(&start_id);
-        let proc2 = start_process();
-        let pid2 = proc2.id() as i32;
-        state.start_or_attach(pid2, &store_path);
-
-        // Verify both PIDs are initially present
-        let initial_pids = state.attached_pids_running();
-        assert_eq!(
-            initial_pids,
-            vec![pid1, pid2],
-            "both pids should be running and present"
-        );
-
-        write_activation_state(runtime_dir.path(), &dot_flox_path, state);
-
-        // The cleanup logic is order sensitive,
-        // so proc2 wouldn't be cleaned up if we stopped it instead of proc1
-        stop_process(proc1);
-
-        let activation_state_dir = activation_state_dir_path(runtime_dir.path(), &dot_flox_path);
-        let state_json_path = state_json_path(&activation_state_dir);
-        let mut watcher = PidWatcher::new(state_json_path, activation_state_dir);
-
-        // Call cleanup_pids to process the terminated PID
-        let result = watcher.cleanup_pids().unwrap();
-        assert!(result.is_none(), "should not cleanup while pid2 is running");
-
-        // Check state while proc2 is still running
-        let intermediate_state = read_activation_state(runtime_dir.path(), &dot_flox_path);
-        let intermediate_attachments = intermediate_state.attachments_by_start_id();
-        assert_eq!(
-            BTreeMap::from([(start_id.clone(), vec![(pid2, None)])]),
-            intermediate_attachments,
-            "only pid2 should be running and present after proc1 terminated"
-        );
-
-        // Clean up
-        stop_process(proc2);
-        let (state, _lock) = watcher
-            .cleanup_pids()
-            .unwrap()
-            .expect("should return cleanup result");
-        assert_eq!(
-            state.attachments_by_start_id(),
-            BTreeMap::new(),
-            "should return empty state for cleanup"
+            "should return empty state after cleanup"
         );
     }
 
@@ -323,9 +258,9 @@ pub mod test {
         let state_json_path = state_json_path(&activation_state_dir);
         let mut watcher = PidWatcher::new(state_json_path, activation_state_dir);
 
-        // Terminate proc1 and call cleanup_pids
+        // Terminate proc1 and call cleanup_pid
         stop_process(proc1);
-        let result = watcher.cleanup_pids().unwrap();
+        let result = watcher.cleanup_pid(pid1).unwrap();
         assert!(result.is_none(), "should not cleanup while pid2 is running");
 
         // Verify state_dir_1 has been removed but state_dir_2 still exists
@@ -335,7 +270,7 @@ pub mod test {
         // Clean up
         stop_process(proc2);
         let (state, _lock) = watcher
-            .cleanup_pids()
+            .cleanup_pid(pid2)
             .unwrap()
             .expect("should return cleanup result");
         assert_eq!(
