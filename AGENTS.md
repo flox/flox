@@ -33,8 +33,9 @@ just unit-tests                # Unit tests
 just impure-tests              # Unit tests with extra-tests feature
 just integ-tests               # Integration tests (bats)
 just unit-tests regex="test_name"     # Run specific unit test
-just integ-tests usage.bats           # Run specific test file
-just integ-tests -- --filter-tags tag # Run tests by tag
+just integ-tests usage.bats           # Run specific integration test file
+just integ-tests -- --filter-tags tag # Run integration tests by tag
+just integ-tests -- --filter regex    # Run integration tests by name
 
 # Formatting and Linting
 just format                    # Format all code
@@ -73,14 +74,6 @@ pre-commit run -a              # Run all linters
 | `test_data/` | Mock responses and test fixtures |
 
 ## Testing
-
-### Integration Test Tags
-
-Tests use bats tags for filtering: `init`, `build_env`, `install`, `uninstall`, `activate`, `push`, `pull`, `search`, `edit`, `list`, `delete`, `upgrade`, `project_env`, `managed_env`, `remote_env`, `python`, `node`, `go`, etc.
-
-```bash
-just integ-tests -- --filter-tags activate  # Run activation tests
-```
 
 ### Mock Data Generation
 
