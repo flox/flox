@@ -11,7 +11,7 @@ use log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::sys::signal::Signal::SIGUSR1;
 use nix::sys::signal::kill;
 use nix::unistd::{Pid, getpgid, getpid, setsid};
-use pid_monitor::{EventCoordinator, ExecutiveEvent};
+use event_coordinator::{EventCoordinator, ExecutiveEvent};
 use reaper::reap_orphaned_children;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, error, info, instrument};
@@ -22,7 +22,7 @@ use crate::logger;
 use crate::process_compose::{process_compose_down, start_process_compose_no_services};
 
 mod log_gc;
-mod pid_monitor;
+mod event_coordinator;
 mod reaper;
 mod watcher;
 // TODO: Re-enable sentry after fixing OpenSSL dependency issues
@@ -421,7 +421,7 @@ mod test {
     use flox_core::activations::test_helpers::{read_activation_state, write_activation_state};
     use flox_core::activations::{ActivationState, StartOrAttachResult, activation_state_dir_path};
 
-    use super::pid_monitor::{EventCoordinator, ExecutiveEvent};
+    use super::event_coordinator::{EventCoordinator, ExecutiveEvent};
     use super::watcher::test::{start_process, stop_process};
     use super::*;
 
