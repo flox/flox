@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use itertools::Itertools;
 use shell_gen::{GenerateShell, SetVar, Statement, UnsetVar};
 
@@ -28,8 +28,10 @@ impl EnvDiff {
         let start_json = activation_state_dir.as_ref().join("start.env.json");
         let end_json = activation_state_dir.as_ref().join("end.env.json");
 
-        let start_env = parse_env_json(start_json)?;
-        let end_env = parse_env_json(end_json)?;
+        let start_env = parse_env_json(&start_json)
+            .with_context(|| format!("Failed to read {}", start_json.display()))?;
+        let end_env = parse_env_json(&end_json)
+            .with_context(|| format!("Failed to read {}", end_json.display()))?;
 
         Ok(from_parsed_files(&start_env, &end_env))
     }
