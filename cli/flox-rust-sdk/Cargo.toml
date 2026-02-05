@@ -69,8 +69,8 @@ sentry = { workspace = true, features = ["test"] }
 
 [features]
 # Catalog authentication strategy
-# GSSAPI/Kerberos is available when this feature is enabled
-catalog-auth-gssapi = ["dep:libgssapi", "dep:base64"]
+# Kerberos authentication is available when this feature is enabled
+floxhub-authn-kerberos = ["dep:libgssapi", "dep:base64"]
 
 # allow exporting test helpers in dev mode only
 tests = [

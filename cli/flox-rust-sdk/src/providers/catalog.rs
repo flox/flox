@@ -30,12 +30,11 @@ use thiserror::Error;
 use tracing::{debug, info, instrument};
 use url::Url;
 
-use super::catalog_auth::AuthMethod;
+use super::catalog_auth::{AuthManager, AuthMethod};
 use super::publish::CheckedEnvironmentMetadata;
 use crate::data::System;
 use crate::flox::{FLOX_VERSION, Flox};
 use crate::models::search::{PackageDetails, ResultCount, SearchLimit, SearchResults};
-use crate::providers::catalog_auth::AuthStrategy;
 use crate::utils::INVOCATION_SOURCES;
 
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
@@ -386,7 +385,7 @@ impl CatalogClient {
         };
 
         // Add authentication headers (compile-time strategy selection via Cargo features)
-        AuthMethod::add_auth_headers(&mut header_map, config);
+        AuthManager::add_auth_headers(&mut header_map, config);
 
         for (key, value) in &config.extra_headers {
             header_map.insert(

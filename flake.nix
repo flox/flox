@@ -109,11 +109,11 @@
           flox-activations = callPackage ./pkgs/flox-activations { };
           flox-cli = callPackage ./pkgs/flox-cli { };
 
-          # GSSAPI-enabled variant with Kerberos authentication
-          flox-cli-gssapi = callPackage ./pkgs/flox-cli {
+          # Kerberos-enabled variant with GSSAPI authentication
+          flox-cli-kerberos = callPackage ./pkgs/flox-cli {
             rust-internal-deps = final.rust-internal-deps.override {
               rust-external-deps = final.rust-external-deps.override {
-                overrideCatalogAuth = "catalog-auth-gssapi";
+                overrideCatalogAuth = "floxhub-authn-kerberos";
               };
             };
           };
@@ -203,7 +203,7 @@
           flox-package-builder
           flox-activations
           flox-cli
-          flox-cli-gssapi
+          flox-cli-kerberos
           flox-cli-tests
           flox-manpages
           flox
