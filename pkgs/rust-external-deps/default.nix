@@ -11,7 +11,7 @@
   flox-src,
   llvmPackages,
   # Override catalog authentication strategy
-  # Options: "catalog-auth-gssapi"
+  # Options: "floxhub-authn-kerberos"
   overrideCatalogAuth ? null,
 }:
 let
@@ -49,7 +49,7 @@ let
         openssl.dev
       ]
       # Conditionally include Kerberos dependencies for GSSAPI
-      ++ lib.optionals (overrideCatalogAuth == "catalog-auth-gssapi") [ krb5.dev ];
+      ++ lib.optionals (overrideCatalogAuth == "floxhub-authn-kerberos") [ krb5.dev ];
 
       nativeBuildInputs = [
         pkg-config
