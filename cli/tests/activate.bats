@@ -5190,6 +5190,28 @@ EOF
   assert_equal "$stderr" "$expected_stderr"
 }
 
+@test "hook.on-activate still captures env after exit 0" {
+  project_setup
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+    [hook]
+    on-activate = """
+      export TEST_VAR="captured"
+      exit 0
+    """
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  run "$FLOX_BIN" activate -c 'echo "TEST_VAR=$TEST_VAR"'
+  assert_success
+  assert_output "Sourcing .bashrc
+Setting PATH from .bashrc
+TEST_VAR=captured"
+}
+
 @test "start state directory and files are not world-readable (may contain secrets)" {
   project_setup
 
