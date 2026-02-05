@@ -381,6 +381,7 @@ impl ActivationState {
     }
 
     /// Returns the list of attached PIDs that are still running.
+    #[cfg(any(test, feature = "tests"))]
     pub fn attached_pids_running(&self) -> Vec<Pid> {
         self.attached_pids
             .keys()
