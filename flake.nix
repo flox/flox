@@ -108,6 +108,16 @@
           flox-buildenv = callPackage ./pkgs/flox-buildenv { };
           flox-activations = callPackage ./pkgs/flox-activations { };
           flox-cli = callPackage ./pkgs/flox-cli { };
+
+          # Kerberos-enabled variant with GSSAPI authentication
+          flox-cli-kerberos = callPackage ./pkgs/flox-cli {
+            rust-internal-deps = final.rust-internal-deps.override {
+              rust-external-deps = final.rust-external-deps.override {
+                overrideCatalogAuth = "floxhub-authn-kerberos";
+              };
+            };
+          };
+
           flox-manpages = callPackage ./pkgs/flox-manpages { }; # Flox Command Line Interface Manpages
           flox = callPackage ./pkgs/flox { }; # Flox Command Line Interface ( production build ).
 
@@ -191,6 +201,7 @@
           flox-package-builder
           flox-activations
           flox-cli
+          flox-cli-kerberos
           flox-cli-tests
           flox-manpages
           flox

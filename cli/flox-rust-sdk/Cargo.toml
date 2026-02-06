@@ -49,6 +49,10 @@ http.workspace = true
 httpmock.workspace = true
 schemars = { workspace = true, features = ["chrono04"] }
 
+# Optional dependencies for GSSAPI authentication
+libgssapi = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
+
 [dev-dependencies]
 anyhow.workspace = true
 httpmock.workspace = true
@@ -64,6 +68,10 @@ sentry = { workspace = true, features = ["test"] }
 
 
 [features]
+# Catalog authentication strategy
+# Kerberos authentication is available when this feature is enabled
+floxhub-authn-kerberos = ["dep:libgssapi", "dep:base64"]
+
 # allow exporting test helpers in dev mode only
 tests = [
     "dep:tracing-subscriber",

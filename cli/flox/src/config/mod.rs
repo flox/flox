@@ -8,6 +8,7 @@ use config::{Config as HierarchicalConfig, Environment};
 use flox_core::{WriteError, write_atomically};
 use flox_rust_sdk::flox::{Features, RemoteEnvironmentRef};
 use flox_rust_sdk::models::search::SearchLimit;
+use flox_rust_sdk::providers::catalog_auth::AuthMethod;
 use itertools::{Either, Itertools};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -80,6 +81,10 @@ pub struct FloxConfig {
     // Using a URL here adds an extra trailing slash,
     // so just use a String.
     pub catalog_url: Option<String>,
+
+    /// Authentication mode for FloxHub
+    #[serde(default)]
+    pub floxhub_authn_mode: AuthMethod,
 
     /// Rule whether to change the shell prompt in activated environments.
     /// Deprecated in favor of set_prompt and hide_default_prompt.
