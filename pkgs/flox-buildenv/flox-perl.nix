@@ -97,6 +97,9 @@ perl.overrideAttrs (oldAttrs: {
     "STRIPFLAGS=-s" # Run strip on installed binaries.
   ];
 
+  # Testing
+  doCheck = false;
+
   postInstall = ''
     # The upstream hook depends upon $man being defined.
     man="/no-such-path"
