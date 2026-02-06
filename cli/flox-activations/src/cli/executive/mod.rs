@@ -15,7 +15,7 @@ use nix::unistd::{Pid, getpgid, getpid, setsid};
 use reaper::reap_orphaned_children;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, error, info, instrument};
-use watcher::{LockedActivationState, PidWatcher};
+use watcher::LockedActivationState;
 
 use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
 use crate::logger;
@@ -163,7 +163,6 @@ fn run_event_loop(
 ) -> Result<()> {
     let state_json_path = state_json_path(&activation_state_dir);
 
-    let mut pid_watcher = PidWatcher::new(state_json_path.clone(), activation_state_dir.clone());
     let mut loop_guard = LoopGuard::new(5);
 
     let process_compose_bin = project_ctx.process_compose_bin.to_path_buf();
@@ -190,7 +189,6 @@ fn run_event_loop(
                 let should_exit = handle_process_exited(
                     pid,
                     &coordinator,
-                    &mut pid_watcher,
                     &mut loop_guard,
                     &state_json_path,
                     &process_compose_bin,
@@ -286,7 +284,6 @@ impl LoopGuard {
 fn handle_process_exited(
     pid: i32,
     coordinator: &EventCoordinator,
-    pid_watcher: &mut PidWatcher,
     loop_guard: &mut LoopGuard,
     state_json_path: &Path,
     process_compose_bin: &Path,
@@ -297,7 +294,7 @@ fn handle_process_exited(
     coordinator.stop_monitoring(pid);
 
     // Use PidWatcher to clean up the state
-    match pid_watcher.cleanup_pid(pid) {
+    match watcher::cleanup_pid(state_json_path, activation_state_dir, pid) {
         Ok(None) => {
             // Still have active PIDs - check if this PID re-attached
             // and needs to be monitored again.
@@ -669,8 +666,6 @@ mod test {
 
         // These are all dummy values
         let coordinator = EventCoordinator::new().unwrap();
-        let mut pid_watcher =
-            PidWatcher::new(state_json.clone(), activation_state_directory.clone());
         let mut loop_guard = LoopGuard::new(5);
         let (_attach, project) =
             test_context(&dot_flox_path, runtime_dir, &flox_env.to_string_lossy());
@@ -681,7 +676,6 @@ mod test {
         let result = handle_process_exited(
             pid1,
             &coordinator,
-            &mut pid_watcher,
             &mut loop_guard,
             &state_json,
             &project.process_compose_bin,
@@ -755,8 +749,6 @@ mod test {
         let state_json = state_json_path(&activation_state_directory);
 
         let coordinator = EventCoordinator::new().unwrap();
-        let mut pid_watcher =
-            PidWatcher::new(state_json.clone(), activation_state_directory.clone());
         // Use a low limit so we can test hitting it
         let mut loop_guard = LoopGuard::new(2);
         let (_attach, project) =
@@ -767,7 +759,6 @@ mod test {
         let result = handle_process_exited(
             pid,
             &coordinator,
-            &mut pid_watcher,
             &mut loop_guard,
             &state_json,
             &project.process_compose_bin,
@@ -781,7 +772,6 @@ mod test {
         let result = handle_process_exited(
             pid,
             &coordinator,
-            &mut pid_watcher,
             &mut loop_guard,
             &state_json,
             &project.process_compose_bin,
