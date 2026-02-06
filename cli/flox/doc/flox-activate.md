@@ -30,7 +30,7 @@ Configures a shell with everything defined by the environment:
 * Runs hooks.
 * Starts services (if `--start-services` is specified).
 
-`flox activate` may run in one of three modes:
+`flox activate` may run in one of four modes:
 
 * interactive: `flox activate` when invoked from an interactive shell\
   Launches an interactive sub-shell.

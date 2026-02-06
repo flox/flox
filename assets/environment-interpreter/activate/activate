@@ -209,8 +209,9 @@ fi
 if [ "$_command_mode" = "false" ]; then
   # Set umask to ensure files are created with 0600 (may contain secrets)
   umask 077
-  # First activation of this environment. Snapshot environment to start.
   _start_env_json="$_start_state_dir/start.env.json"
+  _end_env_json="$_start_state_dir/end.env.json"
+  # First activation of this environment. Snapshot environment to start.
   $_jq -nS env > "$_start_env_json"
 fi
 
@@ -244,10 +245,19 @@ if [ "$_skip_hook_on_activate" = "false" ]; then
     # as configuration statements by the "in-place" activation
     # mode. So, we'll redirect stdout to stderr.
     set +euo pipefail
+    if [ "$_command_mode" = "false" ]; then
+      # Capture env if hook calls `exit` early.
+      # shellcheck disable=SC2329 # called indirectly
+      exit() {
+        $_jq -nS env > "$_end_env_json"
+        builtin exit "$@"
+      }
+    fi
     "$_flox_activate_tracer" "$FLOX_ENV/activate.d/hook-on-activate" START
     # shellcheck disable=SC1091 # from rendered environment
     source "$FLOX_ENV/activate.d/hook-on-activate" 1>&2
     "$_flox_activate_tracer" "$FLOX_ENV/activate.d/hook-on-activate" END
+    unset -f exit 2> /dev/null || true
     set -euo pipefail
   else
     "$_flox_activate_tracer" "$FLOX_ENV/activate.d/hook-on-activate" NOT FOUND
@@ -263,8 +273,7 @@ if [ "$_command_mode" = "true" ]; then
 fi
 
 if [ "$_command_mode" = "false" ]; then
-  # Capture ending environment.
-  _end_env_json="$_start_state_dir/end.env.json"
+  # Capture ending environment for normal completion (no early `exit` from hook)
   $_jq -nS env > "$_end_env_json"
 fi
 

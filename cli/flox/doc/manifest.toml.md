@@ -380,10 +380,8 @@ fish = """
 """
 ```
 
-Profile scripts are re-run for nested activations.
-A nested activation can occur when an environment is already active and either
-`eval "$(flox activate)"` or `flox activate -- CMD` is run.
-In this scenario, profile scripts are run a second time.
+Profile scripts are re-run when an environment is already active and
+`eval "$(flox activate)"` or `flox activate -c CMD` is run.
 Re-running profile scripts allows aliases to be set in subshells that inherit
 from a parent shell with an already active environment.
 
