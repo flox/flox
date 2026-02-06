@@ -164,6 +164,7 @@ fn run_event_loop(
     let state_json_path = state_json_path(&activation_state_dir);
 
     let mut pid_watcher = PidWatcher::new(state_json_path.clone(), activation_state_dir.clone());
+    let mut loop_guard = LoopGuard::new(5);
 
     let process_compose_bin = project_ctx.process_compose_bin.to_path_buf();
     let socket_path = project_ctx.flox_services_socket.to_path_buf();
@@ -190,6 +191,7 @@ fn run_event_loop(
                     pid,
                     &coordinator,
                     &mut pid_watcher,
+                    &mut loop_guard,
                     &state_json_path,
                     &process_compose_bin,
                     &socket_path,
@@ -248,6 +250,35 @@ fn run_event_loop(
     }
 }
 
+/// Guards against infinite re-monitoring loops for the same PID.
+/// If a PID is re-monitored `limit` times consecutively, further re-monitoring is skipped.
+struct LoopGuard {
+    pid: Option<i32>,
+    count: u32,
+    limit: u32,
+}
+
+impl LoopGuard {
+    fn new(limit: u32) -> Self {
+        Self {
+            pid: None,
+            count: 0,
+            limit,
+        }
+    }
+
+    /// Record a PID re-monitoring attempt. Returns true if allowed, false if blocked.
+    fn allow_remonitor(&mut self, pid: i32) -> bool {
+        if self.pid == Some(pid) {
+            self.count += 1;
+        } else {
+            self.pid = Some(pid);
+            self.count = 1;
+        }
+        self.count <= self.limit
+    }
+}
+
 /// Handle a process exit event by cleaning up state and determining if the loop should continue.
 ///
 /// Returns `true` if all PIDs have terminated and cleanup completed (exit the loop),
@@ -256,6 +287,7 @@ fn handle_process_exited(
     pid: i32,
     coordinator: &EventCoordinator,
     pid_watcher: &mut PidWatcher,
+    loop_guard: &mut LoopGuard,
     state_json_path: &Path,
     process_compose_bin: &Path,
     socket_path: &Path,
@@ -293,10 +325,17 @@ fn handle_process_exited(
                 .into_iter()
                 .find(|(attached_pid, _)| *attached_pid == pid);
             if let Some((pid, expiration)) = pid_reused {
-                debug!(pid, "PID re-attached to activation, starting new monitor");
-                coordinator
-                    .start_monitoring(pid, expiration)
-                    .context("failed to restart monitoring for re-attached PID")?;
+                if loop_guard.allow_remonitor(pid) {
+                    debug!(pid, "PID re-attached to activation, starting new monitor");
+                    coordinator
+                        .start_monitoring(pid, expiration)
+                        .context("failed to restart monitoring for re-attached PID")?;
+                } else {
+                    error!(
+                        pid,
+                        "PID re-monitored too many times, skipping to prevent loop"
+                    );
+                }
             }
             Ok(false)
         },
@@ -632,6 +671,7 @@ mod test {
         let coordinator = EventCoordinator::new().unwrap();
         let mut pid_watcher =
             PidWatcher::new(state_json.clone(), activation_state_directory.clone());
+        let mut loop_guard = LoopGuard::new(5);
         let (_attach, project) =
             test_context(&dot_flox_path, runtime_dir, &flox_env.to_string_lossy());
 
@@ -642,6 +682,7 @@ mod test {
             pid1,
             &coordinator,
             &mut pid_watcher,
+            &mut loop_guard,
             &state_json,
             &project.process_compose_bin,
             &project.flox_services_socket,
@@ -661,5 +702,101 @@ mod test {
 
         // Clean up
         stop_process(proc2);
+    }
+
+    #[test]
+    fn loop_guard_blocks_after_limit() {
+        let mut guard = LoopGuard::new(2);
+        let pid = 12345;
+
+        // First two calls should be allowed
+        assert!(guard.allow_remonitor(pid));
+        assert!(guard.allow_remonitor(pid));
+
+        assert!(!guard.allow_remonitor(pid), "third call should be blocked");
+
+        // Different PID resets the counter
+        let other_pid = 67890;
+        assert!(guard.allow_remonitor(other_pid));
+        assert!(
+            guard.allow_remonitor(pid),
+            "counter should reset after different PID"
+        );
+    }
+
+    /// Test that handle_process_exited increments the loop guard when a PID
+    /// is still in state.json and needs to be re-monitored.
+    ///
+    /// This simulates the edge case where a PID exits but is immediately
+    /// re-used by a new attachment before cleanup completes.
+    #[test]
+    fn handle_process_exited_increments_loop_guard() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let runtime_dir = temp_dir.path();
+        let dot_flox_path = PathBuf::from(".flox");
+        let flox_env = dot_flox_path.join("run/test");
+        let store_path = "store_path".to_string();
+
+        // Start a process that will stay running (so cleanup_pid won't remove it)
+        let proc = start_process();
+        let pid = proc.id() as i32;
+
+        // Create state with this PID attached
+        let mut state =
+            ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
+        let result = state.start_or_attach(pid, &store_path);
+        let StartOrAttachResult::Start { start_id, .. } = result else {
+            panic!("Expected Start")
+        };
+        state.set_ready(&start_id);
+        write_activation_state(runtime_dir, &dot_flox_path, state);
+
+        let activation_state_directory = activation_state_dir_path(runtime_dir, &dot_flox_path);
+        let state_json = state_json_path(&activation_state_directory);
+
+        let coordinator = EventCoordinator::new().unwrap();
+        let mut pid_watcher =
+            PidWatcher::new(state_json.clone(), activation_state_directory.clone());
+        // Use a low limit so we can test hitting it
+        let mut loop_guard = LoopGuard::new(2);
+        let (_attach, project) =
+            test_context(&dot_flox_path, runtime_dir, &flox_env.to_string_lossy());
+
+        // First call: PID is in state and running, so it will be re-monitored.
+        // loop_guard.allow_remonitor(pid) returns true (count=1 < limit=2)
+        let result = handle_process_exited(
+            pid,
+            &coordinator,
+            &mut pid_watcher,
+            &mut loop_guard,
+            &state_json,
+            &project.process_compose_bin,
+            &project.flox_services_socket,
+            &activation_state_directory,
+        );
+        assert!(matches!(result, Ok(false)), "first call should succeed");
+
+        // Second call: loop_guard.allow_remonitor(pid) returns false (count=2 >= limit=2)
+        // The re-monitoring should be skipped
+        let result = handle_process_exited(
+            pid,
+            &coordinator,
+            &mut pid_watcher,
+            &mut loop_guard,
+            &state_json,
+            &project.process_compose_bin,
+            &project.flox_services_socket,
+            &activation_state_directory,
+        );
+        assert!(matches!(result, Ok(false)), "second call should succeed");
+
+        // Verify the guard state: calling allow_remonitor again should return false
+        // since we've hit the limit
+        assert!(
+            !loop_guard.allow_remonitor(pid),
+            "loop guard should block after handle_process_exited incremented it"
+        );
+
+        stop_process(proc);
     }
 }
