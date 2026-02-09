@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Sun, 28 Dec 2025 13:37:33 GMT
+    value: Mon, 09 Feb 2026 21:59:03 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,7 +14,7 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: WTTYojNhoAMEaKQ=
+    value: YiLKIgPWoAMESuw=
   body: '{"items":[{"name":"toplevel","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"attr_path_not_found.not_found_for_all_systems","message":"The package ''darwin.ps'' is not found for all the requested systems, suggest limiting systems to (aarch64-darwin,x86_64-darwin).","context":{"attr_path":"darwin.ps","install_id":"ps","valid_systems":"aarch64-darwin,x86_64-darwin"}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'
 ---
 when:
@@ -25,13 +25,13 @@ then:
   status: 200
   header:
   - name: date
-    value: Sun, 28 Dec 2025 13:37:33 GMT
+    value: Mon, 09 Feb 2026 21:59:03 GMT
   - name: content-type
     value: application/json
   - name: content-length
-    value: '2150'
+    value: '2136'
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: WTTYrh3mIAMESlA=
-  body: '{"items":[{"name":"toplevel","page":{"page":916364,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"darwin.ps","pkg_path":"darwin.ps","derivation":"/nix/store/vdmaqlndh6g93mlw7cl3jzxn94g0p5ia-adv_cmds-235.drv","name":"adv_cmds-235","pname":"ps","version":"235","system":"aarch64-darwin","outputs":[{"name":"ps","store_path":"/nix/store/jlmrjfmhcmiyayvl968wgba06x2ba389-adv_cmds-235-ps"},{"name":"man","store_path":"/nix/store/49wdmkngkfkmvxzdzh9f2giphcfall9r-adv_cmds-235-man"},{"name":"out","store_path":"/nix/store/xadfwzm0bv131rqxg5krp1hcc5gvjdmm-adv_cmds-235"}],"outputs_to_install":["man","out"],"description":"Advanced commands package for Darwin","license":"[ APSL-1.0, APSL-2.0 ]","locked_url":"https://github.com/flox/nixpkgs?rev=3e2499d5539c16d0d173ba53552a4ff8547f4539","rev":"3e2499d5539c16d0d173ba53552a4ff8547f4539","rev_count":916364,"rev_date":"2025-12-25T08:32:45Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-12-26T03:02:30.797972Z","cache_uri":null,"install_id":"ps"},{"catalog":"nixpkgs","attr_path":"darwin.ps","pkg_path":"darwin.ps","derivation":"/nix/store/sddc7mj6wlmgxfrcvdpz1f36q2qy703q-adv_cmds-235.drv","name":"adv_cmds-235","pname":"ps","version":"235","system":"x86_64-darwin","outputs":[{"name":"ps","store_path":"/nix/store/13nhr4jfn2z4jd5k35hfm5ml6nia2jq5-adv_cmds-235-ps"},{"name":"man","store_path":"/nix/store/8kw75fhl7xv926ycfbav6kdbhl9c9jn5-adv_cmds-235-man"},{"name":"out","store_path":"/nix/store/kfj79s8d9g8fa6p0xa2dlv7ws8d6c12q-adv_cmds-235"}],"outputs_to_install":["man","out"],"description":"Advanced commands package for Darwin","license":"[ APSL-1.0, APSL-2.0 ]","locked_url":"https://github.com/flox/nixpkgs?rev=3e2499d5539c16d0d173ba53552a4ff8547f4539","rev":"3e2499d5539c16d0d173ba53552a4ff8547f4539","rev_count":916364,"rev_date":"2025-12-25T08:32:45Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-12-26T03:34:57.176855Z","cache_uri":null,"install_id":"ps"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
+    value: YiLKLhGCoAMEaPg=
+  body: '{"items":[{"name":"toplevel","page":{"page":942779,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"darwin.ps","pkg_path":"darwin.ps","derivation":"/nix/store/jnyfb9bqvrddhxq4jvi7nsrxiap2vp54-adv_cmds-235.drv","name":"adv_cmds-235","pname":"ps","version":"235","system":"aarch64-darwin","outputs":[{"name":"ps","store_path":"/nix/store/skc7jkcgdwm7rfdy8cwfj288dr536xnm-adv_cmds-235-ps"},{"name":"man","store_path":"/nix/store/3zfy2x8q24627nbvc8aq8rrin01vlxyx-adv_cmds-235-man"},{"name":"out","store_path":"/nix/store/l7whs5fwk0s7lw3w1kqia3j5q13bs5kf-adv_cmds-235"}],"outputs_to_install":["man","out","out"],"description":"Advanced commands package for Darwin","license":"[ APSL-1.0, APSL-2.0 ]","locked_url":"https://github.com/flox/nixpkgs?rev=d6c71932130818840fc8fe9509cf50be8c64634f","rev":"d6c71932130818840fc8fe9509cf50be8c64634f","rev_count":942779,"rev_date":"2026-02-08T14:52:16Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-02-09T04:38:28.692399Z","cache_uri":null,"install_id":"ps"},{"catalog":"nixpkgs","attr_path":"darwin.ps","pkg_path":"darwin.ps","derivation":"/nix/store/yicvy9qml65gbb6x1953k8szrvbggd5s-adv_cmds-235.drv","name":"adv_cmds-235","pname":"ps","version":"235","system":"x86_64-darwin","outputs":[{"name":"ps","store_path":"/nix/store/ig4ryhkyaldj5mcrm2m8rs95q7822rw3-adv_cmds-235-ps"},{"name":"man","store_path":"/nix/store/qf9aiy714c4v4z20zcjr07r6lqjj5vif-adv_cmds-235-man"},{"name":"out","store_path":"/nix/store/8nyfvkp4sgk9d74jrjpp9b1yma3zwlf2-adv_cmds-235"}],"outputs_to_install":["man","out"],"description":"Advanced commands package for Darwin","license":"[ APSL-1.0, APSL-2.0 ]","locked_url":"https://github.com/flox/nixpkgs?rev=d6c71932130818840fc8fe9509cf50be8c64634f","rev":"d6c71932130818840fc8fe9509cf50be8c64634f","rev_count":942779,"rev_date":"2026-02-08T14:52:16Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-02-09T05:44:13.833307Z","cache_uri":null,"install_id":"ps"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'

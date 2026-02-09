@@ -556,8 +556,8 @@ mod tests {
             compatible: ProvidedPackage {
                 name: "go".to_string(),
                 attr_path: "go".into(),
-                display_version: "1.25.4".to_string(),
-                version: Some("1.25.4".to_string()),
+                display_version: "1.25.5".to_string(),
+                version: Some("1.25.5".to_string()),
             }
         });
     }

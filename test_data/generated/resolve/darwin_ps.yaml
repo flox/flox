@@ -6,13 +6,13 @@ then:
   status: 200
   header:
   - name: date
-    value: Sun, 28 Dec 2025 13:37:32 GMT
+    value: Mon, 09 Feb 2026 21:59:14 GMT
   - name: content-type
     value: application/json
   - name: content-length
-    value: '1146'
+    value: '1136'
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: WTTYfjQDIAMEaOQ=
-  body: '{"items":[{"name":"toplevel","page":{"page":916364,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"darwin.ps","pkg_path":"darwin.ps","derivation":"/nix/store/sddc7mj6wlmgxfrcvdpz1f36q2qy703q-adv_cmds-235.drv","name":"adv_cmds-235","pname":"ps","version":"235","system":"x86_64-darwin","outputs":[{"name":"ps","store_path":"/nix/store/13nhr4jfn2z4jd5k35hfm5ml6nia2jq5-adv_cmds-235-ps"},{"name":"man","store_path":"/nix/store/8kw75fhl7xv926ycfbav6kdbhl9c9jn5-adv_cmds-235-man"},{"name":"out","store_path":"/nix/store/kfj79s8d9g8fa6p0xa2dlv7ws8d6c12q-adv_cmds-235"}],"outputs_to_install":["man","out"],"description":"Advanced commands package for Darwin","license":"[ APSL-1.0, APSL-2.0 ]","locked_url":"https://github.com/flox/nixpkgs?rev=3e2499d5539c16d0d173ba53552a4ff8547f4539","rev":"3e2499d5539c16d0d173ba53552a4ff8547f4539","rev_count":916364,"rev_date":"2025-12-25T08:32:45Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-12-26T03:34:57.176855Z","cache_uri":null,"install_id":"ps"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
+    value: YiLL8jZDoAMEbwQ=
+  body: '{"items":[{"name":"toplevel","page":{"page":942779,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"darwin.ps","pkg_path":"darwin.ps","derivation":"/nix/store/yicvy9qml65gbb6x1953k8szrvbggd5s-adv_cmds-235.drv","name":"adv_cmds-235","pname":"ps","version":"235","system":"x86_64-darwin","outputs":[{"name":"ps","store_path":"/nix/store/ig4ryhkyaldj5mcrm2m8rs95q7822rw3-adv_cmds-235-ps"},{"name":"man","store_path":"/nix/store/qf9aiy714c4v4z20zcjr07r6lqjj5vif-adv_cmds-235-man"},{"name":"out","store_path":"/nix/store/8nyfvkp4sgk9d74jrjpp9b1yma3zwlf2-adv_cmds-235"}],"outputs_to_install":["man","out"],"description":"Advanced commands package for Darwin","license":"[ APSL-1.0, APSL-2.0 ]","locked_url":"https://github.com/flox/nixpkgs?rev=d6c71932130818840fc8fe9509cf50be8c64634f","rev":"d6c71932130818840fc8fe9509cf50be8c64634f","rev_count":942779,"rev_date":"2026-02-08T14:52:16Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-02-09T05:44:13.833307Z","cache_uri":null,"install_id":"ps"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
