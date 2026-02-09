@@ -1083,13 +1083,15 @@ pub mod tests {
         create_remotes,
         get_remote_url,
         init_temp_repo,
+        test_git_options,
     };
     use crate::providers::nix::test_helpers::known_store_path;
 
     fn example_git_remote_repo() -> (tempfile::TempDir, GitCommandProvider, String) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
 
-        let repo = GitCommandProvider::init(tempdir_handle.path(), true).unwrap();
+        let repo =
+            GitCommandProvider::init_with(test_git_options(), tempdir_handle.path(), true).unwrap();
 
         let remote_uri = format!("file://{}", tempdir_handle.path().display());
 
@@ -1147,7 +1149,7 @@ pub mod tests {
             None,
         );
 
-        let git = GitCommandProvider::init(repo_root, false).unwrap();
+        let git = GitCommandProvider::init_with(test_git_options(), repo_root, false).unwrap();
 
         git.checkout("main", true).expect("checkout main branch");
         git.add(&[&env.dot_flox_path()]).expect("adding flox files");

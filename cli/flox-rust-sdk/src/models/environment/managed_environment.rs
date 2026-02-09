@@ -1747,8 +1747,8 @@ mod test {
     use crate::models::manifest::typed::{Inner, Manifest, PackageDescriptorCatalog, Vars};
     use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::catalog::{GENERATED_DATA, MockClient};
-    use crate::providers::git::tests::commit_file;
-    use crate::providers::git::{GitCommandOptions, GitCommandProvider};
+    use crate::providers::git::GitCommandProvider;
+    use crate::providers::git::tests::{commit_file, test_git_options};
 
     /// Create a [ManagedPointer] for testing with mock owner and name data
     /// as well as an override for the floxhub git url to fetch from local
@@ -1773,7 +1773,8 @@ mod test {
             .join(test_pointer.owner.as_str())
             .join("floxmeta");
         fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let remote =
+            GitCommandProvider::init_with(test_git_options(), &remote_path, false).unwrap();
         (test_pointer, remote_path, remote)
     }
 
@@ -1786,7 +1787,7 @@ mod test {
         let bare_tempdir = base_tempdir.as_ref().join(name);
 
         let mut generations = Generations::init(
-            GitCommandOptions::default(),
+            test_git_options(),
             &checked_out_tempdir,
             bare_tempdir,
             name.to_string(),

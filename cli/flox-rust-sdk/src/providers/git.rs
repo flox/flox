@@ -1292,10 +1292,17 @@ pub mod tests {
 
     use super::*;
 
+    pub fn test_git_options() -> GitCommandOptions {
+        let mut options = GitCommandOptions::default();
+        options.add_config_flag("user.name", "Test User");
+        options.add_config_flag("user.email", "test@example.com");
+        options
+    }
+
     pub fn init_temp_repo(bare: bool) -> (GitCommandProvider, tempfile::TempDir) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
-
-        let git_command_provider = GitCommandProvider::init(tempdir_handle.path(), bare).unwrap();
+        let git_command_provider =
+            GitCommandProvider::init_with(test_git_options(), tempdir_handle.path(), bare).unwrap();
         (git_command_provider, tempdir_handle)
     }
 
@@ -1305,8 +1312,8 @@ pub mod tests {
     ) -> (GitCommandProvider, tempfile::TempDir) {
         let tempdir_handle =
             tempfile::TempDir::with_prefix_in(format!("{name}-"), std::env::temp_dir()).unwrap();
-
-        let git_command_provider = GitCommandProvider::init(tempdir_handle.path(), bare).unwrap();
+        let git_command_provider =
+            GitCommandProvider::init_with(test_git_options(), tempdir_handle.path(), bare).unwrap();
         (git_command_provider, tempdir_handle)
     }
 

@@ -1335,6 +1335,7 @@ mod tests {
     use crate::models::environment::Environment;
     use crate::models::environment::generations::test_helpers::{ARGV, AUTHOR, HOSTNAME};
     use crate::models::environment::path_environment::test_helpers::new_path_environment;
+    use crate::providers::git::tests::test_git_options;
 
     const GEN_ID_1: GenerationId = GenerationId(1);
     const GEN_ID_2: GenerationId = GenerationId(2);
@@ -2015,7 +2016,7 @@ mod tests {
         let floxmeta_temp_path = tempfile::tempdir_in(&tempdir).unwrap().keep();
 
         let mut generations = Generations::init(
-            GitCommandOptions::default(),
+            test_git_options(),
             floxmeta_checkedout_path,
             floxmeta_temp_path,
             "some-branch".to_string(),
