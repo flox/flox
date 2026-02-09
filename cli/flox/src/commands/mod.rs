@@ -79,7 +79,7 @@ use crate::utils::active_environments::{
 };
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
-use crate::utils::init::{init_catalog_client, init_telemetry_uuid};
+use crate::utils::init::init_catalog_client;
 use crate::utils::message;
 use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub};
 use crate::utils::update_notifications::UpdateNotification;
