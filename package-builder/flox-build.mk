@@ -143,14 +143,27 @@ ifeq (,$(NIX_EXPRESSION_DIR))
   $(error NIX_EXPRESSION_DIR not defined)
 endif
 
-# If there is no git root,
+# Construct three orthogonal arguments for nef:
+#   source-ref: flakeref to the source root (for fetching/tracking)
+#   pkgs-dir:   relative path to packages directory within the source
+#   catalogs-lock: relative path to catalog lock file within the source (if present)
 ifeq (,$(NIX_EXPRESSION_GIT_ROOT))
   NIX_EXPRESSION_DIR_ARGS := \
-    --arg pkgs-dir '$(NIX_EXPRESSION_DIR)'
+    --argstr source-ref 'path:$(dir $(NIX_EXPRESSION_DIR))' \
+    --argstr pkgs-dir '$(notdir $(NIX_EXPRESSION_DIR))'
+  NIX_CATALOGS_LOCK_PATH := $(dir $(NIX_EXPRESSION_DIR))/nix-builds.lock
+  NIX_CATALOGS_LOCK_REL := nix-builds.lock
 else
   NIX_EXPRESSION_DIR_ARGS := \
-    --argstr pkgs-dir '$(NIX_EXPRESSION_GIT_ROOT)' \
-    --argstr git-subdir '$(NIX_EXPRESSION_GIT_SUBDIR)'
+    --argstr source-ref 'git+file://$(NIX_EXPRESSION_GIT_ROOT)' \
+    --argstr pkgs-dir '$(NIX_EXPRESSION_GIT_SUBDIR)'
+  NIX_CATALOGS_LOCK_PATH := $(NIX_EXPRESSION_GIT_ROOT)/$(NIX_EXPRESSION_GIT_SUBDIR)/../nix-builds.lock
+  NIX_CATALOGS_LOCK_REL := $(NIX_EXPRESSION_GIT_SUBDIR)/../nix-builds.lock
+endif
+
+# Add catalogs-lock only if the file exists
+ifneq (,$(wildcard $(NIX_CATALOGS_LOCK_PATH)))
+  NIX_EXPRESSION_DIR_ARGS += --argstr catalogs-lock '$(NIX_CATALOGS_LOCK_REL)'
 endif
 
 
