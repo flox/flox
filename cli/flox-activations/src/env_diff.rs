@@ -9,6 +9,9 @@ use shell_gen::{GenerateShell, SetVar, Statement, UnsetVar};
 /// in hooks and result in keys containing `%%` that are invalid in other userShells.
 const BASH_EXPORTED_FUNC_PREFIX: &str = "BASH_FUNC_";
 
+pub const ENV_DIFF_START_JSON: &str = "start.env.json";
+pub const ENV_DIFF_END_JSON: &str = "end.env.json";
+
 #[derive(Debug, Clone)]
 pub struct EnvDiff {
     pub additions: HashMap<String, String>,
@@ -25,8 +28,8 @@ impl EnvDiff {
 
     /// Load an EnvDiff from start.env.json and end.env.json files in activation_state_dir
     pub fn from_files(activation_state_dir: impl AsRef<Path>) -> Result<EnvDiff> {
-        let start_json = activation_state_dir.as_ref().join("start.env.json");
-        let end_json = activation_state_dir.as_ref().join("end.env.json");
+        let start_json = activation_state_dir.as_ref().join(ENV_DIFF_START_JSON);
+        let end_json = activation_state_dir.as_ref().join(ENV_DIFF_END_JSON);
 
         let start_env = parse_env_json(&start_json)
             .with_context(|| format!("Failed to read {}", start_json.display()))?;

@@ -5190,7 +5190,7 @@ EOF
   assert_equal "$stderr" "$expected_stderr"
 }
 
-@test "hook.on-activate still captures env after exit 0" {
+@test "hook.on-activate exit 0 produces helpful error" {
   project_setup
 
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -5205,11 +5205,38 @@ EOF
 
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
+  unset RUST_BACKTRACE
   run "$FLOX_BIN" activate -c 'echo "TEST_VAR=$TEST_VAR"'
-  assert_success
-  assert_output "Sourcing .bashrc
-Setting PATH from .bashrc
-TEST_VAR=captured"
+  assert_failure
+  assert_output "✘ ERROR: The hook.on-activate script did not complete normally.
+
+Review your script for the use of:
+- 'exit' commands, which should be replaced with 'return'
+- 'exec' commands, which should be run in a subshell: '(exec command)'"
+}
+
+@test "hook.on-activate exec produces helpful error" {
+  project_setup
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+    [hook]
+    on-activate = """
+      exec true
+    """
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  unset RUST_BACKTRACE
+  run "$FLOX_BIN" activate -c 'echo hello'
+  assert_failure
+  assert_output "✘ ERROR: The hook.on-activate script did not complete normally.
+
+Review your script for the use of:
+- 'exit' commands, which should be replaced with 'return'
+- 'exec' commands, which should be run in a subshell: '(exec command)'"
 }
 
 @test "start state directory and files are not world-readable (may contain secrets)" {

@@ -22,6 +22,7 @@ use flox_core::activations::{
     write_activations_json,
 };
 use fslock::LockFile;
+use indoc::indoc;
 use nix::sys::signal::{Signal, kill};
 use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::{Pid, getpid};
@@ -31,6 +32,7 @@ use tracing::{debug, error};
 
 use crate::activate_script_builder::assemble_activate_command;
 use crate::cli::executive::ExecutiveCtx;
+use crate::env_diff::ENV_DIFF_END_JSON;
 use crate::process_compose::{
     process_compose_down,
     start_services_via_socket,
@@ -98,6 +100,15 @@ pub fn start(
     if !status.success() {
         // hook.on-activate may have already printed to stderr
         bail!("Running hook.on-activate failed");
+    }
+
+    if !start_state_dir.join(ENV_DIFF_END_JSON).exists() {
+        bail!(indoc! {"
+            The hook.on-activate script did not complete normally.
+
+            Review your script for the use of:
+            - 'exit' commands, which should be replaced with 'return'
+            - 'exec' commands, which should be run in a subshell: '(exec command)'"});
     }
 
     // Re-acquire lock to mark ready
