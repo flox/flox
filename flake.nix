@@ -127,10 +127,18 @@
                   name = "flox-activations";
                   path = floxActivationsBin;
                 }
-                ''
-                  mkdir -p $out/libexec
-                  ln -s ${floxActivationsBin} $out/libexec/flox-activations
-                '';
+                (
+                  ''
+                    mkdir -p $out/libexec
+                    ln -s ${floxActivationsBin} $out/libexec/flox-activations
+                  ''
+                  + prev.lib.optionalString prev.stdenv.isLinux ''
+                    # Ensure OpenSSL is in the closure for the cargo-built binary
+                    # which links against it via sentry -> native-tls
+                    mkdir -p $out/nix-support
+                    ln -s ${prev.openssl.out} $out/nix-support/openssl
+                  ''
+                );
           in
           prev.lib.makeScope prev.newScope (self: {
             rust-internal-deps = prev.rust-internal-deps.override {
