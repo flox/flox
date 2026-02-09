@@ -4,50 +4,14 @@ use std::path::Path;
 use anyhow::Result;
 use fslock::LockFile;
 use indoc::formatdoc;
-use tokio::io::AsyncReadExt;
 use tracing::debug;
 
 use crate::utils::message;
 use crate::utils::metrics::{METRICS_LOCK_FILE_NAME, METRICS_UUID_FILE_NAME};
 
-/// Determine whether the user has previously opted-out of metrics
-/// through the legacy consent dialog.
-///
-/// Check whether the current uuid file is empty.
-///
-/// An empty metrics uuid file used to signal telemetry opt-out.
-/// We are moving this responsibility to the user configuration file.
-/// This detects whether a migration is necessary.
-pub async fn telemetry_opt_out_needs_migration(
-    data_dir: impl AsRef<Path>,
-    cache_dir: impl AsRef<Path>,
-) -> Result<bool> {
-    tokio::fs::create_dir_all(&data_dir).await?;
-    tokio::fs::create_dir_all(&cache_dir).await?;
-
-    let mut metrics_lock = LockFile::open(&cache_dir.as_ref().join(METRICS_LOCK_FILE_NAME))?;
-    tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
-
-    let uuid_path = data_dir.as_ref().join(METRICS_UUID_FILE_NAME);
-
-    match tokio::fs::File::open(&uuid_path).await {
-        Ok(mut file) => {
-            let mut content = String::new();
-            file.read_to_string(&mut content).await?;
-            if content.trim().is_empty() {
-                return Ok(true);
-            }
-            Ok(false)
-        },
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(err) => Err(err.into()),
-    }
-}
-
 /// Initializes the telemetry for the current installation by creating a new metrics uuid
 ///
 /// If a metrics-uuid file is present, assume telemetry is already set up.
-/// Any migration concerning user opt-out should be handled before using [telemetry_denial_need_migration].
 pub fn init_telemetry_uuid(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Path>) -> Result<()> {
     fs::create_dir_all(&data_dir)?;
     fs::create_dir_all(&cache_dir)?;
@@ -98,61 +62,6 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-
-    /// An empty metrics-uuid file needs migration
-    #[allow(clippy::bool_assert_comparison)]
-    #[tokio::test]
-    async fn test_telemetry_denial_need_migration_empty_uuid() {
-        let tempdir = TempDir::new().unwrap();
-        let data_dir = tempdir.path().join("data");
-
-        std::fs::create_dir_all(&data_dir).unwrap();
-        std::fs::File::create(data_dir.join(METRICS_UUID_FILE_NAME)).unwrap();
-
-        let need_migration =
-            telemetry_opt_out_needs_migration(data_dir, tempdir.path().join("cache"))
-                .await
-                .unwrap();
-
-        assert_eq!(need_migration, true);
-    }
-
-    /// An empty data dir (without metrics-uuid file) does not need migration
-    #[allow(clippy::bool_assert_comparison)]
-    #[tokio::test]
-    async fn test_telemetry_denial_need_migration_empty_data() {
-        let tempdir = TempDir::new().unwrap();
-        let need_migration = telemetry_opt_out_needs_migration(
-            tempdir.path().join("data"),
-            tempdir.path().join("cache"),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(need_migration, false);
-    }
-
-    /// A non-empty metrics-uuid file does not need migration
-    #[allow(clippy::bool_assert_comparison)]
-    #[tokio::test]
-    async fn test_telemetry_denial_need_migration_filled_uuid() {
-        let tempdir = TempDir::new().unwrap();
-        let data_dir = tempdir.path().join("data");
-
-        std::fs::create_dir_all(&data_dir).unwrap();
-        std::fs::write(
-            data_dir.join(METRICS_UUID_FILE_NAME),
-            uuid::Uuid::new_v4().to_string(),
-        )
-        .unwrap();
-
-        let need_migration =
-            telemetry_opt_out_needs_migration(data_dir, tempdir.path().join("cache"))
-                .await
-                .unwrap();
-
-        assert_eq!(need_migration, false);
-    }
 
     #[test]
     fn test_init_telemetry() {
