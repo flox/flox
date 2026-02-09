@@ -10,8 +10,8 @@ use crate::CatalogId;
 
 /// Locked source information to nix expression catalog.
 /// That is either:
-/// 1. a locked source-type [1], referencing a source + optional (sub)
-///    with `.flox/pkgs`
+/// 1. a locked source-type [1], referencing a source with explicit paths
+///    to the packages directory and catalog lock file
 /// 2. a package attribute hierarchy with a locked source per package
 ///    at its leaves (phase 3, WIP)
 ///
@@ -20,7 +20,19 @@ use crate::CatalogId;
 #[serde(tag = "type")]
 pub(crate) enum CatalogLock {
     #[serde(rename = "nix")]
-    Nix(serde_json::Value),
+    Nix {
+        /// Relative path from source root to packages directory
+        #[serde(rename = "pkgsDir")]
+        pkgs_dir: String,
+
+        /// Relative path from source root to catalog lock file, if any
+        #[serde(rename = "catalogsLock", skip_serializing_if = "Option::is_none")]
+        catalogs_lock: Option<String>,
+
+        /// Raw nix flake prefetch output (hash, locked, original, storePath)
+        #[serde(flatten)]
+        prefetch: serde_json::Value,
+    },
 }
 
 /// A `BuildLock` is a collection of locked sources for each catalog.

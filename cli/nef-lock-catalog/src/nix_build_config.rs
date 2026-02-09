@@ -174,8 +174,28 @@ pub fn lock_config(config: &BuildConfig) -> Result<BuildLock> {
         let locked_catalog = match catalog {
             nix_spec => {
                 let catalog_url = nix_spec.to_url()?;
-                let locked_catalog = lock_url(&catalog_url)?;
-                CatalogLock::Nix(locked_catalog)
+                let mut prefetch = lock_url(&catalog_url)?;
+
+                // Extract and remove `dir` from the locked ref.
+                // Replaced by explicit pkgsDir/catalogsLock fields.
+                let dir = prefetch
+                    .get_mut("locked")
+                    .and_then(|l| l.as_object_mut())
+                    .and_then(|l| l.remove("dir"))
+                    .and_then(|d| d.as_str().map(String::from))
+                    .unwrap_or_default();
+
+                let prefix = if dir.is_empty() {
+                    String::new()
+                } else {
+                    format!("{dir}/")
+                };
+
+                CatalogLock::Nix {
+                    pkgs_dir: format!("{prefix}.flox/pkgs"),
+                    catalogs_lock: Some(format!("{prefix}.flox/nix-builds.lock")),
+                    prefetch,
+                }
             },
         };
 

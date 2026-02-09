@@ -1,8 +1,9 @@
 {
   nixpkgs-url ? "nixpkgs",
   nixpkgs-flake ? builtins.getFlake nixpkgs-url,
-  pkgs-dir,
-  git-subdir ? null,
+  source-ref,
+  pkgs-dir ? ".",
+  catalogs-lock ? null,
   system ? builtins.currentSystem or null,
 }:
 let
@@ -13,61 +14,24 @@ let
       allowInsecure = true;
     };
   };
-  pkgsDir =
-    if git-subdir != null then
-      let
-        tree = builtins.fetchTree "git+file://${pkgs-dir}";
-      in
-      "${tree.outPath}/${git-subdir}"
 
+  parsedRef =
+    if builtins.isAttrs source-ref then
+      source-ref
+    else if builtins.isString source-ref then
+      builtins.parseFlakeRef source-ref
     else
-      pkgs-dir;
+      throw "'source-ref' needs to be a flakeref url or structure, was ${builtins.typeOf source-ref}";
+
+  sourceInfo = builtins.fetchTree parsedRef;
+  root = sourceInfo.outPath;
+
+  pkgsDir = "${root}/${pkgs-dir}";
+  catalogsLock = if catalogs-lock != null then "${root}/${catalogs-lock}" else null;
 
   libOverlay = (import ./lib).overlay;
   lib = nixpkgs.lib.extend libOverlay;
-
-  # step 1 collect packages
-  # collectedPackages = lib.nef.dirToAttrs pkgsDir;
-
-  # # Extend nixpkgs, with collectedPackages.
-  # # `attrPath` and `currentScope` remain empty as this is the toplevel attrset.
-  # extendedNixpkgs = lib.nef.extendAttrSet [ ] { } nixpkgs collectedPackages;
-
-  # # different forms of identifiers for the collected packages
-  # # including Make `targets`
-  # collectedAttrPaths = lib.nef.reflect.collectAttrPaths collectedPackages;
-  # reflect = {
-  #   attrPaths = collectedAttrPaths;
-  #   targets = lib.nef.reflect.makeTargets collectedAttrPaths;
-  # };
 in
 lib.nef.instantiate {
-  inherit nixpkgs pkgsDir;
+  inherit nixpkgs pkgsDir catalogsLock;
 }
-# {
-#   # debugging stuff ignore for now
-#   inherit
-#     lib
-#     libOverlay
-#     nixpkgs
-#     collectedPackages
-#     extendedNixpkgs
-#     ;
-
-#   # get make targets
-#   #
-#   # nix eval -f <nef> --argstr pkgs-dir <PATH> reflect.targets
-#   # nix eval -f <nef> --argstr pkgs-dir <PATH> reflect.attrPaths
-#   inherit reflect;
-
-#   # get all the packages
-#   #
-#   # nix eval -f <nef> --argstr pkgs-dir <PATH> --argstr system <SYSTEM> pkgs.<attrPath>
-#   pkgs =
-#     assert lib.assertMsg (system != null) ''
-#       'system' argument missing.
-#       Evaluate with `--argstr system <SYSTEM>` or with `--impure` to use the current system.
-#     '';
-#     extendedNixpkgs;
-
-# }
