@@ -19,7 +19,7 @@ use tracing::debug;
 
 use crate::attach::{attach, quote_run_args};
 use crate::message::updated;
-use crate::start::{start, start_services_with_new_process_compose, start_without_executive};
+use crate::start::{start, start_services_with_new_process_compose};
 use crate::vars_from_env::VarsFromEnvironment;
 
 pub const NO_REMOVE_ACTIVATION_FILES: &str = "_FLOX_NO_REMOVE_ACTIVATION_FILES";
@@ -226,23 +226,15 @@ impl ActivateArgs {
 
         let pid = std::process::id() as i32;
         match activations.start_or_attach(pid, &context.flox_activate_store_path) {
-            StartOrAttachResult::Start { start_id } => {
-                let start_fn = match context.project_ctx {
-                    // Normal path.
-                    Some(_) => start,
-                    // Containers.
-                    None => start_without_executive,
-                };
-                start_fn(
-                    context,
-                    subsystem_verbosity,
-                    vars_from_env,
-                    start_id,
-                    &mut activations,
-                    &activations_json_path,
-                    lock,
-                )
-            },
+            StartOrAttachResult::Start { start_id } => start(
+                context,
+                subsystem_verbosity,
+                vars_from_env,
+                start_id,
+                &mut activations,
+                &activations_json_path,
+                lock,
+            ),
             StartOrAttachResult::Attach { start_id } => {
                 write_activations_json(&activations, &activations_json_path, lock)?;
                 Ok(StartOrAttachResult::Attach { start_id })
