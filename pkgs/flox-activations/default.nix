@@ -95,6 +95,7 @@ craneLib.buildPackage (
       '';
     };
   }
+  // rust-external-deps.passthru.envs
   // envs
   // lib.optionalAttrs hostPlatform.isLinux {
     LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
