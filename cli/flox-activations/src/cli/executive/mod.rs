@@ -63,6 +63,17 @@ impl ExecutiveArgs {
             fs::remove_file(&self.executive_ctx)?;
         }
 
+        let log_dir = project_ctx.flox_env_log_dir.clone();
+        let log_file = format!("executive.{}.log", std::process::id());
+        // Read verbosity from dedicated executive variable, not `activate -v`
+        // Only takes numeric values like its `FLOX_ACTIVATIONS_VERBOSITY` counterpart.
+        let subsystem_verbosity = std::env::var(FLOX_EXECUTIVE_VERBOSITY_VAR)
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        logger::init_executive_logger(subsystem_verbosity, log_file, &log_dir)
+            .context("failed to initialize logger")?;
+
         // Set as subreaper immediately. The guard ensures cleanup on all exit paths.
         #[cfg(target_os = "linux")]
         let _subreaper_guard = SubreaperGuard::new()?;
@@ -80,17 +91,6 @@ impl ExecutiveArgs {
         // Signal the parent that the executive is ready
         debug!("sending SIGUSR1 to parent {}", parent_pid);
         kill(Pid::from_raw(parent_pid), SIGUSR1)?;
-
-        let log_dir = project_ctx.flox_env_log_dir.clone();
-        let log_file = format!("executive.{}.log", std::process::id());
-        // Read verbosity from dedicated executive variable, not `activate -v`
-        // Only takes numeric values like its `FLOX_ACTIVATIONS_VERBOSITY` counterpart.
-        let subsystem_verbosity = std::env::var(FLOX_EXECUTIVE_VERBOSITY_VAR)
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0);
-        logger::init_file_logger(subsystem_verbosity, log_file, &log_dir)
-            .context("failed to initialize logger")?;
 
         // Propagate PID field to all spans.
         // We can set this eagerly because the PID doesn't change after this entry
