@@ -89,7 +89,7 @@ impl ExecutiveArgs {
         coordinator.spawn_all_watchers(state_json_path)?;
 
         // Signal the parent that the executive is ready
-        debug!("sending SIGUSR1 to parent {}", parent_pid);
+        info!("sending SIGUSR1 to parent {}", parent_pid);
         kill(Pid::from_raw(parent_pid), SIGUSR1)?;
 
         // Propagate PID field to all spans.
@@ -99,7 +99,7 @@ impl ExecutiveArgs {
         let root_span = debug_span!("flox_activations_executive", pid = pid);
         let _guard = root_span.entered();
 
-        debug!("{self:?}");
+        info!("{self:?}");
 
         // TODO: Enable earlier in `flox-activations` rather than just when detached?
         // TODO: Re-enable sentry after fixing OpenSSL dependency issues
@@ -109,7 +109,7 @@ impl ExecutiveArgs {
         spawn_heartbeat_log();
         spawn_logs_gc_threads(&log_dir);
 
-        debug!("starting monitoring loop");
+        info!("starting monitoring loop");
         let result = run_event_loop(
             attach_ctx,
             project_ctx,
@@ -117,7 +117,7 @@ impl ExecutiveArgs {
             coordinator,
             subsystem_verbosity,
         );
-        debug!("executive exiting: {:?}", &result);
+        info!("executive exiting: {:?}", &result);
         result
     }
 }
