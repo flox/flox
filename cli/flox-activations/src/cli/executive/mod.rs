@@ -7,6 +7,7 @@ use event_coordinator::{EventCoordinator, ExecutiveEvent};
 use flox_core::activate::context::{AttachCtx, AttachProjectCtx};
 use flox_core::activate::vars::FLOX_EXECUTIVE_VERBOSITY_VAR;
 use flox_core::activations::{read_activations_json, state_json_path, write_activations_json};
+use flox_core::sentry::init_sentry;
 use flox_core::traceable_path;
 use log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::sys::signal::Signal::SIGUSR1;
@@ -15,10 +16,11 @@ use nix::unistd::{Pid, getpgid, getpid, setsid};
 use reaper::reap_orphaned_children;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, error, info, instrument};
+use uuid::Uuid;
 use watcher::LockedActivationState;
 
 use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
-use crate::logger;
+use crate::logger::init_executive_logger;
 use crate::process_compose::{process_compose_down, start_process_compose_no_services};
 
 mod event_coordinator;
@@ -35,6 +37,11 @@ pub struct ExecutiveCtx {
     pub project_ctx: AttachProjectCtx,
     pub activation_state_dir: std::path::PathBuf,
     pub parent_pid: i32,
+    /// The metrics UUID for Sentry user identification.
+    /// When Some, Sentry is initialized with this user ID.
+    /// When None, metrics are disabled and Sentry is not initialized.
+    #[serde(default)]
+    pub metrics_uuid: Option<Uuid>,
 }
 
 #[derive(Debug, Args)]
@@ -58,6 +65,7 @@ impl ExecutiveArgs {
             project_ctx,
             activation_state_dir,
             parent_pid,
+            metrics_uuid,
         } = serde_json::from_str(&contents)?;
         if !std::env::var(NO_REMOVE_ACTIVATION_FILES).is_ok_and(|val| val == "true") {
             fs::remove_file(&self.executive_ctx)?;
@@ -71,7 +79,7 @@ impl ExecutiveArgs {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
-        logger::init_executive_logger(subsystem_verbosity, log_file, &log_dir)
+        init_executive_logger(subsystem_verbosity, log_file, &log_dir)
             .context("failed to initialize logger")?;
 
         // Set as subreaper immediately. The guard ensures cleanup on all exit paths.
@@ -102,9 +110,9 @@ impl ExecutiveArgs {
         info!("{self:?}");
 
         // TODO: Enable earlier in `flox-activations` rather than just when detached?
-        // TODO: Re-enable sentry after fixing OpenSSL dependency issues
-        // let disable_metrics = env::var(FLOX_DISABLE_METRICS_VAR).is_ok();
-        // let _sentry_guard = (!disable_metrics).then(sentry::init_sentry);
+        // Initialize Sentry if metrics_uuid is present (metrics enabled)
+        let _sentry_guard =
+            metrics_uuid.and_then(|uuid| init_sentry("flox-activations::executive", uuid));
 
         spawn_heartbeat_log();
         spawn_logs_gc_threads(&log_dir);
