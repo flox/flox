@@ -155,8 +155,36 @@ fn lock_url(url: &Url) -> Result<serde_json::Value> {
     serde_json::from_slice(&output.stdout).context("could not parse nix prefetch")
 }
 
+/// Options for controlling the paths written into lock entries.
+/// Defaults to the flox convention (`.flox/pkgs` and `.flox/nix-builds.lock`).
+#[derive(Debug, Clone)]
+pub struct LockOptions {
+    /// Relative path from source root to packages directory.
+    /// Appended after any `dir` prefix from the flakeref.
+    pub pkgs_dir: String,
+    /// Relative path from source root to catalog lock file.
+    /// Appended after any `dir` prefix from the flakeref.
+    pub catalogs_lock: String,
+}
+
+impl Default for LockOptions {
+    fn default() -> Self {
+        LockOptions {
+            pkgs_dir: ".flox/pkgs".to_string(),
+            catalogs_lock: ".flox/nix-builds.lock".to_string(),
+        }
+    }
+}
+
+/// Lock a [BuildConfig] using the default flox convention for paths.
 #[tracing::instrument(skip_all)]
 pub fn lock_config(config: &BuildConfig) -> Result<BuildLock> {
+    lock_config_with_options(config, &LockOptions::default())
+}
+
+/// Lock a [BuildConfig] with explicit path options.
+#[tracing::instrument(skip_all)]
+pub fn lock_config_with_options(config: &BuildConfig, options: &LockOptions) -> Result<BuildLock> {
     let BuildConfig {
         catalogs: catalog_spec,
     } = config;
@@ -192,8 +220,8 @@ pub fn lock_config(config: &BuildConfig) -> Result<BuildLock> {
                 };
 
                 CatalogLock::Nix {
-                    pkgs_dir: format!("{prefix}.flox/pkgs"),
-                    catalogs_lock: Some(format!("{prefix}.flox/nix-builds.lock")),
+                    pkgs_dir: format!("{prefix}{}", options.pkgs_dir),
+                    catalogs_lock: Some(format!("{prefix}{}", options.catalogs_lock)),
                     prefetch,
                 }
             },
