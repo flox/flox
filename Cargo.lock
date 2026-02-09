@@ -2589,6 +2589,7 @@ name = "nef-lock-catalog"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
  "indexmap 2.13.0",
  "serde",
  "serde_json",

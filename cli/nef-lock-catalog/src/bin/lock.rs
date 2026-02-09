@@ -1,11 +1,25 @@
-use std::env::args;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use nef_lock_catalog::{lock_config, read_config, write_lock};
+use clap::Parser;
+use nef_lock_catalog::{LockOptions, lock_config_with_options, read_config, write_lock};
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+
+#[derive(Parser)]
+struct Cli {
+    /// Path to the nix-builds.toml config file
+    config: PathBuf,
+
+    /// Relative path from source root to packages directory
+    #[arg(long, default_value = ".flox/pkgs")]
+    pkgs_dir: String,
+
+    /// Relative path from source root to catalog lock file
+    #[arg(long, default_value = ".flox/nix-builds.lock")]
+    catalogs_lock: String,
+}
 
 fn main() -> Result<()> {
     tracing_subscriber::registry()
@@ -13,13 +27,16 @@ fn main() -> Result<()> {
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    let mut args = args().skip(1);
+    let cli = Cli::parse();
 
-    let config_path = PathBuf::from(args.next().unwrap());
+    let options = LockOptions {
+        pkgs_dir: cli.pkgs_dir,
+        catalogs_lock: cli.catalogs_lock,
+    };
 
-    let config = read_config(&config_path)?;
-    let lockfile = lock_config(&config)?;
+    let config = read_config(&cli.config)?;
+    let lockfile = lock_config_with_options(&config, &options)?;
 
-    write_lock(&lockfile, config_path.with_extension("lock"))?;
+    write_lock(&lockfile, cli.config.with_extension("lock"))?;
     Ok(())
 }
