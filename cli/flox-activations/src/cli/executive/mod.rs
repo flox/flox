@@ -25,8 +25,6 @@ mod event_coordinator;
 mod log_gc;
 mod reaper;
 mod watcher;
-// TODO: Re-enable sentry after fixing OpenSSL dependency issues
-// mod sentry;
 
 #[cfg(target_os = "linux")]
 use reaper::linux::SubreaperGuard;
