@@ -59,6 +59,7 @@ pub struct ExecutiveArgs {
 
 impl ExecutiveArgs {
     pub fn handle(self) -> Result<(), anyhow::Error> {
+        // Step 1: Extract context which we need to do anything.
         let contents = fs::read_to_string(&self.executive_ctx)?;
         let ExecutiveCtx {
             attach_ctx,
@@ -71,6 +72,7 @@ impl ExecutiveArgs {
             fs::remove_file(&self.executive_ctx)?;
         }
 
+        // Step 2: Setup logger, so that we can record errors.
         let log_dir = project_ctx.flox_env_log_dir.clone();
         let log_file = format!("executive.{}.log", std::process::id());
         // Read verbosity from dedicated executive variable, not `activate -v`
@@ -82,16 +84,19 @@ impl ExecutiveArgs {
         init_executive_logger(subsystem_verbosity, log_file, &log_dir)
             .context("failed to initialize logger")?;
 
-        // Propagate PID field to all spans.
+        // Step 3: Setup root span with PID, so that logs contain PID.
         // We can set this eagerly because the PID doesn't change after this entry
         // point. Re-execs of activate->executive will cross this entry point again.
         let pid = std::process::id();
         let _root_span = debug_span!("flox_activations::executive", pid = pid).entered();
         info!("{self:?}");
 
-        // Initialize Sentry if metrics_uuid is present (metrics enabled)
+        // Step 4: Setup Sentry, so that we get exception reports.
+        // Skip if metrics_uuid not present (metrics disabled)
         let _sentry_guard =
             metrics_uuid.and_then(|uuid| init_sentry("flox-activations::executive", uuid));
+
+        // Step 5: Catch errors from sub-reaper and setsid.
 
         // Set as subreaper. The guard ensures cleanup on all exit paths.
         #[cfg(target_os = "linux")]
@@ -101,19 +106,22 @@ impl ExecutiveArgs {
         ensure_process_group_leader()
             .context("failed to ensure executive is detached from terminal")?;
 
-        // Set up signal handlers early. All signals registered together.
+        // Step 6: Set up signal handlers (among other watchers).
+        // All signals registered together.
         let state_json_path = state_json_path(&activation_state_dir);
         let mut coordinator =
             EventCoordinator::new().context("failed to create event coordinator")?;
         coordinator.spawn_all_watchers(state_json_path)?;
 
-        // Signal the parent that the executive is ready
+        // Step 7: Signal SIGUSR1 when all setup and possible errors have passed.
         info!("sending SIGUSR1 to parent {}", parent_pid);
         kill(Pid::from_raw(parent_pid), SIGUSR1)?;
 
+        // Step 8: Spawn non-essential GC threads
         spawn_heartbeat_log();
         spawn_logs_gc_threads(&log_dir);
 
+        // Step 9: Enter the monitoring loop
         info!("starting monitoring loop");
         let result = run_event_loop(
             attach_ctx,
