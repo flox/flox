@@ -82,7 +82,18 @@ impl ExecutiveArgs {
         init_executive_logger(subsystem_verbosity, log_file, &log_dir)
             .context("failed to initialize logger")?;
 
-        // Set as subreaper immediately. The guard ensures cleanup on all exit paths.
+        // Propagate PID field to all spans.
+        // We can set this eagerly because the PID doesn't change after this entry
+        // point. Re-execs of activate->executive will cross this entry point again.
+        let pid = std::process::id();
+        let _root_span = debug_span!("flox_activations::executive", pid = pid).entered();
+        info!("{self:?}");
+
+        // Initialize Sentry if metrics_uuid is present (metrics enabled)
+        let _sentry_guard =
+            metrics_uuid.and_then(|uuid| init_sentry("flox-activations::executive", uuid));
+
+        // Set as subreaper. The guard ensures cleanup on all exit paths.
         #[cfg(target_os = "linux")]
         let _subreaper_guard = SubreaperGuard::new()?;
 
@@ -99,20 +110,6 @@ impl ExecutiveArgs {
         // Signal the parent that the executive is ready
         info!("sending SIGUSR1 to parent {}", parent_pid);
         kill(Pid::from_raw(parent_pid), SIGUSR1)?;
-
-        // Propagate PID field to all spans.
-        // We can set this eagerly because the PID doesn't change after this entry
-        // point. Re-execs of activate->executive will cross this entry point again.
-        let pid = std::process::id();
-        let root_span = debug_span!("flox_activations_executive", pid = pid);
-        let _guard = root_span.entered();
-
-        info!("{self:?}");
-
-        // TODO: Enable earlier in `flox-activations` rather than just when detached?
-        // Initialize Sentry if metrics_uuid is present (metrics enabled)
-        let _sentry_guard =
-            metrics_uuid.and_then(|uuid| init_sentry("flox-activations::executive", uuid));
 
         spawn_heartbeat_log();
         spawn_logs_gc_threads(&log_dir);
