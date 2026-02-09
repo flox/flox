@@ -229,8 +229,6 @@ impl FloxArgs {
         if !config.flox.disable_metrics {
             debug!("Metrics collection enabled");
 
-            init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir)?;
-
             let connection = AWSDatalakeConnection::default();
             let client = Client::new_with_config(&config, connection)?;
             Hub::global().set_client(client);

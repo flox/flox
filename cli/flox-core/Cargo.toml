@@ -17,6 +17,7 @@ log.workspace = true
 proptest.workspace = true
 # should be a dev-dependency but test doesn't apply across crates
 proptest-derive.workspace = true
+sentry.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 shell_gen = { path = "../shell_gen" }
@@ -27,6 +28,7 @@ tempfile.workspace = true
 time.workspace = true
 thiserror.workspace = true
 schemars.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 indoc.workspace = true

@@ -6,15 +6,16 @@ use std::process::ExitCode;
 use anyhow::Result;
 use bpaf::{Args, Parser};
 use commands::{EnvironmentSelectError, FloxArgs, FloxCli, Prefix, Version};
+use flox_core::sentry::init_sentry;
 use flox_core::vars::{FLOX_VERSION_STRING, FLOX_VERSION_VAR};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::EnvironmentError;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
 use flox_rust_sdk::providers::services::process_compose::ServiceError;
-use tracing::debug;
+use tracing::{debug, warn};
 use utils::errors::format_service_error;
-use utils::init::{init_logger, init_sentry};
+use utils::init::init_logger;
 use utils::{message, populate_default_nix_env_vars};
 
 use crate::utils::errors::{
@@ -23,7 +24,8 @@ use crate::utils::errors::{
     format_managed_error,
     format_remote_error,
 };
-use crate::utils::metrics::Hub;
+use crate::utils::init::init_telemetry_uuid;
+use crate::utils::metrics::{Hub, read_metrics_uuid};
 
 mod commands;
 mod config;
@@ -33,15 +35,6 @@ async fn run(args: FloxArgs) -> Result<()> {
     set_parent_process_id();
     populate_default_nix_env_vars();
     let config = config::Config::parse()?;
-    let uuid = utils::metrics::read_metrics_uuid(&config)
-        .map(|u| Some(u.to_string()))
-        .unwrap_or(None);
-    sentry::configure_scope(|scope| {
-        scope.set_user(Some(sentry::User {
-            id: uuid,
-            ..Default::default()
-        }));
-    });
     args.handle(config).await?;
     Ok(())
 }
@@ -91,14 +84,19 @@ fn main() -> ExitCode {
         return ExitCode::from(1);
     }
 
-    let disable_metrics = config::Config::parse()
-        .unwrap_or_default()
-        .flox
-        .disable_metrics;
+    let config = config::Config::parse().unwrap_or_default();
+    let metrics_uuid = if !config.flox.disable_metrics {
+        init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir)
+            .and_then(|_| read_metrics_uuid(&config))
+            .inspect_err(|e| warn!("Failed to initialize metrics UUID: {e}"))
+            .ok()
+    } else {
+        None
+    };
 
     // Sentry client must be initialized before starting an async runtime or spawning threads
     // https://docs.sentry.io/platforms/rust/#async-main-function
-    let _sentry_guard = (!disable_metrics).then(init_sentry);
+    let _sentry_guard = metrics_uuid.map(|uuid| init_sentry("flox-cli", uuid));
     let _metrics_guard = Hub::global().try_guard().ok();
 
     // Pass down the verbosity level to all sub-processes
