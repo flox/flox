@@ -1,0 +1,1 @@
+{ catalogs }: catalogs.mid.midPkg
