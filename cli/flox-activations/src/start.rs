@@ -50,32 +50,35 @@ pub fn start(
     activations_json_path: &Path,
     lock: LockFile,
 ) -> Result<StartOrAttachResult, anyhow::Error> {
-    let attach = &context.attach_ctx;
-    let project = context
-        .project_ctx
-        .as_ref()
-        .expect("start() requires project context");
-
     let start_state_dir = start_id.start_state_dir(&context.activation_state_dir)?;
     DirBuilder::new()
         .recursive(true)
         .mode(0o700)
         .create(&start_state_dir)?;
 
-    let new_executive = if !activations.executive_started() {
-        // Register signal handler BEFORE spawning executive to avoid race condition
-        // where SIGUSR1 arrives before handler is registered
-        let signals = Signals::new([SIGCHLD, SIGUSR1])?;
-        let exec_pid = spawn_executive(
-            attach,
-            project,
-            &context.activation_state_dir,
-            &start_state_dir,
-        )?;
-        activations.set_executive_pid(exec_pid.as_raw());
-        Some((exec_pid, signals))
-    } else {
-        None
+    let new_executive = match context.project_ctx.as_ref() {
+        // Start a new executive.
+        Some(project) if !activations.executive_started() => {
+            // Register signal handler BEFORE spawning executive to avoid race condition
+            // where SIGUSR1 arrives before handler is registered
+            let signals = Signals::new([SIGCHLD, SIGUSR1])?;
+            let exec_pid = spawn_executive(
+                &context.attach_ctx,
+                project,
+                &context.activation_state_dir,
+                &start_state_dir,
+            )?;
+            activations.set_executive_pid(exec_pid.as_raw());
+            Some((exec_pid, signals))
+        },
+        // Executive already started
+        Some(_) => None,
+        // Use own PID as an executive when there's no project, e.g. containerize.
+        None => {
+            let pid_self = std::process::id() as i32;
+            activations.set_executive_pid(pid_self);
+            None
+        },
     };
 
     write_activations_json(activations, activations_json_path, lock)?;
@@ -98,50 +101,6 @@ pub fn start(
     }
 
     // Re-acquire lock to mark ready
-    let (activations_opt, lock) = read_activations_json(activations_json_path)?;
-    let mut activations = activations_opt.expect("activations.json should exist");
-    activations.set_ready(&start_id);
-    write_activations_json(&activations, activations_json_path, lock)?;
-
-    Ok(StartOrAttachResult::Start { start_id })
-}
-
-/// Start activation without executive (for containers).
-/// Uses own PID as an "executive" to indicate container lifecycle.
-pub fn start_without_executive(
-    context: &ActivateCtx,
-    subsystem_verbosity: u32,
-    vars_from_env: &VarsFromEnvironment,
-    start_id: StartIdentifier,
-    activations: &mut ActivationState,
-    activations_json_path: &Path,
-    lock: LockFile,
-) -> Result<StartOrAttachResult, anyhow::Error> {
-    let start_state_dir = start_id.start_state_dir(&context.activation_state_dir)?;
-    DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(&start_state_dir)?;
-
-    let pid_self = std::process::id() as i32;
-    activations.set_executive_pid(pid_self);
-    write_activations_json(activations, activations_json_path, lock)?;
-
-    // Run activation hooks (same as normal)
-    let mut start_command = assemble_activate_command(
-        context,
-        subsystem_verbosity,
-        vars_from_env.clone(),
-        &start_state_dir,
-    );
-    debug!("spawning activate script (container): {:?}", start_command);
-    let status = start_command.spawn()?.wait()?;
-    if !status.success() {
-        // hook.on-activate may have already printed to stderr
-        bail!("Running hook.on-activate failed");
-    }
-
-    // Mark ready
     let (activations_opt, lock) = read_activations_json(activations_json_path)?;
     let mut activations = activations_opt.expect("state.json should exist");
     activations.set_ready(&start_id);
