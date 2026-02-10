@@ -33,9 +33,10 @@ just unit-tests                # Unit tests
 just impure-tests              # Unit tests with extra-tests feature
 just integ-tests               # Integration tests (bats)
 just unit-tests regex="test_name"     # Run specific unit test
-just integ-tests usage.bats           # Run specific integration test file
-just integ-tests -- --filter-tags tag # Run integration tests by tag
-just integ-tests -- --filter regex    # Run integration tests by name
+just integ-tests usage.bats                       # Run specific integration test file
+just integ-tests -- --filter-tags tag             # Run integration tests by tag
+just integ-tests -- --filter regex                # Run integration tests by name
+just integ-tests activate.bats -- --filter regex  # Run integration tests, filtering by both test file and test name. This is faster when wanting to run tests in a single file, because bats doesn't have to filter through all the tests in other files
 
 # Formatting and Linting
 just format                    # Format all code
