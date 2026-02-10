@@ -316,12 +316,12 @@ EOF
   assert_success
 
   run tomlq -e \
-    '.install.bpftrace.systems | debug(.) == ["x86_64-linux","aarch64-linux"]' \
+    '.install.bpftrace.systems | debug(.) == ["aarch64-linux","x86_64-linux"]' \
     "$MANIFEST_PATH"
   assert_success
 
   run tomlq -e \
-    '.install.systemd.systems | debug(.) == ["x86_64-linux","aarch64-linux"]' \
+    '.install.systemd.systems | debug(.) == ["aarch64-linux","x86_64-linux"]' \
     "$MANIFEST_PATH"
   assert_success
 }
