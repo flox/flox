@@ -748,7 +748,7 @@ mod tests {
     use crate::flox::test_helpers::flox_instance;
     use crate::models::environment::{EnvironmentName, EnvironmentOwner};
     use crate::models::floxmeta::{FloxMeta, floxmeta_dir};
-    use crate::providers::git::tests::commit_file;
+    use crate::providers::git::tests::{commit_file, test_git_options};
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
     /// Create a [ManagedPointer] for testing with mock owner and name data
@@ -774,7 +774,8 @@ mod tests {
             .join(test_pointer.owner.as_str())
             .join("floxmeta");
         fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let remote =
+            GitCommandProvider::init_with(test_git_options(), &remote_path, false).unwrap();
         (test_pointer, remote_path, remote)
     }
 
@@ -1538,7 +1539,8 @@ mod tests {
     fn create_equal_branches(flox: &Flox) -> (GitCommandProvider, &str, &str) {
         let branch_a = "branch_a";
         let branch_b = "branch_b";
-        let git = GitCommandProvider::init(flox.temp_dir.as_path(), false).unwrap();
+        let git = GitCommandProvider::init_with(test_git_options(), flox.temp_dir.as_path(), false)
+            .unwrap();
         git.checkout(branch_a, true).unwrap();
         commit_file(&git, "file_1");
         git.create_branch(branch_b, branch_a).unwrap();
