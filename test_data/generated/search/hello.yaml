@@ -5,7 +5,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Mon, 09 Feb 2026 21:59:18 GMT
+    value: Tue, 10 Feb 2026 14:48:55 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -13,5 +13,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: YiLMjhjkoAMEV0A=
+    value: YkfFrhRhoAMEYCA=
   body: '{"items":[{"attr_path":"hello","catalog":null,"pkg_path":"hello","name":"hello-2.12.2","pname":"hello","version":"2.12.2","description":"Program that produces a familiar, friendly greeting","stabilities":[],"system":"x86_64-linux"},{"attr_path":"hello-go","catalog":null,"pkg_path":"hello-go","name":"hello-go","pname":"hello-go","version":"hello-go","description":"Simple program printing hello world in Go","stabilities":[],"system":"x86_64-linux"},{"attr_path":"hello-cpp","catalog":null,"pkg_path":"hello-cpp","name":"hello-cpp-26.05.20260208.d6c7193","pname":"hello-cpp","version":"26.05.20260208.d6c7193","description":"Basic sanity check that C++ and cmake infrastructure are working","stabilities":[],"system":"x86_64-linux"},{"attr_path":"nwg-hello","catalog":null,"pkg_path":"nwg-hello","name":"nwg-hello-0.4.2","pname":"nwg-hello","version":"0.4.2","description":"GTK3-based greeter for the greetd daemon, written in python","stabilities":[],"system":"x86_64-linux"},{"attr_path":"hello-unfree","catalog":null,"pkg_path":"hello-unfree","name":"example-unfree-package-1.0","pname":"hello-unfree","version":"1.0","description":"Example package with unfree license (for testing)","stabilities":[],"system":"x86_64-linux"},{"attr_path":"hello-wayland","catalog":null,"pkg_path":"hello-wayland","name":"hello-wayland-0-unstable-2024-03-04","pname":"hello-wayland","version":"2024-03-04","description":"Hello world Wayland client","stabilities":[],"system":"x86_64-linux"},{"attr_path":"vdrPlugins.hello","catalog":null,"pkg_path":"vdrPlugins.hello","name":"hello-2.6.9","pname":"hello","version":"2.6.9","description":null,"stabilities":[],"system":"x86_64-linux"},{"attr_path":"haskellPackages.hello","catalog":null,"pkg_path":"haskellPackages.hello","name":"hello-1.0.0.2","pname":"hello","version":"1.0.0.2","description":"Hello World, an example package","stabilities":[],"system":"x86_64-linux"},{"attr_path":"sbclPackages.hello-clog","catalog":null,"pkg_path":"sbclPackages.hello-clog","name":"sbcl-hello-clog-20250622-git","pname":"hello-clog","version":"20250622-git","description":null,"stabilities":[],"system":"x86_64-linux"},{"attr_path":"texlivePackages.othello","catalog":null,"pkg_path":"texlivePackages.othello","name":"othello-15878","pname":"othello","version":"15878","description":"Modification of a Go package to create othello boards","stabilities":[],"system":"x86_64-linux"}],"total_count":38}'
