@@ -166,8 +166,11 @@ gen-unit-data-no-publish force="":
     python_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/python3' | jq -r '.items[0].version')
     go_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/go' | jq -r '.items[0].version')
     poetry_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/poetry' | jq -r '.items[0].version')
-    printf '{\n  "python3": "%s",\n  "go": "%s",\n  "poetry": "%s"\n}\n' \
-        "$python_version" "$go_version" "$poetry_version" \
+    jq -n \
+        --arg python3 "$python_version" \
+        --arg go "$go_version" \
+        --arg poetry "$poetry_version" \
+        '{python3: $python3, go: $go, poetry: $poetry}' \
         > "{{TEST_DATA}}/unit_test_generated/latest_prod_versions.json"
     echo "Wrote latest_prod_versions.json with python3=$python_version, go=$go_version, poetry=$poetry_version"
 
