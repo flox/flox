@@ -425,10 +425,17 @@ impl GoVersion {
 #[cfg(test)]
 mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::providers::catalog::test_helpers::auto_recording_catalog_client;
+    use flox_rust_sdk::providers::catalog::test_helpers::{
+        auto_recording_catalog_client,
+        get_prod_package_version,
+    };
 
     use super::*;
     use crate::commands::init::ProvidedPackage;
+
+    fn go_latest_version() -> String {
+        get_prod_package_version("go")
+    }
 
     #[tokio::test]
     async fn go_version_from_content_returns_error_on_invalid_version() {
@@ -551,13 +558,14 @@ mod tests {
         // higher version of go.
         // But per https://go.dev/doc/modules/gomod-ref#go, the version provided
         // is minimum-go-version, so I think what we're doing is correct.
+        let go_version = go_latest_version();
         assert_eq!(version, ProvidedVersion::Compatible {
             requested: Some("^1.21.4".to_string()),
             compatible: ProvidedPackage {
                 name: "go".to_string(),
                 attr_path: "go".into(),
-                display_version: "1.25.5".to_string(),
-                version: Some("1.25.5".to_string()),
+                display_version: go_version.clone(),
+                version: Some(go_version),
             }
         });
     }
