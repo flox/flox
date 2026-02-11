@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Sun, 28 Dec 2025 12:33:19 GMT
+    value: Tue, 10 Feb 2026 14:48:12 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,7 +14,7 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: WTJ-hgQGoAMEb8w=
+    value: Yke-7g97oAMESKw=
   body: '{"items":[{"name":"toplevel","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"attr_path_not_found.not_in_catalog","message":"The package ''package'' is not found in the catalog.","context":{"attr_path":"package","install_id":"package"}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'
 ---
 when:
@@ -24,13 +24,13 @@ then:
   status: 200
   header:
   - name: date
-    value: Sun, 28 Dec 2025 12:33:20 GMT
+    value: Tue, 10 Feb 2026 14:48:12 GMT
   - name: content-type
     value: application/json
   - name: content-length
-    value: '764'
+    value: '758'
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: WTJ-khMSoAMEVrw=
-  body: '{"items":[{"attr_path":"packagekit","catalog":null,"pkg_path":"packagekit","name":"packagekit-1.3.2","pname":"packagekit","version":"1.3.2","description":"System to facilitate installing and updating packages","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"psc-package","catalog":null,"pkg_path":"psc-package","name":"psc-package-simple-0.6.2","pname":"psc-package","version":"0.6.2","description":"Package manager for PureScript based on package sets","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"patch-package","catalog":null,"pkg_path":"patch-package","name":"patch-package-8.0.0","pname":"patch-package","version":"8.0.0","description":"Fix broken node modules instantly","stabilities":[],"system":"aarch64-darwin"}],"total_count":5883}'
+    value: Yke-8gkVoAMEaUA=
+  body: '{"items":[{"attr_path":"packagekit","catalog":null,"pkg_path":"packagekit","name":"packagekit-1.3.3","pname":"packagekit","version":"1.3.3","description":"System to facilitate installing and updating packages","stabilities":[],"system":"x86_64-linux"},{"attr_path":"psc-package","catalog":null,"pkg_path":"psc-package","name":"psc-package-simple-0.6.2","pname":"psc-package","version":"0.6.2","description":"Package manager for PureScript based on package sets","stabilities":[],"system":"x86_64-linux"},{"attr_path":"patch-package","catalog":null,"pkg_path":"patch-package","name":"patch-package-8.0.0","pname":"patch-package","version":"8.0.0","description":"Fix broken node modules instantly","stabilities":[],"system":"x86_64-linux"}],"total_count":6293}'

@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Sun, 28 Dec 2025 12:32:21 GMT
+    value: Tue, 10 Feb 2026 14:48:33 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,7 +14,7 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: WTJ1djHDIAMEbsQ=
+    value: YkfCQhvroAMEaUA=
   body: '{"items":[{"name":"toplevel","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"attr_path_not_found.not_in_catalog","message":"The package ''node'' is not found in the catalog.","context":{"attr_path":"node","install_id":"node"}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'
 ---
 when:
@@ -24,13 +24,13 @@ then:
   status: 200
   header:
   - name: date
-    value: Sun, 28 Dec 2025 12:32:23 GMT
+    value: Tue, 10 Feb 2026 14:48:33 GMT
   - name: content-type
     value: application/json
   - name: content-length
-    value: '748'
+    value: '742'
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: WTJ1giNMoAMEVFA=
-  body: '{"items":[{"attr_path":"nodejs","catalog":null,"pkg_path":"nodejs","name":"nodejs-22.21.1","pname":"nodejs","version":"22.21.1","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_14","catalog":null,"pkg_path":"nodejs_14","name":"nodejs-14.21.3","pname":"nodejs_14","version":"14.21.3","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_16","catalog":null,"pkg_path":"nodejs_16","name":"nodejs-16.20.2","pname":"nodejs_16","version":"16.20.2","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"}],"total_count":79}'
+    value: YkfCRjr6oAMEafQ=
+  body: '{"items":[{"attr_path":"nodejs","catalog":null,"pkg_path":"nodejs","name":"nodejs-24.13.0","pname":"nodejs","version":"24.13.0","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"x86_64-linux"},{"attr_path":"nodejs_14","catalog":null,"pkg_path":"nodejs_14","name":"nodejs-14.21.3","pname":"nodejs_14","version":"14.21.3","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"x86_64-linux"},{"attr_path":"nodejs_16","catalog":null,"pkg_path":"nodejs_16","name":"nodejs-16.20.2","pname":"nodejs_16","version":"16.20.2","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"x86_64-linux"}],"total_count":80}'

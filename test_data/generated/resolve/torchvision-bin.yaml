@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Sun, 28 Dec 2025 12:33:22 GMT
+    value: Tue, 10 Feb 2026 14:48:20 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,5 +14,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: WTJ-zjqzIAMEb-g=
+    value: YkfAPiG8oAMEa_Q=
   body: '{"items":[{"name":"toplevel","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"attr_path_not_found.systems_not_on_same_page","message":"The package ''python311Packages.torchvision-bin'' is not found for all requested systems on the same page, consider package groups with the following system groupings: (x86_64-darwin), (aarch64-linux), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin).","context":{"attr_path":"python311Packages.torchvision-bin","install_id":"torchvision-bin","system_groupings":"(x86_64-darwin), (aarch64-linux), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin)"}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'

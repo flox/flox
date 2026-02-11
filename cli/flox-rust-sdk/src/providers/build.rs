@@ -2406,17 +2406,12 @@ mod tests {
         }
 
         let store_path_prefix_pattern = r"/nix/store/[\w]{32}";
-        let expected_pattern = if cfg!(target_os = "macos") {
-            formatdoc! {r#"
-                2 packages found in {store_path_prefix_pattern}-{package_name}-0\.0\.0
-                       not found in {store_path_prefix_pattern}-environment-build-{package_name}
-        "#}
-        } else {
-            formatdoc! {r#"
-                1 packages found in {store_path_prefix_pattern}-{package_name}-0\.0\.0
-                       not found in {store_path_prefix_pattern}-environment-build-{package_name}
-        "#}
-        };
+        // Use \d+ to match any positive number of packages - the exact count
+        // depends on the nixpkgs version and transitive dependencies.
+        let expected_pattern = formatdoc! {r#"
+            \d+ packages found in {store_path_prefix_pattern}-{package_name}-0\.0\.0
+                   not found in {store_path_prefix_pattern}-environment-build-{package_name}
+        "#};
         let re = regex::Regex::new(&expected_pattern).unwrap();
         assert!(
             re.is_match(&output.stderr),

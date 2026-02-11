@@ -160,6 +160,20 @@ gen-unit-data-no-publish force="":
     # Use remote services for non-publish tests
     {{cargo_test_invocation}} --filterset 'not (test(providers::build::tests) | test(providers::publish) | test(commands::publish) | test(providers::catalog::tests::creates_new_catalog))'
 
+    # Extract latest package versions from production catalog for test assertions.
+    # These versions must match what's in the recorded mock YAML files.
+    echo "Extracting latest package versions from production catalog..."
+    python_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/python3' | jq -r '.items[0].version')
+    go_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/go' | jq -r '.items[0].version')
+    poetry_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/poetry' | jq -r '.items[0].version')
+    jq -n \
+        --arg python3 "$python_version" \
+        --arg go "$go_version" \
+        --arg poetry "$poetry_version" \
+        '{python3: $python3, go: $go, poetry: $poetry}' \
+        > "{{TEST_DATA}}/unit_test_generated/latest_prod_versions.json"
+    echo "Wrote latest_prod_versions.json with python3=$python_version, go=$go_version, poetry=$poetry_version"
+
 gen-unit-data-for-publish floxhub_repo_path force="":
     #!/usr/bin/env bash
 
@@ -169,8 +183,11 @@ gen-unit-data-for-publish floxhub_repo_path force="":
 
     set -euo pipefail
 
+    # Get the catalog server URL from the FloxHub environment
+    catalog_server_url="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $FLOXHUB_CATALOG_SERVER_URL')"
+
     # Get the latest Nixpkgs revision that exists in the catalog
-    nixpkgs_rev="$(curl -X 'GET' --silent 'http://localhost:8000/api/v1/catalog/info/base-catalog' -H 'accept: application/json' | jq .scraped_pages[0].rev | tr -d "'\"")"
+    nixpkgs_rev="$(curl -X 'GET' --silent "${catalog_server_url}/api/v1/catalog/info/base-catalog" -H 'accept: application/json' | jq .scraped_pages[0].rev | tr -d "'\"")"
     if [ -z "$nixpkgs_rev" ]; then
         echo "failed to communicate with floxhub services"
         exit 1

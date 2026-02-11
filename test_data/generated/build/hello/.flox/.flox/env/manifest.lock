@@ -20,30 +20,30 @@
     {
       "attr_path": "gcc",
       "broken": false,
-      "derivation": "/nix/store/ngwnxc9m4aaz95bnmsmdb3680p5dsk0s-gcc-wrapper-14.2.1.20250322.drv",
-      "description": "GNU Compiler Collection, version 14.2.1.20250322 (wrapper script)",
+      "derivation": "/nix/store/g85mgqp82xzpvd9yy1sbvn3kpakn0j0r-gcc-wrapper-15.2.0.drv",
+      "description": "GNU Compiler Collection, version 15.2.0 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=9e83b64f727c88a7711a2c463a7b16eedb69a84c",
-      "name": "gcc-wrapper-14.2.1.20250322",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d6c71932130818840fc8fe9509cf50be8c64634f",
+      "name": "gcc-wrapper-15.2.0",
       "pname": "gcc",
-      "rev": "9e83b64f727c88a7711a2c463a7b16eedb69a84c",
-      "rev_count": 816272,
-      "rev_date": "2025-06-17T04:31:58Z",
-      "scrape_date": "2025-06-18T00:36:16.259679Z",
+      "rev": "d6c71932130818840fc8fe9509cf50be8c64634f",
+      "rev_count": 942779,
+      "rev_date": "2026-02-08T14:52:16Z",
+      "scrape_date": "2026-02-09T04:38:29.239933Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "14.2.1.20250322",
+      "version": "15.2.0",
       "outputs_to_install": [
         "man",
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/fl8gp0pvp2lz34va2pp2rg4krk2z35ar-gcc-wrapper-14.2.1.20250322-info",
-        "man": "/nix/store/ndnl5s0a8671f19jwhyms5wb0d0jq7ix-gcc-wrapper-14.2.1.20250322-man",
-        "out": "/nix/store/pnppg88x29b2rmmz54zj9rvm6rgbwml5-gcc-wrapper-14.2.1.20250322"
+        "info": "/nix/store/4grmw25w5vddbzfzsf2fx2d3abs9axlv-gcc-wrapper-15.2.0-info",
+        "man": "/nix/store/sbyrswi6n263imfw4n474k97qlkc9fp4-gcc-wrapper-15.2.0-man",
+        "out": "/nix/store/ma96zyr88min916scxhygvw7w99jrflz-gcc-wrapper-15.2.0"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -52,30 +52,31 @@
     {
       "attr_path": "gcc",
       "broken": false,
-      "derivation": "/nix/store/bn7yhf3ngv7r5lcsi8psy5bgpc2751km-gcc-wrapper-14.2.1.20250322.drv",
-      "description": "GNU Compiler Collection, version 14.2.1.20250322 (wrapper script)",
+      "derivation": "/nix/store/zmxacly8fqqzsy7s85v50f0l5fq26hps-gcc-wrapper-15.2.0.drv",
+      "description": "GNU Compiler Collection, version 15.2.0 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=9e83b64f727c88a7711a2c463a7b16eedb69a84c",
-      "name": "gcc-wrapper-14.2.1.20250322",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d6c71932130818840fc8fe9509cf50be8c64634f",
+      "name": "gcc-wrapper-15.2.0",
       "pname": "gcc",
-      "rev": "9e83b64f727c88a7711a2c463a7b16eedb69a84c",
-      "rev_count": 816272,
-      "rev_date": "2025-06-17T04:31:58Z",
-      "scrape_date": "2025-06-18T00:54:49.115926Z",
+      "rev": "d6c71932130818840fc8fe9509cf50be8c64634f",
+      "rev_count": 942779,
+      "rev_date": "2026-02-08T14:52:16Z",
+      "scrape_date": "2026-02-09T05:10:36.886079Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "14.2.1.20250322",
+      "version": "15.2.0",
       "outputs_to_install": [
         "man",
+        "out",
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/02wyr4amxzw5wdwsr1w8iviwz21dpzzq-gcc-wrapper-14.2.1.20250322-info",
-        "man": "/nix/store/v2vgm7qpc7nck1p39cnq29ld1jb4i02z-gcc-wrapper-14.2.1.20250322-man",
-        "out": "/nix/store/m5lx55lwrvcax2lwfv83793i2b8x6r2w-gcc-wrapper-14.2.1.20250322"
+        "info": "/nix/store/s6bajs6f0safjv6yfqawxw23dcbnc0c5-gcc-wrapper-15.2.0-info",
+        "man": "/nix/store/ww5vd3zhxa9dfkxdyyfd69pvq3nivfz1-gcc-wrapper-15.2.0-man",
+        "out": "/nix/store/2l6z5aiys7mpsacdm1ikiafijr30g2fg-gcc-wrapper-15.2.0"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -84,30 +85,30 @@
     {
       "attr_path": "gcc",
       "broken": false,
-      "derivation": "/nix/store/nb6z68cyxxa8dv7q05nf0sc0y0j60k45-gcc-wrapper-14.2.1.20250322.drv",
-      "description": "GNU Compiler Collection, version 14.2.1.20250322 (wrapper script)",
+      "derivation": "/nix/store/3b7zxpk0ak9mkpdzvmrwlvjprn6y62rv-gcc-wrapper-15.2.0.drv",
+      "description": "GNU Compiler Collection, version 15.2.0 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=9e83b64f727c88a7711a2c463a7b16eedb69a84c",
-      "name": "gcc-wrapper-14.2.1.20250322",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d6c71932130818840fc8fe9509cf50be8c64634f",
+      "name": "gcc-wrapper-15.2.0",
       "pname": "gcc",
-      "rev": "9e83b64f727c88a7711a2c463a7b16eedb69a84c",
-      "rev_count": 816272,
-      "rev_date": "2025-06-17T04:31:58Z",
-      "scrape_date": "2025-06-18T01:12:23.481062Z",
+      "rev": "d6c71932130818840fc8fe9509cf50be8c64634f",
+      "rev_count": 942779,
+      "rev_date": "2026-02-08T14:52:16Z",
+      "scrape_date": "2026-02-09T05:44:14.407703Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "14.2.1.20250322",
+      "version": "15.2.0",
       "outputs_to_install": [
         "man",
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/n0qd4ys4ss1pxqcwf8fpf4p8gqfqp8xc-gcc-wrapper-14.2.1.20250322-info",
-        "man": "/nix/store/wdrsjsi6020c883n5bd4j0ih3wqf65da-gcc-wrapper-14.2.1.20250322-man",
-        "out": "/nix/store/kpk57xjwgb2kkbidrvhj4mk0zifj7jkp-gcc-wrapper-14.2.1.20250322"
+        "info": "/nix/store/0x2vvydxchpdb6jb7f6qx1ml2a2xp4bw-gcc-wrapper-15.2.0-info",
+        "man": "/nix/store/jh1kv1kz9xl3s389cakcgv63mbwaz3ri-gcc-wrapper-15.2.0-man",
+        "out": "/nix/store/pia0yz6p1g201qsmn43lp69qzj89wp2d-gcc-wrapper-15.2.0"
       },
       "system": "x86_64-darwin",
       "group": "toplevel",
@@ -116,30 +117,33 @@
     {
       "attr_path": "gcc",
       "broken": false,
-      "derivation": "/nix/store/f0d6rgrfnslm73sw2w1bwlym3f1cp670-gcc-wrapper-14.2.1.20250322.drv",
-      "description": "GNU Compiler Collection, version 14.2.1.20250322 (wrapper script)",
+      "derivation": "/nix/store/ilxab5sggh9gxs5f36w9inhzhsr20pya-gcc-wrapper-15.2.0.drv",
+      "description": "GNU Compiler Collection, version 15.2.0 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=9e83b64f727c88a7711a2c463a7b16eedb69a84c",
-      "name": "gcc-wrapper-14.2.1.20250322",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d6c71932130818840fc8fe9509cf50be8c64634f",
+      "name": "gcc-wrapper-15.2.0",
       "pname": "gcc",
-      "rev": "9e83b64f727c88a7711a2c463a7b16eedb69a84c",
-      "rev_count": 816272,
-      "rev_date": "2025-06-17T04:31:58Z",
-      "scrape_date": "2025-06-18T01:32:28.639894Z",
+      "rev": "d6c71932130818840fc8fe9509cf50be8c64634f",
+      "rev_count": 942779,
+      "rev_date": "2026-02-08T14:52:16Z",
+      "scrape_date": "2026-02-09T06:20:17.829816Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "14.2.1.20250322",
+      "version": "15.2.0",
       "outputs_to_install": [
         "man",
+        "man",
+        "out",
+        "out",
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/7bzcswp68xfk2x17fmqbdrybbwcjy0kq-gcc-wrapper-14.2.1.20250322-info",
-        "man": "/nix/store/kbykzp8wk3anb8ym760yf5m28nqz2k9n-gcc-wrapper-14.2.1.20250322-man",
-        "out": "/nix/store/0fsnicvfpf55nkza12cjnad0w84d6ba7-gcc-wrapper-14.2.1.20250322"
+        "info": "/nix/store/m1x7c684wrcyic4jbijyadapnm7zj33q-gcc-wrapper-15.2.0-info",
+        "man": "/nix/store/578hg40df89239rl4921nb3gdfjnm82c-gcc-wrapper-15.2.0-man",
+        "out": "/nix/store/a245z3cvf9x9sn0xlk6k8j9xhxbhda1z-gcc-wrapper-15.2.0"
       },
       "system": "x86_64-linux",
       "group": "toplevel",

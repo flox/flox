@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Sun, 28 Dec 2025 12:33:17 GMT
+    value: Tue, 10 Feb 2026 14:48:44 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,7 +14,7 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: WTJ-HgWfoAMEb6Q=
+    value: YkfD-iLpIAMEahg=
   body: '{"items":[{"name":"toplevel","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"attr_path_not_found.not_in_catalog","message":"The package ''badpkg1'' is not found in the catalog.","context":{"attr_path":"badpkg1","install_id":"badpkg1"}},{"level":"error","type":"attr_path_not_found.not_in_catalog","message":"The package ''badpkg2'' is not found in the catalog.","context":{"attr_path":"badpkg2","install_id":"badpkg2"}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'
 ---
 when:
@@ -24,7 +24,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Sun, 28 Dec 2025 12:33:18 GMT
+    value: Tue, 10 Feb 2026 14:48:44 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -32,7 +32,7 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: WTJ-MhfyoAMEbow=
+    value: YkfD_gYpIAMEaPw=
   body: '{"items":[],"total_count":0}'
 ---
 when:
@@ -42,7 +42,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Sun, 28 Dec 2025 12:33:18 GMT
+    value: Tue, 10 Feb 2026 14:48:45 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -50,5 +50,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: WTJ-ViVOoAMEVaA=
+    value: YkfEFgx2oAMESZw=
   body: '{"items":[],"total_count":0}'

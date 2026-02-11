@@ -814,11 +814,22 @@ mod tests {
     use std::fs::File;
 
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::providers::catalog::test_helpers::auto_recording_catalog_client;
+    use flox_rust_sdk::providers::catalog::test_helpers::{
+        auto_recording_catalog_client,
+        get_prod_package_version,
+    };
     use pretty_assertions::assert_eq;
 
     use super::*;
     use crate::commands::init::ProvidedPackage;
+
+    fn python_latest_version() -> String {
+        get_prod_package_version("python3")
+    }
+
+    fn poetry_latest_version() -> String {
+        get_prod_package_version("poetry")
+    }
 
     /// Requirements::get_matches should return an empty Vec if no requirements files are found
     #[test]
@@ -883,8 +894,6 @@ mod tests {
     ///////////////////////////////////////////////////////////////////////////
 
     const PYTHON_310_VERSION: &str = "3.10.12";
-    const PYTHON_LATEST_VERSION: &str = "3.13.9";
-    const POETRY_LATEST_VERSION: &str = "2.2.1";
 
     /// An invalid pyproject.toml should return an error
     #[tokio::test]
@@ -912,7 +921,11 @@ mod tests {
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
                 requested: None,
-                compatible: ProvidedPackage::new("python3", vec!["python3"], PYTHON_LATEST_VERSION),
+                compatible: ProvidedPackage::new(
+                    "python3",
+                    vec!["python3"],
+                    &python_latest_version(),
+                ),
             },
         });
     }
@@ -1034,7 +1047,11 @@ mod tests {
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Incompatible {
                 requested: "1".to_string(),
-                substitute: ProvidedPackage::new("python3", vec!["python3"], PYTHON_LATEST_VERSION),
+                substitute: ProvidedPackage::new(
+                    "python3",
+                    vec!["python3"],
+                    &python_latest_version(),
+                ),
             }
         });
     }
@@ -1099,9 +1116,13 @@ mod tests {
         assert_eq!(pyproject.unwrap(), PoetryPyProject {
             provided_python_version: ProvidedVersion::Compatible {
                 requested: Some("^3.7".to_string()),
-                compatible: ProvidedPackage::new("python3", vec!["python3"], PYTHON_LATEST_VERSION),
+                compatible: ProvidedPackage::new(
+                    "python3",
+                    vec!["python3"],
+                    &python_latest_version(),
+                ),
             },
-            poetry_version: POETRY_LATEST_VERSION.to_string(),
+            poetry_version: poetry_latest_version(),
         });
     }
 
@@ -1124,9 +1145,13 @@ mod tests {
         assert_eq!(pyproject.unwrap(), PoetryPyProject {
             provided_python_version: ProvidedVersion::Incompatible {
                 requested: "1".to_string(),
-                substitute: ProvidedPackage::new("python3", vec!["python3"], PYTHON_LATEST_VERSION),
+                substitute: ProvidedPackage::new(
+                    "python3",
+                    vec!["python3"],
+                    &python_latest_version(),
+                ),
             },
-            poetry_version: POETRY_LATEST_VERSION.to_string(),
+            poetry_version: poetry_latest_version(),
         });
     }
 }
