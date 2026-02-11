@@ -5874,6 +5874,8 @@ Optional Query Parameters:
   all catalogs. Note: when searching base catalog, search_term is required.
 - **page**: Page number for pagination (default: 0)
 - **pageSize**: Page size for pagination (default: 10)
+- **search_version**: Query version for A/B testing (0=original, 1=optimized;
+  default: 0)
 
 Returns:
 - **PackageSearchResult**: A list of PackageInfoSearch items and total count
@@ -5887,6 +5889,7 @@ Sends a `GET` request to `/api/v1/catalog/search`
         page: Option<i64>,
         page_size: Option<i64>,
         search_term: Option<&'a types::SearchTerm>,
+        search_version: Option<i64>,
         system: types::PackageSystem,
     ) -> Result<ResponseValue<types::PackageSearchResult>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/search", self.baseurl,);
@@ -5908,6 +5911,9 @@ Sends a `GET` request to `/api/v1/catalog/search`
             .query(&progenitor_client::QueryParam::new("page", &page))
             .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
             .query(&progenitor_client::QueryParam::new("search_term", &search_term))
+            .query(
+                &progenitor_client::QueryParam::new("search_version", &search_version),
+            )
             .query(&progenitor_client::QueryParam::new("system", &system))
             .headers(header_map)
             .build()?;

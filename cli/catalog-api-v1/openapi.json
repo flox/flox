@@ -16,7 +16,7 @@
           "catalog"
         ],
         "summary": "Search for packages",
-        "description": "Search the catalog(s) under the given criteria for matching packages.\n\nRequired Query Parameters:\n- **system**: The system architecture to search for (e.g., x86_64-linux)\n\nOptional Query Parameters:\n- **search_term**: The search term to filter packages by\n- **catalogs**: Comma separated list of catalog names to search; defaults to\n  all catalogs. Note: when searching base catalog, search_term is required.\n- **page**: Page number for pagination (default: 0)\n- **pageSize**: Page size for pagination (default: 10)\n\nReturns:\n- **PackageSearchResult**: A list of PackageInfoSearch items and total count",
+        "description": "Search the catalog(s) under the given criteria for matching packages.\n\nRequired Query Parameters:\n- **system**: The system architecture to search for (e.g., x86_64-linux)\n\nOptional Query Parameters:\n- **search_term**: The search term to filter packages by\n- **catalogs**: Comma separated list of catalog names to search; defaults to\n  all catalogs. Note: when searching base catalog, search_term is required.\n- **page**: Page number for pagination (default: 0)\n- **pageSize**: Page size for pagination (default: 10)\n- **search_version**: Query version for A/B testing (0=original, 1=optimized;\n  default: 0)\n\nReturns:\n- **PackageSearchResult**: A list of PackageInfoSearch items and total count",
         "operationId": "search_api_v1_catalog_search_get",
         "security": [
           {
@@ -74,6 +74,16 @@
               "type": "integer",
               "default": 10,
               "title": "Pagesize"
+            }
+          },
+          {
+            "name": "search_version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Search Version"
             }
           }
         ],
