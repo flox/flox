@@ -7,6 +7,7 @@ use event_coordinator::{EventCoordinator, ExecutiveEvent};
 use flox_core::activate::context::{AttachCtx, AttachProjectCtx};
 use flox_core::activate::vars::FLOX_EXECUTIVE_VERBOSITY_VAR;
 use flox_core::activations::{read_activations_json, state_json_path, write_activations_json};
+use flox_core::sentry::init_sentry;
 use flox_core::traceable_path;
 use log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::sys::signal::Signal::SIGUSR1;
@@ -15,18 +16,17 @@ use nix::unistd::{Pid, getpgid, getpid, setsid};
 use reaper::reap_orphaned_children;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, error, info, instrument};
+use uuid::Uuid;
 use watcher::LockedActivationState;
 
 use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
-use crate::logger;
+use crate::logger::init_executive_logger;
 use crate::process_compose::{process_compose_down, start_process_compose_no_services};
 
 mod event_coordinator;
 mod log_gc;
 mod reaper;
 mod watcher;
-// TODO: Re-enable sentry after fixing OpenSSL dependency issues
-// mod sentry;
 
 #[cfg(target_os = "linux")]
 use reaper::linux::SubreaperGuard;
@@ -37,6 +37,11 @@ pub struct ExecutiveCtx {
     pub project_ctx: AttachProjectCtx,
     pub activation_state_dir: std::path::PathBuf,
     pub parent_pid: i32,
+    /// The metrics UUID for Sentry user identification.
+    /// When Some, Sentry is initialized with this user ID.
+    /// When None, metrics are disabled and Sentry is not initialized.
+    #[serde(default)]
+    pub metrics_uuid: Option<Uuid>,
 }
 
 #[derive(Debug, Args)]
@@ -54,35 +59,20 @@ pub struct ExecutiveArgs {
 
 impl ExecutiveArgs {
     pub fn handle(self) -> Result<(), anyhow::Error> {
+        // Step 1: Extract context which we need to do anything.
         let contents = fs::read_to_string(&self.executive_ctx)?;
         let ExecutiveCtx {
             attach_ctx,
             project_ctx,
             activation_state_dir,
             parent_pid,
+            metrics_uuid,
         } = serde_json::from_str(&contents)?;
         if !std::env::var(NO_REMOVE_ACTIVATION_FILES).is_ok_and(|val| val == "true") {
             fs::remove_file(&self.executive_ctx)?;
         }
 
-        // Set as subreaper immediately. The guard ensures cleanup on all exit paths.
-        #[cfg(target_os = "linux")]
-        let _subreaper_guard = SubreaperGuard::new()?;
-
-        // Ensure the executive is detached from the terminal
-        ensure_process_group_leader()
-            .context("failed to ensure executive is detached from terminal")?;
-
-        // Set up signal handlers early. All signals registered together.
-        let state_json_path = state_json_path(&activation_state_dir);
-        let mut coordinator =
-            EventCoordinator::new().context("failed to create event coordinator")?;
-        coordinator.spawn_all_watchers(state_json_path)?;
-
-        // Signal the parent that the executive is ready
-        debug!("sending SIGUSR1 to parent {}", parent_pid);
-        kill(Pid::from_raw(parent_pid), SIGUSR1)?;
-
+        // Step 2: Setup logger, so that we can record errors.
         let log_dir = project_ctx.flox_env_log_dir.clone();
         let log_file = format!("executive.{}.log", std::process::id());
         // Read verbosity from dedicated executive variable, not `activate -v`
@@ -91,27 +81,48 @@ impl ExecutiveArgs {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
-        logger::init_file_logger(subsystem_verbosity, log_file, &log_dir)
+        init_executive_logger(subsystem_verbosity, log_file, &log_dir)
             .context("failed to initialize logger")?;
 
-        // Propagate PID field to all spans.
+        // Step 3: Setup root span with PID, so that logs contain PID.
         // We can set this eagerly because the PID doesn't change after this entry
         // point. Re-execs of activate->executive will cross this entry point again.
         let pid = std::process::id();
-        let root_span = debug_span!("flox_activations_executive", pid = pid);
-        let _guard = root_span.entered();
+        let _root_span = debug_span!("flox_activations::executive", pid = pid).entered();
+        info!("{self:?}");
 
-        debug!("{self:?}");
+        // Step 4: Setup Sentry, so that we get exception reports.
+        // Skip if metrics_uuid not present (metrics disabled)
+        let _sentry_guard =
+            metrics_uuid.and_then(|uuid| init_sentry("flox-activations::executive", uuid));
 
-        // TODO: Enable earlier in `flox-activations` rather than just when detached?
-        // TODO: Re-enable sentry after fixing OpenSSL dependency issues
-        // let disable_metrics = env::var(FLOX_DISABLE_METRICS_VAR).is_ok();
-        // let _sentry_guard = (!disable_metrics).then(sentry::init_sentry);
+        // Step 5: Catch errors from sub-reaper and setsid.
 
+        // Set as subreaper. The guard ensures cleanup on all exit paths.
+        #[cfg(target_os = "linux")]
+        let _subreaper_guard = SubreaperGuard::new()?;
+
+        // Ensure the executive is detached from the terminal
+        ensure_process_group_leader()
+            .context("failed to ensure executive is detached from terminal")?;
+
+        // Step 6: Set up signal handlers (among other watchers).
+        // All signals registered together.
+        let state_json_path = state_json_path(&activation_state_dir);
+        let mut coordinator =
+            EventCoordinator::new().context("failed to create event coordinator")?;
+        coordinator.spawn_all_watchers(state_json_path)?;
+
+        // Step 7: Signal SIGUSR1 when all setup and possible errors have passed.
+        info!("sending SIGUSR1 to parent {}", parent_pid);
+        kill(Pid::from_raw(parent_pid), SIGUSR1)?;
+
+        // Step 8: Spawn non-essential GC threads
         spawn_heartbeat_log();
         spawn_logs_gc_threads(&log_dir);
 
-        debug!("starting monitoring loop");
+        // Step 9: Enter the monitoring loop
+        info!("starting monitoring loop");
         let result = run_event_loop(
             attach_ctx,
             project_ctx,
@@ -119,7 +130,7 @@ impl ExecutiveArgs {
             coordinator,
             subsystem_verbosity,
         );
-        debug!("executive exiting: {:?}", &result);
+        info!("executive exiting: {:?}", &result);
         result
     }
 }

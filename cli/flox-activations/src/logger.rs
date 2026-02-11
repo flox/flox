@@ -75,8 +75,9 @@ pub fn init_stderr_logger(verbosity_arg: Option<u32>) -> Result<u32, anyhow::Err
     Ok(subsystem_verbosity)
 }
 
-/// Initialize file logging for the executive process.
-pub fn init_file_logger(
+/// Initialize logging for the executive process.
+/// Sets up file logging and the Sentry tracing layer.
+pub fn init_executive_logger(
     verbosity: u32,
     log_file: impl AsRef<str>,
     log_dir: impl AsRef<Path>,
@@ -91,9 +92,14 @@ pub fn init_file_logger(
         .with_target(true)
         .boxed();
 
+    // The sentry layer is safe to add unconditionally - it checks for an active
+    // Sentry client at span capture time and is a no-op when none exists.
+    let sentry_layer = sentry::integrations::tracing::layer().enable_span_attributes();
+
     tracing_subscriber::registry()
         .with(file_layer)
         .with(env_filter)
+        .with(sentry_layer)
         .init();
 
     Ok(())

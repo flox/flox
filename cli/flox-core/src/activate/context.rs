@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use shell_gen::ShellWithPath;
+use uuid::Uuid;
 
 pub use super::mode::ActivateMode;
 
@@ -95,6 +96,12 @@ pub struct ActivateCtx {
 
     /// Whether to clean up the context file after reading it.
     pub remove_after_reading: bool,
+
+    /// The metrics UUID for this installation.
+    /// When Some, Sentry is initialized with this user ID.
+    /// When None, metrics are disabled and Sentry is not initialized.
+    #[serde(default)]
+    pub metrics_uuid: Option<Uuid>,
 }
 
 #[derive(Clone, Debug, Deserialize, derive_more::Display, PartialEq, Serialize)]
