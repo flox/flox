@@ -125,11 +125,13 @@
               prev.runCommandNoCC "flox-activations"
                 {
                   name = "flox-activations";
-                  path = floxActivationsBin;
+                  # Ensure OpenSSL is in the closure for the cargo-built binary
+                  # which links against it via sentry -> native-tls
+                  propagatedBuildInputs = prev.lib.optionals prev.stdenv.isLinux [ prev.openssl.out ];
                 }
                 ''
                   mkdir -p $out/libexec
-                  ln -s ${floxActivationsBin} $out/libexec/flox-activations
+                  cp ${floxActivationsBin} $out/libexec/flox-activations
                 '';
           in
           prev.lib.makeScope prev.newScope (self: {
