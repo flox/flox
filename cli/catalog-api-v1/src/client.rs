@@ -585,6 +585,73 @@ pub mod types {
             }
         }
     }
+    /**Request body for environment SBOM endpoint.
+
+The environment SBOM endpoint generates a Software Bill of Materials
+for a Flox environment by analyzing its lockfile and dependencies.
+
+Attributes:
+    lockfile: The environment's lockfile dictionary (v0 or v1 format)
+    system: Target system architecture (e.g., "x86_64-linux", "aarch64-darwin")
+    environment_name: Name of the environment (for informational purposes in SBOM)
+    environment_owner: Owner of the environment (for informational purposes in SBOM)
+    generation: Optional generation number (for informational purposes in SBOM)*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "EnvironmentSbomRequest",
+    ///  "description": "Request body for environment SBOM endpoint.\n\nThe environment SBOM endpoint generates a Software Bill of Materials\nfor a Flox environment by analyzing its lockfile and dependencies.\n\nAttributes:\n    lockfile: The environment's lockfile dictionary (v0 or v1 format)\n    system: Target system architecture (e.g., \"x86_64-linux\", \"aarch64-darwin\")\n    environment_name: Name of the environment (for informational purposes in SBOM)\n    environment_owner: Owner of the environment (for informational purposes in SBOM)\n    generation: Optional generation number (for informational purposes in SBOM)",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "environment_name",
+    ///    "environment_owner",
+    ///    "lockfile",
+    ///    "system"
+    ///  ],
+    ///  "properties": {
+    ///    "environment_name": {
+    ///      "title": "Environment Name",
+    ///      "type": "string"
+    ///    },
+    ///    "environment_owner": {
+    ///      "title": "Environment Owner",
+    ///      "type": "string"
+    ///    },
+    ///    "generation": {
+    ///      "title": "Generation",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "lockfile": {
+    ///      "title": "Lockfile",
+    ///      "type": "object",
+    ///      "additionalProperties": true
+    ///    },
+    ///    "system": {
+    ///      "$ref": "#/components/schemas/PackageSystem"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct EnvironmentSbomRequest {
+        pub environment_name: ::std::string::String,
+        pub environment_owner: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub generation: ::std::option::Option<i64>,
+        pub lockfile: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+        pub system: PackageSystem,
+    }
+    impl ::std::convert::From<&EnvironmentSbomRequest> for EnvironmentSbomRequest {
+        fn from(value: &EnvironmentSbomRequest) -> Self {
+            value.clone()
+        }
+    }
     ///`ErrorResponse`
     ///
     /// <details><summary>JSON schema</summary>
@@ -5629,6 +5696,82 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
+    /**Get SBOM for an environment
+
+Get SBOM (Software Bill of Materials) for an environment.
+
+Args:
+    body: Request body containing lockfile and environment metadata
+    format: SBOM format (defaults to SbomFormat.SPDX_2_3_JSON)
+    auth_result: Authentication payload
+    cache: Request-scoped dependency cache (injected)
+
+Returns:
+    SBOM document in the requested format
+
+Raises:
+    HTTPException: If lockfile is malformed, system is invalid, or SBOM generation fails
+
+Sends a `POST` request to `/api/v1/catalog/sbom/environment`
+
+*/
+    pub async fn environment_sbom_api_v1_catalog_sbom_environment_post<'a>(
+        &'a self,
+        format: Option<types::SbomFormat>,
+        body: &'a types::EnvironmentSbomRequest,
+    ) -> Result<
+        ResponseValue<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+        Error<types::ErrorResponse>,
+    > {
+        let url = format!("{}/api/v1/catalog/sbom/environment", self.baseurl,);
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .json(&body)
+            .query(&progenitor_client::QueryParam::new("format", &format))
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "environment_sbom_api_v1_catalog_sbom_environment_post",
+        };
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::Custom(e.to_string())),
+        }
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
     /**Get SBOM for a package derivation
 
 Get SBOM (Software Bill of Materials) for a package derivation.
@@ -5731,6 +5874,8 @@ Optional Query Parameters:
   all catalogs. Note: when searching base catalog, search_term is required.
 - **page**: Page number for pagination (default: 0)
 - **pageSize**: Page size for pagination (default: 10)
+- **search_version**: Query version for A/B testing (0=original, 1=optimized;
+  default: 0)
 
 Returns:
 - **PackageSearchResult**: A list of PackageInfoSearch items and total count
@@ -5744,6 +5889,7 @@ Sends a `GET` request to `/api/v1/catalog/search`
         page: Option<i64>,
         page_size: Option<i64>,
         search_term: Option<&'a types::SearchTerm>,
+        search_version: Option<i64>,
         system: types::PackageSystem,
     ) -> Result<ResponseValue<types::PackageSearchResult>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/search", self.baseurl,);
@@ -5765,6 +5911,9 @@ Sends a `GET` request to `/api/v1/catalog/search`
             .query(&progenitor_client::QueryParam::new("page", &page))
             .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
             .query(&progenitor_client::QueryParam::new("search_term", &search_term))
+            .query(
+                &progenitor_client::QueryParam::new("search_version", &search_version),
+            )
             .query(&progenitor_client::QueryParam::new("system", &system))
             .headers(header_map)
             .build()?;
