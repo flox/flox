@@ -423,6 +423,18 @@ EOF
   assert_output --partial "Hello, world!"
 }
 
+# bats test_tags=activate:standalone
+@test "activation works with env -i (empty environment)" {
+  project_setup
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" "$FLOX_BIN" install hello
+
+  # Current recommendation for isolating environments:
+  # https://github.com/flox/flox/issues/2447
+  run env -i FLOX_DISABLE_METRICS=true "$FLOX_BIN" activate -d "$PROJECT_DIR" -- hello
+  assert_success
+  assert_output "Hello, world!"
+}
+
 # bats test_tags=activate,activate:hook,activate:hook:fish
 @test "fish: interactive activate runs profile scripts" {
   project_setup
