@@ -104,7 +104,6 @@ pub fn start_process_compose_no_services(
         subsystem_verbosity,
         vars_from_env,
         &env_diff,
-        &start_state_dir,
     );
 
     command

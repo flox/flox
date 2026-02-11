@@ -504,7 +504,7 @@ EOF
     echo "Testing: flox services $command"
 
     command="$command" run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
-      rm -f "$_FLOX_SERVICES_SOCKET"
+      rm -f "$("$FLOX_BIN" services-socket)"
       "$FLOX_BIN" services "$command" one invalid
 EOF
 )
@@ -523,7 +523,7 @@ EOF
     echo "Testing: flox services $command"
     command="$command" run "$FLOX_BIN" activate -- bash <(cat <<EOF
 
-      [ ! -e "\$_FLOX_SERVICES_SOCKET" ] || exit 2
+      ! [ -e "\$("$FLOX_BIN" services-socket)" ] || exit 2
 
       "$FLOX_BIN" services "$command"
 EOF
@@ -551,7 +551,7 @@ EOF
         echo "Started outer activation.."
         echo "$$" > activation_pid
 
-        ACTIVATIONS_DIR=$(dirname "$_FLOX_START_STATE_DIR")
+        ACTIVATIONS_DIR=$("$FLOX_BIN" activation-state -d "$FLOX_ENV_PROJECT")
         STATE_PATH="${ACTIVATIONS_DIR}/state.json"
 
         # Stop the executive before making changes to state.json which will
@@ -908,7 +908,8 @@ EOF
   # we can get for checking that activation has blocked until process list
   # succeeds
   run "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
-    "$PROCESS_COMPOSE_BIN" process list -u $_FLOX_SERVICES_SOCKET
+    SOCKET=$("$FLOX_BIN" services-socket)
+    "$PROCESS_COMPOSE_BIN" process list -u "$SOCKET"
 EOF
 )
   # Just assert that one of our processes shows up in the output, which indicates
