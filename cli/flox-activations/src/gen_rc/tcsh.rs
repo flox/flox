@@ -6,6 +6,7 @@ use anyhow::Result;
 use shell_gen::{GenerateShell, Shell, set_exported_unexpanded, unset};
 
 use crate::env_diff::EnvDiff;
+use crate::gen_rc::RM;
 
 /// Arguments for generating tcsh startup commands
 #[derive(Debug, Clone)]
@@ -147,7 +148,7 @@ pub fn generate_tcsh_startup_commands(
     if let Some(path) = args.clean_up.as_ref() {
         let path_str = path.to_string_lossy();
         let escaped_path = shell_escape::escape(Cow::Borrowed(path_str.as_ref()));
-        stmts.push(format!("rm {};", escaped_path).to_stmt());
+        stmts.push(format!("{RM} {};", escaped_path).to_stmt());
     }
 
     for stmt in stmts {
@@ -194,6 +195,12 @@ mod tests {
         let mut buf = Vec::new();
         generate_tcsh_startup_commands(&args, &env_diff, &mut buf).unwrap();
         let output = String::from_utf8_lossy(&buf);
+        let (main_output, last_line) = output
+            .strip_suffix('\n')
+            .unwrap()
+            .rsplit_once('\n')
+            .unwrap();
+        assert_eq!(last_line, format!("{RM} /path/to/rc/file;"));
         expect![[r#"
             set verbose
             setenv ADDED_VAR ADDED_VALUE;
@@ -215,8 +222,6 @@ mod tests {
             if ($?_FLOX_SOURCED_PROFILE_SCRIPTS) set _already_sourced_args = ( --already-sourced-env-dirs `echo $_FLOX_SOURCED_PROFILE_SCRIPTS:q` );
             eval "`'/flox_activations' profile-scripts --shell tcsh --env-dirs $FLOX_ENV_DIRS:q $_already_sourced_args:q`";
             unhash;
-            unset verbose;
-            rm /path/to/rc/file;
-        "#]].assert_eq(&output);
+            unset verbose;"#]].assert_eq(main_output);
     }
 }

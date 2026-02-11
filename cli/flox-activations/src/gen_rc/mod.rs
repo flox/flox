@@ -2,6 +2,9 @@ use std::path::PathBuf;
 
 use flox_core::activate::context::ActivateCtx;
 
+/// Absolute path to coreutils `rm`, avoiding user alias expansion (e.g. `alias rm='rm -i'`).
+const RM: &str = concat!(env!("COREUTILS"), "/bin/rm");
+
 use crate::env_diff::EnvDiff;
 use crate::gen_rc::bash::BashStartupArgs;
 use crate::gen_rc::fish::FishStartupArgs;
