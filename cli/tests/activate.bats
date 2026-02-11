@@ -394,18 +394,18 @@ EOF
 
   # Test running the activate script directly in various forms.
   export _FLOX_SHELL_FORCE="bash"
-  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.run/activate -c :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.run/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.run -c :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
-  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --command :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev -c :
   assert_success
-  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -c true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev -c true
   assert_success
-  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --command true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev --command true
   assert_success
-  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev true
   assert_success
-  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -- true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev -- true
   assert_success
 }
 
@@ -415,10 +415,10 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" "$FLOX_BIN" install hello
 
   # Verify that running the activate script directly can access installed packages.
-  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -- hello
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev -- hello
   assert_success
   assert_output --partial "Hello, world!"
-  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -c hello
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev --command hello
   assert_success
   assert_output --partial "Hello, world!"
 }

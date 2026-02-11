@@ -713,7 +713,7 @@ define JSON_VERSION_TO_COMMAND_jq =
       to_entries[] | \
       if .key == "file" then "$(_cat) \(.value)" else (
         if .key == "command" then (
-          "$(FLOX_ENV)/activate --mode build --skip-hook-on-activate -- \(.value)"
+          "$(FLOX_ENV)/activate --mode build --skip-hook-on-activate --env $(FLOX_ENV) -- \(.value)"
         ) else (
           "unknown version type: \(.key)" | halt_error(1)
         ) end

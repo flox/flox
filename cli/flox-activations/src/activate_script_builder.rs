@@ -27,7 +27,6 @@ pub(super) fn assemble_activate_command(
     start_state_dir: &Path,
 ) -> Command {
     let mut command = Command::new(context.attach_ctx.interpreter_path.join("activate"));
-    add_old_cli_options(&mut command, context);
     command.envs(old_cli_envs(
         &context.attach_ctx,
         context.project_ctx.as_ref(),
@@ -40,7 +39,7 @@ pub(super) fn assemble_activate_command(
         vars_from_env,
         start_state_dir,
     );
-    add_activate_script_options(&mut command, start_state_dir);
+    add_activate_script_options(&mut command, context, start_state_dir);
     command
 }
 
@@ -125,28 +124,17 @@ pub fn old_cli_envs(
     exports
 }
 
-/// Prior to the refactor, these options were passed by the CLI to the activate
-/// script
-fn add_old_cli_options(command: &mut Command, context: &ActivateCtx) {
-    if let Some(project) = &context.project_ctx {
-        command
-            .arg("--env-project")
-            .arg(project.env_project.to_string_lossy().to_string());
-    }
-
-    command
-        .arg("--env-cache")
-        .arg(context.attach_ctx.env_cache.to_string_lossy().to_string());
-    command
-        .arg("--env-description")
-        .arg(context.attach_ctx.env_description.clone());
+/// Options parsed by getopt in the activate script
+fn add_activate_script_options(
+    command: &mut Command,
+    context: &ActivateCtx,
+    start_state_dir: &Path,
+) {
+    command.arg("--env").arg(&context.attach_ctx.env);
 
     // Pass down the activation mode
     command.arg("--mode").arg(context.mode.to_string());
-}
 
-/// Options parsed by getopt that are only used by the activate script
-fn add_activate_script_options(command: &mut Command, start_state_dir: &Path) {
     command.args(["--start-state-dir", &start_state_dir.to_string_lossy()]);
 }
 
