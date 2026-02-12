@@ -6,6 +6,7 @@ use anyhow::Result;
 use shell_gen::{GenerateShell, Shell, set_exported_unexpanded, unset};
 
 use crate::env_diff::EnvDiff;
+use crate::gen_rc::RM;
 
 /// Arguments for generating fish startup commands
 #[derive(Debug, Clone)]
@@ -145,7 +146,7 @@ pub fn generate_fish_startup_commands(
     if let Some(path) = args.clean_up.as_ref() {
         let path_str = path.to_string_lossy();
         let escaped_path = shell_escape::escape(Cow::Borrowed(path_str.as_ref()));
-        stmts.push(format!("rm {};", escaped_path).to_stmt());
+        stmts.push(format!("{RM} {};", escaped_path).to_stmt());
     }
 
     for stmt in stmts {
@@ -192,6 +193,12 @@ mod tests {
         let mut buf = Vec::new();
         generate_fish_startup_commands(&args, &env_diff, &mut buf).unwrap();
         let output = String::from_utf8_lossy(&buf);
+        let (main_output, last_line) = output
+            .strip_suffix('\n')
+            .unwrap()
+            .rsplit_once('\n')
+            .unwrap();
+        assert_eq!(last_line, format!("{RM} /path/to/rc/file;"));
         expect![[r#"
             set -gx fish_trace 1;
             set -gx ADDED_VAR ADDED_VALUE;
@@ -211,8 +218,6 @@ mod tests {
             /flox_activations fix-paths --shell fish --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "$MANPATH" | source;
             set -g  _FLOX_SOURCED_PROFILE_SCRIPTS (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end);
             /flox_activations profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source;
-            set -gx fish_trace 0;
-            rm /path/to/rc/file;
-        "#]].assert_eq(&output);
+            set -gx fish_trace 0;"#]].assert_eq(main_output);
     }
 }

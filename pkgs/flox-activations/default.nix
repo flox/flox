@@ -21,6 +21,7 @@ let
     FLOX_ACTIVATIONS_BIN = "${placeholder "out"}/libexec/flox-activations";
     # Nix will ignore this if it starts with just BASH
     X_BASH_BIN = "${bash}/bin/bash";
+    COREUTILS = "${coreutils}";
   };
 
 in

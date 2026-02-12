@@ -6,6 +6,7 @@ use anyhow::Result;
 use shell_gen::{GenerateShell, Shell, set_exported_unexpanded, source_file, unset};
 
 use crate::env_diff::EnvDiff;
+use crate::gen_rc::RM;
 
 /// Arguments for generating bash startup commands
 #[derive(Debug, Clone)]
@@ -143,7 +144,7 @@ pub fn generate_bash_startup_commands(
     if let Some(path) = args.clean_up.as_ref() {
         let path_str = path.to_string_lossy();
         let escaped_path = shell_escape::escape(Cow::Borrowed(path_str.as_ref()));
-        stmts.push(format!("rm {};", escaped_path).to_stmt());
+        stmts.push(format!("{RM} {};", escaped_path).to_stmt());
     }
 
     for stmt in stmts {
@@ -191,6 +192,12 @@ mod tests {
         let mut buf = Vec::new();
         generate_bash_startup_commands(&args, &env_diff, &mut buf).unwrap();
         let output = String::from_utf8_lossy(&buf);
+        let (main_output, last_line) = output
+            .strip_suffix('\n')
+            .unwrap()
+            .rsplit_once('\n')
+            .unwrap();
+        assert_eq!(last_line, format!("{RM} /path/to/rc/file;"));
         expect![[r#"
             set -x
             export _flox_sourcing_rc=true;
@@ -211,8 +218,6 @@ mod tests {
             eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")";
             eval "$('/flox_activations' profile-scripts --shell bash --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "${FLOX_ENV_DIRS:-}")";
             set +h
-            set +x
-            rm /path/to/rc/file;
-        "#]].assert_eq(&output);
+            set +x"#]].assert_eq(main_output);
     }
 }
