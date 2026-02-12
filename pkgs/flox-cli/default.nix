@@ -74,8 +74,6 @@ craneLib.buildPackage (
     cargoArtifacts = rust-internal-deps;
     cargoExtraArgs = "--locked -p flox";
 
-    CARGO_LOG = "cargo::core::compiler::fingerprint=info";
-
     # runtime dependencies
     buildInputs = rust-internal-deps.buildInputs ++ [ ];
 
