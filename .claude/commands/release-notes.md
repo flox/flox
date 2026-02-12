@@ -10,6 +10,15 @@ well.
 Look for anything called out specifically as "Release Notes", breaking changes,
 new features, fixed bugs and anything that could be user facing.
 
+For any commits that include a `## Release Notes` section, include the content
+of that section verbatim, unless it's marked as N/A or irrelevant.
+If improvements can be made to how they're written, prompt for whether to
+include the original content verbatim, showing the original content verbatim and
+the improved version.
+
+You can view commits with Release Notes with a command like
+`git log --grep="Release Notes" v0.0.0..release-1.0.0`.
+
 Generate 3 lists of items, one of things that were called out as "Release Notes"
 or otherwise is clear it is something to be included.  Another of things that
 you thing should be included but are questionable, and a final list of things
