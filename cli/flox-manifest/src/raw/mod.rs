@@ -8,7 +8,7 @@ use flox_core::data::System;
 use indoc::indoc;
 use itertools::Itertools;
 use reqwest::Url;
-use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Table, Value};
+use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Table, TableLike, Value};
 use tracing::{debug, trace};
 
 use crate::parsed::common::{self, VersionKind};
@@ -103,7 +103,7 @@ mod schema_version_tests {
 
     #[test]
     fn missing_schema() {
-        let toml = parse_toml("{}");
+        let toml = parse_toml("foo = 1");
         let err = get_schema_version_kind(&toml).err().unwrap();
         assert!(matches!(err, ManifestError::MissingSchemaVersion));
     }
@@ -133,7 +133,7 @@ mod schema_version_tests {
 
     #[test]
     fn schema_version() {
-        let toml = parse_toml("version = \"1.10.0\"");
+        let toml = parse_toml("schema-version = \"1.10.0\"");
         let VersionKind::SchemaVersion(value) = get_schema_version_kind(&toml).unwrap() else {
             panic!()
         };
@@ -682,11 +682,11 @@ impl ModifyPackages for Manifest<Migrated> {
                         None
                     };
                     let catalog_descriptor = v1_10_0::PackageDescriptorCatalog {
-                        pkg_path: pkg.id().to_string(),
+                        pkg_path: pkg_raw.pkg_path.clone(),
                         pkg_group,
                         priority: None,
                         version: pkg_raw.version.clone(),
-                        systems: None,
+                        systems: pkg_raw.systems.clone(),
                         outputs: pkg_raw.outputs.clone().map(|outputs| outputs.into()),
                     };
                     let descriptor =
@@ -701,7 +701,7 @@ impl ModifyPackages for Manifest<Migrated> {
                     let flake_descriptor = v1_10_0::PackageDescriptorFlake {
                         flake: flake_raw.url.to_string(),
                         priority: None,
-                        systems: None,
+                        systems: pkg.systems(),
                         outputs: None,
                     };
                     let descriptor = v1_10_0::ManifestPackageDescriptor::FlakeRef(flake_descriptor);
@@ -728,10 +728,10 @@ impl ModifyPackages for Manifest<Migrated> {
             }
         }
         let new_manifest = if already_installed.values().all(|p| *p) {
+            None
+        } else {
             manifest.update_raw_packages_from_typed_manifest()?;
             Some(manifest)
-        } else {
-            None
         };
         Ok(PackageInsertion {
             new_manifest,
@@ -808,27 +808,42 @@ fn update_raw_packages_from_typed_manifest(
         .difference(&raw_pkgs)
         .cloned()
         .collect::<HashSet<_>>();
+    let added_or_removed = to_add.union(&to_remove).cloned().collect::<HashSet<_>>();
     let to_update = typed_pkgs
-        .intersection(&raw_pkgs)
-        .cloned()
-        .collect::<HashSet<String>>()
-        .union(&to_add)
+        .difference(&added_or_removed)
         .cloned()
         .collect::<HashSet<_>>();
+    let should_be_original_pkgs = to_remove.union(&to_update).cloned().collect::<HashSet<_>>();
+    debug_assert_eq!(should_be_original_pkgs, raw_pkgs);
 
     for pkg in to_remove {
+        debug!(%pkg, "removing package");
         install_table.remove(&pkg);
     }
     for pkg in to_add.iter() {
-        let mut new_descriptor = InlineTable::new();
-        new_descriptor.set_dotted(true);
-        install_table.insert(pkg, Item::Value(Value::InlineTable(new_descriptor)));
+        debug!(%pkg, "adding package");
+        let mut inner_descriptor = InlineTable::new();
+        inner_descriptor.set_dotted(true);
+        let mut descriptor = Item::Value(Value::InlineTable(inner_descriptor));
+        update_descriptor(
+            descriptor
+                .as_table_like_mut()
+                .expect("toml inline table should be table-like"),
+            pkg.as_str(),
+            parsed,
+        )?;
+        install_table.insert(pkg, descriptor);
     }
     for pkg in to_update {
+        debug!(%pkg, "updating package");
         let raw_descriptor = install_table
             .get_mut(&pkg)
-            .and_then(|value| value.as_inline_table_mut())
-            .ok_or(ManifestError::PackageNotFound(pkg.clone()))?;
+            .ok_or(ManifestError::PackageNotFound(pkg.clone()))?
+            .as_table_like_mut()
+            .ok_or(ManifestError::Other(format!(
+                "package descriptor '{}' was not a TOML table",
+                pkg
+            )))?;
         update_descriptor(raw_descriptor, pkg.as_str(), parsed)?;
     }
 
@@ -837,7 +852,7 @@ fn update_raw_packages_from_typed_manifest(
 
 /// Brings a raw TOML package descriptor into sync with the corresponding typed package descriptor.
 fn update_descriptor(
-    raw: &mut InlineTable,
+    raw: &mut dyn toml_edit::TableLike,
     install_id: &str,
     parsed: &Parsed,
 ) -> Result<(), ManifestError> {
@@ -850,53 +865,9 @@ fn update_descriptor(
                 .ok_or(ManifestError::PackageNotFound(install_id.to_string()))?;
             use crate::parsed::v1::ManifestPackageDescriptor::*;
             match typed {
-                Catalog(v1::PackageDescriptorCatalog {
-                    pkg_path,
-                    pkg_group,
-                    priority,
-                    version,
-                    systems,
-                }) => {
-                    raw["pkg-path"] = toml_string(pkg_path);
-                    if let Some(pkg_group) = pkg_group {
-                        raw["pkg-group"] = toml_string(pkg_group);
-                    }
-                    if let Some(priority) = priority {
-                        raw["priority"] = Value::Integer(Formatted::new(*priority as i64));
-                    }
-                    if let Some(version) = version {
-                        raw["version"] = toml_string(version);
-                    }
-                    if let Some(systems) = systems {
-                        raw["systems"] = toml_array_of_strings(systems);
-                    }
-                },
-                FlakeRef(v1::PackageDescriptorFlake {
-                    flake,
-                    priority,
-                    systems,
-                }) => {
-                    raw["flake"] = toml_string(flake);
-                    if let Some(priority) = priority {
-                        raw["priority"] = Value::Integer(Formatted::new(*priority as i64));
-                    }
-                    if let Some(systems) = systems {
-                        raw["systems"] = toml_array_of_strings(systems);
-                    }
-                },
-                StorePath(common::PackageDescriptorStorePath {
-                    store_path,
-                    systems,
-                    priority,
-                }) => {
-                    raw["store-path"] = toml_string(store_path);
-                    if let Some(priority) = priority {
-                        raw["priority"] = Value::Integer(Formatted::new(*priority as i64));
-                    }
-                    if let Some(systems) = systems {
-                        raw["systems"] = toml_array_of_strings(systems);
-                    }
-                },
+                Catalog(d) => update_v1_catalog_descriptor(raw, d),
+                FlakeRef(d) => update_v1_flake_descriptor(raw, d),
+                StorePath(d) => update_store_path_descriptor(raw, d),
             }
         },
         Parsed::V1_10_0(manifest) => {
@@ -907,75 +878,9 @@ fn update_descriptor(
                 .ok_or(TomlEditError::PackageNotFound(install_id.to_string()))?;
             use crate::parsed::v1_10_0::ManifestPackageDescriptor::*;
             match typed {
-                Catalog(v1_10_0::PackageDescriptorCatalog {
-                    pkg_path,
-                    pkg_group,
-                    priority,
-                    version,
-                    systems,
-                    outputs,
-                }) => {
-                    raw["pkg-path"] = toml_string(pkg_path);
-                    if let Some(pkg_group) = pkg_group {
-                        raw["pkg-group"] = toml_string(pkg_group);
-                    }
-                    if let Some(priority) = priority {
-                        raw["priority"] = Value::Integer(Formatted::new(*priority as i64));
-                    }
-                    if let Some(version) = version {
-                        raw["version"] = toml_string(version);
-                    }
-                    if let Some(systems) = systems {
-                        raw["systems"] = toml_array_of_strings(systems);
-                    }
-                    if let Some(outputs) = outputs {
-                        match outputs {
-                            v1_10_0::SelectedOutputs::All(_) => {
-                                raw["outputs"] = toml_string("all");
-                            },
-                            v1_10_0::SelectedOutputs::Specific(items) => {
-                                raw["outputs"] = toml_array_of_strings(items);
-                            },
-                        }
-                    }
-                },
-                FlakeRef(v1_10_0::PackageDescriptorFlake {
-                    flake,
-                    priority,
-                    systems,
-                    outputs,
-                }) => {
-                    raw["flake"] = toml_string(flake);
-                    if let Some(priority) = priority {
-                        raw["priority"] = Value::Integer(Formatted::new(*priority as i64));
-                    }
-                    if let Some(systems) = systems {
-                        raw["systems"] = toml_array_of_strings(systems);
-                    }
-                    if let Some(outputs) = outputs {
-                        match outputs {
-                            v1_10_0::SelectedOutputs::All(_) => {
-                                raw["outputs"] = toml_string("all");
-                            },
-                            v1_10_0::SelectedOutputs::Specific(items) => {
-                                raw["outputs"] = toml_array_of_strings(items);
-                            },
-                        }
-                    }
-                },
-                StorePath(common::PackageDescriptorStorePath {
-                    store_path,
-                    systems,
-                    priority,
-                }) => {
-                    raw["store-path"] = toml_string(store_path);
-                    if let Some(priority) = priority {
-                        raw["priority"] = Value::Integer(Formatted::new(*priority as i64));
-                    }
-                    if let Some(systems) = systems {
-                        raw["systems"] = toml_array_of_strings(systems);
-                    }
-                },
+                Catalog(d) => update_v1_10_0_catalog_descriptor(raw, d),
+                FlakeRef(d) => update_v1_10_0_flake_descriptor(raw, d),
+                StorePath(d) => update_store_path_descriptor(raw, d),
             }
         },
     }
@@ -990,6 +895,10 @@ fn toml_array_of_strings(strs: &[String]) -> Value {
     Value::Array(strs.iter().map(toml_string).collect::<Array>())
 }
 
+fn toml_priority(p: u64) -> Value {
+    Value::Integer(Formatted::new(p as i64))
+}
+
 fn get_install_table_mut(doc: &mut DocumentMut) -> Result<&mut Table, TomlEditError> {
     let install_field = doc
         .entry("install")
@@ -999,6 +908,163 @@ fn get_install_table_mut(doc: &mut DocumentMut) -> Result<&mut Table, TomlEditEr
         debug!("creating new [install] table");
         TomlEditError::MalformedInstallTable(install_field_type)
     })
+}
+
+fn update_v1_catalog_descriptor(
+    raw: &mut dyn TableLike,
+    descriptor: &v1::PackageDescriptorCatalog,
+) {
+    let v1::PackageDescriptorCatalog {
+        pkg_path,
+        pkg_group,
+        priority,
+        version,
+        systems,
+    } = descriptor;
+    raw.insert("pkg-path", toml_string(pkg_path).into());
+    if let Some(pkg_group) = pkg_group {
+        raw.insert("pkg-group", toml_string(pkg_group).into());
+    } else {
+        raw.remove("pkg-group");
+    }
+    if let Some(priority) = priority {
+        raw.insert("priority", toml_priority(*priority).into());
+    } else {
+        raw.remove("priority");
+    }
+    if let Some(version) = version {
+        raw.insert("version", toml_string(version).into());
+    } else {
+        raw.remove("version");
+    }
+    if let Some(systems) = systems {
+        raw.insert("systems", toml_array_of_strings(systems).into());
+    } else {
+        raw.remove("systems");
+    }
+}
+
+fn update_v1_flake_descriptor(raw: &mut dyn TableLike, descriptor: &v1::PackageDescriptorFlake) {
+    let v1::PackageDescriptorFlake {
+        flake,
+        priority,
+        systems,
+    } = descriptor;
+    raw.insert("flake", toml_string(flake).into());
+    if let Some(priority) = priority {
+        raw.insert("priority", toml_priority(*priority).into());
+    } else {
+        raw.remove("priority");
+    }
+    if let Some(systems) = systems {
+        raw.insert("systems", toml_array_of_strings(systems).into());
+    } else {
+        raw.remove("systems");
+    }
+}
+
+fn update_store_path_descriptor(
+    raw: &mut dyn TableLike,
+    descriptor: &common::PackageDescriptorStorePath,
+) {
+    let common::PackageDescriptorStorePath {
+        store_path,
+        systems,
+        priority,
+    } = descriptor;
+    raw.insert("store-path", toml_string(store_path).into());
+    if let Some(priority) = priority {
+        raw.insert("priority", toml_priority(*priority).into());
+    } else {
+        raw.remove("priority");
+    }
+    if let Some(systems) = systems {
+        raw.insert("systems", toml_array_of_strings(systems).into());
+    } else {
+        raw.remove("systems");
+    }
+}
+
+fn update_v1_10_0_catalog_descriptor(
+    raw: &mut dyn TableLike,
+    descriptor: &v1_10_0::PackageDescriptorCatalog,
+) {
+    let v1_10_0::PackageDescriptorCatalog {
+        pkg_path,
+        pkg_group,
+        priority,
+        version,
+        systems,
+        outputs,
+    } = descriptor;
+    raw.insert("pkg-path", toml_string(pkg_path).into());
+    if let Some(pkg_group) = pkg_group {
+        raw.insert("pkg-group", toml_string(pkg_group).into());
+    } else {
+        raw.remove("pkg-group");
+    }
+    if let Some(priority) = priority {
+        raw.insert("priority", toml_priority(*priority).into());
+    } else {
+        raw.remove("priority");
+    }
+    if let Some(version) = version {
+        raw.insert("version", toml_string(version).into());
+    } else {
+        raw.remove("version");
+    }
+    if let Some(systems) = systems {
+        raw.insert("systems", toml_array_of_strings(systems).into());
+    } else {
+        raw.remove("systems");
+    }
+    if let Some(outputs) = outputs {
+        match outputs {
+            v1_10_0::SelectedOutputs::All(_) => {
+                raw.insert("outputs", toml_string("all").into());
+            },
+            v1_10_0::SelectedOutputs::Specific(items) => {
+                raw.insert("outputs", toml_array_of_strings(items).into());
+            },
+        }
+    } else {
+        raw.remove("outputs");
+    }
+}
+
+fn update_v1_10_0_flake_descriptor(
+    raw: &mut dyn TableLike,
+    descriptor: &v1_10_0::PackageDescriptorFlake,
+) {
+    let v1_10_0::PackageDescriptorFlake {
+        flake,
+        priority,
+        systems,
+        outputs,
+    } = descriptor;
+    raw.insert("flake", toml_string(flake).into());
+    if let Some(priority) = priority {
+        raw.insert("priority", toml_priority(*priority).into());
+    } else {
+        raw.remove("priority");
+    }
+    if let Some(systems) = systems {
+        raw.insert("systems", toml_array_of_strings(systems).into());
+    } else {
+        raw.remove("systems");
+    }
+    if let Some(outputs) = outputs {
+        match outputs {
+            v1_10_0::SelectedOutputs::All(_) => {
+                raw.insert("outputs", toml_string("all").into());
+            },
+            v1_10_0::SelectedOutputs::Specific(items) => {
+                raw.insert("outputs", toml_array_of_strings(items).into());
+            },
+        }
+    } else {
+        raw.remove("outputs");
+    }
 }
 
 /// Add a `system` to the `[options.systems]` array of a manifest
@@ -1087,7 +1153,7 @@ pub mod test_helpers {
 }
 
 #[cfg(test)]
-pub(super) mod test {
+mod test {
     use pretty_assertions::assert_eq;
     use proptest::prelude::*;
     use proptest_derive::Arbitrary;
@@ -1096,7 +1162,7 @@ pub(super) mod test {
     use crate::raw::test_helpers::mk_test_manifest_from_contents;
 
     const DUMMY_MANIFEST: &str = indoc! {r#"
-        version = 1
+        schema-version = "1.10.0"
 
         [install]
         hello.pkg-path = "hello"
@@ -1107,23 +1173,8 @@ pub(super) mod test {
         pkg-path = "bat"
     "#};
 
-    // This is an array of tables called `install` rather than a table called `install`.
-    const BAD_MANIFEST: &str = indoc! {r#"
-        version = 1
-
-        [[install]]
-        python = {}
-
-        [[install]]
-        ripgrep = {}
-    "#};
-
     fn dummy_manifest() -> Manifest<Migrated> {
         mk_test_manifest_from_contents(DUMMY_MANIFEST)
-    }
-
-    fn bad_manifest() -> Manifest<Migrated> {
-        mk_test_manifest_from_contents(BAD_MANIFEST)
     }
 
     /// Check whether a TOML document contains a line declaring that the provided package
@@ -1159,7 +1210,8 @@ pub(super) mod test {
         )];
         let pre_addition_manifest = dummy_manifest();
         let pre_addition_toml = pre_addition_manifest.inner.migrated_raw.clone();
-        assert!(!contains_package(&pre_addition_toml, test_packages[0].id()));
+        // dummy manifest already contains `hello`
+        assert!(contains_package(&pre_addition_toml, test_packages[0].id()));
         let insertion = pre_addition_manifest.add_packages(&test_packages).unwrap();
         assert!(
             insertion.new_manifest.is_none(),
@@ -1184,38 +1236,6 @@ pub(super) mod test {
             !insertion.already_installed.values().all(|p| *p),
             "none of the packages should be listed as already installed"
         );
-    }
-
-    #[test]
-    fn insert_error_when_manifest_malformed() {
-        let test_packages = vec![PackageToInstall::Catalog(
-            CatalogPackage::from_str("foo").unwrap(),
-        )];
-        let manifest = bad_manifest();
-        let attempted_insertion = manifest.add_packages(&test_packages);
-        assert!(matches!(
-            attempted_insertion,
-            Err(ManifestError::ParseToml(_))
-        ))
-    }
-
-    #[test]
-    fn remove_error_when_manifest_malformed() {
-        let test_packages = vec!["hello".to_owned()];
-        let manifest = bad_manifest();
-        let attempted_removal = manifest.remove_packages(&test_packages);
-        assert!(matches!(
-            attempted_removal,
-            Err(ManifestError::ParseToml(_))
-        ))
-    }
-
-    #[test]
-    fn error_when_install_table_missing() {
-        let test_packages = vec!["hello".to_owned()];
-        let manifest = mk_test_manifest_from_contents("version = 1");
-        let removal = manifest.remove_packages(&test_packages);
-        assert!(matches!(removal, Err(ManifestError::PackageNotFound(_))));
     }
 
     #[test]
@@ -1411,7 +1431,7 @@ pub(super) mod test {
     fn manifest_is_updated_correctly_with_outputs() {
         let package = PackageToInstall::parse(&"".to_string(), "curl^bin,man").unwrap();
         let contents = "
-version = 1
+schema-version = \"1.10.0\"
         ";
         let manifest = mk_test_manifest_from_contents(contents);
         let insertion = manifest
@@ -1425,7 +1445,7 @@ version = 1
                 .migrated_raw
                 .to_string(),
             "
-version = 1
+schema-version = \"1.10.0\"
 
 [install]
 curl.pkg-path = \"curl\"

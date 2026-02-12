@@ -1,0 +1,4 @@
+version = 1
+
+[install]
+hello.flake = "github:NixOS/nixpkgs/nixpkgs-unstable#hello"

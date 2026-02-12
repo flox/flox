@@ -1,23 +1,23 @@
-//!                                  ┌────────────────────────────────────┐
-//!                                  │                                    │
-//! Manifests on this side of the    │ Manifest state machine             │ Manifest states on this side of the graph
-//! graph maintain information about │                                    │ don't contain the original, formatted
-//! the formatting and comments from │ Init                               │ contents of the manifest, and only contain
-//! the user's on-disk manifest.     │  │                                 │ the typed contents of the manifest.
-//!                                  │  ▼                                 │
-//! This means you can only write a  │ TomlParsed                         │
-//! manifest from one of these       │  │                                 │
-//! states. A manifest serialized    │  ▼                                 │
-//! via serde will have a different  │ Validated───────►TypedOnly         │
-//! style, won't have a user's       │  │               ▲   │             │
-//! comments, and won't have a       │  │    ┌──────────┘   │             │
-//! user's formatting, which is a    │  ▼    │              ▼             │
-//! dealbreaker.                     │ Migrated───────► MigratedTypedOnly │
-//!                                  │  │                                 │
-//!                                  │  ▼                                 │
-//!                                  │ Writable                           │
-//!                                  │                                    │
-//!                                  └────────────────────────────────────┘
+//!```text
+//!                                  ┌───────────────────────────────────────┐
+//! Manifests on this side of the    │    Manifest state machine             │ Manifest states on this side of the graph
+//! graph maintain information about │                                       │ don't contain the original, formatted
+//! the formatting and comments from │    Init                               │ contents of the manifest, and only contain
+//! the user's on-disk manifest.     │     │                                 │ the typed contents of the manifest.
+//!                                  │     ▼                                 │
+//! This means you can only write a  │    ParsedToml                         │ You'll get these manifests when you read
+//! manifest from one of these       │     │                                 │ the contents of a lockfile.
+//! states. A manifest serialized    │     ▼                                 │
+//! via serde will have a different  │ ┌──Validated───────►TypedOnly         │
+//! style, won't have a user's       │ │   │               ▲   │             │
+//! comments, and won't have a       │ │   │    ┌──────────┘   │             │
+//! user's formatting, which is a    │ │   ▼    │              ▼             │
+//! dealbreaker.                     │ │  Migrated───────► MigratedTypedOnly │
+//!                                  │ │   │                                 │
+//!                                  │ │   ▼                                 │
+//!                                  │ └─►Writable                           │
+//!                                  └───────────────────────────────────────┘
+//! ```
 
 use std::path::Path;
 use std::str::FromStr;
