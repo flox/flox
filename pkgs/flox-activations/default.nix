@@ -42,7 +42,6 @@ craneLib.buildPackage (
     # if we add shared (internal) packages.
     cargoExtraArgs = "--locked -p flox-activations";
 
-    CARGO_LOG = "cargo::core::compiler::fingerprint=info";
     CARGO_PROFILE = "small";
 
     # runtime dependencies
