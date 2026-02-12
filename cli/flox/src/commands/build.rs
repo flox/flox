@@ -28,6 +28,7 @@ use flox_rust_sdk::providers::nix;
 use flox_rust_sdk::utils::{CommandExt, FLOX_INTERPRETER};
 use indoc::formatdoc;
 use itertools::Itertools;
+use nef_lock_catalog::{lock_config, read_config, write_lock};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use url::Url;
@@ -106,6 +107,11 @@ enum SubcommandOrBuildTargets {
         #[bpaf(positional("installable"))]
         installable: String,
     },
+    #[bpaf(
+        command,
+        footer("Run 'man flox-build-update-catalogs' for more details.")
+    )]
+    UpdateCatalogs {},
     BuildTargets {
         #[bpaf(external(base_catalog_url_select), optional)]
         base_catalog_url_select: Option<BaseCatalogUrlSelect>,
@@ -139,6 +145,14 @@ impl Build {
                 environment_subcommand_metric!("build::import-nixpkgs", env);
 
                 Self::import_nixpkgs(flox, env, installable, force).await
+            },
+            SubcommandOrBuildTargets::UpdateCatalogs {} => {
+                let env = self
+                    .environment
+                    .detect_concrete_environment(&flox, "Clean build files of")?;
+                environment_subcommand_metric!("build::update-catalogs", env);
+
+                Self::update_catalogs(&flox, env).await
             },
             SubcommandOrBuildTargets::BuildTargets {
                 targets,
@@ -381,6 +395,38 @@ impl Build {
             installable,
             package_file.display()
         ));
+
+        Ok(())
+    }
+
+    async fn update_catalogs(_flox: &Flox, env: ConcreteEnvironment) -> Result<()> {
+        match &env {
+            ConcreteEnvironment::Path(_) => (),
+            ConcreteEnvironment::Managed(_) => {
+                bail!("Cannot import from nixpkgs in an environment on FloxHub.")
+            },
+            ConcreteEnvironment::Remote(_) => {
+                unreachable!("Cannot import from nixpkgs in a remote environment")
+            },
+        };
+
+        let config_path = env.dot_flox_path().join("nix-builds.toml");
+
+        if !config_path.exists() {
+            message::warning(formatdoc! {"
+                No catalog inputs defined in this project.
+
+                Create and edit catalog inputs in your .flox/nix-builds.toml:
+
+                    {}
+            ", config_path.display()});
+            return Ok(());
+        };
+
+        let config = read_config(&config_path)?;
+        let lockfile = lock_config(&config)?;
+
+        write_lock(&lockfile, config_path.with_extension("lock"))?;
 
         Ok(())
     }

@@ -562,6 +562,14 @@ pub fn find_toplevel_group_nixpkgs(lockfile: &Lockfile) -> Option<BaseCatalogUrl
 fn get_nix_expression_targets(
     expression_dir: &Path,
 ) -> Result<Vec<(String, ExpressionBuildMetadata)>, ManifestBuilderError> {
+    if !expression_dir.exists() {
+        debug!(
+            path = %expression_dir.display(),
+            "expression directory does not exist, skipping nix expression target discovery"
+        );
+        return Ok(vec![]);
+    }
+
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct NefTargetReflect {
@@ -573,7 +581,12 @@ fn get_nix_expression_targets(
     let output = nix_base_command()
         .arg("eval")
         .args(["--argstr", "nixpkgs-url", COMMON_NIXPKGS_URL.as_str()])
-        .args(["--argstr", "pkgs-dir", &*expression_dir.to_string_lossy()])
+        .args([
+            "--argstr",
+            "source-ref",
+            &format!("path:{}", &*expression_dir.to_string_lossy()),
+        ])
+        .args(["--argstr", "pkgs-dir", "."])
         .args([
             "--file",
             &*FLOX_EXPRESSION_BUILD_NIX.to_string_lossy(),

@@ -113,12 +113,24 @@ let
     in
     lib.concatStringsSep " " (mkAttrPathsWithOutputs collectedAttrPaths);
 
+  mapToPackages =
+    attrsFromDirTop: pkgs:
+    lib.mapAttrs (
+      name: spec:
+      {
+        "nix" = pkgs.${name};
+        "directory" = mapToPackages spec.entries pkgs.${name};
+      }
+      .${spec.type}
+    ) attrsFromDirTop;
+
 in
 {
 
   inherit
     collectAttrPaths
     makeTargets
+    mapToPackages
     ;
 
 }
