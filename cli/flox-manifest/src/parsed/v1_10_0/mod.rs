@@ -37,7 +37,7 @@ pub use package_descriptor::*;
 // the user provided manifest but allow unknown fields when deserializing the
 // lockfile, but that doesn't seem worth the effort at the moment.
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
 pub struct ManifestV1_10_0 {
@@ -77,6 +77,25 @@ pub struct ManifestV1_10_0 {
     pub include: Include,
 }
 impl_pkg_lookup!(crate::parsed::v1_10_0, ManifestV1_10_0);
+
+// You can't derive `Default` because `schema-version` is a `String`,
+// which just defaults to an empty string.
+impl Default for ManifestV1_10_0 {
+    fn default() -> Self {
+        Self {
+            schema_version: "1.10.0".into(),
+            install: Default::default(),
+            vars: Default::default(),
+            hook: Default::default(),
+            profile: Default::default(),
+            options: Default::default(),
+            services: Default::default(),
+            build: Default::default(),
+            containerize: Default::default(),
+            include: Default::default(),
+        }
+    }
+}
 
 impl AsTypedOnlyManifest for ManifestV1_10_0 {
     fn as_typed_only(&self) -> crate::Manifest<TypedOnly> {
@@ -234,7 +253,7 @@ pub mod test {
     };
 
     const CATALOG_MANIFEST: &str = indoc! {r#"
-        version = 1
+        schema-version = "1.10.0"
     "#};
 
     // Generate a Manifest that has empty install and include sections
@@ -363,7 +382,7 @@ pub mod test {
     fn serialize_omits_unspecified_fields() {
         let manifest = ManifestV1_10_0::default();
         let expected = indoc! {r#"
-            version = 1
+            schema-version = "1.10.0"
 
             [options]
         "#};
@@ -383,7 +402,7 @@ pub mod test {
             ..Default::default()
         };
         let expected = indoc! {r#"
-            version = 1
+            schema-version = "1.10.0"
 
             [hook]
 
@@ -399,7 +418,7 @@ pub mod test {
     #[test]
     fn parses_build_section() {
         let build_manifest = indoc! {r#"
-            version = 1
+            schema-version = "1.10.0"
             [build]
             test.command = 'hello'
 
@@ -454,7 +473,7 @@ pub mod test {
     #[test]
     fn filter_services_by_system() {
         let manifest = indoc! {r#"
-            version = 1
+            schema-version = "1.10.0"
             [services]
             postgres.command = "postgres"
             mysql.command = "mysql"
@@ -482,7 +501,7 @@ pub mod test {
     #[test]
     fn parses_include_section_manifest() {
         let manifest = indoc! {r#"
-            version = 1
+            schema-version = "1.10.0"
 
             [include]
             environments = [
