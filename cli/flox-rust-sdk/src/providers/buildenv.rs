@@ -111,7 +111,10 @@ pub enum BuildEnvError {
 
     /// A custom package has been uploaded, but the current user hasn't configured
     /// a trusted public key that matches a signature of this package.
-    #[error("Package '{0}' is not signed by a trusted key")]
+    #[error(
+        "Package '{0}' is not signed by a trusted key.\n\
+        See https://flox.dev/docs/customer/signing-keys/ for more information."
+    )]
     UntrustedPackage(String),
 
     #[error("authentication error")]
