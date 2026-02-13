@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox};
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSource};
-use flox_rust_sdk::providers::nix::NIX_VERSION;
+use flox_rust_sdk::providers::nix::{NIX_VERSION, NixSubstituterConfig};
 use flox_rust_sdk::utils::ReaderExt;
 use indoc::formatdoc;
 use thiserror::Error;
@@ -187,6 +187,21 @@ impl ContainerizeProxy {
                 "--env",
                 &format!("{}={}", FLOX_DISABLE_METRICS_VAR, disable_metrics),
             ]);
+        }
+
+        // Propagate the host's nix substituters and trusted public keys into
+        // the proxy container so that all nix invocations can fetch packages
+        // from the same caches available on the host.
+        match NixSubstituterConfig::from_nix_config() {
+            Ok(config) => {
+                let config_str = config.to_string();
+                if !config_str.is_empty() {
+                    command.args(["--env", &format!("NIX_CONFIG={config_str}")]);
+                }
+            },
+            Err(err) => {
+                tracing::warn!(%err, "failed to read nix substituter config, continuing without extra substituters");
+            },
         }
 
         command.arg(self.container_image());
