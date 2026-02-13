@@ -1469,6 +1469,7 @@ dependencies = [
  "chrono",
  "derive_more",
  "enum_dispatch",
+ "flox-catalog",
  "flox-core",
  "flox-test-utils",
  "fslock",

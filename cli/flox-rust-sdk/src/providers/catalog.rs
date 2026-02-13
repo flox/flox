@@ -1,5 +1,5 @@
 use std::cmp::min;
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::fmt::{Debug, Display};
 use std::fs;
 use std::future::ready;
@@ -19,6 +19,8 @@ use catalog_api_v1::types::{
 };
 use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
+// Re-export shared types from catalog-client for backwards compatibility
+pub use flox_catalog::{CatalogClientConfig, CatalogClientError, CatalogMockMode, MapApiErrorExt};
 use futures::stream::Stream;
 use futures::{Future, StreamExt, TryStreamExt};
 use httpmock::{MockServer, RecordingID};
@@ -127,14 +129,6 @@ pub enum Client {
     Mock(MockClient),
 }
 
-#[derive(Debug, Clone)]
-pub struct CatalogClientConfig {
-    pub catalog_url: String,
-    pub floxhub_token: Option<String>,
-    pub extra_headers: BTreeMap<String, String>,
-    pub mock_mode: CatalogMockMode,
-}
-
 #[derive(Clone, Copy, Debug, Default, derive_more::Display, PartialEq)]
 /// The QoS class of a catalog request.
 ///
@@ -167,17 +161,6 @@ impl CatalogQoS {
     pub fn as_header_pair(&self) -> (String, String) {
         ("X-Flox-QoS-Context".to_string(), self.to_string())
     }
-}
-
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
-pub enum CatalogMockMode {
-    /// Use a real server without any mock recording or replaying.
-    #[default]
-    None,
-    /// Proxy via a mock server and record interactions to a path.
-    Record(PathBuf),
-    /// Replay interactions from a path using a mock server.
-    Replay(PathBuf),
 }
 
 /// Guard to keep a `MockServer` running until the `CatalogClient` is dropped.
@@ -1145,79 +1128,6 @@ pub struct PackageGroup {
 }
 
 #[derive(Debug, Error)]
-pub enum CatalogClientError {
-    #[error("system not supported by catalog")]
-    UnsupportedSystem(#[source] api_error::ConversionError),
-    #[error("{}", fmt_api_error(.0))]
-    APIError(APIError<api_types::ErrorResponse>),
-    #[error("{}", .0)]
-    StabilityError(String),
-    #[error("{}", .0)]
-    Other(String),
-}
-
-/// Extension trait for converting API errors into our client errors.
-trait MapApiErrorExt<T> {
-    /// Consumes a `Result<T, APIError<ApiErrorResponse>>`, maps any APIError
-    /// into `CatalogClientError`, and returns `Ok(T)` or `Err(...)`.
-    async fn map_api_error(self) -> Result<T, CatalogClientError>;
-}
-
-impl<T> MapApiErrorExt<T> for Result<T, APIError<ApiErrorResponse>> {
-    async fn map_api_error(self) -> Result<T, CatalogClientError> {
-        let err = match self {
-            Ok(v) => return Ok(v),
-            Err(err) => err,
-        };
-
-        // Attempt to parse errors that don't have status code enumerated in the
-        // spec but still contain a `detail` field.
-        if let APIError::UnexpectedResponse(resp) = err {
-            return parse_api_error(resp).await;
-        }
-
-        Err(CatalogClientError::APIError(err))
-    }
-}
-
-async fn parse_api_error<T>(resp: reqwest::Response) -> Result<T, CatalogClientError> {
-    let status = resp.status();
-    match ApiErrorResponseValue::from_response::<ErrorResponse>(resp).await {
-        Ok(resp_parsed) => Err(CatalogClientError::APIError(APIError::ErrorResponse(
-            resp_parsed,
-        ))),
-        Err(_) => {
-            // We couldn't parse but consumed the response body, which we don't
-            // format anyway because it may contain HTML garbage, so recreate a
-            // response with the right status.
-            let resp_bare = http::Response::builder()
-                .status(status)
-                .body("response body omitted by error parsing")
-                .expect("failed to rebuild response while parsing error response")
-                .into();
-            Err(CatalogClientError::APIError(APIError::UnexpectedResponse(
-                resp_bare,
-            )))
-        },
-    }
-}
-
-fn fmt_api_error(api_error: &APIError<api_types::ErrorResponse>) -> String {
-    match api_error {
-        APIError::ErrorResponse(error_response) => {
-            let status = error_response.status();
-            let details = &error_response.detail;
-            format!("{status}: {details}")
-        },
-        APIError::UnexpectedResponse(resp) => {
-            let status = resp.status();
-            format!("{status}")
-        },
-        _ => format!("{api_error}"),
-    }
-}
-
-#[derive(Debug, Error)]
 pub enum SearchError {
     #[error("invalid search term")]
     InvalidSearchTerm(#[source] api_error::ConversionError),
@@ -2065,7 +1975,7 @@ pub mod test_helpers {
 
 #[cfg(test)]
 mod tests {
-
+    use std::collections::BTreeMap;
     use std::num::NonZeroU8;
 
     use futures::TryStreamExt;
