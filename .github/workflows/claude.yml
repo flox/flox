@@ -22,13 +22,16 @@ jobs:
       contents: read
       pull-requests: read
       issues: read
-      id-token: write
+      id-token: write # Required in order for the Claude GitHub app to function
       actions: read # Required for Claude to read CI results on PRs
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
 
       - name: Run Claude Code
         id: claude
@@ -46,5 +49,5 @@ jobs:
           # Optional: Add claude_args to customize behavior and configuration
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr:*)'
+          claude_args: '--dangerously-skip-permissions'
 
