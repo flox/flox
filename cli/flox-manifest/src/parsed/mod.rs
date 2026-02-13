@@ -44,7 +44,10 @@ pub(crate) trait SkipSerializing {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use indoc::indoc;
+    use serde_json::{Number, Value};
 
     use crate::Manifest;
     use crate::parsed::common::KnownSchemaVersion;
@@ -71,7 +74,36 @@ mod tests {
         "};
         for schema in KnownSchemaVersion::iter() {
             let manifest = with_schema(schema, body);
-            Manifest::parse_untyped(manifest).unwrap();
+            Manifest::parse_toml_untyped(manifest).unwrap();
+        }
+    }
+
+    #[test]
+    fn deserializes_null_fields() {
+        for schema in KnownSchemaVersion::iter() {
+            let schema_value = match schema {
+                KnownSchemaVersion::V1 => {
+                    Value::Number(Number::from_str(schema.to_string().as_str()).unwrap())
+                },
+                KnownSchemaVersion::V1_10_0 => Value::String(schema.to_string()),
+            };
+            let json_value = serde_json::json!({
+                schema.key_name(): schema_value,
+                "hook": {
+                    "on-activate": null
+                },
+                "profile": {
+                    "common": null,
+                    "bash": null,
+                    "fish": null,
+                    "zsh": null,
+                    "tcsh": null
+                },
+                "options": {}
+            });
+
+            let json = serde_json::ser::to_string_pretty(&json_value).unwrap();
+            Manifest::parse_json(json).unwrap();
         }
     }
 }

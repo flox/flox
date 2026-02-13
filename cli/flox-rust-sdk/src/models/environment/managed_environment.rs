@@ -236,7 +236,7 @@ impl Environment for ManagedEnvironment {
                 .generations()
                 .manifest_contents(*generation)
                 .map_err(ManagedEnvironmentError::Generations)?;
-            let manifest = Manifest::parse_typed(pre_migration_manifest_contents)?;
+            let manifest = Manifest::parse_toml_typed(pre_migration_manifest_contents)?;
             return Ok(manifest);
         }
 

@@ -406,7 +406,7 @@ impl CoreEnvironment<ReadOnly> {
             return Ok(EditResult::Unchanged);
         }
 
-        let new_manifest = Manifest::parse_typed(&contents)?;
+        let new_manifest = Manifest::parse_toml_typed(&contents)?;
         let (old_lockfile, migrated_manifest) =
             if let Some(lockfile) = maybe_up_to_date_lockfile.as_ref() {
                 (lockfile.clone(), new_manifest.migrate(Some(lockfile))?)
@@ -450,7 +450,7 @@ impl CoreEnvironment<ReadOnly> {
             return Ok(Ok(EditResult::Unchanged));
         }
 
-        let new_manifest = Manifest::parse_typed(&contents)?;
+        let new_manifest = Manifest::parse_toml_typed(&contents)?;
         let (old_lockfile, migrated_manifest) =
             if let Some(lockfile) = self.lockfile_if_up_to_date()?.as_ref() {
                 (lockfile.clone(), new_manifest.migrate(Some(lockfile))?)
@@ -1187,7 +1187,7 @@ pub mod test_helpers {
 
     #[cfg(target_os = "macos")]
     pub fn manifest_with_incompatible_system() -> Manifest<Validated> {
-        Manifest::parse_typed(MANIFEST_INCOMPATIBLE_SYSTEM_STR).unwrap()
+        Manifest::parse_toml_typed(MANIFEST_INCOMPATIBLE_SYSTEM_STR).unwrap()
     }
 
     #[cfg(target_os = "linux")]
@@ -1197,7 +1197,7 @@ pub mod test_helpers {
 
     #[cfg(target_os = "macos")]
     pub fn manifest_with_incompatible_system_v1() -> Manifest<Validated> {
-        Manifest::parse_typed(MANIFEST_INCOMPATIBLE_SYSTEM_V1_STR).unwrap()
+        Manifest::parse_toml_typed(MANIFEST_INCOMPATIBLE_SYSTEM_V1_STR).unwrap()
     }
 
     #[cfg(target_os = "linux")]

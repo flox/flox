@@ -1660,7 +1660,7 @@ mod tests {
             systems = ["x86_64-linux"]
         "#};
 
-        let migrated = Manifest::parse_typed(manifest_str)
+        let migrated = Manifest::parse_toml_typed(manifest_str)
             .unwrap()
             .as_typed_only()
             .migrate_typed_only(None)
@@ -2389,7 +2389,7 @@ mod tests {
             {foo_iid}.store-path = "{store_path}"
             {foo_iid}.systems = ["{system}"]
         "#};
-        let manifest = Manifest::parse_typed(contents)
+        let manifest = Manifest::parse_toml_typed(contents)
             .unwrap()
             .as_typed_only()
             .migrate_typed_only(None)
