@@ -44,7 +44,6 @@ use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError, open_path};
 use crate::models::lockfile::Lockfile;
 use crate::providers::auth::catalog_auth_to_envs;
-use crate::providers::catalog::Client;
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
 use crate::utils::CommandExt;
@@ -111,12 +110,12 @@ pub enum PublishError {
 pub trait Publisher {
     async fn create_package_and_possibly_user_catalog(
         &self,
-        client: &Client,
+        client: &impl ClientTrait,
         catalog_name: &str,
     ) -> Result<PackageCreatedGuard, PublishError>;
     async fn publish(
         &self,
-        client: &Client,
+        client: &impl ClientTrait,
         catalog_name: &str,
         package_created: PackageCreatedGuard,
         build_metadata: &CheckedBuildMetadata,
@@ -125,7 +124,7 @@ pub trait Publisher {
     ) -> Result<(), PublishError>;
     async fn wait_for_publish_completion(
         &self,
-        client: &Client,
+        client: &impl ClientTrait,
         build_metadata: &CheckedBuildMetadata,
         poll_interval_millis: u64,
         timeout_millis: u64,
@@ -543,7 +542,7 @@ where
     /// permission to publish it.
     async fn create_package_and_possibly_user_catalog(
         &self,
-        client: &Client,
+        client: &impl ClientTrait,
         catalog_name: &str,
     ) -> Result<PackageCreatedGuard, PublishError> {
         // Step 1 hit /packages
@@ -569,7 +568,7 @@ where
     /// [PackageCreatedGuard] must be obtained from [Self::create_package].
     async fn publish(
         &self,
-        client: &Client,
+        client: &impl ClientTrait,
         catalog_name: &str,
         _package_created: PackageCreatedGuard,
         build_metadata: &CheckedBuildMetadata,
@@ -645,7 +644,7 @@ where
     /// or errors on timeout.
     async fn wait_for_publish_completion(
         &self,
-        client: &Client,
+        client: &impl ClientTrait,
         build_metadata: &CheckedBuildMetadata,
         poll_interval_millis: u64,
         timeout_millis: u64,
@@ -1069,7 +1068,6 @@ pub mod tests {
     };
     use crate::providers::catalog::{
         GENERATED_DATA,
-        MockClient,
         Response,
         get_base_nixpkgs_url,
         mock_base_catalog_url,
@@ -1463,7 +1461,6 @@ pub mod tests {
     #[tokio::test]
     async fn publish_errors_without_key() {
         let (mut flox, _tempdir) = flox_instance();
-        let mut client = Client::Mock(MockClient::new());
 
         let token = create_test_token("test");
         let catalog_name = token.handle().to_string();
@@ -1475,7 +1472,7 @@ pub mod tests {
         let auth = Auth::from_flox(&flox).unwrap();
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
-        reset_mocks(&mut client, vec![
+        reset_mocks(&mut flox.catalog_client, vec![
             Response::CreatePackage,
             Response::Publish(PublishResponse {
                 ingress_uri: Some("https://example.com".to_string()),
@@ -1489,13 +1486,13 @@ pub mod tests {
         ]);
 
         let package_created = publish_provider
-            .create_package_and_possibly_user_catalog(&client, &catalog_name)
+            .create_package_and_possibly_user_catalog(&flox.catalog_client, &catalog_name)
             .await
             .unwrap();
 
         let result = publish_provider
             .publish(
-                &client,
+                &flox.catalog_client,
                 &catalog_name,
                 package_created,
                 &build_metadata,
