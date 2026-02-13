@@ -93,6 +93,7 @@ pub trait PackageLookup {
     fn get_install_ids(&self, packages: Vec<String>) -> Result<Vec<String>, ManifestError>;
 }
 
+#[macro_export]
 macro_rules! impl_pkg_lookup {
     ($manifest_module:path, $manifest:ty) => {
         // This `use` is necessary because you can't interpolate on either side
@@ -101,7 +102,7 @@ macro_rules! impl_pkg_lookup {
         // alias (`concrete`) that we _can_ put `::` next to without the
         // compiler complaining.
         use $manifest_module as concrete;
-        impl crate::interfaces::PackageLookup for $manifest {
+        impl $crate::interfaces::PackageLookup for $manifest {
             type CatalogDescriptor = concrete::package_descriptor::PackageDescriptorCatalog;
             type FlakeDescriptor = concrete::package_descriptor::PackageDescriptorFlake;
             type PkgDescriptor = concrete::package_descriptor::ManifestPackageDescriptor;
@@ -118,7 +119,7 @@ macro_rules! impl_pkg_lookup {
                         let group_name = catalog_descriptor
                             .pkg_group
                             .clone()
-                            .unwrap_or(crate::parsed::common::DEFAULT_GROUP_NAME.to_string());
+                            .unwrap_or($crate::parsed::common::DEFAULT_GROUP_NAME.to_string());
                         let group_map: &mut BTreeMap<String, Self::CatalogDescriptor> =
                             groups.entry(group_name).or_default();
                         group_map.insert(id.clone(), catalog_descriptor.clone());

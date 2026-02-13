@@ -69,6 +69,14 @@ impl KnownSchemaVersion {
     pub fn iter() -> impl Iterator<Item = KnownSchemaVersion> {
         [KnownSchemaVersion::V1, KnownSchemaVersion::V1_10_0].into_iter()
     }
+
+    /// Returns the name of the schema version field.
+    pub fn key_name(&self) -> &str {
+        match self {
+            KnownSchemaVersion::V1 => "version",
+            _ => "schema-version",
+        }
+    }
 }
 
 impl TryFrom<VersionKind> for KnownSchemaVersion {

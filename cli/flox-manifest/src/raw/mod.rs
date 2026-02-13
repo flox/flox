@@ -69,18 +69,18 @@ pub(crate) fn get_schema_version_kind(toml: &DocumentMut) -> Result<VersionKind,
     }
 }
 
-pub(crate) fn get_toml_schema_version_kind(
-    toml: &toml::Value,
+pub(crate) fn get_json_schema_version_kind(
+    json: &serde_json::Value,
 ) -> Result<VersionKind, ManifestError> {
-    if let Some(item) = toml.get("version") {
-        if let Some(int) = item.as_integer() {
+    if let Some(value) = json.get("version") {
+        if let Some(int) = value.as_i64() {
             Ok(VersionKind::Version(int as u8))
         } else {
             Err(ManifestError::Other(
                 "'version' field must be an integer".into(),
             ))
         }
-    } else if let Some(item) = toml.get("schema-version") {
+    } else if let Some(item) = json.get("schema-version") {
         if let Some(s) = item.as_str() {
             Ok(VersionKind::SchemaVersion(s.to_string()))
         } else {
