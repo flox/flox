@@ -14,6 +14,7 @@ pub struct CatalogClientConfig {
     pub extra_headers: BTreeMap<String, String>,
     /// Mock mode for testing.
     pub mock_mode: CatalogMockMode,
+    pub user_agent: Option<String>,
 }
 
 /// Mock recording/replay mode for integration testing.

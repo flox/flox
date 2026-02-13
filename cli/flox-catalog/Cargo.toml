@@ -4,22 +4,29 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+async-stream.workspace = true
 catalog-api-v1.workspace = true
 derive_more.workspace = true
+futures.workspace = true
 http.workspace = true
 reqwest.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 url.workspace = true
 
-# Optional mock dependencies
-httpmock = { workspace = true, optional = true }
-serde_yaml = { workspace = true, optional = true }
+httpmock.workspace = true
+serde_yaml.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+serde_json.workspace = true
+itertools.workspace = true
+proptest.workspace = true
+sentry.workspace = true
+tracing-subscriber.workspace = true
 
 [features]
 default = []
-mock = ["dep:httpmock", "dep:serde_yaml"]
+tests = []
