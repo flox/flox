@@ -4,6 +4,7 @@ members = [
     "cli/flox",
     "cli/flox-rust-sdk",
     "cli/flox-activations",
+    "cli/flox-catalog",
     "cli/flox-core",
     "cli/flox-test-utils",
     "cli/mk_data",
@@ -21,6 +22,7 @@ async-stream = "0.3.6"
 blake3 = "1.8.2"
 bpaf = { version = "0.9.22", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "cli/catalog-api-v1" }
+flox-catalog = { path = "cli/flox-catalog" }
 chrono = { version = "0.4.43", features = ["serde"] }
 clap = { version = "4.5.56", features = ["derive"] }
 close_fds = "0.3"

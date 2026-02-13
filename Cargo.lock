@@ -1416,6 +1416,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "flox-catalog"
+version = "0.1.0"
+dependencies = [
+ "catalog-api-v1",
+ "derive_more",
+ "http 1.4.0",
+ "httpmock",
+ "reqwest",
+ "serde",
+ "serde_yaml",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "flox-core"
 version = "0.0.0"
 dependencies = [

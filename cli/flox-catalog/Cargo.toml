@@ -1,0 +1,25 @@
+[package]
+name = "flox-catalog"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+catalog-api-v1.workspace = true
+derive_more.workspace = true
+http.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+# Optional mock dependencies
+httpmock = { workspace = true, optional = true }
+serde_yaml = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[features]
+default = []
+mock = ["dep:httpmock", "dep:serde_yaml"]
