@@ -234,7 +234,7 @@ let
                 # CUDA support.
                 (builtins.attrNames (builtins.removeAttrs package.outputs [ "stubs" ]))
               );
-              getV2Outputs = (
+              get_V1_10_0_Outputs = (
                 pd: pkg:
                 if (builtins.hasAttr "outputs" pd) then
                   if (builtins.isString pd.outputs) then
@@ -255,10 +255,16 @@ let
                   outputsToInstall
               );
               outputs =
-                if (manifest.version == 1) then
-                  getV1Outputs package
-                else if (manifest.version == 2) then
-                  getV2Outputs descriptor package
+                if (builtins.hasAttr "version" manifest) then
+                  if (manifest.version == 1) then
+                    getV1Outputs package
+                  else
+                    throw "unsupported manifest schema version: '${manifest.version}'"
+                else if (builtins.hasAttr "schema-version" manifest) then
+                  if (manifest.schema-version == "1.10.0") then
+                    get_V1_10_0_Outputs descriptor package
+                  else
+                    throw "unsupported manifest schema version: '${manifest.schema-version}'"
                 else
                   throw "unsupported manifest version: '${manifest.version}'";
             in
