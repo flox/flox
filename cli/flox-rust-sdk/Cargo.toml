@@ -61,7 +61,8 @@ tracing-subscriber.workspace = true
 flox-test-utils.workspace = true
 catalog-api-v1 = { workspace = true, features = ["tests"] }
 sentry = { workspace = true, features = ["test"] }
-flox-manifest = { workspace = true, features = ["tests"]}
+flox-manifest = { workspace = true, features = ["tests"] }
+flox-core = { workspace = true, features = ["tests"] }
 
 
 [features]
