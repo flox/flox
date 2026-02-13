@@ -451,7 +451,7 @@ mod tests {
         //     - oti: man, out
         let manifest_path = GENERATED_DATA.join("envs/krb5_prereqs/manifest.toml");
         let contents = std::fs::read_to_string(manifest_path).unwrap();
-        let manifest: v1::ManifestV1 = Manifest::parse_typed(&contents)
+        let manifest: v1::ManifestV1 = Manifest::parse_toml_typed(&contents)
             .unwrap()
             .inner_manifest::<ManifestV1>()
             .unwrap()
@@ -564,7 +564,7 @@ mod tests {
     fn migration_updates_manifest_version() {
         let manifest_path = GENERATED_DATA.join("envs/krb5_prereqs/manifest.toml");
         let contents = std::fs::read_to_string(manifest_path).unwrap();
-        let manifest = Manifest::parse_typed(contents)
+        let manifest = Manifest::parse_toml_typed(contents)
             .unwrap()
             .inner_manifest::<ManifestV1>()
             .unwrap()

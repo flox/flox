@@ -455,7 +455,7 @@ impl PathEnvironment {
         }
 
         // The most minimal manifest we can generate.
-        let manifest = Manifest::parse_typed("schema-version = \"1.10.0\"\n")?;
+        let manifest = Manifest::parse_toml_typed("schema-version = \"1.10.0\"\n")?;
 
         let environment = Self::write_new_unchecked(
             flox,
@@ -649,7 +649,7 @@ pub mod test_helpers {
                 .parse()
                 .unwrap(),
         );
-        let manifest = Manifest::parse_typed(contents).unwrap();
+        let manifest = Manifest::parse_toml_typed(contents).unwrap();
         PathEnvironment::write_new_unchecked(flox, pointer, path, &manifest.as_writable()).unwrap()
     }
 
@@ -660,7 +660,7 @@ pub mod test_helpers {
         name: &str,
     ) -> PathEnvironment {
         let pointer = PathPointer::new(name.parse().unwrap());
-        let manifest = Manifest::parse_typed(contents).unwrap();
+        let manifest = Manifest::parse_toml_typed(contents).unwrap();
         PathEnvironment::write_new_unchecked(flox, pointer, path, &manifest.as_writable()).unwrap()
     }
 
