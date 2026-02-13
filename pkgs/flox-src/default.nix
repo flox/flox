@@ -1,11 +1,11 @@
 { }:
 builtins.path {
   name = "flox-src";
-  path = ./../../cli;
+  path = ./../..;
   filter =
     path: type:
     !builtins.elem path (
-      map (f: ./../../cli/${f}) [
+      map (f: ./../${f}) [
         "flake.nix"
         "flake.lock"
         "pkgs"

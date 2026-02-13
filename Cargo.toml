@@ -1,17 +1,17 @@
 [workspace]
 members = [
-    "catalog-api-v1",
-    "flox",
-    "flox-rust-sdk",
-    "flox-activations",
-    "flox-core",
-    "flox-test-utils",
-    "mk_data",
-    "shell_gen",
-    "systemd",
-    "xtask",
+    "cli/catalog-api-v1",
+    "cli/flox",
+    "cli/flox-rust-sdk",
+    "cli/flox-activations",
+    "cli/flox-core",
+    "cli/flox-test-utils",
+    "cli/mk_data",
+    "cli/shell_gen",
+    "cli/systemd",
+    "cli/xtask",
 ]
-default-members = ["flox", "flox-activations"]
+default-members = ["cli/flox", "cli/flox-activations"]
 
 resolver = "2"
 
@@ -20,7 +20,7 @@ anyhow = "1"
 async-stream = "0.3.6"
 blake3 = "1.8.2"
 bpaf = { version = "0.9.22", features = ["derive", "autocomplete"] }
-catalog-api-v1 = { path = "catalog-api-v1" }
+catalog-api-v1 = { path = "cli/catalog-api-v1" }
 chrono = { version = "0.4.43", features = ["serde"] }
 clap = { version = "4.5.56", features = ["derive"] }
 close_fds = "0.3"
@@ -29,10 +29,10 @@ crossterm = "0.29"
 derive_more = { version = "2.1.1", features= ["as_ref", "deref", "deref_mut", "display", "from", "from_str"]}
 dirs = "6.0.0"
 enum_dispatch = "0.3.13"
-flox-activations = { path = "flox-activations" }
-flox-core = { path = "flox-core" }
-flox-rust-sdk = { path = "flox-rust-sdk" }
-flox-test-utils = { path = "flox-test-utils" }
+flox-activations = { path = "cli/flox-activations" }
+flox-core = { path = "cli/flox-core" }
+flox-rust-sdk = { path = "cli/flox-rust-sdk" }
+flox-test-utils = { path = "cli/flox-test-utils" }
 fslock = "0.2.1"
 fs_extra = "1.3.0"
 futures = "0.3"
@@ -84,7 +84,7 @@ sysinfo = "0.38.0"
 # provide system version information for metric
 # TODO: review if we need this
 sys-info = "0.9"
-systemd = { path = "systemd" }
+systemd = { path = "cli/systemd" }
 tar = "0.4"
 tempfile = "3.24.0"
 textwrap = { version = "0.16.2", features = ["terminal_size"] }

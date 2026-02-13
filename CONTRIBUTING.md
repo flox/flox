@@ -193,7 +193,7 @@ section refers to settings from that plugin.
   In VS Code you can add this: to you `.vscode/settings.json`:
   ```json
   "rust-analyzer.linkedProjects": [
-     "${workspaceFolder}/cli/Cargo.toml"
+     "${workspaceFolder}/Cargo.toml"
   ]
   ```
 - If you want to be able to run and get analytics on impure tests, you need to

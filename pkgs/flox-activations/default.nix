@@ -89,7 +89,7 @@ craneLib.buildPackage (
       devShellHook = ''
         #  # Find the project root and add the `bin' directory to `PATH'.
         if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-          PATH="$( git rev-parse --show-toplevel; )/cli/target/debug":$PATH;
+          PATH="$( git rev-parse --show-toplevel; )/target/debug":$PATH;
           REPO_ROOT="$( git rev-parse --show-toplevel; )";
         fi
       '';

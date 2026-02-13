@@ -121,8 +121,8 @@ mkShell (
       # so that they can be changed and built without restarting the shell.
 
       # cargo built binaries
-      define_dev_env_var FLOX_BIN "''${REPO_ROOT}/cli/target/debug/flox";
-      define_dev_env_var FLOX_ACTIVATIONS_BIN "''${REPO_ROOT}/cli/target/debug/flox-activations";
+      define_dev_env_var FLOX_BIN "''${REPO_ROOT}/target/debug/flox";
+      define_dev_env_var FLOX_ACTIVATIONS_BIN "''${REPO_ROOT}/target/debug/flox-activations";
 
       # make built binaries
       define_dev_env_var BUILDENV_BIN "''${REPO_ROOT}/build/flox-buildenv/bin/buildenv";
@@ -148,8 +148,8 @@ mkShell (
 
       # Add all internal rust crates to the PATH.
       # That's `flox` itself as well as the `flox-activations` subsystem.
-      export PATH="''${REPO_ROOT}/cli/target/debug":$PATH;
-      echo -n "''${REPO_ROOT}/cli/target/debug:" >> "$REPO_ROOT/build/.PATH";
+      export PATH="''${REPO_ROOT}/target/debug":$PATH;
+      echo -n "''${REPO_ROOT}/target/debug:" >> "$REPO_ROOT/build/.PATH";
 
       # Add the flox-manpages to the manpath
       export MANPATH="''${FLOX_MANPAGES}/share/man:$MANPATH"
