@@ -95,12 +95,12 @@ in
     # To achieve this, we copy the source of these crates back into the workspace.
     cargoExtraArgs = "--locked -p flox";
     postPatch = ''
-      cp -rf --no-preserve=mode ${flox-src}/flox-rust-sdk/* ./flox-rust-sdk
-      cp -rf --no-preserve=mode ${flox-src}/catalog-api-v1/* ./catalog-api-v1
-      cp -rf --no-preserve=mode ${flox-src}/flox-core/* ./flox-core
-      cp -rf --no-preserve=mode ${flox-src}/shell_gen/* ./shell_gen
-      cp -rf --no-preserve=mode ${flox-src}/flox-test-utils/* ./flox-test-utils
-      cp -rf --no-preserve=mode ${flox-src}/systemd/* ./systemd
+      cp -rf --no-preserve=mode ${flox-src}/cli/flox-rust-sdk/* ./cli/flox-rust-sdk
+      cp -rf --no-preserve=mode ${flox-src}/cli/catalog-api-v1/* ./cli/catalog-api-v1
+      cp -rf --no-preserve=mode ${flox-src}/cli/flox-core/* ./cli/flox-core
+      cp -rf --no-preserve=mode ${flox-src}/cli/shell_gen/* ./cli/shell_gen
+      cp -rf --no-preserve=mode ${flox-src}/cli/flox-test-utils/* ./cli/flox-test-utils
+      cp -rf --no-preserve=mode ${flox-src}/cli/systemd/* ./cli/systemd
     '';
 
     # runtime dependencies

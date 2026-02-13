@@ -78,7 +78,7 @@ jobs:
         run: |
           nix develop -L --no-update-lock-file --command \
             cargo fetch \
-            --manifest-path ./cli/Cargo.toml \
+            --manifest-path ./Cargo.toml \
             --locked;
 
       # Run pre-commit hooks on the diff between the target branch and HEAD.

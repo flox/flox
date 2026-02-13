@@ -3,4 +3,4 @@ file-types = ["bats", "sh", "bash", "ash", "dash", "ksh", "mksh", "zsh", "zshenv
 name = "bash"
 
 [language-server.rust-analyzer.check]
-command = "clippy --all-targets --workspace --manifest-path cli/Cargo.toml"
+command = "clippy --all-targets --workspace"

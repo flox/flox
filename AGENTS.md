@@ -108,7 +108,7 @@ For rust-analyzer, add to `.vscode/settings.json`:
 
 ```json
 {
-  "rust-analyzer.linkedProjects": ["${workspaceFolder}/cli/Cargo.toml"],
+  "rust-analyzer.linkedProjects": ["${workspaceFolder}/Cargo.toml"],
   "rust-analyzer.cargo.features": ["extra-tests"]
 }
 ```

@@ -16,7 +16,7 @@ nix_options := "--extra-experimental-features nix-command \
                 --extra-experimental-features flakes"
 INPUT_DATA := "${PWD}/test_data/input_data"
 TEST_DATA := "${PWD}/test_data"
-cargo_test_invocation := "cargo nextest --profile ci run --manifest-path ${PWD}/cli/Cargo.toml --workspace"
+cargo_test_invocation := "cargo nextest --profile ci run --workspace"
 
 # Set the FLOX_VERSION variable so that it can be used in the build/runtime
 # It's important to add the git revision to the version string,
@@ -94,12 +94,12 @@ version:
 
 # Build the flox activations binary
 @build-activations:
-    pushd cli; cargo build -p flox-activations
+    cargo build -p flox-activations
 
 
 # Build the flox activations binary
 @build-activations-release:
-    pushd cli; cargo build -p flox-activations -r
+    cargo build -p flox-activations -r
 
 
 
@@ -107,14 +107,14 @@ version:
 # Build the flox binary
 
 @build-cli: build-nix-plugins build-package-builder build-activation-scripts build-buildenv
-    pushd cli; cargo build -p flox
+    cargo build -p flox
 
 # Build the binaries
 @build: build-cli
 
 # Build flox with release profile
 @build-release: build-nix-plugins build-package-builder build-activation-scripts build-buildenv
-    pushd cli; cargo build -p flox -r
+    cargo build -p flox -r
 
 # Remove build artifacts
 @clean-builds:
@@ -124,7 +124,7 @@ version:
 # Build just the data generator
 
 @build-data-gen:
-    pushd cli; cargo build -p mk_data; popd
+    cargo build -p mk_data
 
 # Generate test data
 @gen-data floxhub_path +mk_data_args="": (mk-data mk_data_args)
@@ -144,7 +144,7 @@ version:
 
 # The same as mk-data, but faster to type, and doesn't rebuild stuff
 @md +mk_data_args="":
-    mkdata="$PWD/cli/target/debug/mk_data"; pushd test_data; "$mkdata" {{mk_data_args}} config.toml; popd
+    mkdata="$PWD/target/debug/mk_data"; pushd test_data; "$mkdata" {{mk_data_args}} config.toml; popd
 
 gen-unit-data-no-publish force="":
     #!/usr/bin/env bash
@@ -222,7 +222,7 @@ gen-unit-data-for-publish floxhub_repo_path force="":
 
 # Generate JSON schemas for Flox data structures
 @gen-schemas:
-  pushd cli; cargo xtask generate-schemas
+  cargo xtask generate-schemas
 
 # ---------------------------------------------------------------------------- #
 
@@ -296,7 +296,6 @@ test-all: test-nix-plugins impure-tests integ-tests nix-integ-tests
 
 # Output licenses of all dependency crates
 @license:
-    pushd cli;                                     \
      cargo metadata --format-version 1              \
        |jq -r '.packages[]|[.name,.license]|@csv';
 
@@ -305,24 +304,24 @@ test-all: test-nix-plugins impure-tests integ-tests nix-integ-tests
 
 # Run a `flox` command
 @flox +args="": build
-    cli/target/debug/flox {{args}}
+    target/debug/flox {{args}}
 
 # Run a `flox` command using the catalog
 @catalog-flox +args="": build
     echo "just: DEPRECATED TARGET: Use 'flox' instead" >&2;
-    cli/target/debug/flox {{args}}
+    target/debug/flox {{args}}
 
 
 # ---------------------------------------------------------------------------- #
 
 # Clean ( remove ) built artifacts
 @clean: clean-nix-plugins
-    pushd cli; cargo clean; popd
+    cargo clean
 
 # ---------------------------------------------------------------------------- #
 
 @format-cli:
-    pushd cli; cargo fmt; popd
+    cargo fmt
 
 @format-nix-plugins:
     clang-format -i nix-plugins/src/**/*.cc; \

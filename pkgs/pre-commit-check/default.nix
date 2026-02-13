@@ -46,7 +46,7 @@ pre-commit-hooks.lib.${stdenv.hostPlatform.system}.run {
       in
       {
         enable = true;
-        entry = lib.mkForce "${wrapper}/bin/cargo-fmt fmt --all --check --manifest-path 'cli/Cargo.toml' -- --color always";
+        entry = lib.mkForce "${wrapper}/bin/cargo-fmt fmt --all --check -- --color always";
       };
     clippy = {
       enable = true;
@@ -120,7 +120,7 @@ pre-commit-hooks.lib.${stdenv.hostPlatform.system}.run {
     )
   ];
   settings = {
-    rust.cargoManifestPath = "cli/Cargo.toml";
+    rust.cargoManifestPath = "Cargo.toml";
   };
   tools = {
     # use fenix provided clippy
