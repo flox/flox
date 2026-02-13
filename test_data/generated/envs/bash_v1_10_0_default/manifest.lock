@@ -1,11 +1,10 @@
 {
   "lockfile-version": 1,
   "manifest": {
-    "version": 2,
+    "schema-version": "1.10.0",
     "install": {
       "bash": {
-        "pkg-path": "bashNonInteractive",
-        "outputs": "all"
+        "pkg-path": "bashNonInteractive"
       }
     },
     "options": {}

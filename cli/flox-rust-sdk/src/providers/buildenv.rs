@@ -2214,12 +2214,12 @@ mod buildenv_tests {
     }
 
     #[test]
-    fn v2_manifest_default_outputs_includes_man() {
+    fn default_outputs_include_man() {
         let buildenv = buildenv_instance();
         let client = MockClient::new();
 
         // Get a v2 lockfile with no outputs specified (should use outputs_to_install)
-        let lockfile_path = GENERATED_DATA.join("envs/bash_v2_default/manifest.lock");
+        let lockfile_path = GENERATED_DATA.join("envs/bash_v1_10_0_default/manifest.lock");
 
         let result = buildenv.build(&client, &lockfile_path, None);
         assert!(
@@ -2290,12 +2290,12 @@ mod buildenv_tests {
     }
 
     #[test]
-    fn v2_manifest_outputs_all_includes_info() {
+    fn all_outputs_includes_info() {
         let buildenv = buildenv_instance();
         let client = MockClient::new();
 
         // Get a v2 lockfile with outputs = "all"
-        let lockfile_path = GENERATED_DATA.join("envs/bash_v2_all/manifest.lock");
+        let lockfile_path = GENERATED_DATA.join("envs/bash_v1_10_0_all/manifest.lock");
 
         let result = buildenv.build(&client, &lockfile_path, None);
         assert!(
@@ -2358,12 +2358,12 @@ mod buildenv_tests {
     }
 
     #[test]
-    fn v2_manifest_outputs_out_only_excludes_others() {
+    fn outputs_out_only_excludes_others() {
         let buildenv = buildenv_instance();
         let client = MockClient::new();
 
         // Get a v2 lockfile with outputs = ["out"]
-        let lockfile_path = GENERATED_DATA.join("envs/bash_v2_out/manifest.lock");
+        let lockfile_path = GENERATED_DATA.join("envs/bash_v1_10_0_out/manifest.lock");
 
         let result = buildenv.build(&client, &lockfile_path, None);
         assert!(
