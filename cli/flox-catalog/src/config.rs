@@ -17,6 +17,7 @@ pub struct CatalogClientConfig {
     /// Mock mode for testing.
     pub mock_mode: CatalogMockMode,
     pub auth_method: AuthMethod,
+    pub user_agent: Option<String>,
 }
 
 /// Mock recording/replay mode for integration testing.
