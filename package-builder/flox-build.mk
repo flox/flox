@@ -237,8 +237,10 @@ define COMMON_BUILD_VARS_template =
   # Create a target for cleaning up the temporary directory.
   .PHONY: clean/$(_pname)
   clean/$(_pname):
-	-$(_V_) $(_find) $($(_pvarname)_tmpBasename) -type d -exec $(_chmod) +w {} \;
-	-$(_V_) $(_rm) -rf $($(_pvarname)_tmpBasename)
+	-$(_V_) if [ -d "$($(_pvarname)_tmpBasename)" ]; then \
+	  $(_find) $($(_pvarname)_tmpBasename) -type d -exec $(_chmod) +w {} \; && \
+	  $(_rm) -rf $($(_pvarname)_tmpBasename); \
+	fi
 
   clean_targets += clean/$(_pname)
 
@@ -422,8 +424,10 @@ define BUILD_local_template =
 	@# Actually perform the build using the temporary build wrapper.
 	@#
 	@echo "Building $(_name) in local mode"
-	-$(_VV_) $(_find) $($(_pvarname)_out) -type d -exec $(_chmod) +w {} \;
-	-$(_VV_) $(_rm) -rf $($(_pvarname)_out)
+	-$(_VV_) if [ -e "$($(_pvarname)_out)" ]; then \
+	  $(_find) $($(_pvarname)_out) -type d -exec $(_chmod) +w {} \; && \
+	  $(_rm) -rf $($(_pvarname)_out); \
+	fi
 	$(_V_) $(_env) $$(QUOTED_ENV_DISALLOW_ARGS) out=$($(_pvarname)_out) \
 	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$(PWD) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
 	  $(FLOX_INTERPRETER)/activate --env $$($(_pvarname)_develop_copy_env) \
