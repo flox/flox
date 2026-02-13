@@ -4,6 +4,7 @@ use std::process::Stdio;
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
+use flox_catalog::{BaseCatalogUrl, ClientTrait};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
@@ -18,11 +19,7 @@ use flox_rust_sdk::providers::build::{
     find_toplevel_group_nixpkgs,
     nix_expression_dir,
 };
-use flox_rust_sdk::providers::catalog::{
-    BaseCatalogUrl,
-    ClientTrait,
-    base_catalog_url_for_stability_arg,
-};
+use flox_rust_sdk::providers::catalog::base_catalog_url_for_stability_arg;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_rust_sdk::providers::nix;
 use flox_rust_sdk::utils::{CommandExt, FLOX_INTERPRETER};
@@ -649,11 +646,11 @@ pub(crate) fn packages_to_build<'o>(
 mod test {
     use std::fs::File;
 
+    use flox_catalog::{BaseCatalogInfo, BaseCatalogUrl};
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
     use flox_rust_sdk::providers::build::ExpressionBuildMetadata;
     use flox_rust_sdk::providers::build::test_helpers::prepare_nix_expressions_in;
-    use flox_rust_sdk::providers::catalog::{BaseCatalogInfo, BaseCatalogUrl};
     use flox_rust_sdk::providers::nix::test_helpers::known_store_path;
     use tempfile::tempdir_in;
 

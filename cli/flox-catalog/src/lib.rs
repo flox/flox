@@ -29,8 +29,8 @@
 
 mod client;
 mod config;
-pub mod error;
-pub mod types;
+mod error;
+mod types;
 
 pub(crate) mod mock;
 
@@ -47,47 +47,6 @@ pub use client::EMPTY_SEARCH_RESPONSE;
 pub use client::{str_to_catalog_name, str_to_package_name, CatalogClient, ClientTrait};
 pub use config::{CatalogClientConfig, CatalogMockMode};
 // Errors
-pub use error::{
-    CatalogClientError,
-    MapApiErrorExt,
-    PublishError,
-    ResolveError,
-    SearchError,
-    VersionsError,
-};
+pub use error::*;
 // Types (re-exported from types module for convenience)
-pub use types::{
-    // Base catalog
-    BaseCatalogInfo,
-    BaseCatalogUrl,
-    BaseCatalogUrlError,
-    CatalogPage,
-    CatalogStoreConfig,
-    CatalogStoreConfigNixCopy,
-    CatalogStoreConfigPublisher,
-    PackageBuild,
-    PackageDescriptor,
-    PackageDetails,
-    // Package types
-    PackageGroup,
-    PackageResolutionInfo,
-    PageInfo,
-    // API type aliases
-    PublishResponse,
-    ResolutionMessage,
-    // Resolved types
-    ResolvedPackageGroup,
-    ResultCount,
-    // Result types
-    ResultsPage,
-    SearchLimit,
-    SearchResult,
-    SearchResults,
-    StabilityInfo,
-    StoreInfo,
-    StoreInfoRequest,
-    StoreInfoResponse,
-    StorepathStatusResponse,
-    UserBuildPublish,
-    UserDerivationInfo,
-};
+pub use types::*;

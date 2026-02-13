@@ -3,15 +3,23 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::str::FromStr;
 
-use catalog_api_v1::types::{
+use chrono::{DateTime, Utc};
+use flox_catalog::{
+    BaseCatalogUrl,
+    BaseCatalogUrlError,
+    CatalogClientError,
+    CatalogStoreConfig,
+    CatalogStoreConfigNixCopy,
+    ClientTrait,
     NarInfo,
     NarInfos,
     PackageOutput,
     PackageOutputs,
     PackageSystem,
-    PublishInfoResponseCatalog,
+    PublishResponse,
+    UserBuildPublish,
+    UserDerivationInfo,
 };
-use chrono::{DateTime, Utc};
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use thiserror::Error;
@@ -30,22 +38,13 @@ use super::build::{
     find_toplevel_group_nixpkgs,
     nix_expression_dir,
 };
-use super::catalog::{
-    BaseCatalogUrl,
-    BaseCatalogUrlError,
-    CatalogClientError,
-    Client,
-    ClientTrait,
-    UserBuildPublish,
-    UserDerivationInfo,
-};
 use super::git::{GitCommandError, GitCommandProvider, StatusInfo};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError, open_path};
 use crate::models::lockfile::Lockfile;
 use crate::providers::auth::catalog_auth_to_envs;
-use crate::providers::catalog::{CatalogStoreConfig, CatalogStoreConfigNixCopy};
+use crate::providers::catalog::Client;
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
 use crate::utils::CommandExt;
@@ -173,7 +172,7 @@ pub struct CheckedBuildMetadata {
     // Define metadata coming from the build, e.g. outpaths
     pub name: String,
     pub pname: String,
-    pub outputs: catalog_api_v1::types::PackageOutputs,
+    pub outputs: PackageOutputs,
     pub outputs_to_install: Option<Vec<String>>,
     pub drv_path: String,
     pub system: PackageSystem,
@@ -696,7 +695,7 @@ fn get_client_side_catalog_store_config(
     metadata_only: bool,
     key_file: Option<PathBuf>,
     auth_netrc_path: impl AsRef<Path>,
-    publish_response: PublishInfoResponseCatalog,
+    publish_response: PublishResponse,
 ) -> Result<ClientSideCatalogStoreConfig, PublishError> {
     if metadata_only {
         return Ok(ClientSideCatalogStoreConfig::MetadataOnly);
@@ -754,17 +753,16 @@ fn get_client_side_catalog_store_config(
 fn check_build_metadata_from_build_result(
     build_result: &BuildResult,
 ) -> Result<CheckedBuildMetadata, PublishError> {
-    let outputs = PackageOutputs(
-        build_result
-            .outputs
-            .clone()
-            .into_iter()
-            .map(|(output_name, output_path)| PackageOutput {
-                name: output_name,
-                store_path: output_path.to_string_lossy().to_string(),
-            })
-            .collect(),
-    );
+    let outputs = build_result
+        .outputs
+        .clone()
+        .into_iter()
+        .map(|(output_name, output_path)| PackageOutput {
+            name: output_name,
+            store_path: output_path.to_string_lossy().to_string(),
+        })
+        .collect::<Vec<_>>()
+        .into();
 
     // Get outputs to install from the build result, or default to all outputs.
     let outputs_to_install = build_result.meta.outputs_to_install.clone();
@@ -1052,7 +1050,6 @@ pub mod tests {
     use std::io::Write;
     use std::sync::LazyLock;
 
-    use catalog_api_v1::types::CatalogStoreConfigNixCopy;
     use chrono::Utc;
     use pretty_assertions::assert_eq;
 
@@ -1073,7 +1070,6 @@ pub mod tests {
     use crate::providers::catalog::{
         GENERATED_DATA,
         MockClient,
-        PublishResponse,
         Response,
         get_base_nixpkgs_url,
         mock_base_catalog_url,
@@ -1422,10 +1418,11 @@ pub mod tests {
         let build_metadata = CheckedBuildMetadata {
             name: pkg_name.to_string(),
             pname: pkg_name.to_string(),
-            outputs: PackageOutputs(vec![PackageOutput {
+            outputs: vec![PackageOutput {
                 name: "out".to_string(),
                 store_path: "/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo".to_string(),
-            }]),
+            }]
+            .into(),
             outputs_to_install: None,
             drv_path: "dummy".to_string(),
             system: PackageSystem::X8664Linux,

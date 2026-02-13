@@ -8,6 +8,7 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::thread::ScopedJoinHandle;
 
+use flox_catalog::{CatalogClientError, ClientTrait, StoreInfo};
 use flox_core::activate::mode::ActivateMode;
 use flox_core::canonical_path::CanonicalPath;
 use pollster::FutureExt as _;
@@ -18,7 +19,6 @@ use thiserror::Error;
 use tracing::{Span, debug, info_span, instrument, trace};
 
 use super::auth::{AuthError, AuthProvider};
-use super::catalog::ClientTrait;
 use super::nix::{self, nix_base_command};
 use crate::data::System;
 use crate::models::lockfile::{
@@ -32,7 +32,6 @@ use crate::models::lockfile::{
 use crate::models::manifest::typed::{ManifestError, SelectedOutputs};
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::providers::auth::{catalog_auth_to_envs, store_needs_auth};
-use crate::providers::catalog::{CatalogClientError, StoreInfo};
 use crate::utils::CommandExt;
 
 static BUILDENV_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -1328,7 +1327,7 @@ mod realise_nixpkgs_tests {
     use crate::models::lockfile;
     use crate::models::manifest::typed::{ManifestPackageDescriptor, PackageDescriptorCatalog};
     use crate::providers::auth::Auth;
-    use crate::providers::catalog::{GENERATED_DATA, StoreInfo};
+    use crate::providers::catalog::GENERATED_DATA;
     use crate::providers::nix::test_helpers::known_store_path;
 
     /// Read a single locked package for the current system from a mock lockfile.

@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use flox_catalog::{ClientTrait, PackageDescriptor, PackageGroup, PackageResolutionInfo};
 use flox_core::activate::mode::ActivateMode;
 use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox, RemoteEnvironmentRef};
@@ -11,13 +12,7 @@ use flox_rust_sdk::models::environment::path_environment::{InitCustomization, Pa
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
 use flox_rust_sdk::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
-use flox_rust_sdk::providers::catalog::{
-    ALL_SYSTEMS,
-    ClientTrait,
-    PackageDescriptor,
-    PackageGroup,
-    PackageResolutionInfo,
-};
+use flox_rust_sdk::providers::catalog::ALL_SYSTEMS;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use indoc::{formatdoc, indoc};
 use path_dedot::ParseDot;
@@ -530,8 +525,8 @@ impl From<ProvidedPackage> for CatalogPackage {
     }
 }
 
-impl From<PackageResolutionInfo> for ProvidedPackage {
-    fn from(value: PackageResolutionInfo) -> Self {
+impl From<flox_catalog::PackageResolutionInfo> for ProvidedPackage {
+    fn from(value: flox_catalog::PackageResolutionInfo) -> Self {
         Self {
             name: value.install_id,
             attr_path: value.attr_path.into(),
@@ -541,8 +536,8 @@ impl From<PackageResolutionInfo> for ProvidedPackage {
     }
 }
 
-impl From<&PackageResolutionInfo> for ProvidedPackage {
-    fn from(value: &PackageResolutionInfo) -> Self {
+impl From<&flox_catalog::PackageResolutionInfo> for ProvidedPackage {
+    fn from(value: &flox_catalog::PackageResolutionInfo) -> Self {
         Self {
             name: value.install_id.clone(),
             attr_path: value.attr_path.clone().into(),

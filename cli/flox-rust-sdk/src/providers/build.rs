@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::LazyLock;
 
+use flox_catalog::BaseCatalogUrl;
 use flox_core::activate::vars::FLOX_RUNTIME_DIR_VAR;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -14,7 +15,6 @@ use tracing::debug;
 use url::Url;
 
 use super::buildenv::{BuildEnvOutputs, BuiltStorePath};
-use super::catalog::BaseCatalogUrl;
 use super::nix::nix_base_command;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError};

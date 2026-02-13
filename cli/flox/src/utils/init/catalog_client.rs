@@ -1,10 +1,9 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use flox_catalog::{CatalogClient, CatalogClientConfig, CatalogMockMode};
+use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::providers::catalog::{
-    CatalogClient,
-    CatalogClientConfig,
-    CatalogMockMode,
     Client,
     DEFAULT_CATALOG_URL,
     FLOX_CATALOG_DUMP_DATA_VAR,
@@ -21,17 +20,15 @@ use crate::utils::metrics::read_metrics_uuid;
 /// - Initialize a real client otherwise
 pub fn init_catalog_client(config: &Config) -> Result<Client, anyhow::Error> {
     let extra_headers = {
+        let mut headers = BTreeMap::new();
         // Propagate the metrics UUID to catalog-server if metrics are enabled.
         if !config.flox.disable_metrics {
-            let mut metrics_headers = BTreeMap::new();
-            metrics_headers.insert(
+            headers.insert(
                 "flox-device-uuid".to_string(),
                 read_metrics_uuid(config).unwrap().to_string(),
             );
-            metrics_headers
-        } else {
-            Default::default()
         }
+        headers
     };
 
     let mock_mode = if let Ok(path_str) = std::env::var(FLOX_CATALOG_MOCK_DATA_VAR) {
@@ -53,11 +50,12 @@ pub fn init_catalog_client(config: &Config) -> Result<Client, anyhow::Error> {
         floxhub_token: config.flox.floxhub_token.clone(),
         extra_headers,
         mock_mode,
+        user_agent: Some(format!("flox-cli/{}", &*FLOX_VERSION)),
     };
 
     debug!(
         "using catalog client with url: {}",
         client_config.catalog_url
     );
-    Ok(CatalogClient::new(client_config).into())
+    Ok(CatalogClient::new(client_config)?.into())
 }

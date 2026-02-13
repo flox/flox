@@ -3,9 +3,9 @@ use std::num::NonZeroU8;
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use flox_catalog::{ClientTrait, SearchResults};
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::search::SearchResults;
-use flox_rust_sdk::providers::catalog::{ClientTrait, SearchTerm};
+use flox_rust_sdk::providers::catalog::SearchTerm;
 use indoc::{formatdoc, indoc};
 use tracing::{debug, instrument};
 
@@ -76,7 +76,7 @@ impl Search {
             };
 
             flox.catalog_client
-                .search_with_spinner(parsed_search, flox.system.clone(), limit)
+                .search_with_spinner(parsed_search, flox.system.clone().try_into()?, limit)
                 .await?
         };
 

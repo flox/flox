@@ -7,7 +7,6 @@ edition = "2024"
 
 [dependencies]
 async-stream.workspace = true
-catalog-api-v1.workspace = true
 flox-catalog = { workspace = true }
 chrono.workspace = true
 derive_more.workspace = true
@@ -60,8 +59,8 @@ tar.workspace = true
 temp-env.workspace = true
 tracing-subscriber.workspace = true
 flox-test-utils.workspace = true
-catalog-api-v1 = { workspace = true, features = ["tests"] }
 sentry = { workspace = true, features = ["test"] }
+flox-catalog = { workspace = true, features = ["tests"] }
 
 
 [features]

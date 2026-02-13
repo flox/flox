@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use anyhow::Result;
 use crossterm::style::Stylize;
-use flox_rust_sdk::models::search::{SearchResult, SearchResults};
+use flox_catalog::{SearchResult, SearchResults};
 
 pub const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
 
@@ -160,7 +160,6 @@ impl DisplaySearchResults {
 mod tests {
     use std::str::FromStr;
 
-    use flox_rust_sdk::models::search::SearchResult;
     use flox_rust_sdk::providers::catalog::SystemEnum;
     use indoc::indoc;
 

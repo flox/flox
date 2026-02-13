@@ -1325,13 +1325,13 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "bpaf",
- "catalog-api-v1",
  "chrono",
  "close_fds",
  "config",
  "crossterm 0.29.0",
  "derive_more",
  "dirs",
+ "flox-catalog",
  "flox-core",
  "flox-rust-sdk",
  "flox-test-utils",
@@ -1472,7 +1472,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-stream",
- "catalog-api-v1",
  "chrono",
  "derive_more",
  "enum_dispatch",
