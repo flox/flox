@@ -440,7 +440,7 @@ if ($manifest) {
             }
 
             # Get outputs for v2 manifests
-            sub getV2Outputs {
+            sub get_V1_10_0_Outputs {
                 my ($descriptor, $pkg, $outputsToInstall) = @_;
                 if (exists $descriptor->{"outputs"}) {
                     my $ref = ref($descriptor->{"outputs"});
@@ -510,7 +510,7 @@ if ($manifest) {
                 }
 
                 # Determine which outputs to install based on manifest version
-                if ($manifest->{"version"} == 1) {
+                if (exists $manifest->{"version"} && $manifest->{"version"} == 1) {
                     # V1 manifest logic: group outputs_to_install together,
                     # increment priority only for "other" outputs
                     my @outputs = getV1Outputs($package);
@@ -541,9 +541,9 @@ if ($manifest) {
                             "priority" => ((1000 * $package->{"priority"}) + $otherOutputPriorityCounter++)
                         };
                     }
-                } elsif ($manifest->{"version"} == 2) {
-                    # V2 manifest logic: increment priority for all outputs
-                    my @outputs = getV2Outputs($descriptor, $package, $outputsToInstall);
+                } elsif (exists $manifest->{"schema-version"} && $manifest->{"schema-version"} eq "1.10.0") {
+                    # v1.10.0 manifest logic: increment priority for all outputs
+                    my @outputs = get_V1_10_0_Outputs($descriptor, $package, $outputsToInstall);
                     my @paths = map { $package->{"outputs"}{$_} } @outputs;
 
                     next unless scalar @paths;
@@ -557,8 +557,12 @@ if ($manifest) {
                             "priority" => ((1000 * $package->{"priority"}) + $outputPriorityCounter++)
                         };
                     }
+                } elsif (exists $manifest->{"schema-version"}) {
+                    die "unsupported manifest schema version: '" . $manifest->{"schema-version"} . "'\n";
+                } elsif (exists $manifest->{"version"}) {
+                    die "unsupported manifest schema version: '" . $manifest->{"version"} . "'\n";
                 } else {
-                    die "unsupported manifest version: '$manifest->{version}'\n";
+                    die "missing manifest schema version\n";
                 }
 
             }
