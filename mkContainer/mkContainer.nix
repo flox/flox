@@ -109,7 +109,6 @@ let
       env = "${environment}"; # FIXME: Incorrect for containers.
       env_description = "${containerName}";
       env_cache = "/tmp";
-      flox_runtime_dir = "/run/flox";
       prompt_color_1 = "99";
       prompt_color_2 = "141";
       interpreter_path = "${interpreterPath}";

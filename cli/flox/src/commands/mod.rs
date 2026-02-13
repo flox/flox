@@ -21,6 +21,7 @@ mod pull;
 mod push;
 mod search;
 mod services;
+mod services_socket;
 mod show;
 mod uninstall;
 mod upgrade;
@@ -772,6 +773,12 @@ enum InternalCommands {
     ActivationState(
         #[bpaf(external(activation_state::activation_state))] activation_state::ActivationState,
     ),
+
+    /// Print the services socket path for an environment.
+    #[bpaf(command, long("services-socket"), hide)]
+    ServicesSocket(
+        #[bpaf(external(services_socket::services_socket))] services_socket::ServicesSocket,
+    ),
 }
 
 impl InternalCommands {
@@ -783,6 +790,7 @@ impl InternalCommands {
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
             InternalCommands::Exit(args) => args.handle(flox)?,
             InternalCommands::ActivationState(args) => args.handle(flox)?,
+            InternalCommands::ServicesSocket(args) => args.handle(flox)?,
         }
         Ok(())
     }

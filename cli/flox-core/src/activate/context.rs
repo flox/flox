@@ -35,9 +35,6 @@ pub struct AttachCtx {
     /// Whether to set prompt
     pub set_prompt: bool,
 
-    /// Runtime directory
-    pub flox_runtime_dir: String,
-
     /// CUDA detection enabled
     pub flox_env_cuda_detection: String,
 

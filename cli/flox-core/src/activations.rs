@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
+use std::fs::DirBuilder;
 use std::ops::Deref;
+use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
@@ -195,7 +197,10 @@ pub fn acquire_activations_json_lock(
     let lock_path = activations_json_lock_path(activations_json_path);
     let lock_path_parent = lock_path.parent().expect("lock path has parent");
     if !(lock_path.exists()) {
-        std::fs::create_dir_all(lock_path_parent)?;
+        DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(lock_path_parent)?;
     }
     let mut lock = LockFile::open(&lock_path).context("failed to open lockfile")?;
     lock.lock().context("failed to lock lockfile")?;

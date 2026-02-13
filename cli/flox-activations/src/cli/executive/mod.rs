@@ -476,16 +476,11 @@ mod test {
 
     /// Create minimal context for testing.
     /// The actual values don't matter since tests don't trigger SIGUSR1.
-    fn test_context(
-        dot_flox_path: &Path,
-        runtime_dir: &Path,
-        flox_env: &str,
-    ) -> (AttachCtx, AttachProjectCtx) {
+    fn test_context(dot_flox_path: &Path, flox_env: &str) -> (AttachCtx, AttachProjectCtx) {
         let attach = AttachCtx {
             env: flox_env.to_string(),
             env_description: "test".to_string(),
             env_cache: dot_flox_path.join("cache"),
-            flox_runtime_dir: runtime_dir.to_string_lossy().to_string(),
             interpreter_path: PathBuf::from("/nix/store/fake"),
             prompt_color_1: "".to_string(),
             prompt_color_2: "".to_string(),
@@ -543,8 +538,7 @@ mod test {
 
         stop_process(proc);
 
-        let (attach, project) =
-            test_context(&dot_flox_path, runtime_dir, &flox_env.to_string_lossy());
+        let (attach, project) = test_context(&dot_flox_path, &flox_env.to_string_lossy());
 
         run_event_loop(
             attach,
@@ -599,8 +593,7 @@ mod test {
             .unwrap();
         coordinator.inject_event(ExecutiveEvent::TerminationSignal);
 
-        let (attach, project) =
-            test_context(&dot_flox_path, runtime_dir, &flox_env.to_string_lossy());
+        let (attach, project) = test_context(&dot_flox_path, &flox_env.to_string_lossy());
 
         let result = run_event_loop(
             attach,
@@ -678,8 +671,7 @@ mod test {
         // These are all dummy values
         let coordinator = EventCoordinator::new().unwrap();
         let mut loop_guard = LoopGuard::new(5);
-        let (_attach, project) =
-            test_context(&dot_flox_path, runtime_dir, &flox_env.to_string_lossy());
+        let (_attach, project) = test_context(&dot_flox_path, &flox_env.to_string_lossy());
 
         stop_process(proc1);
 
@@ -762,8 +754,7 @@ mod test {
         let coordinator = EventCoordinator::new().unwrap();
         // Use a low limit so we can test hitting it
         let mut loop_guard = LoopGuard::new(2);
-        let (_attach, project) =
-            test_context(&dot_flox_path, runtime_dir, &flox_env.to_string_lossy());
+        let (_attach, project) = test_context(&dot_flox_path, &flox_env.to_string_lossy());
 
         // First call: PID is in state and running, so it will be re-monitored.
         // loop_guard.allow_remonitor(pid) returns true (count=1 < limit=2)
