@@ -527,3 +527,30 @@ impl JsonSchema for Manifest<TypedOnly> {
         schema_for!(Parsed)
     }
 }
+
+#[cfg(any(test, feature = "tests"))]
+pub mod test_helpers {
+    use indoc::formatdoc;
+
+    use crate::parsed::common::KnownSchemaVersion;
+
+    /// Prepends a `schema-version = "..."` string with the latest schema
+    /// version to the provided manifest body.
+    pub fn with_latest_schema(body: impl AsRef<str>) -> String {
+        with_schema(KnownSchemaVersion::latest(), body)
+    }
+
+    /// Prepends a `schema-version = "..."` string with the specified schema
+    /// version to the provided manifest body.
+    pub fn with_schema(schema: KnownSchemaVersion, body: impl AsRef<str>) -> String {
+        let schema_str = match schema {
+            KnownSchemaVersion::V1 => "version = 1".into(),
+            _ => format!("schema-version = \"{schema}\""),
+        };
+        formatdoc! {r#"
+            {}
+
+            {}
+        "#,  schema_str, body.as_ref()}
+    }
+}

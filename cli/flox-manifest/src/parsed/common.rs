@@ -44,16 +44,30 @@ pub(crate) enum VersionKind {
     SchemaVersion(String),
 }
 
+/// All known and valid schema versions supported by the CLI.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub enum KnownSchemaVersion {
+    // NOTE: The order in which the enum variants are listed defines
+    //       the sort order. Don't mess that up!
     V1,
     V1_10_0,
 }
 
 impl KnownSchemaVersion {
+    /// Returns the latest schema version.
     pub fn latest() -> Self {
         KnownSchemaVersion::V1_10_0
+    }
+
+    /// Returns the oldest supported schema version.
+    pub fn oldest() -> Self {
+        KnownSchemaVersion::V1
+    }
+
+    /// Returns an iterator over all schema versions.
+    pub fn iter() -> impl Iterator<Item = KnownSchemaVersion> {
+        [KnownSchemaVersion::V1, KnownSchemaVersion::V1_10_0].into_iter()
     }
 }
 
