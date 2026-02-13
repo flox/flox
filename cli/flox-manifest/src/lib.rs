@@ -36,7 +36,7 @@ use crate::parsed::common::KnownSchemaVersion;
 use crate::parsed::latest::ManifestLatest;
 use crate::parsed::v1::ManifestV1;
 use crate::parsed::v1_10_0::ManifestV1_10_0;
-use crate::raw::{TomlEditError, get_schema_version_kind, get_toml_schema_version_kind};
+use crate::raw::{TomlEditError, get_json_schema_version_kind, get_schema_version_kind};
 
 pub mod compose;
 pub mod interfaces;
@@ -64,6 +64,14 @@ pub enum ManifestError {
     /// The provided string failed to parse as valid TOML of any kind.
     #[error("manifest contents were not valid TOML: {0}")]
     ParseToml(#[source] toml_edit::TomlError),
+
+    /// The provided string failed to parse as valid JSON of any kind.
+    #[error("manifest contents were not valid JSON: {0}")]
+    ParseJson(#[source] serde_json::Error),
+
+    /// Valid JSON did not deserialize into a manifest.
+    #[error("JSON was not a valid manifest: {0}")]
+    DeserializeJson(#[source] serde_json::Error),
 
     #[error("manifest had invalid schema version '{0}'")]
     InvalidSchemaVersion(String),
@@ -249,7 +257,7 @@ pub struct Manifest<S = Init> {
 
 impl Manifest<Init> {
     /// Parse the given TOML into an untyped manifest.
-    pub fn parse_untyped(s: impl AsRef<str>) -> Result<Manifest<TomlParsed>, ManifestError> {
+    pub fn parse_toml_untyped(s: impl AsRef<str>) -> Result<Manifest<TomlParsed>, ManifestError> {
         let toml = s
             .as_ref()
             .parse::<toml_edit::DocumentMut>()
@@ -262,12 +270,22 @@ impl Manifest<Init> {
     /// Read the TOML file at the given path and parse it into an untyped manifest.
     pub fn read_untyped(p: impl AsRef<Path>) -> Result<Manifest<TomlParsed>, ManifestError> {
         let contents = std::fs::read_to_string(p).map_err(ManifestError::IORead)?;
-        Self::parse_untyped(contents)
+        Self::parse_toml_untyped(contents)
     }
 
     /// Parse the given TOML into a typed and validated manifest.
-    pub fn parse_typed(s: impl AsRef<str>) -> Result<Manifest<Validated>, ManifestError> {
-        Self::parse_untyped(s)?.validate()
+    pub fn parse_toml_typed(s: impl AsRef<str>) -> Result<Manifest<Validated>, ManifestError> {
+        Self::parse_toml_untyped(s)?.validate()
+    }
+
+    /// Parse the given JSON into a typed and validated manifest.
+    pub fn parse_json(s: impl AsRef<str>) -> Result<Manifest<TypedOnly>, ManifestError> {
+        let json = s
+            .as_ref()
+            .parse::<serde_json::Value>()
+            .map_err(ManifestError::ParseJson)?;
+        let d = json.into_deserializer();
+        Manifest::<TypedOnly>::deserialize(d).map_err(ManifestError::DeserializeJson)
     }
 
     /// Read the TOML file at the given path, parse it into a typed and validated manifest.
@@ -281,7 +299,7 @@ impl Manifest<Init> {
         manifest_contents: impl AsRef<str>,
         maybe_lockfile: Option<&Lockfile>,
     ) -> Result<Manifest<Migrated>, ManifestError> {
-        Self::parse_untyped(manifest_contents)?
+        Self::parse_toml_untyped(manifest_contents)?
             .validate()?
             .migrate(maybe_lockfile)
     }
@@ -426,8 +444,13 @@ impl<'de> Deserialize<'de> for Manifest<TypedOnly> {
     where
         D: serde::Deserializer<'de>,
     {
-        let untyped = toml::Value::deserialize(deserializer)?;
-        let version: KnownSchemaVersion = get_toml_schema_version_kind(&untyped)
+        // NOTE: the choice of serde_json is important here (as opposed to `toml`
+        //       or `toml_edit`) because JSON is a superset of TOML. JSON is able
+        //       to represent all of the TOML data types *plus* `null`. Since we
+        //       need to be able to deserialize from JSON, which can contain
+        //       nulls, we need to use `serde_json` instead of `toml`.
+        let untyped = serde_json::Value::deserialize(deserializer)?;
+        let version: KnownSchemaVersion = get_json_schema_version_kind(&untyped)
             .map_err(|err| serde::de::Error::custom(err.to_string()))?
             .try_into()
             .map_err(|err: ManifestError| serde::de::Error::custom(err.to_string()))?;
