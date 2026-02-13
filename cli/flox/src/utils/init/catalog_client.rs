@@ -1,10 +1,9 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use flox_catalog::{CatalogClient, CatalogClientConfig, CatalogMockMode};
+use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::providers::catalog::{
-    CatalogClient,
-    CatalogClientConfig,
-    CatalogMockMode,
     Client,
     DEFAULT_CATALOG_URL,
     FLOX_CATALOG_DUMP_DATA_VAR,
@@ -49,12 +48,13 @@ pub fn init_catalog_client(
         floxhub_token: config.flox.floxhub_token.clone(),
         extra_headers,
         mock_mode,
-        auth_method: config.flox.floxhub_authn_mode.clone(),
+        auth_method: flox_catalog::AuthMethod::Auth0,
+        user_agent: Some(format!("flox-cli/{}", &*FLOX_VERSION)),
     };
 
     debug!(
         "using catalog client with url: {}",
         client_config.catalog_url
     );
-    Ok(CatalogClient::new(client_config).into())
+    Ok(CatalogClient::new(client_config)?.into())
 }

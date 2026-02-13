@@ -1365,7 +1365,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "bpaf",
- "catalog-api-v1",
  "chrono",
  "close_fds",
  "config",
@@ -1549,7 +1548,6 @@ dependencies = [
  "anyhow",
  "async-stream",
  "base64",
- "catalog-api-v1",
  "chrono",
  "derive_more",
  "enum_dispatch",

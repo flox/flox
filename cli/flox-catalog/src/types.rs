@@ -71,11 +71,11 @@ impl TryFrom<PackageGroup> for api_types::PackageGroup {
 // ---------------------------------------------------------------------------
 // Resolution messages
 // ---------------------------------------------------------------------------
-pub use api_types::MessageLevel;
 pub use api_types::{
     CatalogStoreConfig,
     CatalogStoreConfigNixCopy,
     CatalogStoreConfigPublisher,
+    MessageLevel,
     NarInfo,
     NarInfos,
     PackageBuildWithNarInfo as UserBuildPublish,
