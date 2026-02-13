@@ -276,7 +276,7 @@ impl LockManifest {
                     // If the package was locked from a flake installable before
                     // it needs to be re-resolved with the catalog, so the derivation will be None.
                     let locked_derivation = seed_locked_packages
-                        .get(&(id, &system.to_string()))
+                        .get(&(id.as_str(), system.to_string().as_str()))
                         .filter(|(descriptor, _)| {
                             !descriptor.invalidates_existing_resolution(&desc.into())
                         })
@@ -370,8 +370,11 @@ impl LockManifest {
         // Decide which schema we can write the manifest as.
         let merged = merged
             .as_maybe_backwards_compatible(manifest.original_schema(), Some(&proposed_lockfile))?;
-        if merged.get_schema_version() != KnownSchemaVersion::latest()
-            && let Some(compose) = compose.as_mut()
+
+        let merged_manfiest_is_latest_schema =
+            merged.get_schema_version() == KnownSchemaVersion::latest();
+        if let Some(compose) = compose.as_mut()
+            && merged_manfiest_is_latest_schema
         {
             // Record the original schema of the user's manifest.
             compose.composer = manifest.as_typed_only();
@@ -842,7 +845,7 @@ impl LockManifest {
             })
             .filter_map(|(install_id, system)| {
                 seed_locked_packages
-                    .get(&(install_id, &system.to_string()))
+                    .get(&(install_id.as_str(), system.to_string().as_str()))
                     .map(|(_, locked_package)| (*locked_package).to_owned())
             })
             .collect::<Vec<_>>();
@@ -1043,7 +1046,7 @@ impl LockManifest {
                 for installable in unlocked.iter() {
                     let Some((locked_descriptor, in_lockfile @ LockedPackage::Flake(_))) =
                         seed_locked_packages
-                            .get(&(installable.install_id.as_str(), &installable.system))
+                            .get(&(installable.install_id.as_str(), installable.system.as_str()))
                     else {
                         return Either::Right(unlocked);
                     };
@@ -1665,7 +1668,7 @@ mod tests {
             .unwrap();
         let manifest = migrated.as_latest_schema();
 
-        let actual_result = LockManifest::collect_resolution_package_groups(&manifest, None);
+        let actual_result = LockManifest::collect_resolution_package_groups(manifest, None);
 
         assert!(
             matches!(actual_result, Err(ResolveError::SystemUnavailableInManifest {
@@ -2387,7 +2390,7 @@ mod tests {
             {foo_iid}.store-path = "{store_path}"
             {foo_iid}.systems = ["{system}"]
         "#};
-        let manifest = Manifest::parse_typed(&contents)
+        let manifest = Manifest::parse_typed(contents)
             .unwrap()
             .as_typed_only()
             .migrate_typed_only(None)

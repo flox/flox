@@ -291,7 +291,35 @@ fn collect_locked_packages_by_kind(
             }
         }
     } else {
-        todo!()
+        for (install_id, descriptor) in manifest.install.inner().iter() {
+            use v1::ManifestPackageDescriptor::*;
+            match descriptor {
+                Catalog(pd) => {
+                    let locked_descriptor = LockedDescriptor {
+                        install_id: install_id.clone(),
+                        pd: pd.clone(),
+                        locked: HashMap::new(),
+                    };
+                    catalog_pkgs.push(locked_descriptor);
+                },
+                FlakeRef(pd) => {
+                    let locked_descriptor = LockedDescriptor {
+                        install_id: install_id.clone(),
+                        pd: pd.clone(),
+                        locked: HashMap::new(),
+                    };
+                    flake_pkgs.push(locked_descriptor);
+                },
+                StorePath(pd) => {
+                    let locked_descriptor = LockedDescriptor {
+                        install_id: install_id.clone(),
+                        pd: pd.clone(),
+                        locked: HashMap::new(),
+                    };
+                    store_path_pkgs.push(locked_descriptor);
+                },
+            }
+        }
     }
 
     let collected = CollectedPackages {
