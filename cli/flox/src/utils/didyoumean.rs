@@ -4,7 +4,6 @@ use std::num::NonZeroU8;
 use anyhow::Result;
 use flox_catalog::{ClientTrait, SearchResults};
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::catalog::Client;
 use pollster::FutureExt;
 use tracing::{debug, instrument};
 
@@ -62,7 +61,7 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
     /// Collects installation suggestions for a given query using the catalog
     #[instrument(skip(client), fields(progress = "Looking for alternative suggestions"))]
     fn suggest_searched_packages_catalog(
-        client: &Client,
+        client: &impl ClientTrait,
         term: &str,
         system: String,
     ) -> Result<SearchResults> {
@@ -162,7 +161,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
 
     #[instrument(skip(client), fields(progress = "Looking for alternative suggestions"))]
     fn suggest_searched_packages_catalog(
-        client: &Client,
+        client: &impl ClientTrait,
         term: &str,
         system: String,
     ) -> Result<SearchResults> {
@@ -182,7 +181,12 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
     /// and then query for related search results.
     /// Either of these may fail, in which case we will return with empty [SearchResults]
     /// and log the error.
-    pub fn new(term: &'a str, catalog_client: &Client, system: String, use_bold_fmt: bool) -> Self {
+    pub fn new(
+        term: &'a str,
+        catalog_client: &impl ClientTrait,
+        system: String,
+        use_bold_fmt: bool,
+    ) -> Self {
         let curated = Self::suggest_curated_package(term);
 
         let default_results = SearchResults {
