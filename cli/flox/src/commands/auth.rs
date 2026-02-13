@@ -306,7 +306,7 @@ pub async fn login_flox(flox: &mut Flox) -> Result<&FloxhubToken> {
     // If the catalog client is catalog (not a mock), update the token by
     // creating a new client based on the old config with the updated token
     if let Client::Catalog(client) = &mut flox.catalog_client {
-        client.update_config(|config| config.floxhub_token = Some(token.secret().to_string()));
+        client.update_config(|config| config.floxhub_token = Some(token.secret().to_string()))?;
     }
 
     message::updated("Authentication complete");

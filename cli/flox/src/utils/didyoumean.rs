@@ -2,9 +2,8 @@ use std::fmt::Display;
 use std::num::NonZeroU8;
 
 use anyhow::Result;
+use flox_catalog::{ClientTrait, SearchResults};
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::search::SearchResults;
-use flox_rust_sdk::providers::catalog::{Client, ClientTrait};
 use pollster::FutureExt;
 use tracing::{debug, instrument};
 
@@ -69,7 +68,7 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
         let results = client
             .search_with_spinner(
                 term,
-                system.to_string(),
+                system.try_into().map_err(|e| anyhow::anyhow!("{e}"))?,
                 NonZeroU8::new(SUGGESTION_SEARCH_LIMIT),
             )
             .block_on()?;
@@ -169,7 +168,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
         let results = client
             .search_with_spinner(
                 term,
-                system.to_string(),
+                system.try_into().map_err(|e| anyhow::anyhow!("{e}"))?,
                 NonZeroU8::new(SUGGESTION_SEARCH_LIMIT),
             )
             .block_on()?;

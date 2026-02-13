@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-use catalog_api_v1::types::{MessageLevel, PackageSystem};
 #[cfg(test)]
 use flox_test_utils::proptest::{alphanum_string, chrono_strat};
 use indent::{indent_all_by, indent_by};
@@ -20,6 +19,20 @@ use std::fmt::Display;
 use std::fs;
 use std::str::FromStr;
 
+use flox_catalog::{
+    self,
+    ClientTrait,
+    MessageLevel,
+    MsgAttrPathNotFoundNotFoundForAllSystems,
+    MsgAttrPathNotFoundNotInCatalog,
+    MsgAttrPathNotFoundSystemsNotOnSamePage,
+    MsgConstraintsTooTight,
+    MsgUnknown,
+    PackageDescriptor,
+    PackageGroup,
+    PackageSystem,
+    ResolvedPackageGroup,
+};
 use flox_core::Version;
 use thiserror::Error;
 use tracing::debug;
@@ -42,18 +55,7 @@ use super::manifest::typed::{
 use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
 use crate::models::manifest::composite::CompositeManifest;
-use crate::providers::catalog::{
-    self,
-    ALL_SYSTEMS,
-    MsgAttrPathNotFoundNotFoundForAllSystems,
-    MsgAttrPathNotFoundNotInCatalog,
-    MsgAttrPathNotFoundSystemsNotOnSamePage,
-    MsgConstraintsTooTight,
-    MsgUnknown,
-    PackageDescriptor,
-    PackageGroup,
-    ResolvedPackageGroup,
-};
+use crate::providers::catalog::ALL_SYSTEMS;
 use crate::providers::flake_installable_locker::{
     FlakeInstallableError,
     InstallableLocker,
@@ -254,11 +256,11 @@ impl LockedPackageCatalog {
     ///
     /// There may be more validation/parsing we could do here in the future.
     pub fn from_parts(
-        package: catalog::PackageResolutionInfo,
+        package: flox_catalog::PackageResolutionInfo,
         descriptor: PackageDescriptorCatalog,
     ) -> Self {
         // unpack package to avoid missing new fields
-        let catalog::PackageResolutionInfo {
+        let flox_catalog::PackageResolutionInfo {
             catalog: _,
             attr_path,
             broken,
@@ -899,7 +901,7 @@ impl Lockfile {
     async fn resolve_manifest(
         manifest: &Manifest,
         seed_lockfile: Option<&Lockfile>,
-        client: &impl catalog::ClientTrait,
+        client: &impl ClientTrait,
         installable_locker: &impl InstallableLocker,
     ) -> Result<Vec<LockedPackage>, ResolveError> {
         let catalog_groups = Self::collect_package_groups(manifest, seed_lockfile)?;
@@ -1337,35 +1339,39 @@ impl Lockfile {
                     continue;
                 }
                 let failure = match res_msg {
-                    catalog::ResolutionMessage::General(inner) => {
+                    flox_catalog::ResolutionMessage::General(inner) => {
                         tracing::debug!(kind = "general");
                         ResolutionFailure::FallbackMessage {
                             msg: inner.msg.clone(),
                         }
                     },
-                    catalog::ResolutionMessage::AttrPathNotFoundNotInCatalog(inner) => {
+                    flox_catalog::ResolutionMessage::AttrPathNotFoundNotInCatalog(inner) => {
                         tracing::debug!(kind = "attr_path_not_found.not_in_catalog",);
                         ResolutionFailure::PackageNotFound(inner.clone())
                     },
-                    catalog::ResolutionMessage::AttrPathNotFoundNotFoundForAllSystems(inner) => {
+                    flox_catalog::ResolutionMessage::AttrPathNotFoundNotFoundForAllSystems(
+                        inner,
+                    ) => {
                         tracing::debug!(kind = "attr_path_not_found.not_found_for_all_systems",);
                         ResolutionFailure::PackageUnavailableOnSomeSystems {
                             catalog_message: inner.clone(),
                             invalid_systems: Self::determine_invalid_systems(inner, manifest)?,
                         }
                     },
-                    catalog::ResolutionMessage::AttrPathNotFoundSystemsNotOnSamePage(inner) => {
+                    flox_catalog::ResolutionMessage::AttrPathNotFoundSystemsNotOnSamePage(
+                        inner,
+                    ) => {
                         tracing::debug!(kind = "attr_path_not_found.systems_not_on_same_page");
                         ResolutionFailure::SystemsNotOnSamePage(inner.clone())
                     },
-                    catalog::ResolutionMessage::ConstraintsTooTight(inner) => {
+                    flox_catalog::ResolutionMessage::ConstraintsTooTight(inner) => {
                         tracing::debug!(kind = "constraints_too_tight",);
                         ResolutionFailure::ConstraintsTooTight {
                             catalog_message: inner.clone(),
                             group: group.name.clone(),
                         }
                     },
-                    catalog::ResolutionMessage::Unknown(inner) => {
+                    flox_catalog::ResolutionMessage::Unknown(inner) => {
                         tracing::debug!(
                             kind = "unknown",
                             msg_type = inner.msg_type,
@@ -1631,7 +1637,7 @@ pub enum PackageToList {
 #[derive(Debug, Error)]
 pub enum ResolveError {
     #[error("failed to resolve packages")]
-    CatalogResolve(#[from] catalog::ResolveError),
+    CatalogResolve(#[from] flox_catalog::ResolveError),
 
     // todo: this should probably part of some validation logic of the manifest file
     //       rather than occurring during the locking process creation
@@ -1713,6 +1719,8 @@ pub enum RecoverableMergeError {
 }
 
 pub mod test_helpers {
+    use flox_catalog::PackageSystem;
+
     use super::*;
     use crate::models::manifest::typed::PackageDescriptorStorePath;
 
@@ -1870,8 +1878,13 @@ pub(crate) mod tests {
     use std::sync::LazyLock;
     use std::vec;
 
-    use catalog::MsgUnknown;
-    use catalog_api_v1::types::{PackageOutput, PackageOutputs};
+    use flox_catalog::{
+        CatalogPage,
+        MsgUnknown,
+        PackageOutput,
+        PackageResolutionInfo,
+        PackageSystem,
+    };
     use indoc::indoc;
     use pollster::FutureExt;
     use pretty_assertions::assert_eq;
@@ -1882,7 +1895,6 @@ pub(crate) mod tests {
         fake_store_path_lock,
     };
 
-    use self::catalog::{CatalogPage, PackageResolutionInfo};
     use super::*;
     use crate::flox::RemoteEnvironmentRef;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
@@ -2584,10 +2596,11 @@ pub(crate) mod tests {
                     license: Some("license".to_string()),
                     locked_url: "locked_url".to_string(),
                     name: "hello".to_string(),
-                    outputs: PackageOutputs(vec![PackageOutput {
+                    outputs: vec![PackageOutput {
                         name: "name".to_string(),
                         store_path: "store_path".to_string(),
-                    }]),
+                    }]
+                    .into(),
                     outputs_to_install: Some(vec!["name".to_string()]),
                     pname: "pname".to_string(),
                     rev: "rev".to_string(),
@@ -2871,7 +2884,7 @@ pub(crate) mod tests {
         "#})
         .unwrap();
 
-        let client = catalog::MockClient::new();
+        let client = MockClient::new();
 
         let resolved_packages =
             Lockfile::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
@@ -3508,7 +3521,7 @@ pub(crate) mod tests {
         // Set `options.allow.unfree = false` in the manifest, but not the lockfile
         manifest.options.allow.unfree = Some(false);
 
-        let client = catalog::MockClient::new();
+        let client = MockClient::new();
         assert!(matches!(
             Lockfile::resolve_manifest(
                 &manifest,

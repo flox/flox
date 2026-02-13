@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use flox_catalog::{MsgAttrPathNotFoundNotFoundForAllSystems, MsgAttrPathNotFoundNotInCatalog};
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox, RemoteEnvironmentRef};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::{
@@ -37,10 +38,6 @@ use flox_rust_sdk::models::user_state::{
     lock_and_read_user_state_file,
     user_state_path,
     write_user_state_file,
-};
-use flox_rust_sdk::providers::catalog::{
-    MsgAttrPathNotFoundNotFoundForAllSystems,
-    MsgAttrPathNotFoundNotInCatalog,
 };
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -357,7 +354,7 @@ impl Install {
                                 ..
                             },
                         invalid_systems: _,
-                    } = failure
+                    }: &ResolutionFailure = failure
                     else {
                         unreachable!(
                             "already checked that these failures are 'package unavailable on some systems'"

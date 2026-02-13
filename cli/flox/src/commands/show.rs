@@ -4,10 +4,9 @@ use std::io::Write;
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use flox_catalog::{ClientTrait, PackageBuild, PackageDetails, VersionsError};
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::search::{PackageBuild, PackageDetails};
-use flox_rust_sdk::providers::catalog::{ClientTrait, VersionsError};
 use tracing::instrument;
 
 use crate::subcommand_metric;
@@ -194,7 +193,7 @@ fn render_show_catalog(
 
 #[cfg(test)]
 mod test {
-    use catalog_api_v1::types::{PackageOutput, PackageOutputs, PackageSystem};
+    use flox_catalog::{PackageOutput, PackageOutputs, PackageSystem};
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::providers::catalog::test_helpers::auto_recording_catalog_client;
     use indoc::indoc;
