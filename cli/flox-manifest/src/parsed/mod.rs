@@ -41,3 +41,37 @@ pub(crate) use impl_into_inner;
 pub(crate) trait SkipSerializing {
     fn skip_serializing(&self) -> bool;
 }
+
+#[cfg(test)]
+mod tests {
+    use indoc::indoc;
+
+    use crate::Manifest;
+    use crate::parsed::common::KnownSchemaVersion;
+    use crate::test_helpers::with_schema;
+
+    #[test]
+    fn parses_all_schema_versions() {
+        let body = indoc! {"
+            [install]
+            hello.pkg-path = \"hello\"
+
+            [hook]
+            on-activate = '''
+                echo foo
+            '''
+
+            [profile]
+            bash = '''
+                echo \"use fish instead\"
+            '''
+
+            [options]
+            allow.unfree = true
+        "};
+        for schema in KnownSchemaVersion::iter() {
+            let manifest = with_schema(schema, body);
+            Manifest::parse_untyped(manifest).unwrap();
+        }
+    }
+}
