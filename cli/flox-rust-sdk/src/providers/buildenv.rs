@@ -6,6 +6,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, LazyLock, Mutex};
+use std::thread::ScopedJoinHandle;
 
 use flox_core::activate::mode::ActivateMode;
 use flox_core::canonical_path::CanonicalPath;
@@ -452,19 +453,8 @@ where
                 });
                 thread_handles.push(handle);
             }
-            let mut thread_panicked = false;
-            for h in thread_handles {
-                thread_panicked |= h.join().is_err();
-            }
-            if thread_panicked {
-                return Err(BuildEnvError::Other(
-                    "internal error: download thread panicked".to_string(),
-                ));
-            }
-            Ok::<(), BuildEnvError>(())
-        })
-        .map_err(|_| {
-            BuildEnvError::Other("internal error: download thread panicked".to_string())
+
+            join_realise_results(thread_handles)
         })?;
 
         // Intentionally build flakes one at a time. We're not worried about
@@ -1279,6 +1269,36 @@ pub(crate) fn create_gc_root_in(
         ));
     }
 
+    Ok(())
+}
+
+/// Join all realise (download) thread handles, returning the first error encountered.
+/// Thread panics are reported when no threads return an error.
+fn join_realise_results(
+    thread_handles: Vec<ScopedJoinHandle<'_, Result<(), BuildEnvError>>>,
+) -> Result<(), BuildEnvError> {
+    let mut first_error: Option<BuildEnvError> = None;
+    let mut thread_panicked = false;
+
+    for handle in thread_handles {
+        match handle.join() {
+            Ok(Ok(())) => {},
+            Ok(Err(e)) => {
+                if first_error.is_none() {
+                    first_error = Some(e);
+                }
+            },
+            Err(_) => thread_panicked = true,
+        }
+    }
+    if let Some(err) = first_error {
+        return Err(err);
+    }
+    if thread_panicked {
+        return Err(BuildEnvError::Other(
+            "internal error: download thread panicked".to_string(),
+        ));
+    }
     Ok(())
 }
 
@@ -2477,6 +2497,82 @@ mod buildenv_tests {
         assert!(
             !develop.join("include").exists(),
             "include should not exist in develop environment with outputs=['out']"
+        );
+    }
+}
+
+#[cfg(test)]
+mod join_realise_results_tests {
+    use super::*;
+
+    #[test]
+    fn all_succeed() {
+        let result = std::thread::scope(|s| {
+            let handles = vec![s.spawn(|| Ok::<(), BuildEnvError>(())), s.spawn(|| Ok(()))];
+            join_realise_results(handles)
+        });
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn single_error_is_returned() {
+        let result = std::thread::scope(|s| {
+            let handles = vec![
+                s.spawn(|| Ok::<(), BuildEnvError>(())),
+                s.spawn(|| Err(BuildEnvError::UntrustedPackage("pkg".into()))),
+                s.spawn(|| Ok::<(), BuildEnvError>(())),
+            ];
+            join_realise_results(handles)
+        });
+        assert!(
+            matches!(result, Err(BuildEnvError::UntrustedPackage(_))),
+            "got {result:?}"
+        );
+    }
+
+    #[test]
+    fn first_error_in_join_order_wins() {
+        let result = std::thread::scope(|s| {
+            let handles = vec![
+                s.spawn(|| Err::<(), BuildEnvError>(BuildEnvError::NixCopyError("first".into()))),
+                s.spawn(|| Err(BuildEnvError::UntrustedPackage("second".into()))),
+                s.spawn(|| Err(BuildEnvError::Other("third".into()))),
+            ];
+            join_realise_results(handles)
+        });
+        assert!(
+            matches!(result, Err(BuildEnvError::NixCopyError(_))),
+            "got {result:?}"
+        );
+    }
+
+    #[test]
+    fn errors_take_precedence_over_panics() {
+        let result = std::thread::scope(|s| {
+            let handles = vec![
+                s.spawn(|| -> Result<(), BuildEnvError> { panic!("boom") }),
+                s.spawn(|| Err(BuildEnvError::UntrustedPackage("pkg".into()))),
+            ];
+            join_realise_results(handles)
+        });
+        assert!(
+            matches!(result, Err(BuildEnvError::UntrustedPackage(_))),
+            "got {result:?}"
+        );
+    }
+
+    #[test]
+    fn panic_reported_when_no_errors() {
+        let result = std::thread::scope(|s| {
+            let handles = vec![
+                s.spawn(|| Ok::<(), BuildEnvError>(())),
+                s.spawn(|| -> Result<(), BuildEnvError> { panic!("boom") }),
+            ];
+            join_realise_results(handles)
+        });
+        assert!(
+            matches!(result, Err(BuildEnvError::Other(_))),
+            "got {result:?}"
         );
     }
 }
