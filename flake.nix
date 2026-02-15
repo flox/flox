@@ -216,7 +216,7 @@
       # ------------------------------------------------------------------------ #
 
       # NixOS/Darwin/HomeManager module
-      nixosModules.flox = import ./modules/nixos.nix pkgsContext;
+      nixosModules.flox = import ./modules/nixos pkgsContext;
       darwinModules.flox = import ./modules/darwin.nix pkgsContext;
       homeModules.flox = import ./modules/home.nix pkgsContext;
 
