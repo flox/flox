@@ -38,10 +38,13 @@ impl Upgrade {
             "upgrading groups and install ids"
         );
 
-        // Ensure the user is logged in for the following remote operations
-        if let EnvironmentSelect::Remote(_) = self.environment {
+        // Refresh an expired token if present, but allow anonymous access
+        // for public environments when no token is configured.
+        if let EnvironmentSelect::Remote(_) = self.environment
+            && flox.floxhub_token.as_ref().is_some_and(|t| t.is_expired())
+        {
             ensure_floxhub_token(&mut flox).await?;
-        };
+        }
 
         let mut concrete_environment = self
             .environment
