@@ -49,6 +49,8 @@ use crate::commands::check_for_upgrades::spawn_detached_check_for_upgrades_proce
 use crate::commands::services::ServicesCommandsError;
 use crate::commands::{
     EnvironmentSelectError,
+    SHELL_COMPLETION_COMMAND,
+    SHELL_COMPLETION_FILE,
     ensure_environment_trust,
     render_composition_manifest,
     uninitialized_environment_description,
@@ -70,13 +72,20 @@ pub static INTERACTIVE_BASH_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
 pub enum CommandSelect {
     ShellCommand {
         /// Shell command string to run in a subshell started in the activated environment
-        #[bpaf(long("command"), short('c'))]
+        #[bpaf(
+            long("command"),
+            short('c'),
+            argument("cmd"),
+            complete_shell(SHELL_COMPLETION_COMMAND)
+        )]
         shell_command: String,
     },
     ExecCommand {
         /// Command to exec in the activated environment. This does not run any profile scripts
-        #[bpaf(positional("cmd"), strict, some("must provide a non-empty command"))]
-        exec_command: Vec<String>,
+        #[bpaf(positional("cmd"), strict, complete_shell(SHELL_COMPLETION_COMMAND))]
+        command: String,
+        #[bpaf(positional("arg"), strict, complete_shell(SHELL_COMPLETION_FILE), many)]
+        args: Vec<String>,
     },
 }
 
@@ -157,13 +166,16 @@ impl Activate {
                     InvocationType::Interactive
                 }
             },
-            Some(CommandSelect::ExecCommand { ref exec_command }) => {
-                if exec_command.is_empty() {
-                    unreachable!("empty command provided when expected some");
-                } else if exec_command[0].is_empty() {
+            Some(CommandSelect::ExecCommand {
+                ref command,
+                ref args,
+            }) => {
+                if command.is_empty() {
                     bail!("empty command provided");
                 } else {
-                    InvocationType::ExecCommand(exec_command.clone())
+                    let mut exec_command = vec![command.clone()];
+                    exec_command.extend(args.iter().cloned());
+                    InvocationType::ExecCommand(exec_command)
                 }
             },
             Some(CommandSelect::ShellCommand { ref shell_command }) => {
