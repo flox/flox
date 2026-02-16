@@ -90,6 +90,7 @@ pub enum Response {
     CreatePackage,
     PublishBuild,
     GetBaseCatalog(api_types::BaseCatalogInfo),
+    RawDependencyReport(api_types::RawDependencyReport),
 }
 
 #[derive(Debug, Error)]
@@ -449,6 +450,7 @@ pub type StoreInfo = api_types::StoreInfo;
 pub type CatalogStoreConfig = api_types::CatalogStoreConfig;
 pub type CatalogStoreConfigNixCopy = api_types::CatalogStoreConfigNixCopy;
 pub type CatalogStoreConfigPublisher = api_types::CatalogStoreConfigPublisher;
+pub type RawDependencyReport = api_types::RawDependencyReport;
 
 #[enum_dispatch]
 #[allow(async_fn_in_trait)]
@@ -520,6 +522,14 @@ pub trait ClientTrait {
 
     /// Get information about the base catalog, and available stabilities
     async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, CatalogClientError>;
+
+    /// Get a raw dependency report for a store path.
+    ///
+    /// The store path should exclude the `/nix/store/` prefix.
+    async fn get_raw_dependency_report(
+        &self,
+        store_path: &str,
+    ) -> Result<RawDependencyReport, CatalogClientError>;
 }
 
 impl ClientTrait for CatalogClient {
@@ -804,6 +814,19 @@ impl ClientTrait for CatalogClient {
             .map_api_error()
             .await
             .map(|res| res.into_inner().into())
+    }
+
+    async fn get_raw_dependency_report(
+        &self,
+        store_path: &str,
+    ) -> Result<RawDependencyReport, CatalogClientError> {
+        let response = self
+            .client
+            .raw_dependency_report_api_v1_catalog_info_dependencies_storepath_raw_get(store_path)
+            .await
+            .map_api_error()
+            .await?;
+        Ok(response.into_inner())
     }
 }
 
@@ -1116,6 +1139,24 @@ impl ClientTrait for MockClient {
         };
 
         Ok(resp.into())
+    }
+
+    async fn get_raw_dependency_report(
+        &self,
+        _store_path: &str,
+    ) -> Result<RawDependencyReport, CatalogClientError> {
+        let mock_resp = self
+            .mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .pop_front();
+        match mock_resp {
+            Some(Response::RawDependencyReport(resp)) => Ok(resp),
+            _ => panic!(
+                "expected raw_dependency_report response, found {:?}",
+                &mock_resp
+            ),
+        }
     }
 }
 

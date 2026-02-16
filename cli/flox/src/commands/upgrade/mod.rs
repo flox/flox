@@ -129,13 +129,11 @@ impl Upgrade {
             "});
 
             if self.detail {
-                let detail_span = info_span!(
-                    "detail",
-                    progress = "Analyzing dependency changes"
-                );
-                let detail = detail_span.in_scope(|| {
-                    drv_diff::render_detail_tree(&diff_for_system)
-                })?;
+                let detail = drv_diff::render_detail_tree(
+                    &diff_for_system,
+                    &flox.catalog_client,
+                )
+                .await?;
                 if !detail.is_empty() {
                     message::plain(detail);
                 }

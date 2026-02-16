@@ -5444,6 +5444,151 @@ Sends a `GET` request to `/api/v1/catalog/info/base-catalog`
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
+    /**Get a raw dependency report for a storepath (excluding /nix/store/ prefix)
+
+Get a raw dependency report for a store path.
+
+Path Parameters:
+- **storepath**: The store path to analyze (excluding /nix/store/ prefix)
+
+Returns:
+- **RawDependencyReport**: Dependency graph with all transitive dependencies,
+  including store paths, derivation info, and dependency relationships.
+
+Note: Requires authentication and flox organization membership.
+
+Sends a `GET` request to `/api/v1/catalog/info/dependencies/{storepath}/raw`
+
+*/
+    pub async fn raw_dependency_report_api_v1_catalog_info_dependencies_storepath_raw_get<
+        'a,
+    >(
+        &'a self,
+        storepath: &'a str,
+    ) -> Result<ResponseValue<types::RawDependencyReport>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/info/dependencies/{}/raw", self.baseurl, encode_path(&
+            storepath.to_string()),
+        );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "raw_dependency_report_api_v1_catalog_info_dependencies_storepath_raw_get",
+        };
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::Custom(e.to_string())),
+        }
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Get an SPDX report for a storepath (excluding /nix/store/ prefix)
+
+Get an SPDX 2.3 format dependency report for a store path.
+
+Path Parameters:
+- **storepath**: The store path to analyze (excluding /nix/store/ prefix)
+
+Returns:
+- **dict**: SPDX 2.3 JSON document containing package information and
+  dependency relationships in standard SBOM format.
+
+Note: Requires authentication and flox organization membership.
+
+Sends a `GET` request to `/api/v1/catalog/info/dependencies/{storepath}/spdx`
+
+*/
+    pub async fn spdx_report_api_v1_catalog_info_dependencies_storepath_spdx_get<'a>(
+        &'a self,
+        storepath: &'a str,
+    ) -> Result<
+        ResponseValue<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+        Error<types::ErrorResponse>,
+    > {
+        let url = format!(
+            "{}/api/v1/catalog/info/dependencies/{}/spdx", self.baseurl, encode_path(&
+            storepath.to_string()),
+        );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "spdx_report_api_v1_catalog_info_dependencies_storepath_spdx_get",
+        };
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::Custom(e.to_string())),
+        }
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
     /**Shows available packages of a specific package
 
 Returns a list of versions for a given attr_path
