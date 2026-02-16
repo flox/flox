@@ -1,3 +1,5 @@
+mod drv_diff;
+
 use anyhow::Result;
 use bpaf::Bpaf;
 use crossterm::style::Stylize;
@@ -23,6 +25,10 @@ pub struct Upgrade {
     #[bpaf(long)]
     dry_run: bool,
 
+    /// Show dependency changes for build-only updates (implies --dry-run)
+    #[bpaf(long)]
+    detail: bool,
+
     /// ID of a package or pkg-group name to upgrade
     #[bpaf(positional("package or pkg-group"))]
     groups_or_iids: Vec<String>,
@@ -37,6 +43,9 @@ impl Upgrade {
             to_upgrade = self.groups_or_iids.join(","),
             "upgrading groups and install ids"
         );
+
+        // --detail implies --dry-run
+        let dry_run = self.dry_run || self.detail;
 
         // Ensure the user is logged in for the following remote operations
         if let EnvironmentSelect::Remote(_) = self.environment {
@@ -57,7 +66,7 @@ impl Upgrade {
                 format!("{}", self.groups_or_iids.len())
             };
 
-            let dry_prefix = if self.dry_run { "Dry run: " } else { "" };
+            let dry_prefix = if dry_run { "Dry run: " } else { "" };
 
             format!("{dry_prefix}Upgrading {num_upgrades} package(s) or group(s)")
         };
@@ -74,7 +83,7 @@ impl Upgrade {
                 .map(String::as_str)
                 .collect::<Vec<_>>();
 
-            if self.dry_run {
+            if dry_run {
                 concrete_environment.dry_upgrade(&flox, groups_or_iids)
             } else {
                 concrete_environment.upgrade(&flox, groups_or_iids)
@@ -101,7 +110,7 @@ impl Upgrade {
         let rendered_diff = render_diff(&diff_for_system);
         let num_changes_for_system = diff_for_system.len();
 
-        if self.dry_run {
+        if dry_run {
             if diff_for_system.is_empty() {
                 message::plain(formatdoc! {"
                     Upgrades are not available for {description} on this system, but upgrades are
@@ -117,9 +126,24 @@ impl Upgrade {
             message::plain(formatdoc! {"
                 Dry run: Upgrades available for {num_changes_for_system} package(s) in {description}:
                 {rendered_diff}
-
-                To apply these changes, run upgrade without the '--dry-run' flag.
             "});
+
+            if self.detail {
+                let detail_span = info_span!(
+                    "detail",
+                    progress = "Analyzing dependency changes"
+                );
+                let detail = detail_span.in_scope(|| {
+                    drv_diff::render_detail_tree(&diff_for_system)
+                })?;
+                if !detail.is_empty() {
+                    message::plain(detail);
+                }
+            }
+
+            message::plain(
+                "To apply these changes, run upgrade without the '--dry-run' flag.",
+            );
 
             return Ok(());
         }
@@ -257,6 +281,7 @@ mod tests {
         Upgrade {
             environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
             dry_run: true,
+            detail: false,
             groups_or_iids: Vec::new(),
         }
         .handle(flox)
@@ -295,6 +320,7 @@ mod tests {
         Upgrade {
             environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
             dry_run,
+            detail: false,
             groups_or_iids: Vec::new(),
         }
         .handle(flox)
