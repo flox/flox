@@ -343,7 +343,155 @@ pub async fn render_detail_tree(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
+    use flox_rust_sdk::models::lockfile::{LockedPackage, LockedPackageCatalog};
+    use flox_rust_sdk::providers::catalog::{Client, MockClient, Response};
+
     use super::*;
+
+    fn make_catalog_package_with_outputs(
+        install_id: &str,
+        version: &str,
+        output_path: &str,
+    ) -> LockedPackage {
+        LockedPackage::Catalog(LockedPackageCatalog {
+            attr_path: format!("legacyPackages.x86_64-linux.{install_id}"),
+            broken: None,
+            derivation: "/nix/store/drv-placeholder".to_string(),
+            description: None,
+            install_id: install_id.to_string(),
+            license: None,
+            locked_url: "https://github.com/NixOS/nixpkgs".to_string(),
+            name: install_id.to_string(),
+            pname: install_id.to_string(),
+            rev: "abc1234".to_string(),
+            rev_count: 1,
+            rev_date: chrono::Utc::now(),
+            scrape_date: chrono::Utc::now(),
+            stabilities: None,
+            unfree: None,
+            version: version.to_string(),
+            outputs_to_install: None,
+            outputs: BTreeMap::from([("out".to_string(), output_path.to_string())]),
+            system: "x86_64-linux".to_string(),
+            group: "toplevel".to_string(),
+            priority: 5,
+        })
+    }
+
+    #[test]
+    fn get_output_path_returns_out() {
+        let pkg =
+            make_catalog_package_with_outputs("hello", "2.12.2", "/nix/store/abc-hello-2.12.2");
+        assert_eq!(
+            get_output_path(&pkg),
+            Some("/nix/store/abc-hello-2.12.2".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn render_detail_tree_build_only_change() {
+        let before = make_catalog_package_with_outputs(
+            "terraform-docs",
+            "0.21.0",
+            "/nix/store/old-terraform-docs-0.21.0",
+        );
+        let after = make_catalog_package_with_outputs(
+            "terraform-docs",
+            "0.21.0",
+            "/nix/store/new-terraform-docs-0.21.0",
+        );
+
+        let mut diff = SingleSystemUpgradeDiff::new();
+        diff.insert("terraform-docs".to_string(), (before, after));
+
+        let old_report = RawDependencyReport {
+            storepath: "old-terraform-docs-0.21.0".to_string(),
+            dependencies: HashMap::from([
+                ("/nix/store/aaa-go-1.22.5".to_string(), Some(vec![])),
+                ("/nix/store/aaa-glibc-2.38".to_string(), Some(vec![])),
+            ]),
+        };
+        let new_report = RawDependencyReport {
+            storepath: "new-terraform-docs-0.21.0".to_string(),
+            dependencies: HashMap::from([
+                ("/nix/store/bbb-go-1.22.8".to_string(), Some(vec![])),
+                ("/nix/store/aaa-glibc-2.38".to_string(), Some(vec![])),
+            ]),
+        };
+
+        let mock = MockClient::new();
+        mock.mock_responses
+            .lock()
+            .unwrap()
+            .push_back(Response::RawDependencyReport(old_report));
+        mock.mock_responses
+            .lock()
+            .unwrap()
+            .push_back(Response::RawDependencyReport(new_report));
+
+        let client = Client::Mock(mock);
+        let result = render_detail_tree(&diff, &client).await.unwrap();
+
+        assert!(result.contains("terraform-docs dependencies"));
+        assert!(result.contains("1 version change"));
+        assert!(result.contains("go: 1.22.5 -> 1.22.8"));
+        // glibc unchanged, should not appear
+        assert!(!result.contains("glibc"));
+    }
+
+    #[tokio::test]
+    async fn render_detail_tree_skips_version_changes() {
+        let before =
+            make_catalog_package_with_outputs("curl", "8.9.0", "/nix/store/old-curl-8.9.0");
+        let after =
+            make_catalog_package_with_outputs("curl", "8.10.1", "/nix/store/new-curl-8.10.1");
+
+        let mut diff = SingleSystemUpgradeDiff::new();
+        diff.insert("curl".to_string(), (before, after));
+
+        // No mock responses needed — version changes are skipped
+        let mock = MockClient::new();
+        let client = Client::Mock(mock);
+        let result = render_detail_tree(&diff, &client).await.unwrap();
+
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn render_detail_tree_no_changes_in_deps() {
+        let before = make_catalog_package_with_outputs("jq", "1.7.1", "/nix/store/old-jq-1.7.1");
+        let after = make_catalog_package_with_outputs("jq", "1.7.1", "/nix/store/new-jq-1.7.1");
+
+        let mut diff = SingleSystemUpgradeDiff::new();
+        diff.insert("jq".to_string(), (before, after));
+
+        let old_report = RawDependencyReport {
+            storepath: "old-jq-1.7.1".to_string(),
+            dependencies: HashMap::from([("/nix/store/aaa-glibc-2.38".to_string(), Some(vec![]))]),
+        };
+        let new_report = RawDependencyReport {
+            storepath: "new-jq-1.7.1".to_string(),
+            dependencies: HashMap::from([("/nix/store/aaa-glibc-2.38".to_string(), Some(vec![]))]),
+        };
+
+        let mock = MockClient::new();
+        mock.mock_responses
+            .lock()
+            .unwrap()
+            .push_back(Response::RawDependencyReport(old_report));
+        mock.mock_responses
+            .lock()
+            .unwrap()
+            .push_back(Response::RawDependencyReport(new_report));
+
+        let client = Client::Mock(mock);
+        let result = render_detail_tree(&diff, &client).await.unwrap();
+
+        // All deps have same paths, so no changes to show
+        assert!(result.is_empty());
+    }
 
     #[test]
     fn parse_simple_store_path() {
