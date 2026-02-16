@@ -129,19 +129,14 @@ impl Upgrade {
             "});
 
             if self.detail {
-                let detail = drv_diff::render_detail_tree(
-                    &diff_for_system,
-                    &flox.catalog_client,
-                )
-                .await?;
+                let detail =
+                    drv_diff::render_detail_tree(&diff_for_system, &flox.catalog_client).await?;
                 if !detail.is_empty() {
                     message::plain(detail);
                 }
             }
 
-            message::plain(
-                "To apply these changes, run upgrade without the '--dry-run' flag.",
-            );
+            message::plain("To apply these changes, run upgrade without the '--dry-run' flag.");
 
             return Ok(());
         }
@@ -226,9 +221,7 @@ fn build_update_detail(
 }
 
 /// Count how many entries in a diff are version upgrades vs build-only updates.
-pub(crate) fn count_upgrade_categories(
-    diff: &SingleSystemUpgradeDiff,
-) -> (usize, usize) {
+pub(crate) fn count_upgrade_categories(diff: &SingleSystemUpgradeDiff) -> (usize, usize) {
     let mut version_upgrades = 0;
     let mut build_updates = 0;
     for (_, (before, after)) in diff.iter() {
@@ -442,20 +435,10 @@ mod tests {
         #[test]
         fn build_only_same_date_different_rev() {
             let date = chrono::Utc.with_ymd_and_hms(2025, 1, 15, 0, 0, 0).unwrap();
-            let before = make_catalog_package(
-                "jq",
-                "1.7.1",
-                "/nix/store/old",
-                "abc1234def5678",
-                date,
-            );
-            let after = make_catalog_package(
-                "jq",
-                "1.7.1",
-                "/nix/store/new",
-                "fff9999aaa0000",
-                date,
-            );
+            let before =
+                make_catalog_package("jq", "1.7.1", "/nix/store/old", "abc1234def5678", date);
+            let after =
+                make_catalog_package("jq", "1.7.1", "/nix/store/new", "fff9999aaa0000", date);
             let mut diff = SingleSystemUpgradeDiff::new();
             diff.insert("jq".to_string(), (before, after));
 
@@ -468,27 +451,12 @@ mod tests {
         #[test]
         fn build_only_same_date_same_rev_shows_bare() {
             let date = chrono::Utc.with_ymd_and_hms(2025, 1, 15, 0, 0, 0).unwrap();
-            let before = make_catalog_package(
-                "hello",
-                "2.12.1",
-                "/nix/store/old",
-                "abc1234",
-                date,
-            );
-            let after = make_catalog_package(
-                "hello",
-                "2.12.1",
-                "/nix/store/new",
-                "abc1234",
-                date,
-            );
+            let before = make_catalog_package("hello", "2.12.1", "/nix/store/old", "abc1234", date);
+            let after = make_catalog_package("hello", "2.12.1", "/nix/store/new", "abc1234", date);
             let mut diff = SingleSystemUpgradeDiff::new();
             diff.insert("hello".to_string(), (before, after));
 
-            assert_eq!(
-                render_diff(&diff),
-                "- hello: 2.12.1 (build update)"
-            );
+            assert_eq!(render_diff(&diff), "- hello: 2.12.1 (build update)");
         }
 
         #[test]
@@ -523,10 +491,7 @@ mod tests {
             );
             let mut diff = SingleSystemUpgradeDiff::new();
             diff.insert("curl".to_string(), (before_curl, after_curl));
-            diff.insert(
-                "terraform-docs".to_string(),
-                (before_tf, after_tf),
-            );
+            diff.insert("terraform-docs".to_string(), (before_tf, after_tf));
 
             let rendered = render_diff(&diff);
             assert_eq!(
@@ -538,13 +503,8 @@ mod tests {
 
         #[test]
         fn count_categories_mixed() {
-            let before_curl = make_catalog_package(
-                "curl",
-                "8.9.0",
-                "/nix/store/old",
-                "aaa",
-                chrono::Utc::now(),
-            );
+            let before_curl =
+                make_catalog_package("curl", "8.9.0", "/nix/store/old", "aaa", chrono::Utc::now());
             let after_curl = make_catalog_package(
                 "curl",
                 "8.10.1",

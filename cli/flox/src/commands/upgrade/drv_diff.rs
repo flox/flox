@@ -51,12 +51,7 @@ fn parse_store_path_name(store_path: &str) -> (String, Option<String>) {
     let mut found_version = false;
 
     for component in &components {
-        if !found_version
-            && component
-                .chars()
-                .next()
-                .is_some_and(|c| c.is_ascii_digit())
-        {
+        if !found_version && component.chars().next().is_some_and(|c| c.is_ascii_digit()) {
             found_version = true;
         }
 
@@ -90,9 +85,7 @@ fn strip_store_prefix(path: &str) -> &str {
 /// Get the primary output store path from a locked package.
 ///
 /// Prefers the "out" output, falls back to the first available output.
-fn get_output_path(
-    pkg: &flox_rust_sdk::models::lockfile::LockedPackage,
-) -> Option<String> {
+fn get_output_path(pkg: &flox_rust_sdk::models::lockfile::LockedPackage) -> Option<String> {
     let catalog = pkg.as_catalog_package_ref()?;
     catalog
         .outputs
@@ -102,9 +95,7 @@ fn get_output_path(
 }
 
 /// Build a name -> (store_path, version) index from a dependency report.
-fn index_dependencies(
-    report: &RawDependencyReport,
-) -> HashMap<String, (String, Option<String>)> {
+fn index_dependencies(report: &RawDependencyReport) -> HashMap<String, (String, Option<String>)> {
     let mut index = HashMap::new();
     for store_path in report.dependencies.keys() {
         let (name, version) = parse_store_path_name(store_path);
@@ -289,9 +280,7 @@ pub async fn render_detail_tree(
         ) {
             (Ok(old), Ok(new)) => (old, new),
             (Err(e), _) | (_, Err(e)) => {
-                tracing::debug!(
-                    "Could not fetch dependency report for {install_id}: {e}"
-                );
+                tracing::debug!("Could not fetch dependency report for {install_id}: {e}");
                 output_parts.push(format!(
                     "  {install_id}: could not analyze dependencies \
                      (dependency report unavailable)"
@@ -337,14 +326,10 @@ pub async fn render_detail_tree(
             ));
         }
         if added_count > 0 {
-            summary_parts.push(format!(
-                "{added_count} added"
-            ));
+            summary_parts.push(format!("{added_count} added"));
         }
         if removed_count > 0 {
-            summary_parts.push(format!(
-                "{removed_count} removed"
-            ));
+            summary_parts.push(format!("{removed_count} removed"));
         }
 
         let summary = summary_parts.join(", ");
@@ -362,8 +347,7 @@ mod tests {
 
     #[test]
     fn parse_simple_store_path() {
-        let (name, ver) =
-            parse_store_path_name("/nix/store/abc123-terraform-docs-0.21.0");
+        let (name, ver) = parse_store_path_name("/nix/store/abc123-terraform-docs-0.21.0");
         assert_eq!(name, "terraform-docs");
         assert_eq!(ver, Some("0.21.0".to_string()));
     }
@@ -377,25 +361,22 @@ mod tests {
 
     #[test]
     fn parse_store_path_drv_extension() {
-        let (name, ver) = parse_store_path_name(
-            "/nix/store/sa46bbbzrfbapj9lxdmvcvkr6qkc9690-bash-5.3p3.drv",
-        );
+        let (name, ver) =
+            parse_store_path_name("/nix/store/sa46bbbzrfbapj9lxdmvcvkr6qkc9690-bash-5.3p3.drv");
         assert_eq!(name, "bash");
         assert_eq!(ver, Some("5.3p3".to_string()));
     }
 
     #[test]
     fn parse_store_path_hyphenated_name() {
-        let (name, ver) =
-            parse_store_path_name("/nix/store/abc123-apache-httpd-2.0.48");
+        let (name, ver) = parse_store_path_name("/nix/store/abc123-apache-httpd-2.0.48");
         assert_eq!(name, "apache-httpd");
         assert_eq!(ver, Some("2.0.48".to_string()));
     }
 
     #[test]
     fn parse_store_path_go_package() {
-        let (name, ver) =
-            parse_store_path_name("/nix/store/hash-go-1.22.5");
+        let (name, ver) = parse_store_path_name("/nix/store/hash-go-1.22.5");
         assert_eq!(name, "go");
         assert_eq!(ver, Some("1.22.5".to_string()));
     }
@@ -406,7 +387,10 @@ mod tests {
             strip_store_prefix("/nix/store/abc123-hello-2.12.2"),
             "abc123-hello-2.12.2"
         );
-        assert_eq!(strip_store_prefix("abc123-hello-2.12.2"), "abc123-hello-2.12.2");
+        assert_eq!(
+            strip_store_prefix("abc123-hello-2.12.2"),
+            "abc123-hello-2.12.2"
+        );
     }
 
     #[test]
@@ -414,96 +398,70 @@ mod tests {
         let old = RawDependencyReport {
             storepath: "/nix/store/old-hello-2.12.2".to_string(),
             dependencies: HashMap::from([
-                (
-                    "/nix/store/aaa-glibc-2.38".to_string(),
-                    Some(vec![]),
-                ),
-                (
-                    "/nix/store/bbb-openssl-3.3.0".to_string(),
-                    Some(vec![]),
-                ),
+                ("/nix/store/aaa-glibc-2.38".to_string(), Some(vec![])),
+                ("/nix/store/bbb-openssl-3.3.0".to_string(), Some(vec![])),
             ]),
         };
         let new = RawDependencyReport {
             storepath: "/nix/store/new-hello-2.12.2".to_string(),
             dependencies: HashMap::from([
-                (
-                    "/nix/store/aaa-glibc-2.38".to_string(),
-                    Some(vec![]),
-                ),
-                (
-                    "/nix/store/ccc-openssl-3.4.0".to_string(),
-                    Some(vec![]),
-                ),
+                ("/nix/store/aaa-glibc-2.38".to_string(), Some(vec![])),
+                ("/nix/store/ccc-openssl-3.4.0".to_string(), Some(vec![])),
             ]),
         };
 
         let changes = diff_dependencies(&old, &new);
         assert_eq!(changes.len(), 1);
-        assert_eq!(
-            changes[0],
-            DepChange::VersionChange {
-                name: "openssl".to_string(),
-                old_ver: "3.3.0".to_string(),
-                new_ver: "3.4.0".to_string(),
-            }
-        );
+        assert_eq!(changes[0], DepChange::VersionChange {
+            name: "openssl".to_string(),
+            old_ver: "3.3.0".to_string(),
+            new_ver: "3.4.0".to_string(),
+        });
     }
 
     #[test]
     fn diff_deps_build_change() {
         let old = RawDependencyReport {
             storepath: "/nix/store/old-pkg-1.0".to_string(),
-            dependencies: HashMap::from([(
-                "/nix/store/aaa-zlib-1.3.1".to_string(),
-                Some(vec![]),
-            )]),
+            dependencies: HashMap::from([("/nix/store/aaa-zlib-1.3.1".to_string(), Some(vec![]))]),
         };
         let new = RawDependencyReport {
             storepath: "/nix/store/new-pkg-1.0".to_string(),
-            dependencies: HashMap::from([(
-                "/nix/store/bbb-zlib-1.3.1".to_string(),
-                Some(vec![]),
-            )]),
+            dependencies: HashMap::from([("/nix/store/bbb-zlib-1.3.1".to_string(), Some(vec![]))]),
         };
 
         let changes = diff_dependencies(&old, &new);
         assert_eq!(changes.len(), 1);
-        assert_eq!(
-            changes[0],
-            DepChange::BuildChange {
-                name: "zlib".to_string(),
-                version: "1.3.1".to_string(),
-            }
-        );
+        assert_eq!(changes[0], DepChange::BuildChange {
+            name: "zlib".to_string(),
+            version: "1.3.1".to_string(),
+        });
     }
 
     #[test]
     fn diff_deps_added_and_removed() {
         let old = RawDependencyReport {
             storepath: "/nix/store/old-pkg-1.0".to_string(),
-            dependencies: HashMap::from([(
-                "/nix/store/aaa-curl-8.9.0".to_string(),
-                Some(vec![]),
-            )]),
+            dependencies: HashMap::from([("/nix/store/aaa-curl-8.9.0".to_string(), Some(vec![]))]),
         };
         let new = RawDependencyReport {
             storepath: "/nix/store/new-pkg-1.0".to_string(),
-            dependencies: HashMap::from([(
-                "/nix/store/bbb-wget-1.21".to_string(),
-                Some(vec![]),
-            )]),
+            dependencies: HashMap::from([("/nix/store/bbb-wget-1.21".to_string(), Some(vec![]))]),
         };
 
         let changes = diff_dependencies(&old, &new);
         assert_eq!(changes.len(), 2);
         // Should have one added and one removed (sorted by name)
-        assert!(changes
-            .iter()
-            .any(|c| matches!(c, DepChange::Added { name, .. } if name == "wget")));
-        assert!(changes
-            .iter()
-            .any(|c| matches!(c, DepChange::Removed { name, .. } if name == "curl")));
+        assert!(
+            changes
+                .iter()
+                .any(|c| matches!(c, DepChange::Added { name, .. } if name == "wget"))
+        );
+        assert!(
+            changes
+                .iter()
+                .any(|c| matches!(c, DepChange::Removed { name, .. } if name == "curl"))
+        );
     }
 
     #[test]
@@ -511,41 +469,26 @@ mod tests {
         let old = RawDependencyReport {
             storepath: "/nix/store/old-pkg-1.0".to_string(),
             dependencies: HashMap::from([
-                (
-                    "/nix/store/aaa-glibc-2.38".to_string(),
-                    Some(vec![]),
-                ),
-                (
-                    "/nix/store/bbb-openssl-3.3.0".to_string(),
-                    Some(vec![]),
-                ),
+                ("/nix/store/aaa-glibc-2.38".to_string(), Some(vec![])),
+                ("/nix/store/bbb-openssl-3.3.0".to_string(), Some(vec![])),
             ]),
         };
         let new = RawDependencyReport {
             storepath: "/nix/store/new-pkg-1.0".to_string(),
             dependencies: HashMap::from([
-                (
-                    "/nix/store/aaa-glibc-2.38".to_string(),
-                    Some(vec![]),
-                ),
-                (
-                    "/nix/store/ccc-openssl-3.4.0".to_string(),
-                    Some(vec![]),
-                ),
+                ("/nix/store/aaa-glibc-2.38".to_string(), Some(vec![])),
+                ("/nix/store/ccc-openssl-3.4.0".to_string(), Some(vec![])),
             ]),
         };
 
         let changes = diff_dependencies(&old, &new);
         // glibc unchanged (same path), should not appear
         assert_eq!(changes.len(), 1);
-        assert_eq!(
-            changes[0],
-            DepChange::VersionChange {
-                name: "openssl".to_string(),
-                old_ver: "3.3.0".to_string(),
-                new_ver: "3.4.0".to_string(),
-            }
-        );
+        assert_eq!(changes[0], DepChange::VersionChange {
+            name: "openssl".to_string(),
+            old_ver: "3.3.0".to_string(),
+            new_ver: "3.4.0".to_string(),
+        });
     }
 
     #[test]
