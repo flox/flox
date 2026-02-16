@@ -219,16 +219,20 @@ pub fn floxmeta_git_options(
         format!("{floxhub_git_url}/{floxhub_owner}/floxmeta"),
     );
 
-    let token = if let Some(token) = floxhub_token {
-        if token.is_expired() {
-            debug!("FloxHub token is expired, sending for identification");
-        } else {
+    let token = match floxhub_token {
+        Some(token) if !token.is_expired() => {
             debug!("using valid FloxHub token");
-        }
-        token.secret()
-    } else {
-        debug!("no FloxHub token configured");
-        ""
+            token.secret()
+        },
+        Some(_) => {
+            // FloxEM will reject an expired token rather than treating it as anon.
+            debug!("FloxHub token is expired, falling back to unauthenticated access");
+            ""
+        },
+        None => {
+            debug!("no FloxHub token configured");
+            ""
+        },
     };
 
     // Set authentication with the FloxHub token using an inline credential helper.
