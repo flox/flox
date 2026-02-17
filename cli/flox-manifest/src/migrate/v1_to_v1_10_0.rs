@@ -5,12 +5,11 @@ use flox_core::data::System;
 use crate::lockfile::catalog::LockedPackageCatalog;
 use crate::lockfile::flake::LockedPackageFlake;
 use crate::lockfile::package_outputs::PackageOutputs;
-use crate::lockfile::store_path::LockedPackageStorePath;
 use crate::lockfile::{LockedPackage, Lockfile};
 use crate::migrate::MigrationError;
 use crate::parsed::v1::ManifestV1;
 use crate::parsed::v1_10_0::{self, ManifestV1_10_0, SetOutputs};
-use crate::parsed::{Inner, common, latest, v1};
+use crate::parsed::{Inner, latest, v1};
 
 /// Migrate a v1 manifest to a v1.10.0 manifest, optionally using an existing
 /// lockfile to only set `outputs` on package descriptors that need it.
@@ -49,7 +48,13 @@ pub(crate) fn migrate_manifest_v1_to_v1_10_0(
             .entry(locked_descriptor.install_id.clone())
             .insert_entry(locked_descriptor.migrated());
     }
-    // Note: We don't need to migrate store path packages
+    // Note: We don't need to migrate store path packages, they just get passed through
+    for (id, pd) in manifest.install.inner().iter().filter_map(|(id, mpd)| {
+        mpd.as_store_path_descriptor_ref()
+            .map(|store_path_pd| (id.clone(), store_path_pd))
+    }) {
+        install.insert(id, latest::ManifestPackageDescriptor::StorePath(pd.clone()));
+    }
 
     Ok(migrated)
 }
@@ -172,9 +177,6 @@ where
 struct CollectedPackages {
     catalog: Vec<LockedDescriptor<v1::PackageDescriptorCatalog, LockedPackageCatalog>>,
     flake: Vec<LockedDescriptor<v1::PackageDescriptorFlake, LockedPackageFlake>>,
-    // Unused for now, but kept here since the union of all three fields on this
-    // struct should form the complete set of packages in the lockfile.
-    _store_path: Vec<LockedDescriptor<common::PackageDescriptorStorePath, LockedPackageStorePath>>,
 }
 
 // Between output names, install IDs, systems, etc, which are all strings
@@ -208,7 +210,6 @@ fn collect_locked_packages_by_kind(
 ) -> Result<CollectedPackages, MigrationError> {
     let mut catalog_pkgs = vec![];
     let mut flake_pkgs = vec![];
-    let mut store_path_pkgs = vec![];
     if let Some(lockfile) = lockfile {
         for (install_id, descriptor) in manifest.install.inner().iter() {
             use v1::ManifestPackageDescriptor::*;
@@ -263,31 +264,7 @@ fn collect_locked_packages_by_kind(
                     };
                     flake_pkgs.push(locked_descriptor);
                 },
-                StorePath(pd) => {
-                    let locked = get_locked_packages_by_install_id(install_id, lockfile);
-                    // Note that since we ensure that the manifest is locked before
-                    // attempting the migration, you _shouldn't_ see this in real
-                    // life. We're just being careful and showng a real error message
-                    // instead of a panic here.
-                    if locked.is_none() {
-                        return Err(MigrationError::Other(format!(
-                            "package '{install_id}' in the manifest has no locked packages in the lockfile"
-                        )));
-                    }
-                    let locked = locked.unwrap().into_iter().map(|p| {
-                        if let LockedPackage::StorePath(ref pkg) = p {
-                            Ok((p.system().clone(), pkg.clone()))
-                        } else {
-                            Err(MigrationError::Other(format!("package '{install_id}' was a store path in the manifest, but not in the lockfile")))
-                        }
-                    }).collect::<Result<HashMap<_, _>, MigrationError>>()?;
-                    let locked_descriptor = LockedDescriptor {
-                        install_id: install_id.to_string(),
-                        pd: pd.clone(),
-                        locked,
-                    };
-                    store_path_pkgs.push(locked_descriptor);
-                },
+                StorePath(_) => {}, // we don't migrate store path packages
             }
         }
     } else {
@@ -310,14 +287,7 @@ fn collect_locked_packages_by_kind(
                     };
                     flake_pkgs.push(locked_descriptor);
                 },
-                StorePath(pd) => {
-                    let locked_descriptor = LockedDescriptor {
-                        install_id: install_id.clone(),
-                        pd: pd.clone(),
-                        locked: HashMap::new(),
-                    };
-                    store_path_pkgs.push(locked_descriptor);
-                },
+                StorePath(_) => {}, // we don't migrate store path packages
             }
         }
     }
@@ -325,7 +295,6 @@ fn collect_locked_packages_by_kind(
     let collected = CollectedPackages {
         catalog: catalog_pkgs,
         flake: flake_pkgs,
-        _store_path: store_path_pkgs,
     };
     Ok(collected)
 }
@@ -464,7 +433,6 @@ mod tests {
 
         assert_eq!(collected.catalog.len(), 7);
         assert_eq!(collected.flake.len(), 0);
-        assert_eq!(collected._store_path.len(), 0);
 
         let nodejs = collected
             .catalog
