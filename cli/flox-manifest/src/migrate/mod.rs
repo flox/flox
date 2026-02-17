@@ -59,3 +59,40 @@ pub(crate) fn migrate_typed_only(
     };
     Ok(migrated)
 }
+
+#[cfg(test)]
+mod tests {
+    use flox_core::data::CanonicalPath;
+    use flox_test_utils::GENERATED_DATA;
+
+    use super::*;
+    use crate::interfaces::{AsWritableManifest, SchemaVersion, WriteManifest};
+
+    #[test]
+    fn toplevel_migration_method_migrates_to_latest_schema() {
+        let manifest_path = GENERATED_DATA.join("envs/krb5_prereqs/manifest.toml");
+        let contents = std::fs::read_to_string(manifest_path).unwrap();
+        let manifest = Manifest::parse_toml_typed(contents).unwrap();
+        let lockfile_path =
+            CanonicalPath::new_unchecked(GENERATED_DATA.join("envs/krb5_prereqs/manifest.lock"));
+        let lockfile = Lockfile::read_from_file(&lockfile_path).unwrap();
+
+        let migrated = manifest.migrate(Some(&lockfile)).unwrap();
+        assert_eq!(migrated.get_schema_version(), KnownSchemaVersion::latest());
+    }
+
+    #[test]
+    fn toplevel_migration_method_updates_toml() {
+        let manifest_path = GENERATED_DATA.join("envs/krb5_prereqs/manifest.toml");
+        let contents = std::fs::read_to_string(manifest_path).unwrap();
+        let manifest = Manifest::parse_toml_typed(contents).unwrap();
+        let lockfile_path =
+            CanonicalPath::new_unchecked(GENERATED_DATA.join("envs/krb5_prereqs/manifest.lock"));
+        let lockfile = Lockfile::read_from_file(&lockfile_path).unwrap();
+
+        let migrated = manifest.migrate(Some(&lockfile)).unwrap();
+        let contents = migrated.as_writable().to_string();
+        let remigrated = Manifest::parse_and_migrate(&contents, Some(&lockfile)).unwrap();
+        assert_eq!(migrated.as_typed_only(), remigrated.as_typed_only());
+    }
+}
