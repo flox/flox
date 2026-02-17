@@ -29,7 +29,7 @@ pub(crate) fn migrate_with_formatting_data(
             lockfile: lockfile.cloned(),
         },
     };
-    migrated.update_raw_packages_from_typed_manifest()?;
+    migrated.update_toml()?;
     Ok(migrated)
 }
 
