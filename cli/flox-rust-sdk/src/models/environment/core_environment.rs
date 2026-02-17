@@ -17,7 +17,7 @@ use flox_manifest::interfaces::{
 use flox_manifest::lockfile::{LOCKFILE_FILENAME, LockedPackage, Lockfile, LockfileError};
 use flox_manifest::parsed::common::KnownSchemaVersion;
 use flox_manifest::raw::{ModifyPackages, PackageToInstall, TomlEditError};
-use flox_manifest::{MANIFEST_FILENAME, Manifest, ManifestError, Migrated, Validated};
+use flox_manifest::{MANIFEST_FILENAME, Manifest, ManifestError, Migrated, Validated, Writable};
 use itertools::Itertools;
 use pollster::FutureExt;
 use serde::{Deserialize, Serialize};
@@ -471,7 +471,8 @@ impl CoreEnvironment<ReadOnly> {
         let mut temp_env = self.writable(&tempdir)?;
 
         debug!("transaction: updating manifest");
-        temp_env.update_manifest(&migrated_manifest)?;
+        let maybe_original_schema = migrated_manifest.as_writable_maybe_in_original_schema()?;
+        temp_env.update_manifest(&maybe_original_schema)?;
 
         debug!("transaction: building environment, ignoring errors (unsafe)");
 
@@ -795,7 +796,8 @@ impl CoreEnvironment<ReadOnly> {
         let mut temp_env = self.writable(&tempdir)?;
 
         debug!("transaction: updating manifest");
-        temp_env.update_manifest(manifest)?;
+        let maybe_original_schema = manifest.as_writable_maybe_in_original_schema()?;
+        temp_env.update_manifest(&maybe_original_schema)?;
 
         debug!("transaction: locking environment");
         let lockfile = temp_env.lock(flox)?.into();
@@ -849,11 +851,10 @@ impl CoreEnvironment<ReadWrite> {
     /// Updates the environment manifest with the provided contents
     fn update_manifest(
         &mut self,
-        manifest: &Manifest<Migrated>,
+        manifest: &Manifest<Writable>,
     ) -> Result<(), CoreEnvironmentError> {
         debug!("writing new manifest to {}", self.manifest_path().display());
-        let writable = manifest.as_writable();
-        writable.write_to_file(self.manifest_path())?;
+        manifest.write_to_file(self.manifest_path())?;
         Ok(())
     }
 
@@ -1337,7 +1338,8 @@ mod tests {
             .writable(tempdir_in(&flox.temp_dir).unwrap().keep())
             .unwrap();
         let manifest = manifest_with_incompatible_system().migrate(None).unwrap();
-        temp_env.update_manifest(&manifest).unwrap();
+        let maybe_original_schema = manifest.as_writable_maybe_in_original_schema().unwrap();
+        temp_env.update_manifest(&maybe_original_schema).unwrap();
         temp_env.lock(&flox).unwrap();
         env_view.replace_with(temp_env).unwrap();
 

@@ -10,7 +10,7 @@ use reqwest::Url;
 use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Table, TableLike, Value};
 use tracing::{debug, trace};
 
-use crate::parsed::common::{self, ActivateMode, VersionKind};
+use crate::parsed::common::{self, ActivateMode, KnownSchemaVersion, VersionKind};
 use crate::parsed::v1_10_0::SelectedOutputs;
 use crate::parsed::{Inner, v1, v1_10_0};
 use crate::util::is_custom_package;
@@ -756,21 +756,64 @@ impl ModifyPackages for Manifest<Migrated> {
 }
 
 pub(crate) trait SyncTypedToRaw {
+    /// Updates the TOML manifest to match the contents of the typed manifest.
+    fn update_toml(&mut self) -> Result<(), ManifestError> {
+        self.update_schema_version();
+        self.update_raw_packages_from_typed_manifest()?;
+        Ok(())
+    }
+
+    /// Sets the `schema-version` or `version` field in the TOML manifest to match that in
+    /// the typed manifest.
+    ///
+    /// An existing `version` key is removed when setting `schema-version` and vice versa.
+    fn update_schema_version(&mut self);
+
+    /// Updates the TOML manifest to only contain the package descriptors contained in the
+    /// typed manifest, and updates their contents to match as well.
     fn update_raw_packages_from_typed_manifest(&mut self) -> Result<(), ManifestError>;
 }
 
 impl SyncTypedToRaw for Manifest<Validated> {
+    fn update_schema_version(&mut self) {
+        update_schema_version(&mut self.inner.raw, self.inner.parsed.schema_version());
+    }
+
     fn update_raw_packages_from_typed_manifest(&mut self) -> Result<(), ManifestError> {
         update_raw_packages_from_typed_manifest(&mut self.inner.raw, &self.inner.parsed)
     }
 }
 
 impl SyncTypedToRaw for Manifest<Migrated> {
+    fn update_schema_version(&mut self) {
+        update_schema_version(&mut self.inner.migrated_raw, KnownSchemaVersion::latest());
+    }
+
     fn update_raw_packages_from_typed_manifest(&mut self) -> Result<(), ManifestError> {
         update_raw_packages_from_typed_manifest(
             &mut self.inner.migrated_raw,
             &Parsed::from_latest(self.inner.migrated_parsed.clone()),
         )
+    }
+}
+
+fn update_schema_version(raw: &mut DocumentMut, schema_version: KnownSchemaVersion) {
+    match schema_version {
+        KnownSchemaVersion::V1 => {
+            if raw.get("schema-version").is_some() {
+                raw.remove("schema-version");
+            }
+            raw.insert("version", toml_string(schema_version.to_string()).into());
+        },
+        KnownSchemaVersion::V1_10_0 => {
+            if raw.get("version").is_some() {
+                raw.remove("version");
+            }
+            raw.insert(
+                "schema-version",
+                toml_string(schema_version.to_string()).into(),
+            );
+        },
     }
 }
 

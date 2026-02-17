@@ -29,14 +29,24 @@ use serde::de::IntoDeserializer;
 use serde::{Deserialize, Serialize};
 use toml_edit::DocumentMut;
 
-use crate::interfaces::{AsTypedOnlyManifest, OriginalSchemaVersion, SchemaVersion};
+use crate::interfaces::{
+    AsTypedOnlyManifest,
+    AsWritableManifest,
+    OriginalSchemaVersion,
+    SchemaVersion,
+};
 use crate::lockfile::{Lockfile, LockfileError};
 use crate::migrate::{MigrationError, migrate_typed_only, migrate_with_formatting_data};
 use crate::parsed::common::KnownSchemaVersion;
 use crate::parsed::latest::ManifestLatest;
 use crate::parsed::v1::ManifestV1;
 use crate::parsed::v1_10_0::ManifestV1_10_0;
-use crate::raw::{TomlEditError, get_json_schema_version_kind, get_schema_version_kind};
+use crate::raw::{
+    SyncTypedToRaw,
+    TomlEditError,
+    get_json_schema_version_kind,
+    get_schema_version_kind,
+};
 
 pub mod compose;
 pub mod interfaces;
@@ -392,6 +402,24 @@ impl Manifest<Migrated> {
             .get_schema_version()
             == self.original_schema();
         Ok(matches_original_schema)
+    }
+
+    /// Returns the manifest in the original schema if possible.
+    pub fn as_writable_maybe_in_original_schema(
+        &self,
+    ) -> Result<Manifest<Writable>, ManifestError> {
+        let typed_only = self.inner.migrated_parsed.as_maybe_backwards_compatible(
+            self.inner.original_parsed.schema_version(),
+            self.pre_migration_lockfile(),
+        )?;
+        let mut validated = Manifest {
+            inner: Validated {
+                raw: self.inner.migrated_raw.clone(),
+                parsed: typed_only.inner.parsed,
+            },
+        };
+        validated.update_toml()?;
+        Ok(validated.as_writable())
     }
 }
 
