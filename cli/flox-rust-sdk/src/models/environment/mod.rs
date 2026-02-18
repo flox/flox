@@ -10,8 +10,7 @@ use flox_core::data::environment_ref::{
     RemoteEnvironmentRef,
 };
 pub use flox_core::{Version, path_hash};
-use flox_manifest::lockfile::compose::LockedInclude;
-use flox_manifest::lockfile::{Lockfile, LockfileError};
+use flox_manifest::lockfile::{LockedInclude, Lockfile, LockfileError};
 use flox_manifest::parsed::common::ActivateMode;
 use flox_manifest::raw::PackageToInstall;
 use flox_manifest::{Manifest, ManifestError, Migrated, Validated};

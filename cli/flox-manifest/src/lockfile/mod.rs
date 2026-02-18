@@ -1,13 +1,18 @@
-pub mod catalog;
-pub mod compose;
-pub mod flake;
-pub mod package_outputs;
-pub mod store_path;
+mod catalog;
+mod compose;
+mod flake;
+mod package_outputs;
+mod store_path;
 
+pub use catalog::LockedPackageCatalog;
+pub use compose::{Compose, LockedInclude};
+pub use flake::{LockedInstallable, LockedPackageFlake};
 use flox_core::data::{CanonicalPath, System};
+pub use package_outputs::PackageOutputs;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+pub use store_path::LockedPackageStorePath;
 
 pub type FlakeRef = Value;
 
@@ -19,10 +24,6 @@ use std::str::FromStr;
 use flox_core::Version;
 
 use crate::interfaces::{AsLatestSchema, PackageLookup, SchemaVersion};
-use crate::lockfile::catalog::LockedPackageCatalog;
-use crate::lockfile::compose::Compose;
-use crate::lockfile::flake::LockedPackageFlake;
-use crate::lockfile::store_path::LockedPackageStorePath;
 use crate::parsed::common::KnownSchemaVersion;
 use crate::parsed::latest::{PackageDescriptorCatalog, PackageDescriptorFlake};
 use crate::{Manifest, ManifestError, TypedOnly};

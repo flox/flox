@@ -16,11 +16,15 @@ use flox_manifest::interfaces::{
     PackageLookup,
     SchemaVersion,
 };
-use flox_manifest::lockfile::catalog::LockedPackageCatalog;
-use flox_manifest::lockfile::compose::{Compose, LockedInclude};
-use flox_manifest::lockfile::flake::LockedPackageFlake;
-use flox_manifest::lockfile::store_path::LockedPackageStorePath;
-use flox_manifest::lockfile::{LockedPackage, Lockfile};
+use flox_manifest::lockfile::{
+    Compose,
+    LockedInclude,
+    LockedPackage,
+    LockedPackageCatalog,
+    LockedPackageFlake,
+    LockedPackageStorePath,
+    Lockfile,
+};
 use flox_manifest::parsed::common::{
     Allows,
     DEFAULT_PRIORITY,
@@ -1346,7 +1350,7 @@ mod tests {
     use catalog_api_v1::types::{PackageOutput, PackageOutputs, PackageSystem};
     use flox_core::data::environment_ref::RemoteEnvironmentRef;
     use flox_manifest::TypedOnly;
-    use flox_manifest::lockfile::flake::LockedInstallable;
+    use flox_manifest::lockfile::LockedInstallable;
     use flox_manifest::lockfile::test_helpers::{
         fake_catalog_package_lock,
         fake_flake_installable_lock,
