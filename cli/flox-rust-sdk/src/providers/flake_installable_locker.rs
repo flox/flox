@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use enum_dispatch::enum_dispatch;
 use flox_core::data::System;
-use flox_manifest::lockfile::flake::LockedInstallable;
+use flox_manifest::lockfile::LockedInstallable;
 use flox_manifest::parsed::latest::PackageDescriptorFlake;
 use thiserror::Error;
 use tracing::{debug, instrument};
