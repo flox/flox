@@ -4,8 +4,7 @@ use std::str::FromStr;
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
-use flox_manifest::lockfile::flake::{LockedInstallable, LockedPackageFlake};
-use flox_manifest::lockfile::{Lockfile, PackageToList};
+use flox_manifest::lockfile::{LockedInstallable, LockedPackageFlake, Lockfile, PackageToList};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::GenerationsExt;
 use flox_rust_sdk::models::environment::{
