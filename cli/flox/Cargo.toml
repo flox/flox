@@ -70,6 +70,7 @@ toml.workspace = true
 flox-rust-sdk = { workspace = true, features = ["tests"] }
 flox-test-utils.workspace = true
 flox-core = { workspace = true, features = ["tests"] }
+flox-manifest = { workspace = true, features = [ "tests" ]}
 
 
 [features]
