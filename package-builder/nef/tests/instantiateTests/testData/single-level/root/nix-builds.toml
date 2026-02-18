@@ -1,0 +1,2 @@
+[catalogs.child]
+url = "path:../child"

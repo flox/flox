@@ -1,0 +1,1 @@
+{ dep }: ''dep says "${dep}"''

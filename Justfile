@@ -249,8 +249,30 @@ gen-unit-data-for-publish floxhub_repo_path force="":
 # Run the CLI unit tests
 @unit-tests regex="" record="false": build (ut regex record)
 
+build-nef-test-fixtures:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --package nef-lock-catalog 1>&2
+    lock_bin="$PWD/target/debug/lock"
+    testdata="$PWD/package-builder/nef/tests/instantiateTests/testData"
+    tmpdir=$(realpath "$(mktemp -d "${TMPDIR:-/tmp}/nef-test-fixtures.XXXXXX")")
+    cp -r "$testdata"/* "$tmpdir/"
+    # Lock deepest configs first so child locks exist before parents reference them
+    find "$tmpdir" -name nix-builds.toml -print0 \
+        | sort -zr \
+        | while IFS= read -r -d '' config; do
+            dir=$(dirname "$config")
+            (cd "$dir" && "$lock_bin" --pkgs-dir pkgs --catalogs-lock nix-builds.lock nix-builds.toml)
+          done
+    echo "$tmpdir"
+
 test-nef:
-    nix-unit package-builder/nef/tests --arg nixpkgs-url "$COMMON_NIXPKGS_URL"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    fixtures="$(just build-nef-test-fixtures)"
+    nix-unit package-builder/nef/tests \
+        --arg nixpkgs-url "$COMMON_NIXPKGS_URL" \
+        --argstr test-fixtures "$fixtures"
 
 test-buildenvLib:
     nix-unit buildenv/buildenvLib/tests

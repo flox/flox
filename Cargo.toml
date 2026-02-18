@@ -10,6 +10,7 @@ members = [
     "cli/shell_gen",
     "cli/systemd",
     "cli/xtask",
+    "cli/nef-lock-catalog",
 ]
 default-members = ["cli/flox", "cli/flox-activations"]
 
@@ -53,6 +54,7 @@ is_executable = "1.0.5"
 itertools = "0.14.0"
 jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
 log = { version = "0.4.29", features = ["kv"] }
+nef-lock-catalog = { path = "cli/nef-lock-catalog" }
 nix = { version = "0.31", features = ["signal", "process", "user", "fs"] }
 oauth2 = "5.0"
 path-dedot = "3.1.1"
