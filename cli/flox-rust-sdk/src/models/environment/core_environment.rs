@@ -1186,24 +1186,12 @@ pub mod test_helpers {
         systems = ["aarch64-darwin"]
         "#};
 
-    #[cfg(target_os = "macos")]
     pub fn manifest_with_incompatible_system() -> Manifest<Validated> {
         Manifest::parse_toml_typed(MANIFEST_INCOMPATIBLE_SYSTEM_STR).unwrap()
     }
 
-    #[cfg(target_os = "linux")]
-    pub fn manifest_with_incompatible_system() -> Manifest<Validated> {
-        Manifest::parse_typed(MANIFEST_INCOMPATIBLE_SYSTEM_STR).unwrap()
-    }
-
-    #[cfg(target_os = "macos")]
     pub fn manifest_with_incompatible_system_v1() -> Manifest<Validated> {
         Manifest::parse_toml_typed(MANIFEST_INCOMPATIBLE_SYSTEM_V1_STR).unwrap()
-    }
-
-    #[cfg(target_os = "linux")]
-    pub fn manifest_with_incompatible_system_v1() -> Manifest<Validated> {
-        Manifest::parse_typed(MANIFEST_INCOMPATIBLE_SYSTEM_V1_STR).unwrap()
     }
 
     pub fn new_core_environment(flox: &Flox, contents: &str) -> CoreEnvironment {
