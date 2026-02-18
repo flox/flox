@@ -3335,7 +3335,7 @@ mod tests {
         let lowest_precedence_manifest_contents = with_latest_schema(indoc! {r#"
         [vars]
         foo = "lowest_precedence"
-        bar = "lowest_precedenceLockManifest
+        bar = "lowest_precedence"
         "#});
         std::fs::create_dir(&lowest_precedence_path).unwrap();
         let mut lowest_precedence = new_path_environment_in(
@@ -3455,7 +3455,7 @@ mod tests {
         let lowest_precedence_path = tempdir.path().join("lowest_precedence");
         let lowest_precedence_manifest_contents = with_latest_schema(indoc! {r#"
         [vars]
-        foo LockManifest"lowest_precedence"
+        foo = "lowest_precedence"
         "#});
         std::fs::create_dir(&lowest_precedence_path).unwrap();
         let mut lowest_precedence = new_path_environment_in(
@@ -3699,7 +3699,7 @@ mod tests {
 
         // Remove the include of dep1
         let manifest_contents = indoc! {r#"
-        versionLockManifest= 1
+        version = 1
         "#};
         let manifest = Manifest::parse_and_migrate(manifest_contents, None).unwrap();
 
