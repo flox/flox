@@ -17,10 +17,14 @@ use flox_core::activate::context::{
 };
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY_VAR};
 use flox_core::activations::activation_state_dir_path;
+use flox_core::data::System;
 use flox_core::data::environment_ref::DEFAULT_NAME;
 use flox_core::traceable_path;
-use flox_rust_sdk::data::System;
-use flox_rust_sdk::flox::{DEFAULT_NAME, Flox, Flox};
+use flox_manifest::interfaces::{AsWritableManifest, CommonFields, WriteManifest};
+use flox_manifest::parsed::Inner;
+use flox_manifest::parsed::common::IncludeDescriptor;
+use flox_manifest::{Manifest, Migrated, MigratedTypedOnly};
+use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::floxmeta_branch::BranchOrd;
 use flox_rust_sdk::models::environment::generations::{GenerationId, GenerationsExt};
 use flox_rust_sdk::models::environment::managed_environment::DivergedMetadata;
@@ -30,8 +34,7 @@ use flox_rust_sdk::models::environment::{
     EnvironmentError,
     UpgradeResult,
 };
-use flox_rust_sdk::models::lockfile::LockResult;
-use flox_rust_sdk::models::manifest::typed::{IncludeDescriptor, Inner, Manifest};
+use flox_rust_sdk::providers::lock_manifest::LockResult;
 use flox_rust_sdk::providers::services::process_compose::{PROCESS_COMPOSE_BIN, ProcessStates};
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
@@ -145,7 +148,7 @@ impl Activate {
                 &flox,
                 &env.env_ref(),
                 false,
-                &env.manifest_contents(&flox)?,
+                &env.pre_migration_manifest(&flox)?.as_writable().to_string(),
             )
             .await?;
         }
@@ -229,7 +232,7 @@ impl Activate {
             },
             LockResult::Unchanged(lockfile) => lockfile,
         };
-        let manifest = &lockfile.manifest;
+        let manifest = &lockfile.manifest.migrate_typed_only(Some(&lockfile))?;
 
         if !self.trust
             && let Some(compose) = &lockfile.compose
@@ -281,7 +284,7 @@ impl Activate {
         let mode = self
             .mode
             .clone()
-            .unwrap_or(manifest.options.activate.mode.clone().unwrap_or_default());
+            .unwrap_or(manifest.options().activate.mode.clone().unwrap_or_default());
         let mode_link_path = rendered_env_path.clone().for_mode(&mode);
         let store_path = fs::read_link(&mode_link_path).with_context(|| {
             format!(
@@ -361,11 +364,11 @@ impl Activate {
             .unwrap_or(utils::colors::INDIGO_300.to_ansi256().to_string());
 
         let socket_path = concrete_environment.services_socket_path(&flox)?;
-        let flox_env_cuda_detection = match manifest.options.cuda_detection {
+
+        let flox_env_cuda_detection = match manifest.options().cuda_detection {
             Some(false) => "0", // manifest opts-out
             _ => "1",           // default to enabling CUDA
-        }
-        .to_string();
+        };
 
         // Determine services to start with a new process-compose
         let is_ephemeral = !services_for_ephemeral_activation.is_empty();
@@ -404,7 +407,7 @@ impl Activate {
             // TODO: we should probably figure out a more consistent way to
             // pass this since it's also passed for `flox build`
             flox_runtime_dir: flox.runtime_dir.to_string_lossy().to_string(),
-            flox_env_cuda_detection,
+            flox_env_cuda_detection: flox_env_cuda_detection.to_string(),
             interpreter_path,
         };
 
@@ -524,16 +527,16 @@ impl Activate {
     /// - No services are defined for the current system
     /// - Services are already running
     fn gather_services_for_flag(
-        manifest: &Manifest,
+        manifest: &Manifest<MigratedTypedOnly>,
         system: &System,
         socket_path: &Path,
     ) -> Vec<String> {
-        if manifest.services.inner().is_empty() {
+        if manifest.services().inner().is_empty() {
             message::warning(ServicesCommandsError::NoDefinedServices);
             return Vec::new();
         }
 
-        let services_for_system = manifest.services.copy_for_system(system);
+        let services_for_system = manifest.services().copy_for_system(system);
         if services_for_system.inner().is_empty() {
             message::warning(ServicesCommandsError::NoDefinedServicesForSystem {
                 system: system.clone(),
@@ -898,16 +901,16 @@ mod tests {
 #[cfg(test)]
 mod upgrade_notification_tests {
     use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
+    use flox_manifest::lockfile::{LockedPackage, Lockfile};
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::UpgradeResult;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_named_path_environment_from_env_files,
         new_path_environment_from_env_files,
     };
-    use flox_rust_sdk::models::lockfile::{LockedPackage, Lockfile};
-    use flox_rust_sdk::providers::catalog::GENERATED_DATA;
     use flox_rust_sdk::providers::upgrade_checks::UpgradeInformation;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
+    use flox_test_utils::GENERATED_DATA;
     use time::OffsetDateTime;
 
     use super::*;
