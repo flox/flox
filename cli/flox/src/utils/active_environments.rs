@@ -4,9 +4,9 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use anyhow::Result;
+use flox_manifest::parsed::common::ActivateMode;
 use flox_rust_sdk::models::environment::generations::GenerationId;
 use flox_rust_sdk::models::environment::{FLOX_ACTIVE_ENVIRONMENTS_VAR, UninitializedEnvironment};
-use flox_rust_sdk::models::manifest::typed::ActivateMode;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 

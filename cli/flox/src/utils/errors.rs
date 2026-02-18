@@ -19,8 +19,8 @@ use flox_rust_sdk::models::environment::{
     EnvironmentError,
     UpgradeError,
 };
-use flox_rust_sdk::models::lockfile::ResolveError;
 use flox_rust_sdk::providers::git::GitRemoteCommandError;
+use flox_rust_sdk::providers::lock_manifest::ResolveError;
 use flox_rust_sdk::providers::services::process_compose::{LoggedError, ServiceError};
 use indent::indent_by;
 use indoc::{formatdoc, indoc};
@@ -207,8 +207,6 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
 
             {toml_error}
         "},
-        // todo: enrich with path
-        // raised during edit
         CoreEnvironmentError::DeserializeManifest(err) => formatdoc! {
             "Failed to parse manifest:
 
@@ -239,7 +237,6 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
             err = format_core_error(err)
         },
         CoreEnvironmentError::MakeSandbox(_) => display_chain(err),
-        // within transaction, user should not see this and likely can't do anything about it
         CoreEnvironmentError::WriteLockfile(_) => display_chain(err),
         CoreEnvironmentError::WriteLockfileAtomically(_) => display_chain(err),
         CoreEnvironmentError::MakeTemporaryEnv(_) => display_chain(err),
@@ -275,35 +272,25 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
 
             Please ensure that you have write permissions to '.flox/*'.
         "},
-
-        // these are out of our user's control as these errors are within the transaction
-        // todo: adapt wordnig?
-        // todo: enrich with path
         CoreEnvironmentError::OpenManifest(err) => formatdoc! {"
             Failed to open manifest for reading: {err}
 
             Please ensure that you have read permissions to '.flox/env/manifest.toml'.
         "},
-        // todo: enrich with path
         CoreEnvironmentError::UpdateManifest(err) => formatdoc! {"
             Failed to write to manifest file: {err}
 
             Please ensure that you have write permissions to '.flox/env/manifest.toml'.
         "},
-
-        // internal error, a bug if this happens to users!
         CoreEnvironmentError::BadLockfilePath(_) => display_chain(err),
-
         CoreEnvironmentError::BuildEnv(err) => formatdoc! {"
             Failed to build environment:
 
             {err}
         ", err = display_chain(err)},
-
         CoreEnvironmentError::Resolve(locked_manifest_error) => {
             format_resolve_error(locked_manifest_error)
         },
-
         CoreEnvironmentError::UpgradeFailedCatalog(err) => match err {
             UpgradeError::PkgNotFound(err) => err.to_string(),
             UpgradeError::NonEmptyNamedGroup { pkg, group } => formatdoc! {"
@@ -315,10 +302,7 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
             "},
         },
         CoreEnvironmentError::UninstallError(_) => display_chain(err),
-        // User facing
         CoreEnvironmentError::Services(err) => display_chain(err),
-
-        // this is a bug, but likely needs some formatting
         CoreEnvironmentError::ReadLockfile(_) => display_chain(err),
         CoreEnvironmentError::ParseLockfile(serde_error) => formatdoc! {"
             Failed to parse lockfile as JSON: {serde_error}
@@ -327,6 +311,9 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         "},
         CoreEnvironmentError::CreateTempdir(_) => display_chain(err),
         CoreEnvironmentError::Auth(err) => display_chain(err),
+        CoreEnvironmentError::Manifest(err) => display_chain(err),
+        CoreEnvironmentError::Lockfile(err) => display_chain(err),
+        CoreEnvironmentError::EnvError(err) => display_chain(err),
     }
 }
 
@@ -335,13 +322,9 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
 
     match err {
         ManagedEnvironmentError::FloxmetaBranch(inner) => format_floxmeta_branch_error(inner),
-
-        // todo: communicate reasons for this error
-        // git auth errors may be caught separately or reported
         ManagedEnvironmentError::UpdateFloxmeta(err) => formatdoc! {"
             Failed to fetch environment: {err}
         "},
-
         ManagedEnvironmentError::FetchUpdates(err) => {
             formatdoc! {"
             Failed to fetch updates for environment: {err}
@@ -350,28 +333,20 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             and access to the remote environment.
         "}
         },
-        // various internal git errors while acting on the floxmeta repo
         ManagedEnvironmentError::Git(_) => display_chain(err),
         ManagedEnvironmentError::WriteLock(err) => formatdoc! {"
             Failed to write to lockfile: {err}
 
             Please ensure that you have write permissions to '.flox/{GENERATION_LOCK_FILENAME}'
         "},
-
-        // the following two errors are related to create reverse links to the .flox directory
-        // those are internal errors but may arise if the user does not have write permissions to
-        // xdg_data_home
-        // todo: expose as rich error or unexpected error?
         ManagedEnvironmentError::ReverseLink(_) => display_chain(err),
         ManagedEnvironmentError::CreateLinksDir(_) => display_chain(err),
-
         ManagedEnvironmentError::CreateLocalEnvironmentView(err) => formatdoc! {"
             Failed to create the local environment from the current generation: {err}
 
             Please ensure that you have read and write permissions
             to the environment directory in '.flox/env'.
         "},
-
         ManagedEnvironmentError::CheckoutOutOfSync => indoc! {"
             Your environment has changes that are not yet synced to a generation.
 
@@ -380,16 +355,10 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             * 'flox edit --reset' to discard your local changes and reset to the latest generation
         "}
         .to_string(),
-
         ManagedEnvironmentError::ReadLocalManifest(_) => display_chain(err),
         ManagedEnvironmentError::Generations(_) => display_chain(err),
-
         ManagedEnvironmentError::BadBranchName(_) => display_chain(err),
-
-        // currently unused
         ManagedEnvironmentError::ProjectNotFound { .. } => display_chain(err),
-
-        // todo: enrich with url
         ManagedEnvironmentError::InvalidFloxhubBaseUrl(err) => formatdoc! {"
             The FloxHub base url set in the config is invalid: {err}
 
@@ -398,7 +367,6 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             * has a valid domain name
             * is not an IP address or 'localhost'
         "},
-
         ManagedEnvironmentError::Diverged(diverged_metadata) => formatdoc! {"
                 The environment has diverged from the remote:
 
@@ -445,9 +413,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
                 message.to_string()
             }
         },
-
         ManagedEnvironmentError::UpstreamAlreadyExists { .. } => display_chain(err),
-        // access denied is caught early as ManagedEnvironmentError::AccessDenied
         ManagedEnvironmentError::Push(_) => display_chain(err),
         ManagedEnvironmentError::PushWithLocalIncludes => display_chain(err),
         ManagedEnvironmentError::DeleteBranch(_) => display_chain(err),
@@ -459,8 +425,6 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
         ManagedEnvironmentError::DeleteEnvironmentLink(_, _) => display_chain(err),
         ManagedEnvironmentError::DeleteEnvironmentReverseLink(_, _) => display_chain(err),
         ManagedEnvironmentError::ApplyUpdates(_) => display_chain(err),
-        // todo: unwrap this error to report more precisely?
-        //       this should this is a bug if this happens to users.
         ManagedEnvironmentError::InitializeFloxmeta(_) => display_chain(err),
         ManagedEnvironmentError::SerializePointer(_) => display_chain(err),
         ManagedEnvironmentError::WritePointer(err) => formatdoc! {"
@@ -481,7 +445,6 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
 
             Please try again later.
         "},
-
         ManagedEnvironmentError::ReadManifest(e) => formatdoc! {"
             Could not read managed manifest.
 
@@ -498,12 +461,11 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
         ManagedEnvironmentError::Link(core_environment_error) => {
             format_core_error(core_environment_error)
         },
-
         ManagedEnvironmentError::Registry(_) => display_chain(err),
-
         ManagedEnvironmentError::Core(core_environment_error) => {
             format_core_error(core_environment_error)
         },
+        ManagedEnvironmentError::Environment(_) => display_chain(err),
     }
 }
 
@@ -715,27 +677,21 @@ pub fn format_environment_select_error(err: &EnvironmentSelectError) -> String {
 pub fn format_resolve_error(err: &ResolveError) -> String {
     trace!("formatting locked_manifest_error: {err:?}");
     match err {
-        // region: errors from the catalog locking
         ResolveError::CatalogResolve(err) => display_chain(err),
-        // endregion
         ResolveError::UnrecognizedSystem(system) => formatdoc! {"
             Unrecognized system in manifest: {system}
 
             Supported systems are: aarch64-linux, x86_64-linux, aarch64-darwin, x86_64-darwin
         "},
-
         ResolveError::SystemUnavailableInManifest { .. } => display_chain(err),
-
         ResolveError::ResolutionFailed(_) => display_chain(err),
-        // User facing
         ResolveError::LicenseNotAllowed(..) => display_chain(err),
-        // User facing
         ResolveError::BrokenNotAllowed(_) => display_chain(err),
-        // User facing
         ResolveError::UnfreeNotAllowed(_) => display_chain(err),
         ResolveError::MissingPackageDescriptor(_) => display_chain(err),
         ResolveError::LockFlakeNixError(_) => display_chain(err),
         ResolveError::InstallIdNotInManifest(_) => display_chain(err),
+        ResolveError::Manifest(_) => display_chain(err),
     }
 }
 

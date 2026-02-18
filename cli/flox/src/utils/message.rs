@@ -3,9 +3,9 @@ use std::fmt::Display;
 use std::io::Write;
 
 use crossterm::style::Stylize;
-use flox_rust_sdk::models::lockfile::Lockfile;
-use flox_rust_sdk::models::manifest::composite::{COMPOSER_MANIFEST_ID, Warning};
-use flox_rust_sdk::models::manifest::raw::PackageToInstall;
+use flox_manifest::compose::{COMPOSER_MANIFEST_ID, Warning};
+use flox_manifest::lockfile::Lockfile;
+use flox_manifest::raw::PackageToInstall;
 use indoc::formatdoc;
 use minus::{ExitStrategy, Pager, page_all};
 use tracing::info;
