@@ -8,7 +8,7 @@ use flox_manifest::interfaces::{AsLatestSchema, CommonFields};
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
-use flox_manifest::{Manifest, Migrated, MigratedTypedOnly};
+use flox_manifest::{Manifest, MigratedTypedOnly};
 use indoc::formatdoc;
 use itertools::Itertools;
 use serde::Deserialize;
