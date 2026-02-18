@@ -1629,6 +1629,7 @@ impl ManagedEnvironment {
     }
 }
 
+#[cfg(any(test, feature = "tests"))]
 pub mod test_helpers {
 
     use tempfile::tempdir_in;

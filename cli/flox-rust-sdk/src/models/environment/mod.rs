@@ -45,13 +45,14 @@ use crate::providers::manifest_init::ManifestInitError;
 use crate::utils::copy_file_without_permissions;
 
 mod core_environment;
+#[cfg(any(test, feature = "tests"))]
+pub use core_environment::test_helpers;
 pub use core_environment::{
     CoreEnvironment,
     CoreEnvironmentError,
     EditResult,
     SingleSystemUpgradeDiff,
     UpgradeResult,
-    test_helpers,
 };
 
 pub mod fetcher;
