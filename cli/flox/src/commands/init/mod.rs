@@ -5,13 +5,13 @@ use std::str::FromStr;
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_core::data::environment_ref::{DEFAULT_NAME, EnvironmentName, RemoteEnvironmentRef};
+use flox_manifest::parsed::common::ActivateMode;
+use flox_manifest::raw::{CatalogPackage, PackageToInstall};
 use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
-use flox_rust_sdk::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
-use flox_rust_sdk::models::manifest::typed::ActivateMode;
 use flox_rust_sdk::providers::catalog::{
     ALL_SYSTEMS,
     ClientTrait,
@@ -20,6 +20,7 @@ use flox_rust_sdk::providers::catalog::{
     PackageResolutionInfo,
 };
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
+use flox_rust_sdk::providers::manifest_init::ManifestInitializer;
 use indoc::{formatdoc, indoc};
 use path_dedot::ParseDot;
 use tracing::{debug, info_span, instrument};
@@ -462,7 +463,7 @@ fn format_customization(customization: &InitCustomization) -> Result<String> {
         *script = format!("{}\n", script);
     }
 
-    Ok(RawManifest::new_minimal(&customization).to_string())
+    Ok(ManifestInitializer::new_minimal(&customization).to_string())
 }
 
 /// Distinguish compatible versions from default or incompatible versions

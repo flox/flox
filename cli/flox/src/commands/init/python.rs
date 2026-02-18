@@ -4,9 +4,9 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Error, Result, anyhow};
+use flox_manifest::raw::CatalogPackage;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
-use flox_rust_sdk::models::manifest::raw::CatalogPackage;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use regex::Regex;

@@ -28,10 +28,10 @@ pub enum ManifestInitError {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ManifestInitializer;
+pub struct ManifestInitializer;
 
 impl ManifestInitializer {
-    pub(crate) fn new_documented(
+    pub fn new_documented(
         _features: Features,
         systems: &[&System],
         customization: &InitCustomization,
@@ -56,8 +56,7 @@ impl ManifestInitializer {
     /// generated, but more concise.
     /// Note that this isn't a valid TypedManifest because it doesn't include
     /// version.
-    #[allow(dead_code)] // FIXME: this will be used in `flox`, but is unused at the moment
-    pub(crate) fn new_minimal(customization: &InitCustomization) -> DocumentMut {
+    pub fn new_minimal(customization: &InitCustomization) -> DocumentMut {
         let mut manifest = DocumentMut::new();
 
         Self::add_install_section(&mut manifest, customization, false);
