@@ -1367,6 +1367,7 @@ mod tests {
     use flox_test_utils::GENERATED_DATA;
     use indoc::indoc;
     use pollster::FutureExt;
+    use pretty_assertions::assert_eq;
     use proptest::prelude::*;
 
     use super::*;
@@ -3517,32 +3518,27 @@ mod tests {
     /// If modify_include_descriptor is true, modify the include descriptor
     /// which should trigger a re-fetch.
     /// Otherwise, re-merging should not re-fetch.
-    async fn re_merge_after_editing_dep(_modify_include_descriptor: bool) {
+    async fn re_merge_after_editing_dep(modify_include_descriptor: bool) {
         let (flox, tempdir) = flox_instance();
 
-        let mut manifest_contents = indoc! {r#"
-            version = 1
-
+        let mut manifest_contents = with_latest_schema(indoc! {r#"
             [include]
             environments = [
               { dir = "dep1" }
             ]
-            "#};
-        let mut manifest = mk_test_manifest(manifest_contents);
+            "#});
+        let mut manifest = mk_test_manifest_from_contents(manifest_contents);
 
         // Create dep1 environment
         let dep1_path = tempdir.path().join("dep1");
-        let dep1_manifest_contents = indoc! {r#"
-            version = 1
-
+        let dep1_manifest_contents = with_latest_schema(indoc! {r#"
             [vars]
             foo = "dep1"
-            "#};
-        let dep1_manifest =
-            Manifest::parse_and_migrate_without_lockfile(dep1_manifest_contents).unwrap();
+            "#});
+        let dep1_manifest = mk_test_manifest_from_contents(&dep1_manifest_contents);
 
         std::fs::create_dir(&dep1_path).unwrap();
-        let mut dep1 = new_path_environment_in(&flox, dep1_manifest_contents, &dep1_path);
+        let mut dep1 = new_path_environment_in(&flox, &dep1_manifest_contents, &dep1_path);
         dep1.lockfile(&flox).unwrap();
 
         // Lock
@@ -3550,14 +3546,19 @@ mod tests {
             base_directory: Some(tempdir.path().to_path_buf()),
         };
 
-        let lockfile = LockManifest::lock_manifest(&flox, &manifest, None, &include_fetcher)
-            .await
-            .unwrap();
+        let lockfile = LockManifest::lock_manifest(
+            &flox,
+            &manifest.as_migrated_typed_only(),
+            None,
+            &include_fetcher,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             lockfile.manifest,
             ManifestLatest {
-                schema_version: "1.10.0".into(),
+                schema_version: KnownSchemaVersion::latest().to_string(),
                 vars: Vars::from_map(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
                 ..Default::default()
             }
@@ -3565,42 +3566,32 @@ mod tests {
         );
         assert_eq!(
             lockfile.compose.as_ref().unwrap().include[0].manifest,
-            Manifest::parse_typed(manifest_contents)
-                .unwrap()
-                .as_typed_only()
+            dep1_manifest.as_typed_only()
         );
 
         // Edit dep1 and then change its name in the include descriptor and re-merge
-        let dep1_edited_manifest_contents = indoc! {r#"
-            version = 1
-
+        let dep1_edited_manifest_contents = with_latest_schema(indoc! {r#"
             [vars]
             foo = "dep1 edited"
-            "#};
-        let dep1_edited_manifest = toml_edit::de::from_str(dep1_edited_manifest_contents).unwrap();
+            "#});
+        let dep1_edited_manifest = mk_test_manifest_from_contents(&dep1_edited_manifest_contents);
 
-        dep1.edit(&flox, dep1_edited_manifest_contents.to_string())
-            .unwrap();
+        dep1.edit(&flox, dep1_edited_manifest_contents).unwrap();
 
         if modify_include_descriptor {
-            manifest_contents = indoc! {r#"
-                version = 1
-
+            manifest_contents = with_latest_schema(indoc! {r#"
                 [include]
                 environments = [
                   { dir = "dep1", name = "dep1 edited" }
                 ]
-                "#};
-            manifest = Manifest::parse_typed(manifest_contents)
-                .unwrap()
-                .as_typed_only()
-                .migrate_without_lockfile();
+                "#});
+            manifest = mk_test_manifest_from_contents(manifest_contents);
         }
 
         // Merge
         let (merged, compose) = LockManifest::merge_manifest(
             &flox,
-            &manifest,
+            manifest.as_latest_schema(),
             Some(&lockfile),
             &include_fetcher,
             ManifestMerger::Shallow(ShallowMerger),
@@ -3609,7 +3600,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(merged, ManifestLatest {
-            schema_version: "1.10.0".into(),
+            schema_version: KnownSchemaVersion::latest().to_string(),
             vars: Vars::from_map(BTreeMap::from([(
                 "foo".to_string(),
                 if modify_include_descriptor {
@@ -3623,7 +3614,7 @@ mod tests {
         assert_eq!(
             compose.unwrap().include[0].manifest,
             if modify_include_descriptor {
-                dep1_edited_manifest
+                dep1_edited_manifest.as_typed_only()
             } else {
                 dep1_manifest.as_typed_only()
             }
