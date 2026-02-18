@@ -8,6 +8,7 @@ use flox_manifest::interfaces::{AsWritableManifest, CommonFields, WriteManifest}
 use flox_manifest::raw::SyncTypedToRaw;
 use flox_manifest::{Manifest, Migrated};
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment::floxmeta_branch::FloxmetaBranchError;
 use flox_rust_sdk::models::environment::generations::{GenerationId, GenerationsExt};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
