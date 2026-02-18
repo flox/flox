@@ -174,7 +174,7 @@ impl Arbitrary for ManifestVersion {
     type Strategy = BoxedStrategy<Self>;
 
     fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
-        prop_oneof!(Just(ManifestVersion(1)), Just(ManifestVersion(2)),).boxed()
+        Just(ManifestVersion(1)).boxed()
     }
 }
 
