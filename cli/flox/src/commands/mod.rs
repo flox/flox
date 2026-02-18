@@ -36,6 +36,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
 use flox_core::data::environment_ref::{self, DEFAULT_NAME, RemoteEnvironmentRef};
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
+use flox_manifest::{Manifest, TypedOnly};
 use flox_rust_sdk::flox::{
     DEFAULT_FLOXHUB_URL,
     FLOX_VERSION,
@@ -52,14 +53,12 @@ use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
     DOT_FLOX,
     DotFlox,
-    Environment,
     EnvironmentError,
     ManagedPointer,
     UninitializedEnvironment,
     find_dot_flox,
     open_path,
 };
-use flox_rust_sdk::models::manifest::typed::{Inner, Manifest, ManifestPackageDescriptor};
 use indoc::{formatdoc, indoc};
 use tempfile::TempDir;
 use thiserror::Error;
@@ -945,10 +944,6 @@ impl EnvironmentSelect {
                 ConcreteEnvironment::Remote(env)
             },
         };
-        let manifest_contents = env
-            .manifest_contents(flox)
-            .map_err(EnvironmentSelectError::EnvironmentError)?;
-        bail_on_v2_if_feature_flag_not_enabled(flox, manifest_contents.as_str())?;
         Ok(env)
     }
 
@@ -989,10 +984,6 @@ impl EnvironmentSelect {
                 ConcreteEnvironment::Remote(env)
             },
         };
-        let manifest_contents = env
-            .manifest_contents(flox)
-            .map_err(EnvironmentSelectError::EnvironmentError)?;
-        bail_on_v2_if_feature_flag_not_enabled(flox, manifest_contents.as_str())?;
         Ok(env)
     }
 
@@ -1005,44 +996,6 @@ impl EnvironmentSelect {
             EnvironmentSelect::Unspecified => None,
         }
     }
-}
-
-fn bail_on_v2_if_feature_flag_not_enabled(
-    flox: &Flox,
-    manifest_contents: &str,
-) -> Result<(), EnvironmentSelectError> {
-    if flox.features.outputs {
-        return Ok(());
-    }
-    let parsed = Manifest::from_str(manifest_contents)
-        .context("failed to parse manifest")
-        .map_err(EnvironmentSelectError::Anyhow)?;
-    if parsed.version.inner() == &2 {
-        return Err(EnvironmentSelectError::Anyhow(anyhow!(
-            "manifest schema version 2 is only available with FLOX_FEATURES_OUTPUTS=1"
-        )));
-    }
-    for descriptor in parsed.install.inner().values() {
-        use ManifestPackageDescriptor::*;
-        match descriptor {
-            Catalog(catalog_pd) => {
-                if catalog_pd.outputs.is_some() {
-                    return Err(EnvironmentSelectError::Anyhow(anyhow!(
-                        "'outputs' may only be specified with FLOX_FEATURES_OUTPUTS=1"
-                    )));
-                }
-            },
-            FlakeRef(flake_pd) => {
-                if flake_pd.outputs.is_some() {
-                    return Err(EnvironmentSelectError::Anyhow(anyhow!(
-                        "'outputs' may only be specified with FLOX_FEATURES_OUTPUTS=1"
-                    )));
-                }
-            },
-            StorePath(_) => {},
-        }
-    }
-    Ok(())
 }
 
 impl DirEnvironmentSelect {
@@ -1393,7 +1346,7 @@ fn is_current_dir(environment: &UninitializedEnvironment) -> Result<bool> {
 ///
 /// `Environment::manifest_contents` should be used for non-composition
 /// manifests so that it matches what the user has on disk.
-fn render_composition_manifest(manifest: &Manifest) -> Result<String> {
+fn render_composition_manifest(manifest: &Manifest<TypedOnly>) -> Result<String> {
     // A visitor that converts inline tables to proper tables
     // Nested tables are rendered as `dotted` tables.
     // The default behavior when instantiating with `Visitor::new_for_document`,
