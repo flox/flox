@@ -21,6 +21,9 @@
   rust-external-deps,
   rust-toolchain,
   stdenv,
+  # Override catalog authentication strategy if needed
+  # Options: "floxhub-authn-kerberos"
+  overrideCatalogAuth ? null,
 }:
 let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
@@ -93,7 +96,11 @@ in
     # In this case we do want to build some of the crates in the workspace,
     # i.e. flox-rust-sdk, catalog-api-v1, and shared as dependencies of flox.
     # To achieve this, we copy the source of these crates back into the workspace.
-    cargoExtraArgs = "--locked -p flox";
+    cargoExtraArgs =
+      "--locked -p flox"
+      + lib.optionalString (
+        overrideCatalogAuth != null
+      ) " --features flox-rust-sdk/${overrideCatalogAuth}";
     postPatch = ''
       cp -rf --no-preserve=mode ${flox-src}/cli/flox-rust-sdk/* ./cli/flox-rust-sdk
       cp -rf --no-preserve=mode ${flox-src}/cli/catalog-api-v1/* ./cli/catalog-api-v1

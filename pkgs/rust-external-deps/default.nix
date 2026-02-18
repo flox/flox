@@ -49,13 +49,13 @@ let
         openssl.dev
       ]
       # Conditionally include Kerberos dependencies for GSSAPI
-      ++ lib.optionals (overrideCatalogAuth == "floxhub-authn-kerberos") [ krb5.dev ];
+      ++ lib.optional (overrideCatalogAuth == "floxhub-authn-kerberos") krb5.dev;
 
       nativeBuildInputs = [
         pkg-config
-        rustPlatform.bindgenHook
       ]
-      ++ lib.optional (stdenv.hostPlatform.system == "x86_64-linux") [ llvmPackages.bintools ];
+      ++ lib.optional (overrideCatalogAuth == "floxhub-authn-kerberos") rustPlatform.bindgenHook
+      ++ lib.optional (stdenv.hostPlatform.system == "x86_64-linux") llvmPackages.bintools;
       passthru = {
         inherit envs;
       };

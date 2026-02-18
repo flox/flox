@@ -111,7 +111,9 @@
 
           # Kerberos-enabled variant with GSSAPI authentication
           flox-cli-kerberos = callPackage ./pkgs/flox-cli {
+            overrideCatalogAuth = "floxhub-authn-kerberos";
             rust-internal-deps = final.rust-internal-deps.override {
+              overrideCatalogAuth = "floxhub-authn-kerberos";
               rust-external-deps = final.rust-external-deps.override {
                 overrideCatalogAuth = "floxhub-authn-kerberos";
               };
