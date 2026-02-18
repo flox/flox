@@ -1154,6 +1154,7 @@ impl CoreEnvironmentError {
     }
 }
 
+#[cfg(any(test, feature = "tests"))]
 pub mod test_helpers {
     use indoc::indoc;
 
