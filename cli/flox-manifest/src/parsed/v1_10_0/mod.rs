@@ -179,33 +179,6 @@ impl CommonFields for ManifestV1_10_0 {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, JsonSchema)]
-pub struct ManifestVersion(u8);
-
-impl Default for ManifestVersion {
-    fn default() -> Self {
-        Self(1)
-    }
-}
-
-#[cfg(any(test, feature = "tests"))]
-impl Arbitrary for ManifestVersion {
-    type Parameters = ();
-    type Strategy = BoxedStrategy<Self>;
-
-    fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
-        prop_oneof!(Just(ManifestVersion(1)), Just(ManifestVersion(2)),).boxed()
-    }
-}
-
-impl_into_inner!(ManifestVersion, u8);
-
-impl From<u8> for ManifestVersion {
-    fn from(value: u8) -> Self {
-        ManifestVersion(value)
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct Install(
