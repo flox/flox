@@ -2,9 +2,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
+use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
-use flox_rust_sdk::models::manifest::typed::Manifest;
 use flox_rust_sdk::providers::auth::Auth;
 use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget, nix_expression_dir};
 use flox_rust_sdk::providers::publish::{
@@ -119,7 +119,7 @@ impl Publish {
     }
 
     fn get_publish_target(
-        manifest: &Manifest,
+        manifest: &Manifest<MigratedTypedOnly>,
         expression_dir: &Path,
         target_arg: Option<PublishTarget>,
     ) -> Result<PackageTarget> {
@@ -175,7 +175,8 @@ impl Publish {
         // Used for non building expressions and manifest builds
         prefetch_flake_ref(&COMMON_NIXPKGS_URL)?;
 
-        let package = Self::get_publish_target(&lockfile.manifest, &expression_dir, package_arg)?;
+        let lockfile_manifest = lockfile.manifest.migrate_typed_only(Some(&lockfile))?;
+        let package = Self::get_publish_target(&lockfile_manifest, &expression_dir, package_arg)?;
 
         disallow_base_url_select_for_manifest_builds(
             [&package],
@@ -291,15 +292,14 @@ impl Publish {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use flox_manifest::test_helpers::with_latest_schema;
+    use indoc::indoc;
 
     use super::*;
 
     #[test]
     fn detects_default_publish_target() {
-        let manifest_str = formatdoc! {r#"
-            version = 1
-
+        let manifest_contents = with_latest_schema(indoc! {r#"
             [install]
             hello.pkg-path = "hello"
 
@@ -307,8 +307,10 @@ mod tests {
             command = '''
                 doesn't matter
             '''
-        "#};
-        let manifest = Manifest::from_str(&manifest_str).unwrap();
+        "#});
+        let manifest = Manifest::parse_and_migrate(manifest_contents, None)
+            .unwrap()
+            .as_migrated_typed_only();
 
         let target =
             Publish::get_publish_target(&manifest, Path::new("/no/expression/builds"), None)
@@ -324,22 +326,20 @@ mod tests {
 
     #[test]
     fn error_when_no_publish_target_arg_no_builds() {
-        let manifest_str = formatdoc! {r#"
-            version = 1
-
+        let manifest_contents = with_latest_schema(indoc! {r#"
             [install]
             hello.pkg-path = "hello"
-        "#};
-        let manifest = Manifest::from_str(&manifest_str).unwrap();
+        "#});
+        let manifest = Manifest::parse_and_migrate(manifest_contents, None)
+            .unwrap()
+            .as_migrated_typed_only();
         let res = Publish::get_publish_target(&manifest, Path::new("/no/expression/builds"), None);
         assert!(res.is_err());
     }
 
     #[test]
     fn error_when_no_publish_target_arg_multiple_builds() {
-        let manifest_str = formatdoc! {r#"
-            version = 1
-
+        let manifest_contents = with_latest_schema(indoc! {r#"
             [install]
             hello.pkg-path = "hello"
 
@@ -352,17 +352,17 @@ mod tests {
             command = '''
                 doesn't matter
             '''
-        "#};
-        let manifest = Manifest::from_str(&manifest_str).unwrap();
+        "#});
+        let manifest = Manifest::parse_and_migrate(manifest_contents, None)
+            .unwrap()
+            .as_migrated_typed_only();
         let res = Publish::get_publish_target(&manifest, Path::new("/no/expression/builds"), None);
         assert!(res.is_err());
     }
 
     #[test]
     fn no_error_when_target_arg_supplied_multiple_builds() {
-        let manifest_str = formatdoc! {r#"
-            version = 1
-
+        let manifest_contents = with_latest_schema(indoc! {r#"
             [install]
             hello.pkg-path = "hello"
 
@@ -375,8 +375,10 @@ mod tests {
             command = '''
                 doesn't matter
             '''
-        "#};
-        let manifest = Manifest::from_str(&manifest_str).unwrap();
+        "#});
+        let manifest = Manifest::parse_and_migrate(manifest_contents, None)
+            .unwrap()
+            .as_migrated_typed_only();
         let target = Publish::get_publish_target(
             &manifest,
             Path::new("/no/expression/builds"),
@@ -396,9 +398,7 @@ mod tests {
 
     #[test]
     fn no_error_when_target_arg_supplied_one_build() {
-        let manifest_str = formatdoc! {r#"
-            version = 1
-
+        let manifest_contents = with_latest_schema(indoc! {r#"
             [install]
             hello.pkg-path = "hello"
 
@@ -406,8 +406,10 @@ mod tests {
             command = '''
                 doesn't matter
             '''
-        "#};
-        let manifest = Manifest::from_str(&manifest_str).unwrap();
+        "#});
+        let manifest = Manifest::parse_and_migrate(manifest_contents, None)
+            .unwrap()
+            .as_migrated_typed_only();
         let target = Publish::get_publish_target(
             &manifest,
             Path::new("/no/expression/builds"),
