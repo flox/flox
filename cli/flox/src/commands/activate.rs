@@ -10,6 +10,9 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_core::data::environment_ref::DEFAULT_NAME;
+use flox_manifest::interfaces::{AsWritableManifest, CommonFields, WriteManifest};
+use flox_manifest::parsed::Inner;
+use flox_manifest::parsed::common::{ActivateMode, IncludeDescriptor};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::floxmeta_branch::BranchOrd;
 use flox_rust_sdk::models::environment::generations::{GenerationId, GenerationsExt};
@@ -24,9 +27,8 @@ use flox_rust_sdk::models::environment::{
     FLOX_SERVICES_SOCKET_VAR,
     UpgradeResult,
 };
-use flox_rust_sdk::models::lockfile::LockResult;
-use flox_rust_sdk::models::manifest::typed::{ActivateMode, IncludeDescriptor, Inner};
 use flox_rust_sdk::providers::build::FLOX_RUNTIME_DIR_VAR;
+use flox_rust_sdk::providers::lock_manifest::LockResult;
 use flox_rust_sdk::providers::services::process_compose::shutdown_process_compose_if_all_processes_stopped;
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::logging::traceable_path;
@@ -140,7 +142,7 @@ impl Activate {
                 &flox,
                 &env.env_ref(),
                 false,
-                &env.manifest_contents(&flox)?,
+                &env.pre_migration_manifest(&flox)?.as_writable().to_string(),
             )
             .await?;
         }
@@ -265,7 +267,7 @@ impl Activate {
         let mode = self
             .mode
             .clone()
-            .unwrap_or(manifest.options.activate.mode.clone().unwrap_or_default());
+            .unwrap_or(manifest.options().activate.mode.clone().unwrap_or_default());
         let mode_link_path = rendered_env_path.clone().for_mode(&mode);
         let store_path = fs::read_link(&mode_link_path).with_context(|| {
             format!(
@@ -394,7 +396,7 @@ impl Activate {
         let socket_path = concrete_environment.services_socket_path(&flox)?;
         exports.insert(
             "_FLOX_ENV_CUDA_DETECTION",
-            match manifest.options.cuda_detection {
+            match manifest.options().cuda_detection {
                 Some(false) => "0", // manifest opts-out
                 _ => "1",           // default to enabling CUDA
             }
@@ -404,10 +406,10 @@ impl Activate {
         if self.start_services {
             ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
 
-            if manifest.services.inner().is_empty() {
+            if manifest.services().inner().is_empty() {
                 message::warning(ServicesCommandsError::NoDefinedServices);
             } else if manifest
-                .services
+                .services()
                 .copy_for_system(&flox.system)
                 .inner()
                 .is_empty()
@@ -420,7 +422,7 @@ impl Activate {
 
         let should_have_services = self.start_services
             && !manifest
-                .services
+                .services()
                 .copy_for_system(&flox.system)
                 .inner()
                 .is_empty();
@@ -1005,16 +1007,16 @@ mod tests {
 
 #[cfg(test)]
 mod upgrade_notification_tests {
+    use flox_manifest::lockfile::{LockedPackage, Lockfile};
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::UpgradeResult;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_named_path_environment_from_env_files,
         new_path_environment_from_env_files,
     };
-    use flox_rust_sdk::models::lockfile::{LockedPackage, Lockfile};
-    use flox_rust_sdk::providers::catalog::GENERATED_DATA;
     use flox_rust_sdk::providers::upgrade_checks::UpgradeInformation;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
+    use flox_test_utils::GENERATED_DATA;
     use time::OffsetDateTime;
 
     use super::*;
