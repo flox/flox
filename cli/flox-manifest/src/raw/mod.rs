@@ -10,6 +10,7 @@ use reqwest::Url;
 use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Table, TableLike, Value};
 use tracing::{debug, trace};
 
+use crate::interfaces::CommonFields;
 use crate::parsed::common::{self, ActivateMode, KnownSchemaVersion, VersionKind};
 use crate::parsed::v1_10_0::SelectedOutputs;
 use crate::parsed::{Inner, v1, v1_10_0};
@@ -755,13 +756,18 @@ impl ModifyPackages for Manifest<Migrated> {
     }
 }
 
-pub(crate) trait SyncTypedToRaw {
+pub trait SyncTypedToRaw {
     /// Updates the TOML manifest to match the contents of the typed manifest.
     fn update_toml(&mut self) -> Result<(), ManifestError> {
         self.update_schema_version();
+        self.update_systems()?;
         self.update_raw_packages_from_typed_manifest()?;
         Ok(())
     }
+
+    /// Updates `options.systems` in the TOML manifest to match that in the
+    /// typed manifest.
+    fn update_systems(&mut self) -> Result<(), ManifestError>;
 
     /// Sets the `schema-version` or `version` field in the TOML manifest to match that in
     /// the typed manifest.
@@ -779,6 +785,14 @@ impl SyncTypedToRaw for Manifest<Validated> {
         update_schema_version(&mut self.inner.raw, self.inner.parsed.schema_version());
     }
 
+    fn update_systems(&mut self) -> Result<(), ManifestError> {
+        update_systems(
+            &mut self.inner.raw,
+            self.inner.parsed.options().systems.as_ref(),
+        )
+        .map_err(ManifestError::TomlEdit)
+    }
+
     fn update_raw_packages_from_typed_manifest(&mut self) -> Result<(), ManifestError> {
         update_raw_packages_from_typed_manifest(&mut self.inner.raw, &self.inner.parsed)
     }
@@ -787,6 +801,14 @@ impl SyncTypedToRaw for Manifest<Validated> {
 impl SyncTypedToRaw for Manifest<Migrated> {
     fn update_schema_version(&mut self) {
         update_schema_version(&mut self.inner.migrated_raw, KnownSchemaVersion::latest());
+    }
+
+    fn update_systems(&mut self) -> Result<(), ManifestError> {
+        update_systems(
+            &mut self.inner.migrated_raw,
+            self.inner.migrated_parsed.options().systems.as_ref(),
+        )
+        .map_err(ManifestError::TomlEdit)
     }
 
     fn update_raw_packages_from_typed_manifest(&mut self) -> Result<(), ManifestError> {
@@ -815,6 +837,26 @@ fn update_schema_version(raw: &mut DocumentMut, schema_version: KnownSchemaVersi
             );
         },
     }
+}
+
+fn update_systems(
+    raw: &mut DocumentMut,
+    maybe_systems: Option<&Vec<String>>,
+) -> Result<(), TomlEditError> {
+    let options_field = raw
+        .entry("options")
+        .or_insert_with(|| Item::Table(Table::new()));
+    let options_field_type = options_field.type_name().into();
+    let options_table = options_field.as_table_mut().ok_or_else(|| {
+        debug!("creating new [options] table");
+        TomlEditError::MalformedOptionsTable(options_field_type)
+    })?;
+    if let Some(systems) = maybe_systems {
+        options_table.insert("systems", toml_array_of_strings(systems).into());
+    } else {
+        options_table.remove("systems");
+    }
+    Ok(())
 }
 
 /// Brings all package descriptors in a raw TOML manifest into sync with the typed package descriptors
