@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
+use flox_manifest::Manifest;
+use flox_manifest::interfaces::AsTypedOnlyManifest;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::fetcher::IncludeFetcher;
-use flox_rust_sdk::models::lockfile::Lockfile;
 use tracing::instrument;
 
 use crate::commands::SHELL_COMPLETION_FILE;
@@ -41,8 +42,7 @@ impl LockManifest {
         let input_manifest =
             fs::read_to_string(manifest_path).context("Failed to read manifest file")?;
 
-        let input_manifest =
-            toml::from_str(&input_manifest).context("Failed to parse manifest file")?;
+        let input_manifest = Manifest::parse_toml_typed(input_manifest)?;
 
         let input_lockfile = if let Some(lockfile_path) = self.lockfile {
             let lockfile = fs::read_to_string(lockfile_path).context("Failed to read lockfile")?;
@@ -51,9 +51,13 @@ impl LockManifest {
             None
         };
 
-        let lockfile = Lockfile::lock_manifest(
+        let migrated_manifest = input_manifest
+            .as_typed_only()
+            .migrate_typed_only(input_lockfile.as_ref())?;
+
+        let lockfile = flox_rust_sdk::providers::lock_manifest::LockManifest::lock_manifest(
             &flox,
-            &input_manifest,
+            &migrated_manifest,
             input_lockfile.as_ref(),
             // For now this will just cause an error if the manifest has includes
             &IncludeFetcher {
