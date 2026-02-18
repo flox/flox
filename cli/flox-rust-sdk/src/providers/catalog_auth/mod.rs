@@ -33,15 +33,30 @@ mod kerberos;
 use kerberos::KerberosAuthStrategy;
 
 /// Available authentication methods
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AuthMethod {
-    #[default]
-    /// Auth0 authentication (default)
+    /// Auth0 authentication
     Auth0,
     /// Kerberos authentication
     #[cfg(feature = "floxhub-authn-kerberos")]
     Kerberos,
+}
+
+#[cfg(not(feature = "floxhub-authn-kerberos"))]
+#[allow(clippy::derivable_impls)]
+impl Default for AuthMethod {
+    fn default() -> Self {
+        AuthMethod::Auth0
+    }
+}
+
+#[cfg(feature = "floxhub-authn-kerberos")]
+#[allow(clippy::derivable_impls)]
+impl Default for AuthMethod {
+    fn default() -> Self {
+        AuthMethod::Kerberos
+    }
 }
 
 impl AuthMethod {
