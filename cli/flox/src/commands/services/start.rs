@@ -3,9 +3,10 @@ use std::path::Path;
 
 use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
+use flox_manifest::interfaces::CommonFields;
+use flox_manifest::parsed::common::Services;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::manifest::typed::Services;
 use flox_rust_sdk::providers::services::process_compose::{
     ProcessStates,
     shutdown_process_compose_if_all_processes_stopped,
@@ -69,7 +70,7 @@ impl Start {
             debug!("starting services with existing process-compose instance");
             Self::start_with_existing_process_compose(
                 env.socket(),
-                &env.manifest.services,
+                env.manifest.services(),
                 &flox.system,
                 &self.names,
                 &mut stderr(),

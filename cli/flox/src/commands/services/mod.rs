@@ -2,12 +2,15 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use bpaf::Bpaf;
+use flox_manifest::interfaces::CommonFields;
+use flox_manifest::lockfile::Lockfile;
+use flox_manifest::parsed::Inner;
+use flox_manifest::parsed::common::{ActivateMode, Services};
+use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::models::environment::generations::GenerationId;
-use flox_rust_sdk::models::lockfile::Lockfile;
-use flox_rust_sdk::models::manifest::typed::{ActivateMode, Inner, Manifest, Services};
 use flox_rust_sdk::providers::services::process_compose::{
     ProcessState,
     ProcessStates,
@@ -119,7 +122,7 @@ impl ServicesCommands {
 pub struct ServicesEnvironment {
     environment: ConcreteEnvironment,
     socket: PathBuf,
-    manifest: Manifest,
+    manifest: Manifest<MigratedTypedOnly>,
 }
 
 impl ServicesEnvironment {
@@ -134,7 +137,7 @@ impl ServicesEnvironment {
     ) -> Result<Self> {
         let socket = environment.services_socket_path(flox)?;
         let lockfile: Lockfile = environment.lockfile(flox)?.into();
-        let manifest = lockfile.manifest;
+        let manifest = lockfile.manifest.migrate_typed_only(Some(&lockfile))?;
 
         Ok(Self {
             environment,
@@ -187,13 +190,13 @@ pub fn guard_service_commands_available(
     system: &System,
 ) -> Result<()> {
     if !services_environment.socket.exists()
-        && services_environment.manifest.services.inner().is_empty()
+        && services_environment.manifest.services().inner().is_empty()
     {
         return Err(ServicesCommandsError::NoDefinedServices.into());
     } else if !services_environment.socket.exists()
         && services_environment
             .manifest
-            .services
+            .services()
             .copy_for_system(system)
             .inner()
             .is_empty()
@@ -312,12 +315,12 @@ pub async fn start_services_with_new_process_compose(
         // for starting `process-compose`. This does a similar job as
         // `processes_by_name_or_default_to_all` where we don't yet have a
         // running `process-compose` instance.
-        if !lockfile.manifest.services.inner().contains_key(name) {
+        if !lockfile.manifest.services().inner().contains_key(name) {
             return Err(service_does_not_exist_error(name))?;
         }
         if !lockfile
             .manifest
-            .services
+            .services()
             .copy_for_system(&system)
             .inner()
             .contains_key(name)
@@ -352,7 +355,7 @@ pub async fn start_services_with_new_process_compose(
     let names = if names.is_empty() {
         lockfile
             .manifest
-            .services
+            .services()
             .copy_for_system(&system)
             .inner()
             .keys()
@@ -394,7 +397,7 @@ fn defined_service_not_active_error(name: &str) -> ServicesCommandsError {
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::models::manifest::typed::ServiceDescriptor;
+    use flox_manifest::parsed::common::ServiceDescriptor;
     use flox_rust_sdk::providers::services::process_compose::test_helpers::generate_process_state;
 
     use super::*;

@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use flox_manifest::interfaces::CommonFields;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::services::process_compose::{
     DEFAULT_TAIL,
@@ -45,7 +46,7 @@ impl Logs {
         if self.follow {
             let named_processes = super::processes_by_name_or_default_to_all(
                 &processes,
-                &env.manifest.services,
+                env.manifest.services(),
                 &flox.system,
                 &self.names,
             )?;
