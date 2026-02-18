@@ -3,8 +3,9 @@ use std::fmt::Display;
 
 use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
+use flox_manifest::interfaces::CommonFields;
+use flox_manifest::parsed::Inner;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::manifest::typed::Inner;
 use flox_rust_sdk::providers::services::process_compose::{
     LoggedError,
     ProcessState,
@@ -50,7 +51,7 @@ impl Status {
                 let mut states = vec![];
                 let service_names = if self.names.is_empty() {
                     env.manifest
-                        .services
+                        .services()
                         .inner()
                         .keys()
                         .cloned()
@@ -74,7 +75,7 @@ impl Status {
             Ok(processes) => {
                 let named_processes = super::processes_by_name_or_default_to_all(
                     &processes,
-                    &env.manifest.services,
+                    env.manifest.services(),
                     &flox.system,
                     &self.names,
                 )?;
