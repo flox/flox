@@ -12,10 +12,14 @@ use flox_core::activate::mode::ActivateMode;
 use flox_core::canonical_path::CanonicalPath;
 use flox_manifest::ManifestError;
 use flox_manifest::interfaces::{AsLatestSchema, CommonFields, PackageLookup};
-use flox_manifest::lockfile::catalog::LockedPackageCatalog;
-use flox_manifest::lockfile::flake::LockedPackageFlake;
-use flox_manifest::lockfile::store_path::LockedPackageStorePath;
-use flox_manifest::lockfile::{LockedPackage, Lockfile, PackageToList};
+use flox_manifest::lockfile::{
+    LockedPackage,
+    LockedPackageCatalog,
+    LockedPackageFlake,
+    LockedPackageStorePath,
+    Lockfile,
+    PackageToList,
+};
 use flox_manifest::parsed::latest::SelectedOutputs;
 use pollster::FutureExt as _;
 use rsevents_extra::Semaphore;

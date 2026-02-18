@@ -2,10 +2,13 @@ use std::collections::{HashMap, HashSet};
 
 use flox_core::data::System;
 
-use crate::lockfile::catalog::LockedPackageCatalog;
-use crate::lockfile::flake::LockedPackageFlake;
-use crate::lockfile::package_outputs::PackageOutputs;
-use crate::lockfile::{LockedPackage, Lockfile};
+use crate::lockfile::{
+    LockedPackage,
+    LockedPackageCatalog,
+    LockedPackageFlake,
+    Lockfile,
+    PackageOutputs,
+};
 use crate::migrate::MigrationError;
 use crate::parsed::v1::ManifestV1;
 use crate::parsed::v1_10_0::{self, ManifestV1_10_0, SetOutputs};

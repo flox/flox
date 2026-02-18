@@ -2,8 +2,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
-use flox_manifest::lockfile::Lockfile;
-use flox_manifest::lockfile::compose::LockedInclude;
+use flox_manifest::lockfile::{LockedInclude, Lockfile};
 use flox_manifest::parsed::common::IncludeDescriptor;
 use flox_manifest::{Manifest, TypedOnly};
 
