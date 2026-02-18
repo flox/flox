@@ -4,10 +4,10 @@ use std::process::Stdio;
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
+use flox_manifest::lockfile::Lockfile;
+use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
-use flox_rust_sdk::models::lockfile::Lockfile;
-use flox_rust_sdk::models::manifest::typed::Manifest;
 use flox_rust_sdk::providers::build::{
     COMMON_NIXPKGS_URL,
     FloxBuildMk,
@@ -180,7 +180,8 @@ impl Build {
         let flox_env_build_outputs = env.build(&flox)?;
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
 
-        let packages_to_clean = packages_to_build(&lockfile.manifest, &expression_dir, &packages)?;
+        let lockfile_manifest = lockfile.manifest.migrate_typed_only(Some(&lockfile))?;
+        let packages_to_clean = packages_to_build(&lockfile_manifest, &expression_dir, &packages)?;
         let target_names = packages_to_clean
             .iter()
             .map(|target| target.name())
@@ -221,7 +222,8 @@ impl Build {
         // Used for non building expressions and manifest builds
         prefetch_flake_ref(&COMMON_NIXPKGS_URL)?;
 
-        let packages_to_build = packages_to_build(&lockfile.manifest, &expression_dir, &packages)?;
+        let lockfile_manifest = lockfile.manifest.migrate_typed_only(Some(&lockfile))?;
+        let packages_to_build = packages_to_build(&lockfile_manifest, &expression_dir, &packages)?;
 
         disallow_base_url_select_for_manifest_builds(
             &packages_to_build,
@@ -621,7 +623,7 @@ pub(crate) enum PrefetchError {
 }
 
 pub(crate) fn packages_to_build<'o>(
-    manifest: &'o Manifest,
+    manifest: &'o Manifest<MigratedTypedOnly>,
     expression_dir: &'o Path,
     packages: &[impl AsRef<str>],
 ) -> Result<Vec<PackageTarget>> {
@@ -707,7 +709,11 @@ mod test {
             "#})]);
 
         let lockfile: Lockfile = env.lockfile(&flox).unwrap().into();
-        let result = packages_to_build(&lockfile.manifest, &expressions_dir, &Vec::<String>::new());
+        let lockfile_manifest = lockfile
+            .manifest
+            .migrate_typed_only(Some(&lockfile))
+            .unwrap();
+        let result = packages_to_build(&lockfile_manifest, &expressions_dir, &Vec::<String>::new());
         assert!(result.is_err());
     }
 

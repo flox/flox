@@ -8,7 +8,7 @@ use flox_manifest::interfaces::{AsLatestSchema, CommonFields};
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
-use flox_manifest::{Manifest, Migrated};
+use flox_manifest::{Manifest, Migrated, MigratedTypedOnly};
 use indoc::formatdoc;
 use itertools::Itertools;
 use serde::Deserialize;
@@ -712,7 +712,7 @@ impl PackageTargets {
     /// Target names, e.g. arguments from the CLI
     /// can be validated against the known targets via [Self::select].
     pub fn new(
-        manifest: &Manifest<Migrated>,
+        manifest: &Manifest<MigratedTypedOnly>,
         expression_dir: &Path,
     ) -> Result<PackageTargets, PackageTargetError> {
         let environment_packages = manifest.as_latest_schema().build();
