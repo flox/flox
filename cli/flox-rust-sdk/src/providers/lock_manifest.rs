@@ -1363,6 +1363,7 @@ mod tests {
         empty_test_migrated_manifest,
         mk_test_manifest_from_contents,
     };
+    use flox_manifest::test_helpers::with_latest_schema;
     use flox_test_utils::GENERATED_DATA;
     use indoc::indoc;
     use pollster::FutureExt;
@@ -1502,17 +1503,15 @@ mod tests {
     /// request groups for each system separately.
     #[test]
     fn make_params_multiple_systems() {
-        let manifest_str = indoc! {r#"
-            version = 1
-
+        let manifest_str = with_latest_schema(indoc! {r#"
             [install]
             vim.pkg-path = "vim"
             emacs.pkg-path = "emacs"
 
             [options]
             systems = ["aarch64-darwin", "x86_64-linux"]
-        "#};
-        let manifest = toml::from_str(manifest_str).unwrap();
+        "#});
+        let manifest = toml_edit::de::from_str::<ManifestLatest>(&manifest_str).unwrap();
 
         let expected_params = vec![PackageGroup {
             name: DEFAULT_GROUP_NAME.to_string(),
@@ -1584,9 +1583,7 @@ mod tests {
     /// If a package specifies systems, use those instead.
     #[test]
     fn make_params_limit_systems() {
-        let manifest_str = indoc! {r#"
-            version = 1
-
+        let manifest_str = with_latest_schema(indoc! {r#"
             [install]
             vim.pkg-path = "vim"
             emacs.pkg-path = "emacs"
@@ -1594,8 +1591,8 @@ mod tests {
 
             [options]
             systems = ["aarch64-darwin", "x86_64-linux"]
-        "#};
-        let manifest = toml::from_str(manifest_str).unwrap();
+        "#});
+        let manifest = toml_edit::de::from_str::<ManifestLatest>(&manifest_str).unwrap();
 
         let expected_params = vec![PackageGroup {
             name: DEFAULT_GROUP_NAME.to_string(),
@@ -1687,9 +1684,7 @@ mod tests {
     /// create request groups for each group.
     #[test]
     fn make_params_groups() {
-        let manifest_str = indoc! {r#"
-            version = 1
-
+        let manifest_str = with_latest_schema(indoc! {r#"
             [install]
             vim.pkg-path = "vim"
             vim.pkg-group = "group1"
@@ -1699,9 +1694,9 @@ mod tests {
 
             [options]
             systems = ["aarch64-darwin"]
-        "#};
+        "#});
 
-        let manifest = toml::from_str(manifest_str).unwrap();
+        let manifest = toml_edit::de::from_str::<ManifestLatest>(&manifest_str).unwrap();
 
         let expected_params = vec![
             PackageGroup {
@@ -1943,17 +1938,15 @@ mod tests {
     /// should only return [PackageGroup]s for the catalog descriptors.
     #[test]
     fn make_params_filters_installables() {
-        let manifest_str = indoc! {r#"
-            version = 1
-
+        let manifest_str = with_latest_schema(indoc! {r#"
             [install]
             vim.pkg-path = "vim"
             emacs.flake = "github:nixos/nixpkgs#emacs"
 
             [options]
             systems = ["aarch64-darwin", "x86_64-linux"]
-        "#};
-        let manifest = toml::from_str(manifest_str).unwrap();
+        "#});
+        let manifest = toml_edit::de::from_str::<ManifestLatest>(&manifest_str).unwrap();
 
         let expected_params = vec![PackageGroup {
             name: DEFAULT_GROUP_NAME.to_string(),
@@ -3260,17 +3253,15 @@ mod tests {
 
     #[test]
     fn respects_flake_descriptor_systems() {
-        let manifest_contents = formatdoc! {r#"
-        version = 1
-
+        let manifest_contents = with_latest_schema(formatdoc! {r#"
         [install]
         bpftrace.flake = "github:NixOS/nixpkgs#bpftrace"
         bpftrace.systems = ["x86_64-linux"]
 
         [options]
         systems = ["aarch64-linux", "x86_64-linux"]
-        "#};
-        let manifest = toml_edit::de::from_str(&manifest_contents).unwrap();
+        "#});
+        let manifest = toml_edit::de::from_str::<ManifestLatest>(&manifest_contents).unwrap();
         let installables = LockManifest::collect_flake_installables(&manifest).collect::<Vec<_>>();
         assert_eq!(installables.len(), 1);
         assert_eq!(installables[0].system.as_str(), "x86_64-linux");
@@ -3281,27 +3272,23 @@ mod tests {
     #[test]
     fn merge_manifest_fetches_included_environment() {
         let (flox, tempdir) = flox_instance();
-        let manifest_contents = indoc! {r#"
-        version = 1
-
+        let manifest_contents = with_latest_schema(indoc! {r#"
         [include]
         environments = [
           { dir = "dep1" }
         ]
-        "#};
-        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        "#});
+        let manifest = toml_edit::de::from_str::<ManifestLatest>(&manifest_contents).unwrap();
 
         // Create dep1 environment
         let dep1_path = tempdir.path().join("dep1");
-        let dep1_manifest_contents = indoc! {r#"
-        version = 1
-
+        let dep1_manifest_contents = with_latest_schema(indoc! {r#"
         [vars]
         foo = "dep1"
-        "#};
+        "#});
 
         std::fs::create_dir(&dep1_path).unwrap();
-        let mut dep1 = new_path_environment_in(&flox, dep1_manifest_contents, &dep1_path);
+        let mut dep1 = new_path_environment_in(&flox, &dep1_manifest_contents, &dep1_path);
         dep1.lockfile(&flox).unwrap();
 
         // Merge
@@ -3324,7 +3311,7 @@ mod tests {
         });
         assert_eq!(
             compose.unwrap().include[0].manifest,
-            toml_edit::de::from_str(dep1_manifest_contents).unwrap()
+            toml_edit::de::from_str(&dep1_manifest_contents).unwrap()
         )
     }
 
@@ -3332,9 +3319,7 @@ mod tests {
     #[test]
     fn merge_manifest_preserves_include_order() {
         let (flox, tempdir) = flox_instance();
-        let manifest_contents = indoc! {r#"
-        version = 1
-
+        let manifest_contents = with_latest_schema(indoc! {r#"
         [include]
         environments = [
           { dir = "lowest_precedence" },
@@ -3343,39 +3328,35 @@ mod tests {
 
         [vars]
         foo = "highest_precedence"
-        "#};
-        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        "#});
+        let manifest = toml_edit::de::from_str::<ManifestLatest>(&manifest_contents).unwrap();
 
         // Create lowest_precedence environment
         let lowest_precedence_path = tempdir.path().join("lowest_precedence");
-        let lowest_precedence_manifest_contents = indoc! {r#"
-        version = 1
-
+        let lowest_precedence_manifest_contents = with_latest_schema(indoc! {r#"
         [vars]
         foo = "lowest_precedence"
         bar = "lowest_precedenceLockManifest
-        "#};
+        "#});
         std::fs::create_dir(&lowest_precedence_path).unwrap();
         let mut lowest_precedence = new_path_environment_in(
             &flox,
-            lowest_precedence_manifest_contents,
+            &lowest_precedence_manifest_contents,
             &lowest_precedence_path,
         );
         lowest_precedence.lockfile(&flox).unwrap();
 
         // Create higher precedence environment
         let higher_precedence_path = tempdir.path().join("higher_precedence");
-        let higher_precedence_manifest_contents = indoc! {r#"
-        version = 1
-
+        let higher_precedence_manifest_contents = with_latest_schema(indoc! {r#"
         [vars]
         foo = "higher_precedence"
         bar = "higher_precedence"
-        "#};
+        "#});
         std::fs::create_dir(&higher_precedence_path).unwrap();
         let mut higher_precedence = new_path_environment_in(
             &flox,
-            higher_precedence_manifest_contents,
+            &higher_precedence_manifest_contents,
             &higher_precedence_path,
         );
         higher_precedence.lockfile(&flox).unwrap();
@@ -3403,11 +3384,11 @@ mod tests {
         });
         assert_eq!(
             compose.as_ref().unwrap().include[0].manifest,
-            toml_edit::de::from_str(lowest_precedence_manifest_contents).unwrap()
+            toml_edit::de::from_str(&lowest_precedence_manifest_contents).unwrap()
         );
         assert_eq!(
             compose.unwrap().include[1].manifest,
-            toml_edit::de::from_str(higher_precedence_manifest_contents).unwrap()
+            toml_edit::de::from_str(&higher_precedence_manifest_contents).unwrap()
         );
     }
 
@@ -3424,28 +3405,24 @@ mod tests {
     async fn merge_manifest_respects_precedence_when_skipping_fetch() {
         let (flox, tempdir) = flox_instance();
 
-        let manifest_contents = indoc! {r#"
-        version = 1
-
+        let manifest_contents = with_latest_schema(indoc! {r#"
         [include]
         environments = [
           { dir = "middle_precedence" }
         ]
-        "#};
-        let manifest = mk_test_manifest_from_contents(manifest_contents);
+        "#});
+        let manifest = mk_test_manifest_from_contents(&manifest_contents);
 
         // Create middle_precedence environment
         let middle_precedence_path = tempdir.path().join("middle_precedence");
-        let middle_precedence_manifest_contents = indoc! {r#"
-        version = 1
-
+        let middle_precedence_manifest_contents = with_latest_schema(indoc! {r#"
         [vars]
         foo = "middle_precedence"
-        "#};
+        "#});
         std::fs::create_dir(&middle_precedence_path).unwrap();
         let mut middle_precedence = new_path_environment_in(
             &flox,
-            middle_precedence_manifest_contents,
+            &middle_precedence_manifest_contents,
             &middle_precedence_path,
         );
         middle_precedence.lockfile(&flox).unwrap();
@@ -3465,46 +3442,40 @@ mod tests {
         .unwrap();
 
         // Edit manifest to include two more includes
-        let manifest_contents = indoc! {r#"
-        version = 1
-
+        let manifest_contents = with_latest_schema(indoc! {r#"
         [include]
         environments = [
           { dir = "lowest_precedence" },
           { dir = "middle_precedence" },
           { dir = "highest_precedence" },
         ]
-        "#};
-        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        "#});
+        let manifest = toml_edit::de::from_str::<ManifestLatest>(&manifest_contents).unwrap();
 
         // Create lowest_precedence environment
         let lowest_precedence_path = tempdir.path().join("lowest_precedence");
-        let lowest_precedence_manifest_contents = indoc! {r#"
-        version = 1
-
+        let lowest_precedence_manifest_contents = with_latest_schema(indoc! {r#"
         [vars]
         foo LockManifest"lowest_precedence"
-        "#};
+        "#});
         std::fs::create_dir(&lowest_precedence_path).unwrap();
         let mut lowest_precedence = new_path_environment_in(
             &flox,
-            lowest_precedence_manifest_contents,
+            &lowest_precedence_manifest_contents,
             &lowest_precedence_path,
         );
         lowest_precedence.lockfile(&flox).unwrap();
 
         // Create highest_precedence environment
         let highest_precedence_path = tempdir.path().join("highest_precedence");
-        let highest_precedence_manifest_contents = indoc! {r#"
-        version = 1
-
+        let highest_precedence_manifest_contents = with_latest_schema(indoc! {r#"
         [vars]
         foo = "highest_precedence"
-        "#};
+        "#});
         std::fs::create_dir(&highest_precedence_path).unwrap();
         let mut highest_precedence = new_path_environment_in(
             &flox,
-            highest_precedence_manifest_contents,
+            &highest_precedence_manifest_contents,
             &highest_precedence_path,
         );
         highest_precedence.lockfile(&flox).unwrap();
@@ -3530,15 +3501,15 @@ mod tests {
         });
         assert_eq!(
             compose.as_ref().unwrap().include[0].manifest,
-            toml_edit::de::from_str(lowest_precedence_manifest_contents).unwrap()
+            toml_edit::de::from_str(&lowest_precedence_manifest_contents).unwrap()
         );
         assert_eq!(
             compose.as_ref().unwrap().include[1].manifest,
-            toml_edit::de::from_str(middle_precedence_manifest_contents).unwrap()
+            toml_edit::de::from_str(&middle_precedence_manifest_contents).unwrap()
         );
         assert_eq!(
             compose.as_ref().unwrap().include[2].manifest,
-            toml_edit::de::from_str(highest_precedence_manifest_contents).unwrap()
+            toml_edit::de::from_str(&highest_precedence_manifest_contents).unwrap()
         );
     }
 
@@ -3679,28 +3650,24 @@ mod tests {
     async fn merge_manifest_removes_stale_locked_includes() {
         let (flox, tempdir) = flox_instance();
 
-        let mut manifest_contents = indoc! {r#"
-        version = 1
-
+        let manifest_contents = with_latest_schema(indoc! {r#"
         [include]
         environments = [
           { dir = "dep1" }
         ]
-        "#};
-        let manifest = mk_test_manifest_from_contents(manifest_contents);
+        "#});
+        let manifest = mk_test_manifest_from_contents(&manifest_contents);
 
         // Create dep1 environment
         let dep1_path = tempdir.path().join("dep1");
-        let dep1_manifest_contents = indoc! {r#"
-        version = 1
-
+        let dep1_manifest_contents = with_latest_schema(indoc! {r#"
         [vars]
         foo = "dep1"
-        "#};
-        let dep1_manifest = toml_edit::de::from_str(dep1_manifest_contents).unwrap();
+        "#});
+        let dep1_manifest = toml_edit::de::from_str(&dep1_manifest_contents).unwrap();
 
         std::fs::create_dir(&dep1_path).unwrap();
-        let mut dep1 = new_path_environment_in(&flox, dep1_manifest_contents, &dep1_path);
+        let mut dep1 = new_path_environment_in(&flox, &dep1_manifest_contents, &dep1_path);
         dep1.lockfile(&flox).unwrap();
 
         // Lock
@@ -3732,7 +3699,7 @@ mod tests {
         );
 
         // Remove the include of dep1
-        manifest_contents = indoc! {r#"
+        let manifest_contents = indoc! {r#"
         versionLockManifest= 1
         "#};
         let manifest = Manifest::parse_and_migrate(manifest_contents, None).unwrap();
@@ -3758,35 +3725,29 @@ mod tests {
     fn merge_manifest_errors_for_non_unique_include_names() {
         let (flox, tempdir) = flox_instance();
 
-        let manifest_contents = indoc! {r#"
-        version = 1
-
+        let manifest_contents = with_latest_schema(indoc! {r#"
         [include]
         environments = [
           { dir = "dep1" },
           { dir = "dep2" }
         ]
-        "#};
-        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        "#});
+        let manifest = toml_edit::de::from_str::<ManifestLatest>(&manifest_contents).unwrap();
 
         // Create dep1 named dep
         let dep1_path = tempdir.path().join("dep1");
-        let dep1_manifest_contents = indoc! {r#"
-        version = 1
-        "#};
+        let dep1_manifest_contents = with_latest_schema("");
         std::fs::create_dir(&dep1_path).unwrap();
         let mut dep1 =
-            new_named_path_environment_in(&flox, dep1_manifest_contents, &dep1_path, "dep");
+            new_named_path_environment_in(&flox, &dep1_manifest_contents, &dep1_path, "dep");
         dep1.lockfile(&flox).unwrap();
 
         // Create dep2 named dep
         let dep2_path = tempdir.path().join("dep2");
-        let dep2_manifest_contents = indoc! {r#"
-        version = 1
-        "#};
+        let dep2_manifest_contents = with_latest_schema("");
         std::fs::create_dir(&dep2_path).unwrap();
         let mut dep2 =
-            new_named_path_environment_in(&flox, dep2_manifest_contents, &dep2_path, "dep");
+            new_named_path_environment_in(&flox, &dep2_manifest_contents, &dep2_path, "dep");
         dep2.lockfile(&flox).unwrap();
 
         // LockManifest
@@ -3820,30 +3781,26 @@ mod tests {
         let (flox, _tempdir) = flox_instance_with_optional_floxhub(Some(env_ref.owner()));
 
         // Create two "child" environments, local and remote.
-        let mut dep_child_local = new_path_environment(&flox, indoc! {r#"
-                version = 1
-
+        let dep_child_local_manifest = with_latest_schema(indoc! {r#"
                 [vars]
                 child_local = "hi"
             "#});
+        let mut dep_child_local = new_path_environment(&flox, &dep_child_local_manifest);
         dep_child_local.lockfile(&flox).unwrap();
 
-        let _dep_child_remote = mock_remote_environment(
-            &flox,
-            indoc! {r#"
-                version = 1
-
+        let dep_child_remote_manifest = with_latest_schema(indoc! {r#"
                 [vars]
                 child_remote = "hi"
-            "#},
+            "#});
+        let _dep_child_remote = mock_remote_environment(
+            &flox,
+            &dep_child_remote_manifest,
             env_ref.owner().clone(),
             Some(&env_ref.name().to_string()),
         );
 
         // Create a "parent" environment that includes the local and remote "children".
-        let mut dep_parent = new_path_environment(&flox, &formatdoc! {r#"
-                version = 1
-
+        let dep_parent_manifest = with_latest_schema(formatdoc! {r#"
                 [vars]
                 parent = "hi"
 
@@ -3853,12 +3810,11 @@ mod tests {
                     {{ remote = "owner/name" }},
                 ]
             "#, include_path = dep_child_local.parent_path().unwrap().to_string_lossy() });
+        let mut dep_parent = new_path_environment(&flox, &dep_parent_manifest);
         dep_parent.lockfile(&flox).unwrap();
 
         // Create a composer environment that indirectly includes the "children".
-        let mut composer = new_path_environment(&flox, &formatdoc! {r#"
-                version = 1
-
+        let composer_manifest = with_latest_schema(formatdoc! {r#"
                 [vars]
                 composer = "hi"
 
@@ -3867,6 +3823,7 @@ mod tests {
                     {{ dir = "{include_path}" }},
                 ]
             "#, include_path = &dep_parent.parent_path().unwrap().to_string_lossy() });
+        let mut composer = new_path_environment(&flox, &composer_manifest);
 
         let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
         assert_eq!(
