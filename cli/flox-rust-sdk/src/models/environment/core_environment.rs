@@ -315,14 +315,6 @@ impl CoreEnvironment<ReadOnly> {
         Ok(manifest)
     }
 
-    pub(crate) fn manifest_without_writing_new_lockfile(
-        &self,
-    ) -> Result<Manifest<Migrated>, EnvironmentError> {
-        let lockfile = self.existing_lockfile()?;
-        let manifest = self.pre_migration_manifest()?.migrate(lockfile.as_ref())?;
-        Ok(manifest)
-    }
-
     /// Install packages to the environment atomically
     ///
     /// Returns the new manifest content if the environment was modified. Also
@@ -1156,43 +1148,47 @@ impl CoreEnvironmentError {
 
 #[cfg(any(test, feature = "tests"))]
 pub mod test_helpers {
+    use flox_manifest::test_helpers::with_schema;
     use indoc::indoc;
 
     use super::*;
     use crate::flox::Flox;
     use crate::models::environment::fetcher::test_helpers::mock_include_fetcher;
 
-    #[cfg(target_os = "macos")]
-    pub const MANIFEST_INCOMPATIBLE_SYSTEM_STR: &str = indoc! {r#"
-        version = 1
-        [options]
-        systems = ["x86_64-linux"]
-        "#};
-    #[cfg(target_os = "macos")]
-    pub const MANIFEST_INCOMPATIBLE_SYSTEM_V1_STR: &str = indoc! {r#"
-        version = 1
-        [options]
-        systems = ["x86_64-linux"]
-        "#};
-    #[cfg(target_os = "linux")]
-    pub const MANIFEST_INCOMPATIBLE_SYSTEM_STR: &str = indoc! {r#"
-        version = 1
-        [options]
-        systems = ["aarch64-darwin"]
-        "#};
-    #[cfg(target_os = "linux")]
-    pub const MANIFEST_INCOMPATIBLE_SYSTEM_V1_STR: &str = indoc! {r#"
-        version = 1
-        [options]
-        systems = ["aarch64-darwin"]
-        "#};
+    pub fn manifest_contents_with_incompatible_system(schema: KnownSchemaVersion) -> String {
+        #[cfg(target_os = "macos")]
+        let contents = with_schema(schema, indoc! {r#"
+            [options]
+            systems = [ "x86_64-linux" ]
+        "#});
+        #[cfg(target_os = "linux")]
+        let contents = with_schema(schema, indoc! {r#"
+            [options]
+            systems = [ "x86_64-linux" ]
+        "#});
+        contents
+    }
+
+    pub fn manifest_contents_with_latest_schema_and_incompatible_system() -> String {
+        manifest_contents_with_incompatible_system(KnownSchemaVersion::latest())
+    }
+
+    pub fn manifest_contents_with_schema_and_incompatible_system(
+        schema: KnownSchemaVersion,
+    ) -> String {
+        manifest_contents_with_incompatible_system(schema)
+    }
 
     pub fn manifest_with_incompatible_system() -> Manifest<Validated> {
-        Manifest::parse_toml_typed(MANIFEST_INCOMPATIBLE_SYSTEM_STR).unwrap()
+        Manifest::parse_toml_typed(manifest_contents_with_latest_schema_and_incompatible_system())
+            .unwrap()
     }
 
     pub fn manifest_with_incompatible_system_v1() -> Manifest<Validated> {
-        Manifest::parse_toml_typed(MANIFEST_INCOMPATIBLE_SYSTEM_V1_STR).unwrap()
+        Manifest::parse_toml_typed(manifest_contents_with_schema_and_incompatible_system(
+            KnownSchemaVersion::V1,
+        ))
+        .unwrap()
     }
 
     pub fn new_core_environment(flox: &Flox, contents: &str) -> CoreEnvironment {
