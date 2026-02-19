@@ -257,7 +257,7 @@ jobs:
           SETUP_NIX: "false"
 
       - name: "Configure AWS Credentials"
-        uses: "aws-actions/configure-aws-credentials@v5"
+        uses: "aws-actions/configure-aws-credentials@v6"
         with:
           role-to-assume: "arn:aws:iam::759020684799:role/github-oidc-role-flox-cache-public"
           role-session-name: "${{ github.run_id }}"
@@ -334,7 +334,7 @@ jobs:
           SETUP_NIX: "false"
 
       - name: "Configure AWS Credentials"
-        uses: "aws-actions/configure-aws-credentials@v5"
+        uses: "aws-actions/configure-aws-credentials@v6"
         with:
           role-to-assume: "arn:aws:iam::759020684799:role/github-oidc-role-flox-cache-public"
           role-session-name: "${{ github.run_id }}"
