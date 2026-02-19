@@ -7,7 +7,7 @@ use flox_manifest::interfaces::{AsWritableManifest, CommonFields, WriteManifest}
 use flox_manifest::lockfile::{LOCKFILE_FILENAME, Lockfile};
 use flox_manifest::parsed::common::IncludeDescriptor;
 use flox_manifest::raw::{CatalogPackage, FlakePackage, PackageToInstall, StorePath};
-use flox_manifest::{Manifest, Migrated, Validated};
+use flox_manifest::{Manifest, ManifestError, Migrated, Validated};
 use thiserror::Error;
 use tracing::{debug, instrument};
 
@@ -181,6 +181,8 @@ pub enum ManagedEnvironmentError {
     #[error("failed to locate project in environment registry")]
     Registry(#[from] EnvRegistryError),
 
+    #[error(transparent)]
+    Manifest(#[from] ManifestError),
     #[error(transparent)]
     Core(#[from] CoreEnvironmentError),
     #[error(transparent)]
@@ -1123,11 +1125,7 @@ impl ManagedEnvironment {
             return Ok(false);
         }
 
-        let local_manifest_bytes = local
-            .manifest_without_writing_new_lockfile()
-            .map_err(Box::new)?
-            .as_writable()
-            .to_string();
+        let local_manifest_bytes = local.pre_migration_manifest()?.as_writable().to_string();
 
         let remote_manifest_bytes = generations
             .current_gen_manifest_contents()

@@ -665,7 +665,7 @@ mod tests {
         mock_managed_environment_unlocked,
         unusable_mock_managed_environment,
     };
-    use flox_rust_sdk::models::environment::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM_STR;
+    use flox_rust_sdk::models::environment::test_helpers::manifest_contents_with_latest_schema_and_incompatible_system;
     use flox_rust_sdk::providers::buildenv::BuildEnvError;
     use tempfile::tempdir_in;
 
@@ -734,7 +734,11 @@ mod tests {
             incompatible_system_result(),
             &dot_flox_path,
             true,
-            &mut mock_managed_environment_unlocked(&flox, MANIFEST_INCOMPATIBLE_SYSTEM_STR, owner),
+            &mut mock_managed_environment_unlocked(
+                &flox,
+                &manifest_contents_with_latest_schema_and_incompatible_system(),
+                owner,
+            ),
             None,
         )
         .unwrap();
@@ -760,7 +764,7 @@ mod tests {
                 false,
                 &mut mock_managed_environment_unlocked(
                     &flox,
-                    MANIFEST_INCOMPATIBLE_SYSTEM_STR,
+                    &manifest_contents_with_latest_schema_and_incompatible_system(),
                     owner
                 ),
                 Some(QueryFunctions {
@@ -792,7 +796,11 @@ mod tests {
             incompatible_system_result(),
             &dot_flox_path,
             false,
-            &mut mock_managed_environment_unlocked(&flox, MANIFEST_INCOMPATIBLE_SYSTEM_STR, owner),
+            &mut mock_managed_environment_unlocked(
+                &flox,
+                &manifest_contents_with_latest_schema_and_incompatible_system(),
+                owner,
+            ),
             Some(QueryFunctions {
                 query_add_system: |_| Ok(true),
                 query_ignore_build_errors: || panic!(),
