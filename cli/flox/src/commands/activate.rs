@@ -23,7 +23,7 @@ use flox_core::traceable_path;
 use flox_manifest::interfaces::{AsWritableManifest, CommonFields, WriteManifest};
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::IncludeDescriptor;
-use flox_manifest::{Manifest, Migrated, MigratedTypedOnly};
+use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::floxmeta_branch::BranchOrd;
 use flox_rust_sdk::models::environment::generations::{GenerationId, GenerationsExt};

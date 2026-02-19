@@ -455,6 +455,7 @@ mod tests {
         nix_eval_jobs_descriptor,
     };
     use flox_manifest::parsed::common::DEFAULT_PRIORITY;
+    use flox_manifest::test_helpers::with_latest_schema;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
     use indoc::indoc;
@@ -905,35 +906,31 @@ mod tests {
 
         // Create dep environment
         let dep_path = tempdir.path().join("dep");
-        let dep_manifest_contents = indoc! {r#"
-        version = 1
-
-        [services]
-        sleep2.command = "sleep infinity"
-        sleep2.is-daemon = true
-        "#};
+        let dep_manifest_contents = with_latest_schema(indoc! {r#"
+            [services]
+            sleep2.command = "sleep infinity"
+            sleep2.is-daemon = true
+        "#});
 
         fs::create_dir(&dep_path).unwrap();
-        let mut dep = new_path_environment_in(&flox, dep_manifest_contents, &dep_path);
+        let mut dep = new_path_environment_in(&flox, &dep_manifest_contents, &dep_path);
         dep.lockfile(&flox).unwrap();
 
         // Create composer environment
         let composer_path = tempdir.path().join("composer");
-        let composer_manifest_contents = indoc! {r#"
-        version = 1
+        let composer_manifest_contents = with_latest_schema(indoc! {r#"
+            [include]
+            environments = [
+                { dir = "../dep" }
+            ]
 
-        [include]
-        environments = [
-          { dir = "../dep" }
-        ]
-
-        [services]
-        sleep1.command = "sleep infinity"
-        sleep1.is-daemon = true
-        "#};
+            [services]
+            sleep1.command = "sleep infinity"
+            sleep1.is-daemon = true
+        "#});
         fs::create_dir(&composer_path).unwrap();
         let mut composer =
-            new_path_environment_in(&flox, composer_manifest_contents, &composer_path);
+            new_path_environment_in(&flox, &composer_manifest_contents, &composer_path);
         let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
 
         assert_eq!(
@@ -946,15 +943,12 @@ mod tests {
                     .to_string()
             )
             .unwrap(),
-            indoc! {r#"
-                version = 1
-
+            with_latest_schema(indoc! {r#"
                 [services]
                 sleep1.command = "sleep infinity"
                 sleep1.is-daemon = true
                 sleep2.command = "sleep infinity"
-                sleep2.is-daemon = true
-            "#}
+                sleep2.is-daemon = true"#})
         );
     }
 

@@ -466,6 +466,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             format_core_error(core_environment_error)
         },
         ManagedEnvironmentError::Environment(_) => display_chain(err),
+        ManagedEnvironmentError::Manifest(_) => display_chain(err),
     }
 }
 
