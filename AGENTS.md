@@ -25,8 +25,16 @@ nix develop -c just test-all
 nix develop -c cargo clippy --all
 ```
 
-**This is required** — running `just`, `cargo`, or other build/test commands
-without the `nix develop` wrapper will fail with "command not found".
+**This includes git operations** — `git push` and `git commit` trigger
+pre-commit/pre-push hooks that depend on tools (clippy, rustfmt, treefmt)
+provided by the dev shell:
+
+```bash
+nix develop -c git push origin my-branch
+```
+
+**This is required** — running `just`, `cargo`, `git push`, or other commands
+without the `nix develop` wrapper will fail with "command not found" errors.
 
 ## Common Commands
 
