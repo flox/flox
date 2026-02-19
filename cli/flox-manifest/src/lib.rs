@@ -32,6 +32,7 @@ use toml_edit::DocumentMut;
 use crate::interfaces::{
     AsTypedOnlyManifest,
     AsWritableManifest,
+    CommonFields,
     OriginalSchemaVersion,
     SchemaVersion,
 };
@@ -338,12 +339,14 @@ impl Manifest<TomlParsed> {
     pub fn validate_toml(doc: &DocumentMut) -> Result<Manifest<Validated>, ManifestError> {
         let schema_version: KnownSchemaVersion = get_schema_version_kind(doc)?.try_into()?;
         let parsed = Manifest::<Init>::parse_with_schema(doc, schema_version)?;
-        Ok(Manifest {
+        let manifest = Manifest {
             inner: Validated {
                 raw: doc.clone(),
                 parsed,
             },
-        })
+        };
+        manifest.services().validate()?;
+        Ok(manifest)
     }
 }
 
