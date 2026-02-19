@@ -2,12 +2,17 @@
   inputs,
   lib,
   openssl,
+  rustPlatform,
+  krb5,
   pkg-config,
   pkgsFor,
   rust-toolchain,
   stdenv,
   flox-src,
   llvmPackages,
+  # Override catalog authentication strategy
+  # Options: "floxhub-authn-kerberos"
+  overrideCatalogAuth ? null,
 }:
 let
   # crane (<https://crane.dev/>) library for building rust packages
@@ -34,16 +39,23 @@ let
 
       src = craneLib.cleanCargoSource (craneLib.path flox-src);
 
+      # Override catalog authentication strategy if needed
+      cargoExtraArgs =
+        if overrideCatalogAuth != null then "--features flox-rust-sdk/${overrideCatalogAuth}" else "";
+
       # runtime dependencies of the dependent crates
       buildInputs = [
         # reqwest -> hyper -> openssl-sys
         openssl.dev
-      ];
+      ]
+      # Conditionally include Kerberos dependencies for GSSAPI
+      ++ lib.optional (overrideCatalogAuth == "floxhub-authn-kerberos") krb5.dev;
 
       nativeBuildInputs = [
         pkg-config
       ]
-      ++ lib.optional (stdenv.hostPlatform.system == "x86_64-linux") [ llvmPackages.bintools ];
+      ++ lib.optional (overrideCatalogAuth == "floxhub-authn-kerberos") rustPlatform.bindgenHook
+      ++ lib.optional (stdenv.hostPlatform.system == "x86_64-linux") llvmPackages.bintools;
       passthru = {
         inherit envs;
       };
