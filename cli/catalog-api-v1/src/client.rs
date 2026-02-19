@@ -5874,7 +5874,6 @@ Optional Query Parameters:
   all catalogs. Note: when searching base catalog, search_term is required.
 - **page**: Page number for pagination (default: 0)
 - **pageSize**: Page size for pagination (default: 10)
-
 Returns:
 - **PackageSearchResult**: A list of PackageInfoSearch items and total count
 
