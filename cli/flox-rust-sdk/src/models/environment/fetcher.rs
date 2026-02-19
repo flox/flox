@@ -171,6 +171,7 @@ mod test {
     use std::fs;
 
     use flox_manifest::interfaces::AsTypedOnlyManifest;
+    use flox_manifest::test_helpers::with_latest_schema;
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
 
@@ -186,13 +187,11 @@ mod test {
         let (flox, tempdir) = flox_instance();
 
         let environment_path = tempdir.path().join("environment");
-        let manifest_contents = indoc! {r#"
-        version = 1
-        "#};
-        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        let manifest_contents = with_latest_schema("");
+        let manifest = toml_edit::de::from_str(&manifest_contents).unwrap();
 
         fs::create_dir(&environment_path).unwrap();
-        let mut environment = new_path_environment_in(&flox, manifest_contents, &environment_path);
+        let mut environment = new_path_environment_in(&flox, &manifest_contents, &environment_path);
         environment.lockfile(&flox).unwrap();
 
         let include_fetcher = IncludeFetcher {
@@ -218,13 +217,11 @@ mod test {
         let (flox, tempdir) = flox_instance();
 
         let environment_path = tempdir.path().join("environment");
-        let manifest_contents = indoc! {r#"
-        version = 1
-        "#};
-        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        let manifest_contents = with_latest_schema("");
+        let manifest = toml_edit::de::from_str(&manifest_contents).unwrap();
 
         fs::create_dir(&environment_path).unwrap();
-        let mut environment = new_path_environment_in(&flox, manifest_contents, &environment_path);
+        let mut environment = new_path_environment_in(&flox, &manifest_contents, &environment_path);
         environment.lockfile(&flox).unwrap();
 
         let include_fetcher = IncludeFetcher {
@@ -255,12 +252,10 @@ mod test {
         let (flox, tempdir) = flox_instance();
 
         let environment_path = tempdir.path().join("environment");
-        let manifest_contents = indoc! {r#"
-        version = 1
-        "#};
+        let manifest_contents = with_latest_schema("");
 
         fs::create_dir(&environment_path).unwrap();
-        let mut environment = new_path_environment_in(&flox, manifest_contents, &environment_path);
+        let mut environment = new_path_environment_in(&flox, &manifest_contents, &environment_path);
 
         let include_fetcher = IncludeFetcher {
             base_directory: Some(tempdir.path().to_path_buf()),
@@ -288,22 +283,22 @@ mod test {
         include_fetcher.fetch(&flox, &include_descriptor).unwrap();
 
         // After writing a comment, fetching should succeed
-        fs::write(environment.manifest_path(&flox).unwrap(), indoc! {r#"
-        version = 1
-
-        # comment
-        "#})
+        fs::write(
+            environment.manifest_path(&flox).unwrap(),
+            with_latest_schema("# comment"),
+        )
         .unwrap();
         include_fetcher.fetch(&flox, &include_descriptor).unwrap();
 
         // After writing an actual change, fetching should fail
-        fs::write(environment.manifest_path(&flox).unwrap(), indoc! {r#"
-        version = 1
-
-        # comment
-        [vars]
-        foo = "bar"
-        "#})
+        fs::write(
+            environment.manifest_path(&flox).unwrap(),
+            with_latest_schema(indoc! {r#"
+                # comment
+                [vars]
+                foo = "bar"
+            "#}),
+        )
         .unwrap();
         let err = include_fetcher
             .fetch(&flox, &include_descriptor)
@@ -357,7 +352,7 @@ mod test {
 
         let mut remote_env = mock_remote_environment(
             &flox,
-            "version = 1",
+            &with_latest_schema(""),
             env_ref.owner().clone(),
             Some(&env_ref.name().to_string()),
         );
@@ -381,13 +376,11 @@ mod test {
         };
 
         // Modify the remote environment with a new generation.
-        let manifest_contents = indoc! {r#"
-            version = 1
-
+        let manifest_contents = with_latest_schema(indoc! {r#"
             [vars]
             foo = "bar"
-        "#};
-        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        "#});
+        let manifest = toml_edit::de::from_str(&manifest_contents).unwrap();
         remote_env
             .edit(&flox, manifest_contents.to_string())
             .unwrap();
@@ -432,7 +425,7 @@ mod test {
 
         let mut remote_env = mock_remote_environment(
             &flox,
-            "version = 1",
+            &with_latest_schema(""),
             env_ref.owner().clone(),
             Some(&env_ref.name().to_string()),
         );
@@ -462,14 +455,12 @@ mod test {
         });
 
         // Modify the remote environment to create a new generation.
-        let manifest_contents = indoc! {r#"
-            version = 1
-
+        let manifest_contents = with_latest_schema(indoc! {r#"
             [vars]
             foo = "bar"
-        "#};
+        "#});
         remote_env
-            .edit(&flox, manifest_contents.to_string())
+            .edit(&flox, manifest_contents.clone())
             .unwrap();
 
         let fetched_after_upstream_changes =
