@@ -483,3 +483,20 @@ EOF
   hello_pkg_path="$(tomlq -r -c '.install.hello."pkg-path"' < .flox/env/manifest.toml)"
   assert_equal "$hello_pkg_path" "hello"
 }
+
+@test "installing package to bad manifest doesn't update lockfile" {
+  unset RUST_BACKTRACE
+  "$FLOX_BIN" init -b
+  cat >"$PWD/.flox/env/manifest.toml" <<- EOF
+version = 1
+
+[services.bad]
+command = "cmd"
+is-daemon = true
+# missing shutdown.command
+EOF
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    run "$FLOX_BIN" install hello
+  assert_failure
+  assert [ ! -f "$PWD/.flox/env/manifest.lock" ]
+}

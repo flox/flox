@@ -312,9 +312,10 @@ impl CoreEnvironment<ReadOnly> {
     }
 
     pub(crate) fn manifest(&mut self, flox: &Flox) -> Result<Manifest<Migrated>, EnvironmentError> {
+        let manifest = self.pre_migration_manifest()?;
         let lockfile = self.ensure_locked(flox)?.into();
-        let manifest = self.pre_migration_manifest()?.migrate(Some(&lockfile))?;
-        Ok(manifest)
+        let migrated = manifest.migrate(Some(&lockfile))?;
+        Ok(migrated)
     }
 
     /// Install packages to the environment atomically
