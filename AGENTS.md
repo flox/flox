@@ -10,11 +10,28 @@ Flox is a virtual environment and package manager built on Nix. It creates porta
 
 ## Development Setup
 
+All tools (`just`, `cargo`, `rustc`, `bats`, etc.) are provided by the Nix dev
+shell. They are not available on bare PATH.
+
 ```bash
-nix develop                    # Enter dev shell with all dependencies
+nix develop                    # Enter interactive dev shell
 ```
 
+**For agents and non-interactive use**, wrap every command with `nix develop -c`:
+
+```bash
+nix develop -c just build
+nix develop -c just test-all
+nix develop -c cargo clippy --all
+```
+
+**This is required** — running `just`, `cargo`, or other build/test commands
+without the `nix develop` wrapper will fail with "command not found".
+
 ## Common Commands
+
+All commands below assume you are inside `nix develop` or prefixed with
+`nix develop -c`.
 
 ```bash
 # Building
