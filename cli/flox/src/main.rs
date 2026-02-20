@@ -32,7 +32,6 @@ mod config;
 mod utils;
 
 async fn run(args: FloxArgs) -> Result<()> {
-    set_parent_process_id();
     populate_default_nix_env_vars();
     let config = config::Config::parse()?;
     args.handle(config).await?;
@@ -241,18 +240,6 @@ fn set_user() -> Result<()> {
             debug!(euid = %effective_uid, user = %user_var, "Unable to get passwd entry for USER and HOME check");
         };
         Ok(())
-    }
-}
-
-/// Stores the PID of the executing shell as shells do not set $SHELL
-/// when they are launched.
-///
-/// $FLOX_PARENT_PID is used when launching sub-shells to ensure users
-/// keep running their chosen shell.
-fn set_parent_process_id() {
-    let ppid = nix::unistd::getppid();
-    unsafe {
-        env::set_var("FLOX_PARENT_PID", ppid.to_string());
     }
 }
 

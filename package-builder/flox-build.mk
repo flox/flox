@@ -377,7 +377,7 @@ endef
 # from the environment prior to kicking off a manifest build.
 # TODO: move the clearing of variables to "activate --mode build"
 FLOX_MANAGED_ENV_VARS = \
-  FLOX_ACTIVATE_TRACE FLOX_ENV_DIRS FLOX_RUNTIME_DIR \
+  FLOX_ACTIVATE_TRACE FLOX_ENV_DIRS \
   INFOPATH CPATH PKG_CONFIG_PATH ACLOCAL_PATH XDG_DATA_DIRS \
   LD_AUDIT GLIBC_TUNABLES DYLD_FALLBACK_LIBRARY_PATH \
   PYTHONPATH PIP_CONFIG_FILE RUST_SRC_PATH JUPYTER_PATH LD_FLOXLIB_FILES_PATH
@@ -730,7 +730,7 @@ define JSON_VERSION_TO_COMMAND_jq =
       to_entries[] | \
       if .key == "file" then "$(_cat) \(.value)" else (
         if .key == "command" then (
-          "$(FLOX_ENV)/activate --mode build --skip-hook-on-activate -- \(.value)"
+          "$(FLOX_ENV)/activate --mode build --skip-hook-on-activate --env $(FLOX_ENV) -- \(.value)"
         ) else (
           "unknown version type: \(.key)" | halt_error(1)
         ) end

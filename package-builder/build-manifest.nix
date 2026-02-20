@@ -189,12 +189,9 @@ pkgs.runCommand name
               ''
                 # When not preserving a cache we just run the build normally.
 
-                # flox-activations needs runtime dir for activation state dir
-                # TMP will be set to something like
-                # /private/tmp/nix-build-file-0.0.0.drv-0
                 # N.B. not using t3 --forcecolor option because Nix sandbox
                 # strips color codes from output anyway.
-                FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
+                FLOX_SRC_DIR=$(pwd) \
                   ${develop-copy-env-package}/activate --env ${develop-copy-env-package} \
                     --mode build --skip-hook-on-activate --env-project $(pwd) -- \
                       t3 --relative $log -- bash -e ${buildScript-contents}
@@ -205,13 +202,9 @@ pkgs.runCommand name
                 # remove $out on failure and allow the Nix build to proceed to write
                 # the result symlink.
 
-                # flox-activations needs runtime dir for activation state dir
-                # TMP will be set to something like
-                # /private/tmp/nix-build-file-0.0.0.drv-0
-
                 # See flox-build.mk for a detailed explanation of why we use a nested
                 # activation when performing builds.
-                FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
+                FLOX_SRC_DIR=$(pwd) \
                   ${develop-copy-env-package}/activate --env ${develop-copy-env-package} \
                     --mode build --skip-hook-on-activate --env-project $(pwd) -- \
                       t3 --relative $log -- bash -e ${buildScript-contents} || \
@@ -330,11 +323,9 @@ pkgs.runCommand name
           assertExecutable "$prog"
           hidden="$(dirname "$prog")/.$(basename "$prog")"-wrapped
           mv "$prog" "$hidden"
-          # TODO: we shouldn't need to set FLOX_RUNTIME_DIR here
           makeShellWrapper "${build-wrapper-env-package}/wrapper" "$prog" \
             --inherit-argv0 \
             --set FLOX_MANIFEST_BUILD_OUT "$out" \
-            --set FLOX_RUNTIME_DIR "/tmp" \
             --run 'export FLOX_SET_ARG0="$0"' \
             --add-flags "--env ${build-wrapper-env-package}" \
             --add-flags -- \

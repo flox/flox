@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::LazyLock;
 
-use flox_core::activate::vars::FLOX_RUNTIME_DIR_VAR;
 use indoc::formatdoc;
 use itertools::Itertools;
 use serde::Deserialize;
@@ -198,7 +197,6 @@ pub struct FloxBuildMk<'args> {
     verbosity: i32,
     // should these be borrows?
     temp_dir: &'args Path,
-    runtime_dir: &'args Path,
 
     // common build components
     base_dir: &'args Path,
@@ -222,7 +220,6 @@ impl FloxBuildMk<'_> {
         FloxBuildMk {
             verbosity: flox.verbosity,
             temp_dir: &flox.temp_dir,
-            runtime_dir: &flox.runtime_dir,
             base_dir,
             expression_dir,
             built_environments,
@@ -246,7 +243,6 @@ impl FloxBuildMk<'_> {
         FloxBuildMk {
             verbosity: flox.verbosity,
             temp_dir: &flox.temp_dir,
-            runtime_dir: &flox.runtime_dir,
             base_dir,
             expression_dir,
             built_environments,
@@ -350,11 +346,6 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         if !build_cache {
             command.arg("DISABLE_BUILDCACHE=true");
         }
-
-        // activate needs this var
-        // TODO: we should probably figure out a more consistent way to pass
-        // this since it's also passed for `flox activate`
-        command.env(FLOX_RUNTIME_DIR_VAR, self.runtime_dir);
 
         if self.stdout_buffer.is_some() {
             command.stdout(Stdio::piped());

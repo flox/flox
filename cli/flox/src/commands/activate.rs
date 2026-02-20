@@ -400,9 +400,6 @@ impl Activate {
             prompt_color_2,
             flox_prompt_environments,
             set_prompt,
-            // TODO: we should probably figure out a more consistent way to
-            // pass this since it's also passed for `flox build`
-            flox_runtime_dir: flox.runtime_dir.to_string_lossy().to_string(),
             flox_env_cuda_detection,
             interpreter_path,
         };

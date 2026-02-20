@@ -3,7 +3,7 @@ use std::path::Path;
 use std::process::Command;
 
 use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
-use flox_core::activate::vars::{FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_VAR};
+use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
 
@@ -11,11 +11,7 @@ use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
 use crate::env_diff::EnvDiff;
 use crate::vars_from_env::VarsFromEnvironment;
-pub const FLOX_ENV_LOG_DIR_VAR: &str = "_FLOX_ENV_LOG_DIR";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
-/// This variable is used to communicate what socket to use to the activate
-/// script.
-pub const FLOX_SERVICES_SOCKET_VAR: &str = "_FLOX_SERVICES_SOCKET";
 
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
 pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
@@ -27,7 +23,6 @@ pub(super) fn assemble_activate_command(
     start_state_dir: &Path,
 ) -> Command {
     let mut command = Command::new(context.attach_ctx.interpreter_path.join("activate"));
-    add_old_cli_options(&mut command, context);
     command.envs(old_cli_envs(
         &context.attach_ctx,
         context.project_ctx.as_ref(),
@@ -38,9 +33,8 @@ pub(super) fn assemble_activate_command(
         context.project_ctx.as_ref(),
         subsystem_verbosity,
         vars_from_env,
-        start_state_dir,
     );
-    add_activate_script_options(&mut command, start_state_dir);
+    add_activate_script_options(&mut command, context, start_state_dir);
     command
 }
 
@@ -52,7 +46,6 @@ pub fn apply_activation_env(
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
     env_diff: &EnvDiff,
-    start_state_dir: &Path,
 ) {
     command.envs(old_cli_envs(context, project));
     add_old_activate_script_exports(
@@ -61,7 +54,6 @@ pub fn apply_activation_env(
         project,
         subsystem_verbosity,
         vars_from_env,
-        start_state_dir,
     );
     command.envs(&env_diff.additions);
     for var in &env_diff.deletions {
@@ -91,12 +83,6 @@ pub fn old_cli_envs(
         ),
         ("_FLOX_SET_PROMPT", context.set_prompt.to_string()),
         (
-            // TODO: we should probably figure out a more consistent way to
-            // pass this since it's also passed for `flox build`
-            FLOX_RUNTIME_DIR_VAR,
-            context.flox_runtime_dir.clone(),
-        ),
-        (
             "_FLOX_ENV_CUDA_DETECTION",
             context.flox_env_cuda_detection.clone(),
         ),
@@ -109,44 +95,22 @@ pub fn old_cli_envs(
         ),
     ]);
 
-    if let Some(project) = project {
-        exports.insert(
-            FLOX_ENV_LOG_DIR_VAR,
-            project.flox_env_log_dir.to_string_lossy().to_string(),
-        );
-        exports.insert(
-            FLOX_SERVICES_SOCKET_VAR,
-            project.flox_services_socket.to_string_lossy().to_string(),
-        );
-    }
-
     exports.extend(default_nix_env_vars());
 
     exports
 }
 
-/// Prior to the refactor, these options were passed by the CLI to the activate
-/// script
-fn add_old_cli_options(command: &mut Command, context: &ActivateCtx) {
-    if let Some(project) = &context.project_ctx {
-        command
-            .arg("--env-project")
-            .arg(project.env_project.to_string_lossy().to_string());
-    }
-
-    command
-        .arg("--env-cache")
-        .arg(context.attach_ctx.env_cache.to_string_lossy().to_string());
-    command
-        .arg("--env-description")
-        .arg(context.attach_ctx.env_description.clone());
+/// Options parsed by getopt in the activate script
+fn add_activate_script_options(
+    command: &mut Command,
+    context: &ActivateCtx,
+    start_state_dir: &Path,
+) {
+    command.arg("--env").arg(&context.attach_ctx.env);
 
     // Pass down the activation mode
     command.arg("--mode").arg(context.mode.to_string());
-}
 
-/// Options parsed by getopt that are only used by the activate script
-fn add_activate_script_options(command: &mut Command, start_state_dir: &Path) {
     command.args(["--start-state-dir", &start_state_dir.to_string_lossy()]);
 }
 
@@ -160,7 +124,6 @@ fn add_old_activate_script_exports(
     project: Option<&AttachProjectCtx>,
     subsystem_verbosity: u32,
     vars_from_environment: VarsFromEnvironment,
-    start_state_dir: &Path,
 ) {
     let mut removals = Vec::new();
     let mut exports = HashMap::from([
@@ -172,10 +135,6 @@ fn add_old_activate_script_exports(
             context.env_cache.to_string_lossy().to_string(),
         ),
         ("FLOX_ENV_DESCRIPTION", context.env_description.clone()),
-        (
-            "_FLOX_START_STATE_DIR",
-            start_state_dir.to_string_lossy().to_string(),
-        ),
         // These are used by various scripts...custom ZDOTDIR files, set-prompt,
         // .tcshrc
         (
