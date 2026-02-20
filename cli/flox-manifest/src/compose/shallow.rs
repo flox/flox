@@ -43,6 +43,24 @@ impl ShallowMerger {
     }
 
     #[instrument(skip_all)]
+    fn merge_minimum_cli_version(
+        low_priority: Option<&String>,
+        high_priority: Option<&String>,
+    ) -> Result<(Option<String>, Vec<Warning>), MergeError> {
+        let (merged, maybe_warning) = shallow_merge_options(
+            KeyPath::from_iter(["minimum-cli-version"]),
+            low_priority,
+            high_priority,
+        );
+        let warning = if let Some(warning) = maybe_warning {
+            vec![warning]
+        } else {
+            vec![]
+        };
+        Ok((merged, warning))
+    }
+
+    #[instrument(skip_all)]
     fn merge_install(
         low_priority: &Install,
         high_priority: &Install,
@@ -269,6 +287,11 @@ impl ManifestMergeTrait for ShallowMerger {
         let schema_version =
             Self::merge_version(&low_priority.schema_version, &high_priority.schema_version)?;
 
+        let (minimum_cli_version, minimum_cli_version_warnings) = Self::merge_minimum_cli_version(
+            low_priority.minimum_cli_version.as_ref(),
+            high_priority.minimum_cli_version.as_ref(),
+        )?;
+
         trace!(section = "install", "merging manifest section");
         let (install, install_warnings) =
             Self::merge_install(&low_priority.install, &high_priority.install)?;
@@ -301,6 +324,7 @@ impl ManifestMergeTrait for ShallowMerger {
         debug!("manifest pair merged successfully");
 
         let warnings = [
+            minimum_cli_version_warnings,
             install_warnings,
             vars_warnings,
             options_warnings,
@@ -314,6 +338,7 @@ impl ManifestMergeTrait for ShallowMerger {
 
         let merged_manifest = ManifestLatest {
             schema_version,
+            minimum_cli_version,
             install,
             vars,
             hook,
