@@ -148,7 +148,7 @@ pub enum LockedPackage {
 }
 
 impl LockedPackage {
-    pub(crate) fn as_catalog_package_ref(&self) -> Option<&LockedPackageCatalog> {
+    pub fn as_catalog_package_ref(&self) -> Option<&LockedPackageCatalog> {
         match self {
             LockedPackage::Catalog(pkg) => Some(pkg),
             _ => None,

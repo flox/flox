@@ -661,13 +661,42 @@ fn notify_package_upgrades(
         debug!("Not notifying user of upgrade, no changes in lockfile");
         return Ok(());
     }
+    let diff_for_system = upgrade_result.diff_for_system(&flox.system);
+    if diff_for_system.is_empty() {
+        debug!("Not notifying user of upgrade, no changes for this system");
+        return Ok(());
+    }
     let description = environment_description(environment)?;
+    let (version_upgrades, build_updates) =
+        super::upgrade::count_upgrade_categories(&diff_for_system);
+
+    let summary = format_upgrade_summary(version_upgrades, build_updates);
     let message = formatdoc! {"
-        Upgrades are available for packages in {description}.
+        {summary} available in {description}.
         Use 'flox upgrade --dry-run' for details.
     "};
     message::info(message);
     Ok(())
+}
+
+/// Format a human-readable summary like "2 version upgrades and 1 build update".
+fn format_upgrade_summary(version_upgrades: usize, build_updates: usize) -> String {
+    let version_part = match version_upgrades {
+        0 => None,
+        1 => Some("1 version upgrade".to_string()),
+        n => Some(format!("{n} version upgrades")),
+    };
+    let build_part = match build_updates {
+        0 => None,
+        1 => Some("1 build update".to_string()),
+        n => Some(format!("{n} build updates")),
+    };
+    match (version_part, build_part) {
+        (Some(v), Some(b)) => format!("{v} and {b}"),
+        (Some(v), None) => v,
+        (None, Some(b)) => b,
+        (None, None) => "Upgrades".to_string(),
+    }
 }
 
 /// For remote environments only; check whether the environment state is equal
@@ -1022,7 +1051,7 @@ mod upgrade_notification_tests {
         let printed = writer.to_string();
 
         assert_eq!(printed, formatdoc! {"
-            ℹ Upgrades are available for packages in 'name'.
+            ℹ 1 build update available in 'name'.
             Use 'flox upgrade --dry-run' for details.
 
         "});
@@ -1107,5 +1136,51 @@ mod upgrade_notification_tests {
 
         let printed = writer.to_string();
         assert!(printed.is_empty(), "printed: {printed}");
+    }
+}
+
+#[cfg(test)]
+mod format_upgrade_summary_tests {
+    use super::format_upgrade_summary;
+
+    #[test]
+    fn only_version_upgrades_singular() {
+        assert_eq!(format_upgrade_summary(1, 0), "1 version upgrade");
+    }
+
+    #[test]
+    fn only_version_upgrades_plural() {
+        assert_eq!(format_upgrade_summary(3, 0), "3 version upgrades");
+    }
+
+    #[test]
+    fn only_build_updates_singular() {
+        assert_eq!(format_upgrade_summary(0, 1), "1 build update");
+    }
+
+    #[test]
+    fn only_build_updates_plural() {
+        assert_eq!(format_upgrade_summary(0, 4), "4 build updates");
+    }
+
+    #[test]
+    fn mixed_upgrades() {
+        assert_eq!(
+            format_upgrade_summary(2, 1),
+            "2 version upgrades and 1 build update"
+        );
+    }
+
+    #[test]
+    fn mixed_all_plural() {
+        assert_eq!(
+            format_upgrade_summary(3, 5),
+            "3 version upgrades and 5 build updates"
+        );
+    }
+
+    #[test]
+    fn fallback_when_both_zero() {
+        assert_eq!(format_upgrade_summary(0, 0), "Upgrades");
     }
 }
