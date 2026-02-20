@@ -247,11 +247,9 @@ EOF
 
 @test "inits with bare manifest" {
   "$FLOX_BIN" init --bare
-  # -z: treats the whole input as a single line
-  # 's/\n*$//': replace any trailing newlines with an empty string
-  # In short, remove any trailing newlines from the manifest.
-  manifest="$("$FLOX_BIN" list -c | sed -z 's/\n*$//')"
-  assert_equal "$manifest" "version = 1"
+  manifest="$("$FLOX_BIN" list -c)"
+  expected="$(with_latest_schema "")"
+  assert_equal "$manifest" "$expected"
 }
 # ---------------------------------------------------------------------------- #
 #
