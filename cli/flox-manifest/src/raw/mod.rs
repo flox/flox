@@ -14,7 +14,7 @@ use tracing::{debug, trace};
 use crate::interfaces::CommonFields;
 use crate::parsed::common::{self, KnownSchemaVersion, VersionKind};
 use crate::parsed::v1_10_0::SelectedOutputs;
-use crate::parsed::{v1, v1_10_0, Inner};
+use crate::parsed::{Inner, v1, v1_10_0};
 use crate::util::is_custom_package;
 use crate::{Manifest, ManifestError, Migrated, Parsed, Validated};
 

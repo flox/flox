@@ -76,7 +76,9 @@ mod tests {
     use serde::Deserialize;
 
     use super::*;
+    use crate::ManifestError;
     use crate::interfaces::PackageLookup;
+    use crate::parsed::Inner;
     use crate::parsed::common::{
         Build,
         BuildDescriptor,
@@ -86,9 +88,7 @@ mod tests {
         PackageDescriptorStorePath,
         Profile,
     };
-    use crate::parsed::Inner;
     use crate::test_helpers::with_latest_schema;
-    use crate::ManifestError;
 
     #[test]
     fn catalog_manifest_rejects_unknown_fields() {
