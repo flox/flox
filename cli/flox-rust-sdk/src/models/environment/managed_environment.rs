@@ -1131,7 +1131,7 @@ impl ManagedEnvironment {
             .current_gen_manifest_contents()
             .map_err(ManagedEnvironmentError::Generations)?;
 
-        Ok(local_manifest_bytes == remote_manifest_bytes)
+        Ok(local_manifest_bytes.trim() == remote_manifest_bytes.trim())
     }
 
     /// Convenience method to check if the local environment has changes.
@@ -1944,7 +1944,7 @@ mod test {
             .unwrap();
 
         // check that modifications in an existing `.flox/env` are _not_ discarded
-        let locally_edited_content = "edited manifest";
+        let locally_edited_content = "version = 1\n\n# edited locally\n";
         fs::write(
             managed_env.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME),
             locally_edited_content,
@@ -1954,7 +1954,7 @@ mod test {
         let local_manifest = managed_env
             .local_env_or_copy_current_generation(&flox)
             .unwrap()
-            .manifest(&flox)
+            .pre_migration_manifest()
             .unwrap();
         assert_eq!(
             local_manifest.as_writable().to_string(),
@@ -2478,7 +2478,7 @@ mod test {
         let expected_manifest_json = serde_json::json!({
             "version": 1,
             "vars": {
-                "foo": "bar"
+                "foo": "dep"
             }
         });
         let expected_manifest = serde_json::from_value(expected_manifest_json).unwrap();
