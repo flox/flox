@@ -57,6 +57,7 @@ fn main() -> ExitCode {
     // and passes it to `eval`, so unclosed quotes in user input
     // (e.g. `flox activate -c "bas<TAB>`) cause parse errors.
     // Our version uses array-based argument passing instead.
+    // Upstream issue: https://github.com/pacak/bpaf/issues/440
     // This must run before any bpaf parser call (Prefix::check, etc.)
     // because bpaf's ArgScanner intercepts this flag and calls
     // process::exit(0) directly.
@@ -215,6 +216,8 @@ fn main() -> ExitCode {
 }
 
 /// Fixed bash completion script that replaces bpaf's generated version.
+///
+/// Workaround for <https://github.com/pacak/bpaf/issues/440>.
 ///
 /// bpaf's script does:
 ///   line="$1 --bpaf-complete-rev=8 ${COMP_WORDS[@]:1}"
