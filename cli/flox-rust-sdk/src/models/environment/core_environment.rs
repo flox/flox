@@ -1296,12 +1296,26 @@ mod tests {
     fn edit_no_op_locked_returns_unchanged() {
         let (flox, _temp_dir_handle) = flox_instance();
 
+        let same_manifest = with_latest_schema("");
+        let mut env_view = new_core_environment(&flox, &same_manifest);
+        env_view.lock(&flox).unwrap(); // Explicit lock
+
+        let result = env_view.edit(&flox, same_manifest).unwrap();
+        assert_eq!(result, EditResult::Unchanged);
+    }
+
+    /// A no-op with edit against a locked environment with an old schema version
+    /// returns EditResult::Unchanged
+    #[test]
+    fn edit_no_op_locked_old_schema_returns_unchanged() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
         let same_manifest = "version = 1";
         let mut env_view = new_core_environment(&flox, same_manifest);
         env_view.lock(&flox).unwrap(); // Explicit lock
 
         let result = env_view.edit(&flox, same_manifest.to_string()).unwrap();
-        assert!(matches!(result, EditResult::Unchanged));
+        assert_eq!(result, EditResult::Unchanged);
     }
 
     /// A no-op with edit against an unlocked environment returns EditResult::Changed
