@@ -844,17 +844,23 @@ fn update_systems(
     raw: &mut DocumentMut,
     maybe_systems: Option<&Vec<String>>,
 ) -> Result<(), TomlEditError> {
-    let options_field = raw
-        .entry("options")
-        .or_insert_with(|| Item::Table(Table::new()));
-    let options_field_type = options_field.type_name().into();
-    let options_table = options_field.as_table_mut().ok_or_else(|| {
-        debug!("creating new [options] table");
-        TomlEditError::MalformedOptionsTable(options_field_type)
-    })?;
+    // You need to check whether you actually need to touch the systems first,
+    // otherwise you'll unconditionally create the `[options]` table.
     if let Some(systems) = maybe_systems {
+        let options_field = raw
+            .entry("options")
+            .or_insert_with(|| Item::Table(Table::new()));
+        let options_field_type = options_field.type_name().into();
+        let options_table = options_field.as_table_mut().ok_or_else(|| {
+            debug!("creating new [options] table");
+            TomlEditError::MalformedOptionsTable(options_field_type)
+        })?;
         options_table.insert("systems", toml_array_of_strings(systems).into());
-    } else {
+    } else if let Some(options_field) = raw.get_mut("options") {
+        let options_field_type = options_field.type_name().into();
+        let options_table = options_field
+            .as_table_mut()
+            .ok_or(TomlEditError::MalformedOptionsTable(options_field_type))?;
         options_table.remove("systems");
     }
     Ok(())
@@ -1244,7 +1250,9 @@ mod test {
     use proptest_derive::Arbitrary;
 
     use super::*;
+    use crate::interfaces::CommonFields;
     use crate::raw::test_helpers::mk_test_manifest_from_contents;
+    use crate::test_helpers::with_latest_schema;
 
     const DUMMY_MANIFEST: &str = indoc! {r#"
         schema-version = "1.10.0"
@@ -1736,6 +1744,54 @@ curl.outputs = [\"bin\", \"man\"]
             let inferred = infer_flake_install_id(&url).unwrap();
             prop_assert_eq!(inferred, expected_id);
         }
+    }
+
+    #[test]
+    fn update_systems_does_not_add_options_table_when_systems_is_none() {
+        let toml_str = with_latest_schema(indoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+        "#});
+        let mut manifest = Manifest::parse_toml_typed(&toml_str).unwrap();
+        manifest.update_systems().unwrap();
+        assert!(
+            manifest.inner.raw.get("options").is_none(),
+            "update_systems with None should not create an [options] table"
+        );
+    }
+
+    #[test]
+    fn update_systems_adds_options_table_when_systems_provided() {
+        let toml_str = with_latest_schema(indoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+        "#});
+        let mut manifest = Manifest::parse_toml_typed(&toml_str).unwrap();
+        let systems = vec!["x86_64-linux".to_string()];
+        manifest.options_mut().systems = Some(systems.clone());
+        manifest.update_systems().unwrap();
+        let updated_systems = manifest.inner.raw["options"]["systems"]
+            .as_array()
+            .unwrap()
+            .into_iter()
+            .map(|value| value.as_str().unwrap().to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(updated_systems, systems);
+    }
+
+    #[test]
+    fn update_systems_removes_systems_without_removing_other_options() {
+        let toml_str = with_latest_schema(indoc! {r#"
+            [options]
+            systems = ["x86_64-linux"]
+            allow.unfree = true
+        "#});
+        let mut manifest = Manifest::parse_toml_typed(&toml_str).unwrap();
+        manifest.options_mut().systems = None;
+        manifest.update_systems().unwrap();
+        let opts = manifest.inner.raw["options"].clone();
+        assert!(opts["allow"]["unfree"].as_bool().unwrap());
+        assert!(opts.get("systems").is_none());
     }
 
     #[test]
