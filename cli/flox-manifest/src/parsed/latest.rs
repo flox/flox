@@ -24,8 +24,8 @@ impl ManifestLatest {
                     let map = untyped
                         .as_object_mut()
                         .expect("all valid manifests should serialize to JSON objects");
-                    map.remove("version");
-                    map.insert("schema-version".into(), "1.10.0".into());
+                    map.remove("schema-version");
+                    map.insert("version".into(), 1.into());
                 },
                 KnownSchemaVersion::V1_10_0 => {},
             }
@@ -76,9 +76,7 @@ mod tests {
     use serde::Deserialize;
 
     use super::*;
-    use crate::ManifestError;
     use crate::interfaces::PackageLookup;
-    use crate::parsed::Inner;
     use crate::parsed::common::{
         Build,
         BuildDescriptor,
@@ -88,7 +86,9 @@ mod tests {
         PackageDescriptorStorePath,
         Profile,
     };
+    use crate::parsed::Inner;
     use crate::test_helpers::with_latest_schema;
+    use crate::ManifestError;
 
     #[test]
     fn catalog_manifest_rejects_unknown_fields() {
