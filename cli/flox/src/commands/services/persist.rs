@@ -3,9 +3,11 @@ use std::fs::File;
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use flox_core::data::environment_ref::ActivateEnvironmentRef;
+use flox_manifest::interfaces::CommonFields;
+use flox_manifest::parsed::Inner;
+use flox_manifest::parsed::common::ServiceDescriptor;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment_ref::ActivateEnvironmentRef;
-use flox_rust_sdk::models::manifest::typed::{Inner, ServiceDescriptor};
 use flox_rust_sdk::providers::services::systemd::render_systemd_unit_file;
 use tracing::instrument;
 use xdg::BaseDirectories;
@@ -34,7 +36,7 @@ impl Persist {
         environment_subcommand_metric!("services::persist", env.environment);
         guard_service_commands_available(&env, &flox.system)?;
 
-        let services_for_system = env.manifest.services.copy_for_system(&flox.system);
+        let services_for_system = env.manifest.services().copy_for_system(&flox.system);
         let services_to_persist: Vec<_> = if self.names.is_empty() {
             services_for_system.inner().iter().collect()
         } else {
@@ -42,7 +44,8 @@ impl Persist {
                 .iter()
                 .map(|name| {
                     let descriptor = services_for_system.inner().get(name);
-                    let exists_for_other_systems = env.manifest.services.inner().contains_key(name);
+                    let exists_for_other_systems =
+                        env.manifest.services().inner().contains_key(name);
                     match (descriptor, exists_for_other_systems) {
                         (Some(descriptor), _) => Ok((name, descriptor)),
                         (None, true) => Err(super::service_not_available_on_system_error(

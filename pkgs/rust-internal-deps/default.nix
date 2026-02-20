@@ -103,6 +103,7 @@ in
       ) " --features flox-rust-sdk/${overrideCatalogAuth}";
     postPatch = ''
       cp -rf --no-preserve=mode ${flox-src}/cli/flox-rust-sdk/* ./cli/flox-rust-sdk
+      cp -rf --no-preserve=mode ${flox-src}/cli/flox-manifest/* ./cli/flox-manifest
       cp -rf --no-preserve=mode ${flox-src}/cli/catalog-api-v1/* ./cli/catalog-api-v1
       cp -rf --no-preserve=mode ${flox-src}/cli/flox-core/* ./cli/flox-core
       cp -rf --no-preserve=mode ${flox-src}/cli/shell_gen/* ./cli/shell_gen

@@ -3,6 +3,8 @@ use std::str::FromStr;
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
+use flox_manifest::lockfile::{LockedInstallable, LockedPackageFlake, Lockfile, PackageToList};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::GenerationsExt;
 use flox_rust_sdk::models::environment::{
@@ -10,9 +12,7 @@ use flox_rust_sdk::models::environment::{
     Environment,
     SingleSystemUpgradeDiff,
 };
-use flox_rust_sdk::models::lockfile::{LockedPackageFlake, Lockfile, PackageToList};
 use flox_rust_sdk::providers::buildenv::get_installed_outputs;
-use flox_rust_sdk::providers::flake_installable_locker::LockedInstallable;
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -94,7 +94,10 @@ impl List {
 
                 (remote_manifest_contents, lockfile)
             },
-            (env, false) => (env.manifest_contents(&flox)?, env.lockfile(&flox)?.into()),
+            (env, false) => (
+                env.pre_migration_manifest(&flox)?.as_writable().to_string(),
+                env.lockfile(&flox)?.into(),
+            ),
         };
 
         if self.list_mode == ListMode::Config {
@@ -445,15 +448,16 @@ where
 mod tests {
     use std::fs;
 
-    use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
-    use flox_rust_sdk::models::lockfile::LockedPackage;
-    use flox_rust_sdk::models::lockfile::test_helpers::{
+    use flox_manifest::lockfile::LockedPackage;
+    use flox_manifest::lockfile::test_helpers::{
         LOCKED_NIX_EVAL_JOBS,
         fake_catalog_package_lock,
         nix_eval_jobs_descriptor,
     };
-    use flox_rust_sdk::models::manifest::typed::DEFAULT_PRIORITY;
+    use flox_manifest::parsed::common::DEFAULT_PRIORITY;
+    use flox_manifest::test_helpers::with_latest_schema;
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
@@ -902,49 +906,53 @@ mod tests {
 
         // Create dep environment
         let dep_path = tempdir.path().join("dep");
-        let dep_manifest_contents = indoc! {r#"
-        version = 1
-
-        [services]
-        sleep2.command = "sleep infinity"
-        sleep2.is-daemon = true
-        "#};
+        let dep_manifest_contents = with_latest_schema(indoc! {r#"
+            [services]
+            sleep2.command = "sleep infinity"
+            sleep2.is-daemon = true
+            sleep2.shutdown.command = "cmd"
+        "#});
 
         fs::create_dir(&dep_path).unwrap();
-        let mut dep = new_path_environment_in(&flox, dep_manifest_contents, &dep_path);
+        let mut dep = new_path_environment_in(&flox, &dep_manifest_contents, &dep_path);
         dep.lockfile(&flox).unwrap();
 
         // Create composer environment
         let composer_path = tempdir.path().join("composer");
-        let composer_manifest_contents = indoc! {r#"
-        version = 1
+        let composer_manifest_contents = with_latest_schema(indoc! {r#"
+            [include]
+            environments = [
+                { dir = "../dep" }
+            ]
 
-        [include]
-        environments = [
-          { dir = "../dep" }
-        ]
-
-        [services]
-        sleep1.command = "sleep infinity"
-        sleep1.is-daemon = true
-        "#};
+            [services]
+            sleep1.command = "sleep infinity"
+            sleep1.is-daemon = true
+            sleep1.shutdown.command = "cmd"
+        "#});
         fs::create_dir(&composer_path).unwrap();
         let mut composer =
-            new_path_environment_in(&flox, composer_manifest_contents, &composer_path);
+            new_path_environment_in(&flox, &composer_manifest_contents, &composer_path);
         let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
 
         assert_eq!(
-            List::manifest_contents_to_print(&lockfile, composer.manifest_contents(&flox).unwrap())
-                .unwrap(),
-            indoc! {r#"
-                version = 1
-
+            List::manifest_contents_to_print(
+                &lockfile,
+                composer
+                    .pre_migration_manifest(&flox)
+                    .unwrap()
+                    .as_writable()
+                    .to_string()
+            )
+            .unwrap(),
+            with_latest_schema(indoc! {r#"
                 [services]
                 sleep1.command = "sleep infinity"
                 sleep1.is-daemon = true
+                sleep1.shutdown.command = "cmd"
                 sleep2.command = "sleep infinity"
                 sleep2.is-daemon = true
-            "#}
+                sleep2.shutdown.command = "cmd""#})
         );
     }
 

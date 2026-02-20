@@ -79,8 +79,6 @@ impl Uninstall {
         let attempt =
             span.in_scope(|| concrete_environment.uninstall(self.packages.clone(), &flox))?;
 
-        // Note, you need two spaces between this emoji and the package name
-        // otherwise they appear right next to each other.
         self.packages.iter().for_each(|package| {
             message::deleted(format!(
                 "'{package}' uninstalled from environment {description}"

@@ -1,10 +1,23 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use flox_core::{WriteError, write_atomically};
+use flox_manifest::interfaces::{
+    AsLatestSchema,
+    AsTypedOnlyManifest,
+    AsWritableManifest,
+    CommonFields,
+    ContentsMatch,
+    PackageLookup,
+    SchemaVersion,
+    WriteManifest,
+};
+use flox_manifest::lockfile::{LOCKFILE_FILENAME, LockedPackage, Lockfile, LockfileError};
+use flox_manifest::parsed::common::KnownSchemaVersion;
+use flox_manifest::raw::{ModifyPackages, PackageToInstall, TomlEditError};
+use flox_manifest::{MANIFEST_FILENAME, Manifest, ManifestError, Migrated, Validated, Writable};
 use itertools::Itertools;
 use pollster::FutureExt;
 use serde::{Deserialize, Serialize};
@@ -17,8 +30,6 @@ use super::{
     CanonicalizeError,
     EnvironmentError,
     InstallationAttempt,
-    LOCKFILE_FILENAME,
-    MANIFEST_FILENAME,
     UninstallError,
     UninstallationAttempt,
     UpgradeError,
@@ -26,20 +37,6 @@ use super::{
 };
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
-use crate::models::lockfile::{
-    LockResult,
-    LockedPackage,
-    Lockfile,
-    ResolutionFailure,
-    ResolveError,
-};
-use crate::models::manifest::raw::{
-    PackageToInstall,
-    TomlEditError,
-    insert_packages,
-    remove_packages,
-};
-use crate::models::manifest::typed::{Manifest, ManifestError};
 use crate::providers::auth::{Auth, AuthError};
 use crate::providers::buildenv::{
     self,
@@ -49,6 +46,7 @@ use crate::providers::buildenv::{
     BuildEnvOutputs,
     BuiltStorePath,
 };
+use crate::providers::lock_manifest::{LockManifest, LockResult, ResolutionFailure, ResolveError};
 use crate::providers::services::process_compose::{ServiceError, maybe_make_service_config_file};
 
 const TEMPROOTS_DIR_NAME: &str = "temp-roots";
@@ -83,6 +81,10 @@ impl<State> CoreEnvironment<State> {
         &self.env_dir
     }
 
+    pub fn pre_migration_manifest(&self) -> Result<Manifest<Validated>, ManifestError> {
+        Manifest::read_typed(self.manifest_path())
+    }
+
     /// Get the manifest file
     pub fn manifest_path(&self) -> PathBuf {
         self.env_dir.join(MANIFEST_FILENAME)
@@ -93,15 +95,6 @@ impl<State> CoreEnvironment<State> {
     /// Note: may not exist
     pub fn lockfile_path(&self) -> PathBuf {
         self.env_dir.join(LOCKFILE_FILENAME)
-    }
-
-    /// Extract the current content of the manifest from disk.
-    ///
-    /// This may differ from the locked manifest, which should typically be used unless you need to:
-    /// - provide the latest editable contents to the user
-    /// - avoid double-locking
-    pub fn manifest_contents(&self) -> Result<String, CoreEnvironmentError> {
-        fs::read_to_string(self.manifest_path()).map_err(CoreEnvironmentError::OpenManifest)
     }
 
     /// Return the contents of the lockfile or None if it doesn't exist
@@ -127,11 +120,6 @@ impl<State> CoreEnvironment<State> {
         }
     }
 
-    fn manifest(&self) -> Result<Manifest, CoreEnvironmentError> {
-        toml::from_str(&self.manifest_contents()?)
-            .map_err(CoreEnvironmentError::DeserializeManifest)
-    }
-
     /// Return a [LockedManifest] if the environment is already locked and has
     /// the same manifest contents as the manifest, otherwise return None.
     /// Note that the manifest could have whitespace or comment differences from
@@ -143,13 +131,13 @@ impl<State> CoreEnvironment<State> {
             return Ok(None);
         };
 
-        let manifest: Manifest = toml::from_str(&self.manifest_contents()?)
-            .map_err(CoreEnvironmentError::DeserializeManifest)?;
         let lockfile = Lockfile::read_from_file(&lockfile_path)?;
 
         // Check if the manifest embedded in the lockfile and the manifest
         // itself have the same contents
-        let already_locked = &manifest == lockfile.user_manifest();
+        let serialized_unmigrated_manifest = &self.pre_migration_manifest()?.as_typed_only();
+        let already_locked =
+            lockfile.is_up_to_date_with_serialized_manifest(serialized_unmigrated_manifest);
 
         if already_locked {
             Ok(Some(lockfile))
@@ -187,21 +175,39 @@ impl<State> CoreEnvironment<State> {
     /// It's included in the [ReadOnly] struct for ergonomic reasons
     /// and because it doesn't modify the manifest.
     pub fn lock(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
-        let manifest = self.manifest()?;
-        let existing_lockfile_contents = self.existing_lockfile_contents()?;
-        let existing_lockfile = existing_lockfile_contents
-            .as_deref()
-            .map(Lockfile::from_str)
-            .transpose()?;
+        let pre_migration_manifest = self.pre_migration_manifest()?.as_typed_only();
+        let existing_lockfile = self.existing_lockfile()?;
+        let migrated_manifest_for_locking =
+            pre_migration_manifest.migrate_typed_only(existing_lockfile.as_ref())?;
 
         // If a lockfile exists, it is used as a base.
-        let lockfile = Lockfile::lock_manifest(
+        let lockfile = LockManifest::lock_manifest(
             flox,
-            &manifest,
+            &migrated_manifest_for_locking,
             existing_lockfile.as_ref(),
             &self.include_fetcher,
         )
         .block_on()?;
+
+        // Now that we have an up to date lockfile, we can migrate the manifest
+        // if necessary.
+        //
+        // The lockfile always contains the manifest in the latest schema, but
+        // the on-disk manifest may be in an older schema. We only need to
+        // rewrite the manifest if it's not backwards compatible with the
+        // original schema.
+        let original_schema = pre_migration_manifest.get_schema_version();
+        let lockfile_schema_version = lockfile.manifest.get_schema_version();
+        let lockfile_has_latest_schema_version =
+            lockfile_schema_version == KnownSchemaVersion::latest();
+        if lockfile_has_latest_schema_version && (lockfile_schema_version != original_schema) {
+            let migrated_manifest = self.pre_migration_manifest()?.migrate(Some(&lockfile))?;
+            if !migrated_manifest.is_backwards_compatible()? {
+                migrated_manifest
+                    .as_writable()
+                    .write_to_file(self.manifest_path())?;
+            }
+        }
 
         let mut lockfile_contents =
             serde_json::to_string_pretty(&lockfile).expect("lockfile structure is valid json");
@@ -293,12 +299,23 @@ impl CoreEnvironment<()> {
 impl CoreEnvironment<ReadOnly> {
     /// Create a new environment view given the path to a directory that
     /// contains a valid manifest.
-    pub fn new(env_dir: impl AsRef<Path>, include_fetcher: IncludeFetcher) -> Self {
-        CoreEnvironment {
+    pub fn new(
+        env_dir: impl AsRef<Path>,
+        include_fetcher: IncludeFetcher,
+    ) -> Result<Self, CoreEnvironmentError> {
+        let env = CoreEnvironment {
             env_dir: env_dir.as_ref().to_path_buf(),
             include_fetcher,
             _state: ReadOnly {},
-        }
+        };
+        Ok(env)
+    }
+
+    pub(crate) fn manifest(&mut self, flox: &Flox) -> Result<Manifest<Migrated>, EnvironmentError> {
+        let manifest = self.pre_migration_manifest()?;
+        let lockfile = self.ensure_locked(flox)?.into();
+        let migrated = manifest.migrate(Some(&lockfile))?;
+        Ok(migrated)
     }
 
     /// Install packages to the environment atomically
@@ -312,14 +329,13 @@ impl CoreEnvironment<ReadOnly> {
         packages: &[PackageToInstall],
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError> {
-        let current_manifest_contents = self.manifest_contents()?;
-        let mut installation = insert_packages(&current_manifest_contents, packages)
-            .map(|insertion| InstallationAttempt {
-                new_manifest: insertion.new_toml.map(|toml| toml.to_string()),
-                already_installed: insertion.already_installed,
-                built_environments: None,
-            })
-            .map_err(CoreEnvironmentError::ModifyToml)?;
+        let manifest = self.manifest(flox)?;
+        let insertion = manifest.add_packages(packages)?;
+        let mut installation = InstallationAttempt {
+            new_manifest: insertion.new_manifest,
+            already_installed: insertion.already_installed,
+            built_environments: None,
+        };
         if let Some(ref new_manifest) = installation.new_manifest {
             let (store_path, _) = self.transact_with_manifest_contents(new_manifest, flox)?;
             installation.built_environments = Some(store_path);
@@ -337,8 +353,6 @@ impl CoreEnvironment<ReadOnly> {
         packages: Vec<String>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
-        let current_manifest_contents = self.manifest_contents()?;
-
         let lockfile: Lockfile = self.lock(flox)?.into();
         let packages_in_includes = if let Some(compose) = lockfile.compose {
             compose.get_includes_for_packages(&packages)?
@@ -346,7 +360,7 @@ impl CoreEnvironment<ReadOnly> {
             HashMap::new()
         };
 
-        let manifest = self.manifest()?;
+        let manifest = self.manifest(flox)?;
         let install_ids = match manifest.get_install_ids(packages) {
             Ok(ids) => ids,
             Err(err) => {
@@ -364,12 +378,11 @@ impl CoreEnvironment<ReadOnly> {
             },
         };
 
-        let toml = remove_packages(&current_manifest_contents, &install_ids)
-            .map_err(CoreEnvironmentError::ModifyToml)?;
-        let (store_path, _) = self.transact_with_manifest_contents(toml.to_string(), flox)?;
+        let post_removal = manifest.remove_packages(&install_ids)?;
+        let (store_path, _) = self.transact_with_manifest_contents(&post_removal, flox)?;
 
         Ok(UninstallationAttempt {
-            new_manifest: Some(toml.to_string()),
+            new_manifest: Some(post_removal),
             still_included: packages_in_includes,
             built_environment_store_paths: Some(store_path),
         })
@@ -377,26 +390,42 @@ impl CoreEnvironment<ReadOnly> {
 
     /// Atomically edit this environment, ensuring that it still builds
     pub fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError> {
-        let old_contents = self.manifest_contents()?;
-        let lockfile_up_to_date = self.lockfile_if_up_to_date()?.is_some();
+        let maybe_up_to_date_lockfile = self.lockfile_if_up_to_date()?;
 
         // skip the edit if the contents are unchanged
         // and the existing lockfile is up to date
         // note: consumers of this function may call [Self::link] separately,
         //       causing an evaluation/build of the environment.
-        if contents == old_contents && lockfile_up_to_date {
+        let lockfile_is_up_to_date = maybe_up_to_date_lockfile.is_some();
+        if self.contents_match_existing_manifest(&contents)? && lockfile_is_up_to_date {
             return Ok(EditResult::Unchanged);
         }
 
-        // Use the existing lockfile regardless of whether it's up-to-date.
-        let old_lockfile = self.existing_lockfile()?;
-        let (store_path, new_lockfile) = self.transact_with_manifest_contents(&contents, flox)?;
+        let new_manifest = Manifest::parse_toml_typed(&contents)?;
+        let (old_lockfile, migrated_manifest) =
+            if let Some(lockfile) = maybe_up_to_date_lockfile.as_ref() {
+                (lockfile.clone(), new_manifest.migrate(Some(lockfile))?)
+            } else {
+                let lockfile = self.lock(flox)?.into();
+                let migrated = new_manifest.migrate(Some(&lockfile))?;
+                (lockfile, migrated)
+            };
+
+        let (store_path, new_lockfile) =
+            self.transact_with_manifest_contents(&migrated_manifest, flox)?;
 
         Ok(EditResult::Changed {
-            old_lockfile: Box::new(old_lockfile),
+            old_lockfile: Box::new(Some(old_lockfile)),
             new_lockfile: Box::new(new_lockfile),
             built_environment_store_paths: store_path,
         })
+    }
+
+    fn contents_match_existing_manifest(
+        &self,
+        contents: impl AsRef<str>,
+    ) -> Result<bool, ManifestError> {
+        Ok(self.pre_migration_manifest()?.contents_match(contents))
     }
 
     /// Atomically edit this environment, without checking that it still builds
@@ -409,16 +438,22 @@ impl CoreEnvironment<ReadOnly> {
         flox: &Flox,
         contents: String,
     ) -> Result<Result<EditResult, EnvironmentError>, CoreEnvironmentError> {
-        let old_contents = self.manifest_contents()?;
-
         // skip the edit if the contents are unchanged
         // note: consumers of this function may call [Self::link] separately,
         //       causing an evaluation/build of the environment.
-        if contents == old_contents {
+        if self.contents_match_existing_manifest(&contents)? {
             return Ok(Ok(EditResult::Unchanged));
         }
 
-        let old_lockfile = self.existing_lockfile()?;
+        let new_manifest = Manifest::parse_toml_typed(&contents)?;
+        let (old_lockfile, migrated_manifest) =
+            if let Some(lockfile) = self.lockfile_if_up_to_date()?.as_ref() {
+                (lockfile.clone(), new_manifest.migrate(Some(lockfile))?)
+            } else {
+                let lockfile = self.lock(flox).map_err(Box::new)?.into();
+                let migrated = new_manifest.migrate(Some(&lockfile))?;
+                (lockfile, migrated)
+            };
 
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
             .map_err(CoreEnvironmentError::MakeSandbox)?
@@ -431,7 +466,8 @@ impl CoreEnvironment<ReadOnly> {
         let mut temp_env = self.writable(&tempdir)?;
 
         debug!("transaction: updating manifest");
-        temp_env.update_manifest(&contents)?;
+        let maybe_original_schema = migrated_manifest.as_writable_maybe_in_original_schema()?;
+        temp_env.update_manifest(&maybe_original_schema)?;
 
         debug!("transaction: building environment, ignoring errors (unsafe)");
 
@@ -452,7 +488,7 @@ impl CoreEnvironment<ReadOnly> {
 
         match build_attempt {
             Ok(store_path) => Ok(Ok(EditResult::Changed {
-                old_lockfile: Box::new(old_lockfile),
+                old_lockfile: Box::new(Some(old_lockfile)),
                 new_lockfile: Box::new(new_lockfile),
                 built_environment_store_paths: store_path,
             })),
@@ -476,7 +512,7 @@ impl CoreEnvironment<ReadOnly> {
         write_lockfile: bool,
     ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
-        let manifest = self.manifest()?;
+        let manifest = self.manifest(flox)?;
 
         Self::ensure_valid_upgrade(groups_or_iids, &manifest)?;
         tracing::debug!("using catalog client to upgrade");
@@ -514,7 +550,7 @@ impl CoreEnvironment<ReadOnly> {
 
     fn ensure_valid_upgrade(
         groups_or_iids: &[&str],
-        manifest: &Manifest,
+        manifest: &Manifest<Migrated>,
     ) -> Result<(), CoreEnvironmentError> {
         for id in groups_or_iids {
             tracing::debug!(id, "checking that id is a package or group");
@@ -570,7 +606,7 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         flox: &Flox,
         groups_or_iids: &[&str],
-        manifest: &Manifest,
+        manifest: &Manifest<Migrated>,
     ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let existing_lockfile = 'lockfile: {
@@ -584,13 +620,13 @@ impl CoreEnvironment<ReadOnly> {
         // all packages matching the given groups or iids.
         // If no groups or iids are provided, all packages are unlocked.
         let seed_lockfile = existing_lockfile.clone().map(|mut lockfile| {
-            lockfile.unlock_packages_by_group_or_iid(groups_or_iids);
+            LockManifest::unlock_specified_packages_or_groups(&mut lockfile, groups_or_iids);
             lockfile
         });
 
-        let upgraded_lockfile = Lockfile::lock_manifest(
+        let upgraded_lockfile = LockManifest::lock_manifest(
             flox,
-            manifest,
+            &manifest.as_migrated_typed_only(),
             seed_lockfile.as_ref(),
             &self.include_fetcher,
         )
@@ -627,7 +663,7 @@ impl CoreEnvironment<ReadOnly> {
             "upgrading included environments"
         );
 
-        let manifest = self.manifest()?;
+        let manifest = self.manifest(flox)?;
 
         let existing_lockfile_contents = self.existing_lockfile_contents()?;
         let existing_lockfile = existing_lockfile_contents
@@ -635,9 +671,9 @@ impl CoreEnvironment<ReadOnly> {
             .map(Lockfile::from_str)
             .transpose()?;
 
-        let new_lockfile = Lockfile::lock_manifest_with_include_upgrades(
+        let new_lockfile = LockManifest::lock_manifest_with_include_upgrades(
             flox,
-            &manifest,
+            &manifest.as_migrated_typed_only(),
             existing_lockfile.as_ref(),
             &self.include_fetcher,
             Some(to_upgrade),
@@ -738,15 +774,11 @@ impl CoreEnvironment<ReadOnly> {
     #[must_use = "don't discard the store path of built environments"]
     fn transact_with_manifest_contents(
         &mut self,
-        manifest_contents: impl AsRef<str>,
+        manifest: &Manifest<Migrated>,
         flox: &Flox,
     ) -> Result<(BuildEnvOutputs, Lockfile), EnvironmentError> {
-        let manifest: Manifest = toml::from_str(manifest_contents.as_ref())
-            .map_err(CoreEnvironmentError::DeserializeManifest)?;
-        manifest
-            .services
-            .validate()
-            .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Services(e)))?;
+        debug!("transaction: validating services block");
+        manifest.as_latest_schema().services.validate()?;
 
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
             .map_err(CoreEnvironmentError::MakeSandbox)?
@@ -759,7 +791,8 @@ impl CoreEnvironment<ReadOnly> {
         let mut temp_env = self.writable(&tempdir)?;
 
         debug!("transaction: updating manifest");
-        temp_env.update_manifest(&manifest_contents)?;
+        let maybe_original_schema = manifest.as_writable_maybe_in_original_schema()?;
+        temp_env.update_manifest(&maybe_original_schema)?;
 
         debug!("transaction: locking environment");
         let lockfile = temp_env.lock(flox)?.into();
@@ -811,16 +844,12 @@ impl CoreEnvironment<ReadOnly> {
 /// This is not public to enforce that environments are only edited atomically.
 impl CoreEnvironment<ReadWrite> {
     /// Updates the environment manifest with the provided contents
-    fn update_manifest(&mut self, contents: impl AsRef<str>) -> Result<(), CoreEnvironmentError> {
+    fn update_manifest(
+        &mut self,
+        manifest: &Manifest<Writable>,
+    ) -> Result<(), CoreEnvironmentError> {
         debug!("writing new manifest to {}", self.manifest_path().display());
-        let mut manifest_file = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(self.manifest_path())
-            .map_err(CoreEnvironmentError::OpenManifest)?;
-        manifest_file
-            .write_all(contents.as_ref().as_bytes())
-            .map_err(CoreEnvironmentError::UpdateManifest)?;
+        manifest.write_to_file(self.manifest_path())?;
         Ok(())
     }
 
@@ -862,21 +891,21 @@ impl EditResult {
                 let hook_changed = old_lockfile
                     .as_ref()
                     .as_ref()
-                    .and_then(|lockfile| lockfile.manifest.hook.as_ref())
-                    != new_lockfile.manifest.hook.as_ref();
+                    .and_then(|lockfile| lockfile.manifest.hook())
+                    != new_lockfile.manifest.hook();
 
-                let vars_changed = old_lockfile
+                let vars_changed = &old_lockfile
                     .as_ref()
                     .as_ref()
-                    .map(|lockfile| lockfile.manifest.vars.clone())
+                    .map(|lockfile| lockfile.manifest.vars().clone())
                     .unwrap_or_default()
-                    != new_lockfile.manifest.vars;
+                    != new_lockfile.manifest.vars();
 
                 let profile_changed = old_lockfile
                     .as_ref()
                     .as_ref()
-                    .and_then(|lockfile| lockfile.manifest.profile.as_ref())
-                    != new_lockfile.manifest.profile.as_ref();
+                    .and_then(|lockfile| lockfile.manifest.profile())
+                    != new_lockfile.manifest.profile();
 
                 hook_changed || vars_changed || profile_changed
             },
@@ -1015,6 +1044,10 @@ impl UpgradeResult {
 
 #[derive(Debug, Error)]
 pub enum CoreEnvironmentError {
+    #[error(transparent)]
+    Manifest(#[from] ManifestError),
+    #[error(transparent)]
+    Lockfile(#[from] LockfileError),
     // region: immutable manifest errors
     #[error("could not modify manifest")]
     ModifyToml(#[source] TomlEditError),
@@ -1092,6 +1125,8 @@ pub enum CoreEnvironmentError {
     #[error("authentication error")]
     Auth(#[source] AuthError),
     // endregion
+    #[error(transparent)]
+    EnvError(#[from] Box<EnvironmentError>),
 }
 
 impl CoreEnvironmentError {
@@ -1114,43 +1149,56 @@ impl CoreEnvironmentError {
     }
 }
 
+#[cfg(any(test, feature = "tests"))]
 pub mod test_helpers {
+    use flox_manifest::test_helpers::with_schema;
     use indoc::indoc;
 
     use super::*;
     use crate::flox::Flox;
     use crate::models::environment::fetcher::test_helpers::mock_include_fetcher;
 
-    #[cfg(target_os = "macos")]
-    pub const MANIFEST_INCOMPATIBLE_SYSTEM: &str = indoc! {r#"
-        version = 1
-        [options]
-        systems = ["x86_64-linux"]
-        "#};
-    #[cfg(target_os = "macos")]
-    pub const MANIFEST_INCOMPATIBLE_SYSTEM_V1: &str = indoc! {r#"
-        version = 1
-        [options]
-        systems = ["x86_64-linux"]
-        "#};
-    #[cfg(target_os = "linux")]
-    pub const MANIFEST_INCOMPATIBLE_SYSTEM: &str = indoc! {r#"
-        version = 1
-        [options]
-        systems = ["aarch64-darwin"]
-        "#};
-    #[cfg(target_os = "linux")]
-    pub const MANIFEST_INCOMPATIBLE_SYSTEM_V1: &str = indoc! {r#"
-        version = 1
-        [options]
-        systems = ["aarch64-darwin"]
-        "#};
+    pub fn manifest_contents_with_incompatible_system(schema: KnownSchemaVersion) -> String {
+        #[cfg(target_os = "macos")]
+        let contents = with_schema(schema, indoc! {r#"
+            [options]
+            systems = [ "x86_64-linux" ]
+        "#});
+        #[cfg(target_os = "linux")]
+        let contents = with_schema(schema, indoc! {r#"
+            [options]
+            systems = [ "x86_64-linux" ]
+        "#});
+        contents
+    }
+
+    pub fn manifest_contents_with_latest_schema_and_incompatible_system() -> String {
+        manifest_contents_with_incompatible_system(KnownSchemaVersion::latest())
+    }
+
+    pub fn manifest_contents_with_schema_and_incompatible_system(
+        schema: KnownSchemaVersion,
+    ) -> String {
+        manifest_contents_with_incompatible_system(schema)
+    }
+
+    pub fn manifest_with_incompatible_system() -> Manifest<Validated> {
+        Manifest::parse_toml_typed(manifest_contents_with_latest_schema_and_incompatible_system())
+            .unwrap()
+    }
+
+    pub fn manifest_with_incompatible_system_v1() -> Manifest<Validated> {
+        Manifest::parse_toml_typed(manifest_contents_with_schema_and_incompatible_system(
+            KnownSchemaVersion::V1,
+        ))
+        .unwrap()
+    }
 
     pub fn new_core_environment(flox: &Flox, contents: &str) -> CoreEnvironment {
         let env_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
         fs::write(env_path.join(MANIFEST_FILENAME), contents).unwrap();
 
-        CoreEnvironment::new(&env_path, mock_include_fetcher())
+        CoreEnvironment::new(&env_path, mock_include_fetcher()).unwrap()
     }
 
     pub fn new_core_environment_with_lockfile(
@@ -1162,7 +1210,7 @@ pub mod test_helpers {
         fs::write(env_path.join(MANIFEST_FILENAME), manifest_contents).unwrap();
         fs::write(env_path.join(LOCKFILE_FILENAME), lockfile_contents).unwrap();
 
-        CoreEnvironment::new(&env_path, mock_include_fetcher())
+        CoreEnvironment::new(&env_path, mock_include_fetcher()).unwrap()
     }
 
     pub fn new_core_environment_from_env_files(
@@ -1179,21 +1227,23 @@ pub mod test_helpers {
 #[cfg(test)]
 mod tests {
     use std::fs::OpenOptions;
+    use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
 
-    use catalog::{GENERATED_DATA, MANUALLY_GENERATED};
     use flox_core::activate::mode::ActivateMode;
+    use flox_manifest::parsed::Inner;
+    use flox_manifest::raw::CatalogPackage;
+    use flox_manifest::test_helpers::{with_latest_schema, with_schema};
+    use flox_test_utils::{GENERATED_DATA, MANUALLY_GENERATED};
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use tempfile::{TempDir, tempdir_in};
     use test_helpers::{new_core_environment_from_env_files, new_core_environment_with_lockfile};
-    use tests::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
 
     use self::test_helpers::new_core_environment;
     use super::*;
     use crate::flox::test_helpers::flox_instance;
-    use crate::models::manifest::raw::CatalogPackage;
-    use crate::providers::catalog;
+    use crate::models::environment::test_helpers::manifest_with_incompatible_system;
     use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::services::process_compose::SERVICE_CONFIG_FILENAME;
     use crate::utils::serialize_json_with_newline;
@@ -1218,7 +1268,8 @@ mod tests {
 
         let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
             base_directory: None,
-        });
+        })
+        .unwrap();
 
         let new_env_str = r#"
         version = 1
@@ -1231,7 +1282,14 @@ mod tests {
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         env_view.edit(&flox, new_env_str.to_string()).unwrap();
 
-        assert_eq!(env_view.manifest_contents().unwrap(), new_env_str);
+        assert_eq!(
+            env_view
+                .pre_migration_manifest()
+                .unwrap()
+                .as_writable()
+                .to_string(),
+            new_env_str
+        );
         assert!(env_view.env_dir.join(LOCKFILE_FILENAME).exists());
     }
 
@@ -1240,12 +1298,26 @@ mod tests {
     fn edit_no_op_locked_returns_unchanged() {
         let (flox, _temp_dir_handle) = flox_instance();
 
+        let same_manifest = with_latest_schema("");
+        let mut env_view = new_core_environment(&flox, &same_manifest);
+        env_view.lock(&flox).unwrap(); // Explicit lock
+
+        let result = env_view.edit(&flox, same_manifest).unwrap();
+        assert_eq!(result, EditResult::Unchanged);
+    }
+
+    /// A no-op with edit against a locked environment with an old schema version
+    /// returns EditResult::Unchanged
+    #[test]
+    fn edit_no_op_locked_old_schema_returns_unchanged() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
         let same_manifest = "version = 1";
         let mut env_view = new_core_environment(&flox, same_manifest);
         env_view.lock(&flox).unwrap(); // Explicit lock
 
         let result = env_view.edit(&flox, same_manifest.to_string()).unwrap();
-        assert!(matches!(result, EditResult::Unchanged));
+        assert_eq!(result, EditResult::Unchanged);
     }
 
     /// A no-op with edit against an unlocked environment returns EditResult::Changed
@@ -1269,9 +1341,9 @@ mod tests {
         let mut temp_env = env_view
             .writable(tempdir_in(&flox.temp_dir).unwrap().keep())
             .unwrap();
-        temp_env
-            .update_manifest(MANIFEST_INCOMPATIBLE_SYSTEM)
-            .unwrap();
+        let manifest = manifest_with_incompatible_system().migrate(None).unwrap();
+        let maybe_original_schema = manifest.as_writable_maybe_in_original_schema().unwrap();
+        temp_env.update_manifest(&maybe_original_schema).unwrap();
         temp_env.lock(&flox).unwrap();
         env_view.replace_with(temp_env).unwrap();
 
@@ -1358,8 +1430,9 @@ mod tests {
         flox.catalog_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
+        let manifest = env_view.manifest(&flox).unwrap();
         let upgraded_packages = env_view
-            .upgrade_with_catalog_client(&flox, &[], &env_view.manifest().unwrap())
+            .upgrade_with_catalog_client(&flox, &[], &manifest)
             .unwrap()
             .diff();
 
@@ -1377,7 +1450,8 @@ mod tests {
 
         let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
             base_directory: None,
-        });
+        })
+        .unwrap();
         let temp_env = env_view.writable(&sandbox_path).unwrap();
 
         let err = env_view
@@ -1405,7 +1479,8 @@ mod tests {
 
         let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
             base_directory: None,
-        });
+        })
+        .unwrap();
         let temp_env = env_view.writable(&sandbox_path).unwrap();
 
         let err = env_view.replace_with(temp_env).expect_err(&format!(
@@ -1438,7 +1513,8 @@ mod tests {
 
         let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
             base_directory: None,
-        });
+        })
+        .unwrap();
 
         flox.catalog_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
@@ -1559,7 +1635,7 @@ mod tests {
         // Make a non-formatting change to the lock
         {
             let mut lockfile = environment.existing_lockfile().unwrap().unwrap();
-            lockfile.manifest.options.activate.mode = Some(ActivateMode::Dev);
+            lockfile.manifest.options_mut().activate.mode = Some(ActivateMode::Dev);
             let lockfile_contents = serialize_json_with_newline(&lockfile).unwrap();
             let lockfile_path = environment.lockfile_path();
             let mut lockfile = OpenOptions::new().write(true).open(lockfile_path).unwrap();
@@ -1591,25 +1667,45 @@ mod tests {
     #[test]
     fn edit_fails_when_daemon_has_no_shutdown_command() {
         let (flox, _dir) = flox_instance();
-        let initial_manifest = r#"
-            version = 1
-        "#;
-        let mut env = new_core_environment(&flox, initial_manifest);
-        let bad_manifest = r#"
-            version = 1
-
+        let initial_manifest = with_latest_schema("");
+        let mut env = new_core_environment(&flox, &initial_manifest);
+        let bad_manifest = with_latest_schema(indoc! {r#"
             [services.bad]
             command = "cmd"
             is-daemon = true
-            # missing shutdown.command = "..."
-        "#;
-        let res = env.transact_with_manifest_contents(bad_manifest, &flox);
-        eprintln!("{res:?}");
+            shutdown.command = "cmd" # we're going to delete this
+        "#});
+        let mut manifest = Manifest::parse_and_migrate(bad_manifest, None).unwrap();
+        manifest
+            .services_mut()
+            .inner_mut()
+            .get_mut("bad")
+            .unwrap()
+            .shutdown = None;
+        let res = env.transact_with_manifest_contents(&manifest, &flox);
         assert!(matches!(
             res,
-            Err(EnvironmentError::Core(CoreEnvironmentError::Services(
-                ServiceError::InvalidConfig(_)
-            )))
+            Err(EnvironmentError::ManifestError(
+                ManifestError::InvalidServiceConfig(_)
+            ))
         ));
+    }
+
+    #[test]
+    fn lock_doesnt_migrate_backwards_compatible_manifest() {
+        let (flox, tmpdir) = flox_instance();
+        let manifest_contents = with_schema(KnownSchemaVersion::V1, "");
+        let original_manifest = Manifest::parse_toml_typed(&manifest_contents).unwrap();
+        let mut env = new_core_environment(&flox, &manifest_contents);
+        let mut writable_env = env.writable(tmpdir.path()).unwrap();
+        writable_env
+            .update_manifest(&original_manifest.as_writable())
+            .unwrap();
+        writable_env.lock(&flox).unwrap();
+        let post_lock_manifest = writable_env.pre_migration_manifest().unwrap();
+        assert_eq!(
+            original_manifest.as_writable().to_string(),
+            post_lock_manifest.as_writable().to_string()
+        );
     }
 }

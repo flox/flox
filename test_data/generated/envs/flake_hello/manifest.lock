@@ -1,0 +1,130 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "install": {
+      "hello": {
+        "flake": "github:NixOS/nixpkgs/nixpkgs-unstable#hello"
+      }
+    },
+    "options": {}
+  },
+  "packages": [
+    {
+      "install_id": "hello",
+      "locked-url": "github:NixOS/nixpkgs/ea30586ee015f37f38783006a9bc9e4aa64d7d61?narHash=sha256-PDFfpswLiuG/DcadTBb7dEfO3jX1fcGlCD4ZKSkC0M8%3D",
+      "flake-description": "A collection of packages for the Nix package manager",
+      "locked-flake-attr-path": "legacyPackages.aarch64-darwin.hello",
+      "derivation": "/nix/store/n0wvgrqxdljpaa5aaqdjj9gwdm9pk8m1-hello-2.12.2.drv",
+      "outputs": {
+        "out": "/nix/store/z9ljhwdfsydrdjri5fzg599y78nah34j-hello-2.12.2"
+      },
+      "output-names": [
+        "out"
+      ],
+      "outputs-to-install": [
+        "out"
+      ],
+      "requested-outputs-to-install": [],
+      "package-system": "aarch64-darwin",
+      "system": "aarch64-darwin",
+      "name": "hello-2.12.2",
+      "pname": "hello",
+      "version": "2.12.2",
+      "description": "Program that produces a familiar, friendly greeting",
+      "licenses": [
+        "GPL-3.0-or-later"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    },
+    {
+      "install_id": "hello",
+      "locked-url": "github:NixOS/nixpkgs/ea30586ee015f37f38783006a9bc9e4aa64d7d61?narHash=sha256-PDFfpswLiuG/DcadTBb7dEfO3jX1fcGlCD4ZKSkC0M8%3D",
+      "flake-description": "A collection of packages for the Nix package manager",
+      "locked-flake-attr-path": "legacyPackages.aarch64-linux.hello",
+      "derivation": "/nix/store/w4w41xal10m3m36bhacbkiap0d2nk12w-hello-2.12.2.drv",
+      "outputs": {
+        "out": "/nix/store/rdi64cigphnc1f28lxlxay51cxnfa3vs-hello-2.12.2"
+      },
+      "output-names": [
+        "out"
+      ],
+      "outputs-to-install": [
+        "out"
+      ],
+      "requested-outputs-to-install": [],
+      "package-system": "aarch64-linux",
+      "system": "aarch64-linux",
+      "name": "hello-2.12.2",
+      "pname": "hello",
+      "version": "2.12.2",
+      "description": "Program that produces a familiar, friendly greeting",
+      "licenses": [
+        "GPL-3.0-or-later"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    },
+    {
+      "install_id": "hello",
+      "locked-url": "github:NixOS/nixpkgs/ea30586ee015f37f38783006a9bc9e4aa64d7d61?narHash=sha256-PDFfpswLiuG/DcadTBb7dEfO3jX1fcGlCD4ZKSkC0M8%3D",
+      "flake-description": "A collection of packages for the Nix package manager",
+      "locked-flake-attr-path": "legacyPackages.x86_64-darwin.hello",
+      "derivation": "/nix/store/svyiqymchqxj0i0kazcz7fxn8xz5p296-hello-2.12.2.drv",
+      "outputs": {
+        "out": "/nix/store/l8abcf6wk04p2aainyc3pbk091fq8snp-hello-2.12.2"
+      },
+      "output-names": [
+        "out"
+      ],
+      "outputs-to-install": [
+        "out"
+      ],
+      "requested-outputs-to-install": [],
+      "package-system": "x86_64-darwin",
+      "system": "x86_64-darwin",
+      "name": "hello-2.12.2",
+      "pname": "hello",
+      "version": "2.12.2",
+      "description": "Program that produces a familiar, friendly greeting",
+      "licenses": [
+        "GPL-3.0-or-later"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    },
+    {
+      "install_id": "hello",
+      "locked-url": "github:NixOS/nixpkgs/ea30586ee015f37f38783006a9bc9e4aa64d7d61?narHash=sha256-PDFfpswLiuG/DcadTBb7dEfO3jX1fcGlCD4ZKSkC0M8%3D",
+      "flake-description": "A collection of packages for the Nix package manager",
+      "locked-flake-attr-path": "legacyPackages.x86_64-linux.hello",
+      "derivation": "/nix/store/72pl0rs7xi7vsniia10p7q8vl7f36xaw-hello-2.12.2.drv",
+      "outputs": {
+        "out": "/nix/store/i3zw7h6pg3n9r5i63iyqxrapa70i4v5w-hello-2.12.2"
+      },
+      "output-names": [
+        "out"
+      ],
+      "outputs-to-install": [
+        "out"
+      ],
+      "requested-outputs-to-install": [],
+      "package-system": "x86_64-linux",
+      "system": "x86_64-linux",
+      "name": "hello-2.12.2",
+      "pname": "hello",
+      "version": "2.12.2",
+      "description": "Program that produces a familiar, friendly greeting",
+      "licenses": [
+        "GPL-3.0-or-later"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    }
+  ]
+}

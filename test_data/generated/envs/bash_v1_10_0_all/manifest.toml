@@ -1,0 +1,5 @@
+schema-version = "1.10.0"
+
+[install]
+bash.pkg-path = "bashNonInteractive"
+bash.outputs = "all"

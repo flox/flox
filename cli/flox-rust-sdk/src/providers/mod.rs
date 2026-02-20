@@ -6,6 +6,8 @@ pub mod catalog_auth;
 pub mod container_builder;
 pub mod flake_installable_locker;
 pub mod git;
+pub mod lock_manifest;
+pub mod manifest_init;
 pub mod nix;
 pub mod publish;
 pub mod services;

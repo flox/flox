@@ -4,7 +4,15 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
-use flox_rust_sdk::flox::{DEFAULT_NAME, Flox, RemoteEnvironmentRef};
+use flox_core::data::environment_ref::{DEFAULT_NAME, RemoteEnvironmentRef};
+use flox_manifest::compose::{
+    COMPOSER_MANIFEST_ID,
+    new_package_overrides,
+    package_overrides_for_manifest_id,
+};
+use flox_manifest::lockfile::LockedPackage;
+use flox_manifest::raw::{CatalogPackage, PackageToInstall, catalog_packages_to_install};
+use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::{
     RemoteEnvironment,
@@ -17,22 +25,6 @@ use flox_rust_sdk::models::environment::{
     InstallationAttempt,
     ManagedPointer,
 };
-use flox_rust_sdk::models::lockfile::{
-    LockedPackage,
-    ResolutionFailure,
-    ResolutionFailures,
-    ResolveError,
-};
-use flox_rust_sdk::models::manifest::composite::{
-    COMPOSER_MANIFEST_ID,
-    new_package_overrides,
-    package_overrides_for_manifest_id,
-};
-use flox_rust_sdk::models::manifest::raw::{
-    CatalogPackage,
-    PackageToInstall,
-    catalog_packages_to_install,
-};
 use flox_rust_sdk::models::user_state::{
     lock_and_read_user_state_file,
     user_state_path,
@@ -41,6 +33,11 @@ use flox_rust_sdk::models::user_state::{
 use flox_rust_sdk::providers::catalog::{
     MsgAttrPathNotFoundNotFoundForAllSystems,
     MsgAttrPathNotFoundNotInCatalog,
+};
+use flox_rust_sdk::providers::lock_manifest::{
+    ResolutionFailure,
+    ResolutionFailures,
+    ResolveError,
 };
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -754,14 +751,15 @@ fn add_activation_to_rc_file(
 
 #[cfg(test)]
 mod tests {
+    use flox_manifest::lockfile::LockedPackageCatalog;
+    use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
+    use flox_manifest::raw::{CatalogPackage, PackageToInstall};
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
-    use flox_rust_sdk::models::lockfile::LockedPackageCatalog;
-    use flox_rust_sdk::models::lockfile::test_helpers::fake_catalog_package_lock;
-    use flox_rust_sdk::models::manifest::raw::{CatalogPackage, PackageToInstall};
+    use flox_rust_sdk::providers::catalog::SystemEnum;
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
-    use flox_rust_sdk::providers::catalog::{GENERATED_DATA, SystemEnum};
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
+    use flox_test_utils::GENERATED_DATA;
     use flox_test_utils::manifests::EMPTY_ALL_SYSTEMS;
     use indoc::formatdoc;
     use tracing::instrument::WithSubscriber;
