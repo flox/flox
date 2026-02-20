@@ -910,6 +910,7 @@ mod tests {
             [services]
             sleep2.command = "sleep infinity"
             sleep2.is-daemon = true
+            sleep2.shutdown.command = "cmd"
         "#});
 
         fs::create_dir(&dep_path).unwrap();
@@ -927,6 +928,7 @@ mod tests {
             [services]
             sleep1.command = "sleep infinity"
             sleep1.is-daemon = true
+            sleep1.shutdown.command = "cmd"
         "#});
         fs::create_dir(&composer_path).unwrap();
         let mut composer =
@@ -947,8 +949,10 @@ mod tests {
                 [services]
                 sleep1.command = "sleep infinity"
                 sleep1.is-daemon = true
+                sleep1.shutdown.command = "cmd"
                 sleep2.command = "sleep infinity"
-                sleep2.is-daemon = true"#})
+                sleep2.is-daemon = true
+                sleep2.shutdown.command = "cmd""#})
         );
     }
 

@@ -207,6 +207,7 @@ impl_into_inner!(Install, BTreeMap<String, ManifestPackageDescriptor>);
 #[cfg(any(test, feature = "tests"))]
 pub mod test_helpers {
     use super::*;
+    use crate::parsed::common::ServiceShutdown;
 
     // Generate a Manifest that has empty install and include sections
     pub fn manifest_without_install_or_include() -> impl Strategy<Value = ManifestV1> {
@@ -221,7 +222,14 @@ pub mod test_helpers {
             any::<Option<Containerize>>(),
         )
             .prop_map(
-                |(version, vars, hook, profile, options, services, build, containerize)| {
+                |(version, vars, hook, profile, options, mut services, build, containerize)| {
+                    for (_name, svc) in services.inner_mut().iter_mut() {
+                        if svc.is_daemon.is_some_and(|is_daemon| is_daemon) {
+                            svc.shutdown = Some(ServiceShutdown {
+                                command: "cmd".to_string(),
+                            });
+                        }
+                    }
                     ManifestV1 {
                         version,
                         install: Install::default(),
