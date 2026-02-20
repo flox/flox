@@ -1231,6 +1231,7 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     use flox_core::activate::mode::ActivateMode;
+    use flox_manifest::parsed::Inner;
     use flox_manifest::raw::CatalogPackage;
     use flox_manifest::test_helpers::{with_latest_schema, with_schema};
     use flox_test_utils::{GENERATED_DATA, MANUALLY_GENERATED};
@@ -1672,9 +1673,15 @@ mod tests {
             [services.bad]
             command = "cmd"
             is-daemon = true
-            # missing shutdown.command = "..."
+            shutdown.command = "cmd" # we're going to delete this
         "#});
-        let manifest = Manifest::parse_and_migrate(bad_manifest, None).unwrap();
+        let mut manifest = Manifest::parse_and_migrate(bad_manifest, None).unwrap();
+        manifest
+            .services_mut()
+            .inner_mut()
+            .get_mut("bad")
+            .unwrap()
+            .shutdown = None;
         let res = env.transact_with_manifest_contents(&manifest, &flox);
         assert!(matches!(
             res,
