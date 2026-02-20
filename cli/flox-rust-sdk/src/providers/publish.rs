@@ -1203,11 +1203,17 @@ pub mod tests {
         let manifest_path = env
             .manifest_path(&flox)
             .expect("to be able to get manifest path");
-        env.pre_migration_manifest(&flox)
-            .unwrap()
-            .as_writable()
-            .write_to_file(&manifest_path)
-            .unwrap();
+        std::fs::write(
+            &manifest_path,
+            format!(
+                "{}\n",
+                env.pre_migration_manifest(&flox)
+                    .unwrap()
+                    .as_writable()
+                    .to_string()
+            ),
+        )
+        .expect("to write some additional text to the .flox");
         git.add(&[manifest_path.as_path()])
             .expect("adding flox files");
         git.commit("dirty comment").expect("be able to commit");
