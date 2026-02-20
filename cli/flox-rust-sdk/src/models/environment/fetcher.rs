@@ -459,9 +459,7 @@ mod test {
             [vars]
             foo = "bar"
         "#});
-        remote_env
-            .edit(&flox, manifest_contents.clone())
-            .unwrap();
+        remote_env.edit(&flox, manifest_contents.clone()).unwrap();
 
         let fetched_after_upstream_changes =
             include_fetcher.fetch(&flox, &include_descriptor).unwrap();
