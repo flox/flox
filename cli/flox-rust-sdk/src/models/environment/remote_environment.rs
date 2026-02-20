@@ -601,6 +601,7 @@ mod tests {
     use std::str::FromStr;
 
     use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
+    use flox_manifest::test_helpers::with_latest_schema;
     use flox_test_utils::GENERATED_DATA;
     use indoc::indoc;
 
@@ -704,7 +705,7 @@ mod tests {
                 .unwrap()
                 .as_writable()
                 .to_string(),
-            "version = 1\n"
+            with_latest_schema("")
         );
     }
 
