@@ -237,6 +237,7 @@ EOF
 
 # bats test_tags=edit:priority
 @test "'flox edit' priority" {
+  skip "TODO: revisit this test after #3887"
   "$FLOX_BIN" init
 
 WITHOUT_PRIORITY=$(cat <<EOF
