@@ -190,21 +190,23 @@ impl<State> CoreEnvironment<State> {
         .block_on()?;
 
         // Now that we have an up to date lockfile, we can migrate the manifest
-        // if necessary
-
-        // - If the manifest in the lockfile is migrated, we need to migrate
-        //   and write a new manifest
-        // - If the original schema matches what's in the lockfile, we don't need
-        //   to migrate.
+        // if necessary.
+        //
+        // The lockfile always contains the manifest in the latest schema, but
+        // the on-disk manifest may be in an older schema. We only need to
+        // rewrite the manifest if it's not backwards compatible with the
+        // original schema.
         let original_schema = pre_migration_manifest.get_schema_version();
         let lockfile_schema_version = lockfile.manifest.get_schema_version();
         let lockfile_has_latest_schema_version =
             lockfile_schema_version == KnownSchemaVersion::latest();
         if lockfile_has_latest_schema_version && (lockfile_schema_version != original_schema) {
             let migrated_manifest = self.pre_migration_manifest()?.migrate(Some(&lockfile))?;
-            migrated_manifest
-                .as_writable()
-                .write_to_file(self.manifest_path())?;
+            if !migrated_manifest.is_backwards_compatible()? {
+                migrated_manifest
+                    .as_writable()
+                    .write_to_file(self.manifest_path())?;
+            }
         }
 
         let mut lockfile_contents =
@@ -1229,7 +1231,7 @@ mod tests {
 
     use flox_core::activate::mode::ActivateMode;
     use flox_manifest::raw::CatalogPackage;
-    use flox_manifest::test_helpers::with_schema;
+    use flox_manifest::test_helpers::{with_latest_schema, with_schema};
     use flox_test_utils::{GENERATED_DATA, MANUALLY_GENERATED};
     use indoc::indoc;
     use pretty_assertions::assert_eq;
@@ -1649,26 +1651,21 @@ mod tests {
     #[test]
     fn edit_fails_when_daemon_has_no_shutdown_command() {
         let (flox, _dir) = flox_instance();
-        let initial_manifest = r#"
-            version = 1
-        "#;
-        let mut env = new_core_environment(&flox, initial_manifest);
-        let bad_manifest = r#"
-            version = 1
-
+        let initial_manifest = with_latest_schema("");
+        let mut env = new_core_environment(&flox, &initial_manifest);
+        let bad_manifest = with_latest_schema(indoc! {r#"
             [services.bad]
             command = "cmd"
             is-daemon = true
             # missing shutdown.command = "..."
-        "#;
+        "#});
         let manifest = Manifest::parse_and_migrate(bad_manifest, None).unwrap();
         let res = env.transact_with_manifest_contents(&manifest, &flox);
-        eprintln!("{res:?}");
         assert!(matches!(
             res,
-            Err(EnvironmentError::Core(CoreEnvironmentError::Services(
-                ServiceError::InvalidConfig(_)
-            )))
+            Err(EnvironmentError::ManifestError(
+                ManifestError::InvalidServiceConfig(_)
+            ))
         ));
     }
 

@@ -14,7 +14,7 @@ use tracing::{debug, trace};
 use crate::interfaces::CommonFields;
 use crate::parsed::common::{self, KnownSchemaVersion, VersionKind};
 use crate::parsed::v1_10_0::SelectedOutputs;
-use crate::parsed::{Inner, v1, v1_10_0};
+use crate::parsed::{v1, v1_10_0, Inner};
 use crate::util::is_custom_package;
 use crate::{Manifest, ManifestError, Migrated, Parsed, Validated};
 
@@ -826,7 +826,7 @@ fn update_schema_version(raw: &mut DocumentMut, schema_version: KnownSchemaVersi
             if raw.get("schema-version").is_some() {
                 raw.remove("schema-version");
             }
-            raw.insert("version", toml_string(schema_version.to_string()).into());
+            raw.insert("version", Value::Integer(Formatted::new(1)).into());
         },
         KnownSchemaVersion::V1_10_0 => {
             if raw.get("version").is_some() {
@@ -1215,18 +1215,18 @@ pub mod test_helpers {
 
     use crate::lockfile::Lockfile;
     use crate::parsed::latest::ManifestLatest;
-    use crate::parsed::v1::ManifestV1;
-    use crate::{Manifest, Migrated, Parsed};
+    use crate::{Manifest, Migrated};
 
     pub fn mk_test_manifest_from_contents(s: impl AsRef<str>) -> Manifest<Migrated> {
         let toml = s.as_ref().parse::<DocumentMut>().unwrap();
         let typed: ManifestLatest = toml_edit::de::from_document(toml.clone()).unwrap();
+        // Determine the original schema from the content so that
+        // original_parsed accurately reflects the starting schema version.
+        let validated = Manifest::parse_toml_typed(s.as_ref()).unwrap();
         Manifest {
             inner: Migrated {
-                // UNUSED, or DON'T USE, PICK ONE
-                original_parsed: Parsed::V1(ManifestV1::default()),
+                original_parsed: validated.inner.parsed,
                 lockfile: Some(Lockfile::default()),
-                // OK YOU CAN USE THESE
                 migrated_raw: toml,
                 migrated_parsed: typed,
             },
@@ -1234,20 +1234,7 @@ pub mod test_helpers {
     }
 
     pub fn empty_test_migrated_manifest() -> Manifest<Migrated> {
-        let toml = "schema-version = \"1.10.0\""
-            .parse::<DocumentMut>()
-            .unwrap();
-        let typed: ManifestLatest = toml_edit::de::from_document(toml.clone()).unwrap();
-        Manifest {
-            inner: Migrated {
-                // UNUSED, or DON'T USE, PICK ONE
-                original_parsed: Parsed::V1(ManifestV1::default()),
-                lockfile: Some(Lockfile::default()),
-                // OK YOU CAN USE THESE
-                migrated_raw: toml,
-                migrated_parsed: typed,
-            },
-        }
+        mk_test_manifest_from_contents("schema-version = \"1.10.0\"")
     }
 }
 
