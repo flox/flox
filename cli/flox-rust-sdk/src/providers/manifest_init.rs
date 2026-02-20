@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use flox_core::data::System;
+use flox_manifest::parsed::common::KnownSchemaVersion;
 use flox_manifest::raw::{
     DEFAULT_SYSTEMS_STR,
     MANIFEST_BUILD_KEY,
@@ -87,7 +88,10 @@ impl ManifestInitializer {
     /// Populates the manifest schema version.
     fn add_version(manifest: &mut DocumentMut) {
         // `version` number
-        manifest.insert(MANIFEST_VERSION_KEY, toml_edit::value(1));
+        manifest.insert(
+            MANIFEST_VERSION_KEY,
+            toml_edit::value(KnownSchemaVersion::latest().to_string()),
+        );
     }
 
     /// Populates an example install section with any packages necessary for

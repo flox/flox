@@ -154,22 +154,17 @@ EOF
 # bats test_tags=list,list:config
 @test "'flox list --config' shows manifest content for composed environments" {
   "$FLOX_BIN" init -d included
-  cat > included/.flox/env/manifest.toml <<-EOF
-version = 1
-
-[install]
-hello.pkg-path = "hello"
-EOF
+  INCLUDED_CONTENTS="$(with_latest_schema '[install]
+hello.pkg-path = "hello"')"
+  echo "$INCLUDED_CONTENTS" > included/.flox/env/manifest.toml
 
   "$FLOX_BIN" init -d composer
-  cat > composer/.flox/env/manifest.toml <<-EOF
-version = 1
 
-[include]
+  COMPOSER_CONTENTS="$(with_latest_schema '[include]
 environments = [
   { dir = "../included" },
-]
-EOF
+]')"
+  echo "$COMPOSER_CONTENTS" > composer/.flox/env/manifest.toml
 
   # Trigger a lock of included
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
@@ -179,10 +174,9 @@ EOF
     run --separate-stderr "$FLOX_BIN" list -c -d composer
   assert_success
   # TODO: Unspecified tables and empty vecs should be omitted.
-  assert_equal "$output" 'version = 1
-
-[install]
-hello.pkg-path = "hello"'
+  expected="$(with_latest_schema '[install]
+hello.pkg-path = "hello"')"
+  assert_equal "$output" "$expected"
   assert_equal "$stderr" 'ℹ Displaying merged manifest.'
 }
 
