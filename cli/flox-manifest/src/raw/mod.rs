@@ -872,25 +872,33 @@ fn update_raw_packages_from_typed_manifest(
     raw: &mut DocumentMut,
     parsed: &Parsed,
 ) -> Result<(), ManifestError> {
-    let install_table = get_install_table_mut(raw)?;
-    let raw_pkgs = install_table
-        .iter()
-        .map(|(key, _value)| key.to_string())
-        .collect::<HashSet<String>>();
     let typed_pkgs = match parsed {
-        crate::Parsed::V1(manifest) => manifest
+        Parsed::V1(manifest) => manifest
             .install
             .inner()
             .keys()
             .cloned()
             .collect::<HashSet<String>>(),
-        crate::Parsed::V1_10_0(manifest) => manifest
+        Parsed::V1_10_0(manifest) => manifest
             .install
             .inner()
             .keys()
             .cloned()
             .collect::<HashSet<String>>(),
     };
+
+    // Don't create an [install] table if there are no packages in either
+    // the raw TOML or the typed manifest.
+    let has_raw_install = raw.get("install").is_some();
+    if !has_raw_install && typed_pkgs.is_empty() {
+        return Ok(());
+    }
+
+    let install_table = get_install_table_mut(raw)?;
+    let raw_pkgs = install_table
+        .iter()
+        .map(|(key, _value)| key.to_string())
+        .collect::<HashSet<String>>();
     let to_remove = raw_pkgs
         .difference(&typed_pkgs)
         .cloned()
@@ -1792,6 +1800,21 @@ curl.outputs = [\"bin\", \"man\"]
         let opts = manifest.inner.raw["options"].clone();
         assert!(opts["allow"]["unfree"].as_bool().unwrap());
         assert!(opts.get("systems").is_none());
+    }
+
+    #[test]
+    fn update_raw_packages_does_not_add_install_table_when_no_packages() {
+        let toml_str = with_latest_schema("");
+        let mut manifest = Manifest::parse_toml_typed(&toml_str).unwrap();
+        assert!(
+            manifest.inner.raw.get("install").is_none(),
+            "precondition: no [install] table"
+        );
+        manifest.update_raw_packages_from_typed_manifest().unwrap();
+        assert!(
+            manifest.inner.raw.get("install").is_none(),
+            "update_raw_packages should not create an [install] table when there are no packages"
+        );
     }
 
     #[test]
