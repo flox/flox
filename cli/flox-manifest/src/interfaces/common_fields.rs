@@ -1,4 +1,4 @@
-use crate::{Manifest, Migrated, MigratedTypedOnly, Parsed, TypedOnly, parsed};
+use crate::{Manifest, Migrated, MigratedTypedOnly, Parsed, TypedOnly, Validated, parsed};
 
 pub trait CommonFields {
     fn vars(&self) -> &parsed::common::Vars;
@@ -131,6 +131,72 @@ impl CommonFields for Parsed {
             Parsed::V1(inner) => inner.options_mut(),
             Parsed::V1_10_0(inner) => inner.options_mut(),
         }
+    }
+}
+
+impl CommonFields for Manifest<Validated> {
+    fn vars(&self) -> &parsed::common::Vars {
+        self.inner.parsed.vars()
+    }
+
+    fn hook(&self) -> Option<&parsed::common::Hook> {
+        self.inner.parsed.hook()
+    }
+
+    fn profile(&self) -> Option<&parsed::common::Profile> {
+        self.inner.parsed.profile()
+    }
+
+    fn services(&self) -> &parsed::common::Services {
+        self.inner.parsed.services()
+    }
+
+    fn include(&self) -> &parsed::common::Include {
+        self.inner.parsed.include()
+    }
+
+    fn build(&self) -> &parsed::common::Build {
+        self.inner.parsed.build()
+    }
+
+    fn containerize(&self) -> Option<&parsed::common::Containerize> {
+        self.inner.parsed.containerize()
+    }
+
+    fn options(&self) -> &parsed::common::Options {
+        self.inner.parsed.options()
+    }
+
+    fn vars_mut(&mut self) -> &mut parsed::common::Vars {
+        self.inner.parsed.vars_mut()
+    }
+
+    fn hook_mut(&mut self) -> Option<&mut parsed::common::Hook> {
+        self.inner.parsed.hook_mut()
+    }
+
+    fn profile_mut(&mut self) -> Option<&mut parsed::common::Profile> {
+        self.inner.parsed.profile_mut()
+    }
+
+    fn services_mut(&mut self) -> &mut parsed::common::Services {
+        self.inner.parsed.services_mut()
+    }
+
+    fn include_mut(&mut self) -> &mut parsed::common::Include {
+        self.inner.parsed.include_mut()
+    }
+
+    fn build_mut(&mut self) -> &mut parsed::common::Build {
+        self.inner.parsed.build_mut()
+    }
+
+    fn containerize_mut(&mut self) -> Option<&mut parsed::common::Containerize> {
+        self.inner.parsed.containerize_mut()
+    }
+
+    fn options_mut(&mut self) -> &mut parsed::common::Options {
+        self.inner.parsed.options_mut()
     }
 }
 

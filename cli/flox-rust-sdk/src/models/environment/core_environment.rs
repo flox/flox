@@ -1229,6 +1229,7 @@ mod tests {
 
     use flox_core::activate::mode::ActivateMode;
     use flox_manifest::raw::CatalogPackage;
+    use flox_manifest::test_helpers::with_schema;
     use flox_test_utils::{GENERATED_DATA, MANUALLY_GENERATED};
     use indoc::indoc;
     use pretty_assertions::assert_eq;
@@ -1669,5 +1670,23 @@ mod tests {
                 ServiceError::InvalidConfig(_)
             )))
         ));
+    }
+
+    #[test]
+    fn lock_doesnt_migrate_backwards_compatible_manifest() {
+        let (flox, tmpdir) = flox_instance();
+        let manifest_contents = with_schema(KnownSchemaVersion::V1, "");
+        let original_manifest = Manifest::parse_toml_typed(&manifest_contents).unwrap();
+        let mut env = new_core_environment(&flox, &manifest_contents);
+        let mut writable_env = env.writable(tmpdir.path()).unwrap();
+        writable_env
+            .update_manifest(&original_manifest.as_writable())
+            .unwrap();
+        writable_env.lock(&flox).unwrap();
+        let post_lock_manifest = writable_env.pre_migration_manifest().unwrap();
+        assert_eq!(
+            original_manifest.as_writable().to_string(),
+            post_lock_manifest.as_writable().to_string()
+        );
     }
 }
