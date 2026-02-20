@@ -19,7 +19,7 @@ use crate::util::is_custom_package;
 use crate::{Manifest, ManifestError, Migrated, Parsed, Validated};
 
 /// Represents the `[version]` number key in manifest.toml
-pub const MANIFEST_VERSION_KEY: &str = "version";
+pub const MANIFEST_VERSION_KEY: &str = "schema-version";
 /// Represents the `[install]` table key in manifest.toml
 pub const MANIFEST_INSTALL_KEY: &str = "install";
 /// Represents the `[vars]` table key in manifest.toml
