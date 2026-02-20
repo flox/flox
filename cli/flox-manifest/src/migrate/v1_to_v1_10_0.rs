@@ -28,6 +28,7 @@ pub(crate) fn migrate_manifest_v1_to_v1_10_0(
 ) -> Result<ManifestV1_10_0, MigrationError> {
     let mut migrated = ManifestV1_10_0 {
         schema_version: "1.10.0".to_string(),
+        minimum_cli_version: Default::default(),
         install: latest::Install::default(),
         vars: manifest.vars.clone(),
         hook: manifest.hook.clone(),
