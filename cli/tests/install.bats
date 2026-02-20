@@ -243,7 +243,7 @@ EOF
   assert_failure
   assert_output "$(
     cat << EOF
-✘ ERROR: resolution failed:
+✘ ERROR: resolution failed: 
 Could not find package 'badpkg'.
 Try 'flox search' with a broader search term.
 EOF
@@ -281,7 +281,7 @@ EOF
   assert_failure
   assert_output --partial "$(
     cat << EOF
-✘ ERROR: resolution failed:
+✘ ERROR: resolution failed: 
 Could not find package 'node'.
 Try 'flox install nodejs' instead.
 
@@ -365,7 +365,7 @@ EOF
   assert_failure
   assert_output "$(
     cat << EOF
-✘ ERROR: resolution failed:
+✘ ERROR: resolution failed: 
 No version compatible with '14.16.1' found for 'nodejs' on 'aarch64-darwin'.
 EOF
   )"
@@ -382,7 +382,7 @@ EOF
   assert_failure
   assert_output "$(
     cat << EOF
-✘ ERROR: resolution failed:
+✘ ERROR: resolution failed: 
 The package 'python311Packages.torchvision-bin' is not found for all requested systems on the same page, consider package groups with the following system groupings: (x86_64-darwin), (aarch64-linux), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin).
 EOF
   )"
