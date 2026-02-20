@@ -340,6 +340,7 @@ impl Edit {
                 )),
             )
             | Err(e @ EnvironmentError::Recoverable(_))
+            | Err(e @ EnvironmentError::ManifestError(_))
             | Err(e @ EnvironmentError::EditWithUnsupportedFeature(_)) => Ok(Err(e)),
             Err(e) => Err(e),
             Ok(result) => Ok(Ok(result)),
