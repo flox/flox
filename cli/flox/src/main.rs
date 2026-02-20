@@ -52,6 +52,20 @@ fn main() -> ExitCode {
         env::remove_var(FLOX_VERSION_VAR);
     }
 
+    // Override bpaf's bash completion script to fix unsafe eval.
+    // bpaf's generated script interpolates COMP_WORDS into a string
+    // and passes it to `eval`, so unclosed quotes in user input
+    // (e.g. `flox activate -c "bas<TAB>`) cause parse errors.
+    // Our version uses array-based argument passing instead.
+    // Upstream issue: https://github.com/pacak/bpaf/issues/440
+    // This must run before any bpaf parser call (Prefix::check, etc.)
+    // because bpaf's ArgScanner intercepts this flag and calls
+    // process::exit(0) directly.
+    if env::args_os().any(|a| a == "--bpaf-complete-style-bash") {
+        print!("{}", BASH_COMPLETION_SCRIPT);
+        return ExitCode::from(0);
+    }
+
     // Quit early if `--prefix` is present
     if Prefix::check() {
         println!(env!("out"));
@@ -200,6 +214,28 @@ fn main() -> ExitCode {
 
     // drop(runtime) should implicitly be last
 }
+
+/// Fixed bash completion script that replaces bpaf's generated version.
+///
+/// Workaround for <https://github.com/pacak/bpaf/issues/440>.
+///
+/// bpaf's script does:
+///   line="$1 --bpaf-complete-rev=8 ${COMP_WORDS[@]:1}"
+///   source <( eval ${line})
+///
+/// The unquoted ${COMP_WORDS[@]:1} interpolation means special characters
+/// in user input (unclosed quotes, backticks, etc.) are interpreted by eval.
+///
+/// Our version passes each COMP_WORD as a separate array element, avoiding
+/// eval entirely. This correctly preserves word boundaries and handles all
+/// special characters.
+const BASH_COMPLETION_SCRIPT: &str = r#"_bpaf_dynamic_completion()
+{
+    local -a _args=("$1" "--bpaf-complete-rev=8" "${COMP_WORDS[@]:1}")
+    source <( "${_args[@]}" )
+}
+complete -o nosort -F _bpaf_dynamic_completion flox
+"#;
 
 /// Error to exit without printing an error message
 #[derive(Debug)]

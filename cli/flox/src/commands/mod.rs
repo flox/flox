@@ -86,6 +86,12 @@ use crate::utils::update_notifications::UpdateNotification;
 
 const SHELL_COMPLETION_DIR: ShellComp = ShellComp::Dir { mask: None };
 const SHELL_COMPLETION_FILE: ShellComp = ShellComp::File { mask: None };
+const SHELL_COMPLETION_COMMAND: ShellComp = ShellComp::Raw {
+    bash: r#"COMPREPLY=($(compgen -A command -- "${COMP_WORDS[$COMP_CWORD]}"))"#,
+    zsh: "_command_names",
+    fish: "",
+    elvish: "",
+};
 
 static FLOX_DESCRIPTION: &'_ str = indoc! {"
     Flox is a virtual environment and package manager all in one.\n\n

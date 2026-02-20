@@ -407,7 +407,8 @@ pub async fn start_services_with_new_process_compose(
         generation,
         // this isn't actually used because we pass invocation type below
         command: Some(CommandSelect::ExecCommand {
-            exec_command: vec!["true".to_string()],
+            command: "true".to_string(),
+            args: vec![],
         }),
     }
     .activate(
