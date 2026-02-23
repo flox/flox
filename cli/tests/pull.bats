@@ -385,7 +385,7 @@ function add_incompatible_package() {
 
   # add_incompatible_package does not _lock_ the environment,
   # but pull won't either because it will expect it to already have a lock
-  run "$FLOX_BIN" pull owner/name
+  run env -u RUST_BACKTRACE "$FLOX_BIN" pull owner/name
   assert_failure
   assert_line --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
 
