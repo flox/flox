@@ -10,6 +10,7 @@
   just,
   krb5,
   lib,
+  rustPlatform,
   mitmproxy,
   mkShell,
   nix-unit,
@@ -93,6 +94,7 @@ mkShell (
 
     # Include krb5 for development to enable building with GSSAPI feature
     buildInputs = [ krb5.dev ];
+    nativeBuildInputs = [ rustPlatform.bindgenHook ];
 
     packages = ciPackages ++ lib.optionals (!ci) devPackages;
 
