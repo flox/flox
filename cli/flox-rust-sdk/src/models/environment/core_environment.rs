@@ -446,14 +446,13 @@ impl CoreEnvironment<ReadOnly> {
         }
 
         let new_manifest = Manifest::parse_toml_typed(&contents)?;
-        let (old_lockfile, migrated_manifest) =
-            if let Some(lockfile) = self.lockfile_if_up_to_date()?.as_ref() {
-                (lockfile.clone(), new_manifest.migrate(Some(lockfile))?)
-            } else {
-                let lockfile = self.lock(flox).map_err(Box::new)?.into();
-                let migrated = new_manifest.migrate(Some(&lockfile))?;
-                (lockfile, migrated)
-            };
+        let mut old_lockfile = self.lockfile_if_up_to_date()?;
+        if old_lockfile.is_none() {
+            // If locking fails, we still want to perform the unsafe edit, so
+            // carry on with None as lockfile
+            old_lockfile = self.lock(flox).ok().map(|lock_result| lock_result.into());
+        }
+        let migrated_manifest = new_manifest.migrate(old_lockfile.as_ref())?;
 
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
             .map_err(CoreEnvironmentError::MakeSandbox)?
@@ -488,7 +487,7 @@ impl CoreEnvironment<ReadOnly> {
 
         match build_attempt {
             Ok(store_path) => Ok(Ok(EditResult::Changed {
-                old_lockfile: Box::new(Some(old_lockfile)),
+                old_lockfile: Box::new(old_lockfile),
                 new_lockfile: Box::new(new_lockfile),
                 built_environment_store_paths: store_path,
             })),
