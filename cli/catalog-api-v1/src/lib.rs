@@ -6,6 +6,7 @@
 mod client;
 mod error;
 pub use client::*;
+use progenitor_client::ClientHooks;
 
 pub mod types {
     pub use crate::client::types::*;
@@ -28,6 +29,48 @@ pub mod types {
         NixCopy(CatalogStoreConfigNixCopy),
         /// Not yet supported
         Publisher(CatalogStoreConfigPublisher),
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ClientInner {
+    pub foo: String,
+}
+
+impl ClientHooks<ClientInner> for Client {
+    async fn pre<E>(
+        &self,
+        request: &mut reqwest::Request,
+        info: &progenitor_client::OperationInfo,
+    ) -> std::result::Result<(), Error<E>> {
+        println!("pre ({})", self.inner.foo);
+        // Propagate the trace ID to catalog-server.
+        // This will be a noop when metrics are disabled because Sentry will
+        // not have been initialized.
+        if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+            for (k, v) in span.iter_headers() {
+                request
+                    .headers_mut()
+                    .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+            }
+        }
+        Ok(())
+    }
+
+    async fn post<E>(
+        &self,
+        result: &reqwest::Result<reqwest::Response>,
+        info: &progenitor_client::OperationInfo,
+    ) -> std::result::Result<(), Error<E>> {
+        Ok(())
+    }
+
+    async fn exec(
+        &self,
+        request: reqwest::Request,
+        info: &progenitor_client::OperationInfo,
+    ) -> reqwest::Result<reqwest::Response> {
+        self.client().execute(request).await
     }
 }
 

@@ -17,7 +17,7 @@ use catalog_api_v1::types::{
     ResolutionMessageGeneral,
     error as api_error,
 };
-use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
+use catalog_api_v1::{Client as APIClient, ClientInner, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
 use futures::{Future, StreamExt, TryStreamExt};
@@ -367,7 +367,14 @@ impl CatalogClient {
                 .user_agent(format!("flox-cli/{}", &*FLOX_VERSION))
                 .default_headers(headers)
         };
-        APIClient::new_with_client(config.catalog_url.as_str(), client.build().unwrap())
+
+        APIClient::new_with_client(
+            config.catalog_url.as_str(),
+            client.build().unwrap(),
+            ClientInner {
+                foo: "bar".to_string(),
+            },
+        )
     }
 
     fn build_header_map(config: &CatalogClientConfig) -> HeaderMap {

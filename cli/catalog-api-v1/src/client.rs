@@ -4252,6 +4252,7 @@ Version: unknown*/
 pub struct Client {
     pub(crate) baseurl: String,
     pub(crate) client: reqwest::Client,
+    pub(crate) inner: crate::ClientInner,
 }
 impl Client {
     /// Create a new client.
@@ -4259,7 +4260,7 @@ impl Client {
     /// `baseurl` is the base URL provided to the internal
     /// `reqwest::Client`, and should include a scheme and hostname,
     /// as well as port and a path stem if applicable.
-    pub fn new(baseurl: &str) -> Self {
+    pub fn new(baseurl: &str, inner: crate::ClientInner) -> Self {
         #[cfg(not(target_arch = "wasm32"))]
         let client = {
             let dur = ::std::time::Duration::from_secs(15u64);
@@ -4267,7 +4268,7 @@ impl Client {
         };
         #[cfg(target_arch = "wasm32")]
         let client = reqwest::ClientBuilder::new();
-        Self::new_with_client(baseurl, client.build().unwrap())
+        Self::new_with_client(baseurl, client.build().unwrap(), inner)
     }
     /// Construct a new client with an existing `reqwest::Client`,
     /// allowing more control over its configuration.
@@ -4275,14 +4276,19 @@ impl Client {
     /// `baseurl` is the base URL provided to the internal
     /// `reqwest::Client`, and should include a scheme and hostname,
     /// as well as port and a path stem if applicable.
-    pub fn new_with_client(baseurl: &str, client: reqwest::Client) -> Self {
+    pub fn new_with_client(
+        baseurl: &str,
+        client: reqwest::Client,
+        inner: crate::ClientInner,
+    ) -> Self {
         Self {
             baseurl: baseurl.to_string(),
             client,
+            inner,
         }
     }
 }
-impl ClientInfo<()> for Client {
+impl ClientInfo<crate::ClientInner> for Client {
     fn api_version() -> &'static str {
         "unknown"
     }
@@ -4292,11 +4298,11 @@ impl ClientInfo<()> for Client {
     fn client(&self) -> &reqwest::Client {
         &self.client
     }
-    fn inner(&self) -> &() {
-        &()
+    fn inner(&self) -> &crate::ClientInner {
+        &self.inner
     }
 }
-impl ClientHooks<()> for &Client {}
+impl ClientHooks<crate::ClientInner> for &Client {}
 #[allow(clippy::all)]
 impl Client {
     /**Create a new user catalog
@@ -4338,21 +4344,6 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/`
         let info = OperationInfo {
             operation_id: "create_catalog_api_v1_catalog_catalogs_post",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -4409,21 +4400,6 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}`
         let info = OperationInfo {
             operation_id: "get_catalog_api_v1_catalog_catalogs_catalog_name_get",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -4481,21 +4457,6 @@ Sends a `DELETE` request to `/api/v1/catalog/catalogs/{catalog_name}`
         let info = OperationInfo {
             operation_id: "delete_catalog_api_v1_catalog_catalogs_catalog_name_delete",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -4553,21 +4514,6 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
         let info = OperationInfo {
             operation_id: "get_catalog_packages_api_v1_catalog_catalogs_catalog_name_packages_get",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -4632,21 +4578,6 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
         let info = OperationInfo {
             operation_id: "create_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_post",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -4714,21 +4645,6 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
         let info = OperationInfo {
             operation_id: "get_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_package_name_get",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -4789,21 +4705,6 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
         let info = OperationInfo {
             operation_id: "get_package_builds_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_get",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -4871,21 +4772,6 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
         let info = OperationInfo {
             operation_id: "create_package_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_put",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -4957,21 +4843,6 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
         let info = OperationInfo {
             operation_id: "create_package_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_post",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -5041,21 +4912,6 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
         let info = OperationInfo {
             operation_id: "publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -5116,21 +4972,6 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing`
         let info = OperationInfo {
             operation_id: "get_catalog_sharing_api_v1_catalog_catalogs_catalog_name_sharing_get",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -5193,21 +5034,6 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/add-r
         let info = OperationInfo {
             operation_id: "add_catalog_sharing_api_v1_catalog_catalogs_catalog_name_sharing_add_read_users_post",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -5270,21 +5096,6 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/remov
         let info = OperationInfo {
             operation_id: "remove_catalog_sharing_api_v1_catalog_catalogs_catalog_name_sharing_remove_read_users_post",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -5346,21 +5157,6 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
         let info = OperationInfo {
             operation_id: "get_catalog_store_config_api_v1_catalog_catalogs_catalog_name_store_config_get",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -5426,21 +5222,6 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
         let info = OperationInfo {
             operation_id: "set_catalog_store_config_api_v1_catalog_catalogs_catalog_name_store_config_put",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -5484,21 +5265,6 @@ Sends a `GET` request to `/api/v1/catalog/info/base-catalog`
         let info = OperationInfo {
             operation_id: "get_base_catalog_api_v1_catalog_info_base_catalog_get",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -5559,21 +5325,6 @@ Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
         let info = OperationInfo {
             operation_id: "packages_api_v1_catalog_packages_attr_path_get",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -5669,21 +5420,6 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
         let info = OperationInfo {
             operation_id: "resolve_api_v1_catalog_resolve_post",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -5745,21 +5481,6 @@ Sends a `POST` request to `/api/v1/catalog/sbom/environment`
         let info = OperationInfo {
             operation_id: "environment_sbom_api_v1_catalog_sbom_environment_post",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -5834,21 +5555,6 @@ Arguments:
         let info = OperationInfo {
             operation_id: "package_sbom_api_v1_catalog_sbom_package_derivation_post",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -5914,21 +5620,6 @@ Sends a `GET` request to `/api/v1/catalog/search`
         let info = OperationInfo {
             operation_id: "search_api_v1_catalog_search_get",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -5983,21 +5674,6 @@ Sends a `POST` request to `/api/v1/catalog/settings/{key}`
         let info = OperationInfo {
             operation_id: "settings_api_v1_catalog_settings_key_post",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -6050,21 +5726,6 @@ Sends a `POST` request to `/api/v1/catalog/store`
         let info = OperationInfo {
             operation_id: "get_store_info_api_v1_catalog_store_post",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
@@ -6119,21 +5780,6 @@ Sends a `POST` request to `/api/v1/catalog/store/status`
         let info = OperationInfo {
             operation_id: "get_storepath_status_api_v1_catalog_store_status_post",
         };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
         self.post(&result, &info).await?;
