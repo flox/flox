@@ -404,7 +404,10 @@ impl CoreEnvironment<ReadOnly> {
         let new_manifest = Manifest::parse_toml_typed(&contents)?;
         let (old_lockfile, migrated_manifest) =
             if let Some(lockfile) = maybe_up_to_date_lockfile.as_ref() {
-                (lockfile.clone(), new_manifest.migrate(Some(lockfile))?)
+                (
+                    Some(lockfile.clone()),
+                    new_manifest.migrate(Some(lockfile))?,
+                )
             } else {
                 let migrated = new_manifest.migrate(None)?;
                 (None, migrated)
