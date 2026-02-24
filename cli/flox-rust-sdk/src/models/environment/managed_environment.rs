@@ -3,7 +3,7 @@ use std::str::FromStr;
 use std::{fs, io};
 
 use flox_core::data::environment_ref::{EnvironmentName, EnvironmentOwner, RemoteEnvironmentRef};
-use flox_manifest::interfaces::{AsWritableManifest, CommonFields, WriteManifest};
+use flox_manifest::interfaces::{AsWritableManifest, CommonFields, ContentsMatch, WriteManifest};
 use flox_manifest::lockfile::{LOCKFILE_FILENAME, Lockfile};
 use flox_manifest::parsed::common::IncludeDescriptor;
 use flox_manifest::raw::{CatalogPackage, FlakePackage, PackageToInstall, StorePath};
@@ -1125,13 +1125,13 @@ impl ManagedEnvironment {
             return Ok(false);
         }
 
-        let local_manifest_bytes = local.pre_migration_manifest()?.as_writable().to_string();
-
-        let remote_manifest_bytes = generations
-            .current_gen_manifest_contents()
-            .map_err(ManagedEnvironmentError::Generations)?;
-
-        Ok(local_manifest_bytes == remote_manifest_bytes)
+        let local_manifest = local.pre_migration_manifest()?;
+        let remote_manifest = Manifest::parse_toml_typed(
+            generations
+                .current_gen_manifest_contents()
+                .map_err(ManagedEnvironmentError::Generations)?,
+        )?;
+        Ok(local_manifest.contents_match(remote_manifest.as_writable().to_string()))
     }
 
     /// Convenience method to check if the local environment has changes.
