@@ -1263,19 +1263,21 @@ mod tests {
         let (mut flox, tempdir) = flox_instance();
 
         let env_path = tempfile::tempdir_in(&tempdir).unwrap();
-        fs::write(env_path.path().join(MANIFEST_FILENAME), "version = 1").unwrap();
+        fs::write(
+            env_path.path().join(MANIFEST_FILENAME),
+            with_latest_schema(""),
+        )
+        .unwrap();
 
         let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
             base_directory: None,
         })
         .unwrap();
 
-        let new_env_str = r#"
-        version = 1
-
-        [install]
-        hello.pkg-path = "hello"
-        "#;
+        let new_env_str = with_latest_schema(indoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+        "#});
 
         flox.catalog_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
