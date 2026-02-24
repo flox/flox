@@ -52,6 +52,8 @@ fn generator() -> progenitor::Generator {
                     request.headers_mut().append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            // Run the per-request hook (e.g. auth header injection).
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         }
     });

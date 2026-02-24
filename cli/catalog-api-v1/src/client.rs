@@ -4346,6 +4346,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/`
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -4417,6 +4418,7 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}`
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -4489,6 +4491,7 @@ Sends a `DELETE` request to `/api/v1/catalog/catalogs/{catalog_name}`
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -4561,6 +4564,7 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -4640,6 +4644,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -4722,6 +4727,7 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -4797,6 +4803,7 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -4879,6 +4886,7 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -4965,6 +4973,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -5049,6 +5058,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -5124,6 +5134,7 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing`
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -5201,6 +5212,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/add-r
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -5278,6 +5290,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/remov
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -5354,6 +5367,7 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -5434,6 +5448,7 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -5492,6 +5507,7 @@ Sends a `GET` request to `/api/v1/catalog/info/base-catalog`
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -5567,6 +5583,7 @@ Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -5677,6 +5694,7 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -5753,6 +5771,7 @@ Sends a `POST` request to `/api/v1/catalog/sbom/environment`
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -5842,6 +5861,7 @@ Arguments:
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -5922,6 +5942,7 @@ Sends a `GET` request to `/api/v1/catalog/search`
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -5991,6 +6012,7 @@ Sends a `POST` request to `/api/v1/catalog/settings/{key}`
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -6058,6 +6080,7 @@ Sends a `POST` request to `/api/v1/catalog/store`
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await
@@ -6127,6 +6150,7 @@ Sends a `POST` request to `/api/v1/catalog/store/status`
                         .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
                 }
             }
+            crate::pre_request_hook::run_pre_request_hook(request);
             Ok::<_, Box<dyn ::std::error::Error>>(())
         })(&mut request)
             .await

@@ -30,11 +30,12 @@ use thiserror::Error;
 use tracing::{debug, info, instrument};
 use url::Url;
 
-use super::catalog_auth::{AuthManager, AuthMethod};
+use super::catalog_auth::AuthMethod;
 use super::publish::CheckedEnvironmentMetadata;
 use crate::data::System;
 use crate::flox::{FLOX_VERSION, Flox};
 use crate::models::search::{PackageDetails, ResultCount, SearchLimit, SearchResults};
+use crate::providers::catalog_auth::AuthManager;
 use crate::utils::INVOCATION_SOURCES;
 
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
@@ -338,6 +339,11 @@ impl CatalogClient {
             config_mut.catalog_url = mock.url();
         }
 
+        // Register per-request auth hook so that auth strategies producing
+        // single-use tokens (e.g. Kerberos SPNEGO) generate a fresh token
+        // for each API call.
+        Self::register_auth_hook(&config_mut);
+
         Self {
             client: Self::create_client(&config_mut),
             // Copy the original config so that `Self::update_config` has access to
@@ -354,7 +360,9 @@ impl CatalogClient {
     }
 
     fn create_client(config: &CatalogClientConfig) -> APIClient {
-        // Build the map of headers based on the config
+        // Build the map of headers based on the config.
+        // Authentication headers are NOT included here — they are injected
+        // per-request via the pre_hook registered by `register_auth_hook`.
         let headers = Self::build_header_map(config);
 
         let client = {
@@ -370,8 +378,20 @@ impl CatalogClient {
         APIClient::new_with_client(config.catalog_url.as_str(), client.build().unwrap())
     }
 
+    /// Register a per-request hook that injects authentication headers.
+    ///
+    /// This uses the catalog API client's pre-request hook mechanism so that
+    /// each outgoing request gets fresh auth headers. This is essential for
+    /// auth strategies like Kerberos where each SPNEGO token is single-use.
+    fn register_auth_hook(config: &CatalogClientConfig) {
+        let config_clone = config.clone();
+        catalog_api_v1::set_pre_request_hook(move |request: &mut reqwest::Request| {
+            // Add authentication headers (compile-time strategy selection via Cargo features)
+            AuthManager::add_auth_headers(request.headers_mut(), &config_clone);
+        });
+    }
+
     fn build_header_map(config: &CatalogClientConfig) -> HeaderMap {
-        // let mut headers: BTreeMap<String, String> = BTreeMap::new();
         let mut header_map = HeaderMap::new();
 
         // Add invocation sources header if any sources are detected
@@ -383,9 +403,6 @@ impl CatalogClient {
                     .expect("invocation sources should only contain ASCII-safe characters"),
             );
         };
-
-        // Add authentication headers (compile-time strategy selection via Cargo features)
-        AuthManager::add_auth_headers(&mut header_map, config);
 
         for (key, value) in &config.extra_headers {
             header_map.insert(

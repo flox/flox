@@ -5,7 +5,9 @@
 
 mod client;
 mod error;
+mod pre_request_hook;
 pub use client::*;
+pub use pre_request_hook::set_pre_request_hook;
 
 pub mod types {
     pub use crate::client::types::*;
