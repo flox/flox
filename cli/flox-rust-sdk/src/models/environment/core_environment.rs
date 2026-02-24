@@ -406,16 +406,15 @@ impl CoreEnvironment<ReadOnly> {
             if let Some(lockfile) = maybe_up_to_date_lockfile.as_ref() {
                 (lockfile.clone(), new_manifest.migrate(Some(lockfile))?)
             } else {
-                let lockfile = self.lock(flox)?.into();
-                let migrated = new_manifest.migrate(Some(&lockfile))?;
-                (lockfile, migrated)
+                let migrated = new_manifest.migrate(None)?;
+                (None, migrated)
             };
 
         let (store_path, new_lockfile) =
             self.transact_with_manifest_contents(&migrated_manifest, flox)?;
 
         Ok(EditResult::Changed {
-            old_lockfile: Box::new(Some(old_lockfile)),
+            old_lockfile: Box::new(old_lockfile),
             new_lockfile: Box::new(new_lockfile),
             built_environment_store_paths: store_path,
         })
