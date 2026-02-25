@@ -5,7 +5,7 @@ use std::{env, fs};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
-use flox_catalog::SearchLimit;
+use flox_catalog::{AuthMethod, SearchLimit};
 use flox_core::{WriteError, write_atomically};
 use flox_rust_sdk::flox::{Features, RemoteEnvironmentRef};
 use itertools::{Either, Itertools};

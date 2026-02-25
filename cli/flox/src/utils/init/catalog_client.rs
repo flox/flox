@@ -9,6 +9,7 @@ use flox_rust_sdk::providers::catalog::{
     FLOX_CATALOG_DUMP_DATA_VAR,
     FLOX_CATALOG_MOCK_DATA_VAR,
 };
+use flox_rust_sdk::utils::INVOCATION_SOURCES;
 use tracing::debug;
 
 use crate::config::Config;
@@ -28,6 +29,12 @@ pub fn init_catalog_client(config: &Config) -> Result<Client, anyhow::Error> {
                 read_metrics_uuid(config).unwrap().to_string(),
             );
         }
+
+        // Add invocation sources header if any sources are detected
+        if !INVOCATION_SOURCES.is_empty() {
+            let sources_str = INVOCATION_SOURCES.join(",");
+            headers.insert("flox-invocation-source".to_string(), sources_str);
+        };
         headers
     };
 
@@ -50,6 +57,7 @@ pub fn init_catalog_client(config: &Config) -> Result<Client, anyhow::Error> {
         floxhub_token: config.flox.floxhub_token.clone(),
         extra_headers,
         mock_mode,
+        auth_method: config.flox.floxhub_authn_mode.clone(),
         user_agent: Some(format!("flox-cli/{}", &*FLOX_VERSION)),
     };
 

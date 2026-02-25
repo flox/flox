@@ -701,6 +701,8 @@ pub mod test_helpers {
             floxhub_token: None,
             extra_headers: Default::default(),
             mock_mode: CatalogMockMode::Replay(path.as_ref().to_path_buf()),
+            auth_method: Default::default(),
+            user_agent: None,
         };
         Client::Catalog(
             CatalogClient::new(catalog_config).expect("failed to create catalog client"),
@@ -793,6 +795,8 @@ pub mod test_helpers {
             floxhub_token: auth.token().map(|token| token.secret().to_string()),
             extra_headers: Default::default(),
             mock_mode: mock_mode.clone(),
+            auth_method: Default::default(),
+            user_agent: None,
         };
         let client_inner =
             CatalogClient::new(catalog_config).expect("failed to create catalog client");
