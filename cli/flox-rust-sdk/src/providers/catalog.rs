@@ -694,7 +694,7 @@ pub mod test_helpers {
             floxhub_token: None,
             extra_headers: Default::default(),
             mock_mode: CatalogMockMode::Replay(path.as_ref().to_path_buf()),
-            auth_method: flox_catalog::AuthMethod::Auth0,
+            auth_method: Default::default(),
             user_agent: None,
         };
         Client::Catalog(
@@ -788,7 +788,7 @@ pub mod test_helpers {
             floxhub_token: auth.token().map(|token| token.secret().to_string()),
             extra_headers: Default::default(),
             mock_mode: mock_mode.clone(),
-            auth_method: flox_catalog::AuthMethod::Auth0,
+            auth_method: Default::default(),
             user_agent: None,
         };
         let client_inner =

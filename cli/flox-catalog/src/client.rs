@@ -21,7 +21,7 @@ use crate::config::CatalogClientConfig;
 use crate::error::{CatalogClientError, ResolveError, SearchError, VersionsError};
 use crate::mock::MockGuard;
 use crate::types::*;
-use crate::MapApiErrorExt;
+use crate::{AuthManager, MapApiErrorExt};
 
 #[cfg(any(test, feature = "tests"))]
 pub const EMPTY_SEARCH_RESPONSE: &api_types::PackageSearchResult =
@@ -549,16 +549,7 @@ where
 
 /// Build HTTP client with bearer token auth for FloxHub catalog API.
 fn build_http_client(config: &CatalogClientConfig) -> Result<reqwest::Client, CatalogClientError> {
-    let mut headers = HeaderMap::new();
-
-    // Bearer token for catalog API authentication
-    if let Some(token) = &config.floxhub_token {
-        headers.insert(
-            header::HeaderName::from_static("authorization"),
-            header::HeaderValue::from_str(&format!("bearer {token}"))
-                .map_err(|e| CatalogClientError::Other(e.to_string()))?,
-        );
-    }
+    let mut headers = build_header_map(config);
 
     // Extra headers (SDK can add invocation-source, QoS, etc.)
     for (key, value) in &config.extra_headers {
@@ -595,6 +586,23 @@ fn build_http_client(config: &CatalogClientConfig) -> Result<reqwest::Client, Ca
     client_builder
         .build()
         .map_err(|e| CatalogClientError::Other(e.to_string()))
+}
+
+fn build_header_map(config: &CatalogClientConfig) -> HeaderMap {
+    // let mut headers: BTreeMap<String, String> = BTreeMap::new();
+    let mut header_map = HeaderMap::new();
+
+    // Add authentication headers (compile-time strategy selection via Cargo features)
+    AuthManager::add_auth_headers(&mut header_map, config);
+
+    for (key, value) in &config.extra_headers {
+        header_map.insert(
+            header::HeaderName::from_str(key).unwrap(),
+            header::HeaderValue::from_str(value).unwrap(),
+        );
+    }
+
+    header_map
 }
 
 #[cfg(test)]

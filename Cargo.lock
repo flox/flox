@@ -1462,6 +1462,7 @@ name = "flox-catalog"
 version = "0.1.0"
 dependencies = [
  "async-stream",
+ "base64",
  "catalog-api-v1",
  "derive_more",
  "enum_dispatch",
@@ -1469,6 +1470,7 @@ dependencies = [
  "http 1.4.0",
  "httpmock",
  "itertools 0.14.0",
+ "libgssapi",
  "proptest",
  "reqwest",
  "sentry",
@@ -1547,7 +1549,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-stream",
- "base64",
  "chrono",
  "derive_more",
  "enum_dispatch",
@@ -1565,7 +1566,6 @@ dependencies = [
  "indoc",
  "itertools 0.14.0",
  "jsonwebtoken",
- "libgssapi",
  "nix",
  "pollster",
  "pretty_assertions",
