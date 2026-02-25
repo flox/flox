@@ -1168,7 +1168,7 @@ pub mod test_helpers {
         #[cfg(target_os = "linux")]
         let contents = with_schema(schema, indoc! {r#"
             [options]
-            systems = [ "x86_64-linux" ]
+            systems = [ "aarch64-darwin" ]
         "#});
         contents
     }
