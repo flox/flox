@@ -1494,6 +1494,7 @@ dependencies = [
  "catalog-api-v1",
  "chrono",
  "derive_more",
+ "expect-test",
  "flox-core",
  "flox-test-utils",
  "indent",

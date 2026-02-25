@@ -35,6 +35,7 @@ flox-test-utils = { workspace = true }
 proptest.workspace = true
 proptest-derive.workspace = true
 pretty_assertions.workspace = true
+expect-test.workspace = true
 
 [features]
 tests = [
