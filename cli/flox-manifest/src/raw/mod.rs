@@ -821,22 +821,27 @@ impl SyncTypedToRaw for Manifest<Migrated> {
 }
 
 fn update_schema_version(raw: &mut DocumentMut, schema_version: KnownSchemaVersion) {
-    match schema_version {
-        KnownSchemaVersion::V1 => {
-            if raw.get("schema-version").is_some() {
-                raw.remove("schema-version");
-            }
-            raw.insert("version", Value::Integer(Formatted::new(1)).into());
-        },
-        KnownSchemaVersion::V1_10_0 => {
-            if raw.get("version").is_some() {
-                raw.remove("version");
-            }
-            raw.insert(
-                "schema-version",
-                toml_string(schema_version.to_string()).into(),
-            );
-        },
+    let (old_key, new_key, new_value) = match schema_version {
+        KnownSchemaVersion::V1 => (
+            "schema-version",
+            "version",
+            Value::Integer(Formatted::new(1)).into(),
+        ),
+        KnownSchemaVersion::V1_10_0 => (
+            "version",
+            "schema-version",
+            toml_string(schema_version.to_string()).into(),
+        ),
+    };
+    let old_prefix = raw
+        .key(old_key)
+        .and_then(|k| k.leaf_decor().prefix().cloned());
+    raw.remove(old_key);
+    raw.insert(new_key, new_value);
+    if let Some(prefix) = old_prefix
+        && let Some(mut key) = raw.key_mut(new_key)
+    {
+        key.leaf_decor_mut().set_prefix(prefix);
     }
 }
 
@@ -917,7 +922,7 @@ fn update_raw_packages_from_typed_manifest(
 
     for pkg in to_remove {
         debug!(%pkg, "removing package");
-        install_table.remove(&pkg);
+        table_like_remove_preserving_decor(install_table, &pkg);
     }
     for pkg in to_add.iter() {
         debug!(%pkg, "adding package");
@@ -986,6 +991,103 @@ fn update_descriptor(
     Ok(())
 }
 
+/// Insert or update a key-value pair in a `TableLike`, preserving any existing
+/// key decor (prefix comments) and value decor (inline/suffix comments).
+fn table_like_set(raw: &mut dyn TableLike, key: &str, new_value: Item) {
+    if let Some((old_key, old_item)) = raw.get_key_value(key) {
+        // Preserve key decor (prefix/suffix, which hold comments above the line
+        // and after the key name).
+        let old_key = old_key.clone();
+        // Capture old value decor (prefix is whitespace after `=`, suffix
+        // is inline comments like `# comment`).
+        let old_value_decor = old_item.as_value().map(|v| v.decor().clone());
+        raw.insert(key, new_value);
+        // Re-apply the old key's decor after insert (insert resets it).
+        if let Some(mut new_key) = raw.key_mut(key) {
+            *new_key.leaf_decor_mut() = old_key.leaf_decor().clone();
+            *new_key.dotted_decor_mut() = old_key.dotted_decor().clone();
+        }
+        // Re-apply the old value's decor after insert (insert resets it).
+        if let Some(old_decor) = old_value_decor
+            && let Some(new_val) = raw.get_mut(key).and_then(|item| item.as_value_mut())
+        {
+            *new_val.decor_mut() = old_decor;
+        }
+    } else {
+        raw.insert(key, new_value);
+    }
+}
+
+/// Remove a key from a `TableLike`.
+fn table_like_remove(raw: &mut dyn TableLike, key: &str) {
+    raw.remove(key);
+}
+
+/// Get the prefix decor (comment above the line) for an entry in a table.
+///
+/// For dotted keys (e.g. `hello.pkg-path = "hello"`), the comment is stored
+/// on the first sub-key's leaf_decor rather than on the parent key.
+fn get_entry_prefix(raw: &dyn TableLike, key: &str) -> Option<toml_edit::RawString> {
+    let (k, v) = raw.get_key_value(key)?;
+    if let Some(tbl) = v.as_table_like()
+        && let Some((first_sub_key, _)) = tbl.iter().next()
+        && let Some(sub_key) = tbl.key(first_sub_key)
+        && let Some(prefix) = sub_key.leaf_decor().prefix()
+    {
+        return Some(prefix.clone());
+    }
+    k.leaf_decor().prefix().cloned()
+}
+
+/// Set the prefix decor (comment above the line) for an entry in a table.
+///
+/// For dotted keys, the prefix is set on the first sub-key's leaf_decor.
+fn set_entry_prefix(raw: &mut dyn TableLike, key: &str, prefix: toml_edit::RawString) {
+    // For dotted keys, find the first sub-key name (immutable borrow).
+    let first_sub_key = raw
+        .get(key)
+        .and_then(|v| v.as_table_like())
+        .and_then(|tbl| tbl.iter().next().map(|(k, _)| k.to_owned()));
+    // Now mutate: set prefix on the sub-key if found, otherwise the key itself.
+    if let Some(first_sub_key) = first_sub_key
+        && let Some(tbl) = raw.get_mut(key).and_then(|v| v.as_table_like_mut())
+        && let Some(mut sub_key) = tbl.key_mut(&first_sub_key)
+    {
+        sub_key.leaf_decor_mut().set_prefix(prefix);
+        return;
+    }
+    if let Some(mut k) = raw.key_mut(key) {
+        k.leaf_decor_mut().set_prefix(prefix);
+    }
+}
+
+/// Remove a key from a `TableLike`, transferring the removed key's prefix
+/// decor (comments above the line) to the next key in the table so that
+/// comments are not silently discarded.
+fn table_like_remove_preserving_decor(raw: &mut dyn TableLike, key: &str) {
+    let removed_key_position = raw.iter().position(|(k, _)| k == key);
+    let prefix_decor = get_entry_prefix(raw, key);
+    raw.remove(key);
+    // Transfer the removed key's prefix decor to the key that now occupies
+    // the same position (the next key after removal).
+    if let (Some(prefix), Some(pos)) = (prefix_decor, removed_key_position) {
+        let next_key_name = raw.iter().nth(pos).map(|(k, _)| k.to_owned());
+        if let Some(next_key_name) = next_key_name {
+            let existing_prefix = get_entry_prefix(raw, &next_key_name);
+            let existing = existing_prefix
+                .as_ref()
+                .and_then(|p| p.as_str())
+                .unwrap_or("");
+            let combined = toml_edit::RawString::from(format!(
+                "{}{}",
+                prefix.as_str().unwrap_or(""),
+                existing
+            ));
+            set_entry_prefix(raw, &next_key_name, combined);
+        }
+    }
+}
+
 fn toml_string(s: impl AsRef<str>) -> Value {
     Value::String(Formatted::new(s.as_ref().to_string()))
 }
@@ -1020,26 +1122,26 @@ fn update_v1_catalog_descriptor(
         version,
         systems,
     } = descriptor;
-    raw.insert("pkg-path", toml_string(pkg_path).into());
+    table_like_set(raw, "pkg-path", toml_string(pkg_path).into());
     if let Some(pkg_group) = pkg_group {
-        raw.insert("pkg-group", toml_string(pkg_group).into());
+        table_like_set(raw, "pkg-group", toml_string(pkg_group).into());
     } else {
-        raw.remove("pkg-group");
+        table_like_remove(raw, "pkg-group");
     }
     if let Some(priority) = priority {
-        raw.insert("priority", toml_priority(*priority).into());
+        table_like_set(raw, "priority", toml_priority(*priority).into());
     } else {
-        raw.remove("priority");
+        table_like_remove(raw, "priority");
     }
     if let Some(version) = version {
-        raw.insert("version", toml_string(version).into());
+        table_like_set(raw, "version", toml_string(version).into());
     } else {
-        raw.remove("version");
+        table_like_remove(raw, "version");
     }
     if let Some(systems) = systems {
-        raw.insert("systems", toml_array_of_strings(systems).into());
+        table_like_set(raw, "systems", toml_array_of_strings(systems).into());
     } else {
-        raw.remove("systems");
+        table_like_remove(raw, "systems");
     }
 }
 
@@ -1049,16 +1151,16 @@ fn update_v1_flake_descriptor(raw: &mut dyn TableLike, descriptor: &v1::PackageD
         priority,
         systems,
     } = descriptor;
-    raw.insert("flake", toml_string(flake).into());
+    table_like_set(raw, "flake", toml_string(flake).into());
     if let Some(priority) = priority {
-        raw.insert("priority", toml_priority(*priority).into());
+        table_like_set(raw, "priority", toml_priority(*priority).into());
     } else {
-        raw.remove("priority");
+        table_like_remove(raw, "priority");
     }
     if let Some(systems) = systems {
-        raw.insert("systems", toml_array_of_strings(systems).into());
+        table_like_set(raw, "systems", toml_array_of_strings(systems).into());
     } else {
-        raw.remove("systems");
+        table_like_remove(raw, "systems");
     }
 }
 
@@ -1071,16 +1173,16 @@ fn update_store_path_descriptor(
         systems,
         priority,
     } = descriptor;
-    raw.insert("store-path", toml_string(store_path).into());
+    table_like_set(raw, "store-path", toml_string(store_path).into());
     if let Some(priority) = priority {
-        raw.insert("priority", toml_priority(*priority).into());
+        table_like_set(raw, "priority", toml_priority(*priority).into());
     } else {
-        raw.remove("priority");
+        table_like_remove(raw, "priority");
     }
     if let Some(systems) = systems {
-        raw.insert("systems", toml_array_of_strings(systems).into());
+        table_like_set(raw, "systems", toml_array_of_strings(systems).into());
     } else {
-        raw.remove("systems");
+        table_like_remove(raw, "systems");
     }
 }
 
@@ -1096,38 +1198,38 @@ fn update_v1_10_0_catalog_descriptor(
         systems,
         outputs,
     } = descriptor;
-    raw.insert("pkg-path", toml_string(pkg_path).into());
+    table_like_set(raw, "pkg-path", toml_string(pkg_path).into());
     if let Some(pkg_group) = pkg_group {
-        raw.insert("pkg-group", toml_string(pkg_group).into());
+        table_like_set(raw, "pkg-group", toml_string(pkg_group).into());
     } else {
-        raw.remove("pkg-group");
+        table_like_remove(raw, "pkg-group");
     }
     if let Some(priority) = priority {
-        raw.insert("priority", toml_priority(*priority).into());
+        table_like_set(raw, "priority", toml_priority(*priority).into());
     } else {
-        raw.remove("priority");
+        table_like_remove(raw, "priority");
     }
     if let Some(version) = version {
-        raw.insert("version", toml_string(version).into());
+        table_like_set(raw, "version", toml_string(version).into());
     } else {
-        raw.remove("version");
+        table_like_remove(raw, "version");
     }
     if let Some(systems) = systems {
-        raw.insert("systems", toml_array_of_strings(systems).into());
+        table_like_set(raw, "systems", toml_array_of_strings(systems).into());
     } else {
-        raw.remove("systems");
+        table_like_remove(raw, "systems");
     }
     if let Some(outputs) = outputs {
         match outputs {
             v1_10_0::SelectedOutputs::All(_) => {
-                raw.insert("outputs", toml_string("all").into());
+                table_like_set(raw, "outputs", toml_string("all").into());
             },
             v1_10_0::SelectedOutputs::Specific(items) => {
-                raw.insert("outputs", toml_array_of_strings(items).into());
+                table_like_set(raw, "outputs", toml_array_of_strings(items).into());
             },
         }
     } else {
-        raw.remove("outputs");
+        table_like_remove(raw, "outputs");
     }
 }
 
@@ -1240,6 +1342,7 @@ pub mod test_helpers {
 
 #[cfg(test)]
 mod test {
+    use expect_test::expect;
     use pretty_assertions::assert_eq;
     use proptest::prelude::*;
     use proptest_derive::Arbitrary;
@@ -1810,6 +1913,272 @@ curl.outputs = [\"bin\", \"man\"]
         let url = Url::parse("https://github.com/foo/bar/archive/main.tar.gz").unwrap();
         let inferred = infer_flake_install_id(&url).unwrap();
         assert_eq!(inferred.as_str(), "main.tar.gz");
+    }
+
+    // =========================================================================
+    // Comment/decor preservation tests
+    // =========================================================================
+
+    /// Helper to remove a package from a `Manifest<Validated>` by mutating
+    /// the inner parsed install map.
+    fn remove_from_install(manifest: &mut Manifest<Validated>, id: &str) {
+        match &mut manifest.inner.parsed {
+            Parsed::V1(m) => {
+                m.install.inner_mut().remove(id);
+            },
+            Parsed::V1_10_0(m) => {
+                m.install.inner_mut().remove(id);
+            },
+        }
+    }
+
+    /// Helper to insert a v1_10_0 catalog package into a `Manifest<Validated>`.
+    fn add_to_install(
+        manifest: &mut Manifest<Validated>,
+        id: &str,
+        descriptor: v1_10_0::ManifestPackageDescriptor,
+    ) {
+        match &mut manifest.inner.parsed {
+            Parsed::V1_10_0(m) => {
+                m.install.inner_mut().insert(id.to_string(), descriptor);
+            },
+            _ => panic!("expected v1_10_0 manifest"),
+        }
+    }
+
+    /// Helper to get a mutable reference to a v1_10_0 catalog descriptor.
+    fn get_catalog_descriptor_mut<'a>(
+        manifest: &'a mut Manifest<Validated>,
+        id: &str,
+    ) -> Option<&'a mut v1_10_0::PackageDescriptorCatalog> {
+        match &mut manifest.inner.parsed {
+            Parsed::V1_10_0(m) => match m.install.inner_mut().get_mut(id)? {
+                v1_10_0::ManifestPackageDescriptor::Catalog(desc) => Some(desc),
+                _ => None,
+            },
+            _ => panic!("expected v1_10_0 manifest"),
+        }
+    }
+
+    #[test]
+    fn removing_package_preserves_comments_on_remaining_packages() {
+        let toml_str = with_latest_schema(indoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+
+            # ripgrep is used for searching
+            ripgrep.pkg-path = "ripgrep"
+
+            # bat is a better cat
+            bat.pkg-path = "bat"
+        "#});
+        let mut manifest = Manifest::parse_toml_typed(&toml_str).unwrap();
+        remove_from_install(&mut manifest, "hello");
+        manifest.update_raw_packages_from_typed_manifest().unwrap();
+        let output = manifest.inner.raw.to_string();
+        expect![[r#"
+            schema-version = "1.10.0"
+
+            [install]
+
+            # ripgrep is used for searching
+            ripgrep.pkg-path = "ripgrep"
+
+            # bat is a better cat
+            bat.pkg-path = "bat"
+
+        "#]]
+        .assert_eq(&output);
+    }
+
+    #[test]
+    fn adding_package_preserves_comments_on_existing_packages() {
+        let toml_str = with_latest_schema(indoc! {r#"
+            [install]
+            # my favorite greeting program
+            hello.pkg-path = "hello"
+
+            # ripgrep is used for searching
+            ripgrep.pkg-path = "ripgrep"
+        "#});
+        let mut manifest = Manifest::parse_toml_typed(&toml_str).unwrap();
+        let descriptor =
+            v1_10_0::ManifestPackageDescriptor::Catalog(v1_10_0::PackageDescriptorCatalog {
+                pkg_path: "bat".to_string(),
+                pkg_group: None,
+                priority: None,
+                version: None,
+                systems: None,
+                outputs: None,
+            });
+        add_to_install(&mut manifest, "bat", descriptor);
+        manifest.update_raw_packages_from_typed_manifest().unwrap();
+        let output = manifest.inner.raw.to_string();
+        expect![[r#"
+            schema-version = "1.10.0"
+
+            [install]
+            # my favorite greeting program
+            hello.pkg-path = "hello"
+
+            # ripgrep is used for searching
+            ripgrep.pkg-path = "ripgrep"
+            bat.pkg-path = "bat"
+
+        "#]]
+        .assert_eq(&output);
+    }
+
+    #[test]
+    fn updating_descriptor_field_preserves_comments() {
+        let toml_str = with_latest_schema(indoc! {r#"
+            [install]
+            # keep this comment about hello
+            hello.pkg-path = "hello"
+            hello.version = "1.0"
+
+            # keep this comment about ripgrep
+            ripgrep.pkg-path = "ripgrep"
+        "#});
+        let mut manifest = Manifest::parse_toml_typed(&toml_str).unwrap();
+        get_catalog_descriptor_mut(&mut manifest, "hello")
+            .unwrap()
+            .version = Some("2.0".to_string());
+        manifest.update_raw_packages_from_typed_manifest().unwrap();
+        let output = manifest.inner.raw.to_string();
+        expect![[r#"
+            schema-version = "1.10.0"
+
+            [install]
+            # keep this comment about hello
+            hello.pkg-path = "hello"
+            hello.version = "2.0"
+
+            # keep this comment about ripgrep
+            ripgrep.pkg-path = "ripgrep"
+
+        "#]]
+        .assert_eq(&output);
+    }
+
+    #[test]
+    fn inline_comments_preserved_after_update() {
+        let toml_str = with_latest_schema(indoc! {r#"
+            [install]
+            hello.pkg-path = "hello" # this is important
+            hello.version = "1.0" # pin the version
+        "#});
+        let mut manifest = Manifest::parse_toml_typed(&toml_str).unwrap();
+        get_catalog_descriptor_mut(&mut manifest, "hello")
+            .unwrap()
+            .version = Some("2.0".to_string());
+        manifest.update_raw_packages_from_typed_manifest().unwrap();
+        let output = manifest.inner.raw.to_string();
+        expect![[r#"
+            schema-version = "1.10.0"
+
+            [install]
+            hello.pkg-path = "hello" # this is important
+            hello.version = "2.0" # pin the version
+
+        "#]]
+        .assert_eq(&output);
+    }
+
+    #[test]
+    fn schema_version_key_preserved_after_package_update() {
+        let toml_str = indoc! {r#"
+            # this comment is above schema-version
+            schema-version = "1.10.0"
+
+            [install]
+            hello.pkg-path = "hello"
+        "#};
+        let mut manifest = Manifest::parse_toml_typed(toml_str).unwrap();
+        get_catalog_descriptor_mut(&mut manifest, "hello")
+            .unwrap()
+            .version = Some("1.0".to_string());
+        manifest.update_raw_packages_from_typed_manifest().unwrap();
+        let output = manifest.inner.raw.to_string();
+        expect![[r#"
+            # this comment is above schema-version
+            schema-version = "1.10.0"
+
+            [install]
+            hello.pkg-path = "hello"
+            hello.version = "1.0"
+        "#]]
+        .assert_eq(&output);
+    }
+
+    #[test]
+    fn version_key_preserved_after_package_update() {
+        let toml_str = indoc! {r#"
+            # this comment is above version
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+        "#};
+        let mut manifest = Manifest::parse_toml_typed(toml_str).unwrap();
+        remove_from_install(&mut manifest, "hello");
+        manifest.update_raw_packages_from_typed_manifest().unwrap();
+        let output = manifest.inner.raw.to_string();
+        expect![[r#"
+            # this comment is above version
+            version = 1
+
+            [install]
+        "#]]
+        .assert_eq(&output);
+    }
+
+    #[test]
+    fn removing_package_preserves_comment_above_removed_package() {
+        let toml_str = with_latest_schema(indoc! {r#"
+            [install]
+            # this comment is above hello
+            hello.pkg-path = "hello"
+
+            ripgrep.pkg-path = "ripgrep"
+        "#});
+        let mut manifest = Manifest::parse_toml_typed(&toml_str).unwrap();
+        remove_from_install(&mut manifest, "hello");
+        manifest.update_raw_packages_from_typed_manifest().unwrap();
+        let output = manifest.inner.raw.to_string();
+        expect![[r#"
+            schema-version = "1.10.0"
+
+            [install]
+            # this comment is above hello
+
+            ripgrep.pkg-path = "ripgrep"
+
+        "#]]
+        .assert_eq(&output);
+    }
+
+    #[test]
+    fn migration_from_v1_preserves_comment_above_version_key() {
+        let toml_str = indoc! {r#"
+            # this comment is above version
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+        "#};
+        let manifest = Manifest::parse_toml_typed(toml_str).unwrap();
+        let migrated = manifest.migrate(None).unwrap();
+        let output = migrated.inner.migrated_raw.to_string();
+        expect![[r##"
+            # this comment is above version
+            schema-version = "1.10.0"
+
+            [install]
+            hello.pkg-path = "hello"
+            hello.outputs = "all"
+        "##]]
+        .assert_eq(&output);
     }
 
     fn assert_store_path_values(
