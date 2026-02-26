@@ -383,8 +383,9 @@ impl LockManifest {
             // Record the original schema of the user's manifest.
             compose.composer = manifest.as_typed_only();
         }
-        // FIXME: if we write out the merged manifest in the migrated schema, we also need
-        //        to write out the user's manifest in that schema to match
+        // The caller (CoreEnvironment::lock / include_upgrade) is responsible
+        // for rewriting the user's on-disk manifest when the merged manifest
+        // ends up at a newer schema than the original.
 
         let lockfile = Lockfile {
             version: Version::<1>,
