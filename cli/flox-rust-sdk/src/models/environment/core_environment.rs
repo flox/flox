@@ -163,6 +163,27 @@ impl<State> CoreEnvironment<State> {
         }
     }
 
+    fn ensure_manifest_schemas_match(
+        &mut self,
+        original_schema: KnownSchemaVersion,
+        lockfile: &mut Lockfile,
+    ) -> Result<(), EnvironmentError> {
+        let schema_after_merging_and_locking = lockfile.manifest.get_schema_version();
+        let on_disk_manifest_needs_migration = schema_after_merging_and_locking != original_schema;
+
+        if on_disk_manifest_needs_migration {
+            let migrated_manifest = self.pre_migration_manifest()?.migrate(Some(lockfile))?;
+            migrated_manifest
+                .as_writable()
+                .write_to_file(self.manifest_path())?;
+            if let Some(compose) = lockfile.compose.as_mut() {
+                compose.composer = migrated_manifest.as_typed_only().clone();
+            }
+        }
+
+        Ok(())
+    }
+
     /// Lock the environment.
     ///
     /// Use a catalog client to lock the environment,
@@ -176,12 +197,18 @@ impl<State> CoreEnvironment<State> {
     /// and because it doesn't modify the manifest.
     pub fn lock(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
         let pre_migration_manifest = self.pre_migration_manifest()?.as_typed_only();
+        let original_schema = pre_migration_manifest.get_schema_version();
+
         let existing_lockfile = self.existing_lockfile()?;
         let migrated_manifest_for_locking =
             pre_migration_manifest.migrate_typed_only(existing_lockfile.as_ref())?;
 
         // If a lockfile exists, it is used as a base.
-        let lockfile = LockManifest::lock_manifest(
+        //
+        // This is `mut` because we may need to update the on-disk manifest to match the
+        // schema of the merged manifest, and then we'll also have to update the
+        // `compose.composer` to match.
+        let mut lockfile = LockManifest::lock_manifest(
             flox,
             &migrated_manifest_for_locking,
             existing_lockfile.as_ref(),
@@ -189,25 +216,9 @@ impl<State> CoreEnvironment<State> {
         )
         .block_on()?;
 
-        // Now that we have an up to date lockfile, we can migrate the manifest
-        // if necessary.
-        //
-        // The lockfile always contains the manifest in the latest schema, but
-        // the on-disk manifest may be in an older schema. We only need to
-        // rewrite the manifest if it's not backwards compatible with the
-        // original schema.
-        let original_schema = pre_migration_manifest.get_schema_version();
-        let lockfile_schema_version = lockfile.manifest.get_schema_version();
-        let lockfile_has_latest_schema_version =
-            lockfile_schema_version == KnownSchemaVersion::latest();
-        if lockfile_has_latest_schema_version && (lockfile_schema_version != original_schema) {
-            let migrated_manifest = self.pre_migration_manifest()?.migrate(Some(&lockfile))?;
-            if !migrated_manifest.is_backwards_compatible()? {
-                migrated_manifest
-                    .as_writable()
-                    .write_to_file(self.manifest_path())?;
-            }
-        }
+        // Now that we have an up to date lockfile, we check the schema version of its manifest
+        // and ensure that the manifest on disk and the manifest in the lockfile are all in sync.
+        self.ensure_manifest_schemas_match(original_schema, &mut lockfile)?;
 
         let mut lockfile_contents =
             serde_json::to_string_pretty(&lockfile).expect("lockfile structure is valid json");
@@ -672,7 +683,13 @@ impl CoreEnvironment<ReadOnly> {
             .map(Lockfile::from_str)
             .transpose()?;
 
-        let new_lockfile = LockManifest::lock_manifest_with_include_upgrades(
+        let pre_migration_manifest = self.pre_migration_manifest()?;
+        let original_schema = pre_migration_manifest.get_schema_version();
+
+        // This is `mut` because we may need to update the on-disk manifest to match the
+        // schema of the merged manifest, and then we'll also have to update the
+        // `compose.composer` to match.
+        let mut new_lockfile = LockManifest::lock_manifest_with_include_upgrades(
             flox,
             &manifest.as_migrated_typed_only(),
             existing_lockfile.as_ref(),
@@ -680,6 +697,11 @@ impl CoreEnvironment<ReadOnly> {
             Some(to_upgrade),
         )
         .block_on()?;
+
+        // If the merged manifest required a newer schema than the composer's
+        // on-disk manifest (due to composition introducing features like
+        // explicit outputs), migrate the composer's manifest to match.
+        self.ensure_manifest_schemas_match(original_schema, &mut new_lockfile)?;
 
         let mut result = UpgradeResult {
             old_lockfile: existing_lockfile,

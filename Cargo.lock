@@ -1527,6 +1527,7 @@ dependencies = [
  "chrono",
  "derive_more",
  "enum_dispatch",
+ "expect-test",
  "flox-core",
  "flox-manifest",
  "flox-test-utils",
