@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 
+pub mod lock;
 mod nix;
 mod nix_build_config;
 mod nix_build_lock;

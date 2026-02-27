@@ -60,7 +60,7 @@
         fileOrDir:
 
         let
-          exists = builtins.pathExists fileOrDir;
+          exists = builtins.pathExists (fileOrDir);
           filetype = builtins.readFileType fileOrDir;
 
           directoryWithDefault = {
