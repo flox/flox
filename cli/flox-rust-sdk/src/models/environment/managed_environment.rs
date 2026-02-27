@@ -549,6 +549,13 @@ impl Environment for ManagedEnvironment {
         Ok(local_checkout.build(flox)?)
     }
 
+    fn link(&mut self, store_paths: &BuildEnvOutputs) -> Result<(), EnvironmentError> {
+        CoreEnvironment::link(&self.rendered_env_links.development, &store_paths.develop)?;
+        CoreEnvironment::link(&self.rendered_env_links.runtime, &store_paths.runtime)?;
+
+        Ok(())
+    }
+
     /// Returns .flox/cache
     fn cache_path(&self) -> Result<CanonicalPath, EnvironmentError> {
         let cache_dir = self.path.join(CACHE_DIR_NAME);
@@ -784,13 +791,6 @@ impl ManagedEnvironment {
                 None => Err(EnvironmentError::MissingLockfile),
             }
         }
-    }
-
-    pub fn link(&mut self, store_paths: &BuildEnvOutputs) -> Result<(), EnvironmentError> {
-        CoreEnvironment::link(&self.rendered_env_links.development, &store_paths.develop)?;
-        CoreEnvironment::link(&self.rendered_env_links.runtime, &store_paths.runtime)?;
-
-        Ok(())
     }
 
     /// Returns a unique identifier for the location of the environment.

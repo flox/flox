@@ -452,6 +452,10 @@ impl Environment for RemoteEnvironment {
         self.inner.build(flox)
     }
 
+    fn link(&mut self, store_paths: &BuildEnvOutputs) -> Result<(), EnvironmentError> {
+        self.inner.link(store_paths)
+    }
+
     fn cache_path(&self) -> Result<CanonicalPath, EnvironmentError> {
         self.inner.cache_path()
     }

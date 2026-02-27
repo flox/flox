@@ -182,6 +182,8 @@ pub trait Environment: Send {
     /// This does not link the environment, but may lock the environment, if necessary.
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError>;
 
+    fn link(&mut self, store_paths: &BuildEnvOutputs) -> Result<(), EnvironmentError>;
+
     /// Return a path to store transient data,
     /// such as temporary files created by the environment hooks or the environment itself,
     /// including reproducible data about the environment.
