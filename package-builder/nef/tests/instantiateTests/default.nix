@@ -8,14 +8,12 @@ let
 
   singleLevel = instantiate {
     inherit nixpkgs;
-    pkgsDir = "${fixtures}/single-level/root/pkgs";
-    catalogsLock = "${fixtures}/single-level/root/nix-builds.lock";
+    sourceInfo = builtins.fetchTree "path:${fixtures}/single-level/root";
   };
 
   multiLevel = instantiate {
     inherit nixpkgs;
-    pkgsDir = "${fixtures}/multi-level/root/pkgs";
-    catalogsLock = "${fixtures}/multi-level/root/nix-builds.lock";
+    sourceInfo = builtins.fetchTree "path:${fixtures}/multi-level/root";
   };
 in
 {

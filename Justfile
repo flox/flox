@@ -262,7 +262,7 @@ build-nef-test-fixtures:
         | sort -zr \
         | while IFS= read -r -d '' config; do
             dir=$(dirname "$config")
-            (cd "$dir" && "$lock_bin" --pkgs-dir pkgs --catalogs-lock nix-builds.lock nix-builds.toml)
+            (cd "$dir" && "$lock_bin" nix-builds.toml)
           done
     echo "$tmpdir"
 

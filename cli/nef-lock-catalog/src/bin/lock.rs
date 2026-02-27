@@ -13,12 +13,8 @@ struct Cli {
     config: PathBuf,
 
     /// Relative path from source root to packages directory
-    #[arg(long, default_value = ".flox/pkgs")]
-    pkgs_dir: String,
-
-    /// Relative path from source root to catalog lock file
-    #[arg(long, default_value = ".flox/nix-builds.lock")]
-    catalogs_lock: String,
+    #[arg(long)]
+    nef_base_dir: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -30,8 +26,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let options = LockOptions {
-        pkgs_dir: cli.pkgs_dir,
-        catalogs_lock: cli.catalogs_lock,
+        nef_base_dir: cli.nef_base_dir,
     };
 
     let config = read_config(&cli.config)?;
