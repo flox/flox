@@ -42,8 +42,10 @@ use crate::models::environment::floxmeta_branch::{
     GenerationLock,
     write_generation_lock,
 };
+use crate::models::environment::generations::SyncToGenerationResult;
 use crate::models::environment::managed_environment::GENERATION_LOCK_FILENAME;
 use crate::models::environment::path_environment::{InitCustomization, PathEnvironment};
+use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::lock_manifest::LockResult;
 
 const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
@@ -556,6 +558,17 @@ impl GenerationsExt for RemoteEnvironment {
 
     fn compare_remote(&self) -> Result<BranchOrd, EnvironmentError> {
         self.inner.compare_remote()
+    }
+
+    fn create_generation_from_local_env(
+        &mut self,
+        flox: &Flox,
+    ) -> Result<SyncToGenerationResult, EnvironmentError> {
+        self.inner.create_generation_from_local_env(flox)
+    }
+
+    fn reset_local_env_to_current_generation(&self, flox: &Flox) -> Result<(), EnvironmentError> {
+        self.inner.reset_local_env_to_current_generation(flox)
     }
 }
 

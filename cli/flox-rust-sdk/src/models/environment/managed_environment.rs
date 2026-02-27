@@ -55,6 +55,7 @@ use crate::models::environment::floxmeta_branch::{
     remote_branch_name,
     write_generation_lock,
 };
+use crate::models::environment::generations::SyncToGenerationResult;
 use crate::models::floxmeta::{FloxMetaError, floxmeta_git_options};
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{GitCommandError, GitProvider, GitRemoteCommandError, PushFlag};
@@ -752,6 +753,18 @@ impl GenerationsExt for ManagedEnvironment {
             .compare_remote()
             .map_err(ManagedEnvironmentError::FloxmetaBranch)?)
     }
+
+    fn create_generation_from_local_env(
+        &mut self,
+        flox: &Flox,
+    ) -> Result<SyncToGenerationResult, EnvironmentError> {
+        ManagedEnvironment::create_generation_from_local_env(self, flox)
+    }
+
+    fn reset_local_env_to_current_generation(&self, flox: &Flox) -> Result<(), EnvironmentError> {
+        let _ = ManagedEnvironment::reset_local_env_to_current_generation(self, flox)?;
+        Ok(())
+    }
 }
 
 /// Constructors and related functions
@@ -926,15 +939,6 @@ impl ManagedEnvironment {
     }
 }
 
-/// Result of creating a generation from local changes with
-/// [ManagedEnvironment::create_generation_from_local_env]
-pub enum SyncToGenerationResult {
-    /// The environment was already up to date
-    UpToDate,
-    /// The environment was successfully synced to the generation
-    Synced,
-}
-
 /// Utility instance methods
 impl ManagedEnvironment {
     /// Edit the environment without checking that it builds
@@ -992,7 +996,7 @@ impl ManagedEnvironment {
     /// Before creating a new generation, the local environment is locked and built,
     /// to ensure the validity of the new generation.
     /// Unless an error occurs, [SyncToGenerationResult::Synced] is returned.
-    pub fn create_generation_from_local_env(
+    fn create_generation_from_local_env(
         &mut self,
         flox: &Flox,
     ) -> Result<SyncToGenerationResult, EnvironmentError> {
@@ -1050,7 +1054,7 @@ impl ManagedEnvironment {
     /// TODO: Specific behavior for other files than the manifest should is undefined.
     /// Currently the entire environment directory is **deleted and recreated**.
     /// Any other files are lost.
-    pub fn reset_local_env_to_current_generation(
+    fn reset_local_env_to_current_generation(
         &self,
         flox: &Flox,
     ) -> Result<CoreEnvironment, ManagedEnvironmentError> {
