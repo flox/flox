@@ -943,11 +943,6 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
     Ok(None)
 }
 
-/// Directory containing nix gc roots for (previous) builds of environments of a given owner
-pub(super) fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
-    flox.cache_dir.join(GCROOTS_DIR_NAME).join(owner.as_str())
-}
-
 /// Return a path to the services socket given a unique identifier
 ///
 /// Socket paths cannot exceed 104 characters on macOS
