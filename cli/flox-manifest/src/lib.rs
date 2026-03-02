@@ -380,9 +380,8 @@ impl Manifest<Migrated> {
     /// Returns a `Manifest<MigratedTypedOnly>` copy of the manifest.
     ///
     /// This is mostly useful for locking, where you need a `ManifestLatest`,
-    /// but you may not yet have a lockfile with which to migrate an older
-    /// schema version. A pathway exists for migrating without a lockfile,
-    /// which breaks the need
+    /// but you may not have the original TOML to migrate (e.g. the manifest
+    /// that you're migrating came from a lockfile).
     pub fn as_migrated_typed_only(&self) -> Manifest<MigratedTypedOnly> {
         Manifest {
             inner: MigratedTypedOnly {
