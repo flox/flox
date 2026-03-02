@@ -447,7 +447,7 @@ impl LockManifest {
                 "inspecting included environment"
             );
             let existing_locked_include = 'existing: {
-                // Don't use existing locked includes if we're upgradeing all
+                // Don't use existing locked includes if we're upgrading all
                 // includes
                 if upgrade_all {
                     break 'existing None;
