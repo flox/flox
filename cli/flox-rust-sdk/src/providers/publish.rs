@@ -3,15 +3,23 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::str::FromStr;
 
-use catalog_api_v1::types::{
+use chrono::{DateTime, Utc};
+use flox_catalog::{
+    BaseCatalogUrl,
+    BaseCatalogUrlError,
+    CatalogClientError,
+    CatalogStoreConfig,
+    CatalogStoreConfigNixCopy,
+    ClientTrait,
     NarInfo,
     NarInfos,
     PackageOutput,
     PackageOutputs,
     PackageSystem,
-    PublishInfoResponseCatalog,
+    PublishResponse,
+    UserBuildPublish,
+    UserDerivationInfo,
 };
-use chrono::{DateTime, Utc};
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use thiserror::Error;
@@ -30,22 +38,12 @@ use super::build::{
     find_toplevel_group_nixpkgs,
     nix_expression_dir,
 };
-use super::catalog::{
-    BaseCatalogUrl,
-    BaseCatalogUrlError,
-    CatalogClientError,
-    Client,
-    ClientTrait,
-    UserBuildPublish,
-    UserDerivationInfo,
-};
 use super::git::{GitCommandError, GitCommandProvider, StatusInfo};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError, open_path};
 use crate::models::lockfile::Lockfile;
 use crate::providers::auth::catalog_auth_to_envs;
-use crate::providers::catalog::{CatalogStoreConfig, CatalogStoreConfigNixCopy};
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
 use crate::utils::CommandExt;
@@ -112,12 +110,12 @@ pub enum PublishError {
 pub trait Publisher {
     async fn create_package_and_possibly_user_catalog(
         &self,
-        client: &Client,
+        client: &impl ClientTrait,
         catalog_name: &str,
     ) -> Result<PackageCreatedGuard, PublishError>;
     async fn publish(
         &self,
-        client: &Client,
+        client: &impl ClientTrait,
         catalog_name: &str,
         package_created: PackageCreatedGuard,
         build_metadata: &CheckedBuildMetadata,
@@ -126,7 +124,7 @@ pub trait Publisher {
     ) -> Result<(), PublishError>;
     async fn wait_for_publish_completion(
         &self,
-        client: &Client,
+        client: &impl ClientTrait,
         build_metadata: &CheckedBuildMetadata,
         poll_interval_millis: u64,
         timeout_millis: u64,
@@ -173,7 +171,7 @@ pub struct CheckedBuildMetadata {
     // Define metadata coming from the build, e.g. outpaths
     pub name: String,
     pub pname: String,
-    pub outputs: catalog_api_v1::types::PackageOutputs,
+    pub outputs: PackageOutputs,
     pub outputs_to_install: Option<Vec<String>>,
     pub drv_path: String,
     pub system: PackageSystem,
@@ -544,7 +542,7 @@ where
     /// permission to publish it.
     async fn create_package_and_possibly_user_catalog(
         &self,
-        client: &Client,
+        client: &impl ClientTrait,
         catalog_name: &str,
     ) -> Result<PackageCreatedGuard, PublishError> {
         // Step 1 hit /packages
@@ -570,7 +568,7 @@ where
     /// [PackageCreatedGuard] must be obtained from [Self::create_package].
     async fn publish(
         &self,
-        client: &Client,
+        client: &impl ClientTrait,
         catalog_name: &str,
         _package_created: PackageCreatedGuard,
         build_metadata: &CheckedBuildMetadata,
@@ -646,7 +644,7 @@ where
     /// or errors on timeout.
     async fn wait_for_publish_completion(
         &self,
-        client: &Client,
+        client: &impl ClientTrait,
         build_metadata: &CheckedBuildMetadata,
         poll_interval_millis: u64,
         timeout_millis: u64,
@@ -696,7 +694,7 @@ fn get_client_side_catalog_store_config(
     metadata_only: bool,
     key_file: Option<PathBuf>,
     auth_netrc_path: impl AsRef<Path>,
-    publish_response: PublishInfoResponseCatalog,
+    publish_response: PublishResponse,
 ) -> Result<ClientSideCatalogStoreConfig, PublishError> {
     if metadata_only {
         return Ok(ClientSideCatalogStoreConfig::MetadataOnly);
@@ -754,17 +752,16 @@ fn get_client_side_catalog_store_config(
 fn check_build_metadata_from_build_result(
     build_result: &BuildResult,
 ) -> Result<CheckedBuildMetadata, PublishError> {
-    let outputs = PackageOutputs(
-        build_result
-            .outputs
-            .clone()
-            .into_iter()
-            .map(|(output_name, output_path)| PackageOutput {
-                name: output_name,
-                store_path: output_path.to_string_lossy().to_string(),
-            })
-            .collect(),
-    );
+    let outputs = build_result
+        .outputs
+        .clone()
+        .into_iter()
+        .map(|(output_name, output_path)| PackageOutput {
+            name: output_name,
+            store_path: output_path.to_string_lossy().to_string(),
+        })
+        .collect::<Vec<_>>()
+        .into();
 
     // Get outputs to install from the build result, or default to all outputs.
     let outputs_to_install = build_result.meta.outputs_to_install.clone();
@@ -1052,7 +1049,6 @@ pub mod tests {
     use std::io::Write;
     use std::sync::LazyLock;
 
-    use catalog_api_v1::types::CatalogStoreConfigNixCopy;
     use chrono::Utc;
     use pretty_assertions::assert_eq;
 
@@ -1072,8 +1068,6 @@ pub mod tests {
     };
     use crate::providers::catalog::{
         GENERATED_DATA,
-        MockClient,
-        PublishResponse,
         Response,
         get_base_nixpkgs_url,
         mock_base_catalog_url,
@@ -1422,10 +1416,11 @@ pub mod tests {
         let build_metadata = CheckedBuildMetadata {
             name: pkg_name.to_string(),
             pname: pkg_name.to_string(),
-            outputs: PackageOutputs(vec![PackageOutput {
+            outputs: vec![PackageOutput {
                 name: "out".to_string(),
                 store_path: "/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo".to_string(),
-            }]),
+            }]
+            .into(),
             outputs_to_install: None,
             drv_path: "dummy".to_string(),
             system: PackageSystem::X8664Linux,
@@ -1466,7 +1461,6 @@ pub mod tests {
     #[tokio::test]
     async fn publish_errors_without_key() {
         let (mut flox, _tempdir) = flox_instance();
-        let mut client = Client::Mock(MockClient::new());
 
         let token = create_test_token("test");
         let catalog_name = token.handle().to_string();
@@ -1478,7 +1472,7 @@ pub mod tests {
         let auth = Auth::from_flox(&flox).unwrap();
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
-        reset_mocks(&mut client, vec![
+        reset_mocks(&mut flox.catalog_client, vec![
             Response::CreatePackage,
             Response::Publish(PublishResponse {
                 ingress_uri: Some("https://example.com".to_string()),
@@ -1492,13 +1486,13 @@ pub mod tests {
         ]);
 
         let package_created = publish_provider
-            .create_package_and_possibly_user_catalog(&client, &catalog_name)
+            .create_package_and_possibly_user_catalog(&flox.catalog_client, &catalog_name)
             .await
             .unwrap();
 
         let result = publish_provider
             .publish(
-                &client,
+                &flox.catalog_client,
                 &catalog_name,
                 package_created,
                 &build_metadata,

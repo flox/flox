@@ -3,16 +3,12 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use flox_catalog::{ClientTrait, PackageDescriptor, PackageGroup};
 use flox_core::traceable_path;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::raw::CatalogPackage;
-use flox_rust_sdk::providers::catalog::{
-    ALL_SYSTEMS,
-    ClientTrait,
-    PackageDescriptor,
-    PackageGroup,
-};
+use flox_rust_sdk::providers::catalog::ALL_SYSTEMS;
 use indoc::{formatdoc, indoc};
 use regex::Regex;
 use semver::VersionReq;
@@ -746,7 +742,14 @@ impl Node {
     async fn get_available_node_packages(flox: &Flox) -> Result<Vec<String>> {
         let res = flox
             .catalog_client
-            .search("nodejs_", flox.system.clone(), None)
+            .search(
+                "nodejs_",
+                flox.system
+                    .clone()
+                    .try_into()
+                    .context("unsupported system")?,
+                None,
+            )
             .await
             .context("failed to query node versions")?;
         // SAFETY: This expect/unwrap will catch an invalid regex at test time,

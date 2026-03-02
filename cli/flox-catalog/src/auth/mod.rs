@@ -10,8 +10,6 @@ use enum_dispatch::enum_dispatch;
 use reqwest::header::HeaderMap;
 use serde::{Deserialize, Serialize};
 
-use crate::providers::catalog::CatalogClientConfig;
-
 /// Strategy pattern for authentication header insertion
 #[enum_dispatch]
 pub trait AuthStrategy {
@@ -31,6 +29,8 @@ use auth0::Auth0AuthStrategy;
 mod kerberos;
 #[cfg(feature = "floxhub-authn-kerberos")]
 use kerberos::KerberosAuthStrategy;
+
+use crate::CatalogClientConfig;
 
 /// Available authentication methods
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
