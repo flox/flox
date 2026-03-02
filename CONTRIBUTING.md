@@ -29,11 +29,23 @@ $ just test-all;
 
 ### CI
 
-CI can only be run against the flox/flox repository - it can't be run on forks.
-To run CI on external contributions, a maintainer will have to fetch the branch
-for a PR and force push it to the `community-CI` branch in the flox/flox repo.
-The maintainer reviewing a PR will run CI after approving the PR.
+CI can only be run against the flox/flox repository — it can't be run on forks.
+A maintainer will run CI on your behalf after reviewing the PR.
 If you ever need a run triggered, feel free to ping your reviewer!
+
+#### Maintainer workflow for external PRs
+
+1. Verify the author has accepted the CLA by adding themselves to `.github/CONTRIBUTORS.csv`.
+2. Copy the branch from their fork to our upstream:
+   ```sh
+   git fetch origin pull/<PR>/head
+   git push --force origin FETCH_HEAD:refs/heads/community-ci
+   ```
+3. Open a draft PR against the `community-ci` branch.
+   Review the contents for anything that could be malicious in CI when doing so.
+   This will trigger CI and propagate commit statuses back to the original PR.
+4. Merge the original PR.
+   The draft will auto-close when it sees the same commit has been merged.
 
 ### Commits
 
