@@ -145,7 +145,7 @@ where
             .values()
             .fold(initial_outputs, |acc, locked_pkg| {
                 let set = locked_pkg.outputs().keys().cloned().collect::<HashSet<_>>();
-                acc.union(&set).cloned().collect::<HashSet<_>>()
+                acc.intersection(&set).cloned().collect::<HashSet<_>>()
             })
     }
 
@@ -163,7 +163,7 @@ where
             .fold(initial_outputs, |acc, locked_pkg| {
                 let set =
                     HashSet::from_iter(locked_pkg.outputs_to_install().clone().unwrap_or(vec![]));
-                acc.union(&set).cloned().collect::<HashSet<_>>()
+                acc.intersection(&set).cloned().collect::<HashSet<_>>()
             })
     }
 
