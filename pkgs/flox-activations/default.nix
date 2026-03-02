@@ -13,6 +13,7 @@
   stdenv,
 }:
 let
+  FLOX_VERSION = lib.fileContents ./../../VERSION;
   # crane (<https://crane.dev/>) library for building rust packages
   craneLib = (inputs.crane.mkLib pkgsFor).overrideToolchain rust-toolchain.toolchain;
   envs = {
@@ -22,6 +23,7 @@ let
     # Nix will ignore this if it starts with just BASH
     X_BASH_BIN = "${bash}/bin/bash";
     COREUTILS = "${coreutils}";
+    FLOX_VERSION = FLOX_VERSION;
   };
 
 in
