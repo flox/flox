@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use attach::AttachArgs;
 use clap::{Parser, Subcommand};
+use flox_core::vars::FLOX_VERSION_STRING;
 
 pub mod activate;
 pub mod attach;
@@ -23,9 +24,12 @@ use set_env_dirs::SetEnvDirsArgs;
 const SHORT_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
 const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
 
+fn version() -> &'static str {
+    &FLOX_VERSION_STRING
+}
+
 #[derive(Debug, Parser)]
-// #[command(version = Lazy::get(&FLOX_VERSION).map(|v| v.as_str()).unwrap_or("0.0.0"))]
-#[command(about = SHORT_HELP, long_about = LONG_HELP)]
+#[command(version = version(), about = SHORT_HELP, long_about = LONG_HELP)]
 pub struct Cli {
     #[arg(
         short = 'v',
