@@ -160,7 +160,7 @@ impl PathEnvironment {
         Ok(CoreEnvironment::new(
             self.path.join(ENV_DIR_NAME),
             self.include_fetcher()?,
-        )?)
+        ))
     }
 
     fn as_core_environment_mut(&mut self) -> Result<CoreEnvironment, EnvironmentError> {
@@ -510,7 +510,7 @@ impl PathEnvironment {
             let mut env_view = CoreEnvironment::new(
                 environment.path.join(ENV_DIR_NAME),
                 environment.include_fetcher()?,
-            )?;
+            );
             env_view.lock(flox)?;
             let store_paths = env_view.build(flox)?;
             environment.link(flox, &store_paths)?;
@@ -851,8 +851,7 @@ pub mod tests {
 
         // build the environment -> out link is created -> no rebuild necessary
         let mut env_view =
-            CoreEnvironment::new(env.path.join(ENV_DIR_NAME), env.include_fetcher().unwrap())
-                .unwrap();
+            CoreEnvironment::new(env.path.join(ENV_DIR_NAME), env.include_fetcher().unwrap());
         env_view.lock(&flox).unwrap();
         let store_paths = env_view.build(&flox).unwrap();
         env.link(&flox, &store_paths).unwrap();

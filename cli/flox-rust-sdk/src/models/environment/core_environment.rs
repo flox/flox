@@ -310,16 +310,12 @@ impl CoreEnvironment<()> {
 impl CoreEnvironment<ReadOnly> {
     /// Create a new environment view given the path to a directory that
     /// contains a valid manifest.
-    pub fn new(
-        env_dir: impl AsRef<Path>,
-        include_fetcher: IncludeFetcher,
-    ) -> Result<Self, CoreEnvironmentError> {
-        let env = CoreEnvironment {
+    pub fn new(env_dir: impl AsRef<Path>, include_fetcher: IncludeFetcher) -> Self {
+        CoreEnvironment {
             env_dir: env_dir.as_ref().to_path_buf(),
             include_fetcher,
             _state: ReadOnly {},
-        };
-        Ok(env)
+        }
     }
 
     pub(crate) fn manifest(&mut self, flox: &Flox) -> Result<Manifest<Migrated>, EnvironmentError> {
@@ -1221,7 +1217,7 @@ pub mod test_helpers {
         let env_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
         fs::write(env_path.join(MANIFEST_FILENAME), contents).unwrap();
 
-        CoreEnvironment::new(&env_path, mock_include_fetcher()).unwrap()
+        CoreEnvironment::new(&env_path, mock_include_fetcher())
     }
 
     pub fn new_core_environment_with_lockfile(
@@ -1233,7 +1229,7 @@ pub mod test_helpers {
         fs::write(env_path.join(MANIFEST_FILENAME), manifest_contents).unwrap();
         fs::write(env_path.join(LOCKFILE_FILENAME), lockfile_contents).unwrap();
 
-        CoreEnvironment::new(&env_path, mock_include_fetcher()).unwrap()
+        CoreEnvironment::new(&env_path, mock_include_fetcher())
     }
 
     pub fn new_core_environment_from_env_files(
@@ -1295,8 +1291,7 @@ mod tests {
 
         let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
             base_directory: None,
-        })
-        .unwrap();
+        });
 
         let new_env_str = with_latest_schema(indoc! {r#"
             [install]
@@ -1475,8 +1470,7 @@ mod tests {
 
         let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
             base_directory: None,
-        })
-        .unwrap();
+        });
         let temp_env = env_view.writable(&sandbox_path).unwrap();
 
         let err = env_view
@@ -1504,8 +1498,7 @@ mod tests {
 
         let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
             base_directory: None,
-        })
-        .unwrap();
+        });
         let temp_env = env_view.writable(&sandbox_path).unwrap();
 
         let err = env_view.replace_with(temp_env).expect_err(&format!(
@@ -1538,8 +1531,7 @@ mod tests {
 
         let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
             base_directory: None,
-        })
-        .unwrap();
+        });
 
         flox.catalog_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;

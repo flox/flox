@@ -707,9 +707,8 @@ impl GenerationsExt for ManagedEnvironment {
             )
             .map_err(ManagedEnvironmentError::Generations)?;
 
-        let mut core_environment = generation_rw
-            .get_generation(*generation, self.include_fetcher.clone())
-            .map_err(ManagedEnvironmentError::Generations)?;
+        let mut core_environment =
+            generation_rw.get_generation(*generation, self.include_fetcher.clone());
 
         let store_paths = core_environment.build(flox)?;
 
@@ -1072,7 +1071,7 @@ impl ManagedEnvironment {
         )
         .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
 
-        let local_checkout = CoreEnvironment::new(env_dir, self.include_fetcher.clone())?;
+        let local_checkout = CoreEnvironment::new(env_dir, self.include_fetcher.clone());
 
         Ok(local_checkout)
     }
@@ -1100,7 +1099,7 @@ impl ManagedEnvironment {
         }
 
         let local =
-            CoreEnvironment::new(self.path.join(ENV_DIR_NAME), self.include_fetcher.clone())?;
+            CoreEnvironment::new(self.path.join(ENV_DIR_NAME), self.include_fetcher.clone());
         Ok(local)
     }
 

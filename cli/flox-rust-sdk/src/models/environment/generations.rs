@@ -291,16 +291,14 @@ impl Generations<ReadWrite<'_>> {
         &self,
         generation: usize,
         include_fetcher: IncludeFetcher,
-    ) -> Result<CoreEnvironment, GenerationsError> {
-        let environment = CoreEnvironment::new(
+    ) -> CoreEnvironment {
+        CoreEnvironment::new(
             self.repo
                 .path()
                 .join(generation.to_string())
                 .join(ENV_DIR_NAME),
             include_fetcher,
-        )?;
-
-        Ok(environment)
+        )
     }
 
     /// Return the current generation as set in the metadata file
@@ -316,7 +314,7 @@ impl Generations<ReadWrite<'_>> {
         let current_gen = metadata
             .current_gen()
             .ok_or(GenerationsError::NoGenerations)?;
-        self.get_generation(*current_gen, include_fetcher)
+        Ok(self.get_generation(*current_gen, include_fetcher))
     }
 
     /// Create a new generation from an existing environment
