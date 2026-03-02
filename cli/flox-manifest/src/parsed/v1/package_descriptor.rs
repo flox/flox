@@ -1,11 +1,6 @@
 use flox_core::data::System;
 #[cfg(any(test, feature = "tests"))]
-use flox_test_utils::proptest::{
-    alphanum_string,
-    optional_string,
-    optional_vec_of_strings,
-    vec_of_strings,
-};
+use flox_test_utils::proptest::{alphanum_string, optional_string, optional_vec_of_strings};
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use schemars::JsonSchema;
@@ -219,32 +214,4 @@ pub struct PackageDescriptorFlake {
         proptest(strategy = "optional_vec_of_strings(3, 4)")
     )]
     pub(crate) systems: Option<Vec<System>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
-#[serde(untagged)]
-#[serde(deny_unknown_fields)]
-pub enum SelectedOutputs {
-    All(AllSentinel),
-    Specific(Vec<String>),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum AllSentinel {
-    All,
-}
-
-#[cfg(any(test, feature = "tests"))]
-impl Arbitrary for SelectedOutputs {
-    type Parameters = ();
-    type Strategy = BoxedStrategy<SelectedOutputs>;
-
-    fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
-        prop_oneof!(
-            Just(SelectedOutputs::All(AllSentinel::All)),
-            vec_of_strings(3, 4).prop_map(SelectedOutputs::Specific)
-        )
-        .boxed()
-    }
 }
