@@ -237,6 +237,7 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
             err = format_core_error(err)
         },
         CoreEnvironmentError::MakeSandbox(_) => display_chain(err),
+        // within transaction, user should not see this and likely can't do anything about it
         CoreEnvironmentError::WriteLockfile(_) => display_chain(err),
         CoreEnvironmentError::WriteLockfileAtomically(_) => display_chain(err),
         CoreEnvironmentError::MakeTemporaryEnv(_) => display_chain(err),
@@ -282,6 +283,7 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
 
             Please ensure that you have write permissions to '.flox/env/manifest.toml'.
         "},
+        // internal error, a bug if this happens to users!
         CoreEnvironmentError::BadLockfilePath(_) => display_chain(err),
         CoreEnvironmentError::BuildEnv(err) => formatdoc! {"
             Failed to build environment:
