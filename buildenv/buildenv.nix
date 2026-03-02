@@ -236,7 +236,7 @@ let
                 # CUDA support.
                 (builtins.attrNames (builtins.removeAttrs package.outputs [ "stubs" ]))
               );
-              get_V1_10_0_Outputs = (
+              getSpecifiedOutputs = (
                 pd: pkg:
                 if (builtins.hasAttr "outputs" pd) then
                   if (builtins.isString pd.outputs) then
@@ -263,12 +263,9 @@ let
                   else
                     throw "unsupported manifest schema version: '${manifest.version}'"
                 else if (builtins.hasAttr "schema-version" manifest) then
-                  if (manifest.schema-version == "1.10.0") then
-                    get_V1_10_0_Outputs descriptor package
-                  else
-                    throw "unsupported manifest schema version: '${manifest.schema-version}'"
+                  getSpecifiedOutputs descriptor package
                 else
-                  throw "unsupported manifest version: '${manifest.version}'";
+                  throw "manifest 'version' or 'schema-version' is required";
             in
             builtins.map (output: builtins.storePath (builtins.getAttr output package.outputs)) outputs
           )

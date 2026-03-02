@@ -440,7 +440,7 @@ if ($manifest) {
             }
 
             # Get outputs for v2 manifests
-            sub get_V1_10_0_Outputs {
+            sub getSpecifiedOutputs {
                 my ($descriptor, $pkg, $outputsToInstall) = @_;
                 if (exists $descriptor->{"outputs"}) {
                     my $ref = ref($descriptor->{"outputs"});
@@ -541,9 +541,9 @@ if ($manifest) {
                             "priority" => ((1000 * $package->{"priority"}) + $otherOutputPriorityCounter++)
                         };
                     }
-                } elsif (exists $manifest->{"schema-version"} && $manifest->{"schema-version"} eq "1.10.0") {
+                } elsif (exists $manifest->{"schema-version"}) {
                     # v1.10.0 manifest logic: increment priority for all outputs
-                    my @outputs = get_V1_10_0_Outputs($descriptor, $package, $outputsToInstall);
+                    my @outputs = getSpecifiedOutputs($descriptor, $package, $outputsToInstall);
                     my @paths = map { $package->{"outputs"}{$_} } @outputs;
 
                     next unless scalar @paths;
@@ -890,4 +890,3 @@ if ($manifest) {
     }
 }
 # </flox>
-
