@@ -10,6 +10,15 @@ use enum_dispatch::enum_dispatch;
 use reqwest::header::HeaderMap;
 use serde::{Deserialize, Serialize};
 
+use crate::token::FloxhubToken;
+
+/// Errors from authentication validation
+#[derive(Debug, thiserror::Error)]
+pub enum AuthError {
+    #[error("{0}")]
+    NotAuthenticated(String),
+}
+
 /// Strategy pattern for authentication header insertion
 #[enum_dispatch]
 pub trait AuthStrategy {
@@ -18,6 +27,9 @@ pub trait AuthStrategy {
     /// # Arguments
     /// * `header_map` - The header map to modify
     fn add_auth_headers(&self, header_map: &mut HeaderMap);
+
+    /// Validate that auth is available and return the user's handle.
+    fn get_handle(&self) -> Result<String, AuthError>;
 }
 
 // Always include Auth0 strategy
@@ -29,8 +41,6 @@ use auth0::Auth0AuthStrategy;
 mod kerberos;
 #[cfg(feature = "floxhub-authn-kerberos")]
 use kerberos::KerberosAuthStrategy;
-
-use crate::CatalogClientConfig;
 
 /// Available authentication methods
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,20 +70,28 @@ impl Default for AuthMethod {
 }
 
 impl AuthMethod {
-    /// Convert this auth method to the appropriate strategy with config data
-    pub fn to_strategy(&self, config: &CatalogClientConfig) -> AuthStrategies {
+    /// Convert this auth method to the appropriate strategy with the required data.
+    ///
+    /// Each strategy uses different data:
+    /// - Auth0 needs the FloxHub token for bearer authentication
+    /// - Kerberos needs the catalog URL for SPNEGO service principal resolution
+    pub fn to_strategy(
+        &self,
+        floxhub_token: Option<FloxhubToken>,
+        #[cfg_attr(not(feature = "floxhub-authn-kerberos"), allow(unused_variables))]
+        catalog_url: String,
+    ) -> AuthStrategies {
         match self {
-            AuthMethod::Auth0 => {
-                AuthStrategies::Auth0(Auth0AuthStrategy::new(config.floxhub_token.clone()))
-            },
+            AuthMethod::Auth0 => AuthStrategies::Auth0(Auth0AuthStrategy::new(floxhub_token)),
             #[cfg(feature = "floxhub-authn-kerberos")]
             AuthMethod::Kerberos => {
-                AuthStrategies::Kerberos(KerberosAuthStrategy::new(config.catalog_url.clone()))
+                AuthStrategies::Kerberos(KerberosAuthStrategy::new(catalog_url))
             },
         }
     }
 }
 
+#[derive(Debug)]
 #[enum_dispatch(AuthStrategy)]
 pub enum AuthStrategies {
     /// Auth0 authentication (default)
@@ -81,18 +99,4 @@ pub enum AuthStrategies {
     /// Kerberos authentication
     #[cfg(feature = "floxhub-authn-kerberos")]
     Kerberos(KerberosAuthStrategy),
-}
-
-/// Authentication manager that provides a static method for adding auth headers
-pub struct AuthManager;
-
-impl AuthManager {
-    /// Add authentication headers using the configured auth method
-    ///
-    /// This static method creates the appropriate strategy based on the config
-    /// and delegates to it via enum_dispatch.
-    pub fn add_auth_headers(header_map: &mut HeaderMap, config: &CatalogClientConfig) {
-        let strategy = config.auth_method.to_strategy(config);
-        strategy.add_auth_headers(header_map);
-    }
 }
