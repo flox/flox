@@ -8,7 +8,7 @@ use flox_rust_sdk::providers::publish::ClientSideCatalogStoreConfig;
 use tracing::instrument;
 use url::Url;
 
-use crate::commands::{SHELL_COMPLETION_FILE, ensure_floxhub_token};
+use crate::commands::{SHELL_COMPLETION_FILE, ensure_auth};
 use crate::subcommand_metric;
 use crate::utils::message;
 
@@ -43,8 +43,13 @@ impl Upload {
         subcommand_metric!("upload");
 
         let store_path = validate_store_path(self.store_path.clone())?;
-        let token = ensure_floxhub_token(&mut flox).await?.clone();
-        let auth_file = write_floxhub_netrc(flox.temp_dir, &token)?;
+        let _handle = ensure_auth(&mut flox).await?;
+        let token = flox
+            .floxhub_token
+            .as_ref()
+            .context("FloxHub token required for upload")?
+            .clone();
+        let auth_file = write_floxhub_netrc(&flox.temp_dir, &token)?;
 
         ClientSideCatalogStoreConfig::upload_store_path(
             &self.cache.store_url,

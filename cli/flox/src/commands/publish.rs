@@ -31,7 +31,7 @@ use crate::commands::build::{
     prefetch_flake_ref,
     system_override,
 };
-use crate::commands::{SHELL_COMPLETION_FILE, ensure_floxhub_token};
+use crate::commands::{SHELL_COMPLETION_FILE, ensure_auth};
 use crate::config::Config;
 use crate::utils::errors::display_chain;
 use crate::utils::message;
@@ -146,12 +146,8 @@ impl Publish {
     ) -> Result<()> {
         // Fail as early as possible if the user isn't authenticated or doesn't
         // belong to an org with a catalog.
-        let token = ensure_floxhub_token(&mut flox).await?.clone();
-        let catalog_name = publish_config
-            .cache_args
-            .org
-            .clone()
-            .unwrap_or(token.handle().to_string());
+        let handle = ensure_auth(&mut flox).await?;
+        let catalog_name = publish_config.cache_args.org.clone().unwrap_or(handle);
 
         let path_env = match env {
             ConcreteEnvironment::Path(path_env) => path_env,

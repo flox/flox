@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use flox_catalog::{CatalogClient, CatalogClientConfig, CatalogMockMode};
+use flox_catalog::{AuthStrategies, CatalogClient, CatalogClientConfig, CatalogMockMode};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::providers::catalog::{
     Client,
@@ -22,6 +22,7 @@ use crate::config::Config;
 pub fn init_catalog_client(
     config: &Config,
     metrics_device_uuid: Option<Uuid>,
+    auth_strategy: AuthStrategies,
 ) -> Result<Client, anyhow::Error> {
     let mut extra_headers = BTreeMap::new();
 
@@ -63,5 +64,5 @@ pub fn init_catalog_client(
         "using catalog client with url: {}",
         client_config.catalog_url
     );
-    Ok(CatalogClient::new(client_config)?.into())
+    Ok(CatalogClient::new(client_config, auth_strategy)?.into())
 }

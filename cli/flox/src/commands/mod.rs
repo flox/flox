@@ -34,6 +34,7 @@ use std::{env, fmt, mem};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
+use flox_catalog::AuthMethod;
 use flox_core::data::environment_ref::{self, DEFAULT_NAME, RemoteEnvironmentRef};
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 use flox_manifest::{Manifest, TypedOnly};
@@ -59,6 +60,7 @@ use flox_rust_sdk::models::environment::{
     find_dot_flox,
     open_path,
 };
+use flox_rust_sdk::providers::catalog::DEFAULT_CATALOG_URL;
 use indoc::{formatdoc, indoc};
 use tempfile::TempDir;
 use thiserror::Error;
@@ -304,14 +306,26 @@ impl FloxArgs {
         let metrics_device_uuid = (!config.flox.disable_metrics)
             .then(|| read_metrics_uuid(&config).ok())
             .flatten();
+        let auth_method = config.flox.floxhub_authn_mode.clone();
+        let catalog_url = config
+            .flox
+            .catalog_url
+            .clone()
+            .unwrap_or_else(|| DEFAULT_CATALOG_URL.to_string());
 
-        let catalog_client = init_catalog_client(&config, metrics_device_uuid)?;
+        let catalog_client = init_catalog_client(
+            &config,
+            metrics_device_uuid,
+            auth_method.to_strategy(floxhub_token.clone(), catalog_url.clone()),
+        )?;
 
         // we already make sure $USER corresponds to **euid** earlier on oin the process.
         let system_user_name =
             std::env::var("USER").context("could not determine username from $USER")?;
         let system_hostname = sys_info::hostname().context("could not determine hostname")?;
         let argv = std::env::args().collect();
+
+        let auth_strategy = auth_method.to_strategy(floxhub_token.clone(), catalog_url.clone());
 
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
@@ -325,6 +339,9 @@ impl FloxArgs {
             system_hostname,
             argv,
             floxhub_token,
+            auth_method,
+            catalog_url,
+            auth_strategy,
             floxhub,
             catalog_client,
             installable_locker: Default::default(),
@@ -1148,10 +1165,8 @@ pub(super) async fn ensure_environment_trust(
         return Ok(());
     }
 
-    if let Some(ref token) = flox.floxhub_token
-        && token.handle() == env_ref.owner().as_str()
-    {
-        debug!("{env_prefixed_name} is trusted by token");
+    if flox.get_handle().ok().as_deref() == Some(env_ref.owner().as_str()) {
+        debug!("{env_prefixed_name} is trusted by auth handle");
         return Ok(());
     }
 
@@ -1257,59 +1272,25 @@ pub(super) async fn ensure_environment_trust(
     }
 }
 
-/// Ensure a valid (non-expired) floxhub_token is present
+/// Validate authentication and return the user's handle.
 ///
-/// If the token is not present or expired and we can prompt the user,
-/// run the login flow ([auth::login_flox]); otherwise, return an error
-/// explaining how to authenticate in a non-interactive context.
-pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<&FloxhubToken> {
-    match &flox.floxhub_token {
-        Some(token) if !token.is_expired() => {
-            debug!(
-                "floxhub token is present and valid; logged in as {}",
-                token.handle()
-            );
-            Ok(flox.floxhub_token.as_ref().unwrap())
-        },
-        Some(_) if !Dialog::can_prompt() => {
-            debug!("floxhub token is expired; can not prompt user for re-authentication");
-            let message = formatdoc! {"
-                Your FloxHub token has expired. To re-authenticate you can either:
-
-                * login to FloxHub with 'flox auth login',
-                * set the 'floxhub_token' field in your config to a fresh token,
-                * set the '$FLOX_FLOXHUB_TOKEN' environment variable"
-            };
-            bail!(message);
-        },
-        Some(_) => {
-            debug!("floxhub token is expired; prompting user for re-authentication");
-
-            message::plain("Your FloxHub token has expired. Re-authenticating...");
+/// If auth fails for Auth0 and we can prompt interactively, triggers the
+/// login flow as a fallback and rebuilds the auth strategy with the fresh token.
+pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
+    match flox.get_handle() {
+        Ok(handle) => Ok(handle),
+        Err(_) if Dialog::can_prompt() && matches!(flox.auth_method, AuthMethod::Auth0) => {
+            if flox.floxhub_token.is_some() {
+                message::plain("Your FloxHub token has expired. Re-authenticating...");
+            } else {
+                message::plain("You are not logged in to FloxHub. Logging in...");
+            }
             let token = auth::login_flox(flox).await?;
-            Ok(token)
+            let handle = token.handle().to_string();
+            flox.rebuild_auth_strategy();
+            Ok(handle)
         },
-        None if !Dialog::can_prompt() => {
-            debug!("floxhub token is not present; can not prompt user");
-            let message = formatdoc! {"
-                You are not logged in to FloxHub.
-
-                Can not automatically login to FloxHub in non-interactive context.
-
-                To login you can either
-                * login to FloxHub with 'flox auth login',
-                * set the 'floxhub_token' field to '<your token>' in your config
-                * set the '$FLOX_FLOXHUB_TOKEN=<your_token>' environment variable."
-            };
-            bail!(message);
-        },
-        None => {
-            debug!("floxhub token is not present; prompting user");
-
-            message::plain("You are not logged in to FloxHub. Logging in...");
-            let token = auth::login_flox(flox).await?;
-            Ok(token)
-        },
+        Err(e) => Err(e.into()),
     }
 }
 
