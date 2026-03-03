@@ -65,6 +65,16 @@ pub struct Flox {
     /// Checking for [None] can be used to check if the use is logged in.
     pub floxhub_token: Option<FloxhubToken>,
 
+    /// The authentication method to use for FloxHub/catalog operations.
+    pub auth_method: AuthMethod,
+
+    /// The catalog URL used for authentication (e.g. Kerberos SPN resolution).
+    pub catalog_url: String,
+
+    /// The authentication strategy instance, constructed from [auth_method],
+    /// [floxhub_token], and [catalog_url].
+    pub auth_strategy: AuthStrategies,
+
     pub catalog_client: catalog::Client,
     pub installable_locker: flake_installable_locker::InstallableLockerImpl,
 
@@ -78,7 +88,23 @@ pub struct Flox {
     pub metrics_device_uuid: Option<Uuid>,
 }
 
-impl Flox {}
+impl Flox {
+    /// Validate that auth is available and return the user's handle.
+    pub fn get_handle(&self) -> Result<String, AuthError> {
+        self.auth_strategy.get_handle()
+    }
+
+    /// Reconstruct the authentication strategy from current state.
+    ///
+    /// Call this after updating [floxhub_token](Self::floxhub_token) (e.g.
+    /// after an interactive login) so that subsequent auth calls see the
+    /// fresh token.
+    pub fn rebuild_auth_strategy(&mut self) {
+        self.auth_strategy = self
+            .auth_method
+            .to_strategy(self.floxhub_token.clone(), self.catalog_url.clone());
+    }
+}
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, Default)]
 pub struct Features {
@@ -262,6 +288,10 @@ pub mod test_helpers {
             Url::from_directory_path(mock_floxhub_git_dir).unwrap()
         });
 
+        let auth_method: AuthMethod = Default::default();
+        let catalog_url = "https://api.flox.dev".to_string();
+        let auth_strategy = auth_method.to_strategy(None, catalog_url.clone());
+
         let flox = Flox {
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             system_user_name: "its-a-me-mario".to_string(),
@@ -279,6 +309,9 @@ pub mod test_helpers {
             )
             .unwrap(),
             floxhub_token: None,
+            auth_method,
+            catalog_url,
+            auth_strategy,
             catalog_client: MockClient::default().into(),
             installable_locker: InstallableLockerImpl::Mock(InstallableLockerMock::new()),
             features: Default::default(),
