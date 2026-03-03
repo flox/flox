@@ -697,8 +697,11 @@ pub mod test_helpers {
             auth_method: Default::default(),
             user_agent: None,
         };
+        let strategy = catalog_config
+            .auth_method
+            .to_strategy(None, catalog_config.catalog_url.clone());
         Client::Catalog(
-            CatalogClient::new(catalog_config).expect("failed to create catalog client"),
+            CatalogClient::new(catalog_config, strategy).expect("failed to create catalog client"),
         )
     }
 
@@ -791,8 +794,11 @@ pub mod test_helpers {
             auth_method: Default::default(),
             user_agent: None,
         };
+        let strategy = catalog_config
+            .auth_method
+            .to_strategy(auth.token().cloned(), catalog_config.catalog_url.clone());
         let client_inner =
-            CatalogClient::new(catalog_config).expect("failed to create catalog client");
+            CatalogClient::new(catalog_config, strategy).expect("failed to create catalog client");
         let mut client = Client::Catalog(client_inner);
         if matches!(mock_mode, CatalogMockMode::Record(_)) && user == PublishTestUser::WithCatalogs
         {
