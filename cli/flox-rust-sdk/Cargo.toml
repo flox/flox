@@ -70,7 +70,7 @@ flox-catalog = { workspace = true, features = ["tests"] }
 [features]
 # Catalog authentication strategy
 # Kerberos authentication is available when this feature is enabled
-floxhub-authn-kerberos = ["dep:libgssapi", "dep:base64"]
+floxhub-authn-kerberos = ["dep:libgssapi", "dep:base64", "flox-catalog/floxhub-authn-kerberos"]
 
 # allow exporting test helpers in dev mode only
 tests = [
