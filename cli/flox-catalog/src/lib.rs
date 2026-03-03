@@ -38,7 +38,7 @@ pub(crate) mod mock;
 
 // Re-export catalog-api-v1 types for consumers.
 // This allows consumers to depend only on catalog-client, not directly on catalog-api-v1.
-pub use auth::{AuthManager, AuthMethod};
+pub use auth::{AuthError, AuthMethod, AuthStrategies, AuthStrategy};
 pub use catalog_api_v1::{
     Client as ApiClient,
     Error as ApiError,

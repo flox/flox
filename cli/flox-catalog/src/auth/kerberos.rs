@@ -9,11 +9,12 @@ use reqwest::header::{self, HeaderMap, HeaderValue};
 use tracing::debug;
 use url::Url;
 
-use super::AuthStrategy;
+use super::{AuthError, AuthStrategy};
 
 /// Kerberos authentication strategy
 ///
 /// Uses Kerberos tickets via GSSAPI to generate SPNEGO tokens for HTTP Negotiate authentication.
+#[derive(Debug)]
 pub struct KerberosAuthStrategy {
     catalog_url: String,
 }
@@ -40,6 +41,21 @@ impl AuthStrategy for KerberosAuthStrategy {
                 tracing::warn!("Failed to generate Kerberos token: {}", e);
             },
         }
+    }
+
+    fn get_handle(&self) -> Result<String, AuthError> {
+        let cred = Cred::acquire(None, None, CredUsage::Initiate, None).map_err(|e| {
+            AuthError::NotAuthenticated(format!(
+                "Kerberos ticket not available. Run `kinit` to authenticate. Error: {e:?}"
+            ))
+        })?;
+        let name = cred.name().map_err(|e| {
+            AuthError::NotAuthenticated(format!("Failed to get Kerberos principal name: {e:?}"))
+        })?;
+        let display = name.display_name().map_err(|e| {
+            AuthError::NotAuthenticated(format!("Failed to display Kerberos principal name: {e:?}"))
+        })?;
+        Ok(String::from_utf8_lossy(&display[..]).to_string())
     }
 }
 
