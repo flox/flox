@@ -31,6 +31,7 @@ mod auth;
 mod client;
 mod config;
 mod error;
+mod token;
 mod types;
 
 pub(crate) mod mock;
@@ -50,5 +51,6 @@ pub use client::{str_to_catalog_name, str_to_package_name, CatalogClient, Client
 pub use config::{CatalogClientConfig, CatalogMockMode};
 // Errors
 pub use error::*;
+pub use token::{FloxhubToken, FloxhubTokenError};
 // Types (re-exported from types module for convenience)
 pub use types::*;
