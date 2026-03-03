@@ -326,10 +326,15 @@ pub async fn login_flox(flox: &mut Flox) -> Result<&FloxhubToken> {
     update_config(&flox.config_dir, "floxhub_token", Some(token.clone()))
         .context("Could not write token to config")?;
 
-    // If the catalog client is catalog (not a mock), update the token by
-    // creating a new client based on the old config with the updated token
+    // Rebuild the catalog client with a fresh auth strategy containing the new token
     if let Client::Catalog(client) = &mut flox.catalog_client {
-        client.update_config(|config| config.floxhub_token = Some(token.secret().to_string()))?;
+        let strategy = flox
+            .auth_method
+            .to_strategy(Some(token.clone()), flox.catalog_url.clone());
+        client.update_config(
+            |config| config.floxhub_token = Some(token.secret().to_string()),
+            strategy,
+        )?;
     }
 
     message::updated("Authentication complete");

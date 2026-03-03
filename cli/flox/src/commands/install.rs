@@ -47,7 +47,7 @@ use crate::commands::activate::Activate;
 use crate::commands::{
     ConcreteEnvironment,
     EnvironmentSelectError,
-    ensure_floxhub_token,
+    ensure_auth,
     environment_description,
 };
 use crate::utils::dialog::{Dialog, Select};
@@ -125,7 +125,7 @@ impl Install {
 
         // Ensure the user is logged in for the following remote operations
         if let EnvironmentSelect::Remote(_) = self.environment {
-            ensure_floxhub_token(&mut flox).await?;
+            ensure_auth(&mut flox).await?;
         }
 
         let mut packages_to_install = self
@@ -595,11 +595,10 @@ async fn try_create_default_environment_interactive(
     // customizations and skipping the normal `init` output.
     let env = {
         // ensure user is logged in
-        let token = ensure_floxhub_token(flox).await?;
-        let owner = token
-            .handle()
+        let handle = ensure_auth(flox).await?;
+        let owner = handle
             .parse()
-            .context("FloxHub token refers to invalid user")?;
+            .context("Auth handle refers to invalid user")?;
         let name = DEFAULT_NAME
             .parse()
             .expect("'default' is a known accepted name");

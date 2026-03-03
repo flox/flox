@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_core::data::environment_ref::EnvironmentOwner;
 use flox_rust_sdk::flox::Flox;
@@ -20,7 +20,7 @@ use flox_rust_sdk::models::environment::{
 use indoc::formatdoc;
 use tracing::{debug, instrument};
 
-use crate::commands::{EnvironmentSelect, ensure_floxhub_token, environment_select};
+use crate::commands::{EnvironmentSelect, ensure_auth, environment_select};
 use crate::environment_subcommand_metric;
 use crate::utils::errors::format_core_error;
 use crate::utils::message;
@@ -52,7 +52,7 @@ impl Push {
     #[instrument(name = "push", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         // Ensure the user is logged in for the following remote operations
-        ensure_floxhub_token(&mut flox).await?;
+        ensure_auth(&mut flox).await?;
 
         // Start a span that doesn't include authentication
         let span = tracing::info_span!("post-auth");
@@ -113,12 +113,7 @@ fn handle_path_environment_push(
     let owner = if let Some(owner) = owner {
         owner
     } else {
-        EnvironmentOwner::from_str(
-            flox.floxhub_token
-                .as_ref()
-                .context("Need to be logged in")?
-                .handle(),
-        )?
+        EnvironmentOwner::from_str(&flox.get_handle()?)?
     };
 
     let pointer = ManagedPointer::new(owner.clone(), path_environment.name(), &flox.floxhub);
