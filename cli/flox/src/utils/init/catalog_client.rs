@@ -1,15 +1,15 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use flox_catalog::{AuthStrategies, CatalogClient, CatalogClientConfig, CatalogMockMode};
+use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::providers::catalog::{
-    CatalogClient,
-    CatalogClientConfig,
-    CatalogMockMode,
     Client,
     DEFAULT_CATALOG_URL,
     FLOX_CATALOG_DUMP_DATA_VAR,
     FLOX_CATALOG_MOCK_DATA_VAR,
 };
+use flox_rust_sdk::utils::INVOCATION_SOURCES;
 use tracing::debug;
 
 use crate::config::Config;
@@ -19,19 +19,26 @@ use crate::utils::metrics::read_metrics_uuid;
 ///
 /// - Initialize a mock client if the `_FLOX_USE_CATALOG_MOCK` environment variable is set to `true`
 /// - Initialize a real client otherwise
-pub fn init_catalog_client(config: &Config) -> Result<Client, anyhow::Error> {
+pub fn init_catalog_client(
+    config: &Config,
+    auth_strategy: AuthStrategies,
+) -> Result<Client, anyhow::Error> {
     let extra_headers = {
+        let mut headers = BTreeMap::new();
         // Propagate the metrics UUID to catalog-server if metrics are enabled.
         if !config.flox.disable_metrics {
-            let mut metrics_headers = BTreeMap::new();
-            metrics_headers.insert(
+            headers.insert(
                 "flox-device-uuid".to_string(),
                 read_metrics_uuid(config).unwrap().to_string(),
             );
-            metrics_headers
-        } else {
-            Default::default()
         }
+
+        // Add invocation sources header if any sources are detected
+        if !INVOCATION_SOURCES.is_empty() {
+            let sources_str = INVOCATION_SOURCES.join(",");
+            headers.insert("flox-invocation-source".to_string(), sources_str);
+        };
+        headers
     };
 
     let mock_mode = if let Ok(path_str) = std::env::var(FLOX_CATALOG_MOCK_DATA_VAR) {
@@ -54,11 +61,12 @@ pub fn init_catalog_client(config: &Config) -> Result<Client, anyhow::Error> {
         extra_headers,
         mock_mode,
         auth_method: config.flox.floxhub_authn_mode.clone(),
+        user_agent: Some(format!("flox-cli/{}", &*FLOX_VERSION)),
     };
 
     debug!(
         "using catalog client with url: {}",
         client_config.catalog_url
     );
-    Ok(CatalogClient::new(client_config).into())
+    Ok(CatalogClient::new(client_config, auth_strategy)?.into())
 }

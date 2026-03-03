@@ -35,7 +35,7 @@ use crate::commands::{
     EnvironmentSelectError,
     SHELL_COMPLETION_FILE,
     bail_on_v2_if_feature_flag_not_enabled,
-    ensure_floxhub_token,
+    ensure_auth,
 };
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::errors::format_error;
@@ -87,7 +87,7 @@ impl Edit {
 
         // Ensure the user is logged in for the following remote operations
         if let EnvironmentSelect::Remote(_) = self.environment {
-            ensure_floxhub_token(&mut flox).await?;
+            ensure_auth(&mut flox).await?;
         };
 
         let mut detected_environment =

@@ -670,7 +670,6 @@ dependencies = [
  "regex",
  "regress",
  "reqwest",
- "sentry",
  "serde",
  "serde_json",
  "syn 2.0.114",
@@ -1365,13 +1364,13 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "bpaf",
- "catalog-api-v1",
  "chrono",
  "close_fds",
  "config",
  "crossterm 0.29.0",
  "derive_more",
  "dirs",
+ "flox-catalog",
  "flox-core",
  "flox-rust-sdk",
  "flox-test-utils",
@@ -1457,6 +1456,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "flox-catalog"
+version = "0.1.0"
+dependencies = [
+ "async-stream",
+ "base64",
+ "catalog-api-v1",
+ "derive_more",
+ "enum_dispatch",
+ "futures",
+ "http 1.4.0",
+ "httpmock",
+ "itertools 0.14.0",
+ "jsonwebtoken",
+ "libgssapi",
+ "proptest",
+ "reqwest",
+ "sentry",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "serde_yaml",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
 name = "flox-core"
 version = "0.0.0"
 dependencies = [
@@ -1490,10 +1518,10 @@ dependencies = [
  "anyhow",
  "async-stream",
  "base64",
- "catalog-api-v1",
  "chrono",
  "derive_more",
  "enum_dispatch",
+ "flox-catalog",
  "flox-core",
  "flox-test-utils",
  "fslock",

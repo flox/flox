@@ -2,9 +2,16 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
+pub use flox_catalog::{
+    AuthError,
+    AuthMethod,
+    AuthStrategies,
+    AuthStrategy,
+    FloxhubToken,
+    FloxhubTokenError,
+};
 use flox_core::vars::FLOX_VERSION_STRING;
 use serde::{Deserialize, Serialize};
-use serde_with::DeserializeFromStr;
 use thiserror::Error;
 use url::Url;
 
@@ -58,6 +65,16 @@ pub struct Flox {
     /// Checking for [None] can be used to check if the use is logged in.
     pub floxhub_token: Option<FloxhubToken>,
 
+    /// The authentication method to use for FloxHub/catalog operations.
+    pub auth_method: AuthMethod,
+
+    /// The catalog URL used for authentication (e.g. Kerberos SPN resolution).
+    pub catalog_url: String,
+
+    /// The authentication strategy instance, constructed from [auth_method],
+    /// [floxhub_token], and [catalog_url].
+    pub auth_strategy: AuthStrategies,
+
     pub catalog_client: catalog::Client,
     pub installable_locker: flake_installable_locker::InstallableLockerImpl,
 
@@ -67,7 +84,23 @@ pub struct Flox {
     pub verbosity: i32,
 }
 
-impl Flox {}
+impl Flox {
+    /// Validate that auth is available and return the user's handle.
+    pub fn get_handle(&self) -> Result<String, AuthError> {
+        self.auth_strategy.get_handle()
+    }
+
+    /// Reconstruct the authentication strategy from current state.
+    ///
+    /// Call this after updating [floxhub_token](Self::floxhub_token) (e.g.
+    /// after an interactive login) so that subsequent auth calls see the
+    /// fresh token.
+    pub fn rebuild_auth_strategy(&mut self) {
+        self.auth_strategy = self
+            .auth_method
+            .to_strategy(self.floxhub_token.clone(), self.catalog_url.clone());
+    }
+}
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, Default)]
 pub struct Features {
@@ -81,88 +114,6 @@ pub struct Features {
 
 pub static DEFAULT_FLOXHUB_URL: LazyLock<Url> =
     LazyLock::new(|| Url::parse("https://hub.flox.dev").unwrap());
-
-/// Assertions about the owner of this token
-#[derive(Debug, Clone, Deserialize)]
-struct FloxTokenClaims {
-    /// The FloxHub handle of the user this token belongs to
-    #[serde(rename = "https://flox.dev/handle")]
-    handle: String,
-    /// The expiration time of the token (Unix timestamp)
-    exp: usize,
-}
-
-/// A token authenticating a user with FloxHub
-#[derive(Debug, Clone, DeserializeFromStr)]
-pub struct FloxhubToken {
-    /// The entire token as a string
-    token: String,
-    /// Assertions about the identity of the token's owner
-    token_data: FloxTokenClaims,
-}
-
-impl FloxhubToken {
-    /// Create a new floxhub token from a string
-    pub fn new(token: String) -> Result<Self, FloxhubTokenError> {
-        token.parse()
-    }
-
-    /// Return the token as a string
-    pub fn secret(&self) -> &str {
-        &self.token
-    }
-
-    /// Return the handle of the user the token belongs to
-    pub fn handle(&self) -> &str {
-        &self.token_data.handle
-    }
-
-    /// Returns whether the token has expired by checking the `exp` claim
-    /// against the current time.
-    pub fn is_expired(&self) -> bool {
-        let now = {
-            let start = std::time::SystemTime::now();
-            start
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("Time went backwards")
-                .as_secs() as usize
-        };
-        self.token_data.exp < now
-    }
-}
-
-impl Serialize for FloxhubToken {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.token.serialize(serializer)
-    }
-}
-
-impl FromStr for FloxhubToken {
-    type Err = FloxhubTokenError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Client side we don't need to verify the signature,
-        // as all priviledged access is guarded server side.
-        // We still decode the token to extract claims like handle and expiration.
-
-        let token = jsonwebtoken::dangerous::insecure_decode::<FloxTokenClaims>(s)
-            .map_err(FloxhubTokenError::InvalidToken)?;
-
-        Ok(FloxhubToken {
-            token: s.to_string(),
-            token_data: token.claims,
-        })
-    }
-}
-
-#[derive(Debug, Clone, Error, Eq, PartialEq)]
-pub enum FloxhubTokenError {
-    #[error("invalid token")]
-    InvalidToken(#[source] jsonwebtoken::errors::Error),
-}
 
 #[derive(Debug, Clone)]
 pub struct Floxhub {
@@ -334,6 +285,10 @@ pub mod test_helpers {
             Url::from_directory_path(mock_floxhub_git_dir).unwrap()
         });
 
+        let auth_method: AuthMethod = Default::default();
+        let catalog_url = "https://api.flox.dev".to_string();
+        let auth_strategy = auth_method.to_strategy(None, catalog_url.clone());
+
         let flox = Flox {
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             system_user_name: "its-a-me-mario".to_string(),
@@ -351,6 +306,9 @@ pub mod test_helpers {
             )
             .unwrap(),
             floxhub_token: None,
+            auth_method,
+            catalog_url,
+            auth_strategy,
             catalog_client: MockClient::default().into(),
             installable_locker: InstallableLockerImpl::Mock(InstallableLockerMock::new()),
             features: Default::default(),

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use flox_catalog::{MsgAttrPathNotFoundNotFoundForAllSystems, MsgAttrPathNotFoundNotInCatalog};
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox, RemoteEnvironmentRef};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::{
@@ -38,10 +39,6 @@ use flox_rust_sdk::models::user_state::{
     user_state_path,
     write_user_state_file,
 };
-use flox_rust_sdk::providers::catalog::{
-    MsgAttrPathNotFoundNotFoundForAllSystems,
-    MsgAttrPathNotFoundNotInCatalog,
-};
 use indoc::formatdoc;
 use itertools::Itertools;
 use shell_gen::ShellWithPath;
@@ -53,7 +50,7 @@ use crate::commands::activate::Activate;
 use crate::commands::{
     ConcreteEnvironment,
     EnvironmentSelectError,
-    ensure_floxhub_token,
+    ensure_auth,
     environment_description,
 };
 use crate::utils::dialog::{Dialog, Select};
@@ -131,7 +128,7 @@ impl Install {
 
         // Ensure the user is logged in for the following remote operations
         if let EnvironmentSelect::Remote(_) = self.environment {
-            ensure_floxhub_token(&mut flox).await?;
+            ensure_auth(&mut flox).await?;
         }
 
         let mut packages_to_install = self
@@ -357,7 +354,7 @@ impl Install {
                                 ..
                             },
                         invalid_systems: _,
-                    } = failure
+                    }: &ResolutionFailure = failure
                     else {
                         unreachable!(
                             "already checked that these failures are 'package unavailable on some systems'"
@@ -597,11 +594,10 @@ async fn try_create_default_environment_interactive(
     // customizations and skipping the normal `init` output.
     let env = {
         // ensure user is logged in
-        let token = ensure_floxhub_token(flox).await?;
-        let owner = token
-            .handle()
+        let handle = ensure_auth(flox).await?;
+        let owner = handle
             .parse()
-            .context("FloxHub token refers to invalid user")?;
+            .context("Auth handle refers to invalid user")?;
         let name = DEFAULT_NAME
             .parse()
             .expect("'default' is a known accepted name");
