@@ -15,8 +15,10 @@ fn main() {
     // Exclude some endpoints we aren't using
     spec_json["paths"].as_object_mut().unwrap().retain(|k, _| {
         *k != "/metrics/"
-            // We don't use any info except for base-catalog
-            && (*k == "/api/v1/catalog/info/base-catalog" || !k.starts_with("/api/v1/catalog/info"))
+            // We don't use any info except for base-catalog and dependencies
+            && (*k == "/api/v1/catalog/info/base-catalog"
+                || k.starts_with("/api/v1/catalog/info/dependencies")
+                || !k.starts_with("/api/v1/catalog/info"))
             && !k.starts_with("/api/v1/catalog/status")
     });
     let spec = serde_json::from_value(spec_json).expect("Failed to parse openapi spec");
