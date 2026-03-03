@@ -22,7 +22,7 @@ url.workspace = true
 httpmock.workspace = true
 serde_yaml.workspace = true
 
-# Optional dependencies for GSSAPI authentication
+# Optional dependencies for GSSAPI/Kerberos authentication
 libgssapi = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }
 
