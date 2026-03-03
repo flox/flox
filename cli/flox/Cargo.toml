@@ -74,3 +74,4 @@ flox-test-utils.workspace = true
 [features]
 extra-tests = ["impure-unit-tests"]
 impure-unit-tests = []
+floxhub-authn-kerberos = ["flox-rust-sdk/floxhub-authn-kerberos"]

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use flox_catalog::{CatalogClient, CatalogClientConfig, CatalogMockMode};
+use flox_catalog::{AuthStrategies, CatalogClient, CatalogClientConfig, CatalogMockMode};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::providers::catalog::{
     Client,
@@ -19,7 +19,10 @@ use crate::utils::metrics::read_metrics_uuid;
 ///
 /// - Initialize a mock client if the `_FLOX_USE_CATALOG_MOCK` environment variable is set to `true`
 /// - Initialize a real client otherwise
-pub fn init_catalog_client(config: &Config) -> Result<Client, anyhow::Error> {
+pub fn init_catalog_client(
+    config: &Config,
+    auth_strategy: AuthStrategies,
+) -> Result<Client, anyhow::Error> {
     let extra_headers = {
         let mut headers = BTreeMap::new();
         // Propagate the metrics UUID to catalog-server if metrics are enabled.
@@ -65,5 +68,5 @@ pub fn init_catalog_client(config: &Config) -> Result<Client, anyhow::Error> {
         "using catalog client with url: {}",
         client_config.catalog_url
     );
-    Ok(CatalogClient::new(client_config)?.into())
+    Ok(CatalogClient::new(client_config, auth_strategy)?.into())
 }
