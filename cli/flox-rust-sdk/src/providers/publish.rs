@@ -7,6 +7,7 @@ use chrono::{DateTime, Utc};
 use flox_catalog::{
     BaseCatalogUrl,
     BaseCatalogUrlError,
+    BuildType,
     CatalogClientError,
     CatalogStoreConfig,
     CatalogStoreConfigNixCopy,
@@ -23,6 +24,9 @@ use flox_catalog::{
 use flox_manifest::lockfile::Lockfile;
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
+use nef_lock_catalog::LockOptions;
+use nef_lock_catalog::lock::{NixFlakeref, lock_url_with_options};
+use serde_json::json;
 use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
@@ -37,12 +41,11 @@ use super::build::{
     PackageTargetError,
     PackageTargetKind,
     find_toplevel_group_nixpkgs,
-    nix_expression_dir,
 };
 use super::git::{GitCommandError, GitCommandProvider, StatusInfo};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
-use crate::models::environment::{Environment, EnvironmentError, open_path};
+use crate::models::environment::{Environment, EnvironmentError, copy_dir_recursive, open_path};
 use crate::providers::auth::catalog_auth_to_envs;
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
@@ -133,8 +136,9 @@ pub trait Publisher {
 
 /// Simple struct to hold the information of a locked URL.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LockedUrlInfo {
+pub struct RemoteBuildRepoMetadata {
     pub url: String,
+    pub ref_: String,
     pub rev: String,
     pub rev_count: u64,
     pub rev_date: DateTime<Utc>,
@@ -151,9 +155,15 @@ pub struct CheckedEnvironmentMetadata {
     /// The path to the parent of .flox for the build environment relative to the `repo_root_path`.
     pub rel_project_path: PathBuf,
 
-    /// A URL pointing at a remote repository. This is required to be present
-    /// for reproducibility purposes.
-    pub build_repo_ref: LockedUrlInfo,
+    /// The path to the directory containing expression builds in
+    /// `pkgs/` and locked catalogs in `nix-builds.lock`/
+    ///  Paths are relative to the `repo_root_path`.
+    pub rel_expression_build_base_dir: PathBuf,
+
+    /// Metadata about the remote source of the repository.
+    /// Used to fill in lock information on publish to allow reproduction,
+    /// and accessing recipes through NEF.
+    pub build_repo_meta: RemoteBuildRepoMetadata,
 
     /// A locked Nixpkgs reference for the `toplevel` package group, which
     /// may be absent when the user has no packages installed.
@@ -162,6 +172,18 @@ pub struct CheckedEnvironmentMetadata {
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
     _private: (),
+}
+
+impl CheckedEnvironmentMetadata {
+    fn remote_flakeref(&self) -> NixFlakeref {
+        NixFlakeref::try_from(json! ({
+          "type": "git",
+          "url": self.build_repo_meta.url,
+          "rev": self.build_repo_meta.rev,
+          "dir": self.rel_expression_build_base_dir.to_string_lossy()
+        }))
+        .unwrap()
+    }
 }
 
 /// Ensures that the required metadata for publishing is consistent from the build process
@@ -555,7 +577,7 @@ where
             .create_package(
                 &catalog_name,
                 self.package_metadata.package.name().as_ref(),
-                &self.env_metadata.build_repo_ref.url,
+                &self.env_metadata.build_repo_meta.url,
             )
             .await
             .map_err(PublishError::CatalogError)?;
@@ -616,10 +638,11 @@ where
             locked_base_catalog_url: Some(self.package_metadata.base_catalog_ref.to_string()),
             base_catalog_rev_count: None,
             base_catalog_rev_date: None,
-            url: self.env_metadata.build_repo_ref.url.clone(),
-            rev: self.env_metadata.build_repo_ref.rev.clone(),
-            rev_count: self.env_metadata.build_repo_ref.rev_count as i64,
-            rev_date: self.env_metadata.build_repo_ref.rev_date,
+            url: self.env_metadata.build_repo_meta.url.clone(),
+            rev: self.env_metadata.build_repo_meta.rev.clone(),
+            rev_count: self.env_metadata.build_repo_meta.rev_count as i64,
+            rev_date: self.env_metadata.build_repo_meta.rev_date,
+            ref_: Some(self.env_metadata.build_repo_meta.ref_.clone()),
             cache_uri: catalog_store_config.upload_url().map(|url| url.to_string()),
             narinfos,
             // The URL where the narinfos were downloaded from.
@@ -629,6 +652,16 @@ where
             // This is the version of the narinfo being submitted.  Until we
             // define changes, we'll use the service defaults.
             narinfos_source_version: None,
+            build_type: match self.package_metadata.package.kind() {
+                PackageTargetKind::ExpressionBuild(_) => BuildType::Nef,
+                PackageTargetKind::ManifestBuild => BuildType::Manifest,
+            }
+            .into(),
+            dot_flox_dir: self
+                .env_metadata
+                .rel_project_path
+                .to_string_lossy()
+                .into_owned(),
         };
 
         tracing::debug!(?build_info, "Publishing build in catalog...");
@@ -753,7 +786,11 @@ fn get_client_side_catalog_store_config(
     Ok(config)
 }
 
-fn check_build_metadata_from_build_result(
+/// Convert a [BuildResult] into a form that can more easily fill the publish api request.
+///
+/// Note: This function is an implementation detail of [check_build_metadata].
+/// In almost any case [check_build_metadata] should be used to obtain [CheckedBuildMetadata]!
+fn convert_build_result_to_build_metadata(
     build_result: &BuildResult,
 ) -> Result<CheckedBuildMetadata, PublishError> {
     let outputs = build_result
@@ -797,12 +834,15 @@ fn check_build_metadata_from_build_result(
             PublishError::UnsupportedEnvironmentState("Invalid system".to_string())
         })?,
         version: Some(build_result.version.clone()),
-
         _private: (),
     })
 }
 
 /// Collect metadata needed for publishing that is obtained from the build output
+///
+/// Notably, [CheckedBuildMetadata] obtained from this function testifies:
+/// * That the remote source is accessible
+/// * That the package can be built
 pub fn check_build_metadata(
     flox: &Flox,
     base_nixpkgs_url: &BaseCatalogUrl,
@@ -810,43 +850,47 @@ pub fn check_build_metadata(
     env_metadata: &CheckedEnvironmentMetadata,
     pkg: &PackageTarget,
 ) -> Result<CheckedBuildMetadata, PublishError> {
+    // Fetch remote sources based on the source info collected in `CheckedEnvironmentMetadata`.
+    // This serves several purposes:
+    // 1. It ensures that the source info we have is indeed valid and accessible
+    // 2. It provides a guaranteed clean checkout that is consistent
+    //    with reproduction/catalog import.
+    // 3. It reduces coupling of publish to _the_ local repo
+    let expression_ref = env_metadata.remote_flakeref();
+    let expression_ref_fetched =
+        lock_url_with_options(&expression_ref, &LockOptions::default()).unwrap();
+    let expression_ref_locked = expression_ref_fetched.locked_flake_ref();
+
     // git clone into a temp directory
     let clean_repo_path = tempfile::tempdir_in(flox.temp_dir.clone())
         .map_err(|err| PublishError::Catchall(format!("could not create tempdir: {err}")))?;
-    let git = <GitCommandProvider as GitProvider>::clone(
-        env_metadata.repo_root_path.as_path(),
-        &clean_repo_path,
-        false,
-    )
-    .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
 
-    // checkout the rev we want to publish
-    git.checkout(env_metadata.build_repo_ref.rev.as_str(), true)
-        .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
-
-    let project_path = CanonicalPath::new(
-        clean_repo_path
-            .path()
-            .join(env_metadata.rel_project_path.as_path()),
-    )
-    .map_err(|_err| {
-        PublishError::UnsupportedEnvironmentState(
-            "Flox project not found in clean checkout, is it tracked in the repository?"
-                .to_string(),
+    // base dir and buildtime environments **for manifest builds**
+    // both are inferred from the fetched source,
+    // based on relative directories of the local environment.
+    // Similar assumptions are made by the NEF at  eval time.
+    let (base_dir, built_environments) = {
+        copy_dir_recursive(expression_ref_fetched.store_path(), &clean_repo_path, false).unwrap();
+        let project_path = CanonicalPath::new(
+            clean_repo_path
+                .path()
+                .join(env_metadata.rel_project_path.as_path()),
         )
-    })?;
+        .map_err(|_err| {
+            PublishError::UnsupportedEnvironmentState(
+                "Flox project not found in clean checkout, is it tracked in the repository?"
+                    .to_string(),
+            )
+        })?;
+        let mut clean_build_env = open_path(flox, &project_path, None)
+            .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
+        (clean_build_env.parent_path()?, clean_build_env.build(flox)?)
+    };
 
-    let mut clean_build_env = open_path(flox, &project_path, None)
-        .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
-    let base_dir = clean_build_env.parent_path()?;
-    let expression_dir = nix_expression_dir(&clean_build_env);
-    let built_environments = clean_build_env.build(flox)?;
-
-    let builder = FloxBuildMk::new(flox, &base_dir, &expression_dir, &built_environments);
+    let builder = FloxBuildMk::new(flox, &base_dir, &expression_ref_locked, &built_environments);
 
     // Build the package and collect the outputs
     let build_results = builder.build(
-        // todo: use a non-hardcoded nixpkgs url
         &base_nixpkgs_url.as_flake_ref()?,
         &built_environments.develop,
         &[pkg.name()],
@@ -861,7 +905,7 @@ pub fn check_build_metadata(
     }
     let build_result = &build_results[0];
 
-    let metadata = check_build_metadata_from_build_result(build_result)?;
+    let metadata = convert_build_result_to_build_metadata(build_result)?;
     Ok(metadata)
 }
 
@@ -891,7 +935,7 @@ pub fn build_repo_err(msg: &str) -> PublishError {
 /// - The tracked source files are clean.
 /// - The current revision is the latest one on the remote.
 #[instrument(skip_all, fields(progress = "Checking repository state"))]
-fn gather_build_repo_meta(git: &impl GitProvider) -> Result<LockedUrlInfo, PublishError> {
+fn gather_build_repo_meta(git: &impl GitProvider) -> Result<RemoteBuildRepoMetadata, PublishError> {
     let status = git
         .status()
         .map_err(|_e| build_repo_err("Unable to get repository status."))?;
@@ -902,14 +946,22 @@ fn gather_build_repo_meta(git: &impl GitProvider) -> Result<LockedUrlInfo, Publi
         ));
     }
 
-    let remote_url = url_for_remote_containing_current_rev(git, &status)?;
-    debug!(?remote_url, "Found remote for current revision");
+    let remote_info = git
+        .get_current_branch_remote_info()
+        .map_err(|e| build_repo_err(&e.to_string()))?;
 
-    Ok(LockedUrlInfo {
-        url: remote_url,
+    if remote_info.revision.as_ref() != Some(&status.rev) {
+        return Err(build_repo_err(
+            "Revisions of local branch and tracked remote branch differ.",
+        ));
+    }
+
+    Ok(RemoteBuildRepoMetadata {
+        url: remote_info.url,
         rev: status.rev,
         rev_count: status.rev_count,
         rev_date: status.rev_date,
+        ref_: remote_info.reference,
     })
 }
 
@@ -991,16 +1043,22 @@ pub fn check_environment_metadata(
         PublishError::UnsupportedEnvironmentState(format!("Flox project path not in git repo: {e}"))
     })?;
 
+    let dot_flox_path = environment.dot_flox_path();
+    let rel_dot_flox_dir = dot_flox_path.strip_prefix(git.path()).map_err(|e| {
+        PublishError::UnsupportedEnvironmentState(format!(".flox/ dir not in git repo: {e}"))
+    })?;
+
     let build_repo_meta = gather_build_repo_meta(&git)?;
 
     let toplevel_catalog_ref = find_toplevel_group_nixpkgs(&lockfile);
 
     Ok(CheckedEnvironmentMetadata {
         lockfile,
-        build_repo_ref: build_repo_meta,
+        build_repo_meta,
         toplevel_catalog_ref,
         repo_root_path: git.path().to_path_buf(),
         rel_project_path: rel_project_path.to_path_buf(),
+        rel_expression_build_base_dir: rel_dot_flox_dir.to_path_buf(),
         _private: (),
     })
 }
@@ -1227,7 +1285,7 @@ pub mod tests {
 
         let meta = check_environment_metadata(&flox, &env).unwrap();
 
-        let build_repo_meta = meta.build_repo_ref;
+        let build_repo_meta = meta.build_repo_meta;
         assert!(build_repo_meta.url.contains(&remote_uri));
         assert!(
             build_repo
@@ -1443,11 +1501,13 @@ pub mod tests {
             lockfile: Lockfile::default(),
             repo_root_path: PathBuf::new(),
             rel_project_path: PathBuf::new(),
+            rel_expression_build_base_dir: PathBuf::new(),
 
             toplevel_catalog_ref: Some(catalog_page_nixpkgs_https_url.clone()),
-            build_repo_ref: LockedUrlInfo {
-                url: "dummy".to_string(),
+            build_repo_meta: RemoteBuildRepoMetadata {
+                url: "https://dummy.local".to_string(),
                 rev: "dummy".to_string(),
+                ref_: "dummy".to_string(),
                 rev_count: 0,
                 rev_date: "2025-01-01T12:00:00Z".parse::<DateTime<Utc>>().unwrap(),
             },
