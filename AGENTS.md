@@ -17,24 +17,29 @@ shell. They are not available on bare PATH.
 nix develop                    # Enter interactive dev shell
 ```
 
-**For agents and non-interactive use**, wrap every command with `nix develop -c`:
+**For agents and non-interactive use**, commands need access to the dev shell.
+If `IN_NIX_SHELL` is set, you are already inside a dev shell and can run
+commands directly. Otherwise, wrap every command with `nix develop -c`:
 
 ```bash
+# Already in dev shell (IN_NIX_SHELL is set) — run directly:
+just build
+cargo clippy --all
+git push origin my-branch
+
+# Not in dev shell — wrap with nix develop -c:
 nix develop -c just build
-nix develop -c just test-all
 nix develop -c cargo clippy --all
+nix develop -c git push origin my-branch
 ```
 
 **This includes git operations** — `git push` and `git commit` trigger
 pre-commit/pre-push hooks that depend on tools (clippy, rustfmt, treefmt)
-provided by the dev shell:
+provided by the dev shell.
 
-```bash
-nix develop -c git push origin my-branch
-```
-
-**This is required** — running `just`, `cargo`, `git push`, or other commands
-without the `nix develop` wrapper will fail with "command not found" errors.
+**Check first** — inspect the `IN_NIX_SHELL` environment variable to determine
+if wrapping is needed. If unset, the `nix develop -c` prefix is required or
+commands will fail with "command not found" errors.
 
 ## Common Commands
 
