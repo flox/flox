@@ -12,6 +12,7 @@ use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use indoc::formatdoc;
 use itertools::Itertools;
+use nef_lock_catalog::lock::NixFlakeref;
 use serde::Deserialize;
 use tempfile::NamedTempFile;
 use thiserror::Error;
@@ -201,11 +202,12 @@ pub struct FloxBuildMk<'args> {
     // should these be borrows?
     temp_dir: &'args Path,
 
-    // common build components
+    // common build components for manifest builds
     base_dir: &'args Path,
-    expression_dir: &'args Path,
     built_environments: &'args BuildEnvOutputs,
 
+    // fetchable ref for nix expression builds
+    expression_ref: &'args NixFlakeref,
     // Optional buffers that collect output.
     // Without these set std{out,err} of the underlying make call
     // are inherited from the current process.
@@ -217,14 +219,14 @@ impl FloxBuildMk<'_> {
     pub fn new<'args>(
         flox: &'args Flox,
         base_dir: &'args Path,
-        expression_dir: &'args Path,
+        expression_ref: &'args NixFlakeref,
         built_environments: &'args BuildEnvOutputs,
     ) -> FloxBuildMk<'args> {
         FloxBuildMk {
             verbosity: flox.verbosity,
             temp_dir: &flox.temp_dir,
             base_dir,
-            expression_dir,
+            expression_ref,
             built_environments,
             stdout_buffer: None,
             stderr_buffer: None,
@@ -238,7 +240,7 @@ impl FloxBuildMk<'_> {
     pub fn new_with_buffers<'args>(
         flox: &'args Flox,
         base_dir: &'args Path,
-        expression_dir: &'args Path,
+        expression_ref: &'args NixFlakeref,
         built_environments: &'args BuildEnvOutputs,
         stdout: &'args mut String,
         stderr: &'args mut String,
@@ -247,7 +249,7 @@ impl FloxBuildMk<'_> {
             verbosity: flox.verbosity,
             temp_dir: &flox.temp_dir,
             base_dir,
-            expression_dir,
+            expression_ref,
             built_environments,
             stdout_buffer: Some(stdout),
             stderr_buffer: Some(stderr),
@@ -322,8 +324,8 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         ));
 
         // TODO: modify flox-build.mk to allow missing expression dirs
-        let expression_dir = self.expression_dir.to_string_lossy();
-        command.arg(format!("NIX_EXPRESSION_DIR={expression_dir}"));
+        let expression_ref = self.expression_ref.as_url();
+        command.arg(format!("NIX_EXPRESSION_REF={expression_ref}"));
         command.arg(format!("FLOX_INTERPRETER={}", flox_interpreter.display()));
 
         // Add the list of packages to be built by passing a space-delimited list
@@ -437,8 +439,8 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         ));
 
         // TODO: is this even necessary, or can we detect build outputs instead?
-        let expression_dir = self.expression_dir.to_string_lossy();
-        command.arg(format!("NIX_EXPRESSION_DIR={expression_dir}"));
+        let expression_ref = self.expression_ref.as_url();
+        command.arg(format!("NIX_EXPRESSION_REF={expression_ref}"));
 
         // Add clean target arguments by prefixing the package names with "clean/".
         // If no packages are specified, clean all packages.
@@ -506,7 +508,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
 }
 
 /// The canonical path for nix expressions when associated with an environment:
-/// Evailable expression builds are discovered with in this directory
+/// Available expression builds are discovered with in this directory
 /// (see [get_nix_expression_targets] for the discovery results).
 pub fn nix_expression_dir(environment: &impl Environment) -> PathBuf {
     environment.dot_flox_path().join("pkgs")
@@ -542,7 +544,7 @@ pub fn find_toplevel_group_nixpkgs(lockfile: &Lockfile) -> Option<BaseCatalogUrl
 /// We need this to verify arguments early rather than running into `make` or `nix` errors,
 /// that while correct, have a bad signal/noise ratio.
 ///
-/// The result of this function are the availaboe package names/attrpaths,
+/// The result of this function are the available package names/attrpaths,
 /// discovered in `expression_dir`:
 ///
 /// ```text
@@ -553,17 +555,18 @@ pub fn find_toplevel_group_nixpkgs(lockfile: &Lockfile) -> Option<BaseCatalogUrl
 /// ```
 ///
 /// will expose the packages `foo`, `bar`, `fizz.buzz`.
+///
+/// **NOTE**
+/// The current implementation will _not_ evaluate any of the packages.
+/// Therefore `nixpkgs` passed to the nef subsystem,
+/// is only used for its library functions.
+/// Additionally, the `expression_ref`
+/// only needs to resolve to a directory containing `pkgs` dir,
+/// and it _does not_ have to use a git fetcher
+/// or give access to the entire project.
 fn get_nix_expression_targets(
-    expression_dir: &Path,
+    expression_ref: &NixFlakeref,
 ) -> Result<Vec<(String, ExpressionBuildMetadata)>, ManifestBuilderError> {
-    if !expression_dir.exists() {
-        debug!(
-            path = %expression_dir.display(),
-            "expression directory does not exist, skipping nix expression target discovery"
-        );
-        return Ok(vec![]);
-    }
-
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct NefTargetReflect {
@@ -572,23 +575,21 @@ fn get_nix_expression_targets(
         metadata: ExpressionBuildMetadata,
     }
 
-    let output = nix_base_command()
+    let mut command = nix_base_command();
+    command
         .arg("eval")
         .args(["--argstr", "nixpkgs-url", COMMON_NIXPKGS_URL.as_str()])
-        .args([
-            "--argstr",
-            "source-ref",
-            &format!("path:{}", &*expression_dir.to_string_lossy()),
-        ])
-        .args(["--argstr", "pkgs-dir", "."])
+        .args(["--argstr", "source-ref", expression_ref.as_url().as_str()])
         .args([
             "--file",
             &*FLOX_EXPRESSION_BUILD_NIX.to_string_lossy(),
             "reflect.attrPaths",
         ])
-        .arg("--json")
-        .output()
-        .map_err(ManifestBuilderError::CallNef)?;
+        .arg("--json");
+
+    debug!(cmd=%command.display(), "querying available nef attr paths");
+
+    let output = command.output().map_err(ManifestBuilderError::CallNef)?;
 
     if !output.status.success() {
         Err(ManifestBuilderError::ListNixExpressions(
@@ -716,11 +717,11 @@ impl PackageTargets {
     /// can be validated against the known targets via [Self::select].
     pub fn new(
         manifest: &Manifest<MigratedTypedOnly>,
-        expression_dir: &Path,
+        expression_ref: &NixFlakeref,
     ) -> Result<PackageTargets, PackageTargetError> {
         let environment_packages = manifest.as_latest_schema().build();
 
-        let nix_expression_packages = get_nix_expression_targets(expression_dir)
+        let nix_expression_packages = get_nix_expression_targets(expression_ref)
             .map_err(|e| PackageTargetError::new(e.to_string()))?;
 
         let mut targets = HashMap::new();
@@ -736,9 +737,10 @@ impl PackageTargets {
             if targets.contains_key(&expression_build_target) {
                 return Err(PackageTargetError::new(formatdoc! {"
                     '{expression_build_target}' is defined in the manifest and as a Nix expression.
-                    Rename or delete either the package definition in {expression_dir}
+                    Rename or delete either the package definition
+                    in the 'pkgs/' dir located in '{expression_ref}'
                     or the '[build]' section in the manifest.
-                    ", expression_dir = expression_dir.display()
+                    ", expression_ref = expression_ref.as_url()
                 }));
             }
 
@@ -793,7 +795,7 @@ impl PackageTargets {
 pub mod test_helpers {
     use std::fs::{self};
 
-    use tempfile::{TempDir, tempdir_in};
+    use tempfile::{TempDir, tempdir, tempdir_in};
 
     use super::*;
     use crate::flox::Flox;
@@ -823,7 +825,7 @@ pub mod test_helpers {
     pub fn assert_build_status_with_nix_expr(
         flox: &Flox,
         env: &mut PathEnvironment,
-        expression_dir: &Path,
+        expression_ref: &NixFlakeref,
         package: &str,
         build_cache: Option<bool>,
         expect_success: bool,
@@ -839,7 +841,7 @@ pub mod test_helpers {
         let output_build_results = FloxBuildMk::new_with_buffers(
             flox,
             &env.parent_path().unwrap(),
-            expression_dir,
+            expression_ref,
             &env.build(flox).unwrap(),
             &mut output_stdout,
             &mut output_stderr,
@@ -886,7 +888,7 @@ pub mod test_helpers {
         assert_build_status_with_nix_expr(
             flox,
             env,
-            &nix_expression_dir(env),
+            &NixFlakeref::from_path(env.dot_flox_path()).unwrap(),
             package_name,
             build_cache,
             expect_success,
@@ -897,7 +899,7 @@ pub mod test_helpers {
         let err = FloxBuildMk::new_with_buffers(
             flox,
             &env.parent_path().unwrap(),
-            &nix_expression_dir(env),
+            &NixFlakeref::from_path(env.dot_flox_path()).unwrap(),
             &env.build(flox).unwrap(),
             &mut String::new(),
             &mut String::new(),
@@ -936,21 +938,48 @@ pub mod test_helpers {
     /// For a list tuples `(AttrPath, NixExpr)`,
     /// create a file structure compatible with nef loading,
     /// within a provided tempdir.
-    /// Places the file structure within _a new directory_ within the provided path.
+    /// Places the file structure within _a new directory_ within the provided path
+    /// and returns a [NixFlakeref] for that _new tempdir_.
+    ///
+    /// ```text
+    /// create
+    ///
+    /// <base>/
+    ///  ╰── <tempdir>
+    ///      ╰── pkgs/
+    ///           ├── foo/default.nix
+    ///           ├── bar/default.nix
+    ///           ╰── [...]
+    ///
+    /// return <tempdir>
+    /// ```
     pub fn prepare_nix_expressions_in(
-        tempdir: impl AsRef<Path>,
+        base: impl AsRef<Path>,
         expressions: &[(&[&str], &str)],
-    ) -> PathBuf {
-        let all_expressions_base_dir = tempdir_in(&tempdir).unwrap().keep();
+    ) -> NixFlakeref {
+        let all_expressions_base_dir = tempdir_in(&base).unwrap().keep();
 
         for (attr_path, expr) in expressions {
-            let expression_dir =
-                all_expressions_base_dir.join(attr_path.iter().collect::<PathBuf>());
+            let expression_dir = all_expressions_base_dir
+                .join("pkgs")
+                .join(attr_path.iter().collect::<PathBuf>());
             fs::create_dir_all(&expression_dir).unwrap();
             fs::write(expression_dir.join("default.nix"), expr).unwrap();
         }
 
-        all_expressions_base_dir.canonicalize().unwrap()
+        NixFlakeref::from_path(all_expressions_base_dir.canonicalize().unwrap()).unwrap()
+    }
+
+    /// Create a flakeref that provides no expressions
+    pub fn prepare_empty_expressions_ref() -> &'static NixFlakeref {
+        static SHARED: LazyLock<(NixFlakeref, TempDir)> = LazyLock::new(|| {
+            let empty_expression_builds_dir = tempdir().unwrap();
+            let empty_expression_builds_ref =
+                NixFlakeref::from_path(empty_expression_builds_dir.path()).unwrap();
+            (empty_expression_builds_ref, empty_expression_builds_dir)
+        });
+
+        &SHARED.0
     }
 
     /// Assert that a build succeeds given the path to the environment
@@ -3573,7 +3602,7 @@ mod nef_tests {
         let env_path = env.parent_path().unwrap();
 
         // Create expressions
-        let expressions_dir = prepare_nix_expressions_in(&tempdir, &[(&[&pname], indoc! {r#"
+        let expressions_ref = prepare_nix_expressions_in(&tempdir, &[(&[&pname], indoc! {r#"
             {runCommand}: runCommand "{pname}" {} ''
                 echo -n "Hello, World!" >> $out
             ''
@@ -3583,7 +3612,7 @@ mod nef_tests {
         let collected = assert_build_status_with_nix_expr(
             &flox,
             &mut env,
-            &expressions_dir,
+            &expressions_ref,
             &pname,
             None,
             true,
@@ -3611,7 +3640,7 @@ mod nef_tests {
         let mut env = new_path_environment(&flox, &manifest);
 
         // Create expressions
-        let expressions_dir =
+        let expressions_ref =
             prepare_nix_expressions_in(&tempdir, &[(&[&pname], &formatdoc! {r#"
             {{runCommand}}: runCommand "{pname}" {{
                 version = "1.0.1";
@@ -3628,7 +3657,7 @@ mod nef_tests {
         let collected = assert_build_status_with_nix_expr(
             &flox,
             &mut env,
-            &expressions_dir,
+            &expressions_ref,
             &pname,
             None,
             true,
@@ -3659,7 +3688,7 @@ mod nef_tests {
         let env_path = env.parent_path().unwrap();
 
         // Create expressions
-        let expressions_dir = prepare_nix_expressions_in(&tempdir, &[(&[&pname], indoc! {r#"
+        let expressions_ref = prepare_nix_expressions_in(&tempdir, &[(&[&pname], indoc! {r#"
             {runCommand}: runCommand "{pname}" {} ''
                 echo -n "${if builtins ? currentSystem then "impure" else "pure-eval"}" >> $out
             ''
@@ -3669,7 +3698,7 @@ mod nef_tests {
         let _collected = assert_build_status_with_nix_expr(
             &flox,
             &mut env,
-            &expressions_dir,
+            &expressions_ref,
             &pname,
             None,
             true,
@@ -3696,7 +3725,7 @@ mod nef_tests {
         let mut env = new_path_environment(&flox, &manifest);
 
         // Create expressions
-        let expressions_dir = prepare_nix_expressions_in(&tempdir, &[
+        let expressions_ref = prepare_nix_expressions_in(&tempdir, &[
             (&[&eval_success], indoc! {r#"
             {runCommand}: runCommand "{eval_success}" {} ''
                 touch $out
@@ -3709,7 +3738,7 @@ mod nef_tests {
         assert_build_status_with_nix_expr(
             &flox,
             &mut env,
-            &expressions_dir,
+            &expressions_ref,
             &eval_failure,
             None,
             false,
@@ -3719,7 +3748,7 @@ mod nef_tests {
         assert_build_status_with_nix_expr(
             &flox,
             &mut env,
-            &expressions_dir,
+            &expressions_ref,
             &eval_success,
             None,
             true,
@@ -3747,7 +3776,7 @@ mod nef_tests {
         let env_path = env.parent_path().unwrap();
 
         // Create expressions
-        let expressions_dir =
+        let expressions_ref =
             prepare_nix_expressions_in(&tempdir, &[(&[attr_path_expression], &formatdoc! {r#"
             {{runCommand}}: runCommand "{pname_expression}" {{}} ''
                 echo "123" >> $out
@@ -3758,7 +3787,7 @@ mod nef_tests {
         let _collected = assert_build_status_with_nix_expr(
             &flox,
             &mut env,
-            &expressions_dir,
+            &expressions_ref,
             pname_manifest_build,
             None,
             true,

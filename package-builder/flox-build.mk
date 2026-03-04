@@ -127,58 +127,37 @@ PROJECT_TMPDIR := $(TMPDIR)/$(shell echo $(PWD) | $(_sha256sum) | $(_head) -c8)
 # Use the wildcard operator to identify builds in the provided $FLOX_ENV.
 MANIFEST_BUILDS := $(wildcard $(FLOX_ENV)/package-builds.d/*)
 
-# TODO NIX_EXPRESSION_DIR may be absent
-ifeq (,$(NIX_EXPRESSION_DIR))
-  $(error NIX_EXPRESSION_DIR not defined)
+# TODO NIX_EXPRESSION_REF may be absent
+ifneq (,$(NIX_EXPRESSION_REF))
+  NIX_EXPRESSION_REF_ARGS := \
+  --argstr source-ref '$(NIX_EXPRESSION_REF)'
+
+  NIX_EXPRESSION_BUILDS := \
+  $(shell $(_nix) eval \
+  --argstr nixpkgs-url '$(BUILDTIME_NIXPKGS_URL)' \
+  --argstr system $(NIX_SYSTEM) \
+  $(NIX_EXPRESSION_REF_ARGS) \
+  --file $(_nef) \
+  reflect.targets --raw)
 endif
 
-NIX_EXPRESSION_GIT_ROOT := \
-  $(shell $(_git) -C '$(NIX_EXPRESSION_DIR)' rev-parse --show-toplevel 2> /dev/null || echo)
 
-NIX_EXPRESSION_GIT_SUBDIR := \
-  $(shell $(_git) -C '$(NIX_EXPRESSION_DIR)' rev-parse --show-prefix 2> /dev/null || echo)
-
-
-ifeq (,$(NIX_EXPRESSION_DIR))
-  $(error NIX_EXPRESSION_DIR not defined)
-endif
 
 # Construct three orthogonal arguments for nef:
 #   source-ref: flakeref to the source root (for fetching/tracking)
 #   pkgs-dir:   relative path to packages directory within the source
 #   catalogs-lock: relative path to catalog lock file within the source (if present)
-ifeq (,$(NIX_EXPRESSION_GIT_ROOT))
-  NIX_EXPRESSION_DIR_ARGS := \
-    --argstr source-ref 'path:$(dir $(NIX_EXPRESSION_DIR))' \
-    --argstr pkgs-dir '$(notdir $(NIX_EXPRESSION_DIR))'
-  NIX_CATALOGS_LOCK_PATH := $(dir $(NIX_EXPRESSION_DIR))/nix-builds.lock
-  NIX_CATALOGS_LOCK_REL := nix-builds.lock
-else
-  NIX_EXPRESSION_DIR_ARGS := \
-    --argstr source-ref 'git+file://$(NIX_EXPRESSION_GIT_ROOT)' \
-    --argstr pkgs-dir '$(NIX_EXPRESSION_GIT_SUBDIR)'
-  NIX_CATALOGS_LOCK_PATH := $(NIX_EXPRESSION_GIT_ROOT)/$(NIX_EXPRESSION_GIT_SUBDIR)/../nix-builds.lock
-  NIX_CATALOGS_LOCK_REL := $(NIX_EXPRESSION_GIT_SUBDIR)/../nix-builds.lock
-endif
-
-# Add catalogs-lock only if the file exists
-ifneq (,$(wildcard $(NIX_CATALOGS_LOCK_PATH)))
-  NIX_EXPRESSION_DIR_ARGS += --argstr catalogs-lock '$(NIX_CATALOGS_LOCK_REL)'
-endif
 
 
-NIX_EXPRESSION_BUILDS := \
-  $(shell $(_nix) eval \
-    --argstr nixpkgs-url '$(BUILDTIME_NIXPKGS_URL)' \
-    --argstr system $(NIX_SYSTEM) \
-    $(NIX_EXPRESSION_DIR_ARGS) \
-    --file $(_nef) \
-    reflect.targets --raw)
+
+
+
+
 
 # Quick sanity check; if no MANIFEST_BUILDS then what are we doing?
 $(if $(MANIFEST_BUILDS),,\
   $(if $(NIX_EXPRESSION_BUILDS),,\
-    $(error no manifest or Nix expression builds found in $(FLOX_ENV))))
+    $(error no manifest or Nix expression builds found in $(FLOX_ENV) ---- $(NIX_EXPRESSION_REF)  )))
 
 # Then set them to empty string or "@" based on being greater than 0, 1, or 2.
 $(eval _V_ = $(intcmp 0,$(_FLOX_SUBSYSTEM_VERBOSITY),,@))
@@ -763,7 +742,7 @@ define NIX_EXPRESSION_BUILD_template =
 	$(_V_) $(_nix) eval -L --file $(_nef) \
 	  --argstr nixpkgs-url '$(EXPRESSION_BUILD_NIXPKGS_URL)' \
 	  --argstr system $(NIX_SYSTEM) \
-	  $(NIX_EXPRESSION_DIR_ARGS) \
+	  $(NIX_EXPRESSION_REF_ARGS) \
 	  --json \
 	  --apply 'pkg: { \
 	    drvPath = pkg.drvPath; \

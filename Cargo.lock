@@ -1566,6 +1566,7 @@ dependencies = [
  "indoc",
  "itertools 0.14.0",
  "jsonwebtoken",
+ "nef-lock-catalog",
  "nix",
  "pollster",
  "pretty_assertions",
