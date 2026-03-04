@@ -1239,6 +1239,8 @@ Attributes:
     ///  "title": "PackageBuild",
     ///  "examples": [
     ///    {
+    ///      "base_catalog_rev_count": 11000,
+    ///      "base_catalog_rev_date": "2021-08-15T00:00:00Z",
     ///      "derivation": {
     ///        "broken": false,
     ///        "description": "A command line tool for transferring files with URL syntax",
@@ -1274,6 +1276,21 @@ Attributes:
     ///    "url"
     ///  ],
     ///  "properties": {
+    ///    "base_catalog_rev_count": {
+    ///      "title": "Base Catalog Rev Count",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "base_catalog_rev_date": {
+    ///      "title": "Base Catalog Rev Date",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ],
+    ///      "format": "date-time"
+    ///    },
     ///    "cache_uri": {
     ///      "title": "Cache Uri",
     ///      "type": [
@@ -1314,6 +1331,12 @@ Attributes:
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct PackageBuild {
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub base_catalog_rev_count: ::std::option::Option<i64>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub base_catalog_rev_date: ::std::option::Option<
+            ::chrono::DateTime<::chrono::offset::Utc>,
+        >,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub cache_uri: ::std::option::Option<::std::string::String>,
         pub derivation: PackageDerivationOutput,
@@ -1414,6 +1437,8 @@ Attributes:
     ///  "title": "PackageBuildWithNarInfo",
     ///  "examples": [
     ///    {
+    ///      "base_catalog_rev_count": 11000,
+    ///      "base_catalog_rev_date": "2021-08-15T00:00:00Z",
     ///      "derivation": {
     ///        "broken": false,
     ///        "description": "A command line tool for transferring files with URL syntax",
@@ -1449,6 +1474,21 @@ Attributes:
     ///    "url"
     ///  ],
     ///  "properties": {
+    ///    "base_catalog_rev_count": {
+    ///      "title": "Base Catalog Rev Count",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "base_catalog_rev_date": {
+    ///      "title": "Base Catalog Rev Date",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ],
+    ///      "format": "date-time"
+    ///    },
     ///    "cache_uri": {
     ///      "title": "Cache Uri",
     ///      "type": [
@@ -1506,6 +1546,12 @@ Attributes:
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct PackageBuildWithNarInfo {
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub base_catalog_rev_count: ::std::option::Option<i64>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub base_catalog_rev_date: ::std::option::Option<
+            ::chrono::DateTime<::chrono::offset::Utc>,
+        >,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub cache_uri: ::std::option::Option<::std::string::String>,
         pub derivation: PackageDerivationInput,
@@ -1588,6 +1634,16 @@ Attributes:
     ///        "null"
     ///      ]
     ///    },
+    ///    "licenses": {
+    ///      "title": "Licenses",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
     ///    "name": {
     ///      "title": "Name",
     ///      "type": "string"
@@ -1642,6 +1698,8 @@ Attributes:
         pub drv_path: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub license: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub licenses: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
         pub name: ::std::string::String,
         pub outputs: PackageOutputs,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -1722,6 +1780,16 @@ Attributes:
     ///        "null"
     ///      ]
     ///    },
+    ///    "licenses": {
+    ///      "title": "Licenses",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
     ///    "name": {
     ///      "title": "Name",
     ///      "type": "string"
@@ -1776,6 +1844,8 @@ Attributes:
         pub drv_path: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub license: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub licenses: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
         pub name: ::std::string::String,
         pub outputs: PackageOutputs,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -5874,7 +5944,6 @@ Optional Query Parameters:
   all catalogs. Note: when searching base catalog, search_term is required.
 - **page**: Page number for pagination (default: 0)
 - **pageSize**: Page size for pagination (default: 10)
-
 Returns:
 - **PackageSearchResult**: A list of PackageInfoSearch items and total count
 
