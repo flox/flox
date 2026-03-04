@@ -3,7 +3,11 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
-use flox_rust_sdk::flox::{Flox, RemoteEnvironmentRef};
+use flox_core::data::environment_ref::RemoteEnvironmentRef;
+use flox_manifest::interfaces::{AsWritableManifest, CommonFields, WriteManifest};
+use flox_manifest::raw::SyncTypedToRaw;
+use flox_manifest::{Manifest, Migrated};
+use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::floxmeta_branch::FloxmetaBranchError;
 use flox_rust_sdk::models::environment::generations::{GenerationId, GenerationsExt};
 use flox_rust_sdk::models::environment::managed_environment::{
@@ -21,10 +25,8 @@ use flox_rust_sdk::models::environment::{
     ManagedPointer,
     create_dot_flox_gitignore,
 };
-use flox_rust_sdk::models::manifest::raw::add_system;
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use indoc::{formatdoc, indoc};
-use toml_edit::DocumentMut;
 use tracing::{debug, info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
@@ -462,7 +464,9 @@ impl Pull {
                     "rebuild_with_current_system",
                     progress = "Adding your system to the manifest and validating the environment"
                 )
-                .in_scope(|| env.edit_unsafe(flox, manifest_with_current_system.to_string()))?;
+                .in_scope(|| {
+                    env.edit_unsafe(flox, manifest_with_current_system.as_writable().to_string())
+                })?;
 
                 match rebuild_with_current_system {
                     Err(broken_error) => {
@@ -553,9 +557,20 @@ impl Pull {
     fn amend_current_system(
         env: &impl Environment,
         flox: &Flox,
-    ) -> Result<DocumentMut, anyhow::Error> {
-        add_system(&env.manifest_contents(flox)?, &flox.system)
-            .context("Could not add system to manifest")
+    ) -> Result<Manifest<Migrated>, anyhow::Error> {
+        let lockfile = env.existing_lockfile(flox)?;
+        let mut manifest = env
+            .pre_migration_manifest(flox)?
+            .migrate(lockfile.as_ref())?;
+        let maybe_systems = manifest.options_mut().systems.as_mut();
+        if let Some(systems) = maybe_systems {
+            if systems.contains(&flox.system) {
+                return Ok(manifest);
+            }
+            systems.push(flox.system.clone());
+        }
+        manifest.update_toml()?;
+        Ok(manifest)
     }
 
     /// Ask the user if they want to ignore build errors and pull a broken environment
@@ -683,7 +698,7 @@ mod tests {
         mock_managed_environment_unlocked,
         unusable_mock_managed_environment,
     };
-    use flox_rust_sdk::models::environment::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
+    use flox_rust_sdk::models::environment::test_helpers::manifest_contents_with_latest_schema_and_incompatible_system;
     use flox_rust_sdk::providers::buildenv::BuildEnvError;
     use tempfile::tempdir_in;
 
@@ -752,7 +767,11 @@ mod tests {
             incompatible_system_result(),
             &dot_flox_path,
             true,
-            &mut mock_managed_environment_unlocked(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
+            &mut mock_managed_environment_unlocked(
+                &flox,
+                &manifest_contents_with_latest_schema_and_incompatible_system(),
+                owner,
+            ),
             None,
         )
         .unwrap();
@@ -776,7 +795,11 @@ mod tests {
                 incompatible_system_result(),
                 &dot_flox_path,
                 false,
-                &mut mock_managed_environment_unlocked(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
+                &mut mock_managed_environment_unlocked(
+                    &flox,
+                    &manifest_contents_with_latest_schema_and_incompatible_system(),
+                    owner
+                ),
                 Some(QueryFunctions {
                     query_add_system: |_| Ok(false),
                     query_ignore_build_errors: || panic!(),
@@ -806,7 +829,11 @@ mod tests {
             incompatible_system_result(),
             &dot_flox_path,
             false,
-            &mut mock_managed_environment_unlocked(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
+            &mut mock_managed_environment_unlocked(
+                &flox,
+                &manifest_contents_with_latest_schema_and_incompatible_system(),
+                owner,
+            ),
             Some(QueryFunctions {
                 query_add_system: |_| Ok(true),
                 query_ignore_build_errors: || panic!(),

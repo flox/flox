@@ -4,6 +4,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::LazyLock;
 
+use flox_manifest::interfaces::{AsLatestSchema, CommonFields};
+use flox_manifest::lockfile::Lockfile;
+use flox_manifest::parsed::Inner;
+use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
+use flox_manifest::{Manifest, MigratedTypedOnly};
 use indoc::formatdoc;
 use itertools::Itertools;
 use serde::Deserialize;
@@ -17,8 +22,6 @@ use super::catalog::BaseCatalogUrl;
 use super::nix::nix_base_command;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError};
-use crate::models::lockfile::Lockfile;
-use crate::models::manifest::typed::{DEFAULT_GROUP_NAME, Inner, Manifest};
 use crate::utils::{CommandExt, ReaderExt};
 
 static FLOX_BUILD_MK: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -712,10 +715,10 @@ impl PackageTargets {
     /// Target names, e.g. arguments from the CLI
     /// can be validated against the known targets via [Self::select].
     pub fn new(
-        manifest: &Manifest,
+        manifest: &Manifest<MigratedTypedOnly>,
         expression_dir: &Path,
     ) -> Result<PackageTargets, PackageTargetError> {
-        let environment_packages = &manifest.build;
+        let environment_packages = manifest.as_latest_schema().build();
 
         let nix_expression_packages = get_nix_expression_targets(expression_dir)
             .map_err(|e| PackageTargetError::new(e.to_string()))?;
@@ -1167,6 +1170,8 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     use anyhow::Context;
+    use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
+    use flox_test_utils::GENERATED_DATA;
     use indoc::{formatdoc, indoc};
 
     use super::test_helpers::*;
@@ -1177,7 +1182,6 @@ mod tests {
         new_path_environment_from_env_files,
     };
     use crate::models::environment::{Environment, copy_dir_recursive};
-    use crate::providers::catalog::GENERATED_DATA;
     use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
@@ -2116,7 +2120,11 @@ mod tests {
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/go_gcc"));
         let env_path = env.parent_path().unwrap();
 
-        let base_manifest = env.manifest_contents(&flox).unwrap();
+        let base_manifest = env
+            .pre_migration_manifest(&flox)
+            .unwrap()
+            .as_writable()
+            .to_string();
         let build_manifest = formatdoc! {r#"
             {base_manifest}
 
@@ -2195,7 +2203,11 @@ mod tests {
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/gcc_boost"));
         let env_path = env.parent_path().unwrap();
 
-        let base_manifest = env.manifest_contents(&flox).unwrap();
+        let base_manifest = env
+            .pre_migration_manifest(&flox)
+            .unwrap()
+            .as_writable()
+            .to_string();
         let build_manifest = formatdoc! {r#"
             {base_manifest}
 
@@ -2270,7 +2282,11 @@ mod tests {
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/gcc_boost"));
         let env_path = env.parent_path().unwrap();
 
-        let base_manifest = env.manifest_contents(&flox).unwrap();
+        let base_manifest = env
+            .pre_migration_manifest(&flox)
+            .unwrap()
+            .as_writable()
+            .to_string();
         let build_manifest = formatdoc! {r#"
             {base_manifest}
 
@@ -2897,7 +2913,11 @@ mod tests {
         let mut env = new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/bash"));
         let env_path = env.parent_path().unwrap();
 
-        let base_manifest = env.manifest_contents(&flox).unwrap();
+        let base_manifest = env
+            .pre_migration_manifest(&flox)
+            .unwrap()
+            .as_writable()
+            .to_string();
         let build_manifest = formatdoc! {r#"
             {base_manifest}
 
@@ -3018,7 +3038,11 @@ mod tests {
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/old_hello"));
         let env_path = env.parent_path().unwrap();
 
-        let base_manifest = env.manifest_contents(&flox).unwrap();
+        let base_manifest = env
+            .pre_migration_manifest(&flox)
+            .unwrap()
+            .as_writable()
+            .to_string();
         let build_manifest = formatdoc! {r##"
             {base_manifest}
 

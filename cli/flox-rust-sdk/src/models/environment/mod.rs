@@ -4,7 +4,16 @@ use std::{fs, io};
 
 use enum_dispatch::enum_dispatch;
 use flox_core::activate::mode::ActivateMode;
+use flox_core::data::environment_ref::{
+    ActivateEnvironmentRef,
+    EnvironmentName,
+    EnvironmentOwner,
+    RemoteEnvironmentRef,
+};
 pub use flox_core::{Version, path_hash};
+use flox_manifest::lockfile::{LockedInclude, Lockfile, LockfileError};
+use flox_manifest::raw::PackageToInstall;
+use flox_manifest::{Manifest, ManifestError, Migrated, Validated};
 use generations::{GenerationId, GenerationsError};
 use indoc::formatdoc;
 use managed_environment::ManagedEnvironment;
@@ -19,31 +28,31 @@ use walkdir::WalkDir;
 use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
 use super::env_registry::EnvRegistryError;
-use super::environment_ref::{EnvironmentName, EnvironmentOwner};
-use super::lockfile::{LockResult, LockedInclude, Lockfile, RecoverableMergeError, ResolveError};
-use super::manifest::raw::PackageToInstall;
-use super::manifest::typed::ManifestError;
 use crate::data::{CanonicalPath, CanonicalizeError, System};
 use crate::flox::{Flox, Floxhub};
 use crate::models::environment::generations::GenerationsEnvironment;
 use crate::providers::auth::AuthError;
 use crate::providers::buildenv::BuildEnvOutputs;
+use crate::providers::catalog::ResolveError;
 use crate::providers::git::{
     GitCommandDiscoverError,
     GitCommandProvider,
     GitDiscoverError,
     GitProvider,
 };
+use crate::providers::lock_manifest::{LockResult, RecoverableMergeError};
+use crate::providers::manifest_init::ManifestInitError;
 use crate::utils::copy_file_without_permissions;
 
 mod core_environment;
+#[cfg(any(test, feature = "tests"))]
+pub use core_environment::test_helpers;
 pub use core_environment::{
     CoreEnvironment,
     CoreEnvironmentError,
     EditResult,
     SingleSystemUpgradeDiff,
     UpgradeResult,
-    test_helpers,
 };
 
 pub mod fetcher;
@@ -61,8 +70,6 @@ pub const DEFAULT_MAX_AGE_DAYS: u32 = 90;
 
 pub const DOT_FLOX: &str = ".flox";
 pub const ENVIRONMENT_POINTER_FILENAME: &str = "env.json";
-pub const MANIFEST_FILENAME: &str = "manifest.toml";
-pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const GCROOTS_DIR_NAME: &str = "run";
 pub const CACHE_DIR_NAME: &str = "cache";
 pub const LIB_DIR_NAME: &str = "lib";
@@ -78,7 +85,7 @@ pub use flox_core::N_HASH_CHARS;
 /// along with whether each package was already installed
 #[derive(Debug)]
 pub struct InstallationAttempt {
-    pub new_manifest: Option<String>,
+    pub new_manifest: Option<Manifest<Migrated>>,
     pub already_installed: HashMap<String, bool>,
     /// The store paths of environment that was built to validate the install.
     /// This is used as an optimization to skip builds that we've already done.
@@ -88,7 +95,7 @@ pub struct InstallationAttempt {
 /// The result of an uninstallation attempt
 #[derive(Debug)]
 pub struct UninstallationAttempt {
-    pub new_manifest: Option<String>,
+    pub new_manifest: Option<Manifest<Migrated>>,
     /// Packages that were requested to be uninstalled but are stilled provided
     /// by included environments.
     pub still_included: HashMap<String, LockedInclude>,
@@ -143,11 +150,20 @@ pub trait Environment: Send {
     /// others call lock.
     fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError>;
 
-    /// Extract the current content of the manifest
+    /// Reads the manifest from disk without performing the migration.
+    ///
+    /// All operations are to be performed on the migrated manifest when possible.
+    /// This is only intended to be used when comparing against manifests that are
+    /// stored unmigrated e.g. manifests stored in the lockfile, manifests stored
+    /// in generations, etc.
+    fn pre_migration_manifest(&self, flox: &Flox) -> Result<Manifest<Validated>, EnvironmentError>;
+
+    /// Reads the manifest from disk and returns the migrated manifest,
+    /// potentially locking it if necessary.
     ///
     /// Implementations may use process context from [Flox]
     /// to determine the current content of the manifest.
-    fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError>;
+    fn manifest(&mut self, flox: &Flox) -> Result<Manifest<Migrated>, EnvironmentError>;
 
     /// Return the path to rendered environment in the Nix store.
     ///
@@ -242,6 +258,21 @@ pub enum ConcreteEnvironment {
     Managed(ManagedEnvironment),
     /// Container for [RemoteEnvironment]
     Remote(RemoteEnvironment),
+}
+
+impl TryFrom<&ConcreteEnvironment> for ActivateEnvironmentRef {
+    type Error = EnvironmentError;
+
+    fn try_from(env: &ConcreteEnvironment) -> Result<Self, Self::Error> {
+        let env_ref = match env {
+            ConcreteEnvironment::Path(env) => ActivateEnvironmentRef::Local(env.parent_path()?),
+            ConcreteEnvironment::Managed(env) => ActivateEnvironmentRef::Local(env.parent_path()?),
+            ConcreteEnvironment::Remote(env) => {
+                ActivateEnvironmentRef::Remote(RemoteEnvironmentRef::from(env.pointer().clone()))
+            },
+        };
+        Ok(env_ref)
+    }
 }
 
 /// A link to a built environment in the Nix store.
@@ -380,6 +411,12 @@ impl ManagedPointer {
     pub fn floxhub_url(&self) -> Result<Url, ParseError> {
         self.floxhub_base_url
             .join(&format!("{}/{}", self.owner, self.name))
+    }
+}
+
+impl From<ManagedPointer> for RemoteEnvironmentRef {
+    fn from(pointer: ManagedPointer) -> Self {
+        RemoteEnvironmentRef::from_parts(pointer.owner, pointer.name)
     }
 }
 
@@ -651,6 +688,10 @@ pub enum EnvironmentError {
     // endregion
     #[error(transparent)]
     ManifestError(#[from] ManifestError),
+    #[error(transparent)]
+    Lockfile(#[from] LockfileError),
+    #[error(transparent)]
+    ManifestInit(#[from] ManifestInitError),
 
     // todo: candidate for impl specific error
     // * only path env implements init
@@ -1284,5 +1325,230 @@ mod test {
             err,
             EnvironmentError::ServicesSocketPathTooLong(_)
         ));
+    }
+}
+
+#[cfg(test)]
+mod migration_composition_tests {
+    use expect_test::expect;
+    use flox_manifest::interfaces::{AsWritableManifest, SchemaVersion, WriteManifest};
+    use flox_manifest::parsed::common::KnownSchemaVersion;
+    use flox_manifest::test_helpers::{with_latest_schema, with_schema};
+    use flox_test_utils::GENERATED_DATA;
+    use indoc::indoc;
+
+    use super::*;
+    use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use crate::providers::catalog::test_helpers::catalog_replay_client;
+
+    /// Set up an included PathEnvironment with the given manifest contents,
+    /// lock it, and return the path to its parent directory.
+    fn setup_locked_included_env(flox: &Flox, parent_dir: &Path, manifest_contents: &str) {
+        let included_path = parent_dir.join("included");
+        let mut env = new_path_environment_in(flox, manifest_contents, &included_path);
+        env.lockfile(flox).unwrap();
+    }
+
+    /// Create a v1 composer PathEnvironment that includes the "included" env.
+    fn setup_v1_composer_with_include(flox: &Flox, parent_dir: &Path) -> PathEnvironment {
+        let manifest_contents = with_schema(KnownSchemaVersion::V1, indoc! {r#"
+            [include]
+            environments = [
+              { dir = "../included" },
+            ]
+        "#});
+
+        let composer_path = parent_dir.join("composer");
+        new_path_environment_in(flox, &manifest_contents, &composer_path)
+    }
+
+    /// A v1.10.0 manifest created by init should not be downgraded to v1.
+    #[test]
+    fn latest_schema_is_not_downgraded() {
+        let (flox, tempdir) = flox_instance();
+        let manifest = with_latest_schema("");
+        let mut env = new_path_environment_in(&flox, &manifest, tempdir.path());
+        env.lockfile(&flox).unwrap(); // ensure it's locked
+
+        let manifest_contents = env
+            .pre_migration_manifest(&flox)
+            .unwrap()
+            .as_writable()
+            .to_string();
+
+        expect![[r#"
+            schema-version = "1.10.0"
+        "#]]
+        .assert_eq(&manifest_contents);
+    }
+
+    /// A v1 composer including a v1.10.0 environment with only vars (no
+    /// packages) should not be migrated because the merged manifest is
+    /// backwards compatible with v1.
+    #[test]
+    fn v1_including_latest_with_only_vars_is_not_migrated() {
+        let (flox, tempdir) = flox_instance();
+
+        let included_manifest = with_latest_schema(indoc! {r#"
+            [vars]
+            included_var = "value"
+        "#});
+        setup_locked_included_env(&flox, tempdir.path(), &included_manifest);
+
+        let mut composer = setup_v1_composer_with_include(&flox, tempdir.path());
+        composer.lockfile(&flox).unwrap();
+
+        let composer_manifest_contents = composer
+            .pre_migration_manifest(&flox)
+            .unwrap()
+            .as_writable()
+            .to_string();
+
+        expect![[r#"
+            version = 1
+
+            [include]
+            environments = [
+              { dir = "../included" },
+            ]
+
+        "#]]
+        .assert_eq(&composer_manifest_contents);
+    }
+
+    /// A v1 composer including a v1.10.0 environment with hello (whose
+    /// outputs match outputs_to_install) should not be migrated because
+    /// hello doesn't require explicit outputs.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn v1_including_latest_with_hello_is_not_migrated() {
+        let (mut flox, tempdir) = flox_instance();
+
+        let included_manifest = with_latest_schema(indoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+        "#});
+
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+
+        setup_locked_included_env(&flox, tempdir.path(), &included_manifest);
+
+        let mut composer = setup_v1_composer_with_include(&flox, tempdir.path());
+        composer.lockfile(&flox).unwrap();
+
+        let composer_manifest_contents = composer
+            .pre_migration_manifest(&flox)
+            .unwrap()
+            .as_writable()
+            .to_string();
+
+        expect![[r#"
+            version = 1
+
+            [include]
+            environments = [
+              { dir = "../included" },
+            ]
+
+        "#]]
+        .assert_eq(&composer_manifest_contents);
+    }
+
+    /// A v1 composer including a v1.10.0 environment with `outputs = "all"`
+    /// on bash should be migrated. The explicit outputs field can't be
+    /// represented in v1 (v1 PackageDescriptorCatalog has no outputs field
+    /// and uses deny_unknown_fields), so the merged manifest requires
+    /// v1.10.0 and the composer's on-disk manifest should be rewritten.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn v1_including_latest_with_outputs_all_is_migrated() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
+
+        let included_manifest = with_latest_schema(indoc! {r#"
+            [install]
+            bash.pkg-path = "bashNonInteractive"
+            bash.outputs = "all"
+        "#});
+        setup_locked_included_env(&flox, tempdir.path(), &included_manifest);
+
+        let mut composer = setup_v1_composer_with_include(&flox, tempdir.path());
+        composer.lockfile(&flox).unwrap();
+
+        // The composer's manifest should be migrated to v1.10.0
+        let manifest = composer.pre_migration_manifest(&flox).unwrap();
+        assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::latest());
+    }
+
+    /// A v1 composer including a v1.10.0 environment with
+    /// `outputs = ["out"]` on bash should be migrated. Even though "out"
+    /// is a common output, the explicit outputs field means the merged
+    /// manifest can't be deserialized as v1.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn v1_including_latest_with_specific_outputs_is_migrated() {
+        let (mut flox, tempdir) = flox_instance();
+
+        let included_manifest = with_latest_schema(indoc! {r#"
+            [install]
+            bash.pkg-path = "bashNonInteractive"
+            bash.outputs = ["out"]
+        "#});
+
+        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
+
+        setup_locked_included_env(&flox, tempdir.path(), &included_manifest);
+
+        let mut composer = setup_v1_composer_with_include(&flox, tempdir.path());
+        composer.lockfile(&flox).unwrap();
+
+        let manifest = composer.pre_migration_manifest(&flox).unwrap();
+        assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::latest());
+    }
+
+    /// A v1 composer that initially includes a backwards-compatible v1.10.0
+    /// environment (only vars) should be migrated when the included
+    /// environment is updated to contain a package with explicit outputs
+    /// and `include_upgrade` is called.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn include_upgrade_triggers_migration_when_included_adds_outputs() {
+        let (mut flox, tempdir) = flox_instance();
+
+        // Start with an included env that only has vars (backwards compatible).
+        let included_manifest = with_latest_schema(indoc! {r#"
+            [vars]
+            included_var = "value"
+        "#});
+        let included_path = tempdir.path().join("included");
+        let mut included_env = new_path_environment_in(&flox, &included_manifest, &included_path);
+        included_env.lockfile(&flox).unwrap();
+
+        // Lock the composer; it should stay v1 since the include is
+        // backwards compatible.
+        let mut composer = setup_v1_composer_with_include(&flox, tempdir.path());
+        composer.lockfile(&flox).unwrap();
+
+        let manifest = composer.pre_migration_manifest(&flox).unwrap();
+        assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::V1);
+
+        // Now update the included env to add a package with explicit outputs.
+        let updated_included_manifest = with_latest_schema(indoc! {r#"
+            [vars]
+            included_var = "value"
+
+            [install]
+            bash.pkg-path = "bashNonInteractive"
+            bash.outputs = "all"
+        "#});
+
+        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
+
+        included_env.edit(&flox, updated_included_manifest).unwrap();
+
+        // Upgrade all includes on the composer.
+        composer.include_upgrade(&flox, vec![]).unwrap();
+
+        // The composer's manifest should now be migrated to v1.10.0.
+        let manifest = composer.pre_migration_manifest(&flox).unwrap();
+        assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::latest());
     }
 }

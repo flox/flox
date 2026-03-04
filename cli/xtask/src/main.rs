@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
+use flox_manifest::lockfile::Lockfile;
+use flox_manifest::{Manifest, TypedOnly};
 use flox_rust_sdk::models::environment::generations::AllGenerationsMetadata;
-use flox_rust_sdk::models::lockfile::Lockfile;
-use flox_rust_sdk::models::manifest::typed::Manifest;
 
 #[derive(Parser)]
 #[command(name = "xtask")]
@@ -58,7 +58,10 @@ fn main() -> Result<(), anyhow::Error> {
 
 fn generate_schema(schema_type: SchemaType) -> Result<()> {
     let (schema, filename) = match schema_type {
-        SchemaType::Manifest => (schemars::schema_for!(Manifest), "manifest-v1.schema.json"),
+        SchemaType::Manifest => (
+            schemars::schema_for!(Manifest<TypedOnly>),
+            "manifest-v1.schema.json",
+        ),
         SchemaType::Lockfile => (schemars::schema_for!(Lockfile), "lockfile-v1.schema.json"),
         SchemaType::GenerationsMetadata => (
             schemars::schema_for!(AllGenerationsMetadata),

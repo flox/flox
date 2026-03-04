@@ -1,0 +1,170 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "install": {
+      "bash": {
+        "flake": "github:NixOS/nixpkgs/nixpkgs-unstable#bash"
+      }
+    },
+    "options": {}
+  },
+  "packages": [
+    {
+      "install_id": "bash",
+      "locked-url": "github:NixOS/nixpkgs/ea30586ee015f37f38783006a9bc9e4aa64d7d61?narHash=sha256-PDFfpswLiuG/DcadTBb7dEfO3jX1fcGlCD4ZKSkC0M8%3D",
+      "flake-description": "A collection of packages for the Nix package manager",
+      "locked-flake-attr-path": "legacyPackages.aarch64-darwin.bash",
+      "derivation": "/nix/store/4l2ds20wph5hbqi95f680a16d2vdikhp-bash-interactive-5.3p3.drv",
+      "outputs": {
+        "dev": "/nix/store/jrqfsfm7j7xhcwyq9mp2z7fal33rq19s-bash-interactive-5.3p3-dev",
+        "doc": "/nix/store/iwky2lbgwjl9biw3x56sm3r94r46wimh-bash-interactive-5.3p3-doc",
+        "info": "/nix/store/vvbpz1vw4wk7qqack0al5zh7p9a1y570-bash-interactive-5.3p3-info",
+        "man": "/nix/store/p8wcfarcvyrvmrw99py1k3jx38445940-bash-interactive-5.3p3-man",
+        "out": "/nix/store/pbimwi0b1n39vvv2m0b6j1yybl3nllin-bash-interactive-5.3p3"
+      },
+      "output-names": [
+        "out",
+        "dev",
+        "man",
+        "doc",
+        "info"
+      ],
+      "outputs-to-install": [
+        "man",
+        "out"
+      ],
+      "requested-outputs-to-install": [],
+      "package-system": "aarch64-darwin",
+      "system": "aarch64-darwin",
+      "name": "bash-interactive-5.3p3",
+      "pname": "bash-interactive",
+      "version": "5.3p3",
+      "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux (for interactive use)",
+      "licenses": [
+        "GPL-3.0-or-later"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    },
+    {
+      "install_id": "bash",
+      "locked-url": "github:NixOS/nixpkgs/ea30586ee015f37f38783006a9bc9e4aa64d7d61?narHash=sha256-PDFfpswLiuG/DcadTBb7dEfO3jX1fcGlCD4ZKSkC0M8%3D",
+      "flake-description": "A collection of packages for the Nix package manager",
+      "locked-flake-attr-path": "legacyPackages.aarch64-linux.bash",
+      "derivation": "/nix/store/q0mrnab0ph372x8lj3sdkz6db9jlz7mx-bash-interactive-5.3p3.drv",
+      "outputs": {
+        "debug": "/nix/store/29rl3mf7xs80aiqhsm29sl8a05wsii7v-bash-interactive-5.3p3-debug",
+        "dev": "/nix/store/dd9f5c5zzk81i0vzqlvzmzxbk235d7n6-bash-interactive-5.3p3-dev",
+        "doc": "/nix/store/in9060ldca4miyq7qjzisrjvxzaiz0hm-bash-interactive-5.3p3-doc",
+        "info": "/nix/store/9i4cp6z5w0hhsbcfv8igis3ha1b41mfd-bash-interactive-5.3p3-info",
+        "man": "/nix/store/xaxbpf5l9incla45nsb4rghzidawq8md-bash-interactive-5.3p3-man",
+        "out": "/nix/store/rlgii39vy2cp7y4rgxz6l0bl7115nk7a-bash-interactive-5.3p3"
+      },
+      "output-names": [
+        "out",
+        "dev",
+        "man",
+        "doc",
+        "info",
+        "debug"
+      ],
+      "outputs-to-install": [
+        "man",
+        "out"
+      ],
+      "requested-outputs-to-install": [],
+      "package-system": "aarch64-linux",
+      "system": "aarch64-linux",
+      "name": "bash-interactive-5.3p3",
+      "pname": "bash-interactive",
+      "version": "5.3p3",
+      "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux (for interactive use)",
+      "licenses": [
+        "GPL-3.0-or-later"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    },
+    {
+      "install_id": "bash",
+      "locked-url": "github:NixOS/nixpkgs/ea30586ee015f37f38783006a9bc9e4aa64d7d61?narHash=sha256-PDFfpswLiuG/DcadTBb7dEfO3jX1fcGlCD4ZKSkC0M8%3D",
+      "flake-description": "A collection of packages for the Nix package manager",
+      "locked-flake-attr-path": "legacyPackages.x86_64-darwin.bash",
+      "derivation": "/nix/store/v5gld82l220adzpjks7qscgdk939kk4n-bash-interactive-5.3p3.drv",
+      "outputs": {
+        "dev": "/nix/store/97ysds9pbfyl2nf09m2na3jxvh7q58qi-bash-interactive-5.3p3-dev",
+        "doc": "/nix/store/dj18n4g27q7qz9v075xf3iisx4wl38r5-bash-interactive-5.3p3-doc",
+        "info": "/nix/store/2yqwn1r5663qqyf48qg12p9w2f8rwvnk-bash-interactive-5.3p3-info",
+        "man": "/nix/store/1wq1717krwjj8k0dy632sjbiv61asa0m-bash-interactive-5.3p3-man",
+        "out": "/nix/store/i7cq9xch3mnsfgjifgmr1ybggv9njn0f-bash-interactive-5.3p3"
+      },
+      "output-names": [
+        "out",
+        "dev",
+        "man",
+        "doc",
+        "info"
+      ],
+      "outputs-to-install": [
+        "man",
+        "out"
+      ],
+      "requested-outputs-to-install": [],
+      "package-system": "x86_64-darwin",
+      "system": "x86_64-darwin",
+      "name": "bash-interactive-5.3p3",
+      "pname": "bash-interactive",
+      "version": "5.3p3",
+      "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux (for interactive use)",
+      "licenses": [
+        "GPL-3.0-or-later"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    },
+    {
+      "install_id": "bash",
+      "locked-url": "github:NixOS/nixpkgs/ea30586ee015f37f38783006a9bc9e4aa64d7d61?narHash=sha256-PDFfpswLiuG/DcadTBb7dEfO3jX1fcGlCD4ZKSkC0M8%3D",
+      "flake-description": "A collection of packages for the Nix package manager",
+      "locked-flake-attr-path": "legacyPackages.x86_64-linux.bash",
+      "derivation": "/nix/store/w673c1p7yx8crv1q7xlylfzw951g6ifl-bash-interactive-5.3p3.drv",
+      "outputs": {
+        "debug": "/nix/store/d836xvvrawwc0dmdrfas6v25ibqmn5cb-bash-interactive-5.3p3-debug",
+        "dev": "/nix/store/9xglrdgxlfd1rgy4ldij7lxcgbjz17fx-bash-interactive-5.3p3-dev",
+        "doc": "/nix/store/66b5nfg85cc55jvppncp5pa1941sxs8h-bash-interactive-5.3p3-doc",
+        "info": "/nix/store/s35gwfmpi4g4x3x5wciw3g21mmy946am-bash-interactive-5.3p3-info",
+        "man": "/nix/store/v26p9gyxsic1d2428hq39b9kqy206r05-bash-interactive-5.3p3-man",
+        "out": "/nix/store/hkbylipx1iiawqdcjv858p501wv81bpm-bash-interactive-5.3p3"
+      },
+      "output-names": [
+        "out",
+        "dev",
+        "man",
+        "doc",
+        "info",
+        "debug"
+      ],
+      "outputs-to-install": [
+        "man",
+        "out"
+      ],
+      "requested-outputs-to-install": [],
+      "package-system": "x86_64-linux",
+      "system": "x86_64-linux",
+      "name": "bash-interactive-5.3p3",
+      "pname": "bash-interactive",
+      "version": "5.3p3",
+      "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux (for interactive use)",
+      "licenses": [
+        "GPL-3.0-or-later"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    }
+  ]
+}

@@ -6,7 +6,9 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
-use flox_rust_sdk::flox::{EnvironmentName, Flox};
+use flox_core::data::environment_ref::EnvironmentName;
+use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
+use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironmentError,
     SyncToGenerationResult,
@@ -31,12 +33,7 @@ use super::{
     activated_environments,
     environment_select,
 };
-use crate::commands::{
-    EnvironmentSelectError,
-    SHELL_COMPLETION_FILE,
-    bail_on_v2_if_feature_flag_not_enabled,
-    ensure_floxhub_token,
-};
+use crate::commands::{EnvironmentSelectError, SHELL_COMPLETION_FILE, ensure_floxhub_token};
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::errors::format_error;
 use crate::utils::message;
@@ -212,10 +209,7 @@ impl Edit {
         let result = match contents {
             // If provided with the contents of a manifest file, either via a path to a file or via
             // contents piped to stdin, use those contents to try building the environment.
-            Some(new_manifest) => {
-                bail_on_v2_if_feature_flag_not_enabled(flox, new_manifest.as_str())?;
-                environment.edit(flox, new_manifest)?
-            },
+            Some(new_manifest) => environment.edit(flox, new_manifest)?,
             // If not provided with new manifest contents, let the user edit the file directly
             // via $EDITOR or $VISUAL (as long as `flox edit` was invoked interactively).
             None => Self::interactive_edit(flox, environment).await?,
@@ -289,7 +283,13 @@ impl Edit {
             .prefix("manifest.")
             .suffix(".toml")
             .tempfile_in(&flox.temp_dir)?;
-        std::fs::write(&tmp_manifest, environment.manifest_contents(flox)?)?;
+        std::fs::write(
+            &tmp_manifest,
+            environment
+                .pre_migration_manifest(flox)?
+                .as_writable()
+                .to_string(),
+        )?;
 
         let should_continue_dialog = Dialog {
             message: "Continue editing?",
@@ -303,12 +303,7 @@ impl Edit {
         // decides to stop.
         loop {
             let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor, &args)?;
-            let result = match bail_on_v2_if_feature_flag_not_enabled(flox, new_manifest.as_str()) {
-                Ok(_) => environment.edit(flox, new_manifest.clone()),
-                Err(err) => Err(EnvironmentError::EditWithUnsupportedFeature(
-                    err.to_string(),
-                )),
-            };
+            let result = environment.edit(flox, new_manifest.clone());
             match Self::make_interactively_recoverable(result)? {
                 Ok(result) => return Ok(result),
 
@@ -345,6 +340,7 @@ impl Edit {
                 )),
             )
             | Err(e @ EnvironmentError::Recoverable(_))
+            | Err(e @ EnvironmentError::ManifestError(_))
             | Err(e @ EnvironmentError::EditWithUnsupportedFeature(_)) => Ok(Err(e)),
             Err(e) => Err(e),
             Ok(result) => Ok(Ok(result)),
@@ -451,7 +447,7 @@ mod tests {
         new_path_environment,
         new_path_environment_in,
     };
-    use flox_rust_sdk::models::lockfile::{ResolutionFailures, ResolveError};
+    use flox_rust_sdk::providers::lock_manifest::{ResolutionFailures, ResolveError};
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;

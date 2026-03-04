@@ -1,5 +1,6 @@
 use anyhow::Result;
 use bpaf::Bpaf;
+use flox_manifest::interfaces::CommonFields;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::services::process_compose::{ProcessStates, stop_services};
 use tracing::instrument;
@@ -31,7 +32,7 @@ impl Stop {
         let processes = ProcessStates::read(socket)?;
         let named_processes = super::processes_by_name_or_default_to_all(
             &processes,
-            &env.manifest.services,
+            env.manifest.services(),
             &flox.system,
             &self.names,
         )?;

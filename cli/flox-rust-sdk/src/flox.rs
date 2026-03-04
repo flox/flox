@@ -9,7 +9,6 @@ use thiserror::Error;
 use url::Url;
 
 use crate::data::FloxVersion;
-pub use crate::models::environment_ref::{self, *};
 use crate::providers::{catalog, flake_installable_locker};
 
 pub static FLOX_VERSION: LazyLock<FloxVersion> = LazyLock::new(|| {
@@ -234,6 +233,7 @@ pub enum FloxhubError {
 pub mod test_helpers {
     use std::fs;
 
+    use flox_core::data::environment_ref::EnvironmentOwner;
     use tempfile::{TempDir, tempdir_in};
 
     use self::catalog::MockClient;
