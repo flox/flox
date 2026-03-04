@@ -4,6 +4,7 @@ use flox_core::data::environment_ref::EnvironmentOwner;
 use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
+use uuid::Uuid;
 
 use super::environment::ManagedPointer;
 use crate::flox::{Flox, Floxhub, FloxhubError, FloxhubToken};
@@ -17,6 +18,7 @@ use crate::providers::git::{
     GitProvider,
     GitRemoteCommandError,
 };
+use crate::utils::{HEADER_DEVICE_UUID, HEADER_INVOCATION_SOURCE, INVOCATION_SOURCES};
 
 pub const FLOXMETA_DIR_NAME: &str = "meta";
 pub const BRANCH_NAME_PATH_SEPARATOR: &str = ".";
@@ -72,7 +74,12 @@ impl FloxMeta {
 
         let git_url = floxhub.git_url();
 
-        let git_options = floxmeta_git_options(git_url, &pointer.owner, token);
+        let git_options = floxmeta_git_options(
+            git_url,
+            &pointer.owner,
+            token,
+            flox.metrics_device_uuid.as_ref(),
+        );
         let branch = remote_branch_name(pointer);
 
         let git = GitCommandProvider::clone_branch_with(
@@ -127,7 +134,12 @@ impl FloxMeta {
 
         let git_url = floxhub.git_url();
 
-        let git_options = floxmeta_git_options(git_url, &pointer.owner, token);
+        let git_options = floxmeta_git_options(
+            git_url,
+            &pointer.owner,
+            token,
+            flox.metrics_device_uuid.as_ref(),
+        );
 
         if !user_floxmeta_dir.as_ref().exists() {
             Err(FloxMetaError::NotFound(pointer.owner.to_string()))?
@@ -171,7 +183,12 @@ impl FloxMeta {
 
         let git_url = floxhub.git_url();
 
-        let git_options = floxmeta_git_options(git_url, &pointer.owner, token);
+        let git_options = floxmeta_git_options(
+            git_url,
+            &pointer.owner,
+            token,
+            flox.metrics_device_uuid.as_ref(),
+        );
 
         let git = GitCommandProvider::init_with(git_options, user_floxmeta_dir, false).unwrap();
         git.rename_branch(&remote_branch_name(pointer)).unwrap();
@@ -194,6 +211,7 @@ pub fn floxmeta_git_options(
     floxhub_git_url: &Url,
     floxhub_owner: &str,
     floxhub_token: Option<&FloxhubToken>,
+    metrics_device_uuid: Option<&Uuid>,
 ) -> GitCommandOptions {
     let mut options = GitCommandOptions::default();
 
@@ -242,6 +260,14 @@ pub fn floxmeta_git_options(
         r#"!f(){ echo "username=oauth"; echo "password=$FLOX_FLOXHUB_TOKEN"; }; f"#,
     );
 
+    if let Some(uuid) = metrics_device_uuid {
+        options.add_http_header(HEADER_DEVICE_UUID, &uuid.to_string());
+    }
+
+    if !INVOCATION_SOURCES.is_empty() {
+        options.add_http_header(HEADER_INVOCATION_SOURCE, &INVOCATION_SOURCES.join(","));
+    }
+
     options
 }
 
@@ -249,6 +275,74 @@ pub(super) fn floxmeta_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
     flox.data_dir
         .join(FLOXMETA_DIR_NAME)
         .join(owner.to_string())
+}
+
+#[cfg(test)]
+mod header_tests {
+    use httpmock::MockServer;
+    use url::Url;
+    use uuid::Uuid;
+
+    use super::*;
+
+    /// Issue a git clone against the mock server using the given options.
+    /// The mock returns 403, so git stops after one request. We assert the
+    /// clone fails to prove the mock was actually hit.
+    fn clone_against_mock(server: &MockServer, owner: &str, options: GitCommandOptions) {
+        let result = GitCommandProvider::clone_branch_with(
+            options,
+            format!("{}/{owner}/floxmeta", server.base_url()),
+            tempfile::tempdir().unwrap().path(),
+            "main",
+            true,
+        );
+        assert!(
+            matches!(result, Err(GitRemoteCommandError::Command(_))),
+            "Expected clone to fail with a command error, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn git_request_includes_telemetry_headers() {
+        let source = "test.mock-source";
+        temp_env::with_var("FLOX_INVOCATION_SOURCE", Some(source), || {
+            let server = MockServer::start();
+            let uuid = Uuid::nil();
+
+            let mock = server.mock(|when, then| {
+                when.header(HEADER_DEVICE_UUID, uuid.to_string())
+                    .header_includes(HEADER_INVOCATION_SOURCE, source);
+                then.status(403);
+            });
+
+            let owner = "testowner";
+            let server_url = Url::parse(&server.base_url()).unwrap();
+            let options = floxmeta_git_options(&server_url, owner, None, Some(&uuid));
+            clone_against_mock(&server, owner, options);
+            mock.assert();
+        });
+    }
+
+    #[test]
+    fn git_request_includes_telemetry_headers_without_device_uuid() {
+        let source = "test.mock-source";
+        temp_env::with_var("FLOX_INVOCATION_SOURCE", Some(source), || {
+            let server = MockServer::start();
+            let uuid = None;
+
+            let mock = server.mock(|when, then| {
+                when.header_missing(HEADER_DEVICE_UUID)
+                    .header_includes(HEADER_INVOCATION_SOURCE, source);
+                then.status(403);
+            });
+
+            let owner = "testowner";
+            let server_url = Url::parse(&server.base_url()).unwrap();
+            let options = floxmeta_git_options(&server_url, owner, None, uuid);
+            clone_against_mock(&server, owner, options);
+            mock.assert();
+        });
+    }
 }
 
 #[cfg(test)]

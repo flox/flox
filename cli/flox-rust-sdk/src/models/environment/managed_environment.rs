@@ -1318,7 +1318,12 @@ impl ManagedEnvironment {
 
         let git_url = flox.floxhub.git_url();
 
-        let options = floxmeta_git_options(git_url, &pointer.owner, token);
+        let options = floxmeta_git_options(
+            git_url,
+            &pointer.owner,
+            token,
+            flox.metrics_device_uuid.as_ref(),
+        );
 
         // Initialize a new branch for this environment in a new, temporary,
         // bare repo. This acts like part of the bare repo that backs a user's
