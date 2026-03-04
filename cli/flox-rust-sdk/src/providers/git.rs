@@ -42,6 +42,7 @@ pub struct BranchInfo {
 }
 
 pub struct StatusInfo {
+    pub ref_: Option<String>,
     pub rev: String,
     pub rev_count: u64,
     pub rev_date: DateTime<Utc>,
@@ -893,20 +894,37 @@ impl GitProvider for GitCommandProvider {
             as_str.trim().to_string()
         };
 
-        let mut command = self.new_command();
-        command.arg("status");
-        command.arg("--porcelain");
-        command.arg("--untracked-files=no");
         let is_dirty = {
+            let mut command = self.new_command();
+            command.arg("status");
+            command.arg("--porcelain");
+            command.arg("--untracked-files=no");
+
             let dirty_output = GitCommandProvider::run_command(&mut command)?;
             let as_str = dirty_output.to_string_lossy();
             !as_str.trim().is_empty()
         };
 
+        let ref_ = {
+            let mut command = self.new_command();
+            command.arg("symbolic-ref");
+            command.arg("HEAD");
+            let ref_output_result = GitCommandProvider::run_command(&mut command);
+            match ref_output_result {
+                Ok(ref_) => Some(ref_.to_string_lossy().into_owned()),
+                Err(GitCommandError::BadExit(128, _, stderr))
+                    if stderr == "fatal: ref HEAD is not a symbolic ref" =>
+                {
+                    None
+                },
+                Err(e) => Err(e)?,
+            }
+        };
         Ok(StatusInfo {
             rev: rev.clone(),
             rev_count: self.rev_count(&rev)?,
             rev_date: self.rev_date(&rev)?,
+            ref_,
             is_dirty,
         })
     }
