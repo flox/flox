@@ -22,6 +22,7 @@
 use std::path::Path;
 use std::str::FromStr;
 
+use flox_core::WriteError;
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use schemars::{JsonSchema, schema_for};
@@ -68,9 +69,13 @@ pub enum ManifestError {
     #[error("failed to read manifest file: {0}")]
     IORead(#[source] std::io::Error),
 
-    /// We failed to read a manifest from disk.
+    /// We failed to write a manifest to disk.
     #[error("failed to write manifest file: {0}")]
     IOWrite(#[source] std::io::Error),
+
+    /// An atomic write of a manifest failed.
+    #[error("failed to write manifest file: {0}")]
+    AtomicWrite(#[source] WriteError),
 
     /// The provided string failed to parse as valid TOML of any kind.
     #[error("manifest contents were not valid TOML: {0}")]
@@ -403,14 +408,29 @@ impl Manifest<Migrated> {
         Ok(matches_original_schema)
     }
 
-    /// Returns the manifest in the original schema if possible.
-    pub fn as_writable_maybe_in_original_schema(
+    /// Returns a copy of the manifest in its original schema if possible,
+    /// and otherwise in the latest schema.
+    ///
+    /// Uses the pre-migration lockfile for the backwards-compatibility check.
+    pub fn as_maybe_original_schema(&self) -> Result<Manifest<Validated>, ManifestError> {
+        self.as_maybe_original_schema_with_lockfile(self.pre_migration_lockfile())
+    }
+
+    /// Returns a copy of the manifest in its original schema if possible,
+    /// and otherwise in the latest schema.
+    ///
+    /// Uses the provided lockfile for the backwards-compatibility check.
+    /// This is needed when the lockfile has changed since migration (e.g.
+    /// after installing a package) and the backwards-compatibility check
+    /// must use the updated lockfile rather than the pre-migration one.
+    pub fn as_maybe_original_schema_with_lockfile(
         &self,
-    ) -> Result<Manifest<Writable>, ManifestError> {
-        let typed_only = self.inner.migrated_parsed.as_maybe_backwards_compatible(
-            self.inner.original_parsed.schema_version(),
-            self.pre_migration_lockfile(),
-        )?;
+        lockfile: Option<&Lockfile>,
+    ) -> Result<Manifest<Validated>, ManifestError> {
+        let typed_only = self
+            .inner
+            .migrated_parsed
+            .as_maybe_backwards_compatible(self.inner.original_parsed.schema_version(), lockfile)?;
         let mut validated = Manifest {
             inner: Validated {
                 raw: self.inner.migrated_raw.clone(),
@@ -418,7 +438,29 @@ impl Manifest<Migrated> {
             },
         };
         validated.update_toml()?;
-        Ok(validated.as_writable())
+        Ok(validated)
+    }
+
+    /// Returns a writable copy of the manifest in its original schema
+    /// when possible, and otherwise in the latest schema.
+    ///
+    /// Uses the pre-migration lockfile for the backwards-compatibility check.
+    pub fn as_writable_maybe_in_original_schema(
+        &self,
+    ) -> Result<Manifest<Writable>, ManifestError> {
+        self.as_maybe_original_schema().map(|m| m.as_writable())
+    }
+
+    /// Returns a writable copy of the manifest in its original schema
+    /// when possible, and otherwise in the latest schema.
+    ///
+    /// Uses the provided lockfile for the backwards-compatibility check.
+    pub fn as_writable_maybe_in_original_schema_with_lockfile(
+        &self,
+        lockfile: Option<&Lockfile>,
+    ) -> Result<Manifest<Writable>, ManifestError> {
+        self.as_maybe_original_schema_with_lockfile(lockfile)
+            .map(|m| m.as_writable())
     }
 }
 

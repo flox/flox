@@ -10,6 +10,7 @@ use flox_manifest::interfaces::{
     AsWritableManifest,
     CommonFields,
     ContentsMatch,
+    OriginalSchemaVersion,
     PackageLookup,
     SchemaVersion,
     WriteManifest,
@@ -246,6 +247,33 @@ impl<State> CoreEnvironment<State> {
         Ok(LockResult::Changed(lockfile))
     }
 
+    /// Lock the provided manifest
+    ///
+    /// Note: does not handle updating the on-disk manifest or lockfile,
+    /// and does not handle ensuring that the schemas of the on-disk
+    /// manifest and the lockfile's manifest are in sync.
+    pub fn lock_without_writing(
+        &mut self,
+        flox: &Flox,
+        manifest: &Manifest<Migrated>,
+        existing_lockfile: Option<&Lockfile>,
+    ) -> Result<LockResult, EnvironmentError> {
+        // If a lockfile exists, it is used as a base.
+        let lockfile = LockManifest::lock_manifest(
+            flox,
+            &manifest.as_migrated_typed_only(),
+            existing_lockfile,
+            &self.include_fetcher,
+        )
+        .block_on()?;
+
+        if Some(&lockfile) == existing_lockfile {
+            return Ok(LockResult::Unchanged(lockfile));
+        }
+
+        Ok(LockResult::Changed(lockfile))
+    }
+
     /// Build the environment.
     ///
     /// Technically this does write to disk as a side effect for now.
@@ -344,7 +372,7 @@ impl CoreEnvironment<ReadOnly> {
             built_environments: None,
         };
         if let Some(ref new_manifest) = installation.new_manifest {
-            let (store_path, _) = self.transact_with_manifest_contents(new_manifest, flox)?;
+            let (store_path, _) = self.transact_with_manifest(new_manifest, flox)?;
             installation.built_environments = Some(store_path);
         }
         Ok(installation)
@@ -386,7 +414,7 @@ impl CoreEnvironment<ReadOnly> {
         };
 
         let post_removal = manifest.remove_packages(&install_ids)?;
-        let (store_path, _) = self.transact_with_manifest_contents(&post_removal, flox)?;
+        let (store_path, _) = self.transact_with_manifest(&post_removal, flox)?;
 
         Ok(UninstallationAttempt {
             new_manifest: Some(post_removal),
@@ -420,8 +448,7 @@ impl CoreEnvironment<ReadOnly> {
                 (None, migrated)
             };
 
-        let (store_path, new_lockfile) =
-            self.transact_with_manifest_contents(&migrated_manifest, flox)?;
+        let (store_path, new_lockfile) = self.transact_with_manifest(&migrated_manifest, flox)?;
 
         Ok(EditResult::Changed {
             old_lockfile: Box::new(old_lockfile),
@@ -791,7 +818,7 @@ impl CoreEnvironment<ReadOnly> {
 
     /// Attempt to transactionally replace the manifest contents
     #[must_use = "don't discard the store path of built environments"]
-    fn transact_with_manifest_contents(
+    fn transact_with_manifest(
         &mut self,
         manifest: &Manifest<Migrated>,
         flox: &Flox,
@@ -809,12 +836,23 @@ impl CoreEnvironment<ReadOnly> {
         );
         let mut temp_env = self.writable(&tempdir)?;
 
-        debug!("transaction: updating manifest");
-        let maybe_original_schema = manifest.as_writable_maybe_in_original_schema()?;
-        temp_env.update_manifest(&maybe_original_schema)?;
-
         debug!("transaction: locking environment");
-        let lockfile = temp_env.lock(flox)?.into();
+        let existing_lockfile = temp_env.existing_lockfile()?;
+        let mut lockfile: Lockfile = temp_env
+            .lock_without_writing(flox, manifest, existing_lockfile.as_ref())?
+            .into();
+
+        debug!("transaction: ensuring manifest schemas match");
+        if lockfile.manifest.get_schema_version() != manifest.original_schema()
+            && let Some(compose) = lockfile.compose.as_mut()
+        {
+            compose.composer = manifest.as_migrated_typed_only().as_typed_only();
+        }
+
+        debug!("transaction: writing manifest and lockfile");
+        let writable_manifest =
+            manifest.as_writable_maybe_in_original_schema_with_lockfile(Some(&lockfile))?;
+        temp_env.write_manifest_lockfile_pair(&writable_manifest, &lockfile)?;
 
         debug!("transaction: building environment");
         let store_path = temp_env.build(flox)?;
@@ -846,7 +884,7 @@ impl CoreEnvironment<ReadOnly> {
         let mut temp_env = self.writable(&tempdir)?;
 
         debug!("transaction: updating lockfile");
-        temp_env.update_lockfile(&lockfile_contents)?;
+        temp_env.update_lockfile_with_contents(&lockfile_contents)?;
 
         debug!("transaction: building environment");
         let store_path = temp_env.build(flox)?;
@@ -873,12 +911,37 @@ impl CoreEnvironment<ReadWrite> {
     }
 
     /// Updates the environment lockfile with the provided contents
-    fn update_lockfile(&mut self, contents: impl AsRef<str>) -> Result<(), CoreEnvironmentError> {
+    fn update_lockfile_with_contents(
+        &mut self,
+        contents: impl AsRef<str>,
+    ) -> Result<(), CoreEnvironmentError> {
         debug!("writing lockfile to {}", self.lockfile_path().display());
         let mut contents_with_newline = contents.as_ref().to_string();
         contents_with_newline.push('\n');
         std::fs::write(self.lockfile_path(), contents_with_newline)
             .map_err(CoreEnvironmentError::WriteLockfile)?;
+        Ok(())
+    }
+
+    /// Updates the environment lockfile with the provided contents
+    fn update_lockfile(&mut self, lockfile: &Lockfile) -> Result<(), CoreEnvironmentError> {
+        debug!("writing lockfile to {}", self.lockfile_path().display());
+        let mut contents =
+            serde_json::to_string_pretty(lockfile).expect("lockfile contents should be valid JSON");
+        contents.push('\n');
+        write_atomically(self.lockfile_path(), contents)
+            .map_err(CoreEnvironmentError::WriteLockfileAtomically)?;
+        Ok(())
+    }
+
+    fn write_manifest_lockfile_pair(
+        &mut self,
+        manifest: &Manifest<Writable>,
+        lockfile: &Lockfile,
+    ) -> Result<(), CoreEnvironmentError> {
+        self.update_manifest(manifest)?;
+        self.update_lockfile(lockfile)?;
+
         Ok(())
     }
 }
@@ -1699,7 +1762,7 @@ mod tests {
             .get_mut("bad")
             .unwrap()
             .shutdown = None;
-        let res = env.transact_with_manifest_contents(&manifest, &flox);
+        let res = env.transact_with_manifest(&manifest, &flox);
         assert!(matches!(
             res,
             Err(EnvironmentError::ManifestError(

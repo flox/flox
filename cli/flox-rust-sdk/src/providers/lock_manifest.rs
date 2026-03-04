@@ -330,14 +330,18 @@ impl LockManifest {
     }
 
     /// Lock, upgrading the specified included environments if to_upgrade is
-    /// Some
+    /// Some.
+    ///
+    /// When the merged and locked manifest is backwards compatible, the
+    /// `.manifest` and `.compose.composer` manifests will both be in the
+    /// manifest's original schema, otherwise those fields will be in the
+    /// latest schema. This is to say that the backwards compatibility
+    /// test is done during this locking process.
     ///
     /// If to_upgrade is an empty vector, all included environments are
     /// re-fetched.
     /// If to_upgrade is None, only included environments not in the seed lockfile
     /// are fetched.
-    ///
-    /// Ensures that the schema versions of `.manifest` and `.compose.composer` match.
     pub async fn lock_manifest_with_include_upgrades(
         flox: &Flox,
         manifest: &Manifest<MigratedTypedOnly>,

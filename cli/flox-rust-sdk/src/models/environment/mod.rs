@@ -1329,17 +1329,21 @@ mod test {
 }
 
 #[cfg(test)]
-mod migration_composition_tests {
+mod migration_tests {
     use expect_test::expect;
     use flox_manifest::interfaces::{AsWritableManifest, SchemaVersion, WriteManifest};
     use flox_manifest::parsed::common::KnownSchemaVersion;
+    use flox_manifest::raw::CatalogPackage;
     use flox_manifest::test_helpers::{with_latest_schema, with_schema};
     use flox_test_utils::GENERATED_DATA;
     use indoc::indoc;
 
     use super::*;
     use crate::flox::test_helpers::flox_instance;
-    use crate::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use crate::models::environment::path_environment::test_helpers::{
+        new_path_environment,
+        new_path_environment_in,
+    };
     use crate::providers::catalog::test_helpers::catalog_replay_client;
 
     /// Set up an included PathEnvironment with the given manifest contents,
@@ -1550,5 +1554,37 @@ mod migration_composition_tests {
         // The composer's manifest should now be migrated to v1.10.0.
         let manifest = composer.pre_migration_manifest(&flox).unwrap();
         assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::latest());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn v1_manifest_doesnt_migrate_when_hello_is_installed() {
+        let (mut flox, _tempdir) = flox_instance();
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+        let mut env = new_path_environment(&flox, "version = 1");
+        _ = env.lockfile(&flox).unwrap(); // make sure a lockfile exists
+        assert_eq!(
+            env.pre_migration_manifest(&flox)
+                .unwrap()
+                .get_schema_version(),
+            KnownSchemaVersion::V1
+        );
+        env.install(
+            &[PackageToInstall::Catalog(CatalogPackage {
+                id: "hello".into(),
+                pkg_path: "hello".into(),
+                version: None,
+                systems: None,
+                outputs: None,
+            })],
+            &flox,
+        )
+        .unwrap();
+        assert_eq!(
+            env.pre_migration_manifest(&flox)
+                .unwrap()
+                .get_schema_version(),
+            KnownSchemaVersion::V1
+        );
     }
 }
