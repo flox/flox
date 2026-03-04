@@ -19,6 +19,7 @@ indexmap.workspace = true
 indoc.workspace = true
 itertools.workspace = true
 jsonwebtoken.workspace = true
+nef-lock-catalog.workspace = true
 nix = { workspace = true, features = ["signal"] }
 pollster.workspace = true
 regex.workspace = true
