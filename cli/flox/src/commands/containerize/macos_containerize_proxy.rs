@@ -175,18 +175,11 @@ impl ContainerizeProxy {
             command.arg(flox_toml_mount);
         }
 
-        // Honour `FLOX_DISABLE_METRICS` if set. Aside from being set by the
-        // user, it may also be set at runtime by  [Flox::Commands::FloxArgs]
-        // from another config path like `/etc/flox.toml` which isn't mounted
-        // into the proxy container.
-        // TODO: it would be better to check config.flox.disable_metrics than
-        // FLOX_DISABLE_METRICS if we store config on Flox struct
-        // https://github.com/flox/flox/issues/1666
-        if let Ok(disable_metrics) = std::env::var(FLOX_DISABLE_METRICS_VAR) {
-            command.args([
-                "--env",
-                &format!("{}={}", FLOX_DISABLE_METRICS_VAR, disable_metrics),
-            ]);
+        // If metrics are disabled (no device UUID), propagate that into the
+        // proxy container. This covers both the env var and config file paths
+        // (e.g. /etc/flox.toml) that may not be mounted into the container.
+        if flox.metrics_device_uuid.is_none() {
+            command.args(["--env", &format!("{}=true", FLOX_DISABLE_METRICS_VAR)]);
         }
 
         // Propagate the host's nix substituters and trusted public keys into

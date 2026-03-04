@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::DeserializeFromStr;
 use thiserror::Error;
 use url::Url;
+use uuid::Uuid;
 
 use crate::data::FloxVersion;
 use crate::providers::{catalog, flake_installable_locker};
@@ -64,6 +65,10 @@ pub struct Flox {
     pub features: Features,
 
     pub verbosity: i32,
+
+    /// Device UUID for telemetry correlation.
+    /// None when metrics are disabled.
+    pub metrics_device_uuid: Option<Uuid>,
 }
 
 impl Flox {}
@@ -355,6 +360,7 @@ pub mod test_helpers {
             installable_locker: InstallableLockerImpl::Mock(InstallableLockerMock::new()),
             features: Default::default(),
             verbosity: 0,
+            metrics_device_uuid: None,
         };
 
         (flox, tempdir_handle)

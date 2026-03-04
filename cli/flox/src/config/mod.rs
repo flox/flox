@@ -44,6 +44,7 @@ pub struct Config {
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct FloxConfig {
     /// Disable collecting and sending usage metrics
+    /// Prefer `Flox.metrics_device_uuid.is_some()` if both are available.
     #[serde(default)]
     pub disable_metrics: bool,
     /// Directory where flox should store ephemeral data (default:
