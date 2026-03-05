@@ -11,6 +11,7 @@ use chrono::{DateTime, Utc};
 use thiserror::Error;
 use tracing::{debug, warn};
 
+use crate::flox::FLOX_VERSION;
 use crate::utils::CommandExt;
 
 // This is the full /path/to/bin/git that we actually use.
@@ -220,9 +221,13 @@ pub struct GitCommandOptions {
 impl Default for GitCommandOptions {
     /// By default, use the git binary bundled with flox
     fn default() -> Self {
+        let config = BTreeMap::from([(
+            "http.userAgent".to_string(),
+            format!("flox-cli/{}", &*FLOX_VERSION),
+        )]);
         Self {
             exe: GIT_BIN.to_string(),
-            config: Default::default(),
+            config,
             envs: Default::default(),
             extra_http_headers: Default::default(),
         }

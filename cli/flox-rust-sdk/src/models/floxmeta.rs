@@ -284,6 +284,7 @@ mod header_tests {
     use uuid::Uuid;
 
     use super::*;
+    use crate::flox::FLOX_VERSION;
 
     /// Issue a git clone against the mock server using the given options.
     /// The mock returns 403, so git stops after one request. We assert the
@@ -311,7 +312,8 @@ mod header_tests {
 
             let mock = server.mock(|when, then| {
                 when.header(HEADER_DEVICE_UUID, uuid.to_string())
-                    .header_includes(HEADER_INVOCATION_SOURCE, source);
+                    .header_includes(HEADER_INVOCATION_SOURCE, source)
+                    .header("user-agent", format!("flox-cli/{}", &*FLOX_VERSION));
                 then.status(403);
             });
 
@@ -332,7 +334,8 @@ mod header_tests {
 
             let mock = server.mock(|when, then| {
                 when.header_missing(HEADER_DEVICE_UUID)
-                    .header_includes(HEADER_INVOCATION_SOURCE, source);
+                    .header_includes(HEADER_INVOCATION_SOURCE, source)
+                    .header("user-agent", format!("flox-cli/{}", &*FLOX_VERSION));
                 then.status(403);
             });
 
