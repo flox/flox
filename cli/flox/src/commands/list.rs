@@ -213,11 +213,18 @@ impl List {
                 PackageToList::Flake(_, p) => &p.install_id,
                 PackageToList::StorePath(p) => &p.install_id,
             };
-            let upgrade_available = if upgrades
-                .as_ref()
-                .is_some_and(|diff| diff.contains_key(install_id))
-            {
-                " - upgrade available"
+            let upgrade_label = if let Some(diff) = upgrades.as_ref() {
+                if let Some((before, after)) = diff.get(install_id) {
+                    let old_ver = before.version().unwrap_or("unknown");
+                    let new_ver = after.version().unwrap_or("unknown");
+                    if old_ver != new_ver {
+                        " - version upgrade available"
+                    } else {
+                        " - source update available"
+                    }
+                } else {
+                    ""
+                }
             } else {
                 ""
             };
@@ -226,7 +233,7 @@ impl List {
                 PackageToList::Catalog(descriptor, p) => {
                     writeln!(
                         &mut out,
-                        "{id}: {path} ({version}{upgrade_available})",
+                        "{id}: {path} ({version}{upgrade_label})",
                         id = p.install_id,
                         path = descriptor.pkg_path,
                         version = p.version,
@@ -235,7 +242,7 @@ impl List {
                 PackageToList::Flake(descriptor, locked_package) => {
                     writeln!(
                         &mut out,
-                        "{id}: {flake}{upgrade_available}",
+                        "{id}: {flake}{upgrade_label}",
                         id = locked_package.install_id,
                         flake = descriptor.flake
                     )?;
@@ -275,11 +282,18 @@ impl List {
                 PackageToList::Flake(_, p) => &p.install_id,
                 PackageToList::StorePath(p) => &p.install_id,
             };
-            let upgrade_available = if upgrades
-                .as_ref()
-                .is_some_and(|diff| diff.contains_key(install_id))
-            {
-                " (upgrade available)"
+            let upgrade_label = if let Some(diff) = upgrades.as_ref() {
+                if let Some((before, after)) = diff.get(install_id) {
+                    let old_ver = before.version().unwrap_or("unknown");
+                    let new_ver = after.version().unwrap_or("unknown");
+                    if old_ver != new_ver {
+                        " (version upgrade available)"
+                    } else {
+                        " (source update available)"
+                    }
+                } else {
+                    ""
+                }
             } else {
                 ""
             };
@@ -289,7 +303,7 @@ impl List {
                     let outputs_lines = format_outputs_lines(package, show_outputs);
 
                     formatdoc! {"
-                        {name}:{upgrade_available}
+                        {name}:{upgrade_label}
                           Description:          {description}
                           Package Path:         {attr_path}
                           Package Name:         {pname}
@@ -339,7 +353,7 @@ impl List {
                     let outputs_lines = format_outputs_lines(package, show_outputs);
 
                     formatdoc! {"
-                    {install_id}:{upgrade_available}
+                    {install_id}:{upgrade_label}
                       Description:          {description}
                       Locked URL:           {locked_url}
                       Flake attribute:      {locked_flake_attr_path}
@@ -573,7 +587,7 @@ mod tests {
             pip_install_id: python3Packages.pip (N/A)
         "});
     }
-    /// If packages have upgrades available, the output should indicate that
+    /// If packages have version upgrades available, the output should indicate "version upgrade"
     #[test]
     fn test_print_extended_includes_upgrade_indicator() {
         let mut out = Vec::new();
@@ -596,7 +610,36 @@ mod tests {
         List::print_extended(&mut out, &packages, Some(upgrades)).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
-            pip_install_id: python3Packages.pip (20.3.4 - upgrade available)
+            pip_install_id: python3Packages.pip (20.3.4 - version upgrade available)
+            python_install_id: python3Packages.python (3.9.5)
+        "});
+    }
+
+    /// If packages have source updates (same version), the output should indicate "source update"
+    #[test]
+    fn test_print_extended_includes_source_update_indicator() {
+        let mut out = Vec::new();
+
+        let mut packages = test_packages();
+        let PackageToList::Catalog(_, ref mut pip_lock) = packages[0] else {
+            unreachable!()
+        };
+        // Same version but source changed (e.g., different rev_count)
+        let mut pip_lock_source_updated = pip_lock.clone();
+        pip_lock_source_updated.rev_count = 999;
+
+        let upgrades = SingleSystemUpgradeDiff::from_iter(vec![(
+            "pip_install_id".to_string(),
+            (
+                LockedPackage::Catalog(pip_lock.clone()),
+                LockedPackage::Catalog(pip_lock_source_updated),
+            ),
+        )]);
+
+        List::print_extended(&mut out, &packages, Some(upgrades)).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out, indoc! {"
+            pip_install_id: python3Packages.pip (20.3.4 - source update available)
             python_install_id: python3Packages.python (3.9.5)
         "});
     }
@@ -807,7 +850,7 @@ mod tests {
         "})
     }
 
-    /// If packages have upgrades available, the output should indicate that
+    /// If packages have version upgrades available, the output should indicate "version upgrade"
     #[test]
     fn test_print_detail_includes_upgrade_indicator() {
         let mut out = Vec::new();
@@ -830,7 +873,57 @@ mod tests {
         List::print_detail(&mut out, &packages, Some(upgrades), true).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
-            pip_install_id: (upgrade available)
+            pip_install_id: (version upgrade available)
+              Description:          Python package installer
+              Package Path:         python3Packages.pip
+              Package Name:         pip
+              Priority:             100
+              Version:              20.3.4
+              License:              MIT
+              Unfree:               true
+              Broken:               false
+              Available Outputs:    [ ]
+              Installed Outputs:    [ ]
+
+            python_install_id:
+              Description:          Python interpreter
+              Package Path:         python3Packages.python
+              Package Name:         python
+              Priority:             200
+              Version:              3.9.5
+              License:              PSF
+              Unfree:               false
+              Broken:               false
+              Available Outputs:    [ ]
+              Installed Outputs:    [ ]
+        "});
+    }
+
+    /// If packages have source updates (same version), the output should indicate "source update"
+    #[test]
+    fn test_print_detail_includes_source_update_indicator() {
+        let mut out = Vec::new();
+
+        let mut packages = test_packages();
+        let PackageToList::Catalog(_, ref mut pip_lock) = packages[0] else {
+            unreachable!()
+        };
+        // Same version but source changed
+        let mut pip_lock_source_updated = pip_lock.clone();
+        pip_lock_source_updated.rev_count = 999;
+
+        let upgrades = SingleSystemUpgradeDiff::from_iter(vec![(
+            "pip_install_id".to_string(),
+            (
+                LockedPackage::Catalog(pip_lock.clone()),
+                LockedPackage::Catalog(pip_lock_source_updated),
+            ),
+        )]);
+
+        List::print_detail(&mut out, &packages, Some(upgrades), true).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out, indoc! {"
+            pip_install_id: (source update available)
               Description:          Python package installer
               Package Path:         python3Packages.pip
               Package Name:         pip
