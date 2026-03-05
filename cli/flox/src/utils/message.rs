@@ -3,10 +3,11 @@ use std::fmt::Display;
 use std::io::Write;
 
 use crossterm::style::Stylize;
+use flox_core::data::System;
 use flox_core::util::message::{format_error, format_updated};
 pub use flox_core::util::message::{stderr_supports_color, stdout_supports_color};
 use flox_manifest::compose::{COMPOSER_MANIFEST_ID, Warning};
-use flox_manifest::lockfile::Lockfile;
+use flox_manifest::lockfile::{LockedPackage, Lockfile, PackageOutputs};
 use flox_manifest::raw::PackageToInstall;
 use indoc::formatdoc;
 use minus::{ExitStrategy, Pager, page_all};
@@ -156,6 +157,53 @@ pub(crate) fn packages_already_installed(pkgs: &[PackageToInstall], environment_
     };
     if let Some(msg) = already_installed_msg {
         warning(msg)
+    }
+}
+
+pub(crate) fn packages_with_additional_outputs(
+    install_ids_of_new_pkgs: &[String],
+    lockfile: &Lockfile,
+    current_system: &System,
+) {
+    let mut pkgs_with_additional_outputs = vec![];
+    let pkgs = lockfile.packages.as_slice();
+    // Yes this is n^2, but n is small
+    for install_id in install_ids_of_new_pkgs.iter() {
+        for pkg in pkgs.iter() {
+            if (pkg.install_id() == install_id) && (pkg.system() == current_system) {
+                match pkg {
+                    LockedPackage::Catalog(locked) => {
+                        let maybe_matched = locked.outputs_match_outputs_to_install();
+                        if maybe_matched.is_some_and(|matched| !matched) {
+                            pkgs_with_additional_outputs.push(install_id);
+                        }
+                    },
+                    LockedPackage::Flake(locked) => {
+                        let maybe_matched = locked.outputs_match_outputs_to_install();
+                        if maybe_matched.is_some_and(|matched| !matched) {
+                            pkgs_with_additional_outputs.push(install_id);
+                        }
+                    },
+                    _ => {},
+                }
+            }
+        }
+    }
+    let maybe_msg = match pkgs_with_additional_outputs.as_slice() {
+        [] => None,
+        [pkg] => Some(format!(
+            "'{pkg}' has additional outputs, use 'flox list -a' to see more"
+        )),
+        pkgs => {
+            let joined = pkgs.iter().map(|p| format!("'{}'", p)).collect::<Vec<_>>();
+            let joined = joined.join(", ");
+            Some(format!(
+                "{joined} have additional outputs, use 'flox list -a' to see more"
+            ))
+        },
+    };
+    if let Some(msg) = maybe_msg {
+        info(msg)
     }
 }
 
