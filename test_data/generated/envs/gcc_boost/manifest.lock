@@ -16,28 +16,28 @@
     {
       "attr_path": "boost",
       "broken": false,
-      "derivation": "/nix/store/8aapcfvnil25faa0b2xyywr687ym94r1-boost-1.87.0.drv",
+      "derivation": "/nix/store/cgbb37i4cmv20nxi3hliz372qkw7pnh3-boost-1.89.0.drv",
       "description": "Collection of C++ libraries",
       "install_id": "boost",
       "license": "BSL-1.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=d6c71932130818840fc8fe9509cf50be8c64634f",
-      "name": "boost-1.87.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=8c809a146a140c5c8806f13399592dbcb1bb5dc4",
+      "name": "boost-1.89.0",
       "pname": "boost",
-      "rev": "d6c71932130818840fc8fe9509cf50be8c64634f",
-      "rev_count": 942779,
-      "rev_date": "2026-02-08T14:52:16Z",
-      "scrape_date": "2026-02-09T04:38:28.246638Z",
+      "rev": "8c809a146a140c5c8806f13399592dbcb1bb5dc4",
+      "rev_count": 957538,
+      "rev_date": "2026-03-03T12:59:14Z",
+      "scrape_date": "2026-03-04T04:39:37.057166Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "1.87.0",
+      "version": "1.89.0",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "dev": "/nix/store/0989pkymnf7b0g4gdyk55c35dn2czgwl-boost-1.87.0-dev",
-        "out": "/nix/store/1cp6969qhn49c2vi81mjlj8jnx3s07ys-boost-1.87.0"
+        "dev": "/nix/store/vxy353g9mylaw8b4fw3cs56mq5g1pn6c-boost-1.89.0-dev",
+        "out": "/nix/store/6pk9qg1m1bpppd1b4mimzlw2x7jk0lv2-boost-1.89.0"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -46,29 +46,29 @@
     {
       "attr_path": "boost",
       "broken": false,
-      "derivation": "/nix/store/g6dy297wy47f2s5ccyj17f32v9bmddzg-boost-1.87.0.drv",
+      "derivation": "/nix/store/rjgaf0azmk3hffqvsbdcq4g8r91c8dyy-boost-1.89.0.drv",
       "description": "Collection of C++ libraries",
       "install_id": "boost",
       "license": "BSL-1.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=d6c71932130818840fc8fe9509cf50be8c64634f",
-      "name": "boost-1.87.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=8c809a146a140c5c8806f13399592dbcb1bb5dc4",
+      "name": "boost-1.89.0",
       "pname": "boost",
-      "rev": "d6c71932130818840fc8fe9509cf50be8c64634f",
-      "rev_count": 942779,
-      "rev_date": "2026-02-08T14:52:16Z",
-      "scrape_date": "2026-02-09T05:10:35.476920Z",
+      "rev": "8c809a146a140c5c8806f13399592dbcb1bb5dc4",
+      "rev_count": 957538,
+      "rev_date": "2026-03-03T12:59:14Z",
+      "scrape_date": "2026-03-04T05:09:48.496622Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "1.87.0",
+      "version": "1.89.0",
       "outputs_to_install": [
         "out",
         "out"
       ],
       "outputs": {
-        "dev": "/nix/store/w7yq95ddf13yqyd7khz37gd1ggy47dw2-boost-1.87.0-dev",
-        "out": "/nix/store/3h7qnh3w7lcajz80fprwvp503cmlafh7-boost-1.87.0"
+        "dev": "/nix/store/a1wis5hpvics9crgjk7d3j4jfmwx46vs-boost-1.89.0-dev",
+        "out": "/nix/store/lh5sa7rzhl9x9chqzk42djn6bylqwdp6-boost-1.89.0"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -77,28 +77,28 @@
     {
       "attr_path": "boost",
       "broken": false,
-      "derivation": "/nix/store/fzx7m4pbw65g1h2dwn9qrxh84n82ggff-boost-1.87.0.drv",
+      "derivation": "/nix/store/cpz0scvzwwx3l10l45vw3admpmcinjyx-boost-1.89.0.drv",
       "description": "Collection of C++ libraries",
       "install_id": "boost",
       "license": "BSL-1.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=d6c71932130818840fc8fe9509cf50be8c64634f",
-      "name": "boost-1.87.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=8c809a146a140c5c8806f13399592dbcb1bb5dc4",
+      "name": "boost-1.89.0",
       "pname": "boost",
-      "rev": "d6c71932130818840fc8fe9509cf50be8c64634f",
-      "rev_count": 942779,
-      "rev_date": "2026-02-08T14:52:16Z",
-      "scrape_date": "2026-02-09T05:44:13.442224Z",
+      "rev": "8c809a146a140c5c8806f13399592dbcb1bb5dc4",
+      "rev_count": 957538,
+      "rev_date": "2026-03-03T12:59:14Z",
+      "scrape_date": "2026-03-04T05:38:32.073883Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "1.87.0",
+      "version": "1.89.0",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "dev": "/nix/store/9x24bz4hbbdg95g6bjylg0c4nk5l015k-boost-1.87.0-dev",
-        "out": "/nix/store/yvlw2q07alcpqsyqk4wxf3llchri5zbd-boost-1.87.0"
+        "dev": "/nix/store/bi6wh1pf7sfy9f0pq59ngsh5g4v4hsmw-boost-1.89.0-dev",
+        "out": "/nix/store/081zagcw2rd49zyfcdlmcf0rxqxn008i-boost-1.89.0"
       },
       "system": "x86_64-darwin",
       "group": "toplevel",
@@ -107,29 +107,29 @@
     {
       "attr_path": "boost",
       "broken": false,
-      "derivation": "/nix/store/vc6695s94gcn5393n4jjhki85wzf3bch-boost-1.87.0.drv",
+      "derivation": "/nix/store/vkhj13dryjiz42rfm9w8wyh1292srlcw-boost-1.89.0.drv",
       "description": "Collection of C++ libraries",
       "install_id": "boost",
       "license": "BSL-1.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=d6c71932130818840fc8fe9509cf50be8c64634f",
-      "name": "boost-1.87.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=8c809a146a140c5c8806f13399592dbcb1bb5dc4",
+      "name": "boost-1.89.0",
       "pname": "boost",
-      "rev": "d6c71932130818840fc8fe9509cf50be8c64634f",
-      "rev_count": 942779,
-      "rev_date": "2026-02-08T14:52:16Z",
-      "scrape_date": "2026-02-09T06:20:16.163303Z",
+      "rev": "8c809a146a140c5c8806f13399592dbcb1bb5dc4",
+      "rev_count": 957538,
+      "rev_date": "2026-03-03T12:59:14Z",
+      "scrape_date": "2026-03-04T06:12:08.988418Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "1.87.0",
+      "version": "1.89.0",
       "outputs_to_install": [
         "out",
         "out"
       ],
       "outputs": {
-        "dev": "/nix/store/074p1j77fjfk52951r6x3l4kq2i62p67-boost-1.87.0-dev",
-        "out": "/nix/store/2izjh733byjickw9719nnkckxd63ghpm-boost-1.87.0"
+        "dev": "/nix/store/adv73gqmglkg48w5ql70s778ba6wpbs4-boost-1.89.0-dev",
+        "out": "/nix/store/wrwzn9h21jzg24dilb15wsh0010idkk6-boost-1.89.0"
       },
       "system": "x86_64-linux",
       "group": "toplevel",
@@ -138,17 +138,17 @@
     {
       "attr_path": "gcc",
       "broken": false,
-      "derivation": "/nix/store/g85mgqp82xzpvd9yy1sbvn3kpakn0j0r-gcc-wrapper-15.2.0.drv",
+      "derivation": "/nix/store/5dclnins9jkvhxffsw72i9b1dgxp1768-gcc-wrapper-15.2.0.drv",
       "description": "GNU Compiler Collection, version 15.2.0 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=d6c71932130818840fc8fe9509cf50be8c64634f",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=8c809a146a140c5c8806f13399592dbcb1bb5dc4",
       "name": "gcc-wrapper-15.2.0",
       "pname": "gcc",
-      "rev": "d6c71932130818840fc8fe9509cf50be8c64634f",
-      "rev_count": 942779,
-      "rev_date": "2026-02-08T14:52:16Z",
-      "scrape_date": "2026-02-09T04:38:29.239933Z",
+      "rev": "8c809a146a140c5c8806f13399592dbcb1bb5dc4",
+      "rev_count": 957538,
+      "rev_date": "2026-03-03T12:59:14Z",
+      "scrape_date": "2026-03-04T04:39:38.088271Z",
       "stabilities": [
         "unstable"
       ],
@@ -159,9 +159,9 @@
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/4grmw25w5vddbzfzsf2fx2d3abs9axlv-gcc-wrapper-15.2.0-info",
-        "man": "/nix/store/sbyrswi6n263imfw4n474k97qlkc9fp4-gcc-wrapper-15.2.0-man",
-        "out": "/nix/store/ma96zyr88min916scxhygvw7w99jrflz-gcc-wrapper-15.2.0"
+        "info": "/nix/store/2lckjqhqbpzv4m6qycsyirzvcgkqwi62-gcc-wrapper-15.2.0-info",
+        "man": "/nix/store/x3jrq5zaj6f8m2zk96m2r9bk61dcgw7l-gcc-wrapper-15.2.0-man",
+        "out": "/nix/store/ljjhqql9gdv64pwn08cmmkzjpkwkkgmc-gcc-wrapper-15.2.0"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -170,17 +170,17 @@
     {
       "attr_path": "gcc",
       "broken": false,
-      "derivation": "/nix/store/zmxacly8fqqzsy7s85v50f0l5fq26hps-gcc-wrapper-15.2.0.drv",
+      "derivation": "/nix/store/rwb9v0myg18sx7fn003h1ymla7fd4yay-gcc-wrapper-15.2.0.drv",
       "description": "GNU Compiler Collection, version 15.2.0 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=d6c71932130818840fc8fe9509cf50be8c64634f",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=8c809a146a140c5c8806f13399592dbcb1bb5dc4",
       "name": "gcc-wrapper-15.2.0",
       "pname": "gcc",
-      "rev": "d6c71932130818840fc8fe9509cf50be8c64634f",
-      "rev_count": 942779,
-      "rev_date": "2026-02-08T14:52:16Z",
-      "scrape_date": "2026-02-09T05:10:36.886079Z",
+      "rev": "8c809a146a140c5c8806f13399592dbcb1bb5dc4",
+      "rev_count": 957538,
+      "rev_date": "2026-03-03T12:59:14Z",
+      "scrape_date": "2026-03-04T05:09:49.996527Z",
       "stabilities": [
         "unstable"
       ],
@@ -192,9 +192,9 @@
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/s6bajs6f0safjv6yfqawxw23dcbnc0c5-gcc-wrapper-15.2.0-info",
-        "man": "/nix/store/ww5vd3zhxa9dfkxdyyfd69pvq3nivfz1-gcc-wrapper-15.2.0-man",
-        "out": "/nix/store/2l6z5aiys7mpsacdm1ikiafijr30g2fg-gcc-wrapper-15.2.0"
+        "info": "/nix/store/0ps642kc7j7wg0bz3hb978plg16xfi7n-gcc-wrapper-15.2.0-info",
+        "man": "/nix/store/y50lsbpbiy4wg5ccbbb68rabs2n3m69b-gcc-wrapper-15.2.0-man",
+        "out": "/nix/store/6hazq450ci6m382yq4ym8a6mbiv9mfsk-gcc-wrapper-15.2.0"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -203,17 +203,17 @@
     {
       "attr_path": "gcc",
       "broken": false,
-      "derivation": "/nix/store/3b7zxpk0ak9mkpdzvmrwlvjprn6y62rv-gcc-wrapper-15.2.0.drv",
+      "derivation": "/nix/store/fczb95p9z7060rnyn6lvnlcawqhb9xx9-gcc-wrapper-15.2.0.drv",
       "description": "GNU Compiler Collection, version 15.2.0 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=d6c71932130818840fc8fe9509cf50be8c64634f",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=8c809a146a140c5c8806f13399592dbcb1bb5dc4",
       "name": "gcc-wrapper-15.2.0",
       "pname": "gcc",
-      "rev": "d6c71932130818840fc8fe9509cf50be8c64634f",
-      "rev_count": 942779,
-      "rev_date": "2026-02-08T14:52:16Z",
-      "scrape_date": "2026-02-09T05:44:14.407703Z",
+      "rev": "8c809a146a140c5c8806f13399592dbcb1bb5dc4",
+      "rev_count": 957538,
+      "rev_date": "2026-03-03T12:59:14Z",
+      "scrape_date": "2026-03-04T05:38:33.018116Z",
       "stabilities": [
         "unstable"
       ],
@@ -224,9 +224,9 @@
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/0x2vvydxchpdb6jb7f6qx1ml2a2xp4bw-gcc-wrapper-15.2.0-info",
-        "man": "/nix/store/jh1kv1kz9xl3s389cakcgv63mbwaz3ri-gcc-wrapper-15.2.0-man",
-        "out": "/nix/store/pia0yz6p1g201qsmn43lp69qzj89wp2d-gcc-wrapper-15.2.0"
+        "info": "/nix/store/a0c8viyq35k1lzx4w1g76kcxsjra5d9h-gcc-wrapper-15.2.0-info",
+        "man": "/nix/store/gln5ld8gg6xfaczzyi84r586pwax8qz5-gcc-wrapper-15.2.0-man",
+        "out": "/nix/store/adhxk22r0v0jsm26z0hfrzznwix7l491-gcc-wrapper-15.2.0"
       },
       "system": "x86_64-darwin",
       "group": "toplevel",
@@ -235,17 +235,17 @@
     {
       "attr_path": "gcc",
       "broken": false,
-      "derivation": "/nix/store/ilxab5sggh9gxs5f36w9inhzhsr20pya-gcc-wrapper-15.2.0.drv",
+      "derivation": "/nix/store/l8kjykqqnkh48cxjhz1p9wh53mb65dpf-gcc-wrapper-15.2.0.drv",
       "description": "GNU Compiler Collection, version 15.2.0 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=d6c71932130818840fc8fe9509cf50be8c64634f",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=8c809a146a140c5c8806f13399592dbcb1bb5dc4",
       "name": "gcc-wrapper-15.2.0",
       "pname": "gcc",
-      "rev": "d6c71932130818840fc8fe9509cf50be8c64634f",
-      "rev_count": 942779,
-      "rev_date": "2026-02-08T14:52:16Z",
-      "scrape_date": "2026-02-09T06:20:17.829816Z",
+      "rev": "8c809a146a140c5c8806f13399592dbcb1bb5dc4",
+      "rev_count": 957538,
+      "rev_date": "2026-03-03T12:59:14Z",
+      "scrape_date": "2026-03-04T06:12:10.573514Z",
       "stabilities": [
         "unstable"
       ],
@@ -253,15 +253,13 @@
       "version": "15.2.0",
       "outputs_to_install": [
         "man",
-        "man",
-        "out",
         "out",
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/m1x7c684wrcyic4jbijyadapnm7zj33q-gcc-wrapper-15.2.0-info",
-        "man": "/nix/store/578hg40df89239rl4921nb3gdfjnm82c-gcc-wrapper-15.2.0-man",
-        "out": "/nix/store/a245z3cvf9x9sn0xlk6k8j9xhxbhda1z-gcc-wrapper-15.2.0"
+        "info": "/nix/store/mj78x8b2vp0q9j6xf7bmvinn3m2csfhp-gcc-wrapper-15.2.0-info",
+        "man": "/nix/store/crcj0frpw4i8shmfwgyfx9fsqklf2iq5-gcc-wrapper-15.2.0-man",
+        "out": "/nix/store/kbw2j1vag664b3sj3rjwz9v53cqx87sb-gcc-wrapper-15.2.0"
       },
       "system": "x86_64-linux",
       "group": "toplevel",

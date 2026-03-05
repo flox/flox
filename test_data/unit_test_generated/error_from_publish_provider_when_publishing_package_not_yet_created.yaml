@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Mon, 25 Aug 2025 16:16:03 GMT
+    value: Mon, 09 Mar 2026 18:41:10 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -23,7 +23,7 @@ then:
   status: 404
   header:
   - name: date
-    value: Mon, 25 Aug 2025 16:16:03 GMT
+    value: Mon, 09 Mar 2026 18:41:10 GMT
   - name: server
     value: uvicorn
   - name: content-length
