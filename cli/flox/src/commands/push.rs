@@ -21,7 +21,7 @@ use indoc::formatdoc;
 use tracing::{debug, instrument};
 
 use crate::commands::{EnvironmentSelect, ensure_floxhub_token, environment_select};
-use crate::subcommand_metric;
+use crate::environment_subcommand_metric;
 use crate::utils::errors::format_core_error;
 use crate::utils::message;
 
@@ -51,8 +51,6 @@ pub struct Push {
 impl Push {
     #[instrument(name = "push", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
-        subcommand_metric!("push");
-
         // Ensure the user is logged in for the following remote operations
         ensure_floxhub_token(&mut flox).await?;
 
@@ -81,6 +79,8 @@ impl Push {
         let env = self
             .environment
             .detect_concrete_environment(&flox, "Push")?;
+
+        environment_subcommand_metric!("push", env);
 
         match (env, self.owner) {
             (ConcreteEnvironment::Managed(managed_environment), Some(owner)) => {
