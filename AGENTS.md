@@ -62,7 +62,7 @@ just test-cli                  # CLI tests only (impure + integration)
 just unit-tests                # Unit tests
 just impure-tests              # Unit tests with extra-tests feature
 just integ-tests               # Integration tests (bats)
-just unit-tests regex="test_name"     # Run specific unit test
+just unit-tests "test_name"           # Run specific unit test
 just integ-tests usage.bats                       # Run specific integration test file
 just integ-tests -- --filter-tags tag             # Run integration tests by tag
 just integ-tests -- --filter regex                # Run integration tests by name
