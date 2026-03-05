@@ -35,7 +35,7 @@ use super::publish::CheckedEnvironmentMetadata;
 use crate::data::System;
 use crate::flox::{FLOX_VERSION, Flox};
 use crate::models::search::{PackageDetails, ResultCount, SearchLimit, SearchResults};
-use crate::utils::INVOCATION_SOURCES;
+use crate::utils::{HEADER_INVOCATION_SOURCE, INVOCATION_SOURCES};
 
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
 pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
@@ -373,7 +373,7 @@ impl CatalogClient {
         if !INVOCATION_SOURCES.is_empty() {
             let sources_str = INVOCATION_SOURCES.join(",");
             header_map.insert(
-                header::HeaderName::from_static("flox-invocation-source"),
+                header::HeaderName::from_static(HEADER_INVOCATION_SOURCE),
                 header::HeaderValue::from_str(&sources_str)
                     .expect("invocation sources should only contain ASCII-safe characters"),
             );

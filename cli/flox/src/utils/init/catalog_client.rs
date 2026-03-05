@@ -10,6 +10,7 @@ use flox_rust_sdk::providers::catalog::{
     FLOX_CATALOG_DUMP_DATA_VAR,
     FLOX_CATALOG_MOCK_DATA_VAR,
 };
+use flox_rust_sdk::utils::HEADER_DEVICE_UUID;
 use tracing::debug;
 use uuid::Uuid;
 
@@ -25,7 +26,7 @@ pub fn init_catalog_client(
 ) -> Result<Client, anyhow::Error> {
     // Propagate the metrics UUID to catalog-server if metrics are enabled.
     let extra_headers = match metrics_device_uuid {
-        Some(uuid) => BTreeMap::from([("flox-device-uuid".to_string(), uuid.to_string())]),
+        Some(uuid) => BTreeMap::from([(HEADER_DEVICE_UUID.to_string(), uuid.to_string())]),
         None => Default::default(),
     };
 
