@@ -2,25 +2,28 @@
   {
     "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTksImh0dHBzOi8vZmxveC5kZXYvaGFuZGxlIjoidGVzdDEifQ.FFOGO7ZFov7139oNFr1QqqbJxBpkE1pZ0VYnzCDMo_Q",
     "handle": "test1",
-    "roles": {"flox": ["Owner"],
-              "publish_tests_read_write": ["Reader", "Writer"] ,
-              "publish_tests_read_only": ["Reader"],
-              "nixpkgs": ["Writer"]
-            }
+    "roles": {
+      "flox": ["Owner"],
+      "publish_tests_read_write": ["Reader", "Writer"],
+      "publish_tests_read_only": ["Reader"],
+      "nixpkgs": ["Writer"]
+    }
   },
   {
     "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTksImh0dHBzOi8vZmxveC5kZXYvaGFuZGxlIjoidGVzdF91c2VyX25vX2NhdGFsb2dzIn0.XoajLiSMhn5cU4O-aCCFm8jq9jRHNK4JfLiOocOBrRM",
     "handle": "test_user_no_catalogs",
-    "roles": {  }
+    "roles": {
+      "test_cli_creates_new_catalog": ["Reader", "Writer"]
+    }
   },
   {
     "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTksImh0dHBzOi8vZmxveC5kZXYvaGFuZGxlIjoidGVzdDMifQ.LCXNxlr6bMndQFD77lqqDTWQJ-ph7DbEtFJiaec9QC0",
     "handle": "test3",
-    "roles": {  }
+    "roles": {}
   },
   {
     "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTksImh0dHBzOi8vZmxveC5kZXYvaGFuZGxlIjoidGVzdDQifQ.hvQ7XSF_XDbpU2BteHCmmzPjQ8LPJ3wDXK9Li8mVOm0",
     "handle": "test4",
-    "roles": {  }
+    "roles": {}
   }
 ]

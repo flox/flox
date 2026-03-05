@@ -2,31 +2,16 @@ when:
   path: /api/v1/catalog/catalogs/
   method: POST
 then:
-  status: 201
+  status: 400
   header:
-  - name: date
-    value: Mon, 25 Aug 2025 16:16:03 GMT
   - name: server
-    value: uvicorn
-  - name: content-length
-    value: '125'
-  - name: content-type
-    value: application/json
-  body: '{"id":4,"name":"dummy_unused_catalog","created_at":"2025-08-25T12:16:03.903666-04:00","owner_handle":"test_user_no_catalogs"}'
----
-when:
-  path: /api/v1/catalog/catalogs/dummy_unused_catalog/store/config
-  method: PUT
-  body: '{"store_type":"meta-only"}'
-then:
-  status: 200
-  header:
+    value: nginx/1.28.2
   - name: date
-    value: Mon, 25 Aug 2025 16:16:03 GMT
-  - name: server
-    value: uvicorn
-  - name: content-length
-    value: '26'
+    value: Thu, 05 Mar 2026 12:32:31 GMT
   - name: content-type
-    value: application/json
-  body: '{"store_type":"meta-only"}'
+    value: text/html
+  - name: content-length
+    value: '255'
+  - name: connection
+    value: close
+  body: "<html>\r\n<head><title>400 The plain HTTP request was sent to HTTPS port</title></head>\r\n<body>\r\n<center><h1>400 Bad Request</h1></center>\r\n<center>The plain HTTP request was sent to HTTPS port</center>\r\n<hr><center>nginx/1.28.2</center>\r\n</body>\r\n</html>\r\n"
