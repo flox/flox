@@ -1909,7 +1909,7 @@ pub mod test_helpers {
 
         flox.floxhub_token = Some(token);
         let auth = Auth::from_flox(&flox).unwrap();
-        let base_url = "http://localhost:8000";
+        let base_url = "http://localhost:8010";
         let client = auto_recording_client_inner(filename, base_url, user, &auth, record);
         flox.catalog_client = client;
 
