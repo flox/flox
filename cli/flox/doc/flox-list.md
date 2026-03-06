@@ -40,7 +40,8 @@ the output.
 :   Show only the install ID of each package.
 
 `-a`, `--all`
-:   Show all available package information including priority and license.
+:   Show all available package information including priority, license,
+    and outputs (both available and installed).
 
 ```{.include}
 ./include/environment-options.md

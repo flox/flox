@@ -20,8 +20,8 @@ flox [<general-options>] show <pkg-path>
 Show detailed information about a single package.
 
 The default output includes the package description,
-name,
-and version.
+available outputs (with defaults marked by `*`),
+and available versions.
 
 ```{.include}
 ./include/package-names.md
