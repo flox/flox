@@ -104,7 +104,10 @@ if [ "$old_fpath" != "$new_fpath" ]; then
     set +x
   fi
 
-  compinit "${_flox_compinit_args[@]}"
+  # -i: silently ignore insecure directories. Nix store paths in fpath are
+  #     read-only, but their permissions can trigger compinit's security check
+  #     which prompts interactively and confuses users during activation.
+  compinit -i "${_flox_compinit_args[@]}"
   unset _flox_compinit_args
 
   if [ "$_flox_activate_tracelevel" -eq 2 ]; then

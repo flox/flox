@@ -12,7 +12,33 @@ fi
 
 _flox="${_floxPrompt1} ${_floxPrompt2} "
 
-if [ -n "$_flox" -a -n "${PS1:-}" -a "${FLOX_PROMPT_ENVIRONMENTS:-}" != "" -a "${_FLOX_SET_PROMPT:-}" != false ]; then
+# Detect prompt frameworks that manage PS1 via precmd hooks. When active,
+# modifying PS1 is futile - the framework overwrites it on every command.
+# FLOX_PROMPT_ENVIRONMENTS remains exported for use in custom segments.
+_flox_external_prompt=0
+
+# Powerlevel10k
+if typeset -f _p9k_precmd > /dev/null 2>&1 \
+  || [[ -n "${POWERLEVEL9K_CONFIG_FILE:-}" ]]; then
+  _flox_external_prompt=1
+fi
+
+# Starship
+if [[ -n "${STARSHIP_SHELL:-}" ]]; then
+  _flox_external_prompt=1
+fi
+
+# Pure
+if typeset -f prompt_pure_precmd > /dev/null 2>&1; then
+  _flox_external_prompt=1
+fi
+
+# Oh My Posh
+if [[ -n "${POSH_THEME:-}" ]]; then
+  _flox_external_prompt=1
+fi
+
+if [ -n "$_flox" -a -n "${PS1:-}" -a "${FLOX_PROMPT_ENVIRONMENTS:-}" != "" -a "${_FLOX_SET_PROMPT:-}" != false -a "$_flox_external_prompt" -eq 0 ]; then
   # Start by saving the original value of PS1.
   if [ -z "${FLOX_SAVE_ZSH_PS1:=}" ]; then
     export FLOX_SAVE_ZSH_PS1="$PS1"
@@ -31,6 +57,6 @@ if [ -n "$_flox" -a -n "${PS1:-}" -a "${FLOX_PROMPT_ENVIRONMENTS:-}" != "" -a "$
   # TODO: figure out zsh way of setting window and icon title.
 fi
 
-unset _flox _floxPrompt1 _floxPrompt2
+unset _flox _floxPrompt1 _floxPrompt2 _flox_external_prompt
 
 "$_flox_activate_tracer" "$_activate_d/set-prompt.zsh" END
