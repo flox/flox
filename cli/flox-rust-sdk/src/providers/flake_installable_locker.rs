@@ -276,6 +276,7 @@ mod tests {
         let pkgs = [PackageToInstall::Flake(FlakePackage {
             id: "gonna_fail".to_string(),
             url: Url::parse(&format!("path:{}", flake_dir.display())).unwrap(),
+            outputs: None,
         })];
         let res = env.install(&pkgs, &flox);
         if let Err(e) = res {
