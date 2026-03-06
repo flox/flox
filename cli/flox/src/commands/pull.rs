@@ -32,10 +32,10 @@ use tracing::{debug, info_span, instrument};
 use super::services::warn_manifest_changes_for_services;
 use super::{ConcreteEnvironment, open_path};
 use crate::commands::{EnvironmentSelect, environment_description, environment_select};
-use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::{display_chain, format_core_error};
 use crate::utils::message;
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 #[derive(Debug, Clone, Bpaf)]
 enum PullSelect {
@@ -90,8 +90,6 @@ struct QueryFunctions {
 impl Pull {
     #[instrument(name = "pull", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("pull");
-
         match self.pull_select {
             PullSelect::NewAbbreviated {
                 remote,
@@ -99,6 +97,10 @@ impl Pull {
                 copy,
                 generation,
             } => {
+                // This could be a `--copy` to `PathEnvironment`, rather than
+                // `ManagedEnvironment`, but we want to keep the remote name.
+                subcommand_metric!("pull", managed_environment = remote.to_string());
+
                 let (dir_message, dir) = match dir {
                     Some(dir) => (format!("{}", dir.display()), dir),
                     None => (
@@ -130,6 +132,7 @@ impl Pull {
             },
             PullSelect::RemoteUpdate { environment, copy } => {
                 let environment = environment.detect_concrete_environment(&flox, "Pull")?;
+                environment_subcommand_metric!("pull", environment);
 
                 if let ConcreteEnvironment::Path(environment) = environment {
                     bail!(
