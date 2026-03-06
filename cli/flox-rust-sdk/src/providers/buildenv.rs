@@ -699,10 +699,16 @@ where
             format!("{}#{}", locked_url, attrpath)
         };
 
+        let reason = match (locked_pkg.unfree, locked_pkg.broken) {
+            (Some(true), _) => " (unfree license)",
+            (_, Some(true)) => " (upstream build marked as broken)",
+            _ => "",
+        };
+
         let _span = info_span!(
             parent: span,
             "build from catalog",
-            progress = format!("Building '{}' from source", locked_pkg.attr_path)
+            progress = format!("Building '{}' from source{reason}", locked_pkg.attr_path)
         )
         .entered();
 
