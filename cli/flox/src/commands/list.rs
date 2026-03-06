@@ -5,6 +5,7 @@ use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
 use flox_manifest::lockfile::{LockedInstallable, LockedPackageFlake, Lockfile, PackageToList};
+use flox_manifest::parsed::latest::SelectedOutputs;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::GenerationsExt;
 use flox_rust_sdk::models::environment::{
@@ -402,11 +403,31 @@ impl List {
 
 fn format_outputs_lines(package: &PackageToList, show_outputs_to_install: bool) -> String {
     let available_outputs = match package {
-        PackageToList::Catalog(_, locked) => {
-            format_as_sorted_list(&locked.outputs.keys().collect::<Vec<_>>())
+        PackageToList::Catalog(desc, locked) => match desc.outputs.as_ref() {
+            Some(SelectedOutputs::All(_)) => {
+                format_as_sorted_list(&locked.outputs.keys().collect::<Vec<_>>())
+            },
+            Some(SelectedOutputs::Specific(outputs)) => format_as_sorted_list(outputs),
+            None => {
+                if let Some(outputs) = locked.outputs_to_install.as_ref() {
+                    format_as_sorted_list(outputs)
+                } else {
+                    format_as_sorted_list(&locked.outputs.keys().collect::<Vec<_>>())
+                }
+            },
         },
-        PackageToList::Flake(_, locked) => {
-            format_as_sorted_list(&locked.locked_installable.output_names)
+        PackageToList::Flake(desc, locked) => match desc.outputs.as_ref() {
+            Some(SelectedOutputs::All(_)) => {
+                format_as_sorted_list(&locked.locked_installable.output_names)
+            },
+            Some(SelectedOutputs::Specific(outputs)) => format_as_sorted_list(outputs),
+            None => {
+                if let Some(outputs) = locked.locked_installable.outputs_to_install.as_ref() {
+                    format_as_sorted_list(outputs)
+                } else {
+                    format_as_sorted_list(&locked.locked_installable.output_names)
+                }
+            },
         },
         PackageToList::StorePath(_) => return String::new(),
     };
