@@ -142,7 +142,6 @@ impl List {
                     } else {
                         List::get_cached_upgrades_for_current_system(&flox, &mut env)?
                     },
-                    flox.features.outputs,
                 )?;
             },
             ListMode::Config => unreachable!(),
@@ -258,7 +257,6 @@ impl List {
         mut out: impl Write,
         packages: &[PackageToList],
         upgrades: Option<SingleSystemUpgradeDiff>,
-        show_outputs: bool,
     ) -> Result<()> {
         // Format the outputs lines for a package
         for (idx, package) in packages
@@ -286,7 +284,7 @@ impl List {
 
             let message = match package {
                 PackageToList::Catalog(descriptor, locked) => {
-                    let outputs_lines = format_outputs_lines(package, show_outputs);
+                    let outputs_lines = format_outputs_lines(package);
 
                     formatdoc! {"
                         {name}:{upgrade_available}
@@ -336,7 +334,7 @@ impl List {
                         }
                     });
 
-                    let outputs_lines = format_outputs_lines(package, show_outputs);
+                    let outputs_lines = format_outputs_lines(package);
 
                     formatdoc! {"
                     {install_id}:{upgrade_available}
@@ -400,7 +398,7 @@ impl List {
     }
 }
 
-fn format_outputs_lines(package: &PackageToList, show_outputs_to_install: bool) -> String {
+fn format_outputs_lines(package: &PackageToList) -> String {
     let available_outputs = match package {
         PackageToList::Catalog(_, locked) => {
             format_as_sorted_list(&locked.outputs.keys().collect::<Vec<_>>())
@@ -410,10 +408,6 @@ fn format_outputs_lines(package: &PackageToList, show_outputs_to_install: bool) 
         },
         PackageToList::StorePath(_) => return String::new(),
     };
-
-    if !show_outputs_to_install {
-        return format!("  Outputs:              {}\n", available_outputs);
-    }
 
     let installed_outputs_or_error_message = get_installed_outputs(package).map_or_else(
         |e| {
@@ -604,7 +598,7 @@ mod tests {
     #[test]
     fn test_print_detail_output() {
         let mut out = Vec::new();
-        List::print_detail(&mut out, &test_packages(), None, true).unwrap();
+        List::print_detail(&mut out, &test_packages(), None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             pip_install_id:
@@ -637,7 +631,7 @@ mod tests {
     #[test]
     fn test_print_detail_flake_output() {
         let mut out = Vec::new();
-        List::print_detail(&mut out, &[test_flake_package()], None, true).unwrap();
+        List::print_detail(&mut out, &[test_flake_package()], None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             nix-eval-jobs:
@@ -664,7 +658,7 @@ mod tests {
             locked_package.locked_installable.pname = None;
         }
 
-        List::print_detail(&mut out, &[package], None, true).unwrap();
+        List::print_detail(&mut out, &[package], None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             nix-eval-jobs:
@@ -692,7 +686,7 @@ mod tests {
         {
             licenses.push("license 2".to_string());
         }
-        List::print_detail(&mut out, &[package], None, true).unwrap();
+        List::print_detail(&mut out, &[package], None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             nix-eval-jobs:
@@ -719,7 +713,7 @@ mod tests {
         package_2.priority = 5;
 
         let mut out = Vec::new();
-        List::print_detail(&mut out, &packages, None, true).unwrap();
+        List::print_detail(&mut out, &packages, None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             python_install_id:
@@ -757,7 +751,7 @@ mod tests {
         package_2.priority = 10;
 
         let mut out = Vec::new();
-        List::print_detail(&mut out, &packages, None, true).unwrap();
+        List::print_detail(&mut out, &packages, None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             python_install_id:
@@ -790,7 +784,7 @@ mod tests {
     #[test]
     fn test_print_detail_output_handles_missing_values() {
         let mut out = Vec::new();
-        List::print_detail(&mut out, &[uninformative_package()], None, true).unwrap();
+        List::print_detail(&mut out, &[uninformative_package()], None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, formatdoc! {"
             pip_install_id:
@@ -827,7 +821,7 @@ mod tests {
             ),
         )]);
 
-        List::print_detail(&mut out, &packages, Some(upgrades), true).unwrap();
+        List::print_detail(&mut out, &packages, Some(upgrades)).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             pip_install_id: (upgrade available)
@@ -883,13 +877,7 @@ mod tests {
         lock.version = "0.1.0".to_string();
 
         let mut out = Vec::new();
-        List::print_detail(
-            &mut out,
-            &[PackageToList::Catalog(descriptor, lock)],
-            None,
-            true,
-        )
-        .unwrap();
+        List::print_detail(&mut out, &[PackageToList::Catalog(descriptor, lock)], None).unwrap();
 
         assert!(
             String::from_utf8(out)
