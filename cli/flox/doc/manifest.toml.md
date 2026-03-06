@@ -35,6 +35,23 @@ tables:
 - [`[options]`](#options)
 - [`containerize`] - see [`flox-containerize(1)`](./flox-containerize.md)
 
+## `schema-version`
+
+`schema-version` is a top-level field that specifies the minimum version of Flox
+that the manifest is compatible with.
+
+```toml
+schema-version = "1.10.0"
+```
+
+Valid string values are:
+
+- `1.10.0`: introduced package outputs
+
+Existing manifest schemas, including the older `version = 1` format, are
+automatically forward-migrated when using features that require a newer schema
+(e.g. `flox install` with package outputs).
+
 ## `[install]`
 
 The `[install]` table is the core of the environment,
