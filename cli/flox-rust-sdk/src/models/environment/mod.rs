@@ -182,6 +182,8 @@ pub trait Environment: Send {
     /// This does not link the environment, but may lock the environment, if necessary.
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError>;
 
+    fn link(&mut self, store_paths: &BuildEnvOutputs) -> Result<(), EnvironmentError>;
+
     /// Return a path to store transient data,
     /// such as temporary files created by the environment hooks or the environment itself,
     /// including reproducible data about the environment.
@@ -941,11 +943,6 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
         }
     }
     Ok(None)
-}
-
-/// Directory containing nix gc roots for (previous) builds of environments of a given owner
-pub(super) fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
-    flox.cache_dir.join(GCROOTS_DIR_NAME).join(owner.as_str())
 }
 
 /// Return a path to the services socket given a unique identifier

@@ -97,10 +97,31 @@ EOF
   run --separate-stderr "$FLOX_BIN" install hello --reference "$OWNER/test"
   assert_success
 
+  assert [ -h "$FLOX_CACHE_DIR/remote/$OWNER/test/.flox/run/$NIX_SYSTEM.test.dev" ]
+  assert [ -h "$FLOX_CACHE_DIR/remote/$OWNER/test/.flox/run/$NIX_SYSTEM.test.run" ]
+}
+
+# bats test_tags=hermetic,remote,remote:outlink
+@test "r0: remote environment deletes old outlinks" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  make_empty_remote_env
+
+
+  mkdir -p "$FLOX_CACHE_DIR/run/$OWNER/"
+  ln -s /nix/store/unused "$FLOX_CACHE_DIR/run/$OWNER/$NIX_SYSTEM.test.dev"
+  ln -s /nix/store/unused "$FLOX_CACHE_DIR/run/$OWNER/$NIX_SYSTEM.test.run"
   assert [ -h "$FLOX_CACHE_DIR/run/$OWNER/$NIX_SYSTEM.test.dev" ]
   assert [ -h "$FLOX_CACHE_DIR/run/$OWNER/$NIX_SYSTEM.test.run" ]
 
+  run --separate-stderr "$FLOX_BIN" install hello --reference "$OWNER/test"
+  assert_success
+
+  assert [ ! -h "$FLOX_CACHE_DIR/run/$OWNER/$NIX_SYSTEM.test.dev" ]
+  assert [ ! -h "$FLOX_CACHE_DIR/run/$OWNER/$NIX_SYSTEM.test.run" ]
+
+
 }
+
 
 # bats test_tags=install,remote,remote:install
 @test "m1: install a package to a remote environment" {
@@ -165,7 +186,7 @@ EOF
   export FLOX_CACHE_DIR="$(realpath $FLOX_CACHE_DIR)"
   run "$FLOX_BIN" activate --trust --reference "$OWNER/test" -c 'command -v hello'
   assert_success
-  assert_output --partial "$FLOX_CACHE_DIR/run/owner/$NIX_SYSTEM.test.dev/bin/hello"
+  assert_output --partial "$FLOX_CACHE_DIR/remote/$OWNER/test/.flox/run/$NIX_SYSTEM.test.dev/bin/hello"
 }
 
 # We need to trust the remote environment before we can activate it.

@@ -617,6 +617,47 @@ pub trait GenerationsExt {
     ) -> Result<super::RenderedEnvironmentLinks, EnvironmentError>;
 
     fn compare_remote(&self) -> Result<BranchOrd, EnvironmentError>;
+
+    /// Create a new generation from local changes,
+    /// and updates the generation lock.
+    ///
+    /// If the environment was already up to date,
+    /// [GenerationsExt::create_generation_from_local_env] should return successfully.
+    /// In that case the result is [SyncToGenerationResult::UpToDate] to signal
+    /// that no changes were made.
+    /// Before creating a new generation, the local environment is locked and built,
+    /// to ensure the validity of the new generation.
+    /// Unless an error occurs, [SyncToGenerationResult::Synced] is returned.
+    fn create_generation_from_local_env(
+        &mut self,
+        flox: &Flox,
+    ) -> Result<SyncToGenerationResult, EnvironmentError>;
+
+    /// Discards local changes in `.flox/env` and recreates the directory from the current generation.
+    ///
+    /// Returns the new [CoreEnvironment] for the `.flox/env` directory.
+    /// Unlike [ManagedEnvironment::create_generation_from_local_env],
+    /// this method **does not** build the environment as previous generations
+    /// may fail to build, unrelated to the success of resetting the environment.
+    /// Pulling an environment for example may result in an invalid environment
+    /// e.g. because the manifest does not specify the current system,
+    /// resetting in that context should not fail either.
+    /// Like [ManagedEnvironment::pull], downtream commands should check that the environment builds
+    /// if applicable.
+    ///
+    /// TODO: Specific behavior for other files than the manifest should is undefined.
+    /// Currently the entire environment directory is **deleted and recreated**.
+    /// Any other files are lost.
+    fn reset_local_env_to_current_generation(&self, flox: &Flox) -> Result<(), EnvironmentError>;
+}
+
+/// Result of creating a generation from local changes with
+/// [ManagedEnvironment::create_generation_from_local_env]
+pub enum SyncToGenerationResult {
+    /// The environment was already up to date
+    UpToDate,
+    /// The environment was successfully synced to the generation
+    Synced,
 }
 
 /// Combined type for environments supporting generations,

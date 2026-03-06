@@ -32,9 +32,9 @@ use super::{
     ManagedPointer,
     RenderedEnvironmentLinks,
     UninstallationAttempt,
-    gcroots_dir,
 };
 use crate::flox::Flox;
+use crate::models::environment::PathPointer;
 use crate::models::environment::floxmeta_branch::{
     BranchOrd,
     FloxmetaBranch,
@@ -42,9 +42,10 @@ use crate::models::environment::floxmeta_branch::{
     GenerationLock,
     write_generation_lock,
 };
+use crate::models::environment::generations::SyncToGenerationResult;
 use crate::models::environment::managed_environment::GENERATION_LOCK_FILENAME;
 use crate::models::environment::path_environment::{InitCustomization, PathEnvironment};
-use crate::models::environment::{PathPointer, RenderedEnvironmentLink};
+use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::lock_manifest::LockResult;
 
 const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
@@ -89,7 +90,6 @@ pub enum RemoteEnvironmentError {
 #[derive(Debug)]
 pub struct RemoteEnvironment {
     inner: ManagedEnvironment,
-    rendered_env_links: RenderedEnvironmentLinks,
     /// Specific generation to use, i.e. from `flox activate`
     /// This doesn't represent the live generation.
     generation: Option<GenerationId>,
@@ -207,30 +207,73 @@ impl RemoteEnvironment {
         )
         .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
 
-        // Note: Remote environments used to get reset to the latest upstream here.
-        // Now they require explicit `pull`s to refresh upstream state.
+        // Note: We used to have links for RemoteEnvironments in two places
+        //
+        // 1. the links associated with the inner managed env.
+        //    These may be updated but ultimately fail to push,
+        //    rendering the remote environment inconsistent with the remote.
+        // 2. a separate set of links in ~/.cache/flox/remote
+        //    updated upon successful push to avoid the caveat above.
+        //
+        // Neither reason is relevant any longer, as we explicitly
+        // _want_ to allow the local state of floxhub environments to move independently.
+        // We therefore only track links for the inner managed environment going forward.
+        // To avoid stale gcroots, we remove the additional dir in ~/.cache/flox/remote/
+        {
+            // Directory containing nix gc roots for (previous) builds of environments of a given owner
+            let gcroots_dir = {
+                let owner: &EnvironmentOwner = &pointer.owner;
+                flox.cache_dir.join(GCROOTS_DIR_NAME).join(owner.as_str())
+            };
 
-        let rendered_env_links = {
-            let gcroots_dir = gcroots_dir(flox, &pointer.owner);
-            if !gcroots_dir.exists() {
-                std::fs::create_dir_all(&gcroots_dir)
-                    .map_err(RemoteEnvironmentError::CreateGcRootDir)?;
+            if gcroots_dir.exists() {
+                debug!(
+                    owner=%&pointer.owner,
+                    gcroots_dir=?gcroots_dir,
+                    "found existing legacy gcroot base dir for remote environments");
+
+                let base_dir =
+                    CanonicalPath::new(gcroots_dir).expect("gcroots_dir is not a valid path");
+
+                let old_links = RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+                    &base_dir,
+                    pointer.name.as_ref(),
+                    &flox.system,
+                );
+
+                if old_links.development.is_symlink() {
+                    debug!(
+                        out_link=?old_links.development,
+                        "deleting legacy outlink");
+                    std::fs::remove_file(&old_links.development)
+                        .map_err(RemoteEnvironmentError::DeleteOldOutLink)?;
+                }
+                if old_links.runtime.is_symlink() {
+                    debug!(
+                        out_link=?old_links.runtime,
+                        "deleting legacy outlink");
+                    std::fs::remove_file(&old_links.runtime)
+                        .map_err(RemoteEnvironmentError::DeleteOldOutLink)?;
+                }
+
+                // if all links of environments of the same owner have been removed, remove owner dir as well
+                let is_dir_empty = fs::read_dir(&base_dir)
+                    .ok()
+                    .map(|mut entries| entries.next().is_none())
+                    .unwrap_or(false);
+
+                if is_dir_empty {
+                    debug!(
+                        base_dir=?base_dir,
+                        "deleting empty legacy outlink base_dir");
+                    fs::remove_dir(&base_dir).map_err(RemoteEnvironmentError::DeleteOldOutLink)?;
+                }
             }
-            let base_dir =
-                CanonicalPath::new(gcroots_dir).expect("gcroots_dir is not a valid path");
-
-            RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
-                &base_dir,
-                pointer.name.as_ref(),
-                &flox.system,
-            )
         };
 
-        Ok(Self {
-            inner,
-            rendered_env_links,
-            generation,
-        })
+        // Note: Remote environments used to get reset to the latest upstream here.
+        // Now they require explicit `pull`s to refresh upstream state.
+        Ok(Self { inner, generation })
     }
 
     pub fn owner(&self) -> &EnvironmentOwner {
@@ -243,48 +286,6 @@ impl RemoteEnvironment {
 
     pub fn pointer(&self) -> &ManagedPointer {
         self.inner.pointer()
-    }
-
-    /// Update the out link to point to the current version of the environment
-    ///
-    /// The inner out link points to the latest version of the managed environment.
-    /// This may be updated, but subsequently fail to push to the remote.
-    /// In that case the remote environment should _not_ be changed.
-    ///
-    /// [RemoteEnvironment::update_out_link] updates the out link when the push succeeds.
-    fn update_out_link(
-        flox: &Flox,
-        rendered_env_links: &RenderedEnvironmentLinks,
-        inner: &mut ManagedEnvironment,
-    ) -> Result<(), EnvironmentError> {
-        let new_rendered_paths = inner.rendered_env_links(flox)?;
-
-        fn update_link(
-            old_link: &RenderedEnvironmentLink,
-            new_link: &RenderedEnvironmentLink,
-        ) -> Result<(), RemoteEnvironmentError> {
-            let new_dev_link_path = new_link
-                .read_link()
-                .map_err(RemoteEnvironmentError::ReadInternalOutLink)?;
-
-            debug!(gcroot=?old_link, to=?new_dev_link_path, "updating gcroot");
-
-            if old_link.read_link().is_ok() {
-                fs::remove_file(old_link).map_err(RemoteEnvironmentError::DeleteOldOutLink)?;
-            }
-
-            std::os::unix::fs::symlink(new_dev_link_path, old_link)
-                .map_err(RemoteEnvironmentError::WriteNewOutlink)?;
-            Ok(())
-        }
-
-        update_link(
-            &rendered_env_links.development,
-            &new_rendered_paths.development,
-        )?;
-        update_link(&rendered_env_links.runtime, &new_rendered_paths.runtime)?;
-
-        Ok(())
     }
 
     /// Push local changes to FloxHub for this remote environment
@@ -307,7 +308,6 @@ impl RemoteEnvironment {
         force: bool,
     ) -> Result<super::managed_environment::PullResult, EnvironmentError> {
         let result = self.inner.pull(flox, force)?;
-        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
         Ok(result)
     }
 
@@ -382,7 +382,6 @@ impl Environment for RemoteEnvironment {
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError> {
         let result = self.inner.install(packages, flox)?;
-        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
         // TODO: clean up git branch for temporary environment
         Ok(result)
     }
@@ -394,7 +393,6 @@ impl Environment for RemoteEnvironment {
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         let result = self.inner.uninstall(packages, flox)?;
-        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
 
         Ok(result)
     }
@@ -405,7 +403,6 @@ impl Environment for RemoteEnvironment {
         if result == EditResult::Unchanged {
             return Ok(result);
         }
-        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
 
         Ok(result)
     }
@@ -425,7 +422,6 @@ impl Environment for RemoteEnvironment {
         groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError> {
         let result = self.inner.upgrade(flox, groups_or_iids)?;
-        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
 
         Ok(result)
     }
@@ -437,7 +433,6 @@ impl Environment for RemoteEnvironment {
         to_upgrade: Vec<String>,
     ) -> Result<UpgradeResult, EnvironmentError> {
         let result = self.inner.include_upgrade(flox, to_upgrade)?;
-        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
 
         Ok(result)
     }
@@ -449,9 +444,7 @@ impl Environment for RemoteEnvironment {
         if let Some(generation) = self.generation {
             return self.rendered_env_links_for_generation(flox, generation);
         }
-
-        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
-        Ok(self.rendered_env_links.clone())
+        self.inner.rendered_env_links(flox)
     }
 
     fn build(
@@ -459,6 +452,10 @@ impl Environment for RemoteEnvironment {
         flox: &Flox,
     ) -> Result<crate::providers::buildenv::BuildEnvOutputs, EnvironmentError> {
         self.inner.build(flox)
+    }
+
+    fn link(&mut self, store_paths: &BuildEnvOutputs) -> Result<(), EnvironmentError> {
+        self.inner.link(store_paths)
     }
 
     fn cache_path(&self) -> Result<CanonicalPath, EnvironmentError> {
@@ -524,7 +521,6 @@ impl GenerationsExt for RemoteEnvironment {
         generation: GenerationId,
     ) -> Result<(), EnvironmentError> {
         self.inner.switch_generation(flox, generation)?;
-        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
         Ok(())
     }
 
@@ -562,6 +558,17 @@ impl GenerationsExt for RemoteEnvironment {
 
     fn compare_remote(&self) -> Result<BranchOrd, EnvironmentError> {
         self.inner.compare_remote()
+    }
+
+    fn create_generation_from_local_env(
+        &mut self,
+        flox: &Flox,
+    ) -> Result<SyncToGenerationResult, EnvironmentError> {
+        self.inner.create_generation_from_local_env(flox)
+    }
+
+    fn reset_local_env_to_current_generation(&self, flox: &Flox) -> Result<(), EnvironmentError> {
+        self.inner.reset_local_env_to_current_generation(flox)
     }
 }
 
