@@ -13,6 +13,7 @@ use crate::{Manifest, ManifestError, TypedOnly};
 pub type ManifestLatest = crate::parsed::v1_10_0::ManifestV1_10_0;
 
 impl ManifestLatest {
+    /// Returns a copy of this manifest in its original schema if possible.
     fn as_original_schema(
         &self,
         original_schema: KnownSchemaVersion,
@@ -41,6 +42,8 @@ impl ManifestLatest {
         Ok(Some(typed_original_schema))
     }
 
+    /// Returns a copy of this manifest in the original schema if it's compatible,
+    /// or in the current schema if not.
     pub fn as_maybe_backwards_compatible(
         &self,
         original_schema: KnownSchemaVersion,

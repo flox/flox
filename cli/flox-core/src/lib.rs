@@ -82,7 +82,7 @@ where
 // co-located with serialize_atomically
 /// Write contents to a file atomically by renaming a tempfile
 pub fn write_atomically(
-    path: &impl AsRef<Path>,
+    path: impl AsRef<Path>,
     contents: impl AsRef<[u8]>,
 ) -> Result<(), WriteError> {
     // Create the tempfile in the same directory as the file so persist()

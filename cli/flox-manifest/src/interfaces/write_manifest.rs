@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use flox_core::write_atomically;
+
 use crate::{Manifest, ManifestError, Migrated, Validated, Writable};
 
 /// An interface for writing manifests, only implemented on manifest states that support
@@ -64,6 +66,6 @@ impl WriteManifest for Manifest<Writable> {
     }
 
     fn write_to_file(&self, p: impl AsRef<Path>) -> Result<(), ManifestError> {
-        std::fs::write(p, self.inner.raw.to_string()).map_err(ManifestError::IOWrite)
+        write_atomically(p, self.inner.raw.to_string()).map_err(ManifestError::AtomicWrite)
     }
 }

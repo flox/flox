@@ -174,7 +174,7 @@ impl PathEnvironment {
         pointer_content.push('\n');
 
         write_atomically(
-            &self.path.join(ENVIRONMENT_POINTER_FILENAME),
+            self.path.join(ENVIRONMENT_POINTER_FILENAME),
             pointer_content,
         )
         .map_err(|e| EnvironmentError::WriteEnvJson(Box::new(e)))?;
