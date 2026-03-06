@@ -243,10 +243,7 @@ impl PackageToInstall {
 
         // if the string parses as a url, assume it's a flake ref
         match Url::parse(s) {
-            Ok(url) => {
-                let id = infer_flake_install_id(&url)?;
-                Ok(PackageToInstall::Flake(FlakePackage { id, url }))
-            },
+            Ok(url) => Ok(PackageToInstall::Flake(url.try_into()?)),
             // if it's not a url, parse it as a catalog package
             _ => Ok(PackageToInstall::Catalog(s.parse()?)),
         }
@@ -294,6 +291,40 @@ fn infer_flake_install_id(url: &Url) -> Result<String, RawManifestError> {
             .map(|s| url_escape::decode(s).to_string())
             .ok_or(RawManifestError::InvalidFlakeRef(url.to_string()))
     }
+}
+
+/// Extracts `^output` specifications from a flake URL fragment.
+///
+/// Returns the URL with the `^output` stripped from its fragment,
+/// along with the parsed outputs if present.
+fn extract_flake_outputs(
+    mut url: Url,
+) -> Result<(Url, Option<RawSelectedOutputs>), RawManifestError> {
+    let Some(fragment) = url.fragment() else {
+        return Ok((url, None));
+    };
+
+    let fragment = url_escape::decode(fragment).to_string();
+    let Some((attr_path, outputs_str)) = fragment.rsplit_once('^') else {
+        return Ok((url, None));
+    };
+
+    if outputs_str.is_empty() {
+        return Err(RawManifestError::MalformedStringDescriptor {
+            msg: "expected output specification after '^'".to_string(),
+            desc: url.to_string(),
+        });
+    }
+
+    let outputs = RawSelectedOutputs::parse(outputs_str);
+
+    if attr_path.is_empty() {
+        url.set_fragment(None);
+    } else {
+        url.set_fragment(Some(attr_path));
+    }
+
+    Ok((url, Some(outputs)))
 }
 
 /// Extracts only the catalog packages from a list of packages to install.
@@ -493,6 +524,21 @@ impl FromStr for CatalogPackage {
 pub struct FlakePackage {
     pub id: String,
     pub url: Url,
+    pub outputs: Option<RawSelectedOutputs>,
+}
+
+impl TryFrom<Url> for FlakePackage {
+    type Error = RawManifestError;
+
+    fn try_from(url: Url) -> Result<Self, Self::Error> {
+        let id = infer_flake_install_id(&url)?;
+        let (clean_url, outputs) = extract_flake_outputs(url)?;
+        Ok(FlakePackage {
+            id,
+            url: clean_url,
+            outputs,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -703,7 +749,7 @@ impl ModifyPackages for Manifest<Migrated> {
                         flake: flake_raw.url.to_string(),
                         priority: None,
                         systems: pkg.systems(),
-                        outputs: None,
+                        outputs: flake_raw.outputs.as_ref().map(|o| o.into()),
                     };
                     let descriptor = v1_10_0::ManifestPackageDescriptor::FlakeRef(flake_descriptor);
                     pkg_map.insert(pkg.id().to_string(), descriptor);
@@ -1476,7 +1522,7 @@ mod test {
     }
 
     #[test]
-    fn parses_string_descriptor() {
+    fn catalog_parses_string_descriptor() {
         let parsed: CatalogPackage = "hello".parse().unwrap();
         assert_eq!(parsed, CatalogPackage {
             id: "hello".to_string(),
@@ -1619,6 +1665,19 @@ mod test {
     }
 
     #[test]
+    fn flake_parses_string_descriptor() {
+        let parsed: FlakePackage = Url::parse("github:nixos/nixpkgs#curl")
+            .unwrap()
+            .try_into()
+            .unwrap();
+        assert_eq!(parsed, FlakePackage {
+            id: "curl".to_string(),
+            url: Url::parse("github:nixos/nixpkgs#curl").unwrap(),
+            outputs: None,
+        });
+    }
+
+    #[test]
     fn manifest_is_updated_correctly_with_outputs() {
         let package = PackageToInstall::parse(&"".to_string(), "curl^bin,man").unwrap();
         let contents = "
@@ -1646,7 +1705,7 @@ curl.outputs = [\"bin\", \"man\"]
     }
 
     #[test]
-    fn parses_descriptors_with_outputs() {
+    fn catalog_parses_descriptors_with_outputs() {
         // Package with specific outputs
         let parsed: CatalogPackage = "curl^bin,man".parse().unwrap();
         assert_eq!(parsed, CatalogPackage {
@@ -1706,6 +1765,49 @@ curl.outputs = [\"bin\", \"man\"]
 
         // Error: empty outputs specification
         CatalogPackage::from_str("curl^").expect_err("empty outputs should cause failure");
+    }
+
+    #[test]
+    fn flake_parses_descriptors_with_outputs() {
+        // Flake with single output
+        let parsed: FlakePackage = Url::parse("github:nixos/nixpkgs#curl^bin")
+            .unwrap()
+            .try_into()
+            .unwrap();
+        assert_eq!(parsed, FlakePackage {
+            id: "curl".to_string(),
+            url: Url::parse("github:nixos/nixpkgs#curl").unwrap(),
+            outputs: Some(RawSelectedOutputs::Specific(vec!["bin".to_string()])),
+        });
+
+        // Flake with multiple outputs
+        let parsed: FlakePackage = Url::parse("github:nixos/nixpkgs#curl^out,man")
+            .unwrap()
+            .try_into()
+            .unwrap();
+        assert_eq!(parsed, FlakePackage {
+            id: "curl".to_string(),
+            url: Url::parse("github:nixos/nixpkgs#curl").unwrap(),
+            outputs: Some(RawSelectedOutputs::Specific(vec![
+                "out".to_string(),
+                "man".to_string(),
+            ])),
+        });
+
+        // Flake with all outputs
+        let parsed: FlakePackage = Url::parse("github:nixos/nixpkgs#curl^..")
+            .unwrap()
+            .try_into()
+            .unwrap();
+        assert_eq!(parsed, FlakePackage {
+            id: "curl".to_string(),
+            url: Url::parse("github:nixos/nixpkgs#curl").unwrap(),
+            outputs: Some(RawSelectedOutputs::All),
+        });
+
+        // Error: empty outputs specification
+        FlakePackage::try_from(Url::parse("github:nixos/nixpkgs#curl^").unwrap())
+            .expect_err("empty outputs should cause failure");
     }
 
     /// Determines whether to have a branch and/or revision in the URL
