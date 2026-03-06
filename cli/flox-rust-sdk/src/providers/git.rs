@@ -11,6 +11,7 @@ use chrono::{DateTime, Utc};
 use thiserror::Error;
 use tracing::{debug, warn};
 
+use crate::flox::FLOX_VERSION;
 use crate::utils::CommandExt;
 
 // This is the full /path/to/bin/git that we actually use.
@@ -214,15 +215,21 @@ pub struct GitCommandOptions {
     exe: String,
     config: BTreeMap<String, String>,
     envs: BTreeMap<String, String>,
+    extra_http_headers: BTreeMap<String, String>,
 }
 
 impl Default for GitCommandOptions {
     /// By default, use the git binary bundled with flox
     fn default() -> Self {
+        let config = BTreeMap::from([(
+            "http.userAgent".to_string(),
+            format!("flox-cli/{}", &*FLOX_VERSION),
+        )]);
         Self {
             exe: GIT_BIN.to_string(),
-            config: Default::default(),
+            config,
             envs: Default::default(),
+            extra_http_headers: Default::default(),
         }
     }
 }
@@ -253,6 +260,15 @@ impl GitCommandOptions {
             .insert(var.to_string(), value.as_ref().to_string());
     }
 
+    /// Add an HTTP header to be sent with git HTTP requests.
+    ///
+    /// Can't be specified via `GitCommandOptions.config` because multiple
+    /// `http.extraHeader` values would overwrite each other.
+    pub fn add_http_header(&mut self, name: &str, value: &str) {
+        self.extra_http_headers
+            .insert(name.to_string(), value.to_string());
+    }
+
     /// Create a new [Command] with the current options prepopulated
     ///
     /// For all configuration flags the arguments `-c <flag>=<value>` are added.
@@ -263,6 +279,11 @@ impl GitCommandOptions {
         for (flag, value) in &self.config {
             c.arg("-c");
             c.arg(format!("{}={}", flag, value));
+        }
+
+        for (name, value) in &self.extra_http_headers {
+            c.arg("-c");
+            c.arg(format!("http.extraHeader={name}: {value}"));
         }
 
         for (var, value) in &self.envs {

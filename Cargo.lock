@@ -1569,6 +1569,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "url-escape",
+ "uuid",
  "walkdir",
 ]
 

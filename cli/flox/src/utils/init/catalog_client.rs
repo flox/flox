@@ -10,28 +10,24 @@ use flox_rust_sdk::providers::catalog::{
     FLOX_CATALOG_DUMP_DATA_VAR,
     FLOX_CATALOG_MOCK_DATA_VAR,
 };
+use flox_rust_sdk::utils::HEADER_DEVICE_UUID;
 use tracing::debug;
+use uuid::Uuid;
 
 use crate::config::Config;
-use crate::utils::metrics::read_metrics_uuid;
 
 /// Initialize the Catalog API client
 ///
 /// - Initialize a mock client if the `_FLOX_USE_CATALOG_MOCK` environment variable is set to `true`
 /// - Initialize a real client otherwise
-pub fn init_catalog_client(config: &Config) -> Result<Client, anyhow::Error> {
-    let extra_headers = {
-        // Propagate the metrics UUID to catalog-server if metrics are enabled.
-        if !config.flox.disable_metrics {
-            let mut metrics_headers = BTreeMap::new();
-            metrics_headers.insert(
-                "flox-device-uuid".to_string(),
-                read_metrics_uuid(config).unwrap().to_string(),
-            );
-            metrics_headers
-        } else {
-            Default::default()
-        }
+pub fn init_catalog_client(
+    config: &Config,
+    metrics_device_uuid: Option<Uuid>,
+) -> Result<Client, anyhow::Error> {
+    // Propagate the metrics UUID to catalog-server if metrics are enabled.
+    let extra_headers = match metrics_device_uuid {
+        Some(uuid) => BTreeMap::from([(HEADER_DEVICE_UUID.to_string(), uuid.to_string())]),
+        None => Default::default(),
     };
 
     let mock_mode = if let Ok(path_str) = std::env::var(FLOX_CATALOG_MOCK_DATA_VAR) {

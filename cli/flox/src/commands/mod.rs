@@ -80,7 +80,7 @@ use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
 use crate::utils::init::init_catalog_client;
 use crate::utils::message;
-use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub};
+use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, read_metrics_uuid};
 use crate::utils::update_notifications::UpdateNotification;
 
 const SHELL_COMPLETION_DIR: ShellComp = ShellComp::Dir { mask: None };
@@ -301,7 +301,11 @@ impl FloxArgs {
             Ok(token) => token,
         };
 
-        let catalog_client = init_catalog_client(&config)?;
+        let metrics_device_uuid = (!config.flox.disable_metrics)
+            .then(|| read_metrics_uuid(&config).ok())
+            .flatten();
+
+        let catalog_client = init_catalog_client(&config, metrics_device_uuid)?;
 
         // we already make sure $USER corresponds to **euid** earlier on oin the process.
         let system_user_name =
@@ -327,6 +331,7 @@ impl FloxArgs {
             #[allow(deprecated, reason = "This should be the only internal use")]
             features: config.features.unwrap_or_default(),
             verbosity: self.verbosity.to_i32(),
+            metrics_device_uuid,
         };
         debug!(
             configured = ?flox.features,

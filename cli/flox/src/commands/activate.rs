@@ -62,7 +62,6 @@ use crate::commands::{
 use crate::config::{Config, EnvironmentPromptConfig};
 use crate::utils::errors::format_diverged_metadata;
 use crate::utils::message;
-use crate::utils::metrics::read_metrics_uuid;
 use crate::utils::openers::CliShellExt;
 use crate::{Exit, environment_subcommand_metric, subcommand_metric, utils};
 
@@ -430,11 +429,6 @@ impl Activate {
 
         let activation_state_dir = activation_state_dir_path(&flox.runtime_dir, &dot_flox_path);
 
-        // None signals metrics disabled.
-        let metrics_uuid = (!config.flox.disable_metrics)
-            .then(|| read_metrics_uuid(&config).ok())
-            .flatten();
-
         let activate_data = ActivateCtx {
             flox_activate_store_path: store_path.to_string_lossy().to_string(),
             attach_ctx: core,
@@ -444,7 +438,7 @@ impl Activate {
             shell,
             invocation_type: Some(invocation_type),
             remove_after_reading: true,
-            metrics_uuid,
+            metrics_uuid: flox.metrics_device_uuid,
         };
 
         let tempfile = tempfile::NamedTempFile::new_in(flox.temp_dir)?;
