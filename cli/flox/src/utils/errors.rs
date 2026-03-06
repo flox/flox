@@ -303,7 +303,6 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
                     $ flox upgrade
             "},
         },
-        CoreEnvironmentError::UninstallError(_) => display_chain(err),
         CoreEnvironmentError::Services(err) => display_chain(err),
         CoreEnvironmentError::ReadLockfile(_) => display_chain(err),
         CoreEnvironmentError::ParseLockfile(serde_error) => formatdoc! {"

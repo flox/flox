@@ -27,11 +27,11 @@ use thiserror::Error;
 use tracing::debug;
 
 use super::fetcher::IncludeFetcher;
+use super::uninstall::{UninstallSpec, resolve_specs_to_modifications};
 use super::{
     CanonicalizeError,
     EnvironmentError,
     InstallationAttempt,
-    UninstallError,
     UninstallationAttempt,
     UpgradeError,
     copy_dir_recursive,
@@ -378,48 +378,49 @@ impl CoreEnvironment<ReadOnly> {
         Ok(installation)
     }
 
-    /// Uninstall packages from the environment atomically
+    /// Uninstall packages and or package outputs from the environment atomically
     ///
     /// Locks the environment first in order to detect and resolve any composition.
     ///
     /// Returns the modified environment if there were no errors.
     pub fn uninstall(
         &mut self,
-        packages: Vec<String>,
+        uninstall_specs: Vec<UninstallSpec>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         let lockfile: Lockfile = self.lock(flox)?.into();
-        let packages_in_includes = if let Some(compose) = lockfile.compose {
-            compose.get_includes_for_packages(&packages)?
+
+        let manifest = self.manifest(flox)?;
+
+        // Resolve specs to modifications using manifest + lockfile.
+        // This also handles PackageOnlyIncluded detection internally.
+        let modifications = resolve_specs_to_modifications(&uninstall_specs, &manifest, &lockfile)?;
+
+        let new_manifest = manifest.modify_packages(&modifications)?;
+        let (store_path, _) = self.transact_with_manifest(&new_manifest, flox)?;
+
+        let new_manifest_string = new_manifest
+            .as_writable_maybe_in_original_schema()?
+            .to_string();
+
+        // Collect the modified install ids that are still installed through includes
+        let still_included = if let Some(compose) = &lockfile.compose {
+            modifications
+                .iter()
+                .filter_map(|m| {
+                    let include = compose.get_include_for_package(&m.install_id, &None).ok()?;
+                    Some((m.install_id.clone(), include?))
+                })
+                .collect()
         } else {
             HashMap::new()
         };
 
-        let manifest = self.manifest(flox)?;
-        let install_ids = match manifest.get_install_ids(packages) {
-            Ok(ids) => ids,
-            Err(err) => {
-                if let ManifestError::PackageNotFound(ref package) = err
-                    && let Some(include) = packages_in_includes.get(package)
-                {
-                    return Err(EnvironmentError::Core(
-                        CoreEnvironmentError::UninstallError(UninstallError::PackageOnlyIncluded(
-                            package.to_string(),
-                            include.name.clone(),
-                        )),
-                    ));
-                };
-                return Err(EnvironmentError::ManifestError(err));
-            },
-        };
-
-        let post_removal = manifest.remove_packages(&install_ids)?;
-        let (store_path, _) = self.transact_with_manifest(&post_removal, flox)?;
-
         Ok(UninstallationAttempt {
-            new_manifest: Some(post_removal),
-            still_included: packages_in_includes,
+            new_manifest: Some(new_manifest_string),
+            still_included,
             built_environment_store_paths: Some(store_path),
+            modifications,
         })
     }
 
@@ -1178,9 +1179,6 @@ pub enum CoreEnvironmentError {
     #[error("failed to upgrade environment")]
     UpgradeFailedCatalog(#[source] UpgradeError),
     // endregion
-    #[error(transparent)]
-    UninstallError(#[from] UninstallError),
-
     #[error("could not automatically migrate manifest to version 1")]
     MigrateManifest(#[source] toml_edit::de::Error),
 

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 #[cfg(any(test, feature = "tests"))]
 use flox_test_utils::proptest::alphanum_string;
 #[cfg(any(test, feature = "tests"))]
@@ -25,33 +23,17 @@ pub struct Compose {
 }
 
 impl Compose {
-    /// Get the highest priority included environment which provides each package.
-    /// Packages that are not provided by any included environments will be absent from the map.
-    pub fn get_includes_for_packages(
-        &self,
-        packages: &[String],
-    ) -> Result<HashMap<String, LockedInclude>, ManifestError> {
-        let mut result = HashMap::new();
-        for package in packages {
-            if let Some(include) = Self::get_include_for_package(package, &self.include)? {
-                result.insert(package.clone(), include);
-            }
-        }
-
-        Ok(result)
-    }
-
     /// Detect which included environment, if any, provides a given package.
-    fn get_include_for_package(
-        package: &String,
-        includes: &[LockedInclude],
+    pub fn get_include_for_package(
+        &self,
+        package: &str,
+        version: &Option<String>,
     ) -> Result<Option<LockedInclude>, ManifestError> {
         // Reverse of merge order so that we return the highest priority match.
-        for include in includes.iter().rev() {
-            let pkgs = vec![package.to_string()];
+        for include in self.include.iter().rev() {
             let res = match &include.manifest.inner.parsed {
-                crate::Parsed::V1(manifest) => manifest.get_install_ids(pkgs),
-                crate::Parsed::V1_10_0(manifest) => manifest.get_install_ids(pkgs),
+                crate::Parsed::V1(manifest) => manifest.resolve_install_id(package, version),
+                crate::Parsed::V1_10_0(manifest) => manifest.resolve_install_id(package, version),
             };
             match res {
                 Ok(_) => return Ok(Some(include.clone())),

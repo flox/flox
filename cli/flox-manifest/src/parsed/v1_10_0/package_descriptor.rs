@@ -288,6 +288,27 @@ impl SetOutputs for ManifestPackageDescriptor {
     }
 }
 
+impl ManifestPackageDescriptor {
+    /// Set the outputs for this package descriptor.
+    /// Store path descriptors do not support outputs and are left unchanged.
+    pub fn set_outputs(&mut self, outputs: Option<SelectedOutputs>) {
+        match self {
+            ManifestPackageDescriptor::Catalog(pkg) => pkg.outputs = outputs,
+            ManifestPackageDescriptor::FlakeRef(pkg) => pkg.outputs = outputs,
+            ManifestPackageDescriptor::StorePath(_) => {},
+        }
+    }
+
+    /// Get the current outputs for this package descriptor.
+    pub fn get_outputs(&self) -> Option<&SelectedOutputs> {
+        match self {
+            ManifestPackageDescriptor::Catalog(pkg) => pkg.outputs.as_ref(),
+            ManifestPackageDescriptor::FlakeRef(pkg) => pkg.outputs.as_ref(),
+            ManifestPackageDescriptor::StorePath(_) => None,
+        }
+    }
+}
+
 impl From<v1::ManifestPackageDescriptor> for ManifestPackageDescriptor {
     fn from(value: v1::ManifestPackageDescriptor) -> Self {
         match value {

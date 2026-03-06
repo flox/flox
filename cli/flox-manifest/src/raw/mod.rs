@@ -612,6 +612,22 @@ impl StorePath {
     }
 }
 
+/// The kind of modification to apply to a package during uninstall.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PackageModification {
+    /// Remove the package entirely.
+    Remove,
+    /// Update the package's outputs to the given list.
+    UpdateOutputs(Vec<String>),
+}
+
+/// A resolved package modification to apply.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PackageToModify {
+    pub install_id: String,
+    pub modification: PackageModification,
+}
+
 /// Infers an install ID from the last component of a slash or dot separated
 /// attribute path, so that we get a user-friendly name without any catalog or
 /// package hierachy.
@@ -707,6 +723,11 @@ pub trait ModifyPackages {
     /// along with a map of which of the newly added packages were already installed.
     fn add_packages(&self, pkgs: &[PackageToInstall]) -> Result<PackageInsertion, ManifestError>;
     fn remove_packages(&self, install_ids: &[String]) -> Result<Manifest<Migrated>, ManifestError>;
+    /// Apply a set of modifications (removals or output updates) to the manifest.
+    fn modify_packages(
+        &self,
+        modifications: &[PackageToModify],
+    ) -> Result<Manifest<Migrated>, ManifestError>;
 }
 
 impl ModifyPackages for Manifest<Migrated> {
@@ -797,6 +818,45 @@ impl ModifyPackages for Manifest<Migrated> {
             }
             pkg_map.remove(install_id);
             debug!(id = install_id, "package removed");
+        }
+        manifest.update_raw_packages_from_typed_manifest()?;
+        Ok(manifest)
+    }
+
+    // It seems like this should take &mut self but I'm going to follow the
+    // same pattern as add_packages and remove_packages for consistency
+    fn modify_packages(
+        &self,
+        modifications: &[PackageToModify],
+    ) -> Result<Manifest<Migrated>, ManifestError> {
+        debug!("attempting to modify packages in the manifest");
+        let mut manifest = self.clone();
+        let pkg_map = manifest.inner.migrated_parsed.install.inner_mut();
+        for modification in modifications {
+            match &modification.modification {
+                PackageModification::Remove => {
+                    if !pkg_map.contains_key(&modification.install_id) {
+                        return Err(ManifestError::PackageNotFound(
+                            modification.install_id.clone(),
+                        ));
+                    }
+                    pkg_map.remove(&modification.install_id);
+                    debug!(id = modification.install_id, "package removed");
+                },
+                // As this is currently only used for uninstalls, we don't worry about ever setting to all
+                PackageModification::UpdateOutputs(outputs) => {
+                    let descriptor =
+                        pkg_map.get_mut(&modification.install_id).ok_or_else(|| {
+                            ManifestError::PackageNotFound(modification.install_id.clone())
+                        })?;
+                    descriptor.set_outputs(Some(SelectedOutputs::Specific(outputs.clone())));
+                    debug!(
+                        id = modification.install_id,
+                        ?outputs,
+                        "package outputs updated"
+                    );
+                },
+            }
         }
         manifest.update_raw_packages_from_typed_manifest()?;
         Ok(manifest)
