@@ -9,10 +9,12 @@ use bpaf::Bpaf;
 use flox_core::data::environment_ref::EnvironmentName;
 use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::managed_environment::{
-    ManagedEnvironmentError,
+use flox_rust_sdk::models::environment::generations::{
+    GenerationsEnvironment,
+    GenerationsExt,
     SyncToGenerationResult,
 };
+use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
     CoreEnvironmentError,
@@ -155,11 +157,12 @@ impl Edit {
                     progress = "Syncing environment to a new generation"
                 );
                 let _guard = span.enter();
-                let ConcreteEnvironment::Managed(ref mut environment) = detected_environment else {
-                    bail!("Cannot sync local or remote environments.");
-                };
 
-                let sync_result = environment.create_generation_from_local_env(&flox)?;
+                let mut generations_environment =
+                    GenerationsEnvironment::try_from(detected_environment)?;
+
+                let sync_result =
+                    generations_environment.create_generation_from_local_env(&flox)?;
                 match sync_result {
                     SyncToGenerationResult::UpToDate => message::plain("No local changes to sync."),
                     SyncToGenerationResult::Synced => {
@@ -174,16 +177,15 @@ impl Edit {
                     progress = "Resetting environment to current generation"
                 );
                 let _guard = span.enter();
-                let ConcreteEnvironment::Managed(ref mut environment) = detected_environment else {
-                    bail!("Cannot reset local or remote environments.");
-                };
+                let mut generations_environment =
+                    GenerationsEnvironment::try_from(detected_environment)?;
 
-                environment.reset_local_env_to_current_generation(&flox)?;
+                generations_environment.reset_local_env_to_current_generation(&flox)?;
 
                 // The current generation already has a lock,
                 // so we can skip locking.
-                let store_path = environment.build(&flox)?;
-                environment.link(&store_path)?;
+                let store_path = generations_environment.build(&flox)?;
+                generations_environment.link(&store_path)?;
 
                 message::updated("Environment changes reset to current generation.");
             },
@@ -442,6 +444,7 @@ mod tests {
     use std::fs;
 
     use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
+    use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::mock_managed_environment_unlocked;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_path_environment,
