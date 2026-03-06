@@ -13,7 +13,8 @@ flox-install - install packages to an environment
 
 ```
 flox [<general options>] install
-     [-i <id>] <package>
+     [-i <id>] <package>[@<version>]
+     [-i <id>] <package>[^<outputs>]
      [[-i <id>] <package>] ...
 ```
 
@@ -74,8 +75,13 @@ reference.
 :   The install ID of the package as it will appear in the manifest
 
 `<package>`
-:   The pkg-path of the package to install as shown by 'flox search'
-    Append `@<version>` to specify a version requirement.
+:   The pkg-path of the package to install as shown by 'flox search'.
+    Append `@<version>` to specify a version requirement,
+    or `^<outputs>` to select which outputs to install.
+    Use `^..` to install all outputs,
+    or a comma-separated list such as `^bin,man` to install specific outputs.
+    The version constraint (`@`) and output specifier (`^`)
+    are mutually exclusive.
 
     Alternatively, an arbitrary Nix flake installable,
     or store path may be specified.

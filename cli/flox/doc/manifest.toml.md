@@ -117,6 +117,7 @@ Descriptor ::= {
 , systems            = null | [<STRING>, ...]
 , pkg-path           = <STRING>
 , priority           = null | <INT>
+, outputs            = null | "all" | [<STRING>, ...]
 }
 ```
 
@@ -200,6 +201,24 @@ Each option is described below:
     Packages with a lower `priority` value will take precedence over packages
     with higher `priority` values.
 
+`outputs`
+:   Selects which outputs of a package to install.
+
+    Packages can split up the files they install into what are called outputs.
+    For example, a package can put binaries into a `bin` output and development
+    headers in a `dev` output.
+    If an environment only needs to use the binaries from the package, it can
+    reduce its size by only installing the `bin` output.
+
+    The outputs of existing packages can be inspected with `flox list -a` and
+    new packages can be inspected with `flox show`.
+
+    When omitted, the package's default outputs are installed.
+    When set to an array of strings (e.g. `["bin", "man"]`), only those
+    specific outputs are installed.
+    When set to the string `"all"`, all available outputs of the package are
+    installed.
+
 #### Flake descriptors
 
 Flake descriptors allow installing software from an arbitrary Nix flake.
@@ -210,12 +229,13 @@ Descriptor ::= {
   flake              = <STRING>
 , systems            = null | [<STRING>, ...]
 , priority           = null | <INT>
+, outputs            = null | "all" | [<STRING>, ...]
 }
 ```
 
 Only `flake` is required.
-`systems` and `priority` behave the same as described above for catalog
-descriptors,
+`systems`, `priority`, and `outputs` behave the same as described above for
+catalog descriptors,
 and `flake` is described below:
 
 `flake`
