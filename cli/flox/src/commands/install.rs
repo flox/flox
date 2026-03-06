@@ -241,6 +241,7 @@ impl Install {
 
         // Get the new set of composer overrides
         let new_composer_package_overrides = lockfile
+            .clone()
             .compose
             .map(|c| c.warnings)
             .map(|warnings| package_overrides_for_manifest_id(&warnings, COMPOSER_MANIFEST_ID))
@@ -274,7 +275,13 @@ impl Install {
             Self::partition_installed_packages(&installed, &installation.already_installed);
 
         // Print status messages for the installation attempt
+        let install_ids = partitioned
+            .successes
+            .iter()
+            .map(|pkg| pkg.id().to_string())
+            .collect::<Vec<_>>();
         message::packages_successfully_installed(&partitioned.successes, &description);
+        message::packages_with_additional_outputs(&install_ids, &lockfile, &flox.system);
         message::packages_installed_with_system_subsets(&partitioned.system_subsets);
         message::packages_already_installed(&partitioned.already_installed, &description);
         message::packages_newly_overridden_by_composer(&new_package_overrides);
@@ -751,8 +758,8 @@ fn add_activation_to_rc_file(
 
 #[cfg(test)]
 mod tests {
-    use flox_manifest::lockfile::LockedPackageCatalog;
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
+    use flox_manifest::lockfile::{LockedPackage, LockedPackageCatalog, Lockfile};
     use flox_manifest::raw::{CatalogPackage, PackageToInstall};
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
@@ -767,6 +774,7 @@ mod tests {
     use super::{add_activation_to_rc_file, ensure_rc_file_exists};
     use crate::commands::EnvironmentSelect;
     use crate::commands::install::{Install, package_list_for_prompt};
+    use crate::utils::message;
 
     /// [Install::generate_warnings] shouldn't warn for packages not in packages_to_install
     #[test]
@@ -974,5 +982,86 @@ mod tests {
              ! '{install_id}' installed only for the following systems: {installed_systems}
         "};
         assert_eq!(writer.to_string(), expected);
+    }
+
+    /// `bash` has more outputs available than its default set, so installing it
+    /// should produce an informational message about additional outputs.
+    #[tokio::test]
+    async fn additional_outputs_message_shown_when_defaults_are_subset() {
+        let lockfile_contents =
+            std::fs::read_to_string(GENERATED_DATA.join("envs/bash/manifest.lock")).unwrap();
+        let lockfile: flox_manifest::lockfile::Lockfile = lockfile_contents.parse().unwrap();
+        // Pick the first system present in the lockfile for the check.
+        let system = lockfile.packages[0].system().to_string();
+
+        let install_ids = vec!["bash".to_string()];
+        let (subscriber, writer) = test_subscriber_message_only();
+        async {
+            message::packages_with_additional_outputs(&install_ids, &lockfile, &system);
+        }
+        .with_subscriber(subscriber)
+        .await;
+
+        let output = writer.to_string();
+        assert!(
+            output.contains("additional outputs"),
+            "expected additional outputs message for bash, got: {output:?}"
+        );
+    }
+
+    /// `hello` only has the `out` output, and its default set is also `out`,
+    /// so no additional outputs message should be shown.
+    #[tokio::test]
+    async fn no_additional_outputs_message_when_defaults_equal_all() {
+        let lockfile_contents =
+            std::fs::read_to_string(GENERATED_DATA.join("envs/hello/manifest.lock")).unwrap();
+        let lockfile: flox_manifest::lockfile::Lockfile = lockfile_contents.parse().unwrap();
+        let system = lockfile.packages[0].system().to_string();
+
+        let install_ids = vec!["hello".to_string()];
+        let (subscriber, writer) = test_subscriber_message_only();
+        async {
+            message::packages_with_additional_outputs(&install_ids, &lockfile, &system);
+        }
+        .with_subscriber(subscriber)
+        .await;
+
+        let output = writer.to_string();
+        assert!(
+            output.is_empty(),
+            "expected no message for hello, got: {output:?}"
+        );
+    }
+
+    /// `hello` only has the `out` output, and its default set is also `out`,
+    /// so no additional outputs message should be shown.
+    #[tokio::test]
+    async fn no_additional_outputs_message_when_outputs_to_install_is_none() {
+        let lockfile_contents =
+            std::fs::read_to_string(GENERATED_DATA.join("envs/hello/manifest.lock")).unwrap();
+        let mut lockfile: Lockfile = lockfile_contents.parse().unwrap();
+        let system = lockfile.packages[0].system().to_string();
+        lockfile
+            .packages
+            .iter_mut()
+            .for_each(|locked_pkg| match locked_pkg {
+                LockedPackage::Catalog(inner) => inner.outputs_to_install = None,
+                LockedPackage::Flake(inner) => inner.locked_installable.outputs_to_install = None,
+                LockedPackage::StorePath(_) => {},
+            });
+
+        let install_ids = vec!["hello".to_string()];
+        let (subscriber, writer) = test_subscriber_message_only();
+        async {
+            message::packages_with_additional_outputs(&install_ids, &lockfile, &system);
+        }
+        .with_subscriber(subscriber)
+        .await;
+
+        let output = writer.to_string();
+        assert!(
+            output.is_empty(),
+            "expected no message for hello, got: {output:?}"
+        );
     }
 }
