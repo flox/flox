@@ -67,7 +67,13 @@ impl PackageLookup for Manifest<Migrated> {
             .pkg_belongs_to_non_empty_toplevel_group(pkg)
     }
 
-    fn get_install_ids(&self, packages: Vec<String>) -> Result<Vec<String>, crate::ManifestError> {
-        self.inner.migrated_parsed.get_install_ids(packages)
+    fn resolve_install_id(
+        &self,
+        package_ref: &str,
+        version: &Option<String>,
+    ) -> Result<String, crate::ManifestError> {
+        self.inner
+            .migrated_parsed
+            .resolve_install_id(package_ref, version)
     }
 }
