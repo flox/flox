@@ -20,7 +20,8 @@ pub trait PackageOutputs {
     ///
     /// Note that this assumes the particular behavior of the catalog-server
     /// bug that causes the duplication in the first place, which is that you
-    /// end up with runs of repeated outputs (`"out"` only, as far as I can tell).
+    /// end up with runs of repeated outputs:
+    /// https://github.com/flox/floxhub/issues/729
     fn deduped_outputs_to_install(&self) -> Option<Vec<String>> {
         self.outputs_to_install().map(|output_list| {
             let mut to_dedup = output_list.clone();
