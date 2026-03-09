@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
-use flox_rust_sdk::flox::{Flox, FloxhubToken};
+use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
 use flox_rust_sdk::providers::catalog::Client;
 use indoc::formatdoc;
 use oauth2::basic::{
@@ -100,6 +100,7 @@ pub async fn authorize(client: ConfiguredClient, floxhub_url: &Url) -> Result<Cr
     }
 
     let http_client = reqwest::ClientBuilder::new()
+        .user_agent(format!("flox-cli/{}", &*FLOX_VERSION))
         .build()
         .expect("Failed to build OAuth HTTP client");
 
