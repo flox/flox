@@ -1909,7 +1909,7 @@ pub mod test_helpers {
 
         flox.floxhub_token = Some(token);
         let auth = Auth::from_flox(&flox).unwrap();
-        let base_url = "http://localhost:8000";
+        let base_url = "http://localhost:8010";
         let client = auto_recording_client_inner(filename, base_url, user, &auth, record);
         flox.catalog_client = client;
 
@@ -2602,6 +2602,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "A catalog can only be created once, this test fails on repeated runs or against an existing DB"]
     async fn creates_new_catalog() {
         let (flox, _tmpdir) = flox_instance();
         let (flox, _auth) = auto_recording_catalog_client_for_authed_local_services(
@@ -2609,7 +2610,7 @@ mod tests {
             PublishTestUser::NoCatalogs,
             "creates_new_catalog",
         );
-        let catalog_name_raw = "dummy_unused_catalog";
+        let catalog_name_raw = "test_cli_creates_new_catalog";
         // Makes two calls:
         // - POST to /catalog/catalogs?name=<catalog_name_raw>
         // - PUT to /catalog/catalogs/<catalog_name_raw>/store/config
