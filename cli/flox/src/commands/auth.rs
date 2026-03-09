@@ -29,6 +29,7 @@ use oauth2::{
     TokenResponse,
     TokenUrl,
 };
+use reqwest::redirect;
 use serde::Serialize;
 use tracing::{debug, instrument};
 use url::Url;
@@ -100,6 +101,7 @@ pub async fn authorize(client: ConfiguredClient, floxhub_url: &Url) -> Result<Cr
     }
 
     let http_client = reqwest::ClientBuilder::new()
+        .redirect(redirect::Policy::none())
         .user_agent(format!("flox-cli/{}", &*FLOX_VERSION))
         .build()
         .expect("Failed to build OAuth HTTP client");
