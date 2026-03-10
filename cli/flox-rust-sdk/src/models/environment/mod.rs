@@ -1584,4 +1584,149 @@ mod migration_tests {
             KnownSchemaVersion::V1
         );
     }
+
+    /// Installing bash (which has non-default outputs) SHOULD trigger
+    /// migration to v1.10.0. This is the counterpart to
+    /// `v1_manifest_doesnt_migrate_when_hello_is_installed`.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn v1_manifest_migrates_when_bash_is_installed() {
+        let (mut flox, _tempdir) = flox_instance();
+        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
+        let mut env = new_path_environment(&flox, "version = 1");
+        _ = env.lockfile(&flox).unwrap(); // make sure a lockfile exists
+        assert_eq!(
+            env.pre_migration_manifest(&flox)
+                .unwrap()
+                .get_schema_version(),
+            KnownSchemaVersion::V1
+        );
+        env.install(
+            &[PackageToInstall::Catalog(CatalogPackage {
+                id: "bash".into(),
+                pkg_path: "bashNonInteractive".into(),
+                version: None,
+                systems: None,
+                outputs: None,
+            })],
+            &flox,
+        )
+        .unwrap();
+        assert_eq!(
+            env.pre_migration_manifest(&flox)
+                .unwrap()
+                .get_schema_version(),
+            KnownSchemaVersion::latest()
+        );
+    }
+
+    /// A v1 manifest with only a hook section (no packages with outputs)
+    /// should stay v1.
+    #[test]
+    fn v1_manifest_with_hook_is_not_migrated() {
+        let (flox, tempdir) = flox_instance();
+
+        let manifest = with_schema(KnownSchemaVersion::V1, indoc! {r#"
+            [hook]
+            on-activate = "echo hello"
+        "#});
+        let mut env = new_path_environment_in(&flox, &manifest, tempdir.path());
+        env.lockfile(&flox).unwrap();
+
+        assert_eq!(
+            env.pre_migration_manifest(&flox)
+                .unwrap()
+                .get_schema_version(),
+            KnownSchemaVersion::V1
+        );
+    }
+
+    /// A v1 manifest with only a profile section should stay v1.
+    #[test]
+    fn v1_manifest_with_profile_is_not_migrated() {
+        let (flox, tempdir) = flox_instance();
+
+        let manifest = with_schema(KnownSchemaVersion::V1, indoc! {r#"
+            [profile]
+            common = "export FOO=bar"
+            bash = "alias ll='ls -la'"
+        "#});
+        let mut env = new_path_environment_in(&flox, &manifest, tempdir.path());
+        env.lockfile(&flox).unwrap();
+
+        assert_eq!(
+            env.pre_migration_manifest(&flox)
+                .unwrap()
+                .get_schema_version(),
+            KnownSchemaVersion::V1
+        );
+    }
+
+    /// A v1 composer including a v1.10.0 environment with only a hook
+    /// section should NOT be migrated because the merged manifest is
+    /// backwards compatible with v1.
+    #[test]
+    fn v1_including_latest_with_hook_is_not_migrated() {
+        let (flox, tempdir) = flox_instance();
+
+        let included_manifest = with_latest_schema(indoc! {r#"
+            [hook]
+            on-activate = "echo hello"
+        "#});
+        setup_locked_included_env(&flox, tempdir.path(), &included_manifest);
+
+        let mut composer = setup_v1_composer_with_include(&flox, tempdir.path());
+        composer.lockfile(&flox).unwrap();
+
+        let composer_manifest_contents = composer
+            .pre_migration_manifest(&flox)
+            .unwrap()
+            .as_writable()
+            .to_string();
+
+        expect![[r#"
+            version = 1
+
+            [include]
+            environments = [
+              { dir = "../included" },
+            ]
+
+        "#]]
+        .assert_eq(&composer_manifest_contents);
+    }
+
+    /// A v1 composer including a v1.10.0 environment with only a profile
+    /// section should NOT be migrated because the merged manifest is
+    /// backwards compatible with v1.
+    #[test]
+    fn v1_including_latest_with_profile_is_not_migrated() {
+        let (flox, tempdir) = flox_instance();
+
+        let included_manifest = with_latest_schema(indoc! {r#"
+            [profile]
+            common = "export FOO=bar"
+            bash = "alias ll='ls -la'"
+        "#});
+        setup_locked_included_env(&flox, tempdir.path(), &included_manifest);
+
+        let mut composer = setup_v1_composer_with_include(&flox, tempdir.path());
+        composer.lockfile(&flox).unwrap();
+
+        let composer_manifest_contents = composer
+            .pre_migration_manifest(&flox)
+            .unwrap()
+            .as_writable()
+            .to_string();
+
+        expect![[r#"
+            version = 1
+
+            [include]
+            environments = [
+              { dir = "../included" },
+            ]
+
+        "#]]
+        .assert_eq(&composer_manifest_contents);
+    }
 }
