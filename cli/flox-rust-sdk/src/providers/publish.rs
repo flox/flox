@@ -604,6 +604,8 @@ where
                 description: build_metadata.description.clone(),
                 drv_path: build_metadata.drv_path.clone(),
                 license: build_metadata.license.clone(),
+                // TODO: populate licenses
+                licenses: None,
                 name: build_metadata.name.clone(),
                 outputs: build_metadata.outputs.clone(),
                 outputs_to_install: build_metadata.outputs_to_install.clone(),
@@ -614,6 +616,8 @@ where
                 version: build_metadata.version.clone(),
             },
             locked_base_catalog_url: Some(self.package_metadata.base_catalog_ref.to_string()),
+            base_catalog_rev_count: None,
+            base_catalog_rev_date: None,
             url: self.env_metadata.build_repo_ref.url.clone(),
             rev: self.env_metadata.build_repo_ref.rev.clone(),
             rev_count: self.env_metadata.build_repo_ref.rev_count as i64,

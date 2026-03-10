@@ -16,7 +16,7 @@
           "catalog"
         ],
         "summary": "Search for packages",
-        "description": "Search the catalog(s) under the given criteria for matching packages.\n\nRequired Query Parameters:\n- **system**: The system architecture to search for (e.g., x86_64-linux)\n\nOptional Query Parameters:\n- **search_term**: The search term to filter packages by\n- **catalogs**: Comma separated list of catalog names to search; defaults to\n  all catalogs. Note: when searching base catalog, search_term is required.\n- **page**: Page number for pagination (default: 0)\n- **pageSize**: Page size for pagination (default: 10)\n\nReturns:\n- **PackageSearchResult**: A list of PackageInfoSearch items and total count",
+        "description": "Search the catalog(s) under the given criteria for matching packages.\n\nRequired Query Parameters:\n- **system**: The system architecture to search for (e.g., x86_64-linux)\n\nOptional Query Parameters:\n- **search_term**: The search term to filter packages by\n- **catalogs**: Comma separated list of catalog names to search; defaults to\n  all catalogs. Note: when searching base catalog, search_term is required.\n- **page**: Page number for pagination (default: 0)\n- **pageSize**: Page size for pagination (default: 10)\nReturns:\n- **PackageSearchResult**: A list of PackageInfoSearch items and total count",
         "operationId": "search_api_v1_catalog_search_get",
         "security": [
           {
@@ -632,7 +632,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9.\\-_]{3,128}",
+              "pattern": "[a-zA-Z0-9.\\-_]{1,128}",
               "title": "Package Name",
               "name": "package_name",
               "example": "curl"
@@ -800,7 +800,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9.\\-_]{3,128}",
+              "pattern": "[a-zA-Z0-9.\\-_]{1,128}",
               "title": "Package Name",
               "name": "package_name",
               "example": "curl"
@@ -876,7 +876,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9.\\-_]{3,128}",
+              "pattern": "[a-zA-Z0-9.\\-_]{1,128}",
               "title": "Package Name",
               "name": "package_name",
               "example": "curl"
@@ -972,7 +972,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9.\\-_]{3,128}",
+              "pattern": "[a-zA-Z0-9.\\-_]{1,128}",
               "title": "Package Name",
               "name": "package_name",
               "example": "curl"
@@ -1076,7 +1076,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9.\\-_]{3,128}",
+              "pattern": "[a-zA-Z0-9.\\-_]{1,128}",
               "title": "Package Name",
               "name": "package_name",
               "example": "curl"
@@ -1180,7 +1180,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9.\\-_]{3,128}",
+              "pattern": "[a-zA-Z0-9.\\-_]{1,128}",
               "title": "Package Name",
               "name": "package_name",
               "example": "curl"
@@ -2670,6 +2670,17 @@
             "nullable": true,
             "type": "string"
           },
+          "base_catalog_rev_date": {
+            "title": "Base Catalog Rev Date",
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          },
+          "base_catalog_rev_count": {
+            "title": "Base Catalog Rev Count",
+            "nullable": true,
+            "type": "integer"
+          },
           "derivation": {
             "$ref": "#/components/schemas/PackageDerivation-Output"
           },
@@ -2689,6 +2700,8 @@
         ],
         "title": "PackageBuild",
         "example": {
+          "base_catalog_rev_count": 11000,
+          "base_catalog_rev_date": "2021-08-15T00:00:00Z",
           "derivation": {
             "broken": false,
             "description": "A command line tool for transferring files with URL syntax",
@@ -2760,6 +2773,17 @@
             "nullable": true,
             "type": "string"
           },
+          "base_catalog_rev_date": {
+            "title": "Base Catalog Rev Date",
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          },
+          "base_catalog_rev_count": {
+            "title": "Base Catalog Rev Count",
+            "nullable": true,
+            "type": "integer"
+          },
           "derivation": {
             "$ref": "#/components/schemas/PackageDerivation-Input"
           },
@@ -2793,6 +2817,8 @@
         ],
         "title": "PackageBuildWithNarInfo",
         "example": {
+          "base_catalog_rev_count": 11000,
+          "base_catalog_rev_date": "2021-08-15T00:00:00Z",
           "derivation": {
             "broken": false,
             "description": "A command line tool for transferring files with URL syntax",
@@ -2862,6 +2888,14 @@
             "title": "License",
             "nullable": true,
             "type": "string"
+          },
+          "licenses": {
+            "title": "Licenses",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "broken": {
             "title": "Broken",
@@ -2945,6 +2979,14 @@
             "title": "License",
             "nullable": true,
             "type": "string"
+          },
+          "licenses": {
+            "title": "Licenses",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "broken": {
             "title": "Broken",

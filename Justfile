@@ -187,7 +187,7 @@ gen-unit-data-for-publish floxhub_repo_path force="":
     catalog_server_url="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $FLOXHUB_CATALOG_SERVER_URL')"
 
     # Get the latest Nixpkgs revision that exists in the catalog
-    nixpkgs_rev="$(curl -X 'GET' --silent "${catalog_server_url}/api/v1/catalog/info/base-catalog" -H 'accept: application/json' | jq .scraped_pages[0].rev | tr -d "'\"")"
+    nixpkgs_rev="$(curl -X 'GET' --silent "${catalog_server_url}/info/base-catalog" -H 'accept: application/json' | jq .scraped_pages[0].rev | tr -d "'\"")"
     if [ -z "$nixpkgs_rev" ]; then
         echo "failed to communicate with floxhub services"
         exit 1

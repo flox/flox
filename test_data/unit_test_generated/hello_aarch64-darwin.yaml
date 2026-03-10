@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Mon, 25 Aug 2025 16:48:48 GMT
+    value: Thu, 05 Mar 2026 13:55:09 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,5 +14,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: P3wNmhELIAMEYzQ=
-  body: '{"items":[{"name":"toplevel","page":{"page":846535,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"hello","pkg_path":"hello","derivation":"/nix/store/db60vwx756bx1cig8ry5j0kxx6jl9jjb-hello-2.12.2.drv","name":"hello-2.12.2","pname":"hello","version":"2.12.2","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/wavwxbxl8szlf2cl40bvlvq551sw08s0-hello-2.12.2"}],"outputs_to_install":["out"],"description":"Program that produces a familiar, friendly greeting","license":"GPL-3.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=20075955deac2583bb12f07151c2df830ef346b4","rev":"20075955deac2583bb12f07151c2df830ef346b4","rev_count":846535,"rev_date":"2025-08-19T15:00:17Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-08-24T15:38:54.113354Z","cache_uri":null,"install_id":"hello"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
+    value: ZwKxphx2IAMEbuQ=
+  body: '{"items":[{"name":"toplevel","page":{"page":957538,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"hello","pkg_path":"hello","derivation":"/nix/store/qg0gd4fzq3rc4yssmwd3kpr8mav18wsl-hello-2.12.2.drv","name":"hello-2.12.2","pname":"hello","version":"2.12.2","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/4w6i1qx2k6g5bb7m2i2h1gfhk6kk7hnr-hello-2.12.2"}],"outputs_to_install":["out"],"description":"Program that produces a familiar, friendly greeting","license":"GPL-3.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=8c809a146a140c5c8806f13399592dbcb1bb5dc4","rev":"8c809a146a140c5c8806f13399592dbcb1bb5dc4","rev_count":957538,"rev_date":"2026-03-03T12:59:14Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-03-04T04:39:51.718759Z","cache_uri":null,"install_id":"hello"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'

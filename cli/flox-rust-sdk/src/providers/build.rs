@@ -2192,7 +2192,7 @@ mod tests {
     /// Test that Flox provided boost can be included at build time and linked
     /// against when boost is in runtime-packages.
     /// but if linking isn't needed, runtime-packages can be empty.
-    /// Use boost::system::error_code so we have to link against boost_system.
+    /// Use boost::exception so we have to link against libboost_exception.
     fn boost_runtime(sandbox: bool) {
         let package_name = String::from("test_boost");
         let source_name = String::from("test_boost.cpp");
@@ -2213,7 +2213,7 @@ mod tests {
 
             [build.{package_name}]
             command = """
-                g++ -o {bin_name} {source_name} -lboost_system
+                g++ -o {bin_name} {source_name} -lboost_exception
                 mkdir -p $out/bin
                 cp {bin_name} $out/bin/{bin_name}
             """
@@ -2223,19 +2223,28 @@ mod tests {
             "#, if sandbox { "pure" } else { "off" }};
         env.edit(&flox, build_manifest).unwrap();
 
+        // From <https://www.boost.org/doc/libs/latest/libs/exception/doc/tutorial_transporting_data.html>
         let source_code = indoc! {r#"
+            #include <boost/exception/all.hpp>
             #include <iostream>
-            #include <boost/system/error_code.hpp>
+
+            typedef boost::error_info<struct tag_my_info,int> my_info; //(1)
+            struct my_error: virtual boost::exception, virtual std::exception { }; //(2)
+
+            void f() {
+                throw my_error() << my_info(42); //(3)
+            }
 
             int main() {
-                // Create an error code representing a generic "invalid argument"
-                boost::system::error_code ec(boost::system::errc::invalid_argument,
-                                             boost::system::generic_category());
-
-                std::cout << ec.value() << std::endl;
-
+                try {
+                    f();
+                } catch( my_error & x ) {
+                    if( int const * mi=boost::get_error_info<my_info>(x) )
+                        std::cout << *mi;
+                }
                 return 0;
             }
+
             "#};
         fs::write(env_path.join(&source_name), source_code).unwrap();
 
@@ -2256,7 +2265,7 @@ mod tests {
             "should execute successfully, stderr: {:?}",
             String::from_utf8_lossy(&output.stderr)
         );
-        assert_eq!(String::from_utf8_lossy(&output.stdout).trim_end(), "22",);
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim_end(), "42",);
     }
 
     #[test]

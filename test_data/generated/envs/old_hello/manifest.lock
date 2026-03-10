@@ -26,9 +26,9 @@
       "rev_date": "2022-01-25T03:21:06Z",
       "scrape_date": "2024-08-15T20:52:42Z",
       "stabilities": [
-        "stable",
+        "unstable",
         "staging",
-        "unstable"
+        "stable"
       ],
       "unfree": false,
       "version": "2.10",
@@ -57,9 +57,9 @@
       "rev_date": "2022-01-25T03:21:06Z",
       "scrape_date": "2024-08-15T20:52:42Z",
       "stabilities": [
-        "stable",
+        "unstable",
         "staging",
-        "unstable"
+        "stable"
       ],
       "unfree": false,
       "version": "2.10",
@@ -88,9 +88,9 @@
       "rev_date": "2022-01-25T03:21:06Z",
       "scrape_date": "2024-08-15T20:52:42Z",
       "stabilities": [
-        "stable",
+        "unstable",
         "staging",
-        "unstable"
+        "stable"
       ],
       "unfree": false,
       "version": "2.10",
@@ -119,9 +119,9 @@
       "rev_date": "2022-01-25T03:21:06Z",
       "scrape_date": "2024-08-15T20:52:42Z",
       "stabilities": [
-        "stable",
+        "unstable",
         "staging",
-        "unstable"
+        "stable"
       ],
       "unfree": false,
       "version": "2.10",

@@ -232,6 +232,7 @@ EOF
   assert_line --partial "✔ 'tabula' installed to environment"
 }
 
+# bats test_tags=resolution:single-package-not-found
 @test "resolution message: single package not found, without curation" {
   "$FLOX_BIN" init
 
@@ -241,9 +242,10 @@ EOF
     run "$FLOX_BIN" install badpkg
 
   assert_failure
+  SPACE=" "
   assert_output "$(
     cat << EOF
-✘ ERROR: resolution failed: 
+✘ ERROR: resolution failed:$SPACE
 Could not find package 'badpkg'.
 Try 'flox search' with a broader search term.
 EOF
@@ -270,6 +272,7 @@ EOF
   )"
 }
 
+# bats test_tags=resolution:single-package-not-found
 @test "resolution message: single package not found, with curation" {
   "$FLOX_BIN" init
 
@@ -277,11 +280,12 @@ EOF
   RUST_BACKTRACE=0 \
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/node_suggestions.yaml" \
     run "$FLOX_BIN" install node
-
   assert_failure
+
+  SPACE=" "
   assert_output --partial "$(
     cat << EOF
-✘ ERROR: resolution failed: 
+✘ ERROR: resolution failed:$SPACE
 Could not find package 'node'.
 Try 'flox install nodejs' instead.
 
@@ -301,13 +305,13 @@ EOF
   assert_success
 
   run tomlq -e \
-    '.install.bpftrace.systems | debug(.) == ["x86_64-linux","aarch64-linux"]' \
+    '.install.bpftrace.systems | debug(.) == ["aarch64-linux","x86_64-linux"]' \
     "$MANIFEST_PATH"
   assert_success
 }
 
 # bats test_tags=install:multiple-not-on-all-systems
-@test "resolution fixub: multiple packages not available on all systems install with looser constraints" {
+@test "resolution fixup: multiple packages not available on all systems install with looser constraints" {
   "$FLOX_BIN" init
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace_systemd.yaml" \
@@ -363,9 +367,10 @@ EOF
     run "$FLOX_BIN" install nodejs@14.16.1
 
   assert_failure
+  SPACE=" "
   assert_output "$(
     cat << EOF
-✘ ERROR: resolution failed: 
+✘ ERROR: resolution failed:$SPACE
 No version compatible with '14.16.1' found for 'nodejs' on 'aarch64-darwin'.
 EOF
   )"
@@ -380,10 +385,11 @@ EOF
     run "$FLOX_BIN" install python311Packages.torchvision-bin
 
   assert_failure
+  SPACE=" "
   assert_output "$(
     cat << EOF
-✘ ERROR: resolution failed: 
-The package 'python311Packages.torchvision-bin' is not found for all requested systems on the same page, consider package groups with the following system groupings: (x86_64-darwin), (aarch64-linux), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin).
+✘ ERROR: resolution failed:$SPACE
+The package 'python311Packages.torchvision-bin' is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-linux), (x86_64-darwin), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin).
 EOF
   )"
 }
