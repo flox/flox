@@ -79,17 +79,18 @@ impl Uninstall {
         let attempt =
             span.in_scope(|| concrete_environment.uninstall(self.packages.clone(), &flox))?;
 
-        self.packages.iter().for_each(|package| {
+        for modification in &attempt.modifications {
+            let install_id = &modification.install_id;
             message::deleted(format!(
-                "'{package}' uninstalled from environment {description}"
+                "'{install_id}' uninstalled from environment {description}"
             ));
-            if let Some(include) = attempt.still_included.get(package) {
+            if let Some(include) = attempt.still_included.get(install_id) {
                 message::info(format!(
-                    "'{package}' is still installed by environment '{}'",
+                    "'{install_id}' is still installed by environment '{}'",
                     include.name,
                 ));
             }
-        });
+        }
 
         warn_manifest_changes_for_services(&flox, &concrete_environment);
 

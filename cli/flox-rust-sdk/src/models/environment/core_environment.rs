@@ -17,7 +17,9 @@ use flox_manifest::interfaces::{
 };
 use flox_manifest::lockfile::{LOCKFILE_FILENAME, LockedPackage, Lockfile, LockfileError};
 use flox_manifest::parsed::common::KnownSchemaVersion;
-use flox_manifest::raw::{ModifyPackages, PackageToInstall, TomlEditError};
+use flox_manifest::raw::{
+    ModifyPackages, PackageModification, PackageToInstall, PackageToModify, TomlEditError,
+};
 use flox_manifest::{MANIFEST_FILENAME, Manifest, ManifestError, Migrated, Validated, Writable};
 use itertools::Itertools;
 use pollster::FutureExt;
@@ -415,12 +417,21 @@ impl CoreEnvironment<ReadOnly> {
             },
         };
 
-        let post_removal = manifest.remove_packages(&install_ids)?;
+        let modifications: Vec<PackageToModify> = install_ids
+            .iter()
+            .map(|id| PackageToModify {
+                install_id: id.clone(),
+                modification: PackageModification::Remove,
+            })
+            .collect();
+
+        let post_removal = manifest.modify_packages(&modifications)?;
         let (store_path, _) = self.transact_with_manifest(&post_removal, flox)?;
 
         Ok(UninstallationAttempt {
             still_included: packages_in_includes,
             built_environment_store_paths: Some(store_path),
+            modifications,
         })
     }
 

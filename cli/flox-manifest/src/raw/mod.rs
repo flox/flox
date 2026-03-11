@@ -630,6 +630,20 @@ impl StorePath {
     }
 }
 
+/// The kind of modification to apply to a package during uninstall.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PackageModification {
+    /// Remove the package entirely.
+    Remove,
+}
+
+/// A resolved package modification to apply.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PackageToModify {
+    pub install_id: String,
+    pub modification: PackageModification,
+}
+
 /// Infers an install ID from the last component of a slash or dot separated
 /// attribute path, so that we get a user-friendly name without any catalog or
 /// package hierachy.
@@ -724,7 +738,12 @@ pub trait ModifyPackages {
     /// Adds new packages to the manifest, returning a new manifest if one was created
     /// along with a map of which of the newly added packages were already installed.
     fn add_packages(&self, pkgs: &[PackageToInstall]) -> Result<PackageInsertion, ManifestError>;
-    fn remove_packages(&self, install_ids: &[String]) -> Result<Manifest<Migrated>, ManifestError>;
+    /// Apply a set of modifications to existing packages (removals or output updates)
+    /// in the manifest.
+    fn modify_packages(
+        &self,
+        modifications: &[PackageToModify],
+    ) -> Result<Manifest<Migrated>, ManifestError>;
 }
 
 impl ModifyPackages for Manifest<Migrated> {
@@ -804,17 +823,25 @@ impl ModifyPackages for Manifest<Migrated> {
         })
     }
 
-    fn remove_packages(&self, install_ids: &[String]) -> Result<Manifest<Migrated>, ManifestError> {
-        debug!("attempting to remove packages from the manifest");
+    fn modify_packages(
+        &self,
+        modifications: &[PackageToModify],
+    ) -> Result<Manifest<Migrated>, ManifestError> {
+        debug!("attempting to modify packages in the manifest");
         let mut manifest = self.clone();
         let pkg_map = manifest.inner.migrated_parsed.install.inner_mut();
-        for install_id in install_ids.iter() {
-            if !pkg_map.contains_key(install_id) {
-                debug!(id = install_id, "package not found");
-                return Err(ManifestError::PackageNotFound(install_id.clone()));
+        for modification in modifications {
+            match &modification.modification {
+                PackageModification::Remove => {
+                    if !pkg_map.contains_key(&modification.install_id) {
+                        return Err(ManifestError::PackageNotFound(
+                            modification.install_id.clone(),
+                        ));
+                    }
+                    pkg_map.remove(&modification.install_id);
+                    debug!(id = modification.install_id, "package removed");
+                },
             }
-            pkg_map.remove(install_id);
-            debug!(id = install_id, "package removed");
         }
         manifest.update_raw_packages_from_typed_manifest()?;
         Ok(manifest)
@@ -1495,9 +1522,18 @@ mod test {
 
     #[test]
     fn removes_all_requested_packages() {
-        let test_packages = vec!["hello".to_owned(), "ripgrep".to_owned()];
+        let test_packages = vec![
+            PackageToModify {
+                install_id: "hello".to_owned(),
+                modification: PackageModification::Remove,
+            },
+            PackageToModify {
+                install_id: "ripgrep".to_owned(),
+                modification: PackageModification::Remove,
+            },
+        ];
         let manifest = dummy_manifest();
-        let post_removal = manifest.remove_packages(&test_packages).unwrap();
+        let post_removal = manifest.modify_packages(&test_packages).unwrap();
         let toml = post_removal.inner.migrated_raw;
         assert!(!contains_package(&toml, "hello"));
         assert!(!contains_package(&toml, "ripgrep"));
@@ -1506,12 +1542,21 @@ mod test {
     #[test]
     fn error_when_removing_nonexistent_package() {
         let test_packages = vec![
-            "hello".to_owned(),
-            "DOES_NOT_EXIST".to_owned(),
-            "nodePackages.@".to_owned(),
+            PackageToModify {
+                install_id: "hello".to_owned(),
+                modification: PackageModification::Remove,
+            },
+            PackageToModify {
+                install_id: "DOES_NOT_EXIST".to_owned(),
+                modification: PackageModification::Remove,
+            },
+            PackageToModify {
+                install_id: "nodePackages.@".to_owned(),
+                modification: PackageModification::Remove,
+            },
         ];
         let manifest = dummy_manifest();
-        let removal = manifest.remove_packages(&test_packages);
+        let removal = manifest.modify_packages(&test_packages);
         assert!(matches!(removal, Err(ManifestError::PackageNotFound(_))));
     }
 

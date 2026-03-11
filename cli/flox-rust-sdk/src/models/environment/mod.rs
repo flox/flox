@@ -12,7 +12,7 @@ use flox_core::data::environment_ref::{
 };
 pub use flox_core::{Version, path_hash};
 use flox_manifest::lockfile::{LockedInclude, Lockfile, LockfileError};
-use flox_manifest::raw::PackageToInstall;
+use flox_manifest::raw::{PackageToInstall, PackageToModify};
 use flox_manifest::{Manifest, ManifestError, Migrated, Validated};
 use generations::{GenerationId, GenerationsError};
 use indoc::formatdoc;
@@ -101,6 +101,8 @@ pub struct UninstallationAttempt {
     /// The store path of environment that was built to validate the uninstall.
     /// This is used as an optimization to skip builds that we've already done.
     pub built_environment_store_paths: Option<BuildEnvOutputs>,
+    /// The resolved modifications that were applied.
+    pub modifications: Vec<PackageToModify>,
 }
 
 #[enum_dispatch]
