@@ -366,16 +366,18 @@ impl CoreEnvironment<ReadOnly> {
     ) -> Result<InstallationAttempt, EnvironmentError> {
         let manifest = self.manifest(flox)?;
         let insertion = manifest.add_packages(packages)?;
-        let mut installation = InstallationAttempt {
-            new_manifest: insertion.new_manifest,
+        let built_environments = insertion
+            .new_manifest
+            .as_ref()
+            .map(|m| self.transact_with_manifest(m, flox))
+            .transpose()?
+            .map(|(store_path, _)| store_path);
+
+        Ok(InstallationAttempt {
+            manifest_modified: built_environments.is_some(),
             already_installed: insertion.already_installed,
-            built_environments: None,
-        };
-        if let Some(ref new_manifest) = installation.new_manifest {
-            let (store_path, _) = self.transact_with_manifest(new_manifest, flox)?;
-            installation.built_environments = Some(store_path);
-        }
-        Ok(installation)
+            built_environments,
+        })
     }
 
     /// Uninstall packages from the environment atomically
@@ -417,7 +419,6 @@ impl CoreEnvironment<ReadOnly> {
         let (store_path, _) = self.transact_with_manifest(&post_removal, flox)?;
 
         Ok(UninstallationAttempt {
-            new_manifest: Some(post_removal),
             still_included: packages_in_includes,
             built_environment_store_paths: Some(store_path),
         })

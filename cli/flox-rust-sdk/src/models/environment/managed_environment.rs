@@ -314,7 +314,7 @@ impl Environment for ManagedEnvironment {
             .collect();
 
         let result = local_checkout.install(packages, flox)?;
-        if result.new_manifest.is_some() {
+        if result.manifest_modified {
             let change = HistoryKind::Install { targets };
             generations
                 .add_generation(&mut local_checkout, change)

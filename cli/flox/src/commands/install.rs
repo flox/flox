@@ -251,7 +251,7 @@ impl Install {
             &new_composer_package_overrides,
         );
 
-        // TODO: move this behind the `installation.new_manifest.is_some()`
+        // TODO: move this behind the `installation.manifest_modified`
         // check below so we don't warn when we don't even install anything
         for warning in Self::generate_unfree_and_broken_warnings(
             &lockfile.packages,
@@ -286,7 +286,7 @@ impl Install {
         message::packages_already_installed(&partitioned.already_installed, &description);
         message::packages_newly_overridden_by_composer(&new_package_overrides);
 
-        if installation.new_manifest.is_some() {
+        if installation.manifest_modified {
             warn_manifest_changes_for_services(&flox, &concrete_environment);
         }
 

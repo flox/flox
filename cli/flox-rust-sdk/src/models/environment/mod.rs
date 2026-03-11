@@ -81,11 +81,11 @@ pub const FLOX_SERVICES_SOCKET_OVERRIDE_VAR: &str = "_FLOX_SERVICES_SOCKET_OVERR
 
 pub use flox_core::N_HASH_CHARS;
 
-/// The result of an installation attempt that contains the new manifest contents
-/// along with whether each package was already installed
+/// The result of an installation attempt that contains whether the manifest
+/// was modified along with whether each package was already installed
 #[derive(Debug)]
 pub struct InstallationAttempt {
-    pub new_manifest: Option<Manifest<Migrated>>,
+    pub manifest_modified: bool,
     pub already_installed: HashMap<String, bool>,
     /// The store paths of environment that was built to validate the install.
     /// This is used as an optimization to skip builds that we've already done.
@@ -95,7 +95,6 @@ pub struct InstallationAttempt {
 /// The result of an uninstallation attempt
 #[derive(Debug)]
 pub struct UninstallationAttempt {
-    pub new_manifest: Option<Manifest<Migrated>>,
     /// Packages that were requested to be uninstalled but are stilled provided
     /// by included environments.
     pub still_included: HashMap<String, LockedInclude>,
