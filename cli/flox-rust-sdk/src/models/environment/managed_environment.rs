@@ -306,7 +306,7 @@ impl Environment for ManagedEnvironment {
                 PackageToInstall::Catalog(CatalogPackage { id, pkg_path, .. }) => {
                     format!("{id} ({pkg_path})")
                 },
-                PackageToInstall::Flake(FlakePackage { id, url, .. }) => format!("{id} ({url})"),
+                PackageToInstall::Flake(pkg @ FlakePackage { id, .. }) => format!("{id} ({pkg})"),
                 PackageToInstall::StorePath(StorePath { id, store_path, .. }) => {
                     format!("{id} ({})", store_path.display())
                 },

@@ -359,6 +359,15 @@ impl RawSelectedOutputs {
     }
 }
 
+impl std::fmt::Display for RawSelectedOutputs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::All => write!(f, ".."),
+            Self::Specific(names) => write!(f, "{}", names.join(",")),
+        }
+    }
+}
+
 impl From<RawSelectedOutputs> for SelectedOutputs {
     fn from(value: RawSelectedOutputs) -> Self {
         match value {
@@ -525,6 +534,15 @@ pub struct FlakePackage {
     pub id: String,
     pub url: Url,
     pub outputs: Option<RawSelectedOutputs>,
+}
+
+impl std::fmt::Display for FlakePackage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.outputs {
+            Some(outputs) => write!(f, "{}^{}", self.url, outputs),
+            None => write!(f, "{}", self.url),
+        }
+    }
 }
 
 impl TryFrom<Url> for FlakePackage {
