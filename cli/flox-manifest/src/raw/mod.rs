@@ -635,6 +635,8 @@ impl StorePath {
 pub enum PackageModification {
     /// Remove the package entirely.
     Remove,
+    /// Update the package's outputs to the given list.
+    UpdateOutputs(Vec<String>),
 }
 
 /// A resolved package modification to apply.
@@ -840,6 +842,19 @@ impl ModifyPackages for Manifest<Migrated> {
                     }
                     pkg_map.remove(&modification.install_id);
                     debug!(id = modification.install_id, "package removed");
+                },
+                // As this is currently only used for uninstalls, we don't worry about ever setting to all
+                PackageModification::UpdateOutputs(outputs) => {
+                    let descriptor =
+                        pkg_map.get_mut(&modification.install_id).ok_or_else(|| {
+                            ManifestError::PackageNotFound(modification.install_id.clone())
+                        })?;
+                    descriptor.set_outputs(Some(SelectedOutputs::Specific(outputs.clone())));
+                    debug!(
+                        id = modification.install_id,
+                        ?outputs,
+                        "package outputs updated"
+                    );
                 },
             }
         }

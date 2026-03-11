@@ -309,6 +309,22 @@ pub mod test_helpers {
         (install_id, descriptor, locked)
     }
 
+    /// Like [`fake_catalog_package_lock`] but with a caller-chosen install_id and outputs.
+    pub fn fake_catalog_package_lock_with_outputs(
+        install_id: &str,
+        pkg_path: &str,
+        outputs: &[&str],
+    ) -> (ManifestPackageDescriptor, LockedPackageCatalog) {
+        let (_, descriptor, mut locked) = fake_catalog_package_lock(pkg_path, None);
+        locked.install_id = install_id.to_string();
+        locked.outputs = outputs
+            .iter()
+            .map(|o| (o.to_string(), format!("/nix/store/fake-{o}")))
+            .collect();
+        locked.outputs_to_install = None;
+        (descriptor, locked)
+    }
+
     pub fn fake_flake_installable_lock(
         name: &str,
     ) -> (String, PackageDescriptorFlake, LockedPackageFlake) {

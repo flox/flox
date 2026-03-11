@@ -89,8 +89,15 @@ pub trait PackageLookup {
         pkg: impl AsRef<str>,
     ) -> Result<bool, ManifestError>;
 
-    /// Who knows what this does
-    fn get_install_ids(&self, packages: Vec<String>) -> Result<Vec<String>, ManifestError>;
+    /// Resolve a "loose" package reference (e.g. pkg-path or install_id)
+    /// to an `install_id` if unambiguous.
+    ///
+    /// This ensures that installation references remain valid for other package operations.
+    fn resolve_install_id(
+        &self,
+        package_ref: &str,
+        version: &Option<String>,
+    ) -> Result<String, ManifestError>;
 }
 
 #[macro_export]
@@ -264,67 +271,56 @@ macro_rules! impl_pkg_lookup {
                 Ok(self_in_toplevel_group && other_toplevel_packages_exist)
             }
 
-            /// Resolve "loose" package references (e.g. pkg-paths),
-            /// to `install_ids` if unambiguous
-            /// so that installation references remain valid for other package operations.
-            fn get_install_ids(&self, packages: Vec<String>) -> Result<Vec<String>, ManifestError> {
-                let mut install_ids = Vec::new();
-                for pkg in packages {
-                    // User passed an install id directly
-                    if self.install.inner().contains_key(&pkg) {
-                        install_ids.push(pkg);
-                        continue;
-                    }
-
-                    // User passed a package path to uninstall
-                    // To support version constraints, we match the provided value against
-                    // `<pkg-path>` and `<pkg-path>@<version>`.
-                    let matching_iids_by_pkg_path = self
-                        .install
-                        .inner()
-                        .iter()
-                        .filter(|(_iid, descriptor)| {
-                            // Find matching pkg-paths and select for uninstall
-
-                            // If the descriptor is not a catalog descriptor, skip.
-                            // flakes descriptors are only matched by install_id.
-                            let ManifestPackageDescriptor::Catalog(des) = descriptor else {
-                                return false;
-                            };
-
-                            // Select if the descriptor's pkg_path matches the user's input
-                            if des.pkg_path == pkg {
-                                return true;
-                            }
-
-                            // Select if the descriptor matches the user's input when the version is included
-                            // Future: if we want to allow uninstalling a specific outputs as well,
-                            //         parsing of uninstall specs will need to be more sophisticated.
-                            //         For now going with a simple check for pkg-path@version.
-                            if let Some(version) = &des.version {
-                                format!("{}@{}", des.pkg_path, version) == pkg
-                            } else {
-                                false
-                            }
-                        })
-                        .map(|(iid, _)| iid.to_owned())
-                        .collect::<Vec<String>>();
-
-                    // Extend the install_ids with the matching install id from pkg-path
-                    match matching_iids_by_pkg_path.len() {
-                        0 => return Err(ManifestError::PackageNotFound(pkg)),
-                        // if there is only one package with the given pkg-path, uninstall it
-                        1 => install_ids.extend(matching_iids_by_pkg_path),
-                        // if there are multiple packages with the given pkg-path, ask for a specific install id
-                        _ => {
-                            return Err(ManifestError::MultiplePackagesMatch(
-                                pkg,
-                                matching_iids_by_pkg_path,
-                            ));
-                        },
-                    }
+            fn resolve_install_id(
+                &self,
+                package_ref: &str,
+                version: &Option<String>,
+            ) -> Result<String, ManifestError> {
+                if self.install.inner().contains_key(package_ref) {
+                    return Ok(package_ref.to_string());
                 }
-                Ok(install_ids)
+
+                // User passed a package path
+                // To support version constraints, we match the provided value against
+                // `<pkg-path>` and `<pkg-path>@<version>`.
+                let matching_iids_by_pkg_path = self
+                    .install
+                    .inner()
+                    .iter()
+                    .filter(|(_iid, descriptor)| {
+                        // Find matching pkg-paths
+
+                        // If the descriptor is not a catalog descriptor, skip.
+                        // flakes descriptors are only matched by install_id.
+                        let ManifestPackageDescriptor::Catalog(des) = descriptor else {
+                            return false;
+                        };
+
+                        // Select if the descriptor's pkg_path matches the user's input
+                        if des.pkg_path == package_ref && version.is_none() {
+                            return true;
+                        }
+
+                        // Select if the descriptor matches the user's input when the version is included
+                        if des.pkg_path == package_ref && &des.version == version {
+                            return true;
+                        }
+
+                        false
+                    })
+                    .map(|(iid, _)| iid.to_owned())
+                    .collect::<Vec<String>>();
+
+                match matching_iids_by_pkg_path.len() {
+                    0 => Err(ManifestError::PackageNotFound(package_ref.to_string())),
+                    // if there is only one package with the given pkg-path, use it
+                    1 => Ok(matching_iids_by_pkg_path[0].clone()),
+                    // if there are multiple packages with the given pkg-path, ask for a specific install id
+                    _ => Err(ManifestError::MultiplePackagesMatch(
+                        package_ref.to_string(),
+                        matching_iids_by_pkg_path,
+                    )),
+                }
             }
         }
     };

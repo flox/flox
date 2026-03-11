@@ -22,6 +22,7 @@ use remote_environment::RemoteEnvironment;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
+use uninstall::UninstallSpec;
 use url::{ParseError, Url};
 use walkdir::WalkDir;
 
@@ -61,6 +62,7 @@ pub mod generations;
 pub mod managed_environment;
 pub mod path_environment;
 pub mod remote_environment;
+pub mod uninstall;
 
 pub const CATALOG_JSON: &str = "catalog.json";
 // don't forget to update the man page
@@ -117,7 +119,7 @@ pub trait Environment: Send {
     /// Uninstall packages from the environment atomically
     fn uninstall(
         &mut self,
-        packages: Vec<String>,
+        specs: Vec<UninstallSpec>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError>;
 
@@ -692,6 +694,8 @@ pub enum EnvironmentError {
     #[error(transparent)]
     ManifestError(#[from] ManifestError),
     #[error(transparent)]
+    Uninstall(#[from] UninstallError),
+    #[error(transparent)]
     Lockfile(#[from] LockfileError),
     #[error(transparent)]
     ManifestInit(#[from] ManifestInitError),
@@ -833,6 +837,12 @@ pub enum UninstallError {
          Remove the package from environment '{1}' and then run 'flox include upgrade'"
     )]
     PackageOnlyIncluded(String, String),
+
+    #[error("'{0}' was not found in Lockfile")]
+    PackageNotInLockfile(String),
+
+    #[error("'{1}' does not have an output '{0}'")]
+    InvalidOutputForPackage(String, String),
 }
 
 /// Open an environment defined in `path` that has a `.flox` within.

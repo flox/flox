@@ -1,6 +1,8 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use flox_manifest::raw::PackageModification;
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment::uninstall::UninstallSpec;
 use flox_rust_sdk::models::environment::{Environment, EnvironmentError};
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -19,7 +21,8 @@ pub struct Uninstall {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    /// The install IDs or package paths of the packages to remove
+    /// The install IDs or package paths of the packages to remove.
+    /// Supports output specification: "pkg^out,man" to uninstall specific outputs.
     #[bpaf(positional("packages"), some("Must specify at least one package"))]
     packages: Vec<String>,
 }
@@ -71,24 +74,44 @@ impl Uninstall {
 
         let description = environment_description(&concrete_environment)?;
 
+        // Parse package arguments into UninstallSpec
+        let uninstall_specs: Vec<UninstallSpec> = self
+            .packages
+            .iter()
+            .map(|s| UninstallSpec::parse(s))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| anyhow::anyhow!("Failed to parse uninstall spec: {}", e))?;
+
         let span = info_span!(
             "uninstall",
             concrete_environment = %description,
             progress = format!("Uninstalling {} packages", self.packages.len()));
 
-        let attempt =
-            span.in_scope(|| concrete_environment.uninstall(self.packages.clone(), &flox))?;
+        let attempt = span.in_scope(|| concrete_environment.uninstall(uninstall_specs, &flox))?;
 
-        for modification in &attempt.modifications {
+        // Note, you need two spaces between this emoji and the package name
+        // otherwise they appear right next to each other.
+        for modification in attempt.modifications.iter() {
             let install_id = &modification.install_id;
-            message::deleted(format!(
-                "'{install_id}' uninstalled from environment {description}"
-            ));
-            if let Some(include) = attempt.still_included.get(install_id) {
-                message::info(format!(
-                    "'{install_id}' is still installed by environment '{}'",
-                    include.name,
-                ));
+
+            match modification.modification {
+                PackageModification::Remove => {
+                    message::deleted(format!(
+                        "'{install_id}' uninstalled from environment {description}"
+                    ));
+                    if let Some(include) = attempt.still_included.get(install_id) {
+                        message::info(format!(
+                            "'{install_id}' is still installed by environment '{}'",
+                            include.name,
+                        ));
+                    }
+                },
+                PackageModification::UpdateOutputs(ref outputs) => {
+                    message::deleted(format!(
+                        "Updated outputs of {install_id} to [{}] from environment {description}",
+                        outputs.join(", ")
+                    ));
+                },
             }
         }
 
