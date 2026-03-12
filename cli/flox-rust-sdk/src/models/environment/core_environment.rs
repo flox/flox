@@ -82,7 +82,7 @@ impl<State> CoreEnvironment<State> {
         &self.env_dir
     }
 
-    pub fn pre_migration_manifest(&self) -> Result<Manifest<Validated>, ManifestError> {
+    pub fn manifest_without_migrating(&self) -> Result<Manifest<Validated>, ManifestError> {
         Manifest::read_typed(self.manifest_path())
     }
 
@@ -136,7 +136,7 @@ impl<State> CoreEnvironment<State> {
 
         // Check if the manifest embedded in the lockfile and the manifest
         // itself have the same contents
-        let serialized_unmigrated_manifest = &self.pre_migration_manifest()?.as_typed_only();
+        let serialized_unmigrated_manifest = &self.manifest_without_migrating()?.as_typed_only();
         let already_locked =
             lockfile.is_up_to_date_with_serialized_manifest(serialized_unmigrated_manifest);
 
@@ -173,7 +173,7 @@ impl<State> CoreEnvironment<State> {
         let on_disk_manifest_needs_migration = schema_after_merging_and_locking != original_schema;
 
         if on_disk_manifest_needs_migration {
-            let migrated_manifest = self.pre_migration_manifest()?.migrate(Some(lockfile))?;
+            let migrated_manifest = self.manifest_without_migrating()?.migrate(Some(lockfile))?;
             migrated_manifest
                 .as_writable()
                 .write_to_file(self.manifest_path())?;
@@ -197,12 +197,12 @@ impl<State> CoreEnvironment<State> {
     /// It's included in the [ReadOnly] struct for ergonomic reasons
     /// and because it doesn't modify the manifest.
     pub fn lock(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
-        let pre_migration_manifest = self.pre_migration_manifest()?.as_typed_only();
-        let original_schema = pre_migration_manifest.get_schema_version();
+        let manifest_without_migrating = self.manifest_without_migrating()?.as_typed_only();
+        let original_schema = manifest_without_migrating.get_schema_version();
 
         let existing_lockfile = self.existing_lockfile()?;
         let migrated_manifest_for_locking =
-            pre_migration_manifest.migrate_typed_only(existing_lockfile.as_ref())?;
+            manifest_without_migrating.migrate_typed_only(existing_lockfile.as_ref())?;
 
         // If a lockfile exists, it is used as a base.
         //
@@ -347,7 +347,7 @@ impl CoreEnvironment<ReadOnly> {
     }
 
     pub(crate) fn manifest(&mut self, flox: &Flox) -> Result<Manifest<Migrated>, EnvironmentError> {
-        let manifest = self.pre_migration_manifest()?;
+        let manifest = self.manifest_without_migrating()?;
         let lockfile = self.ensure_locked(flox)?.into();
         let migrated = manifest.migrate(Some(&lockfile))?;
         Ok(migrated)
@@ -461,7 +461,7 @@ impl CoreEnvironment<ReadOnly> {
         &self,
         contents: impl AsRef<str>,
     ) -> Result<bool, ManifestError> {
-        Ok(self.pre_migration_manifest()?.contents_match(contents))
+        Ok(self.manifest_without_migrating()?.contents_match(contents))
     }
 
     /// Atomically edit this environment, without checking that it still builds
@@ -706,8 +706,8 @@ impl CoreEnvironment<ReadOnly> {
             .map(Lockfile::from_str)
             .transpose()?;
 
-        let pre_migration_manifest = self.pre_migration_manifest()?;
-        let original_schema = pre_migration_manifest.get_schema_version();
+        let manifest_without_migrating = self.manifest_without_migrating()?;
+        let original_schema = manifest_without_migrating.get_schema_version();
 
         // This is `mut` because we may need to update the on-disk manifest to match the
         // schema of the merged manifest, and then we'll also have to update the
@@ -1367,7 +1367,7 @@ mod tests {
 
         assert_eq!(
             env_view
-                .pre_migration_manifest()
+                .manifest_without_migrating()
                 .unwrap()
                 .as_writable()
                 .to_string(),
@@ -1782,7 +1782,7 @@ mod tests {
             .update_manifest(&original_manifest.as_writable())
             .unwrap();
         writable_env.lock(&flox).unwrap();
-        let post_lock_manifest = writable_env.pre_migration_manifest().unwrap();
+        let post_lock_manifest = writable_env.manifest_without_migrating().unwrap();
         assert_eq!(
             original_manifest.as_writable().to_string(),
             post_lock_manifest.as_writable().to_string()

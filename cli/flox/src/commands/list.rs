@@ -95,7 +95,9 @@ impl List {
                 (remote_manifest_contents, lockfile)
             },
             (env, false) => (
-                env.pre_migration_manifest(&flox)?.as_writable().to_string(),
+                env.manifest_without_migrating(&flox)?
+                    .as_writable()
+                    .to_string(),
                 env.lockfile(&flox)?.into(),
             ),
         };
@@ -927,7 +929,7 @@ mod tests {
             List::manifest_contents_to_print(
                 &lockfile,
                 composer
-                    .pre_migration_manifest(&flox)
+                    .manifest_without_migrating(&flox)
                     .unwrap()
                     .as_writable()
                     .to_string()

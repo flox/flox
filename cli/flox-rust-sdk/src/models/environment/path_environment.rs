@@ -202,11 +202,11 @@ impl Environment for PathEnvironment {
             .map_err(EnvironmentError::Core)
     }
 
-    fn pre_migration_manifest(
+    fn manifest_without_migrating(
         &self,
         _flox: &Flox,
     ) -> Result<Manifest<Validated>, EnvironmentError> {
-        let manifest = self.as_core_environment()?.pre_migration_manifest()?;
+        let manifest = self.as_core_environment()?.manifest_without_migrating()?;
         Ok(manifest)
     }
 

@@ -233,20 +233,23 @@ impl Environment for ManagedEnvironment {
             .map_err(EnvironmentError::Core)
     }
 
-    fn pre_migration_manifest(&self, flox: &Flox) -> Result<Manifest<Validated>, EnvironmentError> {
+    fn manifest_without_migrating(
+        &self,
+        flox: &Flox,
+    ) -> Result<Manifest<Validated>, EnvironmentError> {
         if let Some(generation) = self.generation {
-            let pre_migration_manifest_contents = self
+            let manifest_without_migrating_contents = self
                 .generations()
                 .manifest_contents(*generation)
                 .map_err(ManagedEnvironmentError::Generations)?;
-            let manifest = Manifest::parse_toml_typed(pre_migration_manifest_contents)?;
+            let manifest = Manifest::parse_toml_typed(manifest_without_migrating_contents)?;
             return Ok(manifest);
         }
 
         // Read straight from disk
         let env_view = self.local_env_or_copy_current_generation(flox)?;
         env_view
-            .pre_migration_manifest()
+            .manifest_without_migrating()
             .map_err(EnvironmentError::ManifestError)
     }
 
@@ -258,7 +261,7 @@ impl Environment for ManagedEnvironment {
                 .map_err(ManagedEnvironmentError::Generations)?;
             let lockfile = Lockfile::from_str(lockfile_contents.as_str())?;
             let manifest = self
-                .pre_migration_manifest(flox)?
+                .manifest_without_migrating(flox)?
                 .migrate(Some(&lockfile))?;
             return Ok(manifest);
         }
@@ -1128,7 +1131,7 @@ impl ManagedEnvironment {
             return Ok(false);
         }
 
-        let local_manifest = local.pre_migration_manifest()?;
+        let local_manifest = local.manifest_without_migrating()?;
         let remote_manifest = Manifest::parse_toml_typed(
             generations
                 .current_gen_manifest_contents()
@@ -1962,7 +1965,7 @@ mod test {
         let local_manifest = managed_env
             .local_env_or_copy_current_generation(&flox)
             .unwrap()
-            .pre_migration_manifest()
+            .manifest_without_migrating()
             .unwrap();
         assert_eq!(
             local_manifest.as_writable().to_string(),

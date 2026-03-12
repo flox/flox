@@ -2121,7 +2121,7 @@ mod tests {
         let env_path = env.parent_path().unwrap();
 
         let base_manifest = env
-            .pre_migration_manifest(&flox)
+            .manifest_without_migrating(&flox)
             .unwrap()
             .as_writable()
             .to_string();
@@ -2204,7 +2204,7 @@ mod tests {
         let env_path = env.parent_path().unwrap();
 
         let base_manifest = env
-            .pre_migration_manifest(&flox)
+            .manifest_without_migrating(&flox)
             .unwrap()
             .as_writable()
             .to_string();
@@ -2292,7 +2292,7 @@ mod tests {
         let env_path = env.parent_path().unwrap();
 
         let base_manifest = env
-            .pre_migration_manifest(&flox)
+            .manifest_without_migrating(&flox)
             .unwrap()
             .as_writable()
             .to_string();
@@ -2923,7 +2923,7 @@ mod tests {
         let env_path = env.parent_path().unwrap();
 
         let base_manifest = env
-            .pre_migration_manifest(&flox)
+            .manifest_without_migrating(&flox)
             .unwrap()
             .as_writable()
             .to_string();
@@ -3048,7 +3048,7 @@ mod tests {
         let env_path = env.parent_path().unwrap();
 
         let base_manifest = env
-            .pre_migration_manifest(&flox)
+            .manifest_without_migrating(&flox)
             .unwrap()
             .as_writable()
             .to_string();

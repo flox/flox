@@ -563,7 +563,7 @@ impl Pull {
     ) -> Result<Manifest<Migrated>, anyhow::Error> {
         let lockfile = env.existing_lockfile(flox)?;
         let mut manifest = env
-            .pre_migration_manifest(flox)?
+            .manifest_without_migrating(flox)?
             .migrate(lockfile.as_ref())?;
         let maybe_systems = manifest.options_mut().systems.as_mut();
         if let Some(systems) = maybe_systems {
