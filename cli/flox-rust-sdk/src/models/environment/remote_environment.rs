@@ -368,8 +368,11 @@ impl Environment for RemoteEnvironment {
         self.inner.existing_lockfile(flox)
     }
 
-    fn pre_migration_manifest(&self, flox: &Flox) -> Result<Manifest<Validated>, EnvironmentError> {
-        self.inner.pre_migration_manifest(flox)
+    fn manifest_without_migrating(
+        &self,
+        flox: &Flox,
+    ) -> Result<Manifest<Validated>, EnvironmentError> {
+        self.inner.manifest_without_migrating(flox)
     }
 
     fn manifest(&mut self, flox: &Flox) -> Result<Manifest<Migrated>, EnvironmentError> {
@@ -709,7 +712,7 @@ mod tests {
 
         // TODO: should be changed to version 2 once released!
         assert_eq!(
-            env.pre_migration_manifest(&flox)
+            env.manifest_without_migrating(&flox)
                 .unwrap()
                 .as_writable()
                 .to_string(),

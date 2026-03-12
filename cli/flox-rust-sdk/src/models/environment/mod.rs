@@ -159,7 +159,10 @@ pub trait Environment: Send {
     /// This is only intended to be used when comparing against manifests that are
     /// stored unmigrated e.g. manifests stored in the lockfile, manifests stored
     /// in generations, etc.
-    fn pre_migration_manifest(&self, flox: &Flox) -> Result<Manifest<Validated>, EnvironmentError>;
+    fn manifest_without_migrating(
+        &self,
+        flox: &Flox,
+    ) -> Result<Manifest<Validated>, EnvironmentError>;
 
     /// Reads the manifest from disk and returns the migrated manifest,
     /// potentially locking it if necessary.
@@ -1384,7 +1387,7 @@ mod migration_tests {
         env.lockfile(&flox).unwrap(); // ensure it's locked
 
         let manifest_contents = env
-            .pre_migration_manifest(&flox)
+            .manifest_without_migrating(&flox)
             .unwrap()
             .as_writable()
             .to_string();
@@ -1412,7 +1415,7 @@ mod migration_tests {
         composer.lockfile(&flox).unwrap();
 
         let composer_manifest_contents = composer
-            .pre_migration_manifest(&flox)
+            .manifest_without_migrating(&flox)
             .unwrap()
             .as_writable()
             .to_string();
@@ -1450,7 +1453,7 @@ mod migration_tests {
         composer.lockfile(&flox).unwrap();
 
         let composer_manifest_contents = composer
-            .pre_migration_manifest(&flox)
+            .manifest_without_migrating(&flox)
             .unwrap()
             .as_writable()
             .to_string();
@@ -1488,7 +1491,7 @@ mod migration_tests {
         composer.lockfile(&flox).unwrap();
 
         // The composer's manifest should be migrated to v1.10.0
-        let manifest = composer.pre_migration_manifest(&flox).unwrap();
+        let manifest = composer.manifest_without_migrating(&flox).unwrap();
         assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::latest());
     }
 
@@ -1513,7 +1516,7 @@ mod migration_tests {
         let mut composer = setup_v1_composer_with_include(&flox, tempdir.path());
         composer.lockfile(&flox).unwrap();
 
-        let manifest = composer.pre_migration_manifest(&flox).unwrap();
+        let manifest = composer.manifest_without_migrating(&flox).unwrap();
         assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::latest());
     }
 
@@ -1539,7 +1542,7 @@ mod migration_tests {
         let mut composer = setup_v1_composer_with_include(&flox, tempdir.path());
         composer.lockfile(&flox).unwrap();
 
-        let manifest = composer.pre_migration_manifest(&flox).unwrap();
+        let manifest = composer.manifest_without_migrating(&flox).unwrap();
         assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::V1);
 
         // Now update the included env to add a package with explicit outputs.
@@ -1560,7 +1563,7 @@ mod migration_tests {
         composer.include_upgrade(&flox, vec![]).unwrap();
 
         // The composer's manifest should now be migrated to v1.10.0.
-        let manifest = composer.pre_migration_manifest(&flox).unwrap();
+        let manifest = composer.manifest_without_migrating(&flox).unwrap();
         assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::latest());
     }
 
@@ -1572,7 +1575,7 @@ mod migration_tests {
         let mut env = new_path_environment(&flox, "version = 1");
         _ = env.lockfile(&flox).unwrap(); // make sure a lockfile exists
         assert_eq!(
-            env.pre_migration_manifest(&flox)
+            env.manifest_without_migrating(&flox)
                 .unwrap()
                 .get_schema_version(),
             KnownSchemaVersion::V1
@@ -1589,7 +1592,7 @@ mod migration_tests {
         )
         .unwrap();
         assert_eq!(
-            env.pre_migration_manifest(&flox)
+            env.manifest_without_migrating(&flox)
                 .unwrap()
                 .get_schema_version(),
             KnownSchemaVersion::V1
@@ -1606,7 +1609,7 @@ mod migration_tests {
         let mut env = new_path_environment(&flox, "version = 1");
         _ = env.lockfile(&flox).unwrap(); // make sure a lockfile exists
         assert_eq!(
-            env.pre_migration_manifest(&flox)
+            env.manifest_without_migrating(&flox)
                 .unwrap()
                 .get_schema_version(),
             KnownSchemaVersion::V1
@@ -1623,7 +1626,7 @@ mod migration_tests {
         )
         .unwrap();
         assert_eq!(
-            env.pre_migration_manifest(&flox)
+            env.manifest_without_migrating(&flox)
                 .unwrap()
                 .get_schema_version(),
             KnownSchemaVersion::latest()
@@ -1644,7 +1647,7 @@ mod migration_tests {
         env.lockfile(&flox).unwrap();
 
         assert_eq!(
-            env.pre_migration_manifest(&flox)
+            env.manifest_without_migrating(&flox)
                 .unwrap()
                 .get_schema_version(),
             KnownSchemaVersion::V1
@@ -1665,7 +1668,7 @@ mod migration_tests {
         env.lockfile(&flox).unwrap();
 
         assert_eq!(
-            env.pre_migration_manifest(&flox)
+            env.manifest_without_migrating(&flox)
                 .unwrap()
                 .get_schema_version(),
             KnownSchemaVersion::V1
@@ -1689,7 +1692,7 @@ mod migration_tests {
         composer.lockfile(&flox).unwrap();
 
         let composer_manifest_contents = composer
-            .pre_migration_manifest(&flox)
+            .manifest_without_migrating(&flox)
             .unwrap()
             .as_writable()
             .to_string();
@@ -1724,7 +1727,7 @@ mod migration_tests {
         composer.lockfile(&flox).unwrap();
 
         let composer_manifest_contents = composer
-            .pre_migration_manifest(&flox)
+            .manifest_without_migrating(&flox)
             .unwrap()
             .as_writable()
             .to_string();

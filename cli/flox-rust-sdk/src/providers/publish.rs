@@ -1211,7 +1211,7 @@ pub mod tests {
             &manifest_path,
             format!(
                 "{}\n",
-                env.pre_migration_manifest(&flox)
+                env.manifest_without_migrating(&flox)
                     .unwrap()
                     .as_writable()
                     .to_string()

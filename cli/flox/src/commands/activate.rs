@@ -156,7 +156,9 @@ impl Activate {
                 &flox,
                 &env.env_ref(),
                 false,
-                &env.pre_migration_manifest(&flox)?.as_writable().to_string(),
+                &env.manifest_without_migrating(&flox)?
+                    .as_writable()
+                    .to_string(),
             )
             .await?;
         }

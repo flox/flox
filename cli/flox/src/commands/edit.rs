@@ -288,7 +288,7 @@ impl Edit {
         std::fs::write(
             &tmp_manifest,
             environment
-                .pre_migration_manifest(flox)?
+                .manifest_without_migrating(flox)?
                 .as_writable()
                 .to_string(),
         )?;
