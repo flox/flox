@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
-use flox_rust_sdk::flox::{Flox, FloxhubToken};
+use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
 use flox_rust_sdk::providers::catalog::Client;
 use indoc::formatdoc;
 use oauth2::basic::{
@@ -29,6 +29,7 @@ use oauth2::{
     TokenResponse,
     TokenUrl,
 };
+use reqwest::redirect;
 use serde::Serialize;
 use tracing::{debug, instrument};
 use url::Url;
@@ -99,6 +100,12 @@ pub async fn authorize(client: ConfiguredClient, floxhub_url: &Url) -> Result<Cr
         bail!("Cannot prompt for user input")
     }
 
+    let http_client = reqwest::ClientBuilder::new()
+        .redirect(redirect::Policy::none())
+        .user_agent(format!("flox-cli/{}", &*FLOX_VERSION))
+        .build()
+        .expect("Failed to build OAuth HTTP client");
+
     let details: StandardDeviceAuthorizationResponse = client
         .exchange_device_code()
         .add_scope(Scope::new("openid".to_string()))
@@ -107,7 +114,7 @@ pub async fn authorize(client: ConfiguredClient, floxhub_url: &Url) -> Result<Cr
             "audience".to_string(),
             "https://hub.flox.dev/api".to_string(),
         )
-        .request_async(&oauth2::reqwest::Client::new())
+        .request_async(&http_client)
         .await
         .context("Could not request device code")?;
 
@@ -169,11 +176,7 @@ pub async fn authorize(client: ConfiguredClient, floxhub_url: &Url) -> Result<Cr
 
     let token_result = client
         .exchange_device_access_token(&details)
-        .request_async(
-            &oauth2::reqwest::Client::new(),
-            tokio::time::sleep,
-            Some(details.expires_in()),
-        )
+        .request_async(&http_client, tokio::time::sleep, Some(details.expires_in()))
         .await;
 
     let token = match token_result {
