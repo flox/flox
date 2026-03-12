@@ -4,7 +4,7 @@ use base64::Engine as _;
 use libgssapi::context::{ClientCtx, CtxFlags};
 use libgssapi::credential::{Cred, CredUsage};
 use libgssapi::name::Name;
-use libgssapi::oid::{GSS_MECH_KRB5, GSS_NT_HOSTBASED_SERVICE, OidSet};
+use libgssapi::oid::{OidSet, GSS_MECH_KRB5, GSS_NT_HOSTBASED_SERVICE};
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use tracing::debug;
 use url::Url;
