@@ -625,7 +625,11 @@ pub mod test_helpers {
 
     use super::*;
     use crate::flox::Flox;
-    use crate::flox::test_helpers::{PublishTestUser, test_token_from_floxhub_test_users_file};
+    use crate::flox::test_helpers::{
+        PublishTestUser,
+        set_test_token,
+        test_token_from_floxhub_test_users_file,
+    };
     use crate::providers::auth::{Auth, AuthProvider};
 
     pub static UNIT_TEST_GENERATED: LazyLock<PathBuf> =
@@ -736,7 +740,7 @@ pub mod test_helpers {
         // FloxHub with _FLOXHUB_TEST_USER_ROLES pointed at this file.
         let token = test_token_from_floxhub_test_users_file(user);
 
-        flox.floxhub_token = Some(token);
+        set_test_token(&mut flox, token);
         let auth = Auth::from_flox(&flox).unwrap();
         let base_url = "http://localhost:8010";
         let client = auto_recording_client_inner(filename, base_url, user, &auth, record);

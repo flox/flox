@@ -217,6 +217,22 @@ pub mod test_helpers {
         FloxhubToken::from_str(&token).unwrap()
     }
 
+    /// Set a pre-existing token on a [Flox] instance and rebuild the auth
+    /// strategy so that `get_handle()` and friends see it immediately.
+    pub fn set_test_token(flox: &mut Flox, token: FloxhubToken) {
+        flox.floxhub_token = Some(token);
+        flox.rebuild_auth_strategy();
+    }
+
+    /// Set up test authentication on a [Flox] instance.
+    ///
+    /// Creates a test token for the given handle, sets it on the instance,
+    /// and rebuilds the auth strategy so that `get_handle()` and friends
+    /// see the token immediately.
+    pub fn set_test_auth(flox: &mut Flox, handle: &str) {
+        set_test_token(flox, create_test_token(handle));
+    }
+
     /// Describes which test user to load:
     /// - One that has an existing personal catalog and access to other test
     ///   catalogs.

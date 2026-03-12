@@ -1060,7 +1060,12 @@ pub mod tests {
 
     use super::*;
     use crate::flox::FloxhubToken;
-    use crate::flox::test_helpers::{PublishTestUser, create_test_token, flox_instance};
+    use crate::flox::test_helpers::{
+        PublishTestUser,
+        create_test_token,
+        flox_instance,
+        set_test_auth,
+    };
     use crate::models::environment::path_environment::PathEnvironment;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
     use crate::providers::auth::{Auth, write_floxhub_netrc};
@@ -1347,9 +1352,8 @@ pub mod tests {
         let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
-        let token = create_test_token("test");
-        let catalog_name = token.handle().to_string();
-        flox.floxhub_token = Some(token);
+        set_test_auth(&mut flox, "test");
+        let catalog_name = "test".to_string();
 
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
         let package_metadata = check_package_metadata(
@@ -1468,9 +1472,8 @@ pub mod tests {
     async fn publish_errors_without_key() {
         let (mut flox, _tempdir) = flox_instance();
 
-        let token = create_test_token("test");
-        let catalog_name = token.handle().to_string();
-        flox.floxhub_token = Some(token);
+        set_test_auth(&mut flox, "test");
+        let catalog_name = "test".to_string();
 
         // Don't do a build because it's slow
         let (build_metadata, env_metadata, package_metadata) = dummy_publish_metadata("mypkg1");
@@ -1595,9 +1598,8 @@ pub mod tests {
         let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
-        let token = create_test_token("test");
-        let catalog_name = token.handle().to_string();
-        flox.floxhub_token = Some(token.clone());
+        set_test_auth(&mut flox, "test");
+        let catalog_name = "test".to_string();
 
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
         let package_metadata = check_package_metadata(
@@ -1616,7 +1618,7 @@ pub mod tests {
         )
         .unwrap();
 
-        let (_key_file, cache) = local_nix_cache(&token);
+        let (_key_file, cache) = local_nix_cache(flox.floxhub_token.as_ref().unwrap());
         let auth = Auth::from_flox(&flox).unwrap();
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
