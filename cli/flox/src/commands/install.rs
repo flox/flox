@@ -251,15 +251,6 @@ impl Install {
             &new_composer_package_overrides,
         );
 
-        // TODO: move this behind the `installation.manifest_modified`
-        // check below so we don't warn when we don't even install anything
-        for warning in Self::generate_unfree_and_broken_warnings(
-            &lockfile.packages,
-            &catalog_packages_to_install(&packages_to_install),
-        ) {
-            message::warning(warning);
-        }
-
         let installed = if let Some(packages_retried) = packages_retried {
             packages_retried
         } else {
@@ -287,6 +278,12 @@ impl Install {
         message::packages_newly_overridden_by_composer(&new_package_overrides);
 
         if installation.manifest_modified {
+            for warning in Self::generate_unfree_and_broken_warnings(
+                &lockfile.packages,
+                &catalog_packages_to_install(&packages_to_install),
+            ) {
+                message::warning(warning);
+            }
             warn_manifest_changes_for_services(&flox, &concrete_environment);
         }
 
