@@ -94,6 +94,14 @@ define unit_test_TEMPLATE =
   $(if $(_remaining_args),$(call unit_test_TEMPLATE,$(_remaining_args)))
 endef
 
+# Regression test value for long env var handling (PR #4089).
+# Generates a colon-separated path value totalling ~9000 bytes: 200 fake
+# non-existent directories followed by tests/test1 as the final entry.
+# This exercises the strdup() dynamic allocation path and verifies that
+# the last entry is not truncated, which would have silently failed with
+# the original fixed 4096-byte buffers on multi-CUDA hosts (7000+ bytes).
+LONG_VALUE := $(shell python3 -c "n=200;fake=':'.join('/does/not/exist/padding/directory/number/{:03d}'.format(i) for i in range(1,n+1));print(fake+':tests/test1',end='')")
+
 # Declare unit test targets to be performed.
 # test_name     FLOX_ENV_DIRS / LD_FLOXLIB_*_PATH     name_arg    expected_value
 # ------------- ------------------------------------- ----------- --------------
@@ -105,6 +113,7 @@ $(eval $(call unit_test_TEMPLATE,$(strip \
   multiple      tests/test1:tests/test2               libtest1.so tests/test1/lib/libtest1.so \
   unreadable    tests/test1:tests/test2:tests/test3   libtest3.so libtest3.so \
   empty_element tests/test1::tests/test2::tests/test3 libtest2.so tests/test2/lib/libtest2.so \
+  long_value    $(LONG_VALUE)                         libtest1.so tests/test1/lib/libtest1.so \
 )))
 
 # Also configure integration tests which exercise ld-floxlib.so by
