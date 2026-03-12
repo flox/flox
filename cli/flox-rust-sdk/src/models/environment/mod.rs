@@ -12,7 +12,7 @@ use flox_core::data::environment_ref::{
 };
 pub use flox_core::{Version, path_hash};
 use flox_manifest::lockfile::{LockedInclude, Lockfile, LockfileError};
-use flox_manifest::raw::PackageToInstall;
+use flox_manifest::raw::{PackageToInstall, PackageToModify};
 use flox_manifest::{Manifest, ManifestError, Migrated, Validated};
 use generations::{GenerationId, GenerationsError};
 use indoc::formatdoc;
@@ -22,6 +22,7 @@ use remote_environment::RemoteEnvironment;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
+use uninstall::UninstallSpec;
 use url::{ParseError, Url};
 use walkdir::WalkDir;
 
@@ -61,6 +62,7 @@ pub mod generations;
 pub mod managed_environment;
 pub mod path_environment;
 pub mod remote_environment;
+pub mod uninstall;
 
 pub const CATALOG_JSON: &str = "catalog.json";
 // don't forget to update the man page
@@ -81,11 +83,11 @@ pub const FLOX_SERVICES_SOCKET_OVERRIDE_VAR: &str = "_FLOX_SERVICES_SOCKET_OVERR
 
 pub use flox_core::N_HASH_CHARS;
 
-/// The result of an installation attempt that contains the new manifest contents
-/// along with whether each package was already installed
+/// The result of an installation attempt that contains whether the manifest
+/// was modified along with whether each package was already installed
 #[derive(Debug)]
 pub struct InstallationAttempt {
-    pub new_manifest: Option<Manifest<Migrated>>,
+    pub manifest_modified: bool,
     pub already_installed: HashMap<String, bool>,
     /// The store paths of environment that was built to validate the install.
     /// This is used as an optimization to skip builds that we've already done.
@@ -95,13 +97,14 @@ pub struct InstallationAttempt {
 /// The result of an uninstallation attempt
 #[derive(Debug)]
 pub struct UninstallationAttempt {
-    pub new_manifest: Option<Manifest<Migrated>>,
     /// Packages that were requested to be uninstalled but are stilled provided
     /// by included environments.
     pub still_included: HashMap<String, LockedInclude>,
     /// The store path of environment that was built to validate the uninstall.
     /// This is used as an optimization to skip builds that we've already done.
     pub built_environment_store_paths: Option<BuildEnvOutputs>,
+    /// The resolved modifications that were applied.
+    pub modifications: Vec<PackageToModify>,
 }
 
 #[enum_dispatch]
@@ -116,7 +119,7 @@ pub trait Environment: Send {
     /// Uninstall packages from the environment atomically
     fn uninstall(
         &mut self,
-        packages: Vec<String>,
+        specs: Vec<UninstallSpec>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError>;
 
@@ -691,6 +694,8 @@ pub enum EnvironmentError {
     #[error(transparent)]
     ManifestError(#[from] ManifestError),
     #[error(transparent)]
+    Uninstall(#[from] UninstallError),
+    #[error(transparent)]
     Lockfile(#[from] LockfileError),
     #[error(transparent)]
     ManifestInit(#[from] ManifestInitError),
@@ -832,6 +837,12 @@ pub enum UninstallError {
          Remove the package from environment '{1}' and then run 'flox include upgrade'"
     )]
     PackageOnlyIncluded(String, String),
+
+    #[error("'{0}' was not found in Lockfile")]
+    PackageNotInLockfile(String),
+
+    #[error("'{1}' does not have an output '{0}'")]
+    InvalidOutputForPackage(String, String),
 }
 
 /// Open an environment defined in `path` that has a `.flox` within.

@@ -23,6 +23,7 @@ use super::generations::{
     WithOtherFields,
 };
 use super::path_environment::PathEnvironment;
+use super::uninstall::UninstallSpec;
 use super::{
     CACHE_DIR_NAME,
     CanonicalizeError,
@@ -314,7 +315,7 @@ impl Environment for ManagedEnvironment {
             .collect();
 
         let result = local_checkout.install(packages, flox)?;
-        if result.new_manifest.is_some() {
+        if result.manifest_modified {
             let change = HistoryKind::Install { targets };
             generations
                 .add_generation(&mut local_checkout, change)
@@ -331,7 +332,7 @@ impl Environment for ManagedEnvironment {
     /// Uninstall packages from the environment atomically
     fn uninstall(
         &mut self,
-        packages: Vec<String>,
+        specs: Vec<UninstallSpec>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         self.guard_generation_immutable()?;
@@ -354,8 +355,9 @@ impl Environment for ManagedEnvironment {
             ))?
         }
 
-        let result = local_checkout.uninstall(packages.clone(), flox)?;
-        let change = HistoryKind::Uninstall { targets: packages };
+        let targets: Vec<String> = specs.iter().map(|s| s.package_ref.clone()).collect();
+        let result = local_checkout.uninstall(specs, flox)?;
+        let change = HistoryKind::Uninstall { targets };
 
         // It's an error to uninstall a package that isn't installed so if we
         // got this far then we need a new generation.
@@ -2556,15 +2558,30 @@ mod test {
             "initialised environment should have generation 1"
         );
 
-        env.uninstall(vec![package.clone()], &flox).unwrap();
+        env.uninstall(
+            vec![UninstallSpec {
+                package_ref: package.clone(),
+                outputs: None,
+                version: None,
+            }],
+            &flox,
+        )
+        .unwrap();
         assert_eq!(
             env.generations_metadata().unwrap().current_gen().as_deref(),
             Some(&2),
             "uninstalling a package should create a new generation"
         );
 
-        env.uninstall(vec![package.clone()], &flox)
-            .expect_err("uninstalling a package should fail if it is not installed");
+        env.uninstall(
+            vec![UninstallSpec {
+                package_ref: package.clone(),
+                outputs: None,
+                version: None,
+            }],
+            &flox,
+        )
+        .expect_err("uninstalling a package should fail if it is not installed");
         assert_eq!(
             env.generations_metadata().unwrap().current_gen().as_deref(),
             Some(&2),

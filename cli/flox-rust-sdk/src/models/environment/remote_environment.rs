@@ -19,6 +19,7 @@ use super::generations::{
     WithOtherFields,
 };
 use super::managed_environment::{ManagedEnvironment, ManagedEnvironmentError};
+use super::uninstall::UninstallSpec;
 use super::{
     CanonicalPath,
     CanonicalizeError,
@@ -389,10 +390,10 @@ impl Environment for RemoteEnvironment {
     /// Uninstall packages from the environment atomically
     fn uninstall(
         &mut self,
-        packages: Vec<String>,
+        specs: Vec<UninstallSpec>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
-        let result = self.inner.uninstall(packages, flox)?;
+        let result = self.inner.uninstall(specs, flox)?;
 
         Ok(result)
     }

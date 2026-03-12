@@ -357,27 +357,27 @@ mod tests {
     }
     /// Return the install ID if it matches the user input
     #[test]
-    fn test_get_install_ids_to_uninstall_by_install_id() {
+    fn test_resolve_install_id_by_install_id() {
         let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
         let result = manifest_mock
-            .get_install_ids(vec!["testInstallID".to_string()])
+            .resolve_install_id("testInstallID", &None)
             .unwrap();
-        assert_eq!(result, vec!["testInstallID".to_string()]);
+        assert_eq!(result, "testInstallID");
     }
 
-    #[test]
     /// Return the install ID if a pkg-path matches the user input
-    fn test_get_install_ids_to_uninstall_by_pkg_path() {
+    #[test]
+    fn test_resolve_install_id_by_pkg_path() {
         let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
         let result = manifest_mock
-            .get_install_ids(vec!["dotted.package".to_string()])
+            .resolve_install_id("dotted.package", &None)
             .unwrap();
-        assert_eq!(result, vec!["testInstallID".to_string()]);
+        assert_eq!(result, "testInstallID");
     }
 
-    #[test]
     /// Ensure that the install ID takes precedence over pkg-path when both are present
-    fn test_get_install_ids_to_uninstall_iid_wins() {
+    #[test]
+    fn test_resolve_install_id_iid_wins() {
         let manifest_mock = generate_mock_manifest(vec![
             ("testInstallID1", "dotted.package"),
             ("testInstallID2", "dotted.package"),
@@ -385,37 +385,37 @@ mod tests {
         ]);
 
         let result = manifest_mock
-            .get_install_ids(vec!["dotted.package".to_string()])
+            .resolve_install_id("dotted.package", &None)
             .unwrap();
-        assert_eq!(result, vec!["dotted.package".to_string()]);
+        assert_eq!(result, "dotted.package");
     }
 
     #[test]
     /// Throw an error when multiple packages match by pkg_path and flox can't determine which to uninstall
-    fn test_get_install_ids_to_uninstall_multiple_pkg_paths_match() {
+    fn test_resolve_install_id_multiple_pkg_paths_match() {
         let manifest_mock = generate_mock_manifest(vec![
             ("testInstallID1", "dotted.package"),
             ("testInstallID2", "dotted.package"),
             ("testInstallID3", "dotted.package"),
         ]);
         let result = manifest_mock
-            .get_install_ids(vec!["dotted.package".to_string()])
+            .resolve_install_id("dotted.package", &None)
             .unwrap_err();
         assert!(matches!(result, ManifestError::MultiplePackagesMatch(_, _)));
     }
 
     #[test]
     /// Throw an error if no install ID or pkg-path matches the user input
-    fn test_get_install_ids_to_uninstall_pkg_not_found() {
+    fn test_resolve_install_id_pkg_not_found() {
         let manifest_mock = generate_mock_manifest(vec![("testInstallID1", "dotted.package")]);
         let result = manifest_mock
-            .get_install_ids(vec!["invalid.packageName".to_string()])
+            .resolve_install_id("invalid.packageName", &None)
             .unwrap_err();
         assert!(matches!(result, ManifestError::PackageNotFound(_)));
     }
 
     #[test]
-    fn test_get_install_ids_to_uninstall_with_version() {
+    fn test_resolve_install_id_with_version() {
         let mut manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
 
         if let ManifestPackageDescriptor::Catalog(descriptor) = manifest_mock
@@ -428,11 +428,10 @@ mod tests {
         };
 
         let result = manifest_mock
-            .get_install_ids(vec!["dotted.package@1.0".to_string()])
+            .resolve_install_id("dotted.package", &Some("1.0".to_string()))
             .unwrap();
 
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], "testInstallID");
+        assert_eq!(result, "testInstallID");
     }
 
     /// Helper function to create a catalog descriptor for testing

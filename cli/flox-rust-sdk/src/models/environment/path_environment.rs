@@ -30,6 +30,7 @@ use tracing::debug;
 
 use super::core_environment::{CoreEnvironment, UpgradeResult};
 use super::fetcher::IncludeFetcher;
+use super::uninstall::UninstallSpec;
 use super::{
     CACHE_DIR_NAME,
     DOT_FLOX,
@@ -244,11 +245,11 @@ impl Environment for PathEnvironment {
     /// uninstalled rather than a bool.
     fn uninstall(
         &mut self,
-        packages: Vec<String>,
+        specs: Vec<UninstallSpec>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;
-        let result = env_view.uninstall(packages, flox)?;
+        let result = env_view.uninstall(specs, flox)?;
         if let Some(ref store_paths) = result.built_environment_store_paths {
             self.link(store_paths)?;
         }

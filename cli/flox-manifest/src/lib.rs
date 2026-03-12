@@ -133,7 +133,7 @@ pub enum ManifestError {
     // =========================================================================
     // Everything else
     // =========================================================================
-    #[error("outputs '{0:?}' don't exists for package {1}")]
+    #[error("outputs '{0:?}' don't exist for package {1}")]
     InvalidOutputs(Vec<String>, String),
 
     #[error(transparent)]
