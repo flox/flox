@@ -100,7 +100,7 @@ endef
 # This exercises the strdup() dynamic allocation path and verifies that
 # the last entry is not truncated, which would have silently failed with
 # the original fixed 4096-byte buffers on multi-CUDA hosts (7000+ bytes).
-LONG_VALUE := $(shell python3 -c "n=200;fake=':'.join('/does/not/exist/padding/directory/number/{:03d}'.format(i) for i in range(1,n+1));print(fake+':tests/test1',end='')")
+LONG_VALUE := $(shell for i in $$(seq -w 0 199); do printf '/does/not/exist/padding/directory/number/%s:' "$$i"; done; printf 'tests/test1')
 
 # Declare unit test targets to be performed.
 # test_name     FLOX_ENV_DIRS / LD_FLOXLIB_*_PATH     name_arg    expected_value
