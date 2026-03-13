@@ -49,13 +49,14 @@ impl AuthStrategy for Auth0AuthStrategy {
         };
 
         if token.is_expired() {
-            return Err(AuthError::NotAuthenticated(
-                "Your FloxHub token has expired. To re-authenticate you can either:\n\n\
+            return Err(AuthError::Expired {
+                handle: token.handle().to_string(),
+                message: "Your FloxHub token has expired. To re-authenticate you can either:\n\n\
                  * login to FloxHub with 'flox auth login',\n\
                  * set the 'floxhub_token' field in your config to a fresh token,\n\
                  * set the '$FLOX_FLOXHUB_TOKEN' environment variable"
                     .to_string(),
-            ));
+            });
         }
 
         Ok(token.handle().to_string())

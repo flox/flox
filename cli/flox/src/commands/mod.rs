@@ -1165,7 +1165,12 @@ pub(super) async fn ensure_environment_trust(
         return Ok(());
     }
 
-    if flox.get_handle().ok().as_deref() == Some(env_ref.owner().as_str()) {
+    let handle = match flox.get_handle() {
+        Ok(handle) => Some(handle),
+        Err(flox_catalog::AuthError::Expired { handle, .. }) => Some(handle),
+        Err(_) => None,
+    };
+    if handle.as_deref() == Some(env_ref.owner().as_str()) {
         debug!("{env_prefixed_name} is trusted by auth handle");
         return Ok(());
     }
