@@ -1422,6 +1422,7 @@ pub mod test_helpers {
     use toml_edit::DocumentMut;
 
     use crate::lockfile::Lockfile;
+    use crate::parsed::common::KnownSchemaVersion;
     use crate::parsed::latest::ManifestLatest;
     use crate::{Manifest, Migrated};
 
@@ -1442,7 +1443,10 @@ pub mod test_helpers {
     }
 
     pub fn empty_test_migrated_manifest() -> Manifest<Migrated> {
-        mk_test_manifest_from_contents("schema-version = \"1.10.0\"")
+        mk_test_manifest_from_contents(format!(
+            "schema-version = \"{}\"",
+            KnownSchemaVersion::latest()
+        ))
     }
 }
 

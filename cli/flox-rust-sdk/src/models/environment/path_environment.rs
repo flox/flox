@@ -22,6 +22,7 @@ use flox_core::data::environment_ref::EnvironmentName;
 use flox_core::write_atomically;
 use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
 use flox_manifest::lockfile::{LOCKFILE_FILENAME, Lockfile};
+use flox_manifest::parsed::common::KnownSchemaVersion;
 use flox_manifest::raw::{CatalogPackage, DEFAULT_SYSTEMS_STR, PackageToInstall};
 use flox_manifest::{MANIFEST_FILENAME, Manifest, Migrated, Validated, Writable};
 use indoc::formatdoc;
@@ -463,7 +464,10 @@ impl PathEnvironment {
         }
 
         // The most minimal manifest we can generate.
-        let manifest = Manifest::parse_toml_typed("schema-version = \"1.10.0\"\n")?;
+        let manifest = Manifest::parse_toml_typed(format!(
+            "schema-version = \"{}\"\n",
+            KnownSchemaVersion::latest()
+        ))?;
 
         let environment = Self::write_new_unchecked(
             flox,

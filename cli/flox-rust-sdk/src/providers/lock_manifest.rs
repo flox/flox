@@ -2821,7 +2821,7 @@ mod tests {
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
         let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
 
-        let mut manifest = mk_test_manifest_from_contents("schema-version = \"1.10.0\"");
+        let mut manifest = mk_test_manifest_from_contents(with_latest_schema(""));
         let inner_manifest = manifest.as_latest_schema_mut();
         inner_manifest.options.systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
         inner_manifest
