@@ -52,12 +52,13 @@ pub enum KnownSchemaVersion {
     //       the sort order. Don't mess that up!
     V1,
     V1_10_0,
+    V1_11_0,
 }
 
 impl KnownSchemaVersion {
     /// Returns the latest schema version.
     pub fn latest() -> Self {
-        KnownSchemaVersion::V1_10_0
+        KnownSchemaVersion::V1_11_0
     }
 
     /// Returns the oldest supported schema version.
@@ -67,7 +68,12 @@ impl KnownSchemaVersion {
 
     /// Returns an iterator over all schema versions.
     pub fn iter() -> impl Iterator<Item = KnownSchemaVersion> {
-        [KnownSchemaVersion::V1, KnownSchemaVersion::V1_10_0].into_iter()
+        [
+            KnownSchemaVersion::V1,
+            KnownSchemaVersion::V1_10_0,
+            KnownSchemaVersion::V1_11_0,
+        ]
+        .into_iter()
     }
 
     /// Returns the name of the schema version field.
@@ -88,6 +94,7 @@ impl TryFrom<VersionKind> for KnownSchemaVersion {
             VersionKind::Version(v) => Err(ManifestError::InvalidSchemaVersion(format!("{v}"))),
             VersionKind::SchemaVersion(v) => match v.as_str() {
                 "1.10.0" => Ok(KnownSchemaVersion::V1_10_0),
+                "1.11.0" => Ok(KnownSchemaVersion::V1_11_0),
                 _ => Err(ManifestError::InvalidSchemaVersion(v.to_string())),
             },
         }
@@ -99,6 +106,7 @@ impl std::fmt::Display for KnownSchemaVersion {
         match self {
             KnownSchemaVersion::V1 => write!(f, "1"),
             KnownSchemaVersion::V1_10_0 => write!(f, "1.10.0"),
+            KnownSchemaVersion::V1_11_0 => write!(f, "1.11.0"),
         }
     }
 }

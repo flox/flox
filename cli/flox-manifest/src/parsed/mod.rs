@@ -2,6 +2,7 @@ pub mod common;
 pub mod latest;
 pub mod v1;
 pub mod v1_10_0;
+pub mod v1_11_0;
 
 /// An interface codifying how to access types that are just semantic wrappers
 /// around inner types. This impl may be generated with a macro.

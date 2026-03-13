@@ -47,6 +47,7 @@ schema-version = "1.10.0"
 Valid string values are:
 
 - `1.10.0`: introduced package outputs
+- `1.11.0`: introduced `minimum-cli-version`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema

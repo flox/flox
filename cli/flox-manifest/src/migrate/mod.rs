@@ -1,10 +1,12 @@
 use crate::interfaces::AsTypedOnlyManifest;
 use crate::lockfile::Lockfile;
+use crate::migrate::v1_10_0_to_v1_11_0::migrate_manifest_v1_10_0_to_v1_11_0;
 use crate::migrate::v1_to_v1_10_0::migrate_manifest_v1_to_v1_10_0;
 use crate::parsed::common::KnownSchemaVersion;
 use crate::raw::SyncTypedToRaw;
 use crate::{Manifest, ManifestError, Migrated, MigratedTypedOnly, Parsed, TypedOnly, Validated};
 
+mod v1_10_0_to_v1_11_0;
 mod v1_to_v1_10_0;
 
 #[derive(Debug, thiserror::Error)]
@@ -44,11 +46,15 @@ pub(crate) fn migrate_typed_only(
                 let migrated = migrate_manifest_v1_to_v1_10_0(&manifest_v1, lockfile)?;
                 inner = Parsed::V1_10_0(migrated);
             },
-            Parsed::V1_10_0(manifest_v1_10_0) => break Parsed::from_latest(manifest_v1_10_0),
+            Parsed::V1_10_0(manifest_v1_10_0) => {
+                let migrated = migrate_manifest_v1_10_0_to_v1_11_0(&manifest_v1_10_0);
+                inner = Parsed::V1_11_0(migrated);
+            },
+            Parsed::V1_11_0(manifest_v1_11_0) => break Parsed::from_latest(manifest_v1_11_0),
         }
     };
     debug_assert_eq!(inner.schema_version(), KnownSchemaVersion::latest());
-    let Parsed::V1_10_0(migrated_manifest) = inner else {
+    let Parsed::V1_11_0(migrated_manifest) = inner else {
         unreachable!("already checked that manifest was latest schema version")
     };
     let migrated = Manifest {
