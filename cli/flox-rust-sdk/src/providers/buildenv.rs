@@ -8,6 +8,7 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::thread::ScopedJoinHandle;
 
+use flox_catalog::{CatalogClientError, ClientTrait, StoreInfo};
 use flox_core::activate::mode::ActivateMode;
 use flox_core::canonical_path::CanonicalPath;
 use flox_manifest::ManifestError;
@@ -29,12 +30,10 @@ use thiserror::Error;
 use tracing::{Span, debug, info_span, instrument, trace};
 
 use super::auth::{AuthError, AuthProvider};
-use super::catalog::ClientTrait;
 use super::nix::{self, nix_base_command};
 use crate::data::System;
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::providers::auth::{catalog_auth_to_envs, store_needs_auth};
-use crate::providers::catalog::{CatalogClientError, StoreInfo};
 use crate::utils::CommandExt;
 
 static BUILDENV_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -1343,7 +1342,6 @@ mod realise_nixpkgs_tests {
 
     use super::*;
     use crate::providers::auth::Auth;
-    use crate::providers::catalog::StoreInfo;
     use crate::providers::nix::test_helpers::known_store_path;
 
     /// When a package is not available in the store, it should be built from its derivation.

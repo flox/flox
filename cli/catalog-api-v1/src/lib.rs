@@ -5,7 +5,9 @@
 
 mod client;
 mod error;
+pub mod hooks;
 pub use client::*;
+pub use hooks::RequestHooks;
 
 pub mod types {
     pub use crate::client::types::*;

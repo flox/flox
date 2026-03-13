@@ -3,7 +3,17 @@ use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use catalog_api_v1::types as catalog_types;
+use flox_catalog::{
+    MessageLevel,
+    MsgAttrPathNotFoundNotFoundForAllSystems,
+    MsgAttrPathNotFoundNotInCatalog,
+    MsgAttrPathNotFoundSystemsNotOnSamePage,
+    MsgConstraintsTooTight,
+    MsgUnknown,
+    PackageGroup,
+    ResolutionMessage,
+    ResolvedPackageGroup,
+};
 use flox_core::Version;
 use flox_core::data::System;
 use flox_manifest::compose::shallow::ShallowMerger;
@@ -48,16 +58,6 @@ use tracing::{debug, instrument};
 use crate::flox::Flox;
 use crate::models::environment::fetcher::IncludeFetcher;
 use crate::models::environment::{CoreEnvironmentError, EnvironmentError};
-use crate::providers::catalog::{
-    self,
-    MsgAttrPathNotFoundNotFoundForAllSystems,
-    MsgAttrPathNotFoundNotInCatalog,
-    MsgAttrPathNotFoundSystemsNotOnSamePage,
-    MsgConstraintsTooTight,
-    MsgUnknown,
-    PackageGroup,
-    ResolvedPackageGroup,
-};
 use crate::providers::flake_installable_locker::{
     FlakeInstallableError,
     FlakeInstallableToLock,
@@ -67,7 +67,7 @@ use crate::providers::flake_installable_locker::{
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
     #[error("failed to resolve packages")]
-    CatalogResolve(#[from] catalog::ResolveError),
+    CatalogResolve(#[from] flox_catalog::ResolveError),
 
     // todo: this should probably part of some validation logic of the manifest file
     //       rather than occurring during the locking process creation
@@ -251,7 +251,7 @@ impl LockManifest {
                 .iter()
                 .sorted()
                 .map(|s| {
-                    catalog_types::PackageSystem::from_str(s)
+                    flox_catalog::PackageSystem::from_str(s)
                         .map_err(|_| ResolveError::UnrecognizedSystem(s.to_string()))
                 })
                 .collect::<Result<Vec<_>, _>>()
@@ -287,7 +287,7 @@ impl LockManifest {
                         .and_then(|(_, locked_package)| locked_package.as_catalog_package_ref())
                         .map(|locked_package| locked_package.derivation.clone());
 
-                    let descriptor = catalog_types::PackageDescriptor {
+                    let descriptor = flox_catalog::PackageDescriptor {
                         install_id: id.clone(),
                         attr_path: desc.pkg_path.clone(),
                         derivation: locked_derivation,
@@ -635,7 +635,7 @@ impl LockManifest {
     async fn resolve_manifest(
         manifest: &ManifestLatest,
         seed_lockfile: Option<&Lockfile>,
-        client: &impl catalog::ClientTrait,
+        client: &impl flox_catalog::ClientTrait,
         installable_locker: &impl InstallableLocker,
     ) -> Result<Vec<LockedPackage>, ResolveError> {
         let catalog_groups = Self::collect_resolution_package_groups(manifest, seed_lockfile)?;
@@ -939,39 +939,39 @@ impl LockManifest {
                     "handling resolution message"
                 );
                 // If it's not an error, skip this message
-                if res_msg.level() != catalog_types::MessageLevel::Error {
+                if res_msg.level() != MessageLevel::Error {
                     continue;
                 }
                 let failure = match res_msg {
-                    catalog::ResolutionMessage::General(inner) => {
+                    ResolutionMessage::General(inner) => {
                         tracing::debug!(kind = "general");
                         ResolutionFailure::FallbackMessage {
                             msg: inner.msg.clone(),
                         }
                     },
-                    catalog::ResolutionMessage::AttrPathNotFoundNotInCatalog(inner) => {
+                    ResolutionMessage::AttrPathNotFoundNotInCatalog(inner) => {
                         tracing::debug!(kind = "attr_path_not_found.not_in_catalog",);
                         ResolutionFailure::PackageNotFound(inner.clone())
                     },
-                    catalog::ResolutionMessage::AttrPathNotFoundNotFoundForAllSystems(inner) => {
+                    ResolutionMessage::AttrPathNotFoundNotFoundForAllSystems(inner) => {
                         tracing::debug!(kind = "attr_path_not_found.not_found_for_all_systems",);
                         ResolutionFailure::PackageUnavailableOnSomeSystems {
                             catalog_message: inner.clone(),
                             invalid_systems: Self::determine_invalid_systems(inner, manifest)?,
                         }
                     },
-                    catalog::ResolutionMessage::AttrPathNotFoundSystemsNotOnSamePage(inner) => {
+                    ResolutionMessage::AttrPathNotFoundSystemsNotOnSamePage(inner) => {
                         tracing::debug!(kind = "attr_path_not_found.systems_not_on_same_page");
                         ResolutionFailure::SystemsNotOnSamePage(inner.clone())
                     },
-                    catalog::ResolutionMessage::ConstraintsTooTight(inner) => {
+                    ResolutionMessage::ConstraintsTooTight(inner) => {
                         tracing::debug!(kind = "constraints_too_tight",);
                         ResolutionFailure::ConstraintsTooTight {
                             catalog_message: inner.clone(),
                             group: group.name.clone(),
                         }
                     },
-                    catalog::ResolutionMessage::Unknown(inner) => {
+                    ResolutionMessage::Unknown(inner) => {
                         tracing::debug!(
                             kind = "unknown",
                             msg_type = inner.msg_type,
@@ -1353,7 +1353,14 @@ fn format_multiple_resolution_failures(failures: &[ResolutionFailure]) -> String
 mod tests {
     use std::sync::LazyLock;
 
-    use catalog_api_v1::types::{PackageOutput, PackageOutputs, PackageSystem};
+    use flox_catalog::{
+        CatalogPage,
+        PackageDescriptor,
+        PackageOutput,
+        PackageOutputs,
+        PackageResolutionInfo,
+        PackageSystem,
+    };
     use flox_core::data::environment_ref::RemoteEnvironmentRef;
     use flox_manifest::TypedOnly;
     use flox_manifest::lockfile::LockedInstallable;
@@ -1386,15 +1393,10 @@ mod tests {
     };
     use crate::models::environment::path_environment::tests::generate_path_environments_without_install_or_include;
     use crate::models::environment::remote_environment::test_helpers::mock_remote_environment;
+    use crate::providers::catalog::MockClient;
     use crate::providers::catalog::test_helpers::{
         auto_recording_catalog_client,
         catalog_replay_client,
-    };
-    use crate::providers::catalog::{
-        CatalogPage,
-        MockClient,
-        PackageDescriptor,
-        PackageResolutionInfo,
     };
     use crate::providers::flake_installable_locker::{InstallableLocker, InstallableLockerMock};
 
@@ -1490,7 +1492,7 @@ mod tests {
                 allow_unfree: None,
                 allowed_licenses: None,
                 allow_missing_builds: None,
-                systems: vec![catalog_types::PackageSystem::Aarch64Darwin],
+                systems: vec![flox_catalog::PackageSystem::Aarch64Darwin],
             }],
         }]
     });
@@ -1533,7 +1535,7 @@ mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![catalog_types::PackageSystem::Aarch64Darwin],
+                    systems: vec![flox_catalog::PackageSystem::Aarch64Darwin],
                 },
                 PackageDescriptor {
                     allow_pre_releases: None,
@@ -1546,7 +1548,7 @@ mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![catalog_types::PackageSystem::X8664Linux],
+                    systems: vec![flox_catalog::PackageSystem::X8664Linux],
                 },
                 PackageDescriptor {
                     allow_pre_releases: None,
@@ -1559,7 +1561,7 @@ mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![catalog_types::PackageSystem::Aarch64Darwin],
+                    systems: vec![flox_catalog::PackageSystem::Aarch64Darwin],
                 },
                 PackageDescriptor {
                     allow_pre_releases: None,
@@ -1572,7 +1574,7 @@ mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![catalog_types::PackageSystem::X8664Linux],
+                    systems: vec![flox_catalog::PackageSystem::X8664Linux],
                 },
             ],
         }];
@@ -2399,7 +2401,7 @@ mod tests {
             .migrate_typed_only(None)
             .unwrap();
 
-        let client = catalog::MockClient::new();
+        let client = MockClient::new();
 
         let resolved_packages = LockManifest::resolve_manifest(
             manifest.as_latest_schema(),
@@ -3052,7 +3054,7 @@ mod tests {
         // Set `options.allow.unfree = false` in the manifest, but not the lockfile
         manifest.options.allow.unfree = Some(false);
 
-        let client = catalog::MockClient::new();
+        let client = MockClient::new();
         assert!(matches!(
             LockManifest::resolve_manifest(
                 &manifest,

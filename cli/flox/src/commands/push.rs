@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_core::data::environment_ref::EnvironmentOwner;
 use flox_rust_sdk::flox::Flox;
@@ -20,7 +20,7 @@ use flox_rust_sdk::models::environment::{
 use indoc::formatdoc;
 use tracing::{debug, instrument};
 
-use crate::commands::{EnvironmentSelect, ensure_floxhub_token, environment_select};
+use crate::commands::{EnvironmentSelect, ensure_auth, environment_select};
 use crate::environment_subcommand_metric;
 use crate::utils::errors::format_core_error;
 use crate::utils::message;
@@ -52,7 +52,7 @@ impl Push {
     #[instrument(name = "push", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         // Ensure the user is logged in for the following remote operations
-        ensure_floxhub_token(&mut flox).await?;
+        ensure_auth(&mut flox).await?;
 
         // Start a span that doesn't include authentication
         let span = tracing::info_span!("post-auth");
@@ -113,12 +113,7 @@ fn handle_path_environment_push(
     let owner = if let Some(owner) = owner {
         owner
     } else {
-        EnvironmentOwner::from_str(
-            flox.floxhub_token
-                .as_ref()
-                .context("Need to be logged in")?
-                .handle(),
-        )?
+        EnvironmentOwner::from_str(&flox.get_handle()?)?
     };
 
     let pointer = ManagedPointer::new(owner.clone(), path_environment.name(), &flox.floxhub);
@@ -270,10 +265,7 @@ mod tests {
     use std::str::FromStr;
 
     use flox_core::data::environment_ref::EnvironmentOwner;
-    use flox_rust_sdk::flox::test_helpers::{
-        create_test_token,
-        flox_instance_with_optional_floxhub,
-    };
+    use flox_rust_sdk::flox::test_helpers::{flox_instance_with_optional_floxhub, set_test_auth};
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::mock_managed_environment_in;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
     use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
@@ -294,8 +286,7 @@ mod tests {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
 
         let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
-        let token = create_test_token(owner.as_str());
-        flox.floxhub_token = Some(token);
+        set_test_auth(&mut flox, owner.as_str());
         let (subscriber, writer) = test_subscriber_message_only();
 
         let env = new_path_environment_in(&flox, EMPTY_MANIFEST, tempdir.path().join(name));
@@ -327,8 +318,7 @@ mod tests {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
 
         let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
-        let token = create_test_token(owner.as_str());
-        flox.floxhub_token = Some(token);
+        set_test_auth(&mut flox, owner.as_str());
         let (subscriber, writer) = test_subscriber_message_only();
 
         let mut env = mock_managed_environment_in(
@@ -372,8 +362,7 @@ mod tests {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
 
         let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
-        let token = create_test_token(owner.as_str());
-        flox.floxhub_token = Some(token);
+        set_test_auth(&mut flox, owner.as_str());
         let (subscriber, writer) = test_subscriber_message_only();
 
         let env = mock_managed_environment_in(
@@ -407,8 +396,7 @@ mod tests {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
 
         let (mut flox, _tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
-        let token = create_test_token(owner.as_str());
-        flox.floxhub_token = Some(token);
+        set_test_auth(&mut flox, owner.as_str());
 
         let env_ref = format!("{}/my-env", owner).parse().unwrap();
         let push_cmd = Push {
@@ -433,8 +421,7 @@ mod tests {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
 
         let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
-        let token = create_test_token(owner.as_str());
-        flox.floxhub_token = Some(token);
+        set_test_auth(&mut flox, owner.as_str());
 
         // Create and push a managed environment to mock FloxHub
         let mut env = mock_managed_environment_in(
@@ -489,8 +476,7 @@ mod tests {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
 
         let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
-        let token = create_test_token(owner.as_str());
-        flox.floxhub_token = Some(token);
+        set_test_auth(&mut flox, owner.as_str());
 
         // Create and push a managed environment to mock FloxHub
         let mut env = mock_managed_environment_in(
