@@ -8,6 +8,7 @@ use std::{fs, io};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use flox_core::activate::context::ActivateMode;
 use flox_manifest::interfaces::CommonFields;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::common::ContainerizeConfig;
@@ -53,6 +54,11 @@ pub struct Containerize {
     /// Set metadata for an image
     #[bpaf(long("label"), argument("key=value"))]
     labels: Vec<String>,
+
+    /// Containerize the environment in either "dev" or "run" mode.
+    /// Overrides the "options.activate.mode" setting in the manifest.
+    #[bpaf(short, long)]
+    mode: Option<ActivateMode>,
 }
 impl Containerize {
     #[instrument(name = "containerize", skip_all)]
@@ -90,7 +96,9 @@ impl Containerize {
         let env_name = env.name();
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
         let manifest = lockfile.manifest;
-        let mode = manifest.options().clone().activate.mode.unwrap_or_default();
+        let mode = self
+            .mode
+            .unwrap_or(manifest.options().clone().activate.mode.unwrap_or_default());
         let source = if std::env::consts::OS == "linux" {
             let container_config = manifest
                 .containerize()
@@ -115,7 +123,7 @@ impl Containerize {
                     Exporting a container on macOS requires Docker or Podman to be installed.
                 "#});
             };
-            let builder = ContainerizeProxy::new(env_path, proxy_runtime, self.labels);
+            let builder = ContainerizeProxy::new(env_path, proxy_runtime, self.labels, Some(mode));
             builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
         };
 
