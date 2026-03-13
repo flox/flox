@@ -44,13 +44,13 @@ impl ShallowMerger {
 
     #[instrument(skip_all)]
     fn merge_minimum_cli_version(
-        low_priority: Option<&String>,
-        high_priority: Option<&String>,
-    ) -> Result<(Option<String>, Vec<Warning>), MergeError> {
+        low_priority: Option<&semver::Version>,
+        high_priority: Option<&semver::Version>,
+    ) -> Result<(Option<semver::Version>, Vec<Warning>), MergeError> {
         let (merged, maybe_warning) = shallow_merge_options(
             KeyPath::from_iter(["minimum-cli-version"]),
-            low_priority,
-            high_priority,
+            low_priority.cloned(),
+            high_priority.cloned(),
         );
         let warning = if let Some(warning) = maybe_warning {
             vec![warning]

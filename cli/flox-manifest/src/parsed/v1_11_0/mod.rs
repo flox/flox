@@ -44,7 +44,12 @@ pub struct ManifestV1_11_0 {
     pub schema_version: String,
     /// The minimum CLI version that can activate this environment.
     #[serde(rename = "minimum-cli-version")]
-    pub minimum_cli_version: Option<String>,
+    #[schemars(with = "Option<String>")]
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "arbitrary_semver_version()")
+    )]
+    pub minimum_cli_version: Option<semver::Version>,
     /// The packages to install in the form of a map from install_id
     /// to package descriptor.
     #[serde(default)]
@@ -179,5 +184,47 @@ impl CommonFields for ManifestV1_11_0 {
 
     fn options_mut(&mut self) -> &mut super::common::Options {
         &mut self.options
+    }
+}
+
+#[cfg(any(test, feature = "tests"))]
+fn arbitrary_semver_version() -> impl proptest::strategy::Strategy<Value = Option<semver::Version>> {
+    use proptest::prelude::*;
+    proptest::option::of((0..100u64, 0..100u64, 0..100u64).prop_map(|(ma, mi, pa)| {
+        semver::Version::new(ma, mi, pa)
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+    use crate::test_helpers::with_latest_schema;
+
+    #[test]
+    fn parses_minimum_cli_version_semver() {
+        let manifest = with_latest_schema(indoc! {r#"
+            minimum-cli-version = "1.0.0"
+        "#});
+        let parsed: ManifestV1_11_0 = toml_edit::de::from_str(&manifest).unwrap();
+        assert_eq!(
+            parsed.minimum_cli_version,
+            Some(semver::Version::new(1, 0, 0))
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_minimum_cli_version() {
+        let manifest = with_latest_schema(indoc! {r#"
+            minimum-cli-version = "not-semver"
+        "#});
+        let err = toml_edit::de::from_str::<ManifestV1_11_0>(&manifest)
+            .expect_err("should reject invalid semver");
+        assert_eq!(
+            err.message(),
+            "unexpected character 'n' while parsing major version number"
+        );
     }
 }

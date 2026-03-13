@@ -22,6 +22,7 @@ url-escape.workspace = true
 flox-core.workspace = true
 chrono.workspace = true
 catalog-api-v1.workspace = true
+semver.workspace = true
 
 # should be in dev-dependencies but test doesn't apply across crates
 proptest = { workspace = true, optional = true }

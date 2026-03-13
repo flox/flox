@@ -47,7 +47,7 @@ pub(crate) fn migrate_typed_only(
                 inner = Parsed::V1_10_0(migrated);
             },
             Parsed::V1_10_0(manifest_v1_10_0) => {
-                let migrated = migrate_manifest_v1_10_0_to_v1_11_0(&manifest_v1_10_0);
+                let migrated = migrate_manifest_v1_10_0_to_v1_11_0(&manifest_v1_10_0)?;
                 inner = Parsed::V1_11_0(migrated);
             },
             Parsed::V1_11_0(manifest_v1_11_0) => break Parsed::from_latest(manifest_v1_11_0),
