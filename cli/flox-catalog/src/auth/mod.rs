@@ -17,6 +17,8 @@ use crate::token::FloxhubToken;
 pub enum AuthError {
     #[error("{0}")]
     NotAuthenticated(String),
+    #[error("{message}")]
+    Expired { handle: String, message: String },
 }
 
 /// Strategy pattern for authentication header insertion
