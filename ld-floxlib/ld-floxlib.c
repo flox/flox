@@ -37,9 +37,15 @@
 __asm__( ".symver close,close@GLIBC_2.17" );
 __asm__( ".symver fprintf,fprintf@GLIBC_2.17" );
 __asm__( ".symver getenv,getenv@GLIBC_2.17" );
+__asm__( ".symver malloc,malloc@GLIBC_2.17" );
 __asm__( ".symver open,open@GLIBC_2.17" );
 __asm__( ".symver snprintf,snprintf@GLIBC_2.17" );
 __asm__( ".symver stderr,stderr@GLIBC_2.17" );
+__asm__( ".symver strcat,strcat@GLIBC_2.17" );
+__asm__( ".symver strcmp,strcmp@GLIBC_2.17" );
+__asm__( ".symver strcpy,strcpy@GLIBC_2.17" );
+__asm__( ".symver strdup,strdup@GLIBC_2.17" );
+__asm__( ".symver strlen,strlen@GLIBC_2.17" );
 __asm__( ".symver strrchr,strrchr@GLIBC_2.17" );
 __asm__( ".symver strtok,strtok@GLIBC_2.17" );
 #elif defined( __x86_64__ )
@@ -47,9 +53,15 @@ __asm__( ".symver strtok,strtok@GLIBC_2.17" );
 __asm__( ".symver close,close@GLIBC_2.2.5" );
 __asm__( ".symver fprintf,fprintf@GLIBC_2.2.5" );
 __asm__( ".symver getenv,getenv@GLIBC_2.2.5" );
+__asm__( ".symver malloc,malloc@GLIBC_2.2.5" );
 __asm__( ".symver open,open@GLIBC_2.2.5" );
 __asm__( ".symver snprintf,snprintf@GLIBC_2.2.5" );
 __asm__( ".symver stderr,stderr@GLIBC_2.2.5" );
+__asm__( ".symver strcat,strcat@GLIBC_2.2.5" );
+__asm__( ".symver strcmp,strcmp@GLIBC_2.2.5" );
+__asm__( ".symver strcpy,strcpy@GLIBC_2.2.5" );
+__asm__( ".symver strdup,strdup@GLIBC_2.2.5" );
+__asm__( ".symver strlen,strlen@GLIBC_2.2.5" );
 __asm__( ".symver strrchr,strrchr@GLIBC_2.2.5" );
 __asm__( ".symver strtok,strtok@GLIBC_2.2.5" );
 #else
@@ -62,24 +74,24 @@ __asm__( ".symver strtok,strtok@GLIBC_2.2.5" );
 // more than enough for most cases.
 #define LIB_ENVVAR_MAXENTRIES 256
 
-// Define the maximum length of a directory path in an environment variable.
-// This is also somewhat arbitrary but it should be more than enough for most
-// cases.
-#define LIB_ENVVAR_MAXLEN PATH_MAX
-
 #define LIB_SUFFIX "/lib"
 
 static int    audit_ld_floxlib = -1;
 static int    debug_ld_floxlib = -1;
 static char   name_buf[PATH_MAX];
 static int    flox_env_dirs_count = -1;
-static char   flox_env_dirs_buf[LIB_ENVVAR_MAXLEN];
+// Heap-allocated copy of FLOX_ENV_DIRS for in-place tokenization with strtok_r.
+// strdup() handles arbitrarily long values; PATH_MAX fixed buffers were too
+// small for real-world cases with multiple CUDA toolkit versions (7000+ bytes).
+static char * flox_env_dirs_buf = NULL;
 static char * flox_env_dirs[LIB_ENVVAR_MAXENTRIES];
 static int    ld_floxlib_dirs_path_count = -1;
-static char   ld_floxlib_dirs_path_buf[LIB_ENVVAR_MAXLEN];
+// Heap-allocated copy of LD_FLOXLIB_DIRS_PATH for in-place tokenization.
+static char * ld_floxlib_dirs_path_buf = NULL;
 static char * ld_floxlib_dirs_path[LIB_ENVVAR_MAXENTRIES];
 static int    ld_floxlib_files_path_count = -1;
-static char   ld_floxlib_files_path_buf[LIB_ENVVAR_MAXLEN];
+// Heap-allocated copy of LD_FLOXLIB_FILES_PATH for in-place tokenization.
+static char * ld_floxlib_files_path_buf = NULL;
 static char * ld_floxlib_files_path[LIB_ENVVAR_MAXENTRIES];
 
 unsigned int
@@ -132,19 +144,15 @@ la_objsearch( const char * name, uintptr_t * cookie, unsigned int flag )
               const char * flox_env_dirs_env = getenv( "FLOX_ENV_DIRS" );
               if ( flox_env_dirs_env != NULL )
                 {
-                  if ( sizeof( flox_env_dirs_env )
-                       >= LIB_ENVVAR_MAXLEN )
+                  flox_env_dirs_buf = strdup( flox_env_dirs_env );
+                  if ( flox_env_dirs_buf == NULL )
                     {
                       fprintf( stderr,
                                "ERROR: la_objsearch() "
-                               "FLOX_ENV_DIRS is too long, "
-                               "truncating to %d characters\n",
-                               LIB_ENVVAR_MAXLEN );
+                               "strdup failed for FLOX_ENV_DIRS\n" );
                     }
-
-                  strncpy( flox_env_dirs_buf,
-                           flox_env_dirs_env,
-                           sizeof( flox_env_dirs_buf ) );
+                  else
+                    {
 
                   // Iterate over the colon-separated list of paths in the
                   // flox_env_dirs_buf buffer, tokenizing as we go and
@@ -183,6 +191,7 @@ la_objsearch( const char * name, uintptr_t * cookie, unsigned int flag )
                       lib_dir = strtok_r( NULL, ":", &saveptr );
                       flox_env_dirs_count++;
                     }
+                    }  // else (strdup succeeded)
                 }
             }
 
@@ -194,19 +203,15 @@ la_objsearch( const char * name, uintptr_t * cookie, unsigned int flag )
               const char * ld_floxlib_dirs_path_env = getenv( "LD_FLOXLIB_DIRS_PATH" );
               if ( ld_floxlib_dirs_path_env != NULL )
                 {
-                  if ( sizeof( ld_floxlib_dirs_path_env )
-                       >= LIB_ENVVAR_MAXLEN )
+                  ld_floxlib_dirs_path_buf = strdup( ld_floxlib_dirs_path_env );
+                  if ( ld_floxlib_dirs_path_buf == NULL )
                     {
                       fprintf( stderr,
                                "ERROR: la_objsearch() "
-                               "LD_FLOXLIB_DIRS_PATH is too long, "
-                               "truncating to %d characters\n",
-                               LIB_ENVVAR_MAXLEN );
+                               "strdup failed for LD_FLOXLIB_DIRS_PATH\n" );
                     }
-
-                  strncpy( ld_floxlib_dirs_path_buf,
-                           ld_floxlib_dirs_path_env,
-                           sizeof( ld_floxlib_dirs_path_buf ) );
+                  else
+                    {
 
                   char * lib_dir = NULL;
                   char * saveptr = NULL;  // For strtok_r() context
@@ -237,6 +242,7 @@ la_objsearch( const char * name, uintptr_t * cookie, unsigned int flag )
                       lib_dir = strtok_r( NULL, ":", &saveptr );
                       ld_floxlib_dirs_path_count++;
                     }
+                    }  // else (strdup succeeded)
                 }
             }
 
@@ -249,19 +255,15 @@ la_objsearch( const char * name, uintptr_t * cookie, unsigned int flag )
               const char * ld_floxlib_files_path_env = getenv( "LD_FLOXLIB_FILES_PATH" );
               if ( ld_floxlib_files_path_env != NULL )
                 {
-                  if ( sizeof( ld_floxlib_files_path_env )
-                       >= LIB_ENVVAR_MAXLEN )
+                  ld_floxlib_files_path_buf = strdup( ld_floxlib_files_path_env );
+                  if ( ld_floxlib_files_path_buf == NULL )
                     {
                       fprintf( stderr,
                                "ERROR: la_objsearch() "
-                               "LD_FLOXLIB_FILES_PATH is too long, "
-                               "truncating to %d characters\n",
-                               LIB_ENVVAR_MAXLEN );
+                               "strdup failed for LD_FLOXLIB_FILES_PATH\n" );
                     }
-
-                  strncpy( ld_floxlib_files_path_buf,
-                           ld_floxlib_files_path_env,
-                           sizeof( ld_floxlib_files_path_buf ) );
+                  else
+                    {
 
                   char * lib_dir = NULL;
                   char * saveptr = NULL;  // For strtok_r() context
@@ -292,6 +294,7 @@ la_objsearch( const char * name, uintptr_t * cookie, unsigned int flag )
                       lib_dir = strtok_r( NULL, ":", &saveptr );
                       ld_floxlib_files_path_count++;
                     }
+                    }  // else (strdup succeeded)
                 }
             }
 
