@@ -1640,10 +1640,24 @@ mod realise_nixpkgs_tests {
             Span::current(),
             &Semaphore::new(1, 1),
         );
-        assert!(matches!(
-            result,
-            Err(BuildEnvError::BuildPublishedPackage { .. })
-        ));
+        let err = result.unwrap_err();
+        match &err {
+            BuildEnvError::BuildPublishedPackage {
+                install_id,
+                reason,
+            } => {
+                assert_eq!(install_id, &locked_package.install_id);
+                assert!(
+                    !reason.is_empty(),
+                    "reason should contain actual error details, got empty string"
+                );
+                assert!(
+                    !reason.contains("unknown reason"),
+                    "reason should not contain 'unknown reason', got: {reason}"
+                );
+            },
+            other => panic!("expected BuildPublishedPackage, got: {other:?}"),
+        }
     }
 
     /// Ensure that we can build, or (attempt to build) a package from the catalog,
