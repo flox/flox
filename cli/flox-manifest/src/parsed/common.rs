@@ -656,6 +656,39 @@ impl Display for IncludeDescriptor {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Ensure the manifest.toml man page documents all schema versions that use
+    /// the `schema-version` key (i.e. all versions after the legacy `version = 1`).
+    ///
+    /// If this test fails, update the "Valid string values" list in
+    /// `cli/flox/doc/manifest.toml.md` to include the new schema version.
+    #[test]
+    fn man_page_lists_all_schema_versions() {
+        let doc_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../flox/doc/manifest.toml.md");
+        let contents =
+            std::fs::read_to_string(&doc_path).expect("failed to read manifest.toml.md");
+
+        for version in KnownSchemaVersion::iter() {
+            // V1 uses the legacy "version = 1" format, not "schema-version",
+            // so it's not expected in the valid values list.
+            if version == KnownSchemaVersion::V1 {
+                continue;
+            }
+            let needle = format!("- `{version}`:");
+            assert!(
+                contents.contains(&needle),
+                "manifest.toml.md is missing schema version {version}.\n\
+                 Expected to find a line like: {needle}\n\
+                 Update the 'Valid string values' list in cli/flox/doc/manifest.toml.md."
+            );
+        }
+    }
+}
+
 #[cfg(any(test, feature = "tests"))]
 pub mod test_helpers {
     use super::*;
