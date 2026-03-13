@@ -3311,7 +3311,6 @@ mod tests {
         .unwrap();
 
         assert_eq!(merged, ManifestLatest {
-            schema_version: "1.10.0".into(),
             vars: Vars::from_map(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
             ..Default::default()
         });
@@ -3381,7 +3380,6 @@ mod tests {
         .unwrap();
 
         assert_eq!(merged, ManifestLatest {
-            schema_version: "1.10.0".into(),
             vars: Vars::from_map(BTreeMap::from([
                 ("foo".to_string(), "highest_precedence".to_string()),
                 ("bar".to_string(), "higher_precedence".to_string())
@@ -3498,7 +3496,6 @@ mod tests {
         .unwrap();
 
         assert_eq!(merged, ManifestLatest {
-            schema_version: "1.10.0".into(),
             vars: Vars::from_map(BTreeMap::from([(
                 "foo".to_string(),
                 "highest_precedence".to_string()
@@ -3681,7 +3678,6 @@ mod tests {
         assert_eq!(
             lockfile.manifest,
             ManifestLatest {
-                schema_version: "1.10.0".into(),
                 vars: Vars::from_map(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
                 ..Default::default()
             }
