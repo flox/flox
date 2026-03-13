@@ -63,6 +63,19 @@ You can see the whole manifest with 'flox list --config'.
 EOF
 }
 
+@test "minimum-cli-version: warning when CLI is older" {
+  tomlq --in-place -t '."minimum-cli-version" = "99.99.99"' .flox/env/manifest.toml
+
+  run "$FLOX_BIN" list
+  assert_success
+  assert_output - << EOF
+! This environment requires Flox v99.99.99 or later, you have v${FLOX_CLI_SEMVER}.
+! No packages are installed for your current system ('${NIX_SYSTEM}').
+
+You can see the whole manifest with 'flox list --config'.
+EOF
+}
+
 @test "minimum-cli-version: invalid semver is rejected" {
   tomlq --in-place -t '."minimum-cli-version" = "not.a.version"' .flox/env/manifest.toml
 

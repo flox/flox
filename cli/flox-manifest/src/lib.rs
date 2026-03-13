@@ -252,6 +252,17 @@ impl Parsed {
             Parsed::V1_11_0(_) => KnownSchemaVersion::V1_11_0,
         }
     }
+
+    /// Returns the minimum CLI version if present in the manifest.
+    pub(crate) fn minimum_cli_version(&self) -> Option<&semver::Version> {
+        match self {
+            Parsed::V1(_) => None,
+            // V1_10_0 has minimum_cli_version as Option<String> (not validated semver),
+            // but the feature is only formally supported from v1.11.0 onwards.
+            Parsed::V1_10_0(_) => None,
+            Parsed::V1_11_0(m) => m.minimum_cli_version.as_ref(),
+        }
+    }
 }
 
 /// Type states for the state machine that represents loading, parsing,
@@ -359,6 +370,11 @@ impl Manifest<TomlParsed> {
 }
 
 impl Manifest<Validated> {
+    /// Returns the minimum CLI version if present in the manifest.
+    pub fn minimum_cli_version(&self) -> Option<&semver::Version> {
+        self.inner.parsed.minimum_cli_version()
+    }
+
     /// Migrate a manifest with an optional lockfile.
     ///
     /// In some cases the lockfile simply isn't present and you stil must migrate.

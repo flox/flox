@@ -53,6 +53,21 @@ Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
 (e.g. `flox install` with package outputs).
 
+## `minimum-cli-version`
+
+`minimum-cli-version` is a top-level field that specifies the minimum version
+of the Flox CLI required to use the environment.
+Using an older version will emit a warning but not block the command.
+This is useful when an environment depends on behavior introduced in a specific
+release (e.g. a bugfix or feature that isn't schema related).
+
+```toml
+minimum-cli-version = "1.11.0"
+```
+
+The value must be a valid [semantic version](https://semver.org/) string
+(e.g. `"1.11.0"`). Invalid values cause the manifest to be rejected.
+
 ## `[install]`
 
 The `[install]` table is the core of the environment,
