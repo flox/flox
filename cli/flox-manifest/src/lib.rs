@@ -66,27 +66,27 @@ pub enum ManifestError {
     // Parsing manifests
     // =========================================================================
     /// We failed to read a manifest from disk.
-    #[error("failed to read manifest file: {0}")]
+    #[error("failed to read manifest file")]
     IORead(#[source] std::io::Error),
 
     /// We failed to write a manifest to disk.
-    #[error("failed to write manifest file: {0}")]
+    #[error("failed to write manifest file")]
     IOWrite(#[source] std::io::Error),
 
     /// An atomic write of a manifest failed.
-    #[error("failed to write manifest file: {0}")]
+    #[error("failed to write manifest file")]
     AtomicWrite(#[source] WriteError),
 
     /// The provided string failed to parse as valid TOML of any kind.
-    #[error("manifest contents were not valid TOML: {0}")]
+    #[error("manifest contents were not valid TOML")]
     ParseToml(#[source] toml_edit::TomlError),
 
     /// The provided string failed to parse as valid JSON of any kind.
-    #[error("manifest contents were not valid JSON: {0}")]
+    #[error("manifest contents were not valid JSON")]
     ParseJson(#[source] serde_json::Error),
 
     /// Valid JSON did not deserialize into a manifest.
-    #[error("JSON was not a valid manifest: {0}")]
+    #[error("JSON was not a valid manifest")]
     DeserializeJson(#[source] serde_json::Error),
 
     #[error("manifest had invalid schema version '{0}'")]
@@ -95,13 +95,13 @@ pub enum ManifestError {
     #[error("manifest 'schema-version' field is missing")]
     MissingSchemaVersion,
 
-    #[error("invalid manifest: {0}")]
+    #[error("invalid manifest")]
     Invalid(#[source] toml_edit::de::Error),
 
-    #[error("failed to serialize manifest: {0}")]
+    #[error("failed to serialize manifest")]
     Serialize(#[source] toml_edit::ser::Error),
 
-    #[error("failed to serialize manifest to lockfile: {0}")]
+    #[error("failed to serialize manifest to lockfile")]
     SerializeJson(#[source] serde_json::Error),
 
     #[error("{0}")]

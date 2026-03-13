@@ -134,10 +134,18 @@ EOF
   ORIGINAL_MANIFEST_CONTENTS="$(cat "$MANIFEST_PATH")" # for check_manifest_unchanged
 
   cat "$EXTERNAL_MANIFEST_PATH" > ./manifest.toml
-  echo "foo = " > ./manifest.toml
+  echo "foo = ;" > ./manifest.toml
 
-  run "$FLOX_BIN" edit -f ./manifest.toml
+  RUST_BACKTRACE=0 run "$FLOX_BIN" edit -f ./manifest.toml
   assert_failure
+  assert_output - <<'EOF'
+✘ ERROR: manifest contents were not valid TOML: TOML parse error at line 1, column 7
+  |
+1 | foo = ;
+  |       ^
+string values must be quoted, expected literal string
+EOF
+
   run check_manifest_unchanged
   assert_success
 }
@@ -149,8 +157,16 @@ EOF
   "$FLOX_BIN" init
   ORIGINAL_MANIFEST_CONTENTS="$(cat "$MANIFEST_PATH")" # for check_manifest_unchanged
 
-  run sh -c "echo 'foo = ;' | ${FLOX_BIN} edit -f -"
+  RUST_BACKTRACE=0 run sh -c "echo 'foo = ;' | ${FLOX_BIN} edit -f -"
   assert_failure
+  assert_output - <<'EOF'
+✘ ERROR: manifest contents were not valid TOML: TOML parse error at line 1, column 7
+  |
+1 | foo = ;
+  |       ^
+string values must be quoted, expected literal string
+EOF
+
   run check_manifest_unchanged
   assert_success
 }
