@@ -110,10 +110,8 @@ pub enum BuildEnvError {
         "Can't find download location for package '{0}'.\nYou may not be authenticated or package may have been deleted.\nTry logging in with 'flox auth login'"
     )]
     NoPackageStoreLocation(String),
-    // TODO: we should unravel the nix copy spaghetti in
-    // try_substitute_published_package and give the actual reason `nix copy` failed
-    #[error("Couldn't download package '{0}' for unknown reason")]
-    BuildPublishedPackage(String),
+    #[error("Couldn't download package '{install_id}':\n{reason}")]
+    BuildPublishedPackage { install_id: String, reason: String },
 
     /// A custom package has been uploaded, but the current user hasn't configured
     /// a trusted public key that matches a signature of this package.
@@ -517,7 +515,8 @@ where
             progress = format!("Downloading '{}'", locked_pkg.attr_path)
         );
         let _span_guard = span.enter();
-        let mut location_succeeded = vec![];
+        let mut location_errors: Vec<String> = vec![];
+        let mut any_location_succeeded = false;
         for location in locations {
             // nix copy
             let mut copy_command = nix_base_command();
@@ -573,7 +572,7 @@ where
                     auth_error = Some(BuildEnvError::NixCopyError(stderr.to_string()));
                 }
 
-                location_succeeded.push(false);
+                location_errors.push(format!("{location_url}: {stderr}"));
 
                 // If we failed, log the error and try the next location.
                 debug!(%attr_path, %drv, %location_url, %stderr, "Failed to copy custom package from store");
@@ -589,7 +588,7 @@ where
                     gc_root_base_dir.join(format!("by-iid/{}", locked_pkg.install_id)),
                 )?;
 
-                location_succeeded.push(true);
+                any_location_succeeded = true;
 
                 break;
             }
@@ -598,8 +597,7 @@ where
         // Consider the package not found if (1) we never had any locations to
         // download from in the first place, or (2) we did have locations to
         // download from and we failed to find the package in any of them.
-        let not_found_in_custom_catalogs =
-            locations.is_empty() || !location_succeeded.iter().all(|&b| b);
+        let not_found_in_custom_catalogs = locations.is_empty() || !any_location_succeeded;
 
         // Some custom packages are just re-uploads of stuff in nixpkgs with
         // no modifications, so the package may be found in `cache.nixos.org`.
@@ -613,22 +611,29 @@ where
                 span,
                 semaphore,
             );
-            if res.is_err() {
-                // We want to differentiate between these two cases:
-                // - Catalog server knows where we *should* be able to find
-                //   this package, and we failed to download it for some reason.
-                // - Catalog server didn't know where to download this from
-                //   and our fallback to `cache.nixos.org` failed.
-                if locations.is_empty() {
-                    return Err(BuildEnvError::NoPackageStoreLocation(
-                        locked_pkg.install_id.clone(),
-                    ));
-                }
-                return Err(BuildEnvError::BuildPublishedPackage(
-                    locked_pkg.install_id.clone(),
-                ));
-            } else {
-                return Ok(());
+            match res {
+                Ok(()) => return Ok(()),
+                Err(fallback_err) => {
+                    // We want to differentiate between these two cases:
+                    // - Catalog server knows where we *should* be able to find
+                    //   this package, and we failed to download it for some reason.
+                    // - Catalog server didn't know where to download this from
+                    //   and our fallback to `cache.nixos.org` failed.
+                    if locations.is_empty() {
+                        return Err(BuildEnvError::NoPackageStoreLocation(
+                            locked_pkg.install_id.clone(),
+                        ));
+                    }
+                    let reason = if location_errors.is_empty() {
+                        fallback_err.to_string()
+                    } else {
+                        location_errors.join("\n")
+                    };
+                    return Err(BuildEnvError::BuildPublishedPackage {
+                        install_id: locked_pkg.install_id.clone(),
+                        reason,
+                    });
+                },
             }
         }
 
@@ -1635,10 +1640,24 @@ mod realise_nixpkgs_tests {
             Span::current(),
             &Semaphore::new(1, 1),
         );
-        assert!(matches!(
-            result,
-            Err(BuildEnvError::BuildPublishedPackage(_))
-        ));
+        let err = result.unwrap_err();
+        match &err {
+            BuildEnvError::BuildPublishedPackage {
+                install_id,
+                reason,
+            } => {
+                assert_eq!(install_id, &locked_package.install_id);
+                assert!(
+                    !reason.is_empty(),
+                    "reason should contain actual error details, got empty string"
+                );
+                assert!(
+                    !reason.contains("unknown reason"),
+                    "reason should not contain 'unknown reason', got: {reason}"
+                );
+            },
+            other => panic!("expected BuildPublishedPackage, got: {other:?}"),
+        }
     }
 
     /// Ensure that we can build, or (attempt to build) a package from the catalog,
