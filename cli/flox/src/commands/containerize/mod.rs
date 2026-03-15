@@ -96,10 +96,10 @@ impl Containerize {
         let env_name = env.name();
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
         let manifest = lockfile.manifest;
-        let mode = self
-            .mode
-            .unwrap_or(manifest.options().clone().activate.mode.unwrap_or_default());
         let source = if std::env::consts::OS == "linux" {
+            let mode = self
+                .mode
+                .unwrap_or(manifest.options().clone().activate.mode.unwrap_or_default());
             let container_config = manifest
                 .containerize()
                 .and_then(|c| c.config.clone())
@@ -123,7 +123,7 @@ impl Containerize {
                     Exporting a container on macOS requires Docker or Podman to be installed.
                 "#});
             };
-            let builder = ContainerizeProxy::new(env_path, proxy_runtime, self.labels, Some(mode));
+            let builder = ContainerizeProxy::new(env_path, proxy_runtime, self.labels, self.mode);
             builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
         };
 
