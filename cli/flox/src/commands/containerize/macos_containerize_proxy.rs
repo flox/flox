@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 
+use flox_core::activate::context::ActivateMode;
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox};
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSource};
@@ -41,6 +42,7 @@ pub(crate) struct ContainerizeProxy {
     environment_path: PathBuf,
     container_runtime: Runtime,
     labels: Vec<String>,
+    mode: Option<ActivateMode>,
 }
 
 impl ContainerizeProxy {
@@ -48,11 +50,13 @@ impl ContainerizeProxy {
         environment_path: PathBuf,
         container_runtime: Runtime,
         labels: Vec<String>,
+        mode: Option<ActivateMode>,
     ) -> Self {
         Self {
             environment_path,
             container_runtime,
             labels,
+            mode,
         }
     }
 
@@ -242,6 +246,9 @@ impl ContainerizeProxy {
         command.args(["--tag", tag.as_ref()]);
         command.args(["--file", "-"]);
         command.args(self.labels.iter().flat_map(|l| ["--label", l]));
+        if let Some(mode) = &self.mode {
+            command.args(["--mode", &mode.to_string()]);
+        }
     }
 }
 
