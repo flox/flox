@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use enum_dispatch::enum_dispatch;
+use flox_catalog::ResolveError;
 use flox_core::activate::mode::ActivateMode;
 use flox_core::data::environment_ref::{
     ActivateEnvironmentRef,
@@ -34,7 +35,6 @@ use crate::flox::{Flox, Floxhub};
 use crate::models::environment::generations::GenerationsEnvironment;
 use crate::providers::auth::AuthError;
 use crate::providers::buildenv::BuildEnvOutputs;
-use crate::providers::catalog::ResolveError;
 use crate::providers::git::{
     GitCommandDiscoverError,
     GitCommandProvider,

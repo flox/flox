@@ -67,7 +67,7 @@ impl CheckForUpgrades {
             catalog_client.update_config(|config| {
                 let (qos_key, qos_value) = CatalogQoS::Background.as_header_pair();
                 config.extra_headers.insert(qos_key, qos_value);
-            });
+            })?;
         }
 
         let mut environment = self.environment.into_concrete_environment(&flox, None)?;

@@ -3,5 +3,4 @@ pub mod env_registry;
 pub mod environment;
 pub mod floxmeta;
 pub mod nix_plugins;
-pub mod search;
 pub mod user_state;

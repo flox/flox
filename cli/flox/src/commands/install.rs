@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use flox_catalog::{MsgAttrPathNotFoundNotFoundForAllSystems, MsgAttrPathNotFoundNotInCatalog};
 use flox_core::data::environment_ref::{DEFAULT_NAME, RemoteEnvironmentRef};
 use flox_manifest::compose::{
     COMPOSER_MANIFEST_ID,
@@ -29,10 +30,6 @@ use flox_rust_sdk::models::user_state::{
     lock_and_read_user_state_file,
     user_state_path,
     write_user_state_file,
-};
-use flox_rust_sdk::providers::catalog::{
-    MsgAttrPathNotFoundNotFoundForAllSystems,
-    MsgAttrPathNotFoundNotInCatalog,
 };
 use flox_rust_sdk::providers::lock_manifest::{
     ResolutionFailure,
@@ -358,7 +355,7 @@ impl Install {
                                 ..
                             },
                         invalid_systems: _,
-                    } = failure
+                    }: &ResolutionFailure = failure
                     else {
                         unreachable!(
                             "already checked that these failures are 'package unavailable on some systems'"
