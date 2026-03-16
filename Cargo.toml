@@ -41,6 +41,7 @@ flox-manifest = { path = "cli/flox-manifest" }
 fslock = "0.2.1"
 fs_extra = "1.3.0"
 futures = "0.3"
+git-url-parse = "0.6.0"
 http = "1.4.0"
 # git pending:
 # - https://github.com/alexliesenfeld/httpmock/issues/127

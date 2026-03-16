@@ -22,6 +22,7 @@ use flox_catalog::{
     UserDerivationInfo,
 };
 use flox_manifest::lockfile::Lockfile;
+use git_url_parse::GitUrl;
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use nef_lock_catalog::LockOptions;
@@ -962,8 +963,11 @@ fn gather_build_repo_meta(git: &impl GitProvider) -> Result<RemoteBuildRepoMetad
         ));
     }
 
+    let url =
+        GitUrl::parse_to_url(&remote_info.url).map_err(|err| build_repo_err(&err.to_string()))?;
+
     Ok(RemoteBuildRepoMetadata {
-        url: remote_info.url,
+        url: url.to_string(),
         rev: status.rev,
         rev_count: status.rev_count,
         rev_date: status.rev_date,
