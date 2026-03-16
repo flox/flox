@@ -4,7 +4,6 @@ use std::process::Command;
 
 use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
 use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
-use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
 
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
@@ -23,10 +22,6 @@ pub(super) fn assemble_activate_command(
     start_state_dir: &Path,
 ) -> Command {
     let mut command = Command::new(context.attach_ctx.interpreter_path.join("activate"));
-    command.envs(old_cli_envs(
-        &context.attach_ctx,
-        context.project_ctx.as_ref(),
-    ));
     add_old_activate_script_exports(
         &mut command,
         &context.attach_ctx,
@@ -47,7 +42,6 @@ pub fn apply_activation_env(
     vars_from_env: VarsFromEnvironment,
     env_diff: &EnvDiff,
 ) {
-    command.envs(old_cli_envs(context, project));
     add_old_activate_script_exports(
         command,
         context,
@@ -59,45 +53,6 @@ pub fn apply_activation_env(
     for var in &env_diff.deletions {
         command.env_remove(var);
     }
-}
-
-/// Build environment variables from activation context.
-pub fn old_cli_envs(
-    context: &AttachCtx,
-    project: Option<&AttachProjectCtx>,
-) -> HashMap<&'static str, String> {
-    let mut exports = HashMap::from([
-        (
-            FLOX_ACTIVE_ENVIRONMENTS_VAR,
-            context.flox_active_environments.clone(),
-        ),
-        ("FLOX_PROMPT_COLOR_1", context.prompt_color_1.clone()),
-        ("FLOX_PROMPT_COLOR_2", context.prompt_color_2.clone()),
-        // Set `FLOX_PROMPT_ENVIRONMENTS` to the constructed prompt string,
-        // which may be ""
-        // This is used by set-prompt script, and tcsh in particular does not
-        // tolerate references to undefined variables.
-        (
-            FLOX_PROMPT_ENVIRONMENTS_VAR,
-            context.flox_prompt_environments.clone(),
-        ),
-        ("_FLOX_SET_PROMPT", context.set_prompt.to_string()),
-        (
-            "_FLOX_ENV_CUDA_DETECTION",
-            context.flox_env_cuda_detection.clone(),
-        ),
-        // This is user-facing and documented
-        (
-            FLOX_ACTIVATE_START_SERVICES_VAR,
-            project
-                .is_some_and(|p| !p.services_to_start.is_empty())
-                .to_string(),
-        ),
-    ]);
-
-    exports.extend(default_nix_env_vars());
-
-    exports
 }
 
 /// Options parsed by getopt in the activate script
@@ -112,6 +67,10 @@ fn add_activate_script_options(
     command.arg("--mode").arg(context.mode.to_string());
 
     command.args(["--start-state-dir", &start_state_dir.to_string_lossy()]);
+
+    if context.attach_ctx.flox_env_cuda_detection == "1" {
+        command.arg("--cuda-detection");
+    }
 }
 
 /// Prior to the refactor, these variables were exported in the activate script
@@ -150,6 +109,21 @@ fn add_old_activate_script_exports(
                 .to_string(),
         ),
     ]);
+    exports.insert(
+        FLOX_ACTIVE_ENVIRONMENTS_VAR,
+        context.flox_active_environments.clone(),
+    );
+    exports.insert(
+        FLOX_PROMPT_ENVIRONMENTS_VAR,
+        context.flox_prompt_environments.clone(),
+    );
+    exports.insert(
+        FLOX_ACTIVATE_START_SERVICES_VAR,
+        project
+            .is_some_and(|p| !p.services_to_start.is_empty())
+            .to_string(),
+    );
+
     // Propagate optional variables that are documented as exposed.
     // NB: `generate_*_start_commands()` performs the same logic except for zsh.
     if let Some(project) = project {

@@ -1,6 +1,6 @@
 pub mod message;
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::env;
 
 /// Explicitly set environment for nix calls
@@ -18,8 +18,8 @@ use std::env;
 /// Setting buildtime variants of these environment variables
 /// will bundle them in flox' package closure
 /// and ensure that subprocesses are run with valid known values.
-pub fn default_nix_env_vars() -> std::collections::HashMap<&'static str, String> {
-    let mut env_map: HashMap<&str, String> = HashMap::new();
+pub fn default_nix_env_vars() -> std::collections::BTreeMap<&'static str, String> {
+    let mut env_map: BTreeMap<&str, String> = BTreeMap::new();
 
     // use buildtime NIXPKGS_CACERT_BUNDLE_CRT
     let ssl_cert_file = match env::var("SSL_CERT_FILE") {

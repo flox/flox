@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fs::OpenOptions;
 use std::io::{ErrorKind, IsTerminal};
 use std::os::unix::process::CommandExt;
@@ -9,13 +8,14 @@ use anyhow::{Result, anyhow};
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use flox_core::activations::StartIdentifier;
+use flox_core::util::default_nix_env_vars;
 use indoc::formatdoc;
 use itertools::Itertools;
 use nix::unistd::{close, dup2_stdin, pipe, write};
 use shell_gen::{Shell, ShellWithPath};
 use tracing::debug;
 
-use crate::activate_script_builder::{activate_tracer, apply_activation_env, old_cli_envs};
+use crate::activate_script_builder::{activate_tracer, apply_activation_env};
 use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
 use crate::cli::attach::{AttachArgs, AttachExclusiveArgs};
 use crate::env_diff::EnvDiff;
@@ -121,6 +121,18 @@ fn startup_ctx(
     // Get env_project from project context if present (None for containers)
     let env_project = ctx.project_ctx.as_ref().map(|e| e.env_project.clone());
 
+    // Shared fields for all shells (moved from old_cli_envs)
+    let flox_active_environments = ctx.attach_ctx.flox_active_environments.clone();
+    let prompt_color_1 = ctx.attach_ctx.prompt_color_1.clone();
+    let prompt_color_2 = ctx.attach_ctx.prompt_color_2.clone();
+    let flox_prompt_environments = ctx.attach_ctx.flox_prompt_environments.clone();
+    let set_prompt = ctx.attach_ctx.set_prompt;
+    let activate_start_services = ctx
+        .project_ctx
+        .as_ref()
+        .is_some_and(|p| !p.services_to_start.is_empty());
+    let nix_env_vars = default_nix_env_vars();
+
     let args = match ctx.shell {
         ShellWithPath::Bash(_) => {
             let bashrc_path = if let Some(home_dir) = dirs::home_dir() {
@@ -146,6 +158,13 @@ fn startup_ctx(
                 flox_activate_tracer: activate_tracer.to_string(),
                 flox_activations,
                 clean_up,
+                flox_active_environments: flox_active_environments.clone(),
+                prompt_color_1: prompt_color_1.clone(),
+                prompt_color_2: prompt_color_2.clone(),
+                flox_prompt_environments: flox_prompt_environments.clone(),
+                set_prompt,
+                activate_start_services,
+                nix_env_vars: nix_env_vars.clone(),
             })
         },
         ShellWithPath::Fish(_) => StartupArgs::Fish(FishStartupArgs {
@@ -160,6 +179,13 @@ fn startup_ctx(
             flox_activate_tracer: activate_tracer.to_string(),
             flox_activations,
             clean_up,
+            flox_active_environments: flox_active_environments.clone(),
+            prompt_color_1: prompt_color_1.clone(),
+            prompt_color_2: prompt_color_2.clone(),
+            flox_prompt_environments: flox_prompt_environments.clone(),
+            set_prompt,
+            activate_start_services,
+            nix_env_vars: nix_env_vars.clone(),
         }),
         ShellWithPath::Tcsh(_) => StartupArgs::Tcsh(TcshStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
@@ -173,6 +199,13 @@ fn startup_ctx(
             flox_activate_tracer: activate_tracer.to_string(),
             flox_activations,
             clean_up,
+            flox_active_environments: flox_active_environments.clone(),
+            prompt_color_1: prompt_color_1.clone(),
+            prompt_color_2: prompt_color_2.clone(),
+            flox_prompt_environments: flox_prompt_environments.clone(),
+            set_prompt,
+            activate_start_services,
+            nix_env_vars: nix_env_vars.clone(),
         }),
         ShellWithPath::Zsh(_) => StartupArgs::Zsh(ZshStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
@@ -182,6 +215,13 @@ fn startup_ctx(
             flox_env_project: env_project.clone(),
             flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
             clean_up,
+            flox_active_environments,
+            prompt_color_1,
+            prompt_color_2,
+            flox_prompt_environments,
+            set_prompt,
+            activate_start_services,
+            nix_env_vars,
         }),
     };
 
@@ -511,8 +551,6 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
     // Put a 5 second timeout on the activation
     attach_command.handle()?;
 
-    let legacy_exports = render_legacy_exports(&startup_ctx.act_ctx);
-
     let exports_for_zsh = if matches!(startup_ctx.act_ctx.shell, ShellWithPath::Zsh(_)) {
         let zdotdir_path = startup_ctx
             .act_ctx
@@ -544,7 +582,6 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
     };
 
     let script = formatdoc! {r#"
-            {legacy_exports}
             {flox_activations} attach --activation-state-dir "{activation_state_dir}" --pid {self_pid_var} --store-path "{store_path}" --timestamp "{timestamp}" --remove-pid "{pid}";
             {exports_for_zsh}
         "#,
@@ -564,25 +601,6 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
     write_to_stdout(&startup_ctx)?;
 
     Ok(())
-}
-
-/// The CLI used to print export statements for in-place activations for
-/// every environment variable set prior to invoking the activate script
-fn render_legacy_exports(context: &ActivateCtx) -> String {
-    // Render the exports in the correct shell dialect.
-    old_cli_envs(&context.attach_ctx, context.project_ctx.as_ref())
-        .iter()
-        .map(|(key, value)| (key, shell_escape::escape(Cow::Borrowed(value))))
-        // TODO: we should use a method on Shell here, possibly using
-        // shell_escape in the Shell method?
-        // But not quoting here is intentional because we already use shell_escape
-        .map(|(key, value)| match context.shell {
-            ShellWithPath::Bash(_) => format!("export {key}={value};",),
-            ShellWithPath::Fish(_) => format!("set -gx {key} {value};",),
-            ShellWithPath::Tcsh(_) => format!("setenv {key} {value};",),
-            ShellWithPath::Zsh(_) => format!("export {key}={value};",),
-        })
-        .join("\n")
 }
 
 /// Quote run args so that words don't get split,

@@ -1,9 +1,10 @@
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use shell_gen::{GenerateShell, Shell, set_exported_unexpanded, unset};
+use shell_gen::{GenerateShell, Shell, set_exported_unexpanded, set_unexported_unexpanded, unset};
 
 use crate::env_diff::EnvDiff;
 use crate::gen_rc::RM;
@@ -23,6 +24,13 @@ pub struct TcshStartupArgs {
     pub flox_activate_tracer: String,
     pub flox_sourcing_rc: bool,
     pub flox_activations: PathBuf,
+    pub flox_active_environments: String,
+    pub prompt_color_1: String,
+    pub prompt_color_2: String,
+    pub flox_prompt_environments: String,
+    pub set_prompt: bool,
+    pub activate_start_services: bool,
+    pub nix_env_vars: BTreeMap<&'static str, String>,
 }
 
 // N.B. the output of these scripts may be eval'd with backticks which have
@@ -88,6 +96,41 @@ pub fn generate_tcsh_startup_commands(
         &args.flox_activate_tracer,
     ));
 
+    // Exported vars moved from old_cli_envs
+    stmts.push(set_exported_unexpanded(
+        "_FLOX_ACTIVE_ENVIRONMENTS",
+        &args.flox_active_environments,
+    ));
+    stmts.push(set_exported_unexpanded(
+        "FLOX_PROMPT_ENVIRONMENTS",
+        &args.flox_prompt_environments,
+    ));
+    stmts.push(set_exported_unexpanded(
+        "FLOX_ACTIVATE_START_SERVICES",
+        args.activate_start_services.to_string(),
+    ));
+
+    // Nix env vars (exported)
+    for (key, value) in &args.nix_env_vars {
+        stmts.push(set_exported_unexpanded(key, value));
+    }
+
+    // Prompt vars consumed by set-prompt.tcsh (unexported shell vars, unset after source)
+    // NOTE: In tcsh, `set VAR = val;` creates shell variables (not env vars).
+    // shell_gen's `set_unexported_unexpanded` does exactly this for tcsh.
+    stmts.push(set_unexported_unexpanded(
+        "FLOX_PROMPT_COLOR_1",
+        &args.prompt_color_1,
+    ));
+    stmts.push(set_unexported_unexpanded(
+        "FLOX_PROMPT_COLOR_2",
+        &args.prompt_color_2,
+    ));
+    stmts.push(set_unexported_unexpanded(
+        "_FLOX_SET_PROMPT",
+        args.set_prompt.to_string(),
+    ));
+
     // Set the prompt if we're in an interactive shell.
     let set_prompt_path = args.activate_d.join("set-prompt.tcsh");
     stmts.push(
@@ -97,6 +140,13 @@ pub fn generate_tcsh_startup_commands(
         )
         .to_stmt(),
     );
+
+    // Unset prompt-internal shell vars after set-prompt has consumed them.
+    // shell_gen's `unset()` generates `unsetenv` for tcsh (removes env vars),
+    // but these are shell vars, so we use raw `unset` instead.
+    stmts.push("unset FLOX_PROMPT_COLOR_1;".to_stmt());
+    stmts.push("unset FLOX_PROMPT_COLOR_2;".to_stmt());
+    stmts.push("unset _FLOX_SET_PROMPT;".to_stmt());
 
     // We already customized the PATH and MANPATH, but the user and system
     // dotfiles may have changed them, so finish by doing this again.
@@ -191,6 +241,13 @@ mod tests {
             flox_activate_tracer: "TRACER".into(),
             flox_activations: PathBuf::from("/flox_activations"),
             clean_up: Some("/path/to/rc/file".into()),
+            flox_active_environments: "[{\"test\":true}]".to_string(),
+            prompt_color_1: "99".to_string(),
+            prompt_color_2: "141".to_string(),
+            flox_prompt_environments: "test ".to_string(),
+            set_prompt: true,
+            activate_start_services: false,
+            nix_env_vars: BTreeMap::new(),
         };
         let mut buf = Vec::new();
         generate_tcsh_startup_commands(&args, &env_diff, &mut buf).unwrap();
@@ -213,7 +270,16 @@ mod tests {
             setenv _activate_d /activate_d;
             setenv _flox_activations /flox_activations;
             setenv _flox_activate_tracer TRACER;
+            setenv _FLOX_ACTIVE_ENVIRONMENTS '[{"test":true}]';
+            setenv FLOX_PROMPT_ENVIRONMENTS 'test ';
+            setenv FLOX_ACTIVATE_START_SERVICES false;
+            set FLOX_PROMPT_COLOR_1 = 99;
+            set FLOX_PROMPT_COLOR_2 = 141;
+            set _FLOX_SET_PROMPT = true;
             if ( $?tty ) then; source '/activate_d/set-prompt.tcsh'; endif;
+            unset FLOX_PROMPT_COLOR_1;
+            unset FLOX_PROMPT_COLOR_2;
+            unset _FLOX_SET_PROMPT;
             if (! $?FLOX_ENV_DIRS) setenv FLOX_ENV_DIRS "empty";
             eval "`'/flox_activations' set-env-dirs --shell tcsh --flox-env '/flox_env' --env-dirs $FLOX_ENV_DIRS:q`";
             if (! $?MANPATH) setenv MANPATH "empty";

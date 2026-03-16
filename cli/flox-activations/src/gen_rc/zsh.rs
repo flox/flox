@@ -1,9 +1,17 @@
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file, unset};
+use shell_gen::{
+    GenerateShell,
+    Shell,
+    set_exported_unexpanded,
+    set_unexported_unexpanded,
+    source_file,
+    unset,
+};
 
 use crate::env_diff::EnvDiff;
 use crate::gen_rc::RM;
@@ -18,6 +26,13 @@ pub struct ZshStartupArgs {
     pub flox_env_project: Option<PathBuf>,
     pub flox_env_description: Option<String>,
     pub clean_up: Option<PathBuf>,
+    pub flox_active_environments: String,
+    pub prompt_color_1: String,
+    pub prompt_color_2: String,
+    pub flox_prompt_environments: String,
+    pub set_prompt: bool,
+    pub activate_start_services: bool,
+    pub nix_env_vars: BTreeMap<&'static str, String>,
 }
 
 pub fn generate_zsh_startup_commands(
@@ -60,10 +75,52 @@ pub fn generate_zsh_startup_commands(
             description,
         ));
     }
+
+    // Set variables with underscore prefix so activate.d/zsh can export them
+    // without the prefix (e.g. _FLOX_PROMPT_ENVIRONMENTS -> FLOX_PROMPT_ENVIRONMENTS).
+    // This differs from bash/fish/tcsh which export directly.
+    stmts.push(set_unexported_unexpanded(
+        "_FLOX_ACTIVE_ENVIRONMENTS",
+        &args.flox_active_environments,
+    ));
+    stmts.push(set_unexported_unexpanded(
+        "_FLOX_PROMPT_ENVIRONMENTS",
+        &args.flox_prompt_environments,
+    ));
+    stmts.push(set_unexported_unexpanded(
+        "_FLOX_ACTIVATE_START_SERVICES",
+        args.activate_start_services.to_string(),
+    ));
+
+    // Prompt vars consumed by set-prompt.zsh (unexported, unset after source)
+    stmts.push(set_unexported_unexpanded(
+        "FLOX_PROMPT_COLOR_1",
+        &args.prompt_color_1,
+    ));
+    stmts.push(set_unexported_unexpanded(
+        "FLOX_PROMPT_COLOR_2",
+        &args.prompt_color_2,
+    ));
+    stmts.push(set_unexported_unexpanded(
+        "_FLOX_SET_PROMPT",
+        args.set_prompt.to_string(),
+    ));
+
+    // Nix env vars (exported)
+    for (key, value) in &args.nix_env_vars {
+        stmts.push(set_exported_unexpanded(key, value));
+    }
+
     stmts.push(source_file(args.activate_d.join("zsh")));
 
-    // The zsh script depends on these variables
-    // unset immediately after sourcing to avoid leaking variables
+    // Unset prompt-internal vars after activate.d/zsh has consumed them
+    stmts.push(unset("_FLOX_PROMPT_ENVIRONMENTS"));
+    stmts.push(unset("_FLOX_ACTIVATE_START_SERVICES"));
+    stmts.push(unset("FLOX_PROMPT_COLOR_1"));
+    stmts.push(unset("FLOX_PROMPT_COLOR_2"));
+    stmts.push(unset("_FLOX_SET_PROMPT"));
+
+    // Avoid leaking variables
     stmts.push(unset("_FLOX_ENV"));
     stmts.push(unset("_FLOX_ENV_CACHE"));
     stmts.push(unset("_FLOX_ENV_PROJECT"));
@@ -114,6 +171,13 @@ mod tests {
             flox_env_project: Some("/flox_env_project".into()),
             flox_env_description: Some("env_description".to_string()),
             clean_up: Some("/path/to/rc/file".into()),
+            flox_active_environments: "[{\"test\":true}]".to_string(),
+            prompt_color_1: "99".to_string(),
+            prompt_color_2: "141".to_string(),
+            flox_prompt_environments: "test ".to_string(),
+            set_prompt: true,
+            activate_start_services: false,
+            nix_env_vars: BTreeMap::new(),
         };
         let mut buf = Vec::new();
         generate_zsh_startup_commands(&args, &env_diff, &mut buf).unwrap();
@@ -134,7 +198,18 @@ mod tests {
             typeset -g _FLOX_ENV_CACHE=/flox_env_cache;
             typeset -g _FLOX_ENV_PROJECT=/flox_env_project;
             typeset -g _FLOX_ENV_DESCRIPTION=env_description;
+            typeset -g _FLOX_ACTIVE_ENVIRONMENTS='[{"test":true}]';
+            typeset -g _FLOX_PROMPT_ENVIRONMENTS='test ';
+            typeset -g _FLOX_ACTIVATE_START_SERVICES=false;
+            typeset -g FLOX_PROMPT_COLOR_1=99;
+            typeset -g FLOX_PROMPT_COLOR_2=141;
+            typeset -g _FLOX_SET_PROMPT=true;
             source /activate_d/zsh;
+            unset _FLOX_PROMPT_ENVIRONMENTS;
+            unset _FLOX_ACTIVATE_START_SERVICES;
+            unset FLOX_PROMPT_COLOR_1;
+            unset FLOX_PROMPT_COLOR_2;
+            unset _FLOX_SET_PROMPT;
             unset _FLOX_ENV;
             unset _FLOX_ENV_CACHE;
             unset _FLOX_ENV_PROJECT;
