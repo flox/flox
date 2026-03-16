@@ -85,7 +85,7 @@ mod tests {
                 KnownSchemaVersion::V1 => {
                     Value::Number(Number::from_str(schema.to_string().as_str()).unwrap())
                 },
-                KnownSchemaVersion::V1_10_0 => Value::String(schema.to_string()),
+                _ => Value::String(schema.to_string()),
             };
             let json_value = serde_json::json!({
                 schema.key_name(): schema_value,

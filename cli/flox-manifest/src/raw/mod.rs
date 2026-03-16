@@ -933,7 +933,7 @@ fn update_schema_version(raw: &mut DocumentMut, schema_version: KnownSchemaVersi
             "version",
             Value::Integer(Formatted::new(1)).into(),
         ),
-        KnownSchemaVersion::V1_10_0 => (
+        _ => (
             "version",
             "schema-version",
             toml_string(schema_version.to_string()).into(),
