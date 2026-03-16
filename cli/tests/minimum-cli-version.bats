@@ -82,7 +82,27 @@ EOF
   RUST_BACKTRACE=0 run "$FLOX_BIN" list
   assert_failure
   assert_output - << 'EOF'
-✘ ERROR: invalid manifest: unexpected character 'n' while parsing major version number
+✘ ERROR: invalid manifest: Expected a version string or { version = "<version>", reason = "<reason>" }
 in `minimum-cli-version`
+EOF
+}
+
+@test "minimum-cli-version: warning includes reason from table form" {
+  cat > .flox/env/manifest.toml << 'EOF'
+schema-version = "1.11.0"
+
+[minimum-cli-version]
+version = "99.99.99"
+reason = "needs feature X"
+EOF
+
+  run "$FLOX_BIN" list
+  assert_success
+  assert_output - << EOF
+! This environment requires Flox v99.99.99 or later, you have v${FLOX_CLI_SEMVER}.
+Reason: needs feature X
+! No packages are installed for your current system ('${NIX_SYSTEM}').
+
+You can see the whole manifest with 'flox list --config'.
 EOF
 }

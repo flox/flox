@@ -913,9 +913,10 @@ fn warn_minimum_cli_version(env: &ConcreteEnvironment, flox: &Flox) {
             return;
         },
     };
-    let Some(min_version) = manifest.minimum_cli_version() else {
+    let Some(mcv) = manifest.minimum_cli_version() else {
         return;
     };
+    let min_version = mcv.version();
     let current_semver = semver::Version::parse(&FLOX_VERSION.base_semver())
         .expect("FLOX_VERSION should be valid semver");
 
@@ -923,6 +924,9 @@ fn warn_minimum_cli_version(env: &ConcreteEnvironment, flox: &Flox) {
         message::warning(format!(
             "This environment requires Flox v{min_version} or later, you have v{current_semver}."
         ));
+        if let Some(reason) = mcv.reason() {
+            message::plain(format!("Reason: {reason}"));
+        }
     }
 }
 

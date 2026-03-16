@@ -25,7 +25,7 @@ use crate::parsed::common::{
     Services,
     Vars,
 };
-use crate::parsed::latest::{Install, ManifestLatest};
+use crate::parsed::latest::{Install, ManifestLatest, MinimumCliVersion};
 
 /// Merges two manifests by applying `manifest2` on top of `manifest1` and
 /// overwriting any conflicts for keys within the top-level of each `ManifestV1`
@@ -44,9 +44,9 @@ impl ShallowMerger {
 
     #[instrument(skip_all)]
     fn merge_minimum_cli_version(
-        low_priority: Option<&semver::Version>,
-        high_priority: Option<&semver::Version>,
-    ) -> Result<(Option<semver::Version>, Vec<Warning>), MergeError> {
+        low_priority: Option<&MinimumCliVersion>,
+        high_priority: Option<&MinimumCliVersion>,
+    ) -> Result<(Option<MinimumCliVersion>, Vec<Warning>), MergeError> {
         let (merged, maybe_warning) = shallow_merge_options(
             KeyPath::from_iter(["minimum-cli-version"]),
             low_priority.cloned(),

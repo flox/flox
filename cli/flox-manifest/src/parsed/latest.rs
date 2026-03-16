@@ -9,6 +9,7 @@ pub use crate::parsed::v1_10_0::{
     PackageDescriptorFlake,
     SelectedOutputs,
 };
+pub use crate::parsed::v1_11_0::MinimumCliVersion;
 use crate::{Manifest, ManifestError, TypedOnly};
 pub type ManifestLatest = crate::parsed::v1_11_0::ManifestV1_11_0;
 

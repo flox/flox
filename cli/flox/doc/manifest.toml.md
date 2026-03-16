@@ -68,6 +68,15 @@ minimum-cli-version = "1.11.0"
 The value must be a valid [semantic version](https://semver.org/) string
 (e.g. `"1.11.0"`). Invalid values cause the manifest to be rejected.
 
+An optional `reason` can be provided using the table form which will be included
+in the emitted warning message:
+
+```toml
+[minimum-cli-version]
+version = "1.11.0"
+reason = "Needs feature X"
+```
+
 ## `[install]`
 
 The `[install]` table is the core of the environment,

@@ -558,11 +558,15 @@
           "description": "The packages to install in the form of a map from install_id\nto package descriptor."
         },
         "minimum-cli-version": {
-          "description": "The minimum CLI version that can activate this environment.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MinimumCliVersion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The minimum CLI version that can activate this environment."
         },
         "options": {
           "$ref": "#/$defs/Options",
@@ -603,6 +607,29 @@
       "maximum": 255,
       "minimum": 0,
       "type": "integer"
+    },
+    "MinimumCliVersion": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "properties": {
+            "reason": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "version",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "The minimum CLI version required to use the environment.\n\nAccepts either a plain version string:\n  minimum-cli-version = \"1.11.0\"\n\nOr an inline table with a reason:\n  minimum-cli-version = { version = \"1.11.0\", reason = \"needs feature X\" }"
     },
     "Options": {
       "additionalProperties": false,

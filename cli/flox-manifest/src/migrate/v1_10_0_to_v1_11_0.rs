@@ -1,6 +1,6 @@
 use crate::migrate::MigrationError;
 use crate::parsed::v1_10_0::ManifestV1_10_0;
-use crate::parsed::v1_11_0::ManifestV1_11_0;
+use crate::parsed::v1_11_0::{ManifestV1_11_0, MinimumCliVersion};
 
 /// Migrate a v1.10.0 manifest to a v1.11.0 manifest.
 ///
@@ -17,7 +17,8 @@ pub(crate) fn migrate_manifest_v1_10_0_to_v1_11_0(
             .as_deref()
             .map(semver::Version::parse)
             .transpose()
-            .map_err(|e| MigrationError::Other(format!("invalid minimum-cli-version: {e}")))?,
+            .map_err(|e| MigrationError::Other(format!("invalid minimum-cli-version: {e}")))?
+            .map(MinimumCliVersion::Version),
         install: manifest.install.clone(),
         vars: manifest.vars.clone(),
         hook: manifest.hook.clone(),

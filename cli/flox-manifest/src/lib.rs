@@ -40,7 +40,7 @@ use crate::interfaces::{
 use crate::lockfile::{Lockfile, LockfileError};
 use crate::migrate::{MigrationError, migrate_typed_only, migrate_with_formatting_data};
 use crate::parsed::common::KnownSchemaVersion;
-use crate::parsed::latest::ManifestLatest;
+use crate::parsed::latest::{ManifestLatest, MinimumCliVersion};
 use crate::parsed::v1::ManifestV1;
 use crate::parsed::v1_10_0::ManifestV1_10_0;
 use crate::parsed::v1_11_0::ManifestV1_11_0;
@@ -254,7 +254,7 @@ impl Parsed {
     }
 
     /// Returns the minimum CLI version if present in the manifest.
-    pub(crate) fn minimum_cli_version(&self) -> Option<&semver::Version> {
+    pub(crate) fn minimum_cli_version(&self) -> Option<&MinimumCliVersion> {
         match self {
             Parsed::V1(_) => None,
             // V1_10_0 has minimum_cli_version as Option<String> (not validated semver),
@@ -371,7 +371,7 @@ impl Manifest<TomlParsed> {
 
 impl Manifest<Validated> {
     /// Returns the minimum CLI version if present in the manifest.
-    pub fn minimum_cli_version(&self) -> Option<&semver::Version> {
+    pub fn minimum_cli_version(&self) -> Option<&MinimumCliVersion> {
         self.inner.parsed.minimum_cli_version()
     }
 

@@ -1,5 +1,8 @@
+mod minimum_cli_version;
+
 use std::collections::BTreeMap;
 
+pub use minimum_cli_version::MinimumCliVersion;
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use schemars::JsonSchema;
@@ -44,12 +47,7 @@ pub struct ManifestV1_11_0 {
     pub schema_version: String,
     /// The minimum CLI version that can activate this environment.
     #[serde(rename = "minimum-cli-version")]
-    #[schemars(with = "Option<String>")]
-    #[cfg_attr(
-        any(test, feature = "tests"),
-        proptest(strategy = "arbitrary_semver_version()")
-    )]
-    pub minimum_cli_version: Option<semver::Version>,
+    pub minimum_cli_version: Option<MinimumCliVersion>,
     /// The packages to install in the form of a map from install_id
     /// to package descriptor.
     #[serde(default)]
@@ -187,14 +185,6 @@ impl CommonFields for ManifestV1_11_0 {
     }
 }
 
-#[cfg(any(test, feature = "tests"))]
-fn arbitrary_semver_version() -> impl proptest::strategy::Strategy<Value = Option<semver::Version>> {
-    use proptest::prelude::*;
-    proptest::option::of((0..100u64, 0..100u64, 0..100u64).prop_map(|(ma, mi, pa)| {
-        semver::Version::new(ma, mi, pa)
-    }))
-}
-
 #[cfg(test)]
 mod tests {
     use indoc::indoc;
@@ -211,7 +201,24 @@ mod tests {
         let parsed: ManifestV1_11_0 = toml_edit::de::from_str(&manifest).unwrap();
         assert_eq!(
             parsed.minimum_cli_version,
-            Some(semver::Version::new(1, 0, 0))
+            Some(MinimumCliVersion::Version(semver::Version::new(1, 0, 0)))
+        );
+    }
+
+    #[test]
+    fn parses_minimum_cli_version_table_with_reason() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [minimum-cli-version]
+            version = "2.3.4"
+            reason = "needs feature X"
+        "#});
+        let parsed: ManifestV1_11_0 = toml_edit::de::from_str(&manifest).unwrap();
+        assert_eq!(
+            parsed.minimum_cli_version,
+            Some(MinimumCliVersion::WithReason {
+                version: semver::Version::new(2, 3, 4),
+                reason: "needs feature X".to_string(),
+            })
         );
     }
 
@@ -222,9 +229,10 @@ mod tests {
         "#});
         let err = toml_edit::de::from_str::<ManifestV1_11_0>(&manifest)
             .expect_err("should reject invalid semver");
-        assert_eq!(
-            err.message(),
-            "unexpected character 'n' while parsing major version number"
+        let msg = err.message();
+        assert!(
+            msg.contains("Expected a version string or"),
+            "unexpected error: {msg}"
         );
     }
 }
