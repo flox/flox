@@ -93,7 +93,7 @@ impl AuthMethod {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[enum_dispatch(AuthStrategy)]
 pub enum AuthStrategies {
     /// Auth0 authentication (default)

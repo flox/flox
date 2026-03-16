@@ -14,7 +14,7 @@ use super::{AuthError, AuthStrategy};
 /// Kerberos authentication strategy
 ///
 /// Uses Kerberos tickets via GSSAPI to generate SPNEGO tokens for HTTP Negotiate authentication.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct KerberosAuthStrategy {
     catalog_url: String,
 }

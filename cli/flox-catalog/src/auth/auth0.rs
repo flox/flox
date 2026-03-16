@@ -10,7 +10,7 @@ use crate::token::FloxhubToken;
 ///
 /// Uses a bearer token from Auth0 (typically from FloxHub) for authentication.
 /// The token is a JWT that contains the user's handle and expiration time.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Auth0AuthStrategy {
     token: Option<FloxhubToken>,
 }

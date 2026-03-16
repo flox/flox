@@ -314,10 +314,12 @@ impl FloxArgs {
             .clone()
             .unwrap_or_else(|| DEFAULT_CATALOG_URL.to_string());
 
+        let auth_strategy = auth_method.to_strategy(floxhub_token.clone(), catalog_url.clone());
+
         let catalog_client = init_catalog_client(
             &config,
             metrics_device_uuid,
-            auth_method.to_strategy(floxhub_token.clone(), catalog_url.clone()),
+            auth_strategy.clone(),
         )?;
 
         // we already make sure $USER corresponds to **euid** earlier on oin the process.
@@ -325,8 +327,6 @@ impl FloxArgs {
             std::env::var("USER").context("could not determine username from $USER")?;
         let system_hostname = sys_info::hostname().context("could not determine hostname")?;
         let argv = std::env::args().collect();
-
-        let auth_strategy = auth_method.to_strategy(floxhub_token.clone(), catalog_url.clone());
 
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
