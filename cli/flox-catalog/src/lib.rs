@@ -13,7 +13,8 @@
 //!
 //! ```ignore
 //! use flox_catalog::{
-//!     CatalogClient, CatalogClientConfig, CatalogMockMode, ClientTrait,
+//!     AuthMethod, CatalogClient, CatalogClientConfig,
+//!     CatalogMockMode, ClientTrait,
 //! };
 //!
 //! let config = CatalogClientConfig {
@@ -21,9 +22,15 @@
 //!     floxhub_token: Some(token),
 //!     extra_headers: BTreeMap::new(),
 //!     mock_mode: CatalogMockMode::None,
+//!     auth_method: AuthMethod::Auth0,
+//!     user_agent: Some("flox-cli/1.0".to_string()),
 //! };
 //!
-//! let client = CatalogClient::new(config)?;
+//! let auth_strategy = config.auth_method.to_strategy(
+//!     floxhub_token.clone(),
+//!     config.catalog_url.clone(),
+//! );
+//! let client = CatalogClient::new(config, auth_strategy)?;
 //! let results = client.search("curl", system, None).await?;
 //! ```
 

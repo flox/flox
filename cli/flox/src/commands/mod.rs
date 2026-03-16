@@ -316,11 +316,8 @@ impl FloxArgs {
 
         let auth_strategy = auth_method.to_strategy(floxhub_token.clone(), catalog_url.clone());
 
-        let catalog_client = init_catalog_client(
-            &config,
-            metrics_device_uuid,
-            auth_strategy.clone(),
-        )?;
+        let catalog_client =
+            init_catalog_client(&config, metrics_device_uuid, auth_strategy.clone())?;
 
         // we already make sure $USER corresponds to **euid** earlier on oin the process.
         let system_user_name =
