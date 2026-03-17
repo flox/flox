@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file};
+use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file, unset};
 
 use crate::env_diff::EnvDiff;
 use crate::gen_rc::RM;
@@ -61,6 +61,13 @@ pub fn generate_zsh_startup_commands(
         ));
     }
     stmts.push(source_file(args.activate_d.join("zsh")));
+
+    // The zsh script depends on these variables
+    // unset immediately after sourcing to avoid leaking variables
+    stmts.push(unset("_FLOX_ENV"));
+    stmts.push(unset("_FLOX_ENV_CACHE"));
+    stmts.push(unset("_FLOX_ENV_PROJECT"));
+    stmts.push(unset("_FLOX_ENV_DESCRIPTION"));
 
     if let Some(path) = args.clean_up.as_ref() {
         let path_str = path.to_string_lossy();
@@ -127,7 +134,11 @@ mod tests {
             typeset -g _FLOX_ENV_CACHE=/flox_env_cache;
             typeset -g _FLOX_ENV_PROJECT=/flox_env_project;
             typeset -g _FLOX_ENV_DESCRIPTION=env_description;
-            source /activate_d/zsh;"#]]
+            source /activate_d/zsh;
+            unset _FLOX_ENV;
+            unset _FLOX_ENV_CACHE;
+            unset _FLOX_ENV_PROJECT;
+            unset _FLOX_ENV_DESCRIPTION;"#]]
         .assert_eq(main_output);
     }
 }
