@@ -13,12 +13,14 @@ use flox_catalog::{
     CatalogMockMode,
     CatalogStoreConfig,
     ClientTrait,
+    LockedSourceItem,
     PackageDetails,
     PackageGroup,
     PackageSystem,
     PublishResponse,
     ResolveError,
     ResolvedPackageGroup,
+    ResultsPage,
     SearchError,
     SearchLimit,
     SearchResults,
@@ -248,6 +250,16 @@ impl ClientTrait for Client {
         match self {
             Client::Catalog(c) => c.get_base_catalog_info().await,
             Client::Mock(c) => c.get_base_catalog_info().await,
+        }
+    }
+
+    async fn get_catalog_locked_sources(
+        &self,
+        catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<ResultsPage<LockedSourceItem>, CatalogClientError> {
+        match self {
+            Client::Catalog(c) => c.get_catalog_locked_sources(catalog_name).await,
+            Client::Mock(c) => c.get_catalog_locked_sources(catalog_name).await,
         }
     }
 }
@@ -513,6 +525,13 @@ impl ClientTrait for MockClient {
         };
 
         Ok(resp)
+    }
+
+    async fn get_catalog_locked_sources(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<ResultsPage<LockedSourceItem>, CatalogClientError> {
+        unimplemented!("get_catalog_locked_sources not implemented for MockClient")
     }
 }
 

@@ -41,6 +41,7 @@ pub type PackageDetails = ResultsPage<PackageBuild>;
 /// Just an alias until the auto-generated PackageDescriptor diverges from what
 /// we need.
 pub use api_types::{
+    LockedSourceItem,
     PackageDescriptor,
     PackageSystem,
     ResolvedPackageDescriptor as PackageResolutionInfo,
