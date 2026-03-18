@@ -479,7 +479,7 @@
           "catalogs"
         ],
         "summary": "Get user catalog metadata",
-        "description": "Get user catalog metadata.\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nReturns:\n- **UserCatalog**: The user catalog metadata including id, name, created_at,\n  and owner_handle.",
+        "description": "Get user catalog metadata.\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nReturns:\n- **UserCatalog**: The user catalog metadata including id, name, and created_at.",
         "operationId": "get_catalog_api_v1_catalog_catalogs__catalog_name__get",
         "security": [
           {
@@ -1221,14 +1221,14 @@
         }
       }
     },
-    "/api/v1/catalog/catalogs/{catalog_name}/sharing": {
+    "/api/v1/catalog/catalogs/{catalog_name}/locked-sources": {
       "get": {
         "tags": [
           "catalogs"
         ],
-        "summary": "Get usernames that have read access to a catalog",
-        "description": "Get the list of usernames with read access to a catalog\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nReturns:\n- **CatalogShareInfo**: The users with read access to the catalog",
-        "operationId": "get_catalog_sharing_api_v1_catalog_catalogs__catalog_name__sharing_get",
+        "summary": "List all packages with their locked source metadata",
+        "description": "Return a flat paginated list of all packages in the catalog with their\nlocked source metadata (url, ref, rev, dir, buildType).\n\nPackages published before source tracking was introduced have\nsource=null and buildType=null.\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nQuery Parameters:\n- **page**: Zero-indexed page number (default: 0)\n- **pageSize**: Items per page (default: 10)\n\nReturns:\n- **LockedSourcesResponse**: Paginated list with total_count",
+        "operationId": "get_catalog_locked_sources_api_v1_catalog_catalogs__catalog_name__locked_sources_get",
         "security": [
           {
             "HTTPBearer": []
@@ -1249,169 +1249,41 @@
               "name": "catalog_name",
               "example": "mycatalog"
             }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The list of usernames with read access",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CatalogShareInfo"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "The catalog with the given name was not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "The catalog name is invalid",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/catalog/catalogs/{catalog_name}/sharing/add-read-users": {
-      "post": {
-        "tags": [
-          "catalogs"
-        ],
-        "summary": "Add usernames to the read access list for a catalog",
-        "description": "Add usernames to the read access list for a catalog\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nBody Content:\n- **CatalogShareInfo**: The users to add to the read access list\n\nReturns:\n- **CatalogShareInfo**: The users with read access to the catalog",
-        "operationId": "add_catalog_sharing_api_v1_catalog_catalogs__catalog_name__sharing_add_read_users_post",
-        "security": [
-          {
-            "HTTPBearer": []
           },
           {
-            "HTTPBasic": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "catalog_name",
-            "in": "path",
-            "required": true,
+            "name": "page",
+            "in": "query",
+            "required": false,
             "schema": {
-              "type": "string",
-              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Catalog Name",
-              "name": "catalog_name",
-              "example": "mycatalog"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CatalogShareInfo"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "The list of usernames with read access",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CatalogShareInfo"
-                }
-              }
+              "type": "integer",
+              "default": 0,
+              "title": "Page"
             }
           },
-          "404": {
-            "description": "The catalog with the given name was not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "The catalog name is invalid",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/catalog/catalogs/{catalog_name}/sharing/remove-read-users": {
-      "post": {
-        "tags": [
-          "catalogs"
-        ],
-        "summary": "Remove usernames from the read access list for a catalog",
-        "description": "Remove usernames from the read access list for a catalog\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nBody Content:\n- **CatalogShareInfo**: The users to remove from the read access list\n\nReturns:\n- **CatalogShareInfo**: The users with read access to the catalog",
-        "operationId": "remove_catalog_sharing_api_v1_catalog_catalogs__catalog_name__sharing_remove_read_users_post",
-        "security": [
           {
-            "HTTPBearer": []
-          },
-          {
-            "HTTPBasic": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "catalog_name",
-            "in": "path",
-            "required": true,
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
             "schema": {
-              "type": "string",
-              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Catalog Name",
-              "name": "catalog_name",
-              "example": "mycatalog"
+              "type": "integer",
+              "default": 10,
+              "title": "Pagesize"
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CatalogShareInfo"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
-            "description": "The list of usernames with read access",
+            "description": "Flat paginated list of packages with source metadata",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CatalogShareInfo"
+                  "$ref": "#/components/schemas/LockedSourcesResponse"
                 }
               }
             }
           },
           "404": {
-            "description": "The catalog with the given name was not found",
+            "description": "The catalog could not be found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1421,7 +1293,7 @@
             }
           },
           "422": {
-            "description": "The catalog name is invalid",
+            "description": "The request parameters are invalid",
             "content": {
               "application/json": {
                 "schema": {
@@ -1864,7 +1736,7 @@
           "sbom"
         ],
         "summary": "Get SBOM for a package derivation",
-        "description": "Get SBOM (Software Bill of Materials) for a package derivation.\n\nArgs:\n    derivation: The derivation filename without /nix/store/ prefix\n                (e.g., \"abc123def-foo-1.0.drv\")\n    outputs: Optional comma-separated list of outputs (e.g., \"out,bin,dev\").\n             If omitted, includes the package's default outputs from derivation metadata.\n             Must be alphanumeric with underscores only, max 100 chars total.\n    format: SBOM format (defaults to SbomFormat.SPDX_2_3_JSON)\n    body: Request body (reserved for future extension)\n    auth_result: Authentication payload\n    cache: Request-scoped dependency cache (injected)\n\nReturns:\n    SBOM document in the requested format",
+        "description": "Get SBOM (Software Bill of Materials) for a package derivation.\n\nArgs:\n    derivation: The derivation filename without /nix/store/ prefix\n                (e.g., \"abc123def-foo-1.0.drv\")\n    outputs: Optional comma-separated list of outputs (e.g., \"out,bin,dev\").\n             If omitted, includes the package's default outputs from derivation metadata.\n             Must be alphanumeric with underscores only, max 100 chars total.\n    format: SBOM format (defaults to SbomFormat.SPDX_2_3_JSON)\n    body: Request body (reserved for future extension)\n    user: Authenticated user context\n    cache: Request-scoped dependency cache (injected)\n\nReturns:\n    SBOM document in the requested format",
         "operationId": "package_sbom_api_v1_catalog_sbom_package__derivation__post",
         "security": [
           {
@@ -1951,7 +1823,7 @@
           "sbom"
         ],
         "summary": "Get SBOM for an environment",
-        "description": "Get SBOM (Software Bill of Materials) for an environment.\n\nArgs:\n    body: Request body containing lockfile and environment metadata\n    format: SBOM format (defaults to SbomFormat.SPDX_2_3_JSON)\n    auth_result: Authentication payload\n    cache: Request-scoped dependency cache (injected)\n\nReturns:\n    SBOM document in the requested format\n\nRaises:\n    HTTPException: If lockfile is malformed, system is invalid, or SBOM generation fails",
+        "description": "Get SBOM (Software Bill of Materials) for an environment.\n\nArgs:\n    body: Request body containing lockfile and environment metadata\n    format: SBOM format (defaults to SbomFormat.SPDX_2_3_JSON)\n    user: Authenticated user context\n    cache: Request-scoped dependency cache (injected)\n\nReturns:\n    SBOM document in the requested format\n\nRaises:\n    HTTPException: If lockfile is malformed, system is invalid, or SBOM generation fails",
         "operationId": "environment_sbom_api_v1_catalog_sbom_environment_post",
         "security": [
           {
@@ -2140,6 +2012,41 @@
         ],
         "title": "BaseCatalogInfo"
       },
+      "BuildSource": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "git",
+            "title": "Type",
+            "default": "git"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "ref": {
+            "title": "Ref",
+            "nullable": true,
+            "type": "string"
+          },
+          "rev": {
+            "type": "string",
+            "title": "Rev"
+          },
+          "dir": {
+            "type": "string",
+            "title": "Dir",
+            "default": ".flox"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "rev"
+        ],
+        "title": "BuildSource",
+        "description": "Source provenance for a published package."
+      },
       "BuildType": {
         "type": "string",
         "enum": [
@@ -2224,21 +2131,6 @@
           "unfree": false,
           "version": "8.5.0"
         }
-      },
-      "CatalogShareInfo": {
-        "properties": {
-          "allow_read_users": {
-            "title": "Allow Read Users",
-            "default": [],
-            "nullable": true,
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object",
-        "title": "CatalogShareInfo"
       },
       "CatalogStatus": {
         "properties": {
@@ -2406,6 +2298,39 @@
         "type": "object",
         "title": "CatalogStoreConfigPublisher"
       },
+      "DeprecationInfo": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/DeprecationKind"
+          },
+          "replacement": {
+            "title": "Replacement",
+            "nullable": true,
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "DeprecationInfo",
+        "description": "Deprecation metadata for a package from nixpkgs aliases.nix"
+      },
+      "DeprecationKind": {
+        "type": "string",
+        "enum": [
+          "renamed",
+          "removed",
+          "deprecated"
+        ],
+        "title": "DeprecationKind",
+        "description": "Package deprecation category from nixpkgs aliases.nix"
+      },
       "EnvironmentSbomRequest": {
         "properties": {
           "lockfile": {
@@ -2502,6 +2427,57 @@
           "show_elapsed_ms"
         ],
         "title": "HealthCheck"
+      },
+      "LockedSourceItem": {
+        "properties": {
+          "attr_path": {
+            "type": "string",
+            "title": "Attr Path"
+          },
+          "attr_path_components": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Attr Path Components"
+          },
+          "source": {
+            "$ref": "#/components/schemas/BuildSource"
+          },
+          "build_type": {
+            "$ref": "#/components/schemas/BuildType"
+          }
+        },
+        "type": "object",
+        "required": [
+          "attr_path",
+          "attr_path_components",
+          "source",
+          "build_type"
+        ],
+        "title": "LockedSourceItem",
+        "description": "A single entry in the /locked-sources response."
+      },
+      "LockedSourcesResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LockedSourceItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total_count"
+        ],
+        "title": "LockedSourcesResponse"
       },
       "MessageLevel": {
         "type": "string",
@@ -3285,6 +3261,10 @@
           },
           "system": {
             "$ref": "#/components/schemas/PackageSystem"
+          },
+          "deprecation": {
+            "nullable": true,
+            "$ref": "#/components/schemas/DeprecationInfo"
           }
         },
         "type": "object",
@@ -3544,6 +3524,10 @@
           "total_count": {
             "type": "integer",
             "title": "Total Count"
+          },
+          "deprecation": {
+            "nullable": true,
+            "$ref": "#/components/schemas/DeprecationInfo"
           }
         },
         "type": "object",
@@ -4152,11 +4136,6 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
-          },
-          "owner_handle": {
-            "title": "Owner Handle",
-            "nullable": true,
-            "type": "string"
           }
         },
         "type": "object",
