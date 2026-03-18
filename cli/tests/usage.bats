@@ -110,6 +110,7 @@ Administration
     auth           FloxHub authentication commands
     config         View and set configuration options
     gc             Garbage collects any data for deleted environments.
+    feedback       Send Flox feedback
 
 Available options:
     -v, --verbose  Increase logging verbosity

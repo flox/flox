@@ -8,6 +8,7 @@ mod delete;
 mod edit;
 mod envs;
 mod exit;
+mod feedback;
 mod gc;
 mod general;
 mod generations;
@@ -736,6 +737,21 @@ enum AdminCommands {
         footer("Run 'man flox-gc' for more details.")
     )]
     Gc(#[bpaf(external(gc::gc))] gc::Gc),
+
+    /// Send Flox feedback
+    ///
+    /// This will prompt you to enter some optional contact information in case
+    /// you'd like us to follow up with you, and then opens an editor for you
+    /// to enter your message.
+    #[bpaf(
+        command,
+        header(indoc!{"This is an experimental command for sending bug reports, suggestions, etc
+                       to Flox. This currently requires that telemetry is enabled, but you can
+                       temporarily enable telemetry for a single invocation via the command below:
+
+                       FLOX_DISABLE_METRICS=false flox feedback"}),
+    )]
+    Feedback(#[bpaf(external(feedback::feedback))] feedback::Feedback),
 }
 
 impl AdminCommands {
@@ -744,6 +760,7 @@ impl AdminCommands {
             AdminCommands::Auth(args) => args.handle(config, flox).await?,
             AdminCommands::Config(args) => args.handle(config, flox).await?,
             AdminCommands::Gc(args) => args.handle(flox)?,
+            AdminCommands::Feedback(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
