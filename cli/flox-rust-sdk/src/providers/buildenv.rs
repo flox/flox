@@ -1642,10 +1642,7 @@ mod realise_nixpkgs_tests {
         );
         let err = result.unwrap_err();
         match &err {
-            BuildEnvError::BuildPublishedPackage {
-                install_id,
-                reason,
-            } => {
+            BuildEnvError::BuildPublishedPackage { install_id, reason } => {
                 assert_eq!(install_id, &locked_package.install_id);
                 assert!(
                     !reason.is_empty(),
