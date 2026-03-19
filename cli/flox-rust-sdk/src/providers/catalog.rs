@@ -44,8 +44,6 @@ use crate::flox::Flox;
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
 pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
 
-pub const DEFAULT_CATALOG_URL: &str = "https://api.flox.dev";
-
 // Arc allows you to push things into the client from outside the client if necessary
 // Mutex allows you to share across threads (necessary because of tokio)
 type MockField<T> = Arc<Mutex<T>>;
@@ -639,7 +637,7 @@ pub async fn get_base_nixpkgs_url(
 }
 
 pub mod test_helpers {
-    use flox_catalog::AuthMethod;
+    use flox_catalog::{AuthMethod, DEFAULT_CATALOG_URL};
     use pollster::FutureExt;
     use tempfile::TempDir;
 

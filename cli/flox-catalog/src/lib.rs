@@ -38,6 +38,8 @@ mod types;
 
 pub(crate) mod mock;
 
+pub const DEFAULT_CATALOG_URL: &str = "https://api.flox.dev";
+
 // Re-export catalog-api-v1 types for consumers.
 // This allows consumers to depend only on catalog-client, not directly on catalog-api-v1.
 pub use auth::{auth_strategy_from_method, AuthError, AuthMethod, AuthStrategy};
