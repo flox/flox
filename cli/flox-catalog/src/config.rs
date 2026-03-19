@@ -3,20 +3,20 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use crate::auth::AuthMethod;
+use std::sync::Arc;
+
+use crate::AuthStrategy;
 
 /// Configuration for catalog client construction.
 #[derive(Debug, Clone)]
 pub struct CatalogClientConfig {
     /// Base URL for the catalog API.
     pub catalog_url: String,
-    /// Optional bearer token for FloxHub authentication.
-    pub floxhub_token: Option<String>,
     /// Additional headers to include in requests.
     pub extra_headers: BTreeMap<String, String>,
     /// Mock mode for testing.
     pub mock_mode: CatalogMockMode,
-    pub auth_method: AuthMethod,
+    pub auth_strategy: Arc<dyn AuthStrategy>,
     pub user_agent: Option<String>,
 }
 

@@ -54,10 +54,7 @@ impl Debug for CatalogClient {
 
 impl CatalogClient {
     /// Create a new catalog client from configuration.
-    pub fn new(
-        config: CatalogClientConfig,
-        auth_strategy: std::sync::Arc<dyn AuthStrategy>,
-    ) -> Result<Self, CatalogClientError> {
+    pub fn new(config: CatalogClientConfig) -> Result<Self, CatalogClientError> {
         // create a mock server if configured
         let mock_guard = MockGuard::new(&config);
         let effective_url = match mock_guard {
@@ -65,7 +62,7 @@ impl CatalogClient {
             None => config.catalog_url.clone(),
         };
 
-        let hooks = Self::build_request_hooks(auth_strategy);
+        let hooks = Self::build_request_hooks(config.auth_strategy.clone());
 
         let http_client = build_http_client(&config)?;
         let client = APIClient::new_with_client(&effective_url, http_client, hooks);
@@ -100,11 +97,10 @@ impl CatalogClient {
     pub fn update_config(
         &mut self,
         update: impl FnOnce(&mut CatalogClientConfig),
-        auth_strategy: std::sync::Arc<dyn AuthStrategy>,
     ) -> Result<(), CatalogClientError> {
         let mut modified_config = self.config.clone();
         update(&mut modified_config);
-        *self = Self::new(modified_config, auth_strategy)?;
+        *self = Self::new(modified_config)?;
         Ok(())
     }
 
@@ -597,7 +593,7 @@ fn build_http_client(config: &CatalogClientConfig) -> Result<reqwest::Client, Ca
 
     debug!(
         catalog_url = %config.catalog_url,
-        has_token = config.floxhub_token.is_some(),
+        handle = ?config.auth_strategy.get_handle(),
         extra_headers = config.extra_headers.len(),
         "building catalog HTTP client"
     );
@@ -658,10 +654,9 @@ pub mod tests {
     fn client_config(url: &str) -> CatalogClientConfig {
         CatalogClientConfig {
             catalog_url: url.to_string(),
-            floxhub_token: None,
             extra_headers: Default::default(),
             mock_mode: Default::default(),
-            auth_method: Default::default(),
+            auth_strategy: default_strategy(),
             user_agent: None,
         }
     }
@@ -701,11 +696,7 @@ pub mod tests {
             then.status(200).json_body(json_response);
         });
 
-        let client = CatalogClient::new(
-            client_config(server.base_url().as_str()),
-            default_strategy(),
-        )
-        .unwrap();
+        let client = CatalogClient::new(client_config(server.base_url().as_str())).unwrap();
         let res = client.resolve(resolve_req).await.unwrap();
         match &res[0].msgs[0] {
             ResolutionMessage::Unknown(msg_struct) => {
@@ -737,7 +728,7 @@ pub mod tests {
             ..client_config(&server.base_url())
         };
 
-        let client = CatalogClient::new(config, default_strategy()).unwrap();
+        let client = CatalogClient::new(config).unwrap();
         let _ = client.package_versions("some-package").await;
         mock.assert();
     }
@@ -757,7 +748,7 @@ pub mod tests {
             ..client_config(&server.base_url())
         };
 
-        let client = CatalogClient::new(config, default_strategy()).unwrap();
+        let client = CatalogClient::new(config).unwrap();
         let _ = client.package_versions("some-package").await;
         mock.assert();
     }
@@ -765,11 +756,7 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn tracing_headers_present_when_sentry_enabled() {
         let server = MockServer::start_async().await;
-        let client = CatalogClient::new(
-            client_config(server.base_url().as_str()),
-            default_strategy(),
-        )
-        .unwrap();
+        let client = CatalogClient::new(client_config(server.base_url().as_str())).unwrap();
 
         // The following are needed, in this order, for headers to be added:
         //
@@ -810,11 +797,7 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn tracing_headers_absent_when_sentry_disabled() {
         let server = MockServer::start_async().await;
-        let client = CatalogClient::new(
-            client_config(server.base_url().as_str()),
-            default_strategy(),
-        )
-        .unwrap();
+        let client = CatalogClient::new(client_config(server.base_url().as_str())).unwrap();
 
         let subscriber =
             tracing_subscriber::Registry::default().with(sentry::integrations::tracing::layer());
@@ -861,11 +844,7 @@ pub mod tests {
                 .json_body(json! ({"detail" : "(╯°□°)╯︵ ┻━┻ "}));
         });
 
-        let client = CatalogClient::new(
-            client_config(server.base_url().as_str()),
-            default_strategy(),
-        )
-        .unwrap();
+        let client = CatalogClient::new(client_config(server.base_url().as_str())).unwrap();
         let result = client.package_versions("some-package").await;
         assert!(
             matches!(result, Err(VersionsError::NotFound)),
@@ -885,11 +864,7 @@ pub mod tests {
                 .json_body(json! ({"detail" : "(╯°□°)╯︵ ┻━┻ "}));
         });
 
-        let client = CatalogClient::new(
-            client_config(server.base_url().as_str()),
-            default_strategy(),
-        )
-        .unwrap();
+        let client = CatalogClient::new(client_config(server.base_url().as_str())).unwrap();
         let result = client.package_versions("some-package").await;
         assert!(
             matches!(
@@ -914,11 +889,7 @@ pub mod tests {
                 .json_body(json! ({"unknown" : "ceramic"}));
         });
 
-        let client = CatalogClient::new(
-            client_config(server.base_url().as_str()),
-            default_strategy(),
-        )
-        .unwrap();
+        let client = CatalogClient::new(client_config(server.base_url().as_str())).unwrap();
         let result = client.package_versions("some-package").await;
         assert!(
             matches!(

@@ -1,7 +1,14 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::str::FromStr;
 
-use flox_catalog::{CatalogClient, CatalogClientConfig, CatalogMockMode, auth_strategy_from_method};
+use flox_catalog::{
+    CatalogClient,
+    CatalogClientConfig,
+    CatalogMockMode,
+    FloxhubToken,
+    auth_strategy_from_method,
+};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::providers::catalog::{
     Client,
@@ -22,7 +29,6 @@ use crate::config::Config;
 pub fn init_catalog_client(
     config: &Config,
     metrics_device_uuid: Option<Uuid>,
-    auth_strategy: std::sync::Arc<dyn flox_catalog::AuthStrategy>,
 ) -> Result<Client, anyhow::Error> {
     let mut extra_headers = BTreeMap::new();
 
@@ -53,10 +59,27 @@ pub fn init_catalog_client(
             .catalog_url
             .clone()
             .unwrap_or_else(|| DEFAULT_CATALOG_URL.to_string()),
-        floxhub_token: config.flox.floxhub_token.clone(),
         extra_headers,
         mock_mode,
-        auth_method: config.flox.floxhub_authn_mode.clone(),
+        auth_strategy: auth_strategy_from_method(
+            &config.flox.floxhub_authn_mode,
+            config
+                .flox
+                .floxhub_token
+                .as_deref()
+                .and_then(|s| {
+                    if s.is_empty() {
+                        None
+                    } else {
+                        FloxhubToken::from_str(s).ok()
+                    }
+                }),
+            config
+                .flox
+                .catalog_url
+                .clone()
+                .unwrap_or_else(|| DEFAULT_CATALOG_URL.to_string()),
+        ),
         user_agent: Some(format!("flox-cli/{}", &*FLOX_VERSION)),
     };
 
@@ -64,5 +87,5 @@ pub fn init_catalog_client(
         "using catalog client with url: {}",
         client_config.catalog_url
     );
-    Ok(CatalogClient::new(client_config, auth_strategy)?.into())
+    Ok(CatalogClient::new(client_config)?.into())
 }

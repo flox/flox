@@ -13,24 +13,19 @@
 //!
 //! ```ignore
 //! use flox_catalog::{
-//!     AuthMethod, CatalogClient, CatalogClientConfig,
-//!     CatalogMockMode, ClientTrait,
+//!     CatalogClient, CatalogClientConfig,
+//!     CatalogMockMode, ClientTrait, auth_strategy_from_method,
 //! };
 //!
 //! let config = CatalogClientConfig {
 //!     catalog_url: "https://api.flox.dev".to_string(),
-//!     floxhub_token: Some(token),
 //!     extra_headers: BTreeMap::new(),
 //!     mock_mode: CatalogMockMode::None,
-//!     auth_method: AuthMethod::Auth0,
+//!     auth_strategy: auth_strategy_from_method(&Default::default(), floxhub_token, catalog_url),
 //!     user_agent: Some("flox-cli/1.0".to_string()),
 //! };
 //!
-//! let auth_strategy = config.auth_method.to_strategy(
-//!     floxhub_token.clone(),
-//!     config.catalog_url.clone(),
-//! );
-//! let client = CatalogClient::new(config, auth_strategy)?;
+//! let client = CatalogClient::new(config)?;
 //! let results = client.search("curl", system, None).await?;
 //! ```
 

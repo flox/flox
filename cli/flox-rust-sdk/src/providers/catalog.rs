@@ -695,19 +695,17 @@ pub mod test_helpers {
     pub async fn catalog_replay_client(path: impl AsRef<Path>) -> Client {
         let catalog_config = CatalogClientConfig {
             catalog_url: "https://not_used".to_string(),
-            floxhub_token: None,
             extra_headers: Default::default(),
             mock_mode: CatalogMockMode::Replay(path.as_ref().to_path_buf()),
-            auth_method: Default::default(),
+            auth_strategy: flox_catalog::auth_strategy_from_method(
+                &Default::default(),
+                None,
+                "https://not_used".to_string(),
+            ),
             user_agent: None,
         };
-        let strategy = flox_catalog::auth_strategy_from_method(
-            &catalog_config.auth_method,
-            None,
-            catalog_config.catalog_url.clone(),
-        );
         Client::Catalog(
-            CatalogClient::new(catalog_config, strategy).expect("failed to create catalog client"),
+            CatalogClient::new(catalog_config).expect("failed to create catalog client"),
         )
     }
 
@@ -793,20 +791,18 @@ pub mod test_helpers {
         };
 
         let catalog_config = CatalogClientConfig {
-            catalog_url,
-            floxhub_token: auth.token().map(|token| token.secret().to_string()),
+            catalog_url: catalog_url.clone(),
             extra_headers: Default::default(),
             mock_mode: mock_mode.clone(),
-            auth_method: Default::default(),
+            auth_strategy: flox_catalog::auth_strategy_from_method(
+                &Default::default(),
+                auth.token().cloned(),
+                catalog_url.clone(),
+            ),
             user_agent: None,
         };
-        let strategy = flox_catalog::auth_strategy_from_method(
-            &catalog_config.auth_method,
-            auth.token().cloned(),
-            catalog_config.catalog_url.clone(),
-        );
         let client_inner =
-            CatalogClient::new(catalog_config, strategy).expect("failed to create catalog client");
+            CatalogClient::new(catalog_config).expect("failed to create catalog client");
         let mut client = Client::Catalog(client_inner);
         if matches!(mock_mode, CatalogMockMode::Record(_)) && user == PublishTestUser::WithCatalogs
         {

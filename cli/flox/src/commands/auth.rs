@@ -6,9 +6,7 @@ use flox_rust_sdk::flox::{
     FLOX_VERSION,
     Flox,
     FloxhubToken,
-    auth_strategy_from_method,
 };
-use flox_rust_sdk::providers::catalog::Client;
 use indoc::formatdoc;
 use oauth2::basic::{
     BasicClient,
@@ -324,28 +322,17 @@ pub async fn login_flox(flox: &mut Flox) -> Result<&FloxhubToken> {
     debug!("Writing token to config");
 
     // set the token in the runtime config
-    let token = flox.floxhub_token.insert(FloxhubToken::new(cred.token)?);
-    let handle = token.handle();
+    let token = FloxhubToken::new(cred.token)?;
+    let handle = token.handle().to_string();
 
     // write the token to the config file
     update_config(&flox.config_dir, "floxhub_token", Some(token.clone()))
         .context("Could not write token to config")?;
 
-    // Rebuild the catalog client with a fresh auth strategy containing the new token
-    if let Client::Catalog(client) = &mut flox.catalog_client {
-        let strategy = auth_strategy_from_method(
-            &flox.auth_method,
-            Some(token.clone()),
-            flox.catalog_url.clone(),
-        );
-        client.update_config(
-            |config| config.floxhub_token = Some(token.secret().to_string()),
-            strategy,
-        )?;
-    }
+    flox.set_floxhub_token(token.clone())?;
 
     message::updated("Authentication complete");
     message::updated(format!("Logged in as {handle}"));
 
-    Ok(token)
+    Ok(flox.floxhub_token.as_ref().unwrap())
 }

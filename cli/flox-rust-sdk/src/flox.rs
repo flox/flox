@@ -10,6 +10,7 @@ pub use flox_catalog::{
     FloxhubTokenError,
     auth_strategy_from_method,
 };
+use flox_catalog::{CatalogClientError};
 use flox_core::vars::FLOX_VERSION_STRING;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -65,12 +66,6 @@ pub struct Flox {
     /// Checking for [None] can be used to check if the use is logged in.
     pub floxhub_token: Option<FloxhubToken>,
 
-    /// The authentication method to use for FloxHub/catalog operations.
-    pub auth_method: AuthMethod,
-
-    /// The catalog URL used for authentication (e.g. Kerberos SPN resolution).
-    pub catalog_url: String,
-
     /// The authentication strategy instance, constructed from [auth_method],
     /// [floxhub_token], and [catalog_url].
     pub auth_strategy: std::sync::Arc<dyn AuthStrategy>,
@@ -94,14 +89,25 @@ impl Flox {
         self.auth_strategy.get_handle()
     }
 
-    /// Reconstruct the authentication strategy from current state.
-    ///
-    /// Call this after updating [floxhub_token](Self::floxhub_token) (e.g.
-    /// after an interactive login) so that subsequent auth calls see the
-    /// fresh token.
-    pub fn rebuild_auth_strategy(&mut self) {
-        self.auth_strategy =
-            auth_strategy_from_method(&self.auth_method, self.floxhub_token.clone(), self.catalog_url.clone());
+    /// Set a new token and rebuild the auth strategy to reflect it.
+    pub fn set_floxhub_token(&mut self, token: FloxhubToken) -> Result<(), CatalogClientError> {
+        let t: &mut FloxhubToken = self.floxhub_token.insert(token);
+        let auth_strategy = auth_strategy_from_method(
+            &self.auth_strategy.auth_method(),
+            Some(t.clone()),
+            if let catalog::Client::Catalog(client) = &self.catalog_client {
+                client.catalog_url().to_string()
+            } else {
+                String::new()
+            },
+        );
+        self.auth_strategy = auth_strategy.clone();
+        if let catalog::Client::Catalog(client) = &mut self.catalog_client {
+            client.update_config(|config| {
+                config.auth_strategy = auth_strategy;
+            })?;
+        }
+        Ok(())
     }
 }
 
@@ -219,8 +225,7 @@ pub mod test_helpers {
     /// Set a pre-existing token on a [Flox] instance and rebuild the auth
     /// strategy so that `get_handle()` and friends see it immediately.
     pub fn set_test_token(flox: &mut Flox, token: FloxhubToken) {
-        flox.floxhub_token = Some(token);
-        flox.rebuild_auth_strategy();
+        let _ = flox.set_floxhub_token(token);
     }
 
     /// Set up test authentication on a [Flox] instance.
@@ -324,8 +329,6 @@ pub mod test_helpers {
             )
             .unwrap(),
             floxhub_token: None,
-            auth_method,
-            catalog_url,
             auth_strategy,
             catalog_client: MockClient::default().into(),
             installable_locker: InstallableLockerImpl::Mock(InstallableLockerMock::new()),

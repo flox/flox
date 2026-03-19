@@ -318,8 +318,7 @@ impl FloxArgs {
         let auth_strategy =
             auth_strategy_from_method(&auth_method, floxhub_token.clone(), catalog_url.clone());
 
-        let catalog_client =
-            init_catalog_client(&config, metrics_device_uuid, auth_strategy.clone())?;
+        let catalog_client = init_catalog_client(&config, metrics_device_uuid)?;
 
         // we already make sure $USER corresponds to **euid** earlier on oin the process.
         let system_user_name =
@@ -339,8 +338,6 @@ impl FloxArgs {
             system_hostname,
             argv,
             floxhub_token,
-            auth_method,
-            catalog_url,
             auth_strategy,
             floxhub,
             catalog_client,
@@ -1321,7 +1318,6 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
             }
             let token = auth::login_flox(flox).await?;
             let handle = token.handle().to_string();
-            flox.rebuild_auth_strategy();
             Ok(handle)
         },
         Err(e) => Err(e.into()),
