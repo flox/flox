@@ -1465,7 +1465,6 @@ dependencies = [
  "base64",
  "catalog-api-v1",
  "derive_more",
- "enum_dispatch",
  "futures",
  "http 1.4.0",
  "httpmock",

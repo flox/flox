@@ -45,6 +45,7 @@ use flox_rust_sdk::flox::{
     Floxhub,
     FloxhubToken,
     FloxhubTokenError,
+    auth_strategy_from_method,
 };
 use flox_rust_sdk::models::env_registry;
 use flox_rust_sdk::models::env_registry::{ENV_REGISTRY_FILENAME, EnvRegistry};
@@ -314,7 +315,8 @@ impl FloxArgs {
             .clone()
             .unwrap_or_else(|| DEFAULT_CATALOG_URL.to_string());
 
-        let auth_strategy = auth_method.to_strategy(floxhub_token.clone(), catalog_url.clone());
+        let auth_strategy =
+            auth_strategy_from_method(&auth_method, floxhub_token.clone(), catalog_url.clone());
 
         let catalog_client =
             init_catalog_client(&config, metrics_device_uuid, auth_strategy.clone())?;
@@ -1311,7 +1313,7 @@ pub(super) async fn ensure_environment_trust(
 pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
     match flox.get_handle() {
         Ok(handle) => Ok(handle),
-        Err(_) if Dialog::can_prompt() && matches!(flox.auth_method, AuthMethod::Auth0) => {
+        Err(_) if Dialog::can_prompt() && matches!(flox.auth_strategy.auth_method(), AuthMethod::Auth0) => {
             if flox.floxhub_token.is_some() {
                 message::plain("Your FloxHub token has expired. Re-authenticating...");
             } else {

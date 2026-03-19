@@ -6,7 +6,6 @@
 //! - Default (no feature): Auth0 authentication only (no Kerberos dependencies)
 //! - `floxhub-authn-kerberos`: Kerberos authentication via GSSAPI
 
-use enum_dispatch::enum_dispatch;
 use reqwest::header::HeaderMap;
 use serde::{Deserialize, Serialize};
 
@@ -22,16 +21,33 @@ pub enum AuthError {
 }
 
 /// Strategy pattern for authentication header insertion
-#[enum_dispatch]
-pub trait AuthStrategy {
+pub trait AuthStrategy: Send + Sync + std::fmt::Debug {
     /// Add authorization headers to the provided HeaderMap
-    ///
-    /// # Arguments
-    /// * `header_map` - The header map to modify
     fn add_auth_headers(&self, header_map: &mut HeaderMap);
 
     /// Validate that auth is available and return the user's handle.
     fn get_handle(&self) -> Result<String, AuthError>;
+
+    /// Return the authentication method this strategy implements.
+    fn auth_method(&self) -> AuthMethod;
+}
+
+/// Construct the appropriate strategy for the given [`AuthMethod`].
+///
+/// Each strategy uses different data:
+/// - Auth0 needs the FloxHub token for bearer authentication
+/// - Kerberos needs the catalog URL for SPNEGO service principal resolution
+pub fn auth_strategy_from_method(
+    method: &AuthMethod,
+    floxhub_token: Option<FloxhubToken>,
+    #[cfg_attr(not(feature = "floxhub-authn-kerberos"), allow(unused_variables))]
+    catalog_url: String,
+) -> std::sync::Arc<dyn AuthStrategy> {
+    match method {
+        AuthMethod::Auth0 => std::sync::Arc::new(Auth0AuthStrategy::new(floxhub_token)),
+        #[cfg(feature = "floxhub-authn-kerberos")]
+        AuthMethod::Kerberos => std::sync::Arc::new(KerberosAuthStrategy::new(catalog_url)),
+    }
 }
 
 // Always include Auth0 strategy
@@ -69,36 +85,4 @@ impl Default for AuthMethod {
     fn default() -> Self {
         AuthMethod::Kerberos
     }
-}
-
-impl AuthMethod {
-    /// Convert this auth method to the appropriate strategy with the required data.
-    ///
-    /// Each strategy uses different data:
-    /// - Auth0 needs the FloxHub token for bearer authentication
-    /// - Kerberos needs the catalog URL for SPNEGO service principal resolution
-    pub fn to_strategy(
-        &self,
-        floxhub_token: Option<FloxhubToken>,
-        #[cfg_attr(not(feature = "floxhub-authn-kerberos"), allow(unused_variables))]
-        catalog_url: String,
-    ) -> AuthStrategies {
-        match self {
-            AuthMethod::Auth0 => AuthStrategies::Auth0(Auth0AuthStrategy::new(floxhub_token)),
-            #[cfg(feature = "floxhub-authn-kerberos")]
-            AuthMethod::Kerberos => {
-                AuthStrategies::Kerberos(KerberosAuthStrategy::new(catalog_url))
-            },
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-#[enum_dispatch(AuthStrategy)]
-pub enum AuthStrategies {
-    /// Auth0 authentication (default)
-    Auth0(Auth0AuthStrategy),
-    /// Kerberos authentication
-    #[cfg(feature = "floxhub-authn-kerberos")]
-    Kerberos(KerberosAuthStrategy),
 }

@@ -4,7 +4,7 @@ use reqwest::header::{self, HeaderMap, HeaderValue};
 use tracing::debug;
 
 use super::{AuthError, AuthStrategy};
-use crate::token::FloxhubToken;
+use crate::{AuthMethod, token::FloxhubToken};
 
 /// Auth0 authentication strategy
 ///
@@ -34,6 +34,10 @@ impl AuthStrategy for Auth0AuthStrategy {
         };
         header_map.insert(header::AUTHORIZATION, value);
         debug!("Added Auth0 bearer token authorization header");
+    }
+
+    fn auth_method(&self) -> AuthMethod {
+        AuthMethod::Auth0
     }
 
     fn get_handle(&self) -> Result<String, AuthError> {

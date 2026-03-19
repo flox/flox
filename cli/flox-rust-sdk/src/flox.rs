@@ -5,10 +5,10 @@ use std::sync::LazyLock;
 pub use flox_catalog::{
     AuthError,
     AuthMethod,
-    AuthStrategies,
     AuthStrategy,
     FloxhubToken,
     FloxhubTokenError,
+    auth_strategy_from_method,
 };
 use flox_core::vars::FLOX_VERSION_STRING;
 use serde::{Deserialize, Serialize};
@@ -73,7 +73,7 @@ pub struct Flox {
 
     /// The authentication strategy instance, constructed from [auth_method],
     /// [floxhub_token], and [catalog_url].
-    pub auth_strategy: AuthStrategies,
+    pub auth_strategy: std::sync::Arc<dyn AuthStrategy>,
 
     pub catalog_client: catalog::Client,
     pub installable_locker: flake_installable_locker::InstallableLockerImpl,
@@ -100,9 +100,8 @@ impl Flox {
     /// after an interactive login) so that subsequent auth calls see the
     /// fresh token.
     pub fn rebuild_auth_strategy(&mut self) {
-        self.auth_strategy = self
-            .auth_method
-            .to_strategy(self.floxhub_token.clone(), self.catalog_url.clone());
+        self.auth_strategy =
+            auth_strategy_from_method(&self.auth_method, self.floxhub_token.clone(), self.catalog_url.clone());
     }
 }
 
@@ -306,7 +305,7 @@ pub mod test_helpers {
 
         let auth_method: AuthMethod = Default::default();
         let catalog_url = "https://api.flox.dev".to_string();
-        let auth_strategy = auth_method.to_strategy(None, catalog_url.clone());
+        let auth_strategy = auth_strategy_from_method(&auth_method, None, catalog_url.clone());
 
         let flox = Flox {
             system: env!("NIX_TARGET_SYSTEM").to_string(),

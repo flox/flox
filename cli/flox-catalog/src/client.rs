@@ -17,7 +17,7 @@ use reqwest::header::{self, HeaderMap};
 use reqwest::StatusCode;
 use tracing::{debug, instrument};
 
-use crate::auth::{AuthStrategies, AuthStrategy};
+use crate::auth::AuthStrategy;
 use crate::config::CatalogClientConfig;
 use crate::error::{CatalogClientError, ResolveError, SearchError, VersionsError};
 use crate::mock::MockGuard;
@@ -56,7 +56,7 @@ impl CatalogClient {
     /// Create a new catalog client from configuration.
     pub fn new(
         config: CatalogClientConfig,
-        auth_strategy: AuthStrategies,
+        auth_strategy: std::sync::Arc<dyn AuthStrategy>,
     ) -> Result<Self, CatalogClientError> {
         // create a mock server if configured
         let mock_guard = MockGuard::new(&config);
@@ -100,7 +100,7 @@ impl CatalogClient {
     pub fn update_config(
         &mut self,
         update: impl FnOnce(&mut CatalogClientConfig),
-        auth_strategy: AuthStrategies,
+        auth_strategy: std::sync::Arc<dyn AuthStrategy>,
     ) -> Result<(), CatalogClientError> {
         let mut modified_config = self.config.clone();
         update(&mut modified_config);
@@ -113,7 +113,7 @@ impl CatalogClient {
     /// Each `Client` carries its own `RequestHooks`, so auth strategies
     /// producing single-use tokens (e.g. Kerberos SPNEGO) generate a fresh
     /// token for every outgoing request without relying on global state.
-    fn build_request_hooks(auth_strategy: AuthStrategies) -> RequestHooks {
+    fn build_request_hooks(auth_strategy: std::sync::Arc<dyn AuthStrategy>) -> RequestHooks {
         RequestHooks {
             pre_request: std::sync::Arc::new(move |request: &mut reqwest::Request| {
                 // Propagate the Sentry trace ID to catalog-server.
@@ -651,6 +651,7 @@ pub mod tests {
     use tracing_subscriber::layer::SubscriberExt;
 
     use super::*;
+    use crate::auth_strategy_from_method;
 
     const SENTRY_TRACE_HEADER: &str = "sentry-trace";
 
@@ -665,9 +666,9 @@ pub mod tests {
         }
     }
 
-    fn default_strategy() -> AuthStrategies {
+    fn default_strategy() -> std::sync::Arc<dyn AuthStrategy> {
         let method: crate::auth::AuthMethod = Default::default();
-        method.to_strategy(None, String::new())
+        auth_strategy_from_method(&method, None, String::new())
     }
 
     #[tokio::test]

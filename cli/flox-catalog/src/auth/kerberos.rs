@@ -10,6 +10,7 @@ use tracing::debug;
 use url::Url;
 
 use super::{AuthError, AuthStrategy};
+use crate::AuthMethod;
 
 /// Kerberos authentication strategy
 ///
@@ -41,6 +42,10 @@ impl AuthStrategy for KerberosAuthStrategy {
                 tracing::warn!("Failed to generate Kerberos token: {}", e);
             },
         }
+    }
+
+    fn auth_method(&self) -> AuthMethod {
+        AuthMethod::Kerberos
     }
 
     fn get_handle(&self) -> Result<String, AuthError> {

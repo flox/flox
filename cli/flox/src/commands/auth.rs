@@ -2,7 +2,12 @@ use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
-use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
+use flox_rust_sdk::flox::{
+    FLOX_VERSION,
+    Flox,
+    FloxhubToken,
+    auth_strategy_from_method,
+};
 use flox_rust_sdk::providers::catalog::Client;
 use indoc::formatdoc;
 use oauth2::basic::{
@@ -328,9 +333,11 @@ pub async fn login_flox(flox: &mut Flox) -> Result<&FloxhubToken> {
 
     // Rebuild the catalog client with a fresh auth strategy containing the new token
     if let Client::Catalog(client) = &mut flox.catalog_client {
-        let strategy = flox
-            .auth_method
-            .to_strategy(Some(token.clone()), flox.catalog_url.clone());
+        let strategy = auth_strategy_from_method(
+            &flox.auth_method,
+            Some(token.clone()),
+            flox.catalog_url.clone(),
+        );
         client.update_config(
             |config| config.floxhub_token = Some(token.secret().to_string()),
             strategy,

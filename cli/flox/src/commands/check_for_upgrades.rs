@@ -64,9 +64,11 @@ impl CheckForUpgrades {
         //
         // [1]: <https://github.com/flox/flox/pull/2658#discussion_r1932362747>
         if let catalog::Client::Catalog(ref mut catalog_client) = flox.catalog_client {
-            let strategy = flox
-                .auth_method
-                .to_strategy(flox.floxhub_token.clone(), flox.catalog_url.clone());
+            let strategy = flox_catalog::auth_strategy_from_method(
+                &flox.auth_method,
+                flox.floxhub_token.clone(),
+                flox.catalog_url.clone(),
+            );
             catalog_client.update_config(
                 |config| {
                     let (qos_key, qos_value) = CatalogQoS::Background.as_header_pair();

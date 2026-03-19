@@ -701,9 +701,11 @@ pub mod test_helpers {
             auth_method: Default::default(),
             user_agent: None,
         };
-        let strategy = catalog_config
-            .auth_method
-            .to_strategy(None, catalog_config.catalog_url.clone());
+        let strategy = flox_catalog::auth_strategy_from_method(
+            &catalog_config.auth_method,
+            None,
+            catalog_config.catalog_url.clone(),
+        );
         Client::Catalog(
             CatalogClient::new(catalog_config, strategy).expect("failed to create catalog client"),
         )
@@ -798,9 +800,11 @@ pub mod test_helpers {
             auth_method: Default::default(),
             user_agent: None,
         };
-        let strategy = catalog_config
-            .auth_method
-            .to_strategy(auth.token().cloned(), catalog_config.catalog_url.clone());
+        let strategy = flox_catalog::auth_strategy_from_method(
+            &catalog_config.auth_method,
+            auth.token().cloned(),
+            catalog_config.catalog_url.clone(),
+        );
         let client_inner =
             CatalogClient::new(catalog_config, strategy).expect("failed to create catalog client");
         let mut client = Client::Catalog(client_inner);
