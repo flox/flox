@@ -1,7 +1,8 @@
+mod minimum_cli_version;
+
 use std::collections::BTreeMap;
 
-#[cfg(any(test, feature = "tests"))]
-use flox_test_utils::proptest::btree_map_strategy;
+pub use minimum_cli_version::MinimumCliVersion;
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use schemars::JsonSchema;
@@ -20,11 +21,9 @@ use crate::parsed::common::{
     Services,
     Vars,
 };
-use crate::parsed::{Inner, SkipSerializing, impl_into_inner};
+use crate::parsed::v1_10_0::{Install, ManifestPackageDescriptor, package_descriptor};
+use crate::parsed::{Inner, SkipSerializing};
 use crate::{Manifest, ManifestError, Parsed, TypedOnly};
-
-pub(crate) mod package_descriptor;
-pub use package_descriptor::*;
 
 /// Not meant for writing manifest files, only for reading them.
 /// Modifications should be made using `manifest::raw`.
@@ -40,16 +39,15 @@ pub use package_descriptor::*;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
-pub struct ManifestV1_10_0 {
+pub struct ManifestV1_11_0 {
     /// Which schema version this manifest adheres to.
     ///
     /// Must be a valid Flox CLI version listed in [`KnownSchemaVersion`].
     #[serde(rename = "schema-version")]
     pub schema_version: String,
     /// The minimum CLI version that can activate this environment.
-    // NOTE: this field will be used in a later release
     #[serde(rename = "minimum-cli-version")]
-    pub minimum_cli_version: Option<String>,
+    pub minimum_cli_version: Option<MinimumCliVersion>,
     /// The packages to install in the form of a map from install_id
     /// to package descriptor.
     #[serde(default)]
@@ -83,14 +81,14 @@ pub struct ManifestV1_10_0 {
     #[serde(skip_serializing_if = "Include::skip_serializing")]
     pub include: Include,
 }
-impl_pkg_lookup!(crate::parsed::v1_10_0, ManifestV1_10_0);
+impl_pkg_lookup!(crate::parsed::v1_11_0, ManifestV1_11_0);
 
 // You can't derive `Default` because `schema-version` is a `String`,
 // which just defaults to an empty string.
-impl Default for ManifestV1_10_0 {
+impl Default for ManifestV1_11_0 {
     fn default() -> Self {
         Self {
-            schema_version: "1.10.0".into(),
+            schema_version: "1.11.0".into(),
             minimum_cli_version: Default::default(),
             install: Default::default(),
             vars: Default::default(),
@@ -105,23 +103,23 @@ impl Default for ManifestV1_10_0 {
     }
 }
 
-impl AsTypedOnlyManifest for ManifestV1_10_0 {
+impl AsTypedOnlyManifest for ManifestV1_11_0 {
     fn as_typed_only(&self) -> crate::Manifest<TypedOnly> {
         Manifest {
             inner: TypedOnly {
-                parsed: Parsed::V1_10_0(self.clone()),
+                parsed: Parsed::V1_11_0(self.clone()),
             },
         }
     }
 }
 
-impl SchemaVersion for ManifestV1_10_0 {
+impl SchemaVersion for ManifestV1_11_0 {
     fn get_schema_version(&self) -> KnownSchemaVersion {
-        KnownSchemaVersion::V1_10_0
+        KnownSchemaVersion::V1_11_0
     }
 }
 
-impl CommonFields for ManifestV1_10_0 {
+impl CommonFields for ManifestV1_11_0 {
     fn vars(&self) -> &Vars {
         &self.vars
     }
@@ -187,58 +185,54 @@ impl CommonFields for ManifestV1_10_0 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
-#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
-pub struct Install(
-    #[cfg_attr(
-        any(test, feature = "tests"),
-        proptest(strategy = "btree_map_strategy::<ManifestPackageDescriptor>(10, 3)")
-    )]
-    pub(crate) BTreeMap<String, ManifestPackageDescriptor>,
-);
-
-impl From<BTreeMap<String, ManifestPackageDescriptor>> for Install {
-    fn from(value: BTreeMap<String, ManifestPackageDescriptor>) -> Self {
-        Self(value)
-    }
-}
-
-impl SkipSerializing for Install {
-    fn skip_serializing(&self) -> bool {
-        self.0.is_empty()
-    }
-}
-
-impl_into_inner!(Install, BTreeMap<String, ManifestPackageDescriptor>);
-
 #[cfg(test)]
-pub mod test {
+mod tests {
     use indoc::indoc;
+    use pretty_assertions::assert_eq;
 
     use super::*;
     use crate::test_helpers::with_latest_schema;
 
     #[test]
-    fn deserializes_manifest_with_outputs() {
-        let contents_default = with_latest_schema(indoc! {r#"
-            [install]
-            hello.pkg-path = "hello"
+    fn parses_minimum_cli_version_semver() {
+        let manifest = with_latest_schema(indoc! {r#"
+            minimum-cli-version = "1.0.0"
         "#});
+        let parsed: ManifestV1_11_0 = toml_edit::de::from_str(&manifest).unwrap();
+        assert_eq!(
+            parsed.minimum_cli_version,
+            Some(MinimumCliVersion::Version(semver::Version::new(1, 0, 0)))
+        );
+    }
 
-        let contents_all = with_latest_schema(indoc! {r#"
-            [install]
-            hello.pkg-path = "hello"
-            hello.outputs = "all"
+    #[test]
+    fn parses_minimum_cli_version_table_with_reason() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [minimum-cli-version]
+            version = "2.3.4"
+            reason = "needs feature X"
         "#});
+        let parsed: ManifestV1_11_0 = toml_edit::de::from_str(&manifest).unwrap();
+        assert_eq!(
+            parsed.minimum_cli_version,
+            Some(MinimumCliVersion::WithReason {
+                version: semver::Version::new(2, 3, 4),
+                reason: "needs feature X".to_string(),
+            })
+        );
+    }
 
-        let contents_specific = with_latest_schema(indoc! {r#"
-            [install]
-            hello.pkg-path = "hello"
-            hello.outputs = ["foo", "bar"]
+    #[test]
+    fn rejects_invalid_minimum_cli_version() {
+        let manifest = with_latest_schema(indoc! {r#"
+            minimum-cli-version = "not-semver"
         "#});
-
-        let _: ManifestV1_10_0 = toml_edit::de::from_str(&contents_default).unwrap();
-        let _: ManifestV1_10_0 = toml_edit::de::from_str(&contents_all).unwrap();
-        let _: ManifestV1_10_0 = toml_edit::de::from_str(&contents_specific).unwrap();
+        let err = toml_edit::de::from_str::<ManifestV1_11_0>(&manifest)
+            .expect_err("should reject invalid semver");
+        let msg = err.message();
+        assert!(
+            msg.contains("Expected a version string or"),
+            "unexpected error: {msg}"
+        );
     }
 }

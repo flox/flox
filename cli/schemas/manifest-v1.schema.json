@@ -521,11 +521,115 @@
       ],
       "type": "object"
     },
+    "ManifestV1_11_0": {
+      "additionalProperties": false,
+      "description": "Not meant for writing manifest files, only for reading them.\nModifications should be made using `manifest::raw`.",
+      "properties": {
+        "build": {
+          "$ref": "#/$defs/Build",
+          "description": "Package build definitions"
+        },
+        "containerize": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Containerize"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hook": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Hook"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Hooks that are run at various times during the lifecycle of the manifest\nin a known shell environment."
+        },
+        "include": {
+          "$ref": "#/$defs/Include"
+        },
+        "install": {
+          "$ref": "#/$defs/Install2",
+          "description": "The packages to install in the form of a map from install_id\nto package descriptor."
+        },
+        "minimum-cli-version": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MinimumCliVersion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The minimum CLI version that can activate this environment."
+        },
+        "options": {
+          "$ref": "#/$defs/Options",
+          "default": {},
+          "description": "Options that control the behavior of the manifest."
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Profile"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Profile scripts that are run in the user's shell upon activation."
+        },
+        "schema-version": {
+          "description": "Which schema version this manifest adheres to.\n\nMust be a valid Flox CLI version listed in [`KnownSchemaVersion`].",
+          "type": "string"
+        },
+        "services": {
+          "$ref": "#/$defs/Services",
+          "description": "Service definitions"
+        },
+        "vars": {
+          "$ref": "#/$defs/Vars",
+          "description": "Variables that are exported to the shell environment upon activation."
+        }
+      },
+      "required": [
+        "schema-version"
+      ],
+      "type": "object"
+    },
     "ManifestVersion": {
       "format": "uint8",
       "maximum": 255,
       "minimum": 0,
       "type": "integer"
+    },
+    "MinimumCliVersion": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "properties": {
+            "reason": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "version",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "The minimum CLI version required to use the environment.\n\nAccepts either a plain version string:\n  minimum-cli-version = \"1.11.0\"\n\nOr an inline table with a reason:\n  minimum-cli-version = { version = \"1.11.0\", reason = \"needs feature X\" }"
     },
     "Options": {
       "additionalProperties": false,
@@ -1428,6 +1532,9 @@
     },
     {
       "$ref": "#/$defs/ManifestV1_10_0"
+    },
+    {
+      "$ref": "#/$defs/ManifestV1_11_0"
     }
   ],
   "description": "A validated, typed manifest with a known schema.",

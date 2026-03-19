@@ -53,6 +53,7 @@ use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
     DOT_FLOX,
     DotFlox,
+    Environment,
     EnvironmentError,
     ManagedPointer,
     UninitializedEnvironment,
@@ -902,6 +903,33 @@ pub enum EnvironmentSelectError {
     Anyhow(#[from] anyhow::Error),
 }
 
+/// Emit a warning if the manifest specifies a minimum CLI version
+/// that is greater than the currently running CLI version.
+fn warn_minimum_cli_version(env: &ConcreteEnvironment, flox: &Flox) {
+    let manifest = match env.manifest_without_migrating(flox) {
+        Ok(m) => m,
+        Err(e) => {
+            debug!("could not read manifest for minimum-cli-version check: {e}");
+            return;
+        },
+    };
+    let Some(mcv) = manifest.minimum_cli_version() else {
+        return;
+    };
+    let min_version = mcv.version();
+    let current_semver = semver::Version::parse(&FLOX_VERSION.base_semver())
+        .expect("FLOX_VERSION should be valid semver");
+
+    if current_semver < *min_version {
+        message::warning(format!(
+            "This environment requires Flox v{min_version} or later, you have v{current_semver}."
+        ));
+        if let Some(reason) = mcv.reason() {
+            message::plain(format!("Reason: {reason}"));
+        }
+    }
+}
+
 impl EnvironmentSelect {
     /// Open a concrete environment, not detecting the currently active
     /// environment.
@@ -949,6 +977,7 @@ impl EnvironmentSelect {
                 ConcreteEnvironment::Remote(env)
             },
         };
+        warn_minimum_cli_version(&env, flox);
         Ok(env)
     }
 
@@ -989,6 +1018,7 @@ impl EnvironmentSelect {
                 ConcreteEnvironment::Remote(env)
             },
         };
+        warn_minimum_cli_version(&env, flox);
         Ok(env)
     }
 

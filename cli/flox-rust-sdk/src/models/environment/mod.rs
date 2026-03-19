@@ -1393,12 +1393,12 @@ mod migration_tests {
             .to_string();
 
         expect![[r#"
-            schema-version = "1.10.0"
+            schema-version = "1.11.0"
         "#]]
         .assert_eq(&manifest_contents);
     }
 
-    /// A v1 composer including a v1.10.0 environment with only vars (no
+    /// A v1 composer including a v1.11.0 environment with only vars (no
     /// packages) should not be migrated because the merged manifest is
     /// backwards compatible with v1.
     #[test]

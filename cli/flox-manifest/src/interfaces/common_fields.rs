@@ -25,6 +25,7 @@ impl CommonFields for Parsed {
         match self {
             Parsed::V1(inner) => inner.vars(),
             Parsed::V1_10_0(inner) => inner.vars(),
+            Parsed::V1_11_0(inner) => inner.vars(),
         }
     }
 
@@ -32,6 +33,7 @@ impl CommonFields for Parsed {
         match self {
             Parsed::V1(inner) => inner.hook(),
             Parsed::V1_10_0(inner) => inner.hook(),
+            Parsed::V1_11_0(inner) => inner.hook(),
         }
     }
 
@@ -39,6 +41,7 @@ impl CommonFields for Parsed {
         match self {
             Parsed::V1(inner) => inner.profile(),
             Parsed::V1_10_0(inner) => inner.profile(),
+            Parsed::V1_11_0(inner) => inner.profile(),
         }
     }
 
@@ -46,6 +49,7 @@ impl CommonFields for Parsed {
         match self {
             Parsed::V1(inner) => inner.services(),
             Parsed::V1_10_0(inner) => inner.services(),
+            Parsed::V1_11_0(inner) => inner.services(),
         }
     }
 
@@ -53,6 +57,7 @@ impl CommonFields for Parsed {
         match self {
             Parsed::V1(inner) => inner.include(),
             Parsed::V1_10_0(inner) => inner.include(),
+            Parsed::V1_11_0(inner) => inner.include(),
         }
     }
 
@@ -60,6 +65,7 @@ impl CommonFields for Parsed {
         match self {
             Parsed::V1(inner) => inner.build(),
             Parsed::V1_10_0(inner) => inner.build(),
+            Parsed::V1_11_0(inner) => inner.build(),
         }
     }
 
@@ -67,6 +73,7 @@ impl CommonFields for Parsed {
         match self {
             Parsed::V1(inner) => inner.containerize(),
             Parsed::V1_10_0(inner) => inner.containerize(),
+            Parsed::V1_11_0(inner) => inner.containerize(),
         }
     }
 
@@ -74,6 +81,7 @@ impl CommonFields for Parsed {
         match self {
             Parsed::V1(inner) => inner.options(),
             Parsed::V1_10_0(inner) => inner.options(),
+            Parsed::V1_11_0(inner) => inner.options(),
         }
     }
 
@@ -81,6 +89,7 @@ impl CommonFields for Parsed {
         match self {
             Parsed::V1(inner) => inner.vars_mut(),
             Parsed::V1_10_0(inner) => inner.vars_mut(),
+            Parsed::V1_11_0(inner) => inner.vars_mut(),
         }
     }
 
@@ -88,6 +97,7 @@ impl CommonFields for Parsed {
         match self {
             Parsed::V1(inner) => inner.hook_mut(),
             Parsed::V1_10_0(inner) => inner.hook_mut(),
+            Parsed::V1_11_0(inner) => inner.hook_mut(),
         }
     }
 
@@ -95,6 +105,7 @@ impl CommonFields for Parsed {
         match self {
             Parsed::V1(inner) => inner.profile_mut(),
             Parsed::V1_10_0(inner) => inner.profile_mut(),
+            Parsed::V1_11_0(inner) => inner.profile_mut(),
         }
     }
 
@@ -102,6 +113,7 @@ impl CommonFields for Parsed {
         match self {
             Parsed::V1(inner) => inner.services_mut(),
             Parsed::V1_10_0(inner) => inner.services_mut(),
+            Parsed::V1_11_0(inner) => inner.services_mut(),
         }
     }
 
@@ -109,6 +121,7 @@ impl CommonFields for Parsed {
         match self {
             Parsed::V1(inner) => inner.include_mut(),
             Parsed::V1_10_0(inner) => inner.include_mut(),
+            Parsed::V1_11_0(inner) => inner.include_mut(),
         }
     }
 
@@ -116,6 +129,7 @@ impl CommonFields for Parsed {
         match self {
             Parsed::V1(inner) => inner.build_mut(),
             Parsed::V1_10_0(inner) => inner.build_mut(),
+            Parsed::V1_11_0(inner) => inner.build_mut(),
         }
     }
 
@@ -123,6 +137,7 @@ impl CommonFields for Parsed {
         match self {
             Parsed::V1(inner) => inner.containerize_mut(),
             Parsed::V1_10_0(inner) => inner.containerize_mut(),
+            Parsed::V1_11_0(inner) => inner.containerize_mut(),
         }
     }
 
@@ -130,6 +145,7 @@ impl CommonFields for Parsed {
         match self {
             Parsed::V1(inner) => inner.options_mut(),
             Parsed::V1_10_0(inner) => inner.options_mut(),
+            Parsed::V1_11_0(inner) => inner.options_mut(),
         }
     }
 }

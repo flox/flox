@@ -40,9 +40,10 @@ use crate::interfaces::{
 use crate::lockfile::{Lockfile, LockfileError};
 use crate::migrate::{MigrationError, migrate_typed_only, migrate_with_formatting_data};
 use crate::parsed::common::KnownSchemaVersion;
-use crate::parsed::latest::ManifestLatest;
+use crate::parsed::latest::{ManifestLatest, MinimumCliVersion};
 use crate::parsed::v1::ManifestV1;
 use crate::parsed::v1_10_0::ManifestV1_10_0;
+use crate::parsed::v1_11_0::ManifestV1_11_0;
 use crate::raw::{
     SyncTypedToRaw,
     TomlEditError,
@@ -230,13 +231,14 @@ pub struct MigratedTypedOnly {
 enum Parsed {
     V1(ManifestV1),
     V1_10_0(ManifestV1_10_0),
+    V1_11_0(ManifestV1_11_0),
 }
 
 impl Parsed {
     /// A helper function for creating a [`Parsed`] from whatever the latest
     /// manifest schema version happens to be.
     pub(crate) fn from_latest(manifest: ManifestLatest) -> Self {
-        Self::V1_10_0(manifest)
+        Self::V1_11_0(manifest)
     }
 
     /// Returns the known schema version of the contained manifest.
@@ -247,6 +249,18 @@ impl Parsed {
         match self {
             Parsed::V1(_) => KnownSchemaVersion::V1,
             Parsed::V1_10_0(_) => KnownSchemaVersion::V1_10_0,
+            Parsed::V1_11_0(_) => KnownSchemaVersion::V1_11_0,
+        }
+    }
+
+    /// Returns the minimum CLI version if present in the manifest.
+    pub(crate) fn minimum_cli_version(&self) -> Option<&MinimumCliVersion> {
+        match self {
+            Parsed::V1(_) => None,
+            // V1_10_0 has minimum_cli_version as Option<String> (not validated semver),
+            // but the feature is only formally supported from v1.11.0 onwards.
+            Parsed::V1_10_0(_) => None,
+            Parsed::V1_11_0(m) => m.minimum_cli_version.as_ref(),
         }
     }
 }
@@ -356,6 +370,11 @@ impl Manifest<TomlParsed> {
 }
 
 impl Manifest<Validated> {
+    /// Returns the minimum CLI version if present in the manifest.
+    pub fn minimum_cli_version(&self) -> Option<&MinimumCliVersion> {
+        self.inner.parsed.minimum_cli_version()
+    }
+
     /// Migrate a manifest with an optional lockfile.
     ///
     /// In some cases the lockfile simply isn't present and you stil must migrate.
@@ -489,6 +508,11 @@ impl<S: ManifestState> Manifest<S> {
                     .map_err(ManifestError::Invalid)?;
                 Ok(Parsed::V1_10_0(manifest))
             },
+            KnownSchemaVersion::V1_11_0 => {
+                let manifest = toml_edit::de::from_document::<ManifestV1_11_0>(toml.clone())
+                    .map_err(ManifestError::Invalid)?;
+                Ok(Parsed::V1_11_0(manifest))
+            },
         }
     }
 }
@@ -544,6 +568,16 @@ impl<'de> Deserialize<'de> for Manifest<TypedOnly> {
                 Ok(Manifest {
                     inner: TypedOnly {
                         parsed: Parsed::V1_10_0(manifest),
+                    },
+                })
+            },
+            KnownSchemaVersion::V1_11_0 => {
+                let d = untyped.into_deserializer();
+                let manifest = ManifestV1_11_0::deserialize(d)
+                    .map_err(|err| serde::de::Error::custom(err.to_string()))?;
+                Ok(Manifest {
+                    inner: TypedOnly {
+                        parsed: Parsed::V1_11_0(manifest),
                     },
                 })
             },

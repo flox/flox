@@ -2,6 +2,7 @@ pub mod common;
 pub mod latest;
 pub mod v1;
 pub mod v1_10_0;
+pub mod v1_11_0;
 
 /// An interface codifying how to access types that are just semantic wrappers
 /// around inner types. This impl may be generated with a macro.
@@ -85,7 +86,7 @@ mod tests {
                 KnownSchemaVersion::V1 => {
                     Value::Number(Number::from_str(schema.to_string().as_str()).unwrap())
                 },
-                KnownSchemaVersion::V1_10_0 => Value::String(schema.to_string()),
+                _ => Value::String(schema.to_string()),
             };
             let json_value = serde_json::json!({
                 schema.key_name(): schema_value,
