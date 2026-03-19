@@ -156,6 +156,48 @@ FLOX_ACTIVATE_TRACE=1 result/bin/flox activate [args]
 - **Commits:** Conventional commits format (`feat:`, `fix:`, `chore:`, etc.). Use `cz commit` for interactive commits
 - **Rust 2024 edition** for main crates
 
+## Manifest usage (`flox-manifest` crate)
+
+The `flox-manifest` crate uses a type-state pattern (`Manifest<S>`) to enforce
+correct manifest lifecycle at compile time. Follow these rules strictly.
+
+- **New schema version for shape changes** - any change to the manifest schema
+  (adding, removing, or renaming fields/sections/tables) requires creating a
+  new schema version. Never modify an existing schema version's structure.
+
+- **Adding new schemas** - copy the latest `flox-manifest/src/parsed/v*.rs` to
+  a new version file and duplicate modified leaf types. Unmodified types
+  continue to live in `parsed::common` or their respective version.
+
+- **Always use `Manifest` constructors** - don't pass manifest content as
+  `String` or deserialize into inner types directly (e.g.
+  `toml_edit::de::from_str::<ManifestLatest>()`). Any manifest read from disk
+  or received as text must be migrated. Use the typed constructors:
+  - `Manifest::read_typed(path)` / `Manifest::parse_toml_typed(s)` →
+    `Manifest<Validated>`
+  - `Manifest::read_and_migrate(path, lockfile)` /
+    `Manifest::parse_and_migrate(s, lockfile)` → `Manifest<Migrated>`
+  - `Manifest::parse_json(s)` for lockfile-embedded manifests →
+    `Manifest<TypedOnly>`
+
+- **Never serialize manifests by hand** - don't use
+  `toml_edit::ser::to_string()` on inner types. Use
+  `manifest.as_writable().to_string()` or
+  `manifest.as_writable().write_to_file(path)`, which handle schema version
+  selection and format preservation.
+
+- **Use trait methods, not inner type access** - prefer trait methods
+  (`CommonFields`, `PackageLookup`, `SchemaVersion`, `AsLatestSchema`) over
+  extracting and mutating inner types directly. Only use
+  `as_latest_schema()` / `as_latest_schema_mut()` when you genuinely need
+  latest-schema-specific fields.
+
+- **Tests: use test helpers** (behind `feature = "tests"`):
+  - `flox_manifest::raw::test_helpers`: `mk_test_manifest_from_contents()`,
+    `empty_test_migrated_manifest()`
+  - `flox_manifest::test_helpers`: `with_latest_schema("body")` to prepend
+    the correct schema version to TOML content strings
+
 ## IDE Setup
 
 For rust-analyzer, add to `.vscode/settings.json`:
