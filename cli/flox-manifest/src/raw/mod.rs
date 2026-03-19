@@ -1368,11 +1368,11 @@ fn update_v1_10_0_flake_descriptor(
         systems,
         outputs,
     } = descriptor;
-    raw.insert("flake", toml_string(flake).into());
+    table_like_set(raw, "flake", toml_string(flake).into());
     if let Some(priority) = priority {
-        raw.insert("priority", toml_priority(*priority).into());
+        table_like_set(raw, "priority", toml_priority(*priority).into());
     } else {
-        raw.remove("priority");
+        table_like_remove(raw, "priority");
     }
     if let Some(systems) = systems {
         raw.insert("systems", toml_array_of_strings(systems).into());
