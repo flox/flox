@@ -64,7 +64,6 @@ tar.workspace = true
 temp-env.workspace = true
 tracing-subscriber.workspace = true
 flox-test-utils.workspace = true
-sentry = { workspace = true, features = ["test"] }
 flox-manifest = { workspace = true, features = ["tests"] }
 flox-core = { workspace = true, features = ["tests"] }
 flox-catalog = { workspace = true, features = ["tests"] }
