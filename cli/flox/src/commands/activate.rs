@@ -672,17 +672,17 @@ fn notify_package_upgrades(
     Ok(())
 }
 
-/// Format a human-readable summary like "2 version upgrades and 1 build update".
+/// Format a human-readable summary like "2 version changes and 1 rebuild".
 fn format_upgrade_summary(version_upgrades: usize, build_updates: usize) -> String {
     let version_part = match version_upgrades {
         0 => None,
-        1 => Some("1 version upgrade".to_string()),
-        n => Some(format!("{n} version upgrades")),
+        1 => Some("1 version change".to_string()),
+        n => Some(format!("{n} version changes")),
     };
     let build_part = match build_updates {
         0 => None,
-        1 => Some("1 build update".to_string()),
-        n => Some(format!("{n} build updates")),
+        1 => Some("1 rebuild".to_string()),
+        n => Some(format!("{n} rebuilds")),
     };
     match (version_part, build_part) {
         (Some(v), Some(b)) => format!("{v} and {b}"),
@@ -1044,7 +1044,7 @@ mod upgrade_notification_tests {
         let printed = writer.to_string();
 
         assert_eq!(printed, formatdoc! {"
-            ℹ 1 build update available in 'name'.
+            ℹ 1 rebuild available in 'name'.
             Use 'flox upgrade --dry-run' for details.
 
         "});
@@ -1138,29 +1138,29 @@ mod format_upgrade_summary_tests {
 
     #[test]
     fn only_version_upgrades_singular() {
-        assert_eq!(format_upgrade_summary(1, 0), "1 version upgrade");
+        assert_eq!(format_upgrade_summary(1, 0), "1 version change");
     }
 
     #[test]
     fn only_version_upgrades_plural() {
-        assert_eq!(format_upgrade_summary(3, 0), "3 version upgrades");
+        assert_eq!(format_upgrade_summary(3, 0), "3 version changes");
     }
 
     #[test]
     fn only_build_updates_singular() {
-        assert_eq!(format_upgrade_summary(0, 1), "1 build update");
+        assert_eq!(format_upgrade_summary(0, 1), "1 rebuild");
     }
 
     #[test]
     fn only_build_updates_plural() {
-        assert_eq!(format_upgrade_summary(0, 4), "4 build updates");
+        assert_eq!(format_upgrade_summary(0, 4), "4 rebuilds");
     }
 
     #[test]
     fn mixed_upgrades() {
         assert_eq!(
             format_upgrade_summary(2, 1),
-            "2 version upgrades and 1 build update"
+            "2 version changes and 1 rebuild"
         );
     }
 
@@ -1168,7 +1168,7 @@ mod format_upgrade_summary_tests {
     fn mixed_all_plural() {
         assert_eq!(
             format_upgrade_summary(3, 5),
-            "3 version upgrades and 5 build updates"
+            "3 version changes and 5 rebuilds"
         );
     }
 

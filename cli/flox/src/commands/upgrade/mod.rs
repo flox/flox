@@ -167,8 +167,8 @@ impl Upgrade {
 /// Render a diff of locked packages before and after an upgrade.
 ///
 /// Version changes show: `- pkg: 1.0 -> 2.0`
-/// Build-only changes show: `- pkg: 1.0 (build update, rev ...)` with
-/// fallback to rev hash or bare "(build update)" when rev info is unavailable.
+/// Build-only changes show: `- pkg: 1.0 (rebuild, rev ...)` with
+/// fallback to rev hash or bare "(rebuild)" when rev info is unavailable.
 fn render_diff(diff: &SingleSystemUpgradeDiff) -> String {
     diff.iter()
         .map(|(_, (before, after))| {
@@ -183,8 +183,8 @@ fn render_diff(diff: &SingleSystemUpgradeDiff) -> String {
             // Same version — build-only change. Try to show rev info.
             let build_detail = build_update_detail(before, after);
             match build_detail {
-                Some(detail) => format!("- {install_id}: {old_version} (build update, {detail})"),
-                None => format!("- {install_id}: {old_version} (build update)"),
+                Some(detail) => format!("- {install_id}: {old_version} (rebuild, {detail})"),
+                None => format!("- {install_id}: {old_version} (rebuild)"),
             }
         })
         .join("\n")
@@ -220,7 +220,7 @@ fn build_update_detail(
     }
 }
 
-/// Count how many entries in a diff are version upgrades vs build-only updates.
+/// Count how many entries in a diff are version changes vs rebuilds.
 pub(crate) fn count_upgrade_categories(diff: &SingleSystemUpgradeDiff) -> (usize, usize) {
     let mut version_upgrades = 0;
     let mut build_updates = 0;
@@ -428,7 +428,7 @@ mod tests {
 
             assert_eq!(
                 render_diff(&diff),
-                "- terraform-docs: 0.21.0 (build update, rev 2025-01-15 -> 2025-02-10)"
+                "- terraform-docs: 0.21.0 (rebuild, rev 2025-01-15 -> 2025-02-10)"
             );
         }
 
@@ -444,7 +444,7 @@ mod tests {
 
             assert_eq!(
                 render_diff(&diff),
-                "- jq: 1.7.1 (build update, rev abc1234 -> fff9999)"
+                "- jq: 1.7.1 (rebuild, rev abc1234 -> fff9999)"
             );
         }
 
@@ -456,7 +456,7 @@ mod tests {
             let mut diff = SingleSystemUpgradeDiff::new();
             diff.insert("hello".to_string(), (before, after));
 
-            assert_eq!(render_diff(&diff), "- hello: 2.12.1 (build update)");
+            assert_eq!(render_diff(&diff), "- hello: 2.12.1 (rebuild)");
         }
 
         #[test]
@@ -497,7 +497,7 @@ mod tests {
             assert_eq!(
                 rendered,
                 "- curl: 8.9.0 -> 8.10.1\n\
-                 - terraform-docs: 0.21.0 (build update, rev 2025-01-15 -> 2025-02-10)"
+                 - terraform-docs: 0.21.0 (rebuild, rev 2025-01-15 -> 2025-02-10)"
             );
         }
 
