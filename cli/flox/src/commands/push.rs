@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_core::data::environment_ref::EnvironmentOwner;
 use flox_rust_sdk::flox::Flox;
@@ -113,7 +113,7 @@ fn handle_path_environment_push(
     let owner = if let Some(owner) = owner {
         owner
     } else {
-        EnvironmentOwner::from_str(&flox.get_handle()?)?
+        EnvironmentOwner::from_str(&flox.get_handle().context("Need to be logged in")?)?
     };
 
     let pointer = ManagedPointer::new(owner.clone(), path_environment.name(), &flox.floxhub);

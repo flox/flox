@@ -1191,11 +1191,7 @@ pub(super) async fn ensure_environment_trust(
         return Ok(());
     }
 
-    let handle = match flox.get_handle() {
-        Ok(handle) => Some(handle),
-        Err(flox_catalog::AuthError::Expired { handle, .. }) => Some(handle),
-        Err(_) => None,
-    };
+    let handle = flox.get_handle();
     if handle.as_deref() == Some(env_ref.owner().as_str()) {
         debug!("{env_prefixed_name} is trusted by auth handle");
         return Ok(());
@@ -1308,7 +1304,7 @@ pub(super) async fn ensure_environment_trust(
 /// If auth fails for Auth0 and we can prompt interactively, triggers the
 /// login flow as a fallback and rebuilds the auth strategy with the fresh token.
 pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
-    match flox.get_handle() {
+    match flox.auth_strategy.get_handle() {
         Ok(handle) => Ok(handle),
         Err(_) if Dialog::can_prompt() && matches!(flox.auth_strategy.auth_method(), AuthMethod::Auth0) => {
             if flox.floxhub_token.is_some() {

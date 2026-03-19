@@ -85,8 +85,12 @@ pub struct Flox {
 
 impl Flox {
     /// Validate that auth is available and return the user's handle.
-    pub fn get_handle(&self) -> Result<String, AuthError> {
-        self.auth_strategy.get_handle()
+    pub fn get_handle(&self) -> Option<String> {
+        match self.auth_strategy.get_handle() {
+            Ok(handle) => Some(handle),
+            Err(AuthError::Expired { handle, message: _ }) => Some(handle),
+            Err(_) => None,
+        }
     }
 
     /// Set a new token and rebuild the auth strategy to reflect it.
