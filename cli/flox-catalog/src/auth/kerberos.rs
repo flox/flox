@@ -15,14 +15,38 @@ use crate::AuthMethod;
 /// Kerberos authentication strategy
 ///
 /// Uses Kerberos tickets via GSSAPI to generate SPNEGO tokens for HTTP Negotiate authentication.
+/// The principal name (handle) is resolved once at construction time and cached.
 #[derive(Debug, Clone)]
 pub struct KerberosAuthStrategy {
     catalog_url: String,
+    cached_handle: Result<String, AuthError>,
 }
 
 impl KerberosAuthStrategy {
     pub fn new(catalog_url: String) -> Self {
-        Self { catalog_url }
+        let cached_handle = Self::resolve_principal();
+        Self {
+            catalog_url,
+            cached_handle,
+        }
+    }
+
+    /// Resolve the Kerberos principal name from the credential cache.
+    fn resolve_principal() -> Result<String, AuthError> {
+        let cred = Cred::acquire(None, None, CredUsage::Initiate, None).map_err(|e| {
+            AuthError::NotAuthenticated(format!(
+                "Kerberos ticket not available. Run `kinit` to authenticate. Error: {e:?}"
+            ))
+        })?;
+        let name = cred.name().map_err(|e| {
+            AuthError::NotAuthenticated(format!("Failed to get Kerberos principal name: {e:?}"))
+        })?;
+        let display = name.display_name().map_err(|e| {
+            AuthError::NotAuthenticated(format!(
+                "Failed to display Kerberos principal name: {e:?}"
+            ))
+        })?;
+        Ok(String::from_utf8_lossy(&display[..]).to_string())
     }
 }
 
@@ -49,18 +73,7 @@ impl AuthStrategy for KerberosAuthStrategy {
     }
 
     fn get_handle(&self) -> Result<String, AuthError> {
-        let cred = Cred::acquire(None, None, CredUsage::Initiate, None).map_err(|e| {
-            AuthError::NotAuthenticated(format!(
-                "Kerberos ticket not available. Run `kinit` to authenticate. Error: {e:?}"
-            ))
-        })?;
-        let name = cred.name().map_err(|e| {
-            AuthError::NotAuthenticated(format!("Failed to get Kerberos principal name: {e:?}"))
-        })?;
-        let display = name.display_name().map_err(|e| {
-            AuthError::NotAuthenticated(format!("Failed to display Kerberos principal name: {e:?}"))
-        })?;
-        Ok(String::from_utf8_lossy(&display[..]).to_string())
+        self.cached_handle.clone()
     }
 }
 

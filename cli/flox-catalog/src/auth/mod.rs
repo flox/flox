@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::token::FloxhubToken;
 
 /// Errors from authentication validation
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum AuthError {
     #[error("{0}")]
     NotAuthenticated(String),
