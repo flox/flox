@@ -1306,7 +1306,10 @@ pub(super) async fn ensure_environment_trust(
 pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
     match flox.auth_strategy.get_handle() {
         Ok(handle) => Ok(handle),
-        Err(_) if Dialog::can_prompt() && matches!(flox.auth_strategy.auth_method(), AuthMethod::Auth0) => {
+        Err(_)
+            if Dialog::can_prompt()
+                && matches!(flox.auth_strategy.auth_method(), AuthMethod::Auth0) =>
+        {
             if flox.floxhub_token.is_some() {
                 message::plain("Your FloxHub token has expired. Re-authenticating...");
             } else {

@@ -63,17 +63,13 @@ pub fn init_catalog_client(
         mock_mode,
         auth_strategy: auth_strategy_from_method(
             &config.flox.floxhub_authn_mode,
-            config
-                .flox
-                .floxhub_token
-                .as_deref()
-                .and_then(|s| {
-                    if s.is_empty() {
-                        None
-                    } else {
-                        FloxhubToken::from_str(s).ok()
-                    }
-                }),
+            config.flox.floxhub_token.as_deref().and_then(|s| {
+                if s.is_empty() {
+                    None
+                } else {
+                    FloxhubToken::from_str(s).ok()
+                }
+            }),
             config
                 .flox
                 .catalog_url

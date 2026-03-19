@@ -42,9 +42,7 @@ impl KerberosAuthStrategy {
             AuthError::NotAuthenticated(format!("Failed to get Kerberos principal name: {e:?}"))
         })?;
         let display = name.display_name().map_err(|e| {
-            AuthError::NotAuthenticated(format!(
-                "Failed to display Kerberos principal name: {e:?}"
-            ))
+            AuthError::NotAuthenticated(format!("Failed to display Kerberos principal name: {e:?}"))
         })?;
         Ok(String::from_utf8_lossy(&display[..]).to_string())
     }

@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
+use flox_catalog::CatalogClientError;
 pub use flox_catalog::{
     AuthError,
     AuthMethod,
@@ -10,7 +11,6 @@ pub use flox_catalog::{
     FloxhubTokenError,
     auth_strategy_from_method,
 };
-use flox_catalog::{CatalogClientError};
 use flox_core::vars::FLOX_VERSION_STRING;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
