@@ -2794,6 +2794,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "flox-catalog",
  "indexmap 2.13.0",
  "serde",
  "serde_json",

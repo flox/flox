@@ -13,3 +13,4 @@ serde.workspace = true
 indexmap.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+flox-catalog = { path = "../flox-catalog" }
