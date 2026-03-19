@@ -31,12 +31,12 @@ pub enum PackageTreeNode {
 }
 
 /// Builds a package tree from locked source items
-struct PackageTreeBuilder {
+pub struct PackageTreeBuilder {
     root: PackageTreeNode,
 }
 
 impl PackageTreeBuilder {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             root: PackageTreeNode::PackageSet {
                 entries: BTreeMap::new(),
@@ -44,7 +44,7 @@ impl PackageTreeBuilder {
         }
     }
 
-    fn into_root(self) -> PackageTreeNode {
+    pub fn into_root(self) -> PackageTreeNode {
         self.root
     }
 

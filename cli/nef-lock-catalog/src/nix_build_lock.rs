@@ -8,6 +8,7 @@ use tracing::debug;
 
 use crate::CatalogId;
 use crate::lock::NixPrefetchResult;
+use crate::tree::PackageTreeNode;
 
 /// Locked source information to nix expression catalog.
 /// That is either:
@@ -25,6 +26,11 @@ pub(crate) enum CatalogLock {
         /// Raw nix flake prefetch output (hash, locked, original, storePath)
         #[serde(flatten)]
         prefetch: NixPrefetchResult,
+    },
+    #[serde(rename = "floxhub")]
+    FloxHub {
+        /// Tree structure of locked packages from FloxHub
+        packages: PackageTreeNode,
     },
 }
 
