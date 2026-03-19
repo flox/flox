@@ -8,6 +8,14 @@ use progenitor_client::{ClientHooks, Error, OperationInfo};
 /// This replaces the former global `Mutex<Option<Hook>>` in
 /// `pre_request_hook.rs`, giving each `Client` instance its own hook without
 /// shared mutable state.
+///
+/// # Error handling
+///
+/// The `pre_request` hook is infallible by design: errors (e.g. a failed
+/// Kerberos token acquisition) are silently swallowed and the request proceeds
+/// without the auth header. This means auth failures will surface as HTTP 401
+/// responses rather than client-side errors. Keep this in mind when debugging
+/// authentication issues.
 pub struct RequestHooks {
     pub pre_request: Arc<dyn Fn(&mut reqwest::Request) + Send + Sync>,
 }
