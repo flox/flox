@@ -966,7 +966,7 @@ fn update_systems(
             debug!("creating new [options] table");
             TomlEditError::MalformedOptionsTable(options_field_type)
         })?;
-        options_table.insert("systems", toml_array_of_strings(systems).into());
+        table_like_set_string_array(options_table, "systems", systems);
     } else if let Some(options_field) = raw.get_mut("options") {
         let options_field_type = options_field.type_name().into();
         let options_table = options_field
@@ -1114,6 +1114,22 @@ fn update_descriptor(
         },
     }
     Ok(())
+}
+
+/// Set a string array in a `TableLike`.  When the existing array already has
+/// the right values the entry is left untouched so formatting (indentation,
+/// comments) is preserved for noop updates.  Otherwise the value is replaced
+/// wholesale with a freshly built array.
+fn table_like_set_string_array(raw: &mut dyn TableLike, key: &str, strs: &[String]) {
+    if let Some(arr) = raw.get(key).and_then(|v| v.as_array())
+        && arr
+            .iter()
+            .map(|v| v.as_str())
+            .eq(strs.iter().map(|s| Some(s.as_str())))
+    {
+        return;
+    }
+    table_like_set(raw, key, toml_array_of_strings(strs).into());
 }
 
 /// Insert or update a key-value pair in a `TableLike`, preserving any existing
@@ -1264,7 +1280,7 @@ fn update_v1_catalog_descriptor(
         table_like_remove(raw, "version");
     }
     if let Some(systems) = systems {
-        table_like_set(raw, "systems", toml_array_of_strings(systems).into());
+        table_like_set_string_array(raw, "systems", systems);
     } else {
         table_like_remove(raw, "systems");
     }
@@ -1283,7 +1299,7 @@ fn update_v1_flake_descriptor(raw: &mut dyn TableLike, descriptor: &v1::PackageD
         table_like_remove(raw, "priority");
     }
     if let Some(systems) = systems {
-        table_like_set(raw, "systems", toml_array_of_strings(systems).into());
+        table_like_set_string_array(raw, "systems", systems);
     } else {
         table_like_remove(raw, "systems");
     }
@@ -1305,7 +1321,7 @@ fn update_store_path_descriptor(
         table_like_remove(raw, "priority");
     }
     if let Some(systems) = systems {
-        table_like_set(raw, "systems", toml_array_of_strings(systems).into());
+        table_like_set_string_array(raw, "systems", systems);
     } else {
         table_like_remove(raw, "systems");
     }
@@ -1340,17 +1356,17 @@ fn update_v1_10_0_catalog_descriptor(
         table_like_remove(raw, "version");
     }
     if let Some(systems) = systems {
-        table_like_set(raw, "systems", toml_array_of_strings(systems).into());
+        table_like_set_string_array(raw, "systems", systems);
     } else {
         table_like_remove(raw, "systems");
     }
     if let Some(outputs) = outputs {
         match outputs {
             v1_10_0::SelectedOutputs::All(_) => {
-                table_like_set(raw, "outputs", toml_string("all").into());
+                raw.insert("outputs", toml_string("all").into());
             },
             v1_10_0::SelectedOutputs::Specific(items) => {
-                table_like_set(raw, "outputs", toml_array_of_strings(items).into());
+                table_like_set_string_array(raw, "outputs", items);
             },
         }
     } else {
@@ -1375,21 +1391,21 @@ fn update_v1_10_0_flake_descriptor(
         table_like_remove(raw, "priority");
     }
     if let Some(systems) = systems {
-        raw.insert("systems", toml_array_of_strings(systems).into());
+        table_like_set_string_array(raw, "systems", systems);
     } else {
-        raw.remove("systems");
+        table_like_remove(raw, "systems");
     }
     if let Some(outputs) = outputs {
         match outputs {
             v1_10_0::SelectedOutputs::All(_) => {
-                raw.insert("outputs", toml_string("all").into());
+                table_like_set(raw, "outputs", toml_string("all").into());
             },
             v1_10_0::SelectedOutputs::Specific(items) => {
-                raw.insert("outputs", toml_array_of_strings(items).into());
+                table_like_set_string_array(raw, "outputs", items);
             },
         }
     } else {
-        raw.remove("outputs");
+        table_like_remove(raw, "outputs");
     }
 }
 
@@ -2372,6 +2388,108 @@ curl.outputs = [\"bin\", \"man\"]
     }
 
     #[test]
+    fn update_systems_noop_preserves_formatting() {
+        let body = indoc! {r#"
+            [options]
+            systems = [
+              "aarch64-darwin",
+              "x86_64-darwin",
+            ]
+        "#};
+        let mut manifest = Manifest::parse_toml_typed(with_latest_schema(body)).unwrap();
+        manifest.update_systems().unwrap();
+        let output = manifest.inner.raw.to_string();
+        assert!(
+            output.contains(body),
+            "multi-line systems array should be preserved, got:\n{output}"
+        );
+    }
+
+    #[test]
+    fn update_systems_changes_replaces_formatting() {
+        let toml_str = with_latest_schema(indoc! {r#"
+            [options]
+            systems = [
+              "aarch64-darwin",
+              "x86_64-darwin",
+            ]
+        "#});
+        let mut manifest = Manifest::parse_toml_typed(&toml_str).unwrap();
+        manifest.options_mut().systems = Some(vec![
+            "aarch64-darwin".to_string(),
+            "x86_64-linux".to_string(),
+        ]);
+        manifest.update_systems().unwrap();
+        let output = manifest.inner.raw.to_string();
+        expect![[r#"
+            schema-version = "1.11.0"
+
+            [options]
+            systems = ["aarch64-darwin", "x86_64-linux"]
+
+        "#]]
+        .assert_eq(&output);
+    }
+
+    #[test]
+    fn update_packages_noop_preserves_formatting() {
+        let body = indoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+            hello.systems = [
+              "aarch64-darwin",
+              "x86_64-darwin",
+            ]
+            hello.outputs = [
+              "out",
+              "man",
+            ]
+        "#};
+        let mut manifest = Manifest::parse_toml_typed(with_latest_schema(body)).unwrap();
+        manifest.update_raw_packages_from_typed_manifest().unwrap();
+        let output = manifest.inner.raw.to_string();
+        assert!(
+            output.contains(body),
+            "multi-line per-package arrays should be preserved, got:\n{output}"
+        );
+    }
+
+    #[test]
+    fn update_packages_changes_replaces_formatting() {
+        let toml_str = with_latest_schema(indoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+            hello.systems = [
+              "aarch64-darwin",
+              "x86_64-darwin",
+            ]
+            hello.outputs = [
+              "out",
+              "man",
+            ]
+        "#});
+        let mut manifest = Manifest::parse_toml_typed(&toml_str).unwrap();
+        let desc = get_catalog_descriptor_mut(&mut manifest, "hello").unwrap();
+        desc.systems = Some(vec![
+            "aarch64-darwin".to_string(),
+            "aarch64-linux".to_string(),
+        ]);
+        desc.outputs = Some(SelectedOutputs::Specific(vec!["out".to_string()]));
+        manifest.update_raw_packages_from_typed_manifest().unwrap();
+        let output = manifest.inner.raw.to_string();
+        expect![[r#"
+            schema-version = "1.11.0"
+
+            [install]
+            hello.pkg-path = "hello"
+            hello.systems = ["aarch64-darwin", "aarch64-linux"]
+            hello.outputs = ["out"]
+
+        "#]]
+        .assert_eq(&output);
+    }
+
+    #[test]
     fn migration_from_v1_preserves_comment_above_version_key() {
         let toml_str = indoc! {r#"
             # this comment is above version
@@ -2451,5 +2569,141 @@ curl.outputs = [\"bin\", \"man\"]
             "apache-httpd",
             dummy_system,
         );
+    }
+
+    mod table_like_set {
+        use super::*;
+
+        #[test]
+        fn table_like_set_inserts_new_key() {
+            let mut doc: DocumentMut = "".parse().unwrap();
+            table_like_set(doc.as_table_mut(), "key", toml_string("value").into());
+            expect![[r#"
+                key = "value"
+            "#]]
+            .assert_eq(&doc.to_string());
+        }
+
+        #[test]
+        fn table_like_set_updates_existing_value() {
+            let input = indoc! {r#"
+                key = "old"
+            "#};
+            let mut doc: DocumentMut = input.parse().unwrap();
+            table_like_set(doc.as_table_mut(), "key", toml_string("new").into());
+            expect![[r#"
+                key = "new"
+            "#]]
+            .assert_eq(&doc.to_string());
+        }
+
+        #[test]
+        fn table_like_set_preserves_comments() {
+            let input = indoc! {r#"
+                # key prefix comment
+                key = "old" # value inline comment
+            "#};
+            let mut doc: DocumentMut = input.parse().unwrap();
+            table_like_set(doc.as_table_mut(), "key", toml_string("new").into());
+            expect![[r#"
+                # key prefix comment
+                key = "new" # value inline comment
+            "#]]
+            .assert_eq(&doc.to_string());
+        }
+    }
+
+    mod table_like_set_string_array {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[test]
+        fn table_like_set_string_array_inserts_when_key_missing() {
+            let mut doc: DocumentMut = "".parse().unwrap();
+            table_like_set_string_array(doc.as_table_mut(), "arr", &["a".into(), "b".into()]);
+            expect![[r#"
+                arr = ["a", "b"]
+            "#]]
+            .assert_eq(&doc.to_string());
+        }
+
+        #[test]
+        fn table_like_set_string_array_noop_preserves_formatting() {
+            let input = indoc! {r#"
+                # key prefix comment
+                arr = [
+                  # value prefix comment
+                  "a", # value inline comment
+                  "b",
+                ]
+            "#};
+            let mut doc: DocumentMut = input.parse().unwrap();
+            table_like_set_string_array(doc.as_table_mut(), "arr", &["a".into(), "b".into()]);
+            assert_eq!(
+                doc.to_string(),
+                input,
+                "noop should preserve exact formatting"
+            );
+        }
+
+        #[test]
+        fn table_like_set_string_array_replaces_when_values_differ() {
+            let input = indoc! {r#"
+                # key prefix comment
+                arr = [
+                  # value prefix comment
+                  "a", # value inline comment
+                  "b",
+                ]
+            "#};
+            let mut doc: DocumentMut = input.parse().unwrap();
+            table_like_set_string_array(doc.as_table_mut(), "arr", &["a".into(), "c".into()]);
+
+            // Comments and indentation are replaced.
+            expect![[r#"
+                # key prefix comment
+                arr = ["a", "c"]
+            "#]]
+            .assert_eq(&doc.to_string());
+        }
+
+        #[test]
+        fn table_like_set_string_array_replaces_when_length_differs() {
+            let input = indoc! {r#"
+                # key prefix comment
+                arr = [
+                  # value prefix comment
+                  "a", # value inline comment
+                  "b",
+                ]
+            "#};
+            let mut doc: DocumentMut = input.parse().unwrap();
+            table_like_set_string_array(doc.as_table_mut(), "arr", &["a".into()]);
+
+            // Comments and indentation are replaced.
+            expect![[r#"
+                # key prefix comment
+                arr = ["a"]
+            "#]]
+            .assert_eq(&doc.to_string());
+        }
+
+        #[test]
+        fn table_like_set_string_array_replaces_non_array_value() {
+            let input = indoc! {r#"
+                # key prefix comment
+                arr = "not an array"
+            "#};
+            let mut doc: DocumentMut = input.parse().unwrap();
+            table_like_set_string_array(doc.as_table_mut(), "arr", &["a".into()]);
+
+            // Comments are preserved.
+            expect![[r#"
+                # key prefix comment
+                arr = ["a"]
+            "#]]
+            .assert_eq(&doc.to_string());
+        }
     }
 }
