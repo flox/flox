@@ -18,6 +18,7 @@ use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_rust_sdk::providers::manifest_init::ManifestInitializer;
 use indoc::{formatdoc, indoc};
 use path_dedot::ParseDot;
+use flox_core::trust::TrustManager;
 use tracing::{debug, info_span, instrument};
 
 use crate::commands::{SHELL_COMPLETION_DIR, ensure_auth, environment_description};
@@ -240,6 +241,11 @@ async fn init_local_environment(
         debug!("creating environment");
         PathEnvironment::init(path_pointer, dir, &customization, flox)?
     };
+
+    let trust_mgr = TrustManager::new(&flox.data_dir);
+    if let Err(e) = trust_mgr.trust(env.dot_flox_path()) {
+        tracing::debug!("failed to auto-trust new environment: {}", e);
+    }
 
     let env_in_git_repo = GitCommandProvider::discover(dir).is_ok();
 
