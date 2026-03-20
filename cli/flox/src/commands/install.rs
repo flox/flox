@@ -6,6 +6,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_catalog::{MsgAttrPathNotFoundNotFoundForAllSystems, MsgAttrPathNotFoundNotInCatalog};
 use flox_core::data::environment_ref::{DEFAULT_NAME, RemoteEnvironmentRef};
+use flox_core::trust::TrustManager;
 use flox_manifest::compose::{
     COMPOSER_MANIFEST_ID,
     new_package_overrides,
@@ -282,6 +283,13 @@ impl Install {
                 message::warning(warning);
             }
             warn_manifest_changes_for_services(&flox, &concrete_environment);
+
+            // Re-trust the environment so auto-activation isn't revoked by
+            // the manifest change.
+            let trust_mgr = TrustManager::new(&flox.data_dir);
+            if let Err(e) = trust_mgr.trust(concrete_environment.dot_flox_path()) {
+                tracing::debug!("failed to re-trust environment after install: {}", e);
+            }
         }
 
         Ok(())

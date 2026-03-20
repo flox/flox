@@ -81,7 +81,9 @@ impl TrustManager {
         fs::create_dir_all(&self.allowed_dir)
             .with_context(|| format!("creating {}", self.allowed_dir.display()))?;
 
-        let allow_file = self.allowed_dir.join(self.allow_hash(&abs, &manifest_content));
+        let allow_file = self
+            .allowed_dir
+            .join(self.allow_hash(&abs, &manifest_content));
         fs::write(&allow_file, "")
             .with_context(|| format!("writing allow file {}", allow_file.display()))?;
 

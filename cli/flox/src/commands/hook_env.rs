@@ -82,7 +82,8 @@ impl HookEnv {
                 },
                 Ok(TrustStatus::Unknown(_)) => {
                     if !notified_dirs.contains(&dot_flox.path) {
-                        let is_ancestor = cwd.starts_with(dot_flox.path.parent().unwrap_or(&dot_flox.path));
+                        let is_ancestor =
+                            cwd.starts_with(dot_flox.path.parent().unwrap_or(&dot_flox.path));
                         if is_ancestor {
                             eprintln!(
                                 "flox: environment at '{}' is not trusted. Run 'flox trust' to auto-activate it.",
@@ -104,10 +105,8 @@ impl HookEnv {
             }
         }
 
-        let new_active_dirs: Vec<PathBuf> = trusted_dot_flox
-            .iter()
-            .map(|d| d.path.clone())
-            .collect();
+        let new_active_dirs: Vec<PathBuf> =
+            trusted_dot_flox.iter().map(|d| d.path.clone()).collect();
 
         // Check if the set of active dirs actually changed.
         let dirs_changed = new_active_dirs != state.active_dirs;
@@ -235,18 +234,15 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<HashMap<String, S
     }
     let sbin = store_path.join("sbin");
     if sbin.exists() {
-        vars.insert(
-            "_FLOX_SBIN_ADD".to_string(),
-            sbin.display().to_string(),
-        );
+        vars.insert("_FLOX_SBIN_ADD".to_string(), sbin.display().to_string());
     }
 
     // Parse activate.d/envrc for exported variables.
     let envrc = store_path.join("activate.d").join("envrc");
     if envrc.exists() {
         if let Ok(contents) = std::fs::read_to_string(&envrc) {
-            let export_re = Regex::new(r#"^export\s+([A-Za-z_][A-Za-z0-9_]*)="(.*)"$"#)
-                .expect("valid regex");
+            let export_re =
+                Regex::new(r#"^export\s+([A-Za-z_][A-Za-z0-9_]*)="(.*)"$"#).expect("valid regex");
             for line in contents.lines() {
                 if let Some(caps) = export_re.captures(line) {
                     let name = caps[1].to_string();

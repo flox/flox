@@ -23,10 +23,7 @@ impl HookDiff {
     /// - `additions`: keys in `new_env` but not in `pristine`
     /// - `modifications`: keys in both with different values (stores the ORIGINAL value)
     /// - `deletions`: keys in `pristine` but not in `new_env` (stores the ORIGINAL value)
-    pub fn compute(
-        pristine: &HashMap<String, String>,
-        new_env: &HashMap<String, String>,
-    ) -> Self {
+    pub fn compute(pristine: &HashMap<String, String>, new_env: &HashMap<String, String>) -> Self {
         let mut additions = HashMap::new();
         let mut modifications = HashMap::new();
         let mut deletions = HashMap::new();
@@ -67,7 +64,9 @@ impl HookDiff {
         encoder
             .write_all(json.as_bytes())
             .context("failed to zlib compress HookDiff")?;
-        let compressed = encoder.finish().context("failed to finish zlib compression")?;
+        let compressed = encoder
+            .finish()
+            .context("failed to finish zlib compression")?;
         Ok(URL_SAFE_NO_PAD.encode(&compressed))
     }
 

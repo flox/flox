@@ -7,6 +7,7 @@ use bpaf::Bpaf;
 use flox_catalog::{ClientTrait, PackageDescriptor, PackageGroup, PackageResolutionInfo};
 use flox_core::activate::mode::ActivateMode;
 use flox_core::data::environment_ref::{DEFAULT_NAME, EnvironmentName, RemoteEnvironmentRef};
+use flox_core::trust::TrustManager;
 use flox_manifest::raw::{CatalogPackage, PackageToInstall};
 use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::Flox;
@@ -18,7 +19,6 @@ use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_rust_sdk::providers::manifest_init::ManifestInitializer;
 use indoc::{formatdoc, indoc};
 use path_dedot::ParseDot;
-use flox_core::trust::TrustManager;
 use tracing::{debug, info_span, instrument};
 
 use crate::commands::{SHELL_COMPLETION_DIR, ensure_auth, environment_description};

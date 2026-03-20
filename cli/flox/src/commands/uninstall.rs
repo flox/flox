@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use flox_core::trust::TrustManager;
 use flox_manifest::raw::PackageModification;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::uninstall::UninstallSpec;
@@ -116,6 +117,13 @@ impl Uninstall {
         }
 
         warn_manifest_changes_for_services(&flox, &concrete_environment);
+
+        // Re-trust the environment so auto-activation isn't revoked by
+        // the manifest change.
+        let trust_mgr = TrustManager::new(&flox.data_dir);
+        if let Err(e) = trust_mgr.trust(concrete_environment.dot_flox_path()) {
+            tracing::debug!("failed to re-trust environment after uninstall: {}", e);
+        }
 
         Ok(())
     }
