@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use anyhow::Result;
 use bpaf::Bpaf;
 use flox_core::hook_state::HookState;
@@ -73,6 +75,34 @@ impl Exit {
         for (name, orig_val) in &state.diff.deletions {
             SetVar::exported_no_expansion(name, orig_val)
                 .generate_with_newline(shell, &mut stdout)?;
+        }
+
+        // Restore the prompt.
+        match shell {
+            Shell::Zsh => {
+                writeln!(
+                    stdout,
+                    r#"if [ -n "${{_FLOX_HOOK_SAVE_PS1+x}}" ]; then PS1="$_FLOX_HOOK_SAVE_PS1"; unset _FLOX_HOOK_SAVE_PS1; fi;"#,
+                )?;
+            },
+            Shell::Bash => {
+                writeln!(
+                    stdout,
+                    r#"if [ -n "${{_FLOX_HOOK_SAVE_PS1+x}}" ]; then PS1="$_FLOX_HOOK_SAVE_PS1"; unset _FLOX_HOOK_SAVE_PS1; fi;"#,
+                )?;
+            },
+            Shell::Fish => {
+                writeln!(
+                    stdout,
+                    r#"if set -q _FLOX_HOOK_SAVE_PROMPT; functions -q _flox_hook_saved_prompt; and functions --copy _flox_hook_saved_prompt fish_prompt; functions --erase _flox_hook_saved_prompt; set -e _FLOX_HOOK_SAVE_PROMPT; end;"#,
+                )?;
+            },
+            Shell::Tcsh => {
+                writeln!(
+                    stdout,
+                    r#"if ( $?_FLOX_HOOK_SAVE_PROMPT ) then; set prompt = "$_FLOX_HOOK_SAVE_PROMPT"; unsetenv _FLOX_HOOK_SAVE_PROMPT; endif;"#,
+                )?;
+            },
         }
 
         // Add all active dirs to suppressed list so hook won't re-activate them.

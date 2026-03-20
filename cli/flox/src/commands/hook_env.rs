@@ -184,21 +184,14 @@ impl HookEnv {
         // Step 4: Emit new exports.
         emit_apply(&new_diff, &new_env, shell, &mut stdout)?;
 
-        // Report activation/deactivation to the user via stderr.
-        if dirs_changed {
-            for dir in &new_active_dirs {
-                if !state.active_dirs.contains(dir) {
-                    eprintln!("flox: activated environment at '{}'", dir.display());
-                }
-            }
-            for dir in &state.active_dirs {
-                if !new_active_dirs.contains(dir) {
-                    eprintln!("flox: deactivated environment at '{}'", dir.display());
-                }
-            }
-        }
+        // Step 5: Emit prompt modification.
+        let env_names: Vec<String> = trusted_dot_flox
+            .iter()
+            .map(|d| d.pointer.name().to_string())
+            .collect();
+        emit_prompt(&env_names, shell, &mut stdout)?;
 
-        // Step 5: Emit updated state variables.
+        // Step 6: Emit updated state variables.
         emit_state_vars(
             &new_diff,
             &new_active_dirs,
@@ -283,6 +276,8 @@ fn emit_revert(diff: &HookDiff, shell: Shell, writer: &mut impl Write) -> Result
     for (name, orig_val) in &diff.deletions {
         SetVar::exported_no_expansion(name, orig_val).generate_with_newline(shell, writer)?;
     }
+    // Restore the saved prompt.
+    emit_prompt_restore(shell, writer)?;
     Ok(())
 }
 
@@ -338,5 +333,91 @@ fn emit_state_vars(
     SetVar::exported_no_expansion("_FLOX_HOOK_CWD", &cwd.display().to_string())
         .generate_with_newline(shell, writer)?;
 
+    Ok(())
+}
+
+/// Emit shell-specific code to modify the prompt with active environment names.
+/// If `env_names` is empty, only the restore is emitted (via emit_prompt_restore).
+fn emit_prompt(env_names: &[String], shell: Shell, writer: &mut impl Write) -> Result<()> {
+    if env_names.is_empty() {
+        return Ok(());
+    }
+
+    let env_list = env_names.join(" ");
+    // Use the same ANSI-256 colors as `flox activate`: INDIGO_400=99, INDIGO_300=141
+    let color1 = 99;
+    let color2 = 141;
+
+    match shell {
+        Shell::Zsh => {
+            writeln!(
+                writer,
+                r#"if [ -z "${{_FLOX_HOOK_SAVE_PS1+x}}" ]; then _FLOX_HOOK_SAVE_PS1="$PS1"; fi;
+PS1="%B%F{{{color1}}}flox%f%b %F{{{color2}}}[{env_list}]%f $_FLOX_HOOK_SAVE_PS1";"#,
+                color1 = color1,
+                color2 = color2,
+                env_list = env_list,
+            )?;
+        },
+        Shell::Bash => {
+            writeln!(
+                writer,
+                r#"if [ -z "${{_FLOX_HOOK_SAVE_PS1+x}}" ]; then _FLOX_HOOK_SAVE_PS1="$PS1"; fi;
+PS1="\[\x1b[1m\]\[\x1b[38;5;{color1}m\]flox\[\x1b[0m\] \[\x1b[38;5;{color2}m\][{env_list}]\[\x1b[0m\] $_FLOX_HOOK_SAVE_PS1";"#,
+                color1 = color1,
+                color2 = color2,
+                env_list = env_list,
+            )?;
+        },
+        Shell::Fish => {
+            writeln!(
+                writer,
+                r#"if not set -q _FLOX_HOOK_SAVE_PROMPT; functions -q fish_prompt; and functions --copy fish_prompt _flox_hook_saved_prompt; set -g _FLOX_HOOK_SAVE_PROMPT 1; end;
+function fish_prompt; set_color --bold; set_color 875fff; echo -n 'flox'; set_color normal; echo -n ' '; set_color af87ff; echo -n '[{env_list}]'; set_color normal; echo -n ' '; _flox_hook_saved_prompt; end;"#,
+                env_list = env_list,
+            )?;
+        },
+        Shell::Tcsh => {
+            writeln!(
+                writer,
+                r#"if ( ! $?_FLOX_HOOK_SAVE_PROMPT ) setenv _FLOX_HOOK_SAVE_PROMPT "$prompt";
+set prompt = "%{{\033[1m\033[38;5;{color1}m%}}flox%{{\033[0m%}} %{{\033[38;5;{color2}m%}}[{env_list}]%{{\033[0m%}} $_FLOX_HOOK_SAVE_PROMPT";"#,
+                color1 = color1,
+                color2 = color2,
+                env_list = env_list,
+            )?;
+        },
+    }
+    Ok(())
+}
+
+/// Emit shell-specific code to restore the prompt to its original value.
+fn emit_prompt_restore(shell: Shell, writer: &mut impl Write) -> Result<()> {
+    match shell {
+        Shell::Zsh => {
+            writeln!(
+                writer,
+                r#"if [ -n "${{_FLOX_HOOK_SAVE_PS1+x}}" ]; then PS1="$_FLOX_HOOK_SAVE_PS1"; unset _FLOX_HOOK_SAVE_PS1; fi;"#,
+            )?;
+        },
+        Shell::Bash => {
+            writeln!(
+                writer,
+                r#"if [ -n "${{_FLOX_HOOK_SAVE_PS1+x}}" ]; then PS1="$_FLOX_HOOK_SAVE_PS1"; unset _FLOX_HOOK_SAVE_PS1; fi;"#,
+            )?;
+        },
+        Shell::Fish => {
+            writeln!(
+                writer,
+                r#"if set -q _FLOX_HOOK_SAVE_PROMPT; functions -q _flox_hook_saved_prompt; and functions --copy _flox_hook_saved_prompt fish_prompt; functions --erase _flox_hook_saved_prompt; set -e _FLOX_HOOK_SAVE_PROMPT; end;"#,
+            )?;
+        },
+        Shell::Tcsh => {
+            writeln!(
+                writer,
+                r#"if ( $?_FLOX_HOOK_SAVE_PROMPT ) then; set prompt = "$_FLOX_HOOK_SAVE_PROMPT"; unsetenv _FLOX_HOOK_SAVE_PROMPT; endif;"#,
+            )?;
+        },
+    }
     Ok(())
 }
