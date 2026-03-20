@@ -959,6 +959,46 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
     Ok(None)
 }
 
+/// Walk from `initial_dir` up to root, collecting ALL `.flox` directories
+/// found in the ancestor chain. Returns them outermost-first (root end),
+/// so the innermost (closest to CWD) is last — matching composition priority
+/// where later = higher priority (child wins).
+///
+/// Unlike `find_dot_flox`, this does NOT stop at git boundaries.
+pub fn find_all_dot_flox(initial_dir: &Path) -> Result<Vec<DotFlox>, EnvironmentError> {
+    let path = CanonicalPath::new(initial_dir).map_err(EnvironmentError::StartDiscoveryDir)?;
+
+    let mut results = Vec::new();
+    for ancestor in path.ancestors() {
+        let tentative_dot_flox = ancestor.join(DOT_FLOX);
+        debug!(
+            "find_all_dot_flox: looking for .flox: path={}",
+            tentative_dot_flox.display()
+        );
+
+        if tentative_dot_flox.exists() {
+            match DotFlox::open_in(ancestor) {
+                Ok(dot_flox) => {
+                    debug!(
+                        "find_all_dot_flox: .flox found: path={}",
+                        tentative_dot_flox.display()
+                    );
+                    results.push(dot_flox);
+                },
+                Err(err) => {
+                    debug!(
+                        "find_all_dot_flox: skipping invalid .flox at {}: {err}",
+                        tentative_dot_flox.display()
+                    );
+                },
+            }
+        }
+    }
+
+    results.reverse();
+    Ok(results)
+}
+
 /// Return a path to the services socket given a unique identifier
 ///
 /// Socket paths cannot exceed 104 characters on macOS
@@ -1336,6 +1376,134 @@ mod test {
             err,
             EnvironmentError::ServicesSocketPathTooLong(_)
         ));
+    }
+
+    #[test]
+    fn find_all_dot_flox_returns_empty_when_none_exist() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let start_path = temp_dir.path().join("foo").join("bar");
+        std::fs::create_dir_all(&start_path).unwrap();
+        let result = find_all_dot_flox(&start_path).unwrap();
+        assert_eq!(result, vec![]);
+    }
+
+    #[test]
+    fn find_all_dot_flox_finds_single_dot_flox() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let actual_dot_flox = temp_dir.path().join(DOT_FLOX);
+        std::fs::create_dir_all(&actual_dot_flox).unwrap();
+        fs::write(
+            actual_dot_flox.join(ENVIRONMENT_POINTER_FILENAME),
+            serde_json::to_string_pretty(&*MANAGED_ENV_POINTER).unwrap(),
+        )
+        .unwrap();
+
+        let result = find_all_dot_flox(temp_dir.path()).unwrap();
+        assert_eq!(result, vec![DotFlox {
+            path: temp_dir.path().join(DOT_FLOX).canonicalize().unwrap(),
+            pointer: (*MANAGED_ENV_POINTER).clone(),
+        }]);
+    }
+
+    #[test]
+    fn find_all_dot_flox_finds_nested_outermost_first() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        // Create outer .flox at root of temp_dir
+        let outer_dot_flox = temp_dir.path().join(DOT_FLOX);
+        std::fs::create_dir_all(&outer_dot_flox).unwrap();
+        fs::write(
+            outer_dot_flox.join(ENVIRONMENT_POINTER_FILENAME),
+            serde_json::to_string_pretty(&*MANAGED_ENV_POINTER).unwrap(),
+        )
+        .unwrap();
+
+        // Create inner .flox at temp_dir/foo
+        let inner_dir = temp_dir.path().join("foo");
+        let inner_dot_flox = inner_dir.join(DOT_FLOX);
+        std::fs::create_dir_all(&inner_dot_flox).unwrap();
+        fs::write(
+            inner_dot_flox.join(ENVIRONMENT_POINTER_FILENAME),
+            serde_json::to_string_pretty(&*MANAGED_ENV_POINTER).unwrap(),
+        )
+        .unwrap();
+
+        // Start from temp_dir/foo/bar
+        let start_path = inner_dir.join("bar");
+        std::fs::create_dir_all(&start_path).unwrap();
+
+        let result = find_all_dot_flox(&start_path).unwrap();
+        assert_eq!(result, vec![
+            DotFlox {
+                path: temp_dir.path().join(DOT_FLOX).canonicalize().unwrap(),
+                pointer: (*MANAGED_ENV_POINTER).clone(),
+            },
+            DotFlox {
+                path: inner_dir.join(DOT_FLOX).canonicalize().unwrap(),
+                pointer: (*MANAGED_ENV_POINTER).clone(),
+            },
+        ]);
+    }
+
+    #[test]
+    fn find_all_dot_flox_skips_invalid_dot_flox() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        // Create a valid .flox at root
+        let outer_dot_flox = temp_dir.path().join(DOT_FLOX);
+        std::fs::create_dir_all(&outer_dot_flox).unwrap();
+        fs::write(
+            outer_dot_flox.join(ENVIRONMENT_POINTER_FILENAME),
+            serde_json::to_string_pretty(&*MANAGED_ENV_POINTER).unwrap(),
+        )
+        .unwrap();
+
+        // Create an invalid .flox (no env.json) at temp_dir/foo
+        let inner_dir = temp_dir.path().join("foo");
+        let invalid_dot_flox = inner_dir.join(DOT_FLOX);
+        std::fs::create_dir_all(&invalid_dot_flox).unwrap();
+
+        // Start from temp_dir/foo
+        let result = find_all_dot_flox(&inner_dir).unwrap();
+        assert_eq!(result, vec![DotFlox {
+            path: temp_dir.path().join(DOT_FLOX).canonicalize().unwrap(),
+            pointer: (*MANAGED_ENV_POINTER).clone(),
+        }]);
+    }
+
+    #[test]
+    fn find_all_dot_flox_does_not_stop_at_git_boundary() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path();
+
+        // Create .flox above the git repo
+        let outer_dot_flox = path.join(DOT_FLOX);
+        std::fs::create_dir_all(&outer_dot_flox).unwrap();
+        fs::write(
+            outer_dot_flox.join(ENVIRONMENT_POINTER_FILENAME),
+            serde_json::to_string_pretty(&*MANAGED_ENV_POINTER).unwrap(),
+        )
+        .unwrap();
+
+        // Create git repo in subdirectory
+        let git_dir = path.join("repo");
+        std::fs::create_dir_all(&git_dir).unwrap();
+        GitCommandProvider::init(&git_dir, false).unwrap();
+
+        // Create start path inside git repo
+        let start_path = git_dir.join("sub");
+        std::fs::create_dir_all(&start_path).unwrap();
+
+        // find_dot_flox would NOT find the outer .flox (git boundary)
+        let single = find_dot_flox(&start_path).unwrap();
+        assert_eq!(single, None);
+
+        // find_all_dot_flox SHOULD find it (ignores git boundaries)
+        let all = find_all_dot_flox(&start_path).unwrap();
+        assert_eq!(all, vec![DotFlox {
+            path: path.join(DOT_FLOX).canonicalize().unwrap(),
+            pointer: (*MANAGED_ENV_POINTER).clone(),
+        }]);
     }
 }
 
