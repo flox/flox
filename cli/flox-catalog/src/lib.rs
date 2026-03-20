@@ -39,6 +39,8 @@ mod types;
 pub(crate) mod mock;
 
 pub const DEFAULT_CATALOG_URL: &str = "https://api.flox.dev";
+pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
+pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
 
 // Re-export catalog-api-v1 types for consumers.
 // This allows consumers to depend only on catalog-client, not directly on catalog-api-v1.

@@ -34,7 +34,7 @@ use std::{env, fmt, mem};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
-use flox_catalog::AuthMethod;
+use flox_catalog::{AuthMethod, DEFAULT_CATALOG_URL};
 use flox_core::data::environment_ref::{self, DEFAULT_NAME, RemoteEnvironmentRef};
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 use flox_manifest::interfaces::AsLatestSchema;
@@ -63,7 +63,6 @@ use flox_rust_sdk::models::environment::{
     find_dot_flox,
     open_path,
 };
-use flox_rust_sdk::providers::catalog::DEFAULT_CATALOG_URL;
 use indoc::{formatdoc, indoc};
 use tempfile::TempDir;
 use thiserror::Error;

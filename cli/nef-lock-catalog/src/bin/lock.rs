@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use flox_catalog::{CatalogClient, CatalogClientConfig, DEFAULT_CATALOG_URL};
+use flox_catalog::{CatalogClient, CatalogClientConfig, CatalogMockMode, DEFAULT_CATALOG_URL};
 use nef_lock_catalog::{LockOptions, lock_config_with_options, read_config, write_lock};
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::layer::SubscriberExt;
@@ -47,7 +47,7 @@ async fn main() -> Result<()> {
         let config = CatalogClientConfig {
             catalog_url,
             extra_headers: Default::default(),
-            mock_mode: flox_catalog::CatalogMockMode::None,
+            mock_mode: CatalogMockMode::default_from_env(),
             auth_strategy: auth,
             user_agent: None,
         };

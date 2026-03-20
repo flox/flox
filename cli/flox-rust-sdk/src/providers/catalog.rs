@@ -41,9 +41,6 @@ use tracing::info;
 use super::publish::CheckedEnvironmentMetadata;
 use crate::flox::Flox;
 
-pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
-pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
-
 // Arc allows you to push things into the client from outside the client if necessary
 // Mutex allows you to share across threads (necessary because of tokio)
 type MockField<T> = Arc<Mutex<T>>;

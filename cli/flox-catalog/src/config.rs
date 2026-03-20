@@ -30,3 +30,17 @@ pub enum CatalogMockMode {
     /// Replay interactions from a path using a mock server.
     Replay(PathBuf),
 }
+
+impl CatalogMockMode {
+    pub fn default_from_env() -> Self {
+        if let Ok(path_str) = std::env::var(crate::FLOX_CATALOG_MOCK_DATA_VAR) {
+            let path = PathBuf::from(path_str);
+            CatalogMockMode::Replay(path)
+        } else if let Ok(path_str) = std::env::var(crate::FLOX_CATALOG_DUMP_DATA_VAR) {
+            let path = PathBuf::from(path_str);
+            CatalogMockMode::Record(path)
+        } else {
+            CatalogMockMode::None
+        }
+    }
+}
