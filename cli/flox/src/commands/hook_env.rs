@@ -35,16 +35,23 @@ impl HookEnv {
         let state = HookState::from_env()?;
         let cwd = std::env::current_dir().context("failed to get current directory")?;
 
-        // Fast path: CWD unchanged AND no watched files changed → exit with no output.
-        if state.last_cwd.as_ref() == Some(&cwd) && !state.watches_changed() {
-            return Ok(());
-        }
-
         // Discover .flox dirs in ancestor chain.
         let discovered = find_all_dot_flox(&cwd).unwrap_or_else(|e| {
             debug!("find_all_dot_flox failed: {e}");
             Vec::new()
         });
+
+        // Fast path: CWD unchanged AND no watched files changed AND the set of
+        // discovered .flox dirs hasn't changed → exit with no output.
+        // We must check discovered dirs so that a new `flox init` in the
+        // current directory is detected without requiring a `cd` away and back.
+        let discovered_dirs: Vec<PathBuf> = discovered.iter().map(|d| d.path.clone()).collect();
+        if state.last_cwd.as_ref() == Some(&cwd)
+            && !state.watches_changed()
+            && discovered_dirs == state.active_dirs
+        {
+            return Ok(());
+        }
 
         let trust_manager = TrustManager::new(&flox.data_dir);
 
@@ -118,6 +125,7 @@ impl HookEnv {
 
         // Step 2: Build new env vars from all trusted environments.
         let mut combined_env: HashMap<String, String> = HashMap::new();
+        let mut path_additions: Vec<String> = Vec::new();
         let mut new_watches: Vec<WatchEntry> = Vec::new();
 
         for dot_flox in &trusted_dot_flox {
@@ -135,7 +143,14 @@ impl HookEnv {
             match resolve_env_vars(dot_flox, &flox) {
                 Ok(env_vars) => {
                     for (k, v) in env_vars {
-                        combined_env.insert(k, v);
+                        match k.as_str() {
+                            "_FLOX_PATH_ADD" | "_FLOX_SBIN_ADD" => {
+                                path_additions.push(v);
+                            },
+                            _ => {
+                                combined_env.insert(k, v);
+                            },
+                        }
                     }
                 },
                 Err(e) => {
@@ -149,6 +164,13 @@ impl HookEnv {
                     );
                 },
             }
+        }
+
+        // Merge all environment bin/sbin dirs into a single PATH.
+        if !path_additions.is_empty() {
+            let current_path = std::env::var("PATH").unwrap_or_default();
+            let new_path = format!("{}:{}", path_additions.join(":"), current_path);
+            combined_env.insert("PATH".to_string(), new_path);
         }
 
         // Step 3: Compute the new diff (pristine = current env, new = combined).
@@ -211,20 +233,19 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<HashMap<String, S
     // Set FLOX_ENV to the link path.
     vars.insert("FLOX_ENV".to_string(), link_path.display().to_string());
 
-    // Add bin and sbin directories to PATH.
-    let mut path_additions = Vec::new();
+    // Collect bin and sbin directories as PATH additions.
+    // These are returned in the vars map under a special key and merged by the
+    // caller so that multiple environments contribute to a single PATH.
     let bin = store_path.join("bin");
     if bin.exists() {
-        path_additions.push(bin.display().to_string());
+        vars.insert("_FLOX_PATH_ADD".to_string(), bin.display().to_string());
     }
     let sbin = store_path.join("sbin");
     if sbin.exists() {
-        path_additions.push(sbin.display().to_string());
-    }
-    if !path_additions.is_empty() {
-        let current_path = std::env::var("PATH").unwrap_or_default();
-        let new_path = format!("{}:{}", path_additions.join(":"), current_path);
-        vars.insert("PATH".to_string(), new_path);
+        vars.insert(
+            "_FLOX_SBIN_ADD".to_string(),
+            sbin.display().to_string(),
+        );
     }
 
     // Parse activate.d/envrc for exported variables.
