@@ -75,11 +75,19 @@ impl HookEnv {
                 },
                 Ok(TrustStatus::Unknown(_)) => {
                     if !notified_dirs.contains(&dot_flox.path) {
-                        eprintln!(
-                            "flox: environment at '{}' is not trusted. Run 'flox trust --path {}' to auto-activate it.",
-                            dot_flox.path.display(),
-                            dot_flox.path.display()
-                        );
+                        let is_ancestor = cwd.starts_with(dot_flox.path.parent().unwrap_or(&dot_flox.path));
+                        if is_ancestor {
+                            eprintln!(
+                                "flox: environment at '{}' is not trusted. Run 'flox trust' to auto-activate it.",
+                                dot_flox.path.display()
+                            );
+                        } else {
+                            eprintln!(
+                                "flox: environment at '{}' is not trusted. Run 'flox trust --path {}' to auto-activate it.",
+                                dot_flox.path.display(),
+                                dot_flox.path.display()
+                            );
+                        }
                         notified_dirs.push(dot_flox.path.clone());
                     }
                 },
@@ -153,6 +161,20 @@ impl HookEnv {
 
         // Step 4: Emit new exports.
         emit_apply(&new_diff, &new_env, shell, &mut stdout)?;
+
+        // Report activation/deactivation to the user via stderr.
+        if dirs_changed {
+            for dir in &new_active_dirs {
+                if !state.active_dirs.contains(dir) {
+                    eprintln!("flox: activated environment at '{}'", dir.display());
+                }
+            }
+            for dir in &state.active_dirs {
+                if !new_active_dirs.contains(dir) {
+                    eprintln!("flox: deactivated environment at '{}'", dir.display());
+                }
+            }
+        }
 
         // Step 5: Emit updated state variables.
         emit_state_vars(

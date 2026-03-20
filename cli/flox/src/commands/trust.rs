@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_core::trust::TrustManager;
@@ -12,19 +14,27 @@ pub struct Trust {
     /// Deny trust instead of granting it
     #[bpaf(long)]
     deny: bool,
+
+    /// Path to the .flox directory to trust (defaults to current directory)
+    #[bpaf(long, argument("PATH"), optional)]
+    path: Option<PathBuf>,
 }
 
 impl Trust {
     pub fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("trust");
 
-        let current_dir = std::env::current_dir()?;
-        let dot_flox = find_dot_flox(&current_dir)?;
+        let search_dir = match &self.path {
+            Some(p) => p.clone(),
+            None => std::env::current_dir()?,
+        };
+        let dot_flox = find_dot_flox(&search_dir)?;
 
         let Some(dot_flox) = dot_flox else {
             bail!(
-                "No '.flox' environment found in the current directory or any parent directory.\n\
-                 Use 'flox init' to create one."
+                "No '.flox' environment found at '{}' or any parent directory.\n\
+                 Use 'flox init' to create one.",
+                search_dir.display()
             );
         };
 
