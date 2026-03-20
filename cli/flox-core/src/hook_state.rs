@@ -1,0 +1,272 @@
+use std::collections::HashMap;
+use std::io::{Read, Write};
+use std::path::PathBuf;
+
+use anyhow::{Context, Result};
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use flate2::Compression;
+use flate2::read::ZlibDecoder;
+use flate2::write::ZlibEncoder;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct HookDiff {
+    pub additions: HashMap<String, String>,
+    pub modifications: HashMap<String, String>,
+    pub deletions: HashMap<String, String>,
+}
+
+impl HookDiff {
+    /// Compute the diff between a pristine environment and a new environment.
+    ///
+    /// - `additions`: keys in `new_env` but not in `pristine`
+    /// - `modifications`: keys in both with different values (stores the ORIGINAL value)
+    /// - `deletions`: keys in `pristine` but not in `new_env` (stores the ORIGINAL value)
+    pub fn compute(
+        pristine: &HashMap<String, String>,
+        new_env: &HashMap<String, String>,
+    ) -> Self {
+        let mut additions = HashMap::new();
+        let mut modifications = HashMap::new();
+        let mut deletions = HashMap::new();
+
+        for (key, new_val) in new_env {
+            match pristine.get(key) {
+                Some(orig_val) if orig_val != new_val => {
+                    modifications.insert(key.clone(), orig_val.clone());
+                },
+                None => {
+                    additions.insert(key.clone(), new_val.clone());
+                },
+                _ => {},
+            }
+        }
+
+        for (key, orig_val) in pristine {
+            if !new_env.contains_key(key) {
+                deletions.insert(key.clone(), orig_val.clone());
+            }
+        }
+
+        Self {
+            additions,
+            modifications,
+            deletions,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.additions.is_empty() && self.modifications.is_empty() && self.deletions.is_empty()
+    }
+
+    /// Serialize to JSON, zlib compress, then base64url encode (no padding).
+    pub fn serialize(&self) -> Result<String> {
+        let json = serde_json::to_string(self).context("failed to serialize HookDiff to JSON")?;
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder
+            .write_all(json.as_bytes())
+            .context("failed to zlib compress HookDiff")?;
+        let compressed = encoder.finish().context("failed to finish zlib compression")?;
+        Ok(URL_SAFE_NO_PAD.encode(&compressed))
+    }
+
+    /// Deserialize from base64url encoded, zlib compressed JSON.
+    /// An empty string returns the default (empty) HookDiff.
+    pub fn deserialize(encoded: &str) -> Result<Self> {
+        if encoded.is_empty() {
+            return Ok(Self::default());
+        }
+        let compressed = URL_SAFE_NO_PAD
+            .decode(encoded)
+            .context("failed to base64url decode HookDiff")?;
+        let mut decoder = ZlibDecoder::new(&compressed[..]);
+        let mut json = String::new();
+        decoder
+            .read_to_string(&mut json)
+            .context("failed to zlib decompress HookDiff")?;
+        serde_json::from_str(&json).context("failed to deserialize HookDiff from JSON")
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WatchEntry {
+    pub path: PathBuf,
+    pub mtime: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct HookState {
+    pub diff: HookDiff,
+    pub active_dirs: Vec<PathBuf>,
+    pub watches: Vec<WatchEntry>,
+    pub suppressed_dirs: Vec<PathBuf>,
+    pub notified_dirs: Vec<PathBuf>,
+    pub last_cwd: Option<PathBuf>,
+}
+
+impl HookState {
+    /// Read hook state from environment variables.
+    pub fn from_env() -> Result<Self> {
+        let diff_str = std::env::var("_FLOX_HOOK_DIFF").unwrap_or_default();
+        let diff = HookDiff::deserialize(&diff_str).context("failed to parse _FLOX_HOOK_DIFF")?;
+
+        let dirs_str = std::env::var("_FLOX_HOOK_DIRS").unwrap_or_default();
+        let active_dirs = Self::parse_path_list(&dirs_str);
+
+        let watches_str = std::env::var("_FLOX_HOOK_WATCHES").unwrap_or_default();
+        let watches: Vec<WatchEntry> = if watches_str.is_empty() {
+            Vec::new()
+        } else {
+            serde_json::from_str(&watches_str).context("failed to parse _FLOX_HOOK_WATCHES")?
+        };
+
+        let suppressed_str = std::env::var("_FLOX_HOOK_SUPPRESSED").unwrap_or_default();
+        let suppressed_dirs = Self::parse_path_list(&suppressed_str);
+
+        let notified_str = std::env::var("_FLOX_HOOK_NOTIFIED").unwrap_or_default();
+        let notified_dirs = Self::parse_path_list(&notified_str);
+
+        let last_cwd = std::env::var("_FLOX_HOOK_CWD")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .map(PathBuf::from);
+
+        Ok(Self {
+            diff,
+            active_dirs,
+            watches,
+            suppressed_dirs,
+            notified_dirs,
+            last_cwd,
+        })
+    }
+
+    /// Check if any watched file has changed by comparing current mtime to recorded mtime.
+    pub fn watches_changed(&self) -> bool {
+        for entry in &self.watches {
+            let current_mtime = std::fs::metadata(&entry.path)
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs());
+            if current_mtime != entry.mtime {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Format a list of paths as a colon-separated string.
+    pub fn format_path_list(paths: &[PathBuf]) -> String {
+        paths
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(":")
+    }
+
+    /// Parse a colon-separated string into a list of paths.
+    /// An empty string returns an empty list.
+    pub fn parse_path_list(s: &str) -> Vec<PathBuf> {
+        if s.is_empty() {
+            return Vec::new();
+        }
+        s.split(':').map(PathBuf::from).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_compute_addition() {
+        let pristine = HashMap::new();
+        let mut new_env = HashMap::new();
+        new_env.insert("FOO".to_string(), "bar".to_string());
+
+        let diff = HookDiff::compute(&pristine, &new_env);
+        assert_eq!(diff, HookDiff {
+            additions: HashMap::from([("FOO".to_string(), "bar".to_string())]),
+            modifications: HashMap::new(),
+            deletions: HashMap::new(),
+        });
+    }
+
+    #[test]
+    fn test_compute_modification() {
+        let mut pristine = HashMap::new();
+        pristine.insert("FOO".to_string(), "old".to_string());
+        let mut new_env = HashMap::new();
+        new_env.insert("FOO".to_string(), "new".to_string());
+
+        let diff = HookDiff::compute(&pristine, &new_env);
+        assert_eq!(diff, HookDiff {
+            additions: HashMap::new(),
+            modifications: HashMap::from([("FOO".to_string(), "old".to_string())]),
+            deletions: HashMap::new(),
+        });
+    }
+
+    #[test]
+    fn test_compute_deletion() {
+        let mut pristine = HashMap::new();
+        pristine.insert("FOO".to_string(), "bar".to_string());
+        let new_env = HashMap::new();
+
+        let diff = HookDiff::compute(&pristine, &new_env);
+        assert_eq!(diff, HookDiff {
+            additions: HashMap::new(),
+            modifications: HashMap::new(),
+            deletions: HashMap::from([("FOO".to_string(), "bar".to_string())]),
+        });
+    }
+
+    #[test]
+    fn test_compute_no_change() {
+        let mut pristine = HashMap::new();
+        pristine.insert("FOO".to_string(), "bar".to_string());
+        let mut new_env = HashMap::new();
+        new_env.insert("FOO".to_string(), "bar".to_string());
+
+        let diff = HookDiff::compute(&pristine, &new_env);
+        assert_eq!(diff, HookDiff::default());
+    }
+
+    #[test]
+    fn test_serialize_deserialize_roundtrip() {
+        let diff = HookDiff {
+            additions: HashMap::from([("NEW".to_string(), "val".to_string())]),
+            modifications: HashMap::from([("MOD".to_string(), "orig".to_string())]),
+            deletions: HashMap::from([("DEL".to_string(), "gone".to_string())]),
+        };
+
+        let encoded = diff.serialize().unwrap();
+        let decoded = HookDiff::deserialize(&encoded).unwrap();
+        assert_eq!(decoded, diff);
+    }
+
+    #[test]
+    fn test_deserialize_empty_string() {
+        let diff = HookDiff::deserialize("").unwrap();
+        assert_eq!(diff, HookDiff::default());
+    }
+
+    #[test]
+    fn test_path_list_roundtrip() {
+        let paths = vec![
+            PathBuf::from("/home/user/.flox/env1"),
+            PathBuf::from("/home/user/.flox/env2"),
+        ];
+        let serialized = HookState::format_path_list(&paths);
+        let deserialized = HookState::parse_path_list(&serialized);
+        assert_eq!(deserialized, paths);
+    }
+
+    #[test]
+    fn test_parse_empty_path_list() {
+        let paths = HookState::parse_path_list("");
+        assert_eq!(paths, Vec::<PathBuf>::new());
+    }
+}
