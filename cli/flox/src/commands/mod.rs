@@ -10,6 +10,7 @@ mod envs;
 mod exit;
 mod gc;
 mod general;
+pub mod hook;
 mod generations;
 mod include;
 mod init;
@@ -23,6 +24,7 @@ mod search;
 mod services;
 mod services_socket;
 mod show;
+mod trust;
 mod uninstall;
 mod upgrade;
 mod upload;
@@ -521,6 +523,10 @@ enum ManageCommands {
         footer("Run 'man flox-delete' for more details.")
     )]
     Delete(#[bpaf(external(delete::delete))] delete::Delete),
+
+    /// Trust an environment for auto-activation
+    #[bpaf(command, footer("Run 'man flox-trust' for more details."))]
+    Trust(#[bpaf(external(trust::trust))] trust::Trust),
 }
 
 impl ManageCommands {
@@ -529,6 +535,7 @@ impl ManageCommands {
             ManageCommands::Init(args) => args.handle(flox).await?,
             ManageCommands::Envs(args) => args.handle(flox)?,
             ManageCommands::Delete(args) => args.handle(flox).await?,
+            ManageCommands::Trust(args) => args.handle(flox)?,
         }
         Ok(())
     }
@@ -802,6 +809,10 @@ enum InternalCommands {
     ServicesSocket(
         #[bpaf(external(services_socket::services_socket))] services_socket::ServicesSocket,
     ),
+
+    /// Emit shell hook code for auto-activation
+    #[bpaf(command, hide)]
+    Hook(#[bpaf(external(hook::hook))] hook::Hook),
 }
 
 impl InternalCommands {
@@ -814,6 +825,7 @@ impl InternalCommands {
             InternalCommands::Exit(args) => args.handle(flox)?,
             InternalCommands::ActivationState(args) => args.handle(flox)?,
             InternalCommands::ServicesSocket(args) => args.handle(flox)?,
+            InternalCommands::Hook(args) => args.handle()?,
         }
         Ok(())
     }
