@@ -81,8 +81,9 @@ Clone someone else's project to show the trust workflow:
 ```bash
 # Simulate receiving an environment you didn't create
 mkdir -p /tmp/untrusted-project/.flox/env
+echo '{"name": "untrusted-project", "version": 1}' > /tmp/untrusted-project/.flox/env.json
 cat > /tmp/untrusted-project/.flox/env/manifest.toml << 'EOF'
-version = 1
+schema-version = "1.11.0"
 
 [install]
 cowsay.pkg-path = "cowsay"
