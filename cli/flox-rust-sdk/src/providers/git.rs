@@ -319,8 +319,8 @@ impl GitCommandProvider {
         let out = command.output()?;
 
         if !out.status.success() {
-            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
 
             return Err(GitCommandError::BadExit(
                 out.status.code().unwrap_or(-1),
