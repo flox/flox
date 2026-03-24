@@ -84,6 +84,92 @@ pub mod types {
             value.clone()
         }
     }
+    /**Records the build methodology used to produce a package.
+
+NEF packages carry full source metadata and can be reproduced from source;
+manifest packages were built via the traditional flox manifest workflow.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "BuildType",
+    ///  "description": "Records the build methodology used to produce a package.\n\nNEF packages carry full source metadata and can be reproduced from source;\nmanifest packages were built via the traditional flox manifest workflow.",
+    ///  "type": "string",
+    ///  "enum": [
+    ///    "manifest",
+    ///    "nef"
+    ///  ]
+    ///}
+    /// ```
+    /// </details>
+    #[derive(
+        ::serde::Deserialize,
+        ::serde::Serialize,
+        Clone,
+        Copy,
+        Debug,
+        Eq,
+        Hash,
+        Ord,
+        PartialEq,
+        PartialOrd
+    )]
+    pub enum BuildType {
+        #[serde(rename = "manifest")]
+        Manifest,
+        #[serde(rename = "nef")]
+        Nef,
+    }
+    impl ::std::convert::From<&Self> for BuildType {
+        fn from(value: &BuildType) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::fmt::Display for BuildType {
+        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+            match *self {
+                Self::Manifest => f.write_str("manifest"),
+                Self::Nef => f.write_str("nef"),
+            }
+        }
+    }
+    impl ::std::str::FromStr for BuildType {
+        type Err = self::error::ConversionError;
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            match value {
+                "manifest" => Ok(Self::Manifest),
+                "nef" => Ok(Self::Nef),
+                _ => Err("invalid value".into()),
+            }
+        }
+    }
+    impl ::std::convert::TryFrom<&str> for BuildType {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<&::std::string::String> for BuildType {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<::std::string::String> for BuildType {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
     ///`CatalogName`
     ///
     /// <details><summary>JSON schema</summary>
@@ -266,49 +352,6 @@ pub mod types {
     impl ::std::convert::From<&CatalogPage> for CatalogPage {
         fn from(value: &CatalogPage) -> Self {
             value.clone()
-        }
-    }
-    ///`CatalogShareInfo`
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "CatalogShareInfo",
-    ///  "type": "object",
-    ///  "properties": {
-    ///    "allow_read_users": {
-    ///      "title": "Allow Read Users",
-    ///      "default": [],
-    ///      "type": [
-    ///        "array",
-    ///        "null"
-    ///      ],
-    ///      "items": {
-    ///        "type": "string"
-    ///      }
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    pub struct CatalogShareInfo {
-        #[serde(default = "defaults::catalog_share_info_allow_read_users")]
-        pub allow_read_users: ::std::option::Option<
-            ::std::vec::Vec<::std::string::String>,
-        >,
-    }
-    impl ::std::convert::From<&CatalogShareInfo> for CatalogShareInfo {
-        fn from(value: &CatalogShareInfo) -> Self {
-            value.clone()
-        }
-    }
-    impl ::std::default::Default for CatalogShareInfo {
-        fn default() -> Self {
-            Self {
-                allow_read_users: defaults::catalog_share_info_allow_read_users(),
-            }
         }
     }
     ///`CatalogStatus`
@@ -583,6 +626,141 @@ pub mod types {
                 publisher_url: Default::default(),
                 store_type: defaults::catalog_store_config_publisher_store_type(),
             }
+        }
+    }
+    ///Deprecation metadata for a package from nixpkgs aliases.nix
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "DeprecationInfo",
+    ///  "description": "Deprecation metadata for a package from nixpkgs aliases.nix",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "kind"
+    ///  ],
+    ///  "properties": {
+    ///    "kind": {
+    ///      "$ref": "#/components/schemas/DeprecationKind"
+    ///    },
+    ///    "message": {
+    ///      "title": "Message",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "replacement": {
+    ///      "title": "Replacement",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct DeprecationInfo {
+        pub kind: DeprecationKind,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub message: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub replacement: ::std::option::Option<::std::string::String>,
+    }
+    impl ::std::convert::From<&DeprecationInfo> for DeprecationInfo {
+        fn from(value: &DeprecationInfo) -> Self {
+            value.clone()
+        }
+    }
+    ///Package deprecation category from nixpkgs aliases.nix
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "DeprecationKind",
+    ///  "description": "Package deprecation category from nixpkgs aliases.nix",
+    ///  "type": "string",
+    ///  "enum": [
+    ///    "renamed",
+    ///    "removed",
+    ///    "deprecated"
+    ///  ]
+    ///}
+    /// ```
+    /// </details>
+    #[derive(
+        ::serde::Deserialize,
+        ::serde::Serialize,
+        Clone,
+        Copy,
+        Debug,
+        Eq,
+        Hash,
+        Ord,
+        PartialEq,
+        PartialOrd
+    )]
+    pub enum DeprecationKind {
+        #[serde(rename = "renamed")]
+        Renamed,
+        #[serde(rename = "removed")]
+        Removed,
+        #[serde(rename = "deprecated")]
+        Deprecated,
+    }
+    impl ::std::convert::From<&Self> for DeprecationKind {
+        fn from(value: &DeprecationKind) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::fmt::Display for DeprecationKind {
+        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+            match *self {
+                Self::Renamed => f.write_str("renamed"),
+                Self::Removed => f.write_str("removed"),
+                Self::Deprecated => f.write_str("deprecated"),
+            }
+        }
+    }
+    impl ::std::str::FromStr for DeprecationKind {
+        type Err = self::error::ConversionError;
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            match value {
+                "renamed" => Ok(Self::Renamed),
+                "removed" => Ok(Self::Removed),
+                "deprecated" => Ok(Self::Deprecated),
+                _ => Err("invalid value".into()),
+            }
+        }
+    }
+    impl ::std::convert::TryFrom<&str> for DeprecationKind {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<&::std::string::String> for DeprecationKind {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<::std::string::String> for DeprecationKind {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
         }
     }
     /**Request body for environment SBOM endpoint.
@@ -1291,6 +1469,9 @@ Attributes:
     ///      ],
     ///      "format": "date-time"
     ///    },
+    ///    "build_type": {
+    ///      "$ref": "#/components/schemas/BuildType"
+    ///    },
     ///    "cache_uri": {
     ///      "title": "Cache Uri",
     ///      "type": [
@@ -1301,8 +1482,20 @@ Attributes:
     ///    "derivation": {
     ///      "$ref": "#/components/schemas/PackageDerivation-Output"
     ///    },
+    ///    "dot_flox_dir": {
+    ///      "title": "Dot Flox Dir",
+    ///      "default": ".flox",
+    ///      "type": "string"
+    ///    },
     ///    "locked_base_catalog_url": {
     ///      "title": "Locked Base Catalog Url",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "ref": {
+    ///      "title": "Ref",
     ///      "type": [
     ///        "string",
     ///        "null"
@@ -1338,10 +1531,20 @@ Attributes:
             ::chrono::DateTime<::chrono::offset::Utc>,
         >,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub build_type: ::std::option::Option<BuildType>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub cache_uri: ::std::option::Option<::std::string::String>,
         pub derivation: PackageDerivationOutput,
+        #[serde(default = "defaults::package_build_dot_flox_dir")]
+        pub dot_flox_dir: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub locked_base_catalog_url: ::std::option::Option<::std::string::String>,
+        #[serde(
+            rename = "ref",
+            default,
+            skip_serializing_if = "::std::option::Option::is_none"
+        )]
+        pub ref_: ::std::option::Option<::std::string::String>,
         pub rev: ::std::string::String,
         pub rev_count: i64,
         pub rev_date: ::chrono::DateTime<::chrono::offset::Utc>,
@@ -1489,6 +1692,9 @@ Attributes:
     ///      ],
     ///      "format": "date-time"
     ///    },
+    ///    "build_type": {
+    ///      "$ref": "#/components/schemas/BuildType"
+    ///    },
     ///    "cache_uri": {
     ///      "title": "Cache Uri",
     ///      "type": [
@@ -1498,6 +1704,11 @@ Attributes:
     ///    },
     ///    "derivation": {
     ///      "$ref": "#/components/schemas/PackageDerivation-Input"
+    ///    },
+    ///    "dot_flox_dir": {
+    ///      "title": "Dot Flox Dir",
+    ///      "default": ".flox",
+    ///      "type": "string"
     ///    },
     ///    "locked_base_catalog_url": {
     ///      "title": "Locked Base Catalog Url",
@@ -1520,6 +1731,13 @@ Attributes:
     ///      "title": "Narinfos Source Version",
     ///      "type": [
     ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "ref": {
+    ///      "title": "Ref",
+    ///      "type": [
+    ///        "string",
     ///        "null"
     ///      ]
     ///    },
@@ -1553,8 +1771,12 @@ Attributes:
             ::chrono::DateTime<::chrono::offset::Utc>,
         >,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub build_type: ::std::option::Option<BuildType>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub cache_uri: ::std::option::Option<::std::string::String>,
         pub derivation: PackageDerivationInput,
+        #[serde(default = "defaults::package_build_with_nar_info_dot_flox_dir")]
+        pub dot_flox_dir: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub locked_base_catalog_url: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -1563,6 +1785,12 @@ Attributes:
         pub narinfos_source_url: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub narinfos_source_version: ::std::option::Option<i64>,
+        #[serde(
+            rename = "ref",
+            default,
+            skip_serializing_if = "::std::option::Option::is_none"
+        )]
+        pub ref_: ::std::option::Option<::std::string::String>,
         pub rev: ::std::string::String,
         pub rev_count: i64,
         pub rev_date: ::chrono::DateTime<::chrono::offset::Utc>,
@@ -2185,6 +2413,9 @@ Attributes:
     ///        "null"
     ///      ]
     ///    },
+    ///    "deprecation": {
+    ///      "$ref": "#/components/schemas/DeprecationInfo"
+    ///    },
     ///    "description": {
     ///      "title": "Description",
     ///      "type": [
@@ -2230,6 +2461,8 @@ Attributes:
     pub struct PackageInfoSearch {
         pub attr_path: ::std::string::String,
         pub catalog: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub deprecation: ::std::option::Option<DeprecationInfo>,
         pub description: ::std::option::Option<::std::string::String>,
         pub name: ::std::string::String,
         pub pkg_path: ::std::string::String,
@@ -2815,6 +3048,9 @@ Attributes:
     ///    "total_count"
     ///  ],
     ///  "properties": {
+    ///    "deprecation": {
+    ///      "$ref": "#/components/schemas/DeprecationInfo"
+    ///    },
     ///    "items": {
     ///      "title": "Items",
     ///      "type": "array",
@@ -2832,6 +3068,8 @@ Attributes:
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct PackagesResult {
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub deprecation: ::std::option::Option<DeprecationInfo>,
         pub items: ::std::vec::Vec<PackageResolutionInfo>,
         pub total_count: i64,
     }
@@ -4120,13 +4358,6 @@ Attributes:
     ///    "name": {
     ///      "title": "Name",
     ///      "type": "string"
-    ///    },
-    ///    "owner_handle": {
-    ///      "title": "Owner Handle",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
     ///    }
     ///  }
     ///}
@@ -4137,8 +4368,6 @@ Attributes:
         pub created_at: ::chrono::DateTime<::chrono::offset::Utc>,
         pub id: i64,
         pub name: ::std::string::String,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub owner_handle: ::std::option::Option<::std::string::String>,
     }
     impl ::std::convert::From<&UserCatalog> for UserCatalog {
         fn from(value: &UserCatalog) -> Self {
@@ -4262,11 +4491,6 @@ Attributes:
     }
     /// Generation of default values for serde.
     pub mod defaults {
-        pub(super) fn catalog_share_info_allow_read_users() -> ::std::option::Option<
-            ::std::vec::Vec<::std::string::String>,
-        > {
-            ::std::option::Option::Some(vec![])
-        }
         pub(super) fn catalog_store_config_meta_only_store_type() -> ::std::string::String {
             "meta-only".to_string()
         }
@@ -4278,6 +4502,12 @@ Attributes:
         }
         pub(super) fn catalog_store_config_publisher_store_type() -> ::std::string::String {
             "publisher".to_string()
+        }
+        pub(super) fn package_build_dot_flox_dir() -> ::std::string::String {
+            ".flox".to_string()
+        }
+        pub(super) fn package_build_with_nar_info_dot_flox_dir() -> ::std::string::String {
+            ".flox".to_string()
         }
         pub(super) fn package_descriptor_allow_broken() -> ::std::option::Option<bool> {
             ::std::option::Option::Some(false)
@@ -4446,8 +4676,7 @@ Path Parameters:
 - **catalog_name**: The name of the catalog
 
 Returns:
-- **UserCatalog**: The user catalog metadata including id, name, created_at,
-  and owner_handle.
+- **UserCatalog**: The user catalog metadata including id, name, and created_at.
 
 Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}`
 
@@ -5144,232 +5373,6 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
-    /**Get usernames that have read access to a catalog
-
-Get the list of usernames with read access to a catalog
-
-Path Parameters:
-- **catalog_name**: The name of the catalog
-
-Returns:
-- **CatalogShareInfo**: The users with read access to the catalog
-
-Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing`
-
-*/
-    pub async fn get_catalog_sharing_api_v1_catalog_catalogs_catalog_name_sharing_get<
-        'a,
-    >(
-        &'a self,
-        catalog_name: &'a types::CatalogName,
-    ) -> Result<ResponseValue<types::CatalogShareInfo>, Error<types::ErrorResponse>> {
-        let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/sharing", self.baseurl, encode_path(&
-            catalog_name.to_string()),
-        );
-        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
-        header_map
-            .append(
-                ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
-            );
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .get(url)
-            .header(
-                ::reqwest::header::ACCEPT,
-                ::reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .headers(header_map)
-            .build()?;
-        let info = OperationInfo {
-            operation_id: "get_catalog_sharing_api_v1_catalog_catalogs_catalog_name_sharing_get",
-        };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
-        self.pre(&mut request, &info).await?;
-        let result = self.exec(request, &info).await;
-        self.post(&result, &info).await?;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            404u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            422u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
-    /**Add usernames to the read access list for a catalog
-
-Add usernames to the read access list for a catalog
-
-Path Parameters:
-- **catalog_name**: The name of the catalog
-
-Body Content:
-- **CatalogShareInfo**: The users to add to the read access list
-
-Returns:
-- **CatalogShareInfo**: The users with read access to the catalog
-
-Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/add-read-users`
-
-*/
-    pub async fn add_catalog_sharing_api_v1_catalog_catalogs_catalog_name_sharing_add_read_users_post<
-        'a,
-    >(
-        &'a self,
-        catalog_name: &'a types::CatalogName,
-        body: &'a types::CatalogShareInfo,
-    ) -> Result<ResponseValue<types::CatalogShareInfo>, Error<types::ErrorResponse>> {
-        let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/sharing/add-read-users", self.baseurl,
-            encode_path(& catalog_name.to_string()),
-        );
-        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
-        header_map
-            .append(
-                ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
-            );
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .post(url)
-            .header(
-                ::reqwest::header::ACCEPT,
-                ::reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .json(&body)
-            .headers(header_map)
-            .build()?;
-        let info = OperationInfo {
-            operation_id: "add_catalog_sharing_api_v1_catalog_catalogs_catalog_name_sharing_add_read_users_post",
-        };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
-        self.pre(&mut request, &info).await?;
-        let result = self.exec(request, &info).await;
-        self.post(&result, &info).await?;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            404u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            422u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
-    /**Remove usernames from the read access list for a catalog
-
-Remove usernames from the read access list for a catalog
-
-Path Parameters:
-- **catalog_name**: The name of the catalog
-
-Body Content:
-- **CatalogShareInfo**: The users to remove from the read access list
-
-Returns:
-- **CatalogShareInfo**: The users with read access to the catalog
-
-Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/remove-read-users`
-
-*/
-    pub async fn remove_catalog_sharing_api_v1_catalog_catalogs_catalog_name_sharing_remove_read_users_post<
-        'a,
-    >(
-        &'a self,
-        catalog_name: &'a types::CatalogName,
-        body: &'a types::CatalogShareInfo,
-    ) -> Result<ResponseValue<types::CatalogShareInfo>, Error<types::ErrorResponse>> {
-        let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/sharing/remove-read-users", self.baseurl,
-            encode_path(& catalog_name.to_string()),
-        );
-        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
-        header_map
-            .append(
-                ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
-            );
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .post(url)
-            .header(
-                ::reqwest::header::ACCEPT,
-                ::reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .json(&body)
-            .headers(header_map)
-            .build()?;
-        let info = OperationInfo {
-            operation_id: "remove_catalog_sharing_api_v1_catalog_catalogs_catalog_name_sharing_remove_read_users_post",
-        };
-        match (async |request: &mut ::reqwest::Request| {
-            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    request
-                        .headers_mut()
-                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
-                }
-            }
-            Ok::<_, Box<dyn ::std::error::Error>>(())
-        })(&mut request)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => return Err(Error::Custom(e.to_string())),
-        }
-        self.pre(&mut request, &info).await?;
-        let result = self.exec(request, &info).await;
-        self.post(&result, &info).await?;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            404u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            422u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
     /**Get store config
 
 Get store configuration for a catalog.
@@ -5773,7 +5776,7 @@ Get SBOM (Software Bill of Materials) for an environment.
 Args:
     body: Request body containing lockfile and environment metadata
     format: SBOM format (defaults to SbomFormat.SPDX_2_3_JSON)
-    auth_result: Authentication payload
+    user: Authenticated user context
     cache: Request-scoped dependency cache (injected)
 
 Returns:
@@ -5854,7 +5857,7 @@ Args:
              Must be alphanumeric with underscores only, max 100 chars total.
     format: SBOM format (defaults to SbomFormat.SPDX_2_3_JSON)
     body: Request body (reserved for future extension)
-    auth_result: Authentication payload
+    user: Authenticated user context
     cache: Request-scoped dependency cache (injected)
 
 Returns:
