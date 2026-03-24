@@ -476,6 +476,13 @@ impl PathEnvironment {
             &manifest.as_writable(),
         )?;
 
+        // Lock but don't build
+        let mut env_view = CoreEnvironment::new(
+            environment.path.join(ENV_DIR_NAME),
+            environment.include_fetcher()?,
+        );
+        env_view.lock(flox)?;
+
         Ok(environment)
     }
 
@@ -517,13 +524,15 @@ impl PathEnvironment {
             &manifest.as_writable(),
         )?;
 
-        // Build environment if customization installs at least one package
+        // Always lock
+        let mut env_view = CoreEnvironment::new(
+            environment.path.join(ENV_DIR_NAME),
+            environment.include_fetcher()?,
+        );
+        env_view.lock(flox)?;
+
+        // Build+link only when packages are present
         if matches!(customization.packages.as_deref(), Some([_, ..])) {
-            let mut env_view = CoreEnvironment::new(
-                environment.path.join(ENV_DIR_NAME),
-                environment.include_fetcher()?,
-            );
-            env_view.lock(flox)?;
             let store_paths = env_view.build(flox)?;
             environment.link(&store_paths)?;
         }
@@ -829,6 +838,10 @@ pub mod tests {
             actual.manifest_path(&flox).unwrap().exists(),
             "manifest exists"
         );
+        assert!(
+            actual.lockfile_path(&flox).unwrap().exists(),
+            "lockfile exists"
+        );
         assert!(actual.path.is_absolute());
     }
 
@@ -853,7 +866,6 @@ pub mod tests {
         // build the environment -> out link is created -> no rebuild necessary
         let mut env_view =
             CoreEnvironment::new(env.path.join(ENV_DIR_NAME), env.include_fetcher().unwrap());
-        env_view.lock(&flox).unwrap();
         let store_paths = env_view.build(&flox).unwrap();
         env.link(&store_paths).unwrap();
 

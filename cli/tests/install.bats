@@ -493,6 +493,8 @@ EOF
 @test "installing package to bad manifest doesn't update lockfile" {
   unset RUST_BACKTRACE
   "$FLOX_BIN" init -b
+  # Save the lockfile created by init so we can verify install doesn't change it
+  cp "$PWD/.flox/env/manifest.lock" "$PWD/.flox/env/manifest.lock.before"
   cat >"$PWD/.flox/env/manifest.toml" <<- EOF
 version = 1
 
@@ -504,5 +506,5 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" install hello
   assert_failure
-  assert [ ! -f "$PWD/.flox/env/manifest.lock" ]
+  diff "$PWD/.flox/env/manifest.lock.before" "$PWD/.flox/env/manifest.lock"
 }

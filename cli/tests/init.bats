@@ -105,6 +105,9 @@ EOF
   run ls -A
   assert_output ".flox"
 
+  # Lockfile is created
+  assert [ -e ".flox/env/manifest.lock" ]
+
   # .gitignore ignores run/
   run cat .flox/.gitignore
   assert_success
@@ -238,6 +241,7 @@ EOF
 
 @test "inits with bare manifest" {
   "$FLOX_BIN" init --bare
+  assert [ -e ".flox/env/manifest.lock" ]
   manifest="$("$FLOX_BIN" list -c)"
   expected="$(with_latest_schema "")"
   assert_equal "$manifest" "$expected"
