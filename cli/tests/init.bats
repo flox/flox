@@ -84,18 +84,11 @@ teardown() {
   assert_output --partial '"name": "other-test"'
 }
 
-@test "c6: a single directory for state" {
+@test "flox init creates expected directory structure and files" {
   run "$FLOX_BIN" init
   assert_success
 
-  run ls -A
-  assert_output ".flox"
-}
-
-@test "c7: confirmation with tips" {
-  run "$FLOX_BIN" init
-  assert_success
-
+  # Confirmation with tips printed
   assert_output - << EOF
 ⚡︎ Created environment 'test' ($NIX_SYSTEM)
 
@@ -108,6 +101,19 @@ Next:
                                 share it with someone on FloxHub
 EOF
 
+  # Single directory for state
+  run ls -A
+  assert_output ".flox"
+
+  # .gitignore ignores run/
+  run cat .flox/.gitignore
+  assert_success
+  assert_line "run/"
+
+  # .gitattributes marks lockfile as generated
+  run cat .flox/.gitattributes
+  assert_success
+  assert_line "env/manifest.lock linguist-generated=true linguist-language=JSON"
 }
 
 @test "c7: tips omit 'flox push' when within a git repo" {
@@ -195,21 +201,6 @@ EOF
   run "$FLOX_BIN" init -d "$PROJECT_DIR/other"
   assert_success
   check_with_dir
-}
-
-# bats test_tags=init:gitignore
-@test "c9: flox init adds .gitignore that ignores run/ directory" {
-  "$FLOX_BIN" init
-  run cat .flox/.gitignore
-  assert_success
-  assert_line "run/"
-}
-
-@test "c9: flox init adds .gitattributes" {
-  "$FLOX_BIN" init
-  run cat .flox/.gitattributes
-  assert_success
-  assert_line "env/manifest.lock linguist-generated=true linguist-language=JSON"
 }
 
 # ---------------------------------------------------------------------------- #
