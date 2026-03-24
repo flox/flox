@@ -36,6 +36,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
 use flox_core::data::environment_ref::{self, DEFAULT_NAME, RemoteEnvironmentRef};
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
+use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::{Manifest, TypedOnly};
 use flox_rust_sdk::flox::{
     DEFAULT_FLOXHUB_URL,
@@ -913,7 +914,16 @@ fn warn_minimum_cli_version(env: &ConcreteEnvironment, flox: &Flox) {
             return;
         },
     };
-    let Some(mcv) = manifest.minimum_cli_version() else {
+    // Migrate without locking because we're in the hot path of other commands
+    // that don't expect locking, either prematurely or at all.
+    let manifest = match manifest.migrate(None) {
+        Ok(m) => m,
+        Err(e) => {
+            debug!("could not migrate manifest for minimum-cli-version check: {e}");
+            return;
+        },
+    };
+    let Some(mcv) = manifest.as_latest_schema().minimum_cli_version.as_ref() else {
         return;
     };
     let min_version = mcv.version();

@@ -47,7 +47,6 @@ pub struct ManifestV1_10_0 {
     #[serde(rename = "schema-version")]
     pub schema_version: String,
     /// The minimum CLI version that can activate this environment.
-    // NOTE: this field will be used in a later release
     #[serde(rename = "minimum-cli-version")]
     pub minimum_cli_version: Option<String>,
     /// The packages to install in the form of a map from install_id
