@@ -179,28 +179,39 @@ impl HookEnv {
         }
 
         // Merge all environment bin/sbin dirs into a single PATH.
+        // Use the *reverted* PATH (what it would be after undoing the previous
+        // diff) so we don't stack new additions on top of stale entries.
         if !path_additions.is_empty() {
-            let current_path = std::env::var("PATH").unwrap_or_default();
-            let new_path = format!("{}:{}", path_additions.join(":"), current_path);
+            let base_path = reverted_env_var("PATH", &state.diff).unwrap_or_default();
+            let new_path = format!("{}:{}", path_additions.join(":"), base_path);
             combined_env.insert("PATH".to_string(), new_path);
         }
 
-        // Step 3: Compute the new diff directly from combined_env vs current
-        // process env, avoiding two full HashMap allocations.
+        // Step 3: Compute the new diff against the *reverted* process env
+        // (what the env would look like after emit_revert runs in the shell).
+        // We can't use std::env::var() directly because the process env still
+        // reflects the previous activation — emit_revert only writes shell
+        // commands to stdout without modifying this process.
         let new_diff = {
             let mut additions = HashMap::new();
             let mut modifications = HashMap::new();
+
             for (key, new_val) in &combined_env {
-                match std::env::var(key) {
-                    Ok(orig_val) if orig_val != *new_val => {
+                match reverted_env_var(key, &state.diff) {
+                    Some(orig_val) if orig_val != *new_val => {
                         modifications.insert(key.clone(), orig_val);
                     },
-                    Err(_) => {
+                    None => {
                         additions.insert(key.clone(), new_val.clone());
                     },
                     _ => {},
                 }
             }
+
+            // Note: deletions are not needed here because emit_revert already
+            // handles restoring/unsetting vars from the previous diff before
+            // emit_apply runs.  The new diff only needs to track what the new
+            // activation adds or modifies relative to the pristine state.
             HookDiff {
                 additions,
                 modifications,
@@ -233,6 +244,25 @@ impl HookEnv {
         )?;
 
         Ok(())
+    }
+}
+
+/// Compute the value an environment variable would have after reverting the
+/// previous diff.  `emit_revert` writes shell code but does not modify this
+/// process, so we need this to know the "pristine" baseline.
+fn reverted_env_var(key: &str, old_diff: &HookDiff) -> Option<String> {
+    if old_diff.additions.contains_key(key) {
+        // Was added by the previous activation → unset after revert.
+        None
+    } else if let Some(orig_val) = old_diff.modifications.get(key) {
+        // Was modified → restored to original value after revert.
+        Some(orig_val.clone())
+    } else if let Some(orig_val) = old_diff.deletions.get(key) {
+        // Was deleted → re-exported after revert.
+        Some(orig_val.clone())
+    } else {
+        // Not touched by the old diff → current process env value.
+        std::env::var(key).ok()
     }
 }
 
