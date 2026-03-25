@@ -1,11 +1,22 @@
 use std::collections::HashMap;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use flox_core::activate::mode::ActivateMode;
-use flox_core::hook_state::{HookDiff, HookState, WatchEntry};
+use flox_core::hook_state::{
+    HOOK_VAR_CWD,
+    HOOK_VAR_DIFF,
+    HOOK_VAR_DIRS,
+    HOOK_VAR_NOTIFIED,
+    HOOK_VAR_SUPPRESSED,
+    HOOK_VAR_WATCHES,
+    HookDiff,
+    HookState,
+    WatchEntry,
+};
 use flox_core::trust::{TrustManager, TrustStatus};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{
@@ -17,6 +28,8 @@ use flox_rust_sdk::models::environment::{
 use regex::Regex;
 use shell_gen::{GenerateShell, SetVar, Shell, UnsetVar};
 use tracing::debug;
+
+use crate::utils::colors::{INDIGO_300, INDIGO_400};
 
 #[derive(Bpaf, Clone, Debug)]
 pub struct HookEnv {
@@ -46,8 +59,9 @@ impl HookEnv {
         // We must check discovered dirs so that a new `flox init` in the
         // current directory is detected without requiring a `cd` away and back.
         let discovered_dirs: Vec<PathBuf> = discovered.iter().map(|d| d.path.clone()).collect();
+        let watches_changed = state.watches_changed();
         if state.last_cwd.as_ref() == Some(&cwd)
-            && !state.watches_changed()
+            && !watches_changed
             && discovered_dirs == state.active_dirs
         {
             return Ok(());
@@ -110,7 +124,6 @@ impl HookEnv {
 
         // Check if the set of active dirs actually changed.
         let dirs_changed = new_active_dirs != state.active_dirs;
-        let watches_changed = state.watches_changed();
 
         if !dirs_changed && !watches_changed && state.last_cwd.as_ref() == Some(&cwd) {
             // Nothing changed, just update CWD tracking.
@@ -172,16 +185,31 @@ impl HookEnv {
             combined_env.insert("PATH".to_string(), new_path);
         }
 
-        // Step 3: Compute the new diff (pristine = current env, new = combined).
-        let pristine: HashMap<String, String> = std::env::vars().collect();
-        let mut new_env = pristine.clone();
-        for (k, v) in &combined_env {
-            new_env.insert(k.clone(), v.clone());
-        }
-        let new_diff = HookDiff::compute(&pristine, &new_env);
+        // Step 3: Compute the new diff directly from combined_env vs current
+        // process env, avoiding two full HashMap allocations.
+        let new_diff = {
+            let mut additions = HashMap::new();
+            let mut modifications = HashMap::new();
+            for (key, new_val) in &combined_env {
+                match std::env::var(key) {
+                    Ok(orig_val) if orig_val != *new_val => {
+                        modifications.insert(key.clone(), orig_val);
+                    },
+                    Err(_) => {
+                        additions.insert(key.clone(), new_val.clone());
+                    },
+                    _ => {},
+                }
+            }
+            HookDiff {
+                additions,
+                modifications,
+                deletions: HashMap::new(),
+            }
+        };
 
         // Step 4: Emit new exports.
-        emit_apply(&new_diff, &new_env, shell, &mut stdout)?;
+        emit_apply(&new_diff, &combined_env, shell, &mut stdout)?;
 
         // Step 5: Emit prompt modification.
         let env_names: Vec<String> = trusted_dot_flox
@@ -192,12 +220,14 @@ impl HookEnv {
 
         // Step 6: Emit updated state variables.
         emit_state_vars(
-            &new_diff,
-            &new_active_dirs,
-            &new_watches,
-            &suppressed_dirs,
-            &notified_dirs,
-            &cwd,
+            &HookStateUpdate {
+                diff: &new_diff,
+                active_dirs: &new_active_dirs,
+                watches: &new_watches,
+                suppressed_dirs: &suppressed_dirs,
+                notified_dirs: &notified_dirs,
+                cwd: &cwd,
+            },
             shell,
             &mut stdout,
         )?;
@@ -242,8 +272,10 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<HashMap<String, S
     if envrc.exists()
         && let Ok(contents) = std::fs::read_to_string(&envrc)
     {
-        let export_re =
-            Regex::new(r#"^export\s+([A-Za-z_][A-Za-z0-9_]*)="(.*)"$"#).expect("valid regex");
+        static EXPORT_RE: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r#"^export\s+([A-Za-z_][A-Za-z0-9_]*)="(.*)"$"#).expect("valid regex")
+        });
+        let export_re = &*EXPORT_RE;
         for line in contents.lines() {
             if let Some(caps) = export_re.captures(line) {
                 let name = caps[1].to_string();
@@ -259,7 +291,7 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<HashMap<String, S
 }
 
 /// Emit shell commands to revert the previous HookDiff.
-fn emit_revert(diff: &HookDiff, shell: Shell, writer: &mut impl Write) -> Result<()> {
+pub(crate) fn emit_revert(diff: &HookDiff, shell: Shell, writer: &mut impl Write) -> Result<()> {
     // Unset additions (they were added, so remove them).
     for name in diff.additions.keys() {
         UnsetVar::new(name).generate_with_newline(shell, writer)?;
@@ -295,39 +327,43 @@ fn emit_apply(
     Ok(())
 }
 
+/// All state needed to emit `_FLOX_HOOK_*` variables in a single struct.
+struct HookStateUpdate<'a> {
+    diff: &'a HookDiff,
+    active_dirs: &'a [PathBuf],
+    watches: &'a [WatchEntry],
+    suppressed_dirs: &'a [PathBuf],
+    notified_dirs: &'a [PathBuf],
+    cwd: &'a Path,
+}
+
 /// Emit updated _FLOX_HOOK_* state variables.
-#[allow(clippy::too_many_arguments)]
 fn emit_state_vars(
-    diff: &HookDiff,
-    active_dirs: &[PathBuf],
-    watches: &[WatchEntry],
-    suppressed_dirs: &[PathBuf],
-    notified_dirs: &[PathBuf],
-    cwd: &std::path::Path,
+    update: &HookStateUpdate<'_>,
     shell: Shell,
     writer: &mut impl Write,
 ) -> Result<()> {
-    let diff_encoded = diff.serialize()?;
-    SetVar::exported_no_expansion("_FLOX_HOOK_DIFF", &diff_encoded)
+    let diff_encoded = update.diff.serialize()?;
+    SetVar::exported_no_expansion(HOOK_VAR_DIFF, &diff_encoded)
         .generate_with_newline(shell, writer)?;
 
-    let dirs_str = HookState::format_path_list(active_dirs);
-    SetVar::exported_no_expansion("_FLOX_HOOK_DIRS", &dirs_str)
+    let dirs_str = HookState::format_path_list(update.active_dirs);
+    SetVar::exported_no_expansion(HOOK_VAR_DIRS, &dirs_str).generate_with_newline(shell, writer)?;
+
+    let watches_json =
+        serde_json::to_string(update.watches).context("failed to serialize watches")?;
+    SetVar::exported_no_expansion(HOOK_VAR_WATCHES, &watches_json)
         .generate_with_newline(shell, writer)?;
 
-    let watches_json = serde_json::to_string(watches).context("failed to serialize watches")?;
-    SetVar::exported_no_expansion("_FLOX_HOOK_WATCHES", &watches_json)
+    let suppressed_str = HookState::format_path_list(update.suppressed_dirs);
+    SetVar::exported_no_expansion(HOOK_VAR_SUPPRESSED, &suppressed_str)
         .generate_with_newline(shell, writer)?;
 
-    let suppressed_str = HookState::format_path_list(suppressed_dirs);
-    SetVar::exported_no_expansion("_FLOX_HOOK_SUPPRESSED", &suppressed_str)
+    let notified_str = HookState::format_path_list(update.notified_dirs);
+    SetVar::exported_no_expansion(HOOK_VAR_NOTIFIED, &notified_str)
         .generate_with_newline(shell, writer)?;
 
-    let notified_str = HookState::format_path_list(notified_dirs);
-    SetVar::exported_no_expansion("_FLOX_HOOK_NOTIFIED", &notified_str)
-        .generate_with_newline(shell, writer)?;
-
-    SetVar::exported_no_expansion("_FLOX_HOOK_CWD", cwd.display().to_string())
+    SetVar::exported_no_expansion(HOOK_VAR_CWD, update.cwd.display().to_string())
         .generate_with_newline(shell, writer)?;
 
     Ok(())
@@ -340,10 +376,25 @@ fn emit_prompt(env_names: &[String], shell: Shell, writer: &mut impl Write) -> R
         return Ok(());
     }
 
-    let env_list = env_names.join(" ");
-    // Use the same ANSI-256 colors as `flox activate`: INDIGO_400=99, INDIGO_300=141
-    let color1 = 99;
-    let color2 = 141;
+    // Sanitize environment names: replace any character not in [A-Za-z0-9_-]
+    // with `_` to prevent shell injection via malicious env.json names.
+    let sanitized: Vec<String> = env_names
+        .iter()
+        .map(|name| {
+            name.chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    let env_list = sanitized.join(" ");
+    let color1 = INDIGO_400.to_ansi256();
+    let color2 = INDIGO_300.to_ansi256();
 
     match shell {
         Shell::Zsh => {
@@ -389,15 +440,9 @@ set prompt = "%{{\033[1m\033[38;5;{color1}m%}}flox%{{\033[0m%}} %{{\033[38;5;{co
 }
 
 /// Emit shell-specific code to restore the prompt to its original value.
-fn emit_prompt_restore(shell: Shell, writer: &mut impl Write) -> Result<()> {
+pub(crate) fn emit_prompt_restore(shell: Shell, writer: &mut impl Write) -> Result<()> {
     match shell {
-        Shell::Zsh => {
-            writeln!(
-                writer,
-                r#"if [ -n "${{_FLOX_HOOK_SAVE_PS1+x}}" ]; then PS1="$_FLOX_HOOK_SAVE_PS1"; unset _FLOX_HOOK_SAVE_PS1; fi;"#,
-            )?;
-        },
-        Shell::Bash => {
+        Shell::Zsh | Shell::Bash => {
             writeln!(
                 writer,
                 r#"if [ -n "${{_FLOX_HOOK_SAVE_PS1+x}}" ]; then PS1="$_FLOX_HOOK_SAVE_PS1"; unset _FLOX_HOOK_SAVE_PS1; fi;"#,
@@ -417,4 +462,13 @@ fn emit_prompt_restore(shell: Shell, writer: &mut impl Write) -> Result<()> {
         },
     }
     Ok(())
+}
+
+/// Re-trust an environment after a manifest change so auto-activation isn't
+/// revoked. Logs on failure rather than propagating the error.
+pub(crate) fn trust_or_log(data_dir: impl AsRef<Path>, dot_flox_path: impl AsRef<Path>) {
+    let trust_mgr = TrustManager::new(data_dir);
+    if let Err(e) = trust_mgr.trust(dot_flox_path) {
+        tracing::debug!("failed to re-trust environment: {e}");
+    }
 }

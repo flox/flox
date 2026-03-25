@@ -7,7 +7,6 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_core::data::environment_ref::EnvironmentName;
-use flox_core::trust::TrustManager;
 use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::{
@@ -98,8 +97,6 @@ impl Edit {
             };
         environment_subcommand_metric!("edit", detected_environment);
 
-        let trust_mgr = TrustManager::new(&flox.data_dir);
-
         match self.action {
             EditAction::EditManifest { file } => {
                 // TODO: differentiate between interactive edits and replacement
@@ -110,11 +107,7 @@ impl Edit {
 
                 Self::edit_manifest(&flox, &mut detected_environment, contents).await?;
 
-                // Re-trust the environment so auto-activation isn't revoked
-                // by the manifest change.
-                if let Err(e) = trust_mgr.trust(detected_environment.dot_flox_path()) {
-                    tracing::debug!("failed to re-trust environment after edit: {}", e);
-                }
+                super::hook_env::trust_or_log(&flox.data_dir, detected_environment.dot_flox_path());
             },
             EditAction::Rename { name } => {
                 let span = tracing::info_span!("rename");

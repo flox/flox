@@ -3,7 +3,11 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use crate::N_HASH_CHARS;
+/// Full BLAKE3 hex output length for trust hashes (security-sensitive).
+/// Unlike [`N_HASH_CHARS`](crate::N_HASH_CHARS) (8 chars / 32 bits) used for
+/// non-security path hashing, trust hashes use the full 64 hex chars (256 bits)
+/// to prevent brute-force forgery of manifest trust tokens.
+const TRUST_HASH_CHARS: usize = 64;
 
 /// Status of trust for a `.flox` environment path.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -110,20 +114,20 @@ impl TrustManager {
     }
 
     /// Compute the allow hash: `blake3(absolute_path + "\n" + manifest_content)`,
-    /// truncated to [`N_HASH_CHARS`].
+    /// truncated to [`TRUST_HASH_CHARS`].
     fn allow_hash(&self, abs_path: &Path, manifest_content: &str) -> String {
         let input = format!("{}\n{}", abs_path.display(), manifest_content);
         let mut hex = blake3::hash(input.as_bytes()).to_hex();
-        hex.truncate(N_HASH_CHARS);
+        hex.truncate(TRUST_HASH_CHARS);
         hex.to_string()
     }
 
     /// Compute the deny hash: `blake3(absolute_path + "\n")`, truncated to
-    /// [`N_HASH_CHARS`].
+    /// [`TRUST_HASH_CHARS`].
     fn deny_hash(&self, abs_path: &Path) -> String {
         let input = format!("{}\n", abs_path.display());
         let mut hex = blake3::hash(input.as_bytes()).to_hex();
-        hex.truncate(N_HASH_CHARS);
+        hex.truncate(TRUST_HASH_CHARS);
         hex.to_string()
     }
 

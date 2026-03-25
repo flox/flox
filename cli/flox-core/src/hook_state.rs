@@ -10,6 +10,13 @@ use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use serde::{Deserialize, Serialize};
 
+pub const HOOK_VAR_DIFF: &str = "_FLOX_HOOK_DIFF";
+pub const HOOK_VAR_DIRS: &str = "_FLOX_HOOK_DIRS";
+pub const HOOK_VAR_WATCHES: &str = "_FLOX_HOOK_WATCHES";
+pub const HOOK_VAR_SUPPRESSED: &str = "_FLOX_HOOK_SUPPRESSED";
+pub const HOOK_VAR_NOTIFIED: &str = "_FLOX_HOOK_NOTIFIED";
+pub const HOOK_VAR_CWD: &str = "_FLOX_HOOK_CWD";
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct HookDiff {
     pub additions: HashMap<String, String>,
@@ -107,26 +114,26 @@ pub struct HookState {
 impl HookState {
     /// Read hook state from environment variables.
     pub fn from_env() -> Result<Self> {
-        let diff_str = std::env::var("_FLOX_HOOK_DIFF").unwrap_or_default();
+        let diff_str = std::env::var(HOOK_VAR_DIFF).unwrap_or_default();
         let diff = HookDiff::deserialize(&diff_str).context("failed to parse _FLOX_HOOK_DIFF")?;
 
-        let dirs_str = std::env::var("_FLOX_HOOK_DIRS").unwrap_or_default();
+        let dirs_str = std::env::var(HOOK_VAR_DIRS).unwrap_or_default();
         let active_dirs = Self::parse_path_list(&dirs_str);
 
-        let watches_str = std::env::var("_FLOX_HOOK_WATCHES").unwrap_or_default();
+        let watches_str = std::env::var(HOOK_VAR_WATCHES).unwrap_or_default();
         let watches: Vec<WatchEntry> = if watches_str.is_empty() {
             Vec::new()
         } else {
             serde_json::from_str(&watches_str).context("failed to parse _FLOX_HOOK_WATCHES")?
         };
 
-        let suppressed_str = std::env::var("_FLOX_HOOK_SUPPRESSED").unwrap_or_default();
+        let suppressed_str = std::env::var(HOOK_VAR_SUPPRESSED).unwrap_or_default();
         let suppressed_dirs = Self::parse_path_list(&suppressed_str);
 
-        let notified_str = std::env::var("_FLOX_HOOK_NOTIFIED").unwrap_or_default();
+        let notified_str = std::env::var(HOOK_VAR_NOTIFIED).unwrap_or_default();
         let notified_dirs = Self::parse_path_list(&notified_str);
 
-        let last_cwd = std::env::var("_FLOX_HOOK_CWD")
+        let last_cwd = std::env::var(HOOK_VAR_CWD)
             .ok()
             .filter(|s| !s.is_empty())
             .map(PathBuf::from);

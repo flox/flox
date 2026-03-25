@@ -7,7 +7,6 @@ use bpaf::Bpaf;
 use flox_catalog::{ClientTrait, PackageDescriptor, PackageGroup, PackageResolutionInfo};
 use flox_core::activate::mode::ActivateMode;
 use flox_core::data::environment_ref::{DEFAULT_NAME, EnvironmentName, RemoteEnvironmentRef};
-use flox_core::trust::TrustManager;
 use flox_manifest::raw::{CatalogPackage, PackageToInstall};
 use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::Flox;
@@ -242,10 +241,7 @@ async fn init_local_environment(
         PathEnvironment::init(path_pointer, dir, &customization, flox)?
     };
 
-    let trust_mgr = TrustManager::new(&flox.data_dir);
-    if let Err(e) = trust_mgr.trust(env.dot_flox_path()) {
-        tracing::debug!("failed to auto-trust new environment: {}", e);
-    }
+    super::hook_env::trust_or_log(&flox.data_dir, env.dot_flox_path());
 
     let env_in_git_repo = GitCommandProvider::discover(dir).is_ok();
 
