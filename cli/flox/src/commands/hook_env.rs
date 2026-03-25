@@ -67,9 +67,10 @@ impl HookEnv {
         // requiring a `cd` away and back.
         let discovered_dirs: Vec<PathBuf> = discovered.iter().map(|d| d.path.clone()).collect();
         let watches_changed = state.watches_changed();
-        let trust_changed = state.active_dirs.iter().any(|dir| {
-            !matches!(trust_manager.check(dir), Ok(TrustStatus::Trusted))
-        });
+        let trust_changed = state
+            .active_dirs
+            .iter()
+            .any(|dir| !matches!(trust_manager.check(dir), Ok(TrustStatus::Trusted)));
         if state.last_cwd.as_ref() == Some(&cwd)
             && !watches_changed
             && discovered_dirs == state.active_dirs
