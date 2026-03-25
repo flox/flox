@@ -56,20 +56,27 @@ impl HookEnv {
             Vec::new()
         });
 
+        let trust_manager = TrustManager::new(&flox.data_dir);
+
         // Fast path: CWD unchanged AND no watched files changed AND the set of
-        // discovered .flox dirs hasn't changed → exit with no output.
+        // discovered .flox dirs hasn't changed AND trust status hasn't changed
+        // for any active dir → exit with no output.
         // We must check discovered dirs so that a new `flox init` in the
         // current directory is detected without requiring a `cd` away and back.
+        // We must check trust so that `flox trust --deny` is detected without
+        // requiring a `cd` away and back.
         let discovered_dirs: Vec<PathBuf> = discovered.iter().map(|d| d.path.clone()).collect();
         let watches_changed = state.watches_changed();
+        let trust_changed = state.active_dirs.iter().any(|dir| {
+            !matches!(trust_manager.check(dir), Ok(TrustStatus::Trusted))
+        });
         if state.last_cwd.as_ref() == Some(&cwd)
             && !watches_changed
             && discovered_dirs == state.active_dirs
+            && !trust_changed
         {
             return Ok(());
         }
-
-        let trust_manager = TrustManager::new(&flox.data_dir);
 
         // Prune suppressed dirs: only keep those that are still ancestors of CWD.
         let suppressed_dirs: Vec<PathBuf> = state
@@ -79,9 +86,18 @@ impl HookEnv {
             .cloned()
             .collect();
 
+        // Prune notified dirs: only keep those that are still ancestors of CWD.
+        // This ensures the user is re-notified when cd'ing back into a denied
+        // or untrusted directory.
+        let mut notified_dirs: Vec<PathBuf> = state
+            .notified_dirs
+            .iter()
+            .filter(|s| cwd.starts_with(s.parent().unwrap_or(s)))
+            .cloned()
+            .collect();
+
         // Filter discovered envs by trust and suppression.
         let mut trusted_dot_flox: Vec<DotFlox> = Vec::new();
-        let mut notified_dirs = state.notified_dirs.clone();
 
         for dot_flox in &discovered {
             if suppressed_dirs.contains(&dot_flox.path) {
@@ -95,6 +111,23 @@ impl HookEnv {
                 },
                 Ok(TrustStatus::Denied) => {
                     debug!(path = %dot_flox.path.display(), "denied, skipping");
+                    if !notified_dirs.contains(&dot_flox.path) {
+                        let is_ancestor =
+                            cwd.starts_with(dot_flox.path.parent().unwrap_or(&dot_flox.path));
+                        if is_ancestor {
+                            eprintln!(
+                                "flox: environment at '{}' was denied. Run 'flox trust' to auto-activate it.",
+                                dot_flox.path.display()
+                            );
+                        } else {
+                            eprintln!(
+                                "flox: environment at '{}' was denied. Run 'flox trust --path {}' to auto-activate it.",
+                                dot_flox.path.display(),
+                                dot_flox.path.display()
+                            );
+                        }
+                        notified_dirs.push(dot_flox.path.clone());
+                    }
                 },
                 Ok(TrustStatus::Unknown(_)) => {
                     if !notified_dirs.contains(&dot_flox.path) {

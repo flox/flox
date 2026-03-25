@@ -167,7 +167,7 @@ teardown() {
 }
 
 # bats test_tags=auto-activation:hook-env
-@test "'hook-env' skips denied environments silently" {
+@test "'hook-env' notifies about denied environments" {
   "$FLOX_BIN" init
   "$FLOX_BIN" trust --deny
 
@@ -175,13 +175,39 @@ teardown() {
   local stderr_content
   stderr_content="$(cat "$BATS_TEST_TMPDIR/stderr")"
 
-  # Denied environments should NOT produce "not trusted" messages
-  [[ ! "$stderr_content" =~ "not trusted" ]]
+  # Denied environments should produce a "was denied" message
+  [[ "$stderr_content" =~ "was denied" ]]
+  [[ "$stderr_content" =~ "flox trust" ]]
 
   # hook-env still emits state vars, but DIRS should be empty (env not activated)
   run "$FLOX_BIN" hook-env --shell bash
   assert_success
   assert_output --partial "_FLOX_HOOK_DIRS=''"
+}
+
+# bats test_tags=auto-activation:hook-env
+@test "'hook-env' detects deny after prior activation (no cd required)" {
+  "$FLOX_BIN" init
+
+  # First hook-env: activates the trusted environment
+  local first_output
+  first_output="$("$FLOX_BIN" hook-env --shell bash 2>/dev/null)"
+  eval "$(echo "$first_output" | grep '^export _FLOX_HOOK_')"
+
+  # Verify the environment was activated
+  [[ -n "$_FLOX_HOOK_DIRS" ]]
+
+  # Deny the environment (simulates `flox trust --deny` while in the dir)
+  "$FLOX_BIN" trust --deny
+
+  # Next hook-env (same dir, no cd) should detect the trust change,
+  # deactivate the env, and show the denied message.
+  "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr_deny" || true
+  local stderr_content
+  stderr_content="$(cat "$BATS_TEST_TMPDIR/stderr_deny")"
+
+  [[ "$stderr_content" =~ "was denied" ]]
+  [[ "$stderr_content" =~ "flox trust" ]]
 }
 
 # bats test_tags=auto-activation:hook-env
