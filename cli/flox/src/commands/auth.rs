@@ -1,6 +1,3 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
@@ -36,7 +33,7 @@ use url::Url;
 
 use crate::commands::general::update_config;
 use crate::config::Config;
-use crate::utils::dialog::{Checkpoint, Dialog};
+use crate::utils::dialog::{Checkpoint, Dialog, WaitResult};
 use crate::utils::message;
 use crate::utils::openers::Browser;
 use crate::{Exit, subcommand_metric};
@@ -122,8 +119,6 @@ pub async fn authorize(client: ConfiguredClient, floxhub_url: &Url) -> Result<Cr
 
     let opener = Browser::detect();
 
-    let done = Arc::new(AtomicBool::default());
-
     let verification_uri = details
         .verification_uri_complete()
         .expect("Verification URI is always provided by the auth server")
@@ -131,12 +126,24 @@ pub async fn authorize(client: ConfiguredClient, floxhub_url: &Url) -> Result<Cr
         .as_str();
     let code = details.user_code().secret();
 
-    match opener {
+    // Start token polling — shared by both the browser and no-browser paths.
+    let token_future = client.exchange_device_access_token(&details).request_async(
+        &http_client,
+        tokio::time::sleep,
+        Some(details.expires_in()),
+    );
+    tokio::pin!(token_future);
+
+    let token_result = match opener {
         Ok(opener) => {
             let message = formatdoc! {"
+            Logging in to {url}
             Your one-time activation code is: {code}
 
-            Press enter to open {url} in your browser...
+            Open this URL in any browser:
+            {verification_uri}
+
+            Or press Enter to open your default browser...
             ",
                 url = floxhub_url.host_str().unwrap_or(floxhub_url.as_str()),
             };
@@ -146,20 +153,37 @@ pub async fn authorize(client: ConfiguredClient, floxhub_url: &Url) -> Result<Cr
                 details.expires_in().as_secs()
             );
 
-            Dialog {
+            let enter_future = Dialog {
                 message: &message,
                 help_message: None,
                 typed: Checkpoint,
             }
-            .checkpoint()?;
+            .checkpoint_async();
+            tokio::pin!(enter_future);
 
-            let mut command = opener.to_command();
-            command.arg(verification_uri);
+            // Race token polling against Enter-key listening.
+            //   - Enter pressed  → open the browser, then await the token
+            //   - Token received → drop enter_future (RawModeGuard cleans up)
+            //   - Ctrl-C         → bail with cancellation message
+            tokio::select! {
+                enter_result = &mut enter_future => {
+                    if enter_result == WaitResult::Interrupted {
+                        bail!("Authentication cancelled.");
+                    }
 
-            if command.spawn().is_err() {
-                message::warning(format!(
-                    "Could not open browser. Please open the following URL manually: {verification_uri}"
-                ));
+                    let mut command = opener.to_command();
+                    command.arg(verification_uri);
+                    if command.spawn().is_err() {
+                        message::warning(format!(
+                            "Could not open browser. \
+                             Please open the following URL manually: \
+                             {verification_uri}"
+                        ));
+                    }
+
+                    token_future.await
+                },
+                token_result = &mut token_future => token_result,
             }
         },
         Err(e) => {
@@ -171,26 +195,22 @@ pub async fn authorize(client: ConfiguredClient, floxhub_url: &Url) -> Result<Cr
             Your one-time activation code is: {code}
             "
             });
-        },
-    }
 
-    let token_result = client
-        .exchange_device_access_token(&details)
-        .request_async(&http_client, tokio::time::sleep, Some(details.expires_in()))
-        .await;
+            token_future.await
+        },
+    };
 
     let token = match token_result {
-        Err(RequestTokenError::ServerResponse(r))
+        Err(RequestTokenError::ServerResponse(ref r))
             if r.error() == &DeviceCodeErrorResponseType::ExpiredToken =>
         {
             bail!(
-                "failed to authenticate before the device code expired. Please retry to get a new code."
+                "failed to authenticate before the device code expired. \
+                 Please retry to get a new code."
             );
         },
         _ => token_result?,
     };
-
-    done.store(true, Ordering::Relaxed);
 
     Ok(Credential {
         token: token.access_token().secret().to_string(),
