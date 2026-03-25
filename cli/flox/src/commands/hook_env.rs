@@ -239,17 +239,17 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<HashMap<String, S
 
     // Parse activate.d/envrc for exported variables.
     let envrc = store_path.join("activate.d").join("envrc");
-    if envrc.exists() {
-        if let Ok(contents) = std::fs::read_to_string(&envrc) {
-            let export_re =
-                Regex::new(r#"^export\s+([A-Za-z_][A-Za-z0-9_]*)="(.*)"$"#).expect("valid regex");
-            for line in contents.lines() {
-                if let Some(caps) = export_re.captures(line) {
-                    let name = caps[1].to_string();
-                    let value = caps[2].to_string();
-                    if name != "PATH" {
-                        vars.insert(name, value);
-                    }
+    if envrc.exists()
+        && let Ok(contents) = std::fs::read_to_string(&envrc)
+    {
+        let export_re =
+            Regex::new(r#"^export\s+([A-Za-z_][A-Za-z0-9_]*)="(.*)"$"#).expect("valid regex");
+        for line in contents.lines() {
+            if let Some(caps) = export_re.captures(line) {
+                let name = caps[1].to_string();
+                let value = caps[2].to_string();
+                if name != "PATH" {
+                    vars.insert(name, value);
                 }
             }
         }
@@ -287,7 +287,7 @@ fn emit_apply(
     for (name, val) in &diff.additions {
         SetVar::exported_no_expansion(name, val).generate_with_newline(shell, writer)?;
     }
-    for (name, _orig_val) in &diff.modifications {
+    for name in diff.modifications.keys() {
         if let Some(new_val) = new_env.get(name) {
             SetVar::exported_no_expansion(name, new_val).generate_with_newline(shell, writer)?;
         }
@@ -296,6 +296,7 @@ fn emit_apply(
 }
 
 /// Emit updated _FLOX_HOOK_* state variables.
+#[allow(clippy::too_many_arguments)]
 fn emit_state_vars(
     diff: &HookDiff,
     active_dirs: &[PathBuf],
@@ -326,7 +327,7 @@ fn emit_state_vars(
     SetVar::exported_no_expansion("_FLOX_HOOK_NOTIFIED", &notified_str)
         .generate_with_newline(shell, writer)?;
 
-    SetVar::exported_no_expansion("_FLOX_HOOK_CWD", &cwd.display().to_string())
+    SetVar::exported_no_expansion("_FLOX_HOOK_CWD", cwd.display().to_string())
         .generate_with_newline(shell, writer)?;
 
     Ok(())
