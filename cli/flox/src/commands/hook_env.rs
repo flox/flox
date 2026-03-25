@@ -6,6 +6,7 @@ use std::sync::LazyLock;
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use flox_core::activate::mode::ActivateMode;
+use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
 use flox_core::hook_state::{
     HOOK_VAR_CWD,
     HOOK_VAR_DIFF,
@@ -29,6 +30,7 @@ use regex::Regex;
 use shell_gen::{GenerateShell, SetVar, Shell, UnsetVar};
 use tracing::debug;
 
+use crate::utils::active_environments::activated_environments;
 use crate::utils::colors::{INDIGO_300, INDIGO_400};
 
 #[derive(Bpaf, Clone, Debug)]
@@ -238,6 +240,8 @@ impl HookEnv {
                 suppressed_dirs: &suppressed_dirs,
                 notified_dirs: &notified_dirs,
                 cwd: &cwd,
+                trusted_dot_flox: &trusted_dot_flox,
+                prev_active_dirs: &state.active_dirs,
             },
             shell,
             &mut stdout,
@@ -365,6 +369,9 @@ struct HookStateUpdate<'a> {
     suppressed_dirs: &'a [PathBuf],
     notified_dirs: &'a [PathBuf],
     cwd: &'a Path,
+    trusted_dot_flox: &'a [DotFlox],
+    /// .flox dirs that were auto-activated on the *previous* hook-env call.
+    prev_active_dirs: &'a [PathBuf],
 }
 
 /// Emit updated _FLOX_HOOK_* state variables.
@@ -394,6 +401,42 @@ fn emit_state_vars(
         .generate_with_newline(shell, writer)?;
 
     SetVar::exported_no_expansion(HOOK_VAR_CWD, update.cwd.display().to_string())
+        .generate_with_newline(shell, writer)?;
+
+    // Build _FLOX_ACTIVE_ENVIRONMENTS from the auto-activated environments,
+    // preserving any manually-activated environments that were already in the
+    // list but are not managed by auto-activation.
+    let mut active_envs = activated_environments();
+
+    // Remove entries that were previously auto-activated OR are about to be
+    // re-added.  This ensures that environments we are no longer cd'd into
+    // get removed, while manually-activated environments are preserved.
+    let new_auto_paths: Vec<PathBuf> = update
+        .trusted_dot_flox
+        .iter()
+        .map(|d| d.path.clone())
+        .collect();
+
+    active_envs.retain(|env| {
+        if let UninitializedEnvironment::DotFlox(d) = env {
+            !new_auto_paths.contains(&d.path) && !update.prev_active_dirs.contains(&d.path)
+        } else {
+            true
+        }
+    });
+
+    // Prepend auto-activated environments.  trusted_dot_flox is outermost-
+    // first, so iterating forward and using push_front puts the innermost
+    // (CWD-nearest) environment at the front, matching `last_active()`.
+    for dot_flox in update.trusted_dot_flox.iter() {
+        active_envs.set_last_active(
+            UninitializedEnvironment::DotFlox(dot_flox.clone()),
+            None,
+            ActivateMode::Dev,
+        );
+    }
+
+    SetVar::exported_no_expansion(FLOX_ACTIVE_ENVIRONMENTS_VAR, active_envs.to_string())
         .generate_with_newline(shell, writer)?;
 
     Ok(())
