@@ -93,11 +93,8 @@ impl Exit {
                     true
                 }
             });
-            SetVar::exported_no_expansion(
-                FLOX_ACTIVE_ENVIRONMENTS_VAR,
-                active_envs.to_string(),
-            )
-            .generate_with_newline(shell, &mut stdout)?;
+            SetVar::exported_no_expansion(FLOX_ACTIVE_ENVIRONMENTS_VAR, active_envs.to_string())
+                .generate_with_newline(shell, &mut stdout)?;
         }
         let suppressed_str = HookState::format_path_list(&suppressed);
         SetVar::exported_no_expansion(HOOK_VAR_SUPPRESSED, &suppressed_str)
