@@ -307,24 +307,17 @@ fn manage_activations(
                         // is tracked.
                         let result = auto_result.as_ref().unwrap();
                         apply_on_activate_diff(&result.hook_env_diff, &mut combined_env);
-                        new_tracking.entries.insert(
-                            dot_flox.path.clone(),
-                            ActivationInfo {
+                        new_tracking
+                            .entries
+                            .insert(dot_flox.path.clone(), ActivationInfo {
                                 activation_state_dir: activation_state_dir.clone(),
                                 store_path: resolved.store_path.clone(),
-                                start_state_dir: result
-                                    .start_state_dir
-                                    .as_ref()
-                                    .map(PathBuf::from),
+                                start_state_dir: result.start_state_dir.as_ref().map(PathBuf::from),
                                 on_activate_diff: result.hook_env_diff.clone(),
-                            },
-                        );
+                            });
                     } else {
                         // Re-apply cached on-activate diff (hooks don't re-run)
-                        apply_on_activate_diff(
-                            &cached_info.on_activate_diff,
-                            &mut combined_env,
-                        );
+                        apply_on_activate_diff(&cached_info.on_activate_diff, &mut combined_env);
                         new_tracking
                             .entries
                             .insert(dot_flox.path.clone(), cached_info);

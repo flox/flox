@@ -141,10 +141,7 @@ impl Activate {
                         .ok()
                         .and_then(|p| p.to_str().map(String::from))
                         .unwrap_or_else(|| "flox".to_string());
-                    print!(
-                        "{}",
-                        super::hook::hook_code_for_shell(&shell, &flox_bin)
-                    );
+                    print!("{}", super::hook::hook_code_for_shell(&shell, &flox_bin));
                     return Ok(());
                 }
                 bail!(formatdoc! {"
