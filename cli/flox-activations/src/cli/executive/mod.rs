@@ -234,11 +234,27 @@ fn run_event_loop(
                 }
             },
             Ok(ExecutiveEvent::StateFileChanged) => {
-                debug!("state.json changed, checking for new PIDs to monitor");
-                let (state, _lock) = read_activations_json(&state_json_path)?;
+                debug!("state.json changed, checking for PIDs");
+                let (state, lock) = read_activations_json(&state_json_path)?;
                 let Some(activations) = state else {
                     bail!("executive shouldn't be running when state.json doesn't exist");
                 };
+
+                // When auto-detach removes the last PID from state.json,
+                // trigger full cleanup (stop services, remove state dir).
+                if activations.attached_pids_is_empty() {
+                    info!("all PIDs detached from state, running cleanup");
+                    cleanup_all(
+                        (activations, lock),
+                        &process_compose_bin,
+                        &socket_path,
+                        &activation_state_dir,
+                    )
+                    .context("cleanup failed after all PIDs detached")?;
+                    return Ok(());
+                }
+
+                drop(lock);
                 coordinator
                     .ensure_monitoring_pids(activations.all_attached_pids_and_expiration())
                     .context("failed to ensure monitoring PIDs")?;

@@ -131,6 +131,22 @@ impl Activate {
         {
             Ok(concrete_environment) => concrete_environment,
             Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
+                // In eval mode with no explicit environment, just emit hook code
+                // so that `eval "$(flox activate)"` sets up auto-activation
+                // without requiring an environment in the current directory.
+                let is_in_place = self.print_script || !stdout().is_tty();
+                if is_in_place && matches!(self.environment, EnvironmentSelect::Unspecified) {
+                    let shell = Self::detect_shell_for_in_place()?;
+                    let flox_bin = std::env::current_exe()
+                        .ok()
+                        .and_then(|p| p.to_str().map(String::from))
+                        .unwrap_or_else(|| "flox".to_string());
+                    print!(
+                        "{}",
+                        super::hook::hook_code_for_shell(&shell, &flox_bin)
+                    );
+                    return Ok(());
+                }
                 bail!(formatdoc! {"
             {e}
 

@@ -297,12 +297,38 @@ fn manage_activations(
                     new_tracking.entries.insert(dot_flox.path.clone(), info);
                 } else if let Some(cached_info) = cached {
                     // Case 2: cd-away-and-back - re-attach PID, use cached diff
-                    spawn_auto_start(shell_pid, dot_flox, &resolved, &activation_state_dir);
-                    // Re-apply cached on-activate diff (hooks don't re-run)
-                    apply_on_activate_diff(&cached_info.on_activate_diff, &mut combined_env);
-                    new_tracking
-                        .entries
-                        .insert(dot_flox.path.clone(), cached_info);
+                    let auto_result =
+                        spawn_auto_start(shell_pid, dot_flox, &resolved, &activation_state_dir);
+
+                    if auto_result.as_ref().is_some_and(|r| r.is_new) {
+                        // Activation was recreated (e.g. after cleanup when all PIDs
+                        // detached). Use the fresh result instead of stale cached info
+                        // so that services are restarted and the new start_state_dir
+                        // is tracked.
+                        let result = auto_result.as_ref().unwrap();
+                        apply_on_activate_diff(&result.hook_env_diff, &mut combined_env);
+                        new_tracking.entries.insert(
+                            dot_flox.path.clone(),
+                            ActivationInfo {
+                                activation_state_dir: activation_state_dir.clone(),
+                                store_path: resolved.store_path.clone(),
+                                start_state_dir: result
+                                    .start_state_dir
+                                    .as_ref()
+                                    .map(PathBuf::from),
+                                on_activate_diff: result.hook_env_diff.clone(),
+                            },
+                        );
+                    } else {
+                        // Re-apply cached on-activate diff (hooks don't re-run)
+                        apply_on_activate_diff(
+                            &cached_info.on_activate_diff,
+                            &mut combined_env,
+                        );
+                        new_tracking
+                            .entries
+                            .insert(dot_flox.path.clone(), cached_info);
+                    }
                 } else {
                     // Case 3: Truly new or store path changed - run hooks
                     let auto_result =
