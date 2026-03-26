@@ -84,6 +84,92 @@ pub mod types {
             value.clone()
         }
     }
+    /**Records the build methodology used to produce a package.
+
+NEF packages carry full source metadata and can be reproduced from source;
+manifest packages were built via the traditional flox manifest workflow.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "BuildType",
+    ///  "description": "Records the build methodology used to produce a package.\n\nNEF packages carry full source metadata and can be reproduced from source;\nmanifest packages were built via the traditional flox manifest workflow.",
+    ///  "type": "string",
+    ///  "enum": [
+    ///    "manifest",
+    ///    "nef"
+    ///  ]
+    ///}
+    /// ```
+    /// </details>
+    #[derive(
+        ::serde::Deserialize,
+        ::serde::Serialize,
+        Clone,
+        Copy,
+        Debug,
+        Eq,
+        Hash,
+        Ord,
+        PartialEq,
+        PartialOrd
+    )]
+    pub enum BuildType {
+        #[serde(rename = "manifest")]
+        Manifest,
+        #[serde(rename = "nef")]
+        Nef,
+    }
+    impl ::std::convert::From<&Self> for BuildType {
+        fn from(value: &BuildType) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::fmt::Display for BuildType {
+        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+            match *self {
+                Self::Manifest => f.write_str("manifest"),
+                Self::Nef => f.write_str("nef"),
+            }
+        }
+    }
+    impl ::std::str::FromStr for BuildType {
+        type Err = self::error::ConversionError;
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            match value {
+                "manifest" => Ok(Self::Manifest),
+                "nef" => Ok(Self::Nef),
+                _ => Err("invalid value".into()),
+            }
+        }
+    }
+    impl ::std::convert::TryFrom<&str> for BuildType {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<&::std::string::String> for BuildType {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<::std::string::String> for BuildType {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
     ///`CatalogName`
     ///
     /// <details><summary>JSON schema</summary>
@@ -1291,6 +1377,9 @@ Attributes:
     ///      ],
     ///      "format": "date-time"
     ///    },
+    ///    "build_type": {
+    ///      "$ref": "#/components/schemas/BuildType"
+    ///    },
     ///    "cache_uri": {
     ///      "title": "Cache Uri",
     ///      "type": [
@@ -1301,8 +1390,20 @@ Attributes:
     ///    "derivation": {
     ///      "$ref": "#/components/schemas/PackageDerivation-Output"
     ///    },
+    ///    "dot_flox_dir": {
+    ///      "title": "Dot Flox Dir",
+    ///      "default": ".flox",
+    ///      "type": "string"
+    ///    },
     ///    "locked_base_catalog_url": {
     ///      "title": "Locked Base Catalog Url",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "ref": {
+    ///      "title": "Ref",
     ///      "type": [
     ///        "string",
     ///        "null"
@@ -1338,10 +1439,20 @@ Attributes:
             ::chrono::DateTime<::chrono::offset::Utc>,
         >,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub build_type: ::std::option::Option<BuildType>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub cache_uri: ::std::option::Option<::std::string::String>,
         pub derivation: PackageDerivationOutput,
+        #[serde(default = "defaults::package_build_dot_flox_dir")]
+        pub dot_flox_dir: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub locked_base_catalog_url: ::std::option::Option<::std::string::String>,
+        #[serde(
+            rename = "ref",
+            default,
+            skip_serializing_if = "::std::option::Option::is_none"
+        )]
+        pub ref_: ::std::option::Option<::std::string::String>,
         pub rev: ::std::string::String,
         pub rev_count: i64,
         pub rev_date: ::chrono::DateTime<::chrono::offset::Utc>,
@@ -1489,6 +1600,9 @@ Attributes:
     ///      ],
     ///      "format": "date-time"
     ///    },
+    ///    "build_type": {
+    ///      "$ref": "#/components/schemas/BuildType"
+    ///    },
     ///    "cache_uri": {
     ///      "title": "Cache Uri",
     ///      "type": [
@@ -1498,6 +1612,11 @@ Attributes:
     ///    },
     ///    "derivation": {
     ///      "$ref": "#/components/schemas/PackageDerivation-Input"
+    ///    },
+    ///    "dot_flox_dir": {
+    ///      "title": "Dot Flox Dir",
+    ///      "default": ".flox",
+    ///      "type": "string"
     ///    },
     ///    "locked_base_catalog_url": {
     ///      "title": "Locked Base Catalog Url",
@@ -1520,6 +1639,13 @@ Attributes:
     ///      "title": "Narinfos Source Version",
     ///      "type": [
     ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "ref": {
+    ///      "title": "Ref",
+    ///      "type": [
+    ///        "string",
     ///        "null"
     ///      ]
     ///    },
@@ -1553,8 +1679,12 @@ Attributes:
             ::chrono::DateTime<::chrono::offset::Utc>,
         >,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub build_type: ::std::option::Option<BuildType>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub cache_uri: ::std::option::Option<::std::string::String>,
         pub derivation: PackageDerivationInput,
+        #[serde(default = "defaults::package_build_with_nar_info_dot_flox_dir")]
+        pub dot_flox_dir: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub locked_base_catalog_url: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -1563,6 +1693,12 @@ Attributes:
         pub narinfos_source_url: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub narinfos_source_version: ::std::option::Option<i64>,
+        #[serde(
+            rename = "ref",
+            default,
+            skip_serializing_if = "::std::option::Option::is_none"
+        )]
+        pub ref_: ::std::option::Option<::std::string::String>,
         pub rev: ::std::string::String,
         pub rev_count: i64,
         pub rev_date: ::chrono::DateTime<::chrono::offset::Utc>,
@@ -4278,6 +4414,12 @@ Attributes:
         }
         pub(super) fn catalog_store_config_publisher_store_type() -> ::std::string::String {
             "publisher".to_string()
+        }
+        pub(super) fn package_build_dot_flox_dir() -> ::std::string::String {
+            ".flox".to_string()
+        }
+        pub(super) fn package_build_with_nar_info_dot_flox_dir() -> ::std::string::String {
+            ".flox".to_string()
         }
         pub(super) fn package_descriptor_allow_broken() -> ::std::option::Option<bool> {
             ::std::option::Option::Some(false)

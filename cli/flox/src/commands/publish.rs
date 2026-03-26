@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
@@ -6,7 +6,7 @@ use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::providers::auth::Auth;
-use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget, nix_expression_dir};
+use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget};
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
     Publisher,
@@ -16,6 +16,7 @@ use flox_rust_sdk::providers::publish::{
     check_package_metadata,
 };
 use indoc::formatdoc;
+use nef_lock_catalog::lock::NixFlakeref;
 use tracing::{debug, info_span, instrument};
 
 use super::{DirEnvironmentSelect, dir_environment_select};
@@ -120,12 +121,12 @@ impl Publish {
 
     fn get_publish_target(
         manifest: &Manifest<MigratedTypedOnly>,
-        expression_dir: &Path,
+        expression_ref: &NixFlakeref,
         target_arg: Option<PublishTarget>,
     ) -> Result<PackageTarget> {
         match packages_to_build(
             manifest,
-            expression_dir,
+            expression_ref,
             &Vec::from_iter(target_arg.map(|arg| arg.target)),
         )?
         .as_slice()
@@ -170,22 +171,28 @@ impl Publish {
         let Some(lockfile) = path_env.existing_lockfile(&flox)? else {
             bail!(build_repo_err("Environment must be locked."));
         };
-        let expression_dir = nix_expression_dir(&path_env);
 
         // Used for non building expressions and manifest builds
         prefetch_flake_ref(&COMMON_NIXPKGS_URL)?;
 
         let lockfile_manifest = lockfile.manifest.migrate_typed_only(Some(&lockfile))?;
-        let package = Self::get_publish_target(&lockfile_manifest, &expression_dir, package_arg)?;
+        let package = {
+            let expression_dir_parent = path_env.dot_flox_path();
+            let expression_ref_local = NixFlakeref::from_path(&expression_dir_parent)?;
+            let package =
+                Self::get_publish_target(&lockfile_manifest, &expression_ref_local, package_arg)?;
+
+            // Note: when publishing an expression build,
+            // this causes us to discover the containing git repo twice.
+            // While slightly redundant it outweighs the complexity of reusing git instances.
+            check_git_tracking_for_expression_builds([&package], &expression_dir_parent)?;
+            package
+        };
 
         disallow_base_url_select_for_manifest_builds(
             [&package],
             publish_config.base_catalog_url_select.is_some(),
         )?;
-        // Note: when publishsing an expression build,
-        // this causes us to discover the containing git repo twice.
-        // While slightly redundant it outweighs the complexity of reusing git instances.
-        check_git_tracking_for_expression_builds([&package], &expression_dir)?;
 
         // Check the environment for appropriate state to build and publish
         let env_metadata = check_environment_metadata(&flox, &path_env)?;
@@ -293,6 +300,7 @@ impl Publish {
 #[cfg(test)]
 mod tests {
     use flox_manifest::test_helpers::with_latest_schema;
+    use flox_rust_sdk::providers::build::test_helpers::prepare_empty_expressions_ref;
     use indoc::indoc;
 
     use super::*;
@@ -313,8 +321,7 @@ mod tests {
             .as_migrated_typed_only();
 
         let target =
-            Publish::get_publish_target(&manifest, Path::new("/no/expression/builds"), None)
-                .unwrap();
+            Publish::get_publish_target(&manifest, prepare_empty_expressions_ref(), None).unwrap();
         assert_eq!(
             target,
             PackageTarget::new_unchecked(
@@ -333,7 +340,7 @@ mod tests {
         let manifest = Manifest::parse_and_migrate(manifest_contents, None)
             .unwrap()
             .as_migrated_typed_only();
-        let res = Publish::get_publish_target(&manifest, Path::new("/no/expression/builds"), None);
+        let res = Publish::get_publish_target(&manifest, prepare_empty_expressions_ref(), None);
         assert!(res.is_err());
     }
 
@@ -356,7 +363,7 @@ mod tests {
         let manifest = Manifest::parse_and_migrate(manifest_contents, None)
             .unwrap()
             .as_migrated_typed_only();
-        let res = Publish::get_publish_target(&manifest, Path::new("/no/expression/builds"), None);
+        let res = Publish::get_publish_target(&manifest, prepare_empty_expressions_ref(), None);
         assert!(res.is_err());
     }
 
@@ -381,7 +388,7 @@ mod tests {
             .as_migrated_typed_only();
         let target = Publish::get_publish_target(
             &manifest,
-            Path::new("/no/expression/builds"),
+            prepare_empty_expressions_ref(),
             Some(PublishTarget {
                 target: "hello2".to_string(),
             }),
@@ -412,7 +419,7 @@ mod tests {
             .as_migrated_typed_only();
         let target = Publish::get_publish_target(
             &manifest,
-            Path::new("/no/expression/builds"),
+            prepare_empty_expressions_ref(),
             Some(PublishTarget {
                 target: "hello".to_string(),
             }),

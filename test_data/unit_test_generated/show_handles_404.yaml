@@ -5,7 +5,7 @@ then:
   status: 404
   header:
   - name: date
-    value: Thu, 05 Mar 2026 13:55:03 GMT
+    value: Mon, 16 Mar 2026 15:52:14 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -13,5 +13,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: ZwKwuipVoAMEVOw=
+    value: aUsPRiVToAMEa8A=
   body: '{"detail":"Unable to locate attr_path ''search_term''"}'

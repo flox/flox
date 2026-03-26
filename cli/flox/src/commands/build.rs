@@ -5,6 +5,7 @@ use std::process::Stdio;
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_catalog::{BaseCatalogUrl, ClientTrait};
+use flox_core::data::CanonicalPath;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
@@ -25,6 +26,7 @@ use flox_rust_sdk::providers::nix;
 use flox_rust_sdk::utils::{CommandExt, FLOX_INTERPRETER};
 use indoc::formatdoc;
 use itertools::Itertools;
+use nef_lock_catalog::lock::NixFlakeref;
 use nef_lock_catalog::{lock_config, read_config, write_lock};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
@@ -187,18 +189,18 @@ impl Build {
         };
 
         let base_dir = env.parent_path()?;
-        let expression_dir = nix_expression_dir(&env); // TODO: decouple from env
+        let expression_ref = NixFlakeref::from_path(env.dot_flox_path())?; // TODO: decouple from env
         let flox_env_build_outputs = env.build(&flox)?;
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
 
         let lockfile_manifest = lockfile.manifest.migrate_typed_only(Some(&lockfile))?;
-        let packages_to_clean = packages_to_build(&lockfile_manifest, &expression_dir, &packages)?;
+        let packages_to_clean = packages_to_build(&lockfile_manifest, &expression_ref, &packages)?;
         let target_names = packages_to_clean
             .iter()
             .map(|target| target.name())
             .collect::<Vec<_>>();
 
-        let builder = FloxBuildMk::new(&flox, &base_dir, &expression_dir, &flox_env_build_outputs);
+        let builder = FloxBuildMk::new(&flox, &base_dir, &expression_ref, &flox_env_build_outputs);
         builder.clean(&target_names)?;
 
         message::created("Clean completed successfully");
@@ -226,7 +228,6 @@ impl Build {
 
         let base_dir = env.parent_path()?;
         let built_environments = env.build(&flox)?;
-        let expression_dir = nix_expression_dir(&env); // TODO: decouple from env
 
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
 
@@ -234,13 +235,26 @@ impl Build {
         prefetch_flake_ref(&COMMON_NIXPKGS_URL)?;
 
         let lockfile_manifest = lockfile.manifest.migrate_typed_only(Some(&lockfile))?;
-        let packages_to_build = packages_to_build(&lockfile_manifest, &expression_dir, &packages)?;
+        let (packages_to_build, expression_ref) = {
+            // TODO: decouple from env
+            let expression_parent_dir = env.dot_flox_path();
+            let expression_path_ref = NixFlakeref::from_path(&expression_parent_dir)?;
+            let packages_to_build =
+                packages_to_build(&lockfile_manifest, &expression_path_ref, &packages)?;
+            let expression_git_ref = check_git_tracking_for_expression_builds(
+                &packages_to_build,
+                &expression_parent_dir,
+            )?;
+            (
+                packages_to_build,
+                expression_git_ref.unwrap_or(expression_path_ref),
+            )
+        };
 
         disallow_base_url_select_for_manifest_builds(
             &packages_to_build,
             nixpkgs_url_select.is_some(),
         )?;
-        check_git_tracking_for_expression_builds(&packages_to_build, &expression_dir)?;
 
         let base_nixpkgs_url =
             base_nixpkgs_url_from_url_select(&flox, nixpkgs_url_select, Some(&lockfile))
@@ -266,7 +280,7 @@ impl Build {
             "has_manifest_build" = has_manifest_build
         );
 
-        let builder = FloxBuildMk::new(&flox, &base_dir, &expression_dir, &built_environments);
+        let builder = FloxBuildMk::new(&flox, &base_dir, &expression_ref, &built_environments);
         let results = builder.build(
             &base_nixpkgs_url,
             &FLOX_INTERPRETER,
@@ -552,15 +566,15 @@ pub(crate) async fn base_nixpkgs_url_from_url_select(
 /// allowing us to provide cleaner messaging on the way.
 pub(crate) fn check_git_tracking_for_expression_builds<'p>(
     packages_to_build: impl IntoIterator<Item = &'p PackageTarget>,
-    expression_dir: &Path,
-) -> Result<()> {
+    expression_parent_dir: &CanonicalPath,
+) -> Result<Option<NixFlakeref>> {
     let mut expression_builds = packages_to_build
         .into_iter()
         .filter(|target| target.kind().is_expression_build())
         .peekable();
 
     if expression_builds.peek().is_none() {
-        return Ok(());
+        return Ok(None);
     }
 
     let expression_builds: Vec<_> = expression_builds
@@ -577,7 +591,7 @@ pub(crate) fn check_git_tracking_for_expression_builds<'p>(
         .map(|(name, _)| format!("  - {name}"))
         .join("\n");
 
-    let git = match GitCommandProvider::discover(expression_dir) {
+    let git = match GitCommandProvider::discover(expression_parent_dir) {
         Err(err) => {
             trace!(%err, "git discovery error");
 
@@ -593,7 +607,9 @@ pub(crate) fn check_git_tracking_for_expression_builds<'p>(
     };
     for (name, metadata) in expression_builds {
         let mut cmd = git.new_command();
-        let file_path = expression_dir.join(&metadata.rel_file_path);
+        let file_path = expression_parent_dir
+            .join("pkgs")
+            .join(&metadata.rel_file_path);
 
         cmd.arg("ls-files").arg("--error-unmatch").arg(&file_path);
         cmd.stderr(Stdio::null());
@@ -611,7 +627,16 @@ pub(crate) fn check_git_tracking_for_expression_builds<'p>(
         }
     }
 
-    Ok(())
+    let rel_project_path = expression_parent_dir
+        .strip_prefix(git.path())
+        .expect("git repository is common parent of all files contained");
+
+    let expression_git_ref = NixFlakeref::from_git_with_dir(
+        &Url::from_directory_path(git.path()).expect("path should be a valid unix path"),
+        Some(rel_project_path),
+    )?;
+
+    Ok(Some(expression_git_ref))
 }
 
 /// Download the source tree denoted by a flake reference into the Nix store.
@@ -667,18 +692,18 @@ pub(crate) enum PrefetchError {
 
 pub(crate) fn packages_to_build<'o>(
     manifest: &'o Manifest<MigratedTypedOnly>,
-    expression_dir: &'o Path,
+    expression_ref: &'o NixFlakeref,
     packages: &[impl AsRef<str>],
 ) -> Result<Vec<PackageTarget>> {
-    let available_targets = PackageTargets::new(manifest, expression_dir)?;
+    let available_targets = PackageTargets::new(manifest, expression_ref)?;
 
     if available_targets.is_empty() {
         bail!(formatdoc! {"
             No packages found to build.
 
             Add a build by modifying the '[build]' section of the manifest with 'flox edit'
-            or add expression files in '{expression_dir}'.
-            ", expression_dir = expression_dir.display()
+            or add expression files in '{expression_ref}'.
+            ", expression_ref = expression_ref.as_url()
         });
     }
 
@@ -746,7 +771,7 @@ mod test {
         let mut env = new_path_environment(&flox, &manifest);
 
         // Create expressions
-        let expressions_dir =
+        let expressions_ref =
             prepare_nix_expressions_in(&tempdir, &[(&[&pname], &formatdoc! {r#"
                 {{runCommand}}: runCommand "{pname}" {{}} ""
             "#})]);
@@ -756,7 +781,7 @@ mod test {
             .manifest
             .migrate_typed_only(Some(&lockfile))
             .unwrap();
-        let result = packages_to_build(&lockfile_manifest, &expressions_dir, &Vec::<String>::new());
+        let result = packages_to_build(&lockfile_manifest, &expressions_ref, &Vec::<String>::new());
         assert!(result.is_err());
     }
 
@@ -874,8 +899,12 @@ mod test {
     fn expression_builds_require_git_repo() {
         let base_dir = tempfile::tempdir().unwrap();
         let rel_file_path = Path::new("./expression.nix");
-        let abs_file_path = base_dir.path().join(rel_file_path);
-        File::create(&abs_file_path).unwrap();
+        {
+            let pkgs_dir = base_dir.path().join("pkgs");
+            std::fs::create_dir(&pkgs_dir).unwrap();
+            let abs_file_path = pkgs_dir.join(rel_file_path);
+            File::create(&abs_file_path).unwrap();
+        }
 
         let packages = vec![PackageTarget::new_unchecked(
             "expression",
@@ -885,16 +914,25 @@ mod test {
         )];
 
         // fail without a git repository containing the expression dir
-        let result = check_git_tracking_for_expression_builds(&packages, base_dir.path());
+        let result = check_git_tracking_for_expression_builds(
+            &packages,
+            &CanonicalPath::new(base_dir.path()).unwrap(),
+        );
         assert!(result.is_err());
 
         // fail if the expression isn't tracked
         let git = GitCommandProvider::init(base_dir.path(), false).unwrap();
-        let result = check_git_tracking_for_expression_builds(&packages, base_dir.path());
+        let result = check_git_tracking_for_expression_builds(
+            &packages,
+            &CanonicalPath::new(base_dir.path()).unwrap(),
+        );
         assert!(result.is_err(), "expression needs to be tracked");
 
-        git.add(&[rel_file_path]).unwrap();
-        let result = check_git_tracking_for_expression_builds(&packages, base_dir.path());
+        git.add(&[&Path::new("pkgs").join(rel_file_path)]).unwrap();
+        let result = check_git_tracking_for_expression_builds(
+            &packages,
+            &CanonicalPath::new(base_dir.path()).unwrap(),
+        );
         assert!(result.is_ok());
     }
 
@@ -906,7 +944,10 @@ mod test {
         )];
         let base_dir = tempfile::tempdir().unwrap();
 
-        let result = check_git_tracking_for_expression_builds(&packages, base_dir.path());
+        let result = check_git_tracking_for_expression_builds(
+            &packages,
+            &CanonicalPath::new(base_dir.path()).unwrap(),
+        );
         assert!(result.is_ok());
     }
 

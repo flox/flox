@@ -1,12 +1,12 @@
 when:
   path: /api/v1/catalog/catalogs/publish_tests_read_write/packages
   method: POST
-  body: '{"original_url":"dummy"}'
+  body: '{"original_url":"https://dummy.local"}'
 then:
   status: 200
   header:
   - name: date
-    value: Mon, 09 Mar 2026 18:41:10 GMT
+    value: Mon, 16 Mar 2026 15:54:12 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -23,7 +23,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Mon, 09 Mar 2026 18:41:10 GMT
+    value: Mon, 16 Mar 2026 15:54:12 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -35,12 +35,12 @@ then:
 when:
   path: /api/v1/catalog/catalogs/publish_tests_read_write/packages/mypkg6/builds
   method: POST
-  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"mypkg6","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"pname":"mypkg6","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
+  body: '{"build_type":"manifest","derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"mypkg6","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"pname":"mypkg6","system":"x86_64-linux","version":"1.0.0"},"dot_flox_dir":"","locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","ref":"dummy","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"https://dummy.local"}'
 then:
   status: 200
   header:
   - name: date
-    value: Mon, 09 Mar 2026 18:41:10 GMT
+    value: Mon, 16 Mar 2026 15:54:12 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -57,7 +57,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Mon, 09 Mar 2026 18:41:10 GMT
+    value: Mon, 16 Mar 2026 15:54:12 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -69,12 +69,12 @@ then:
 when:
   path: /api/v1/catalog/catalogs/publish_tests_read_write/packages/mypkg6/builds
   method: POST
-  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"mypkg6","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"pname":"mypkg6","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
+  body: '{"build_type":"manifest","derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"mypkg6","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"pname":"mypkg6","system":"x86_64-linux","version":"1.0.0"},"dot_flox_dir":"","locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","ref":"dummy","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"https://dummy.local"}'
 then:
   status: 200
   header:
   - name: date
-    value: Mon, 09 Mar 2026 18:41:10 GMT
+    value: Mon, 16 Mar 2026 15:54:12 GMT
   - name: server
     value: uvicorn
   - name: content-length

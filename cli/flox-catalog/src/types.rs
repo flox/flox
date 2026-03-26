@@ -72,6 +72,7 @@ impl TryFrom<PackageGroup> for api_types::PackageGroup {
 // Resolution messages
 // ---------------------------------------------------------------------------
 pub use api_types::{
+    BuildType,
     CatalogStoreConfig,
     CatalogStoreConfigNixCopy,
     CatalogStoreConfigPublisher,

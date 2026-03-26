@@ -1,16 +1,16 @@
 { lib }:
 {
   nixpkgs,
-  pkgsDir,
-  catalogsLock ? null,
+  sourceInfo,
 }:
 
 let
-  catalogs =
-    if catalogsLock != null && builtins.pathExists catalogsLock then
-      (lib.importJSON catalogsLock).catalogs
-    else
-      { };
+  configRoot = "${sourceInfo.outPath}/${sourceInfo.dir or ""}";
+
+  pkgsDir = configRoot + "/pkgs";
+  catalogsLock = configRoot + "/nix-builds.lock";
+
+  catalogs = if builtins.pathExists catalogsLock then (lib.importJSON catalogsLock).catalogs else { };
 
   catalogInstances = lib.mapAttrs (
     name: lockedCatalogSpec:
@@ -18,8 +18,6 @@ let
     # "catalogs": {
     #   "foo": {
     #     "hash": "sha256-/UmRJVt7XpE27LGxS2hgGKWsErTx1oe65jhwWNPsnYs=",
-    #     "pkgsDir": ".flox/pkgs",
-    #     "catalogsLock": ".flox/nix-builds.lock",
     #     "locked": {
     #       "lastModified": 1769623709,
     #       "ref": "refs/heads/main",
@@ -39,15 +37,17 @@ let
     let
       fetchNixCatalog =
         let
-          sourceInfo = builtins.fetchTree lockedCatalogSpec.locked;
-          root = sourceInfo.outPath;
+          sourceInfo =
+            let
+              lockedWithoutDir = builtins.removeAttrs lockedCatalogSpec.locked [ "dir" ];
+              sourceInfo = builtins.fetchTree lockedWithoutDir;
+            in
+            sourceInfo
+            // lib.optionalAttrs (lockedCatalogSpec.locked ? dir) { inherit (lockedCatalogSpec.locked) dir; };
         in
         builtins.addErrorContext "while fetching catalog '${name}'" (
           lib.nef.instantiate {
-            inherit nixpkgs;
-            pkgsDir = "${root}/${lockedCatalogSpec.pkgsDir}";
-            catalogsLock =
-              if lockedCatalogSpec ? catalogsLock then "${root}/${lockedCatalogSpec.catalogsLock}" else null;
+            inherit nixpkgs sourceInfo;
           }
         );
 

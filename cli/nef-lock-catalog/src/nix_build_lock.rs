@@ -7,6 +7,7 @@ use serde::Serialize;
 use tracing::debug;
 
 use crate::CatalogId;
+use crate::lock::NixPrefetchResult;
 
 /// Locked source information to nix expression catalog.
 /// That is either:
@@ -21,17 +22,9 @@ use crate::CatalogId;
 pub(crate) enum CatalogLock {
     #[serde(rename = "nix")]
     Nix {
-        /// Relative path from source root to packages directory
-        #[serde(rename = "pkgsDir")]
-        pkgs_dir: String,
-
-        /// Relative path from source root to catalog lock file, if any
-        #[serde(rename = "catalogsLock", skip_serializing_if = "Option::is_none")]
-        catalogs_lock: Option<String>,
-
         /// Raw nix flake prefetch output (hash, locked, original, storePath)
         #[serde(flatten)]
-        prefetch: serde_json::Value,
+        prefetch: NixPrefetchResult,
     },
 }
 

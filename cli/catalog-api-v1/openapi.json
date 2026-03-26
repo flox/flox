@@ -2140,6 +2140,15 @@
         ],
         "title": "BaseCatalogInfo"
       },
+      "BuildType": {
+        "type": "string",
+        "enum": [
+          "manifest",
+          "nef"
+        ],
+        "title": "BuildType",
+        "description": "Records the build methodology used to produce a package.\n\nNEF packages carry full source metadata and can be reproduced from source;\nmanifest packages were built via the traditional flox manifest workflow."
+      },
       "CatalogPage": {
         "properties": {
           "page": {
@@ -2688,6 +2697,20 @@
             "title": "Cache Uri",
             "nullable": true,
             "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "nullable": true,
+            "type": "string"
+          },
+          "dot_flox_dir": {
+            "type": "string",
+            "title": "Dot Flox Dir",
+            "default": ".flox"
+          },
+          "build_type": {
+            "nullable": true,
+            "$ref": "#/components/schemas/BuildType"
           }
         },
         "type": "object",
@@ -2791,6 +2814,20 @@
             "title": "Cache Uri",
             "nullable": true,
             "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "nullable": true,
+            "type": "string"
+          },
+          "dot_flox_dir": {
+            "type": "string",
+            "title": "Dot Flox Dir",
+            "default": ".flox"
+          },
+          "build_type": {
+            "nullable": true,
+            "$ref": "#/components/schemas/BuildType"
           },
           "narinfos": {
             "nullable": true,

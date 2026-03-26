@@ -2,14 +2,14 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::nix::nix_base_command;
+use crate::CatalogId;
+use crate::lock::lock_url_with_options;
 use crate::nix_build_lock::{BuildLock, CatalogLock};
-use crate::{CatalogId, nix};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 enum CatalogType {
@@ -41,44 +41,16 @@ enum CatalogType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 enum CatalogSpec {
-    Full {
-        #[serde(rename = "type")]
-        type_: CatalogType,
-        #[serde(flatten)]
-        attrs: toml::Table,
-    },
-    Url {
-        url: Url,
-    },
+    Full(NixSourceTypeSpec),
+    Url { url: Url },
 }
 
-impl CatalogSpec {
-    /// Convert the catalog spec into a URL **using Nix' builtin flakeRef formatting**.
-    /// The Nix cli only accepts `flakeRef`s rather than structural source descriptors.
-    fn to_url(&self) -> Result<Url> {
-        if let CatalogSpec::Url { url } = self {
-            return Ok(url.clone());
-        };
-
-        let catalog_json = serde_json::to_string(&self)?;
-
-        let expr = format!(
-            "let flakeRef = builtins.fromJSON ''{catalog_json}''; in builtins.flakeRefToString flakeRef"
-        );
-
-        let mut command = nix::nix_base_command();
-        command.arg("eval").arg("--raw").arg("--expr").arg(expr);
-
-        let output = command
-            .output()
-            .with_context(|| format!("failed to run '{command:?}')"))?;
-
-        if !output.status.success() {
-            bail!(String::from_utf8_lossy(&output.stderr).into_owned());
-        }
-
-        Url::parse(&String::from_utf8(output.stdout)?).context("could not parse nix flakeref")
-    }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct NixSourceTypeSpec {
+    #[serde(rename = "type")]
+    type_: CatalogType,
+    #[serde(flatten)]
+    attrs: toml::Table,
 }
 
 /// A representation of the [BuildConfig] i.e. catalogs to be locked
@@ -98,88 +70,21 @@ pub fn read_config(path: impl AsRef<Path>) -> Result<BuildConfig> {
     Ok(config)
 }
 
-/// Lock a flakeref url using `nix flake prefetch`.
-/// This resolves urls, downloads the source and returns
-/// a locked source type as well as source information,
-/// such as hash and storePath.
-///
-///
-/// Example:
-///
-/// ```shell
-/// $ nix flake prefetch git+ssh://git@github.com/flox/flox --json
-/// {
-///   "hash": "sha256-LdMMBff1PCXQQl3I5Dvg5U2s4l+7l9lemAncUCjJUY8=",
-///   "locked": {
-///     "lastModified": 1770220825,
-///     "ref": "refs/heads/main",
-///     "rev": "a6250c34313d184c5c5be7ad824ad0bbc7610e38",
-///     "revCount": 4546,
-///     "type": "git",
-///     "url": "ssh://git@github.com/flox/flox"
-///   },
-///   "original": {
-///     "type": "git",
-///     "url": "ssh://git@github.com/flox/flox"
-///   },
-///   "storePath": "/nix/store/pihgq0g5vnrzlx2g5lzdn7dh7aqfbl7g-source"
-/// }
-/// ```
-///
-/// The url is either provided by the user directly
-/// or computed using [CatalogSpec::to_url].
-///
-/// The lock result above is stored _as is_ in the lockfile,
-/// the NEF expects the `.locked` subset of this structure
-/// as the input to `builtins.fetchTree`.
-fn lock_url(url: &Url) -> Result<serde_json::Value> {
-    let mut command = nix_base_command();
-    command
-        .arg("flake")
-        .arg("prefetch")
-        .arg("--refresh")
-        .arg("--json")
-        .arg(url.as_str());
-
-    let output = command
-        .output()
-        .with_context(|| format!("failed to run '{command:?}')"))?;
-
-    if !output.status.success() {
-        Err(anyhow::anyhow!(
-            String::from_utf8_lossy(&output.stderr).into_owned()
-        ))
-        .with_context(|| format!("failed to lock {url}"))?;
-    }
-
-    serde_json::from_slice(&output.stdout).context("could not parse nix prefetch")
-}
-
 /// Options for controlling the paths written into lock entries.
 /// Defaults to the flox convention (`.flox/pkgs` and `.flox/nix-builds.lock`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LockOptions {
-    /// Relative path from source root to packages directory.
+    /// Relative path from source root to nef base directory (containing pkgs/, nix-builds.lock).
     /// Appended after any `dir` prefix from the flakeref.
-    pub pkgs_dir: String,
-    /// Relative path from source root to catalog lock file.
-    /// Appended after any `dir` prefix from the flakeref.
-    pub catalogs_lock: String,
+    pub nef_base_dir: Option<String>,
 }
 
-impl Default for LockOptions {
-    fn default() -> Self {
-        LockOptions {
-            pkgs_dir: ".flox/pkgs".to_string(),
-            catalogs_lock: ".flox/nix-builds.lock".to_string(),
-        }
-    }
-}
-
-/// Lock a [BuildConfig] using the default flox convention for paths.
+/// Lock a [BuildConfig] using the default Flox conventions.
 #[tracing::instrument(skip_all)]
 pub fn lock_config(config: &BuildConfig) -> Result<BuildLock> {
-    lock_config_with_options(config, &LockOptions::default())
+    lock_config_with_options(config, &LockOptions {
+        nef_base_dir: Some(".flox".to_string()),
+    })
 }
 
 /// Lock a [BuildConfig] with explicit path options.
@@ -198,32 +103,17 @@ pub fn lock_config_with_options(config: &BuildConfig, options: &LockOptions) -> 
         )
         .entered();
 
-        #[allow(clippy::match_single_binding)] // extension point for floxhub catalogs
         let locked_catalog = match catalog {
-            nix_spec => {
-                let catalog_url = nix_spec.to_url()?;
-                let mut prefetch = lock_url(&catalog_url)?;
-
-                // Extract and remove `dir` from the locked ref.
-                // Replaced by explicit pkgsDir/catalogsLock fields.
-                let dir = prefetch
-                    .get_mut("locked")
-                    .and_then(|l| l.as_object_mut())
-                    .and_then(|l| l.remove("dir"))
-                    .and_then(|d| d.as_str().map(String::from))
-                    .unwrap_or_default();
-
-                let prefix = if dir.is_empty() {
-                    String::new()
-                } else {
-                    format!("{dir}/")
-                };
-
-                CatalogLock::Nix {
-                    pkgs_dir: format!("{prefix}{}", options.pkgs_dir),
-                    catalogs_lock: Some(format!("{prefix}{}", options.catalogs_lock)),
-                    prefetch,
-                }
+            CatalogSpec::Full(source_type) => {
+                let prefetch = lock_url_with_options(
+                    &serde_json::to_value(source_type)?.try_into()?,
+                    options,
+                )?;
+                CatalogLock::Nix { prefetch }
+            },
+            CatalogSpec::Url { url } => {
+                let prefetch = lock_url_with_options(&url.as_str().try_into()?, options)?;
+                CatalogLock::Nix { prefetch }
             },
         };
 

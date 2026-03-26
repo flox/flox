@@ -109,6 +109,7 @@ in
       cp -rf --no-preserve=mode ${flox-src}/cli/shell_gen/* ./cli/shell_gen
       cp -rf --no-preserve=mode ${flox-src}/cli/flox-test-utils/* ./cli/flox-test-utils
       cp -rf --no-preserve=mode ${flox-src}/cli/systemd/* ./cli/systemd
+      cp -rf --no-preserve=mode ${flox-src}/cli/nef-lock-catalog/* ./cli/nef-lock-catalog
     '';
 
     # runtime dependencies
