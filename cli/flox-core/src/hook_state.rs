@@ -125,8 +125,7 @@ impl ActivationTracking {
         if self.entries.is_empty() {
             return Ok(String::new());
         }
-        let json =
-            serde_json::to_string(self).context("failed to serialize ActivationTracking")?;
+        let json = serde_json::to_string(self).context("failed to serialize ActivationTracking")?;
         let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
         encoder
             .write_all(json.as_bytes())
@@ -339,13 +338,14 @@ mod tests {
     #[test]
     fn test_activation_tracking_serialize_deserialize_roundtrip() {
         let mut tracking = ActivationTracking::default();
-        tracking.entries.insert(
-            PathBuf::from("/home/user/project/.flox"),
-            ActivationInfo {
-                activation_state_dir: PathBuf::from("/run/user/1000/flox/activations/abc12345-project"),
+        tracking
+            .entries
+            .insert(PathBuf::from("/home/user/project/.flox"), ActivationInfo {
+                activation_state_dir: PathBuf::from(
+                    "/run/user/1000/flox/activations/abc12345-project",
+                ),
                 store_path: "/nix/store/abc-env".to_string(),
-            },
-        );
+            });
 
         let encoded = tracking.serialize().unwrap();
         let decoded = ActivationTracking::deserialize(&encoded).unwrap();

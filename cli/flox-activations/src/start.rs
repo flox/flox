@@ -231,7 +231,10 @@ pub(crate) fn spawn_executive(
 /// Wait for the executive to signal that it has started by sending SIGUSR1.
 /// If the executive dies, then we error.
 /// Signals should have been registered for SIGCHLD and SIGUSR1
-pub(crate) fn wait_for_executive(child_pid: Pid, mut signals: Signals) -> Result<(), anyhow::Error> {
+pub(crate) fn wait_for_executive(
+    child_pid: Pid,
+    mut signals: Signals,
+) -> Result<(), anyhow::Error> {
     debug!(
         "Awaiting SIGUSR1 from child process with PID: {}",
         child_pid

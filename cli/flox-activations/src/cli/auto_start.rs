@@ -49,7 +49,7 @@ impl AutoStartArgs {
 
         let start_id = self.start_or_attach(&ctx)?;
 
-        let is_new = matches!(start_id.1, true);
+        let is_new = start_id.1;
         let result = AutoStartResult {
             status: "ok".to_string(),
             start_id: serde_json::to_string(&start_id.0)?,
@@ -106,26 +106,24 @@ impl AutoStartArgs {
 
         let mut activations = activations_opt.unwrap_or_else(|| {
             debug!("no existing activation state, creating new one");
-            ActivationState::new(
-                &ctx.mode,
-                Some(&ctx.dot_flox_path),
-                &ctx.flox_env,
-            )
+            ActivationState::new(&ctx.mode, Some(&ctx.dot_flox_path), &ctx.flox_env)
         });
 
         // Reset state if executive is not running
         if !activations.executive_running() {
             debug!("discarding activation state due to executive not running");
-            activations = ActivationState::new(
-                &ctx.mode,
-                Some(&ctx.dot_flox_path),
-                &ctx.flox_env,
-            );
+            activations = ActivationState::new(&ctx.mode, Some(&ctx.dot_flox_path), &ctx.flox_env);
         }
 
         match activations.start_or_attach(self.pid, &ctx.store_path) {
             StartOrAttachResult::Start { start_id } => {
-                let result = self.do_start(ctx, start_id, &mut activations, &activations_json_path, lock)?;
+                let result = self.do_start(
+                    ctx,
+                    start_id,
+                    &mut activations,
+                    &activations_json_path,
+                    lock,
+                )?;
                 Ok(result)
             },
             StartOrAttachResult::Attach { start_id } => {

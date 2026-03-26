@@ -221,19 +221,13 @@ impl HookEnv {
                         );
                     } else {
                         // New or changed environment - spawn auto-start
-                        spawn_auto_start(
-                            shell_pid,
-                            dot_flox,
-                            &resolved,
-                            &activation_state_dir,
-                        );
-                        new_tracking.entries.insert(
-                            dot_flox.path.clone(),
-                            ActivationInfo {
+                        spawn_auto_start(shell_pid, dot_flox, &resolved, &activation_state_dir);
+                        new_tracking
+                            .entries
+                            .insert(dot_flox.path.clone(), ActivationInfo {
                                 activation_state_dir,
                                 store_path: resolved.store_path.clone(),
-                            },
-                        );
+                            });
                     }
 
                     for (k, v) in resolved.vars {
