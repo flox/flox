@@ -104,9 +104,11 @@ impl HookEnv {
         // Emit new exports.
         emit_apply(&new_diff, &combined_env, shell, &mut stdout)?;
 
-        // Emit prompt modification.
+        // Emit prompt modification.  Reverse to innermost-first order so the
+        // auto-activation prompt matches the convention used by `flox activate`.
         let env_names: Vec<String> = trusted_dot_flox
             .iter()
+            .rev()
             .map(|d| d.pointer.name().to_string())
             .collect();
         emit_prompt(&env_names, shell, &mut stdout)?;

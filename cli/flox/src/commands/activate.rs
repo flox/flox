@@ -496,12 +496,11 @@ impl Activate {
             );
             Ok(())
         } else {
-            // When activating in-place without an explicit --dir or -r target,
-            // emit auto-activation hook code before exec so that
-            // `eval "$(flox activate)"` is a single-line setup that does everything.
-            if matches!(invocation_type_for_hook, InvocationType::InPlace)
-                && matches!(self.environment, EnvironmentSelect::Unspecified)
-            {
+            // Emit auto-activation hook code before exec so that
+            // `eval "$(flox activate ...)"` sets up auto-activation hooks
+            // in addition to activating the specified environment.
+            // The hook code is idempotent and harmless in all contexts.
+            if matches!(invocation_type_for_hook, InvocationType::InPlace) {
                 let flox_bin = std::env::current_exe()
                     .ok()
                     .and_then(|p| p.to_str().map(String::from))
