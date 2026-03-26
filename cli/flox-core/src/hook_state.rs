@@ -18,6 +18,15 @@ pub const HOOK_VAR_NOTIFIED: &str = "_FLOX_HOOK_NOTIFIED";
 pub const HOOK_VAR_CWD: &str = "_FLOX_HOOK_CWD";
 pub const HOOK_VAR_ACTIVATIONS: &str = "_FLOX_HOOK_ACTIVATIONS";
 
+/// Environment variable changes produced by on-activate hooks.
+/// Passed from `flox-activations` back to `hook-env` via `AutoStartResult`,
+/// and cached in `ActivationInfo` for cd-away-and-back without re-running hooks.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct OnActivateEnvDiff {
+    pub additions: HashMap<String, String>,
+    pub deletions: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct HookDiff {
     pub additions: HashMap<String, String>,
@@ -108,6 +117,10 @@ pub struct WatchEntry {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ActivationTracking {
     pub entries: HashMap<PathBuf, ActivationInfo>,
+    /// Cache of activation info for environments the user has cd'd away from.
+    /// Preserves on_activate_diff so cd-back doesn't re-run hooks.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub detached_cache: HashMap<PathBuf, ActivationInfo>,
 }
 
 /// Metadata for a single auto-activated environment.
@@ -117,12 +130,18 @@ pub struct ActivationInfo {
     pub activation_state_dir: PathBuf,
     /// Nix store path for the built environment
     pub store_path: String,
+    /// Start state directory for the current activation
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_state_dir: Option<PathBuf>,
+    /// Cached on-activate hook env diff (avoids re-running hooks on cd-back)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_activate_diff: Option<OnActivateEnvDiff>,
 }
 
 impl ActivationTracking {
     /// Serialize to JSON, zlib compress, then base64url encode (no padding).
     pub fn serialize(&self) -> Result<String> {
-        if self.entries.is_empty() {
+        if self.entries.is_empty() && self.detached_cache.is_empty() {
             return Ok(String::new());
         }
         let json = serde_json::to_string(self).context("failed to serialize ActivationTracking")?;
@@ -345,6 +364,8 @@ mod tests {
                     "/run/user/1000/flox/activations/abc12345-project",
                 ),
                 store_path: "/nix/store/abc-env".to_string(),
+                start_state_dir: None,
+                on_activate_diff: None,
             });
 
         let encoded = tracking.serialize().unwrap();

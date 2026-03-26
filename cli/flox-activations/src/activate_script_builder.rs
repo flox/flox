@@ -3,6 +3,7 @@ use std::path::Path;
 use std::process::Command;
 
 use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
+use flox_core::activate::mode::ActivateMode;
 use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
@@ -193,6 +194,42 @@ fn fixed_vars_to_export(
         ("PATH", new_path),
         ("MANPATH", new_manpath),
     ])
+}
+
+/// Assemble an activate command for auto-activation (hook-env path).
+///
+/// Unlike `assemble_activate_command`, this takes component parts instead of
+/// a full `ActivateCtx`, since auto-start doesn't have shell/invocation_type.
+/// Uses `VarsFromEnvironment::get()` because auto-start inherits the shell
+/// environment via hook-env.
+pub(crate) fn assemble_auto_activate_command(
+    attach_ctx: &AttachCtx,
+    project_ctx: Option<&AttachProjectCtx>,
+    mode: &ActivateMode,
+    start_state_dir: &Path,
+) -> Command {
+    let vars_from_env = VarsFromEnvironment::get().unwrap_or(VarsFromEnvironment {
+        flox_env_dirs: None,
+        path: None,
+        manpath: None,
+    });
+
+    let mut command = Command::new(attach_ctx.interpreter_path.join("activate"));
+    command.envs(old_cli_envs(attach_ctx, project_ctx));
+    add_old_activate_script_exports(
+        &mut command,
+        attach_ctx,
+        project_ctx,
+        0, // subsystem_verbosity: no tracing by default in auto-activation
+        vars_from_env,
+    );
+
+    // Inline the activate script options (--env, --mode, --start-state-dir)
+    command.arg("--env").arg(&attach_ctx.env);
+    command.arg("--mode").arg(mode.to_string());
+    command.args(["--start-state-dir", &start_state_dir.to_string_lossy()]);
+
+    command
 }
 
 /// The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.

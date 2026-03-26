@@ -3,9 +3,9 @@ use std::os::unix::fs::DirBuilderExt;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Args;
-use flox_core::activate::context::AutoStartCtx;
+use flox_core::activate::context::{AutoStartCtx, AutoStartResult};
 use flox_core::activations::{
     ActivationState,
     StartIdentifier,
@@ -14,19 +14,14 @@ use flox_core::activations::{
     state_json_path,
     write_activations_json,
 };
+use flox_core::hook_state::OnActivateEnvDiff;
 use signal_hook::consts::{SIGCHLD, SIGUSR1};
 use signal_hook::iterator::Signals;
-use tracing::debug;
+use tracing::{debug, warn};
 
-use crate::start::{spawn_executive, wait_for_executive};
-
-/// Result reported on stdout as JSON.
-#[derive(Debug, serde::Serialize)]
-pub struct AutoStartResult {
-    pub status: String,
-    pub start_id: String,
-    pub is_new: bool,
-}
+use crate::activate_script_builder::assemble_auto_activate_command;
+use crate::env_diff::{ENV_DIFF_END_JSON, EnvDiff};
+use crate::start::{spawn_executive, start_services_with_new_process_compose, wait_for_executive};
 
 #[derive(Debug, Args)]
 pub struct AutoStartArgs {
@@ -47,13 +42,31 @@ impl AutoStartArgs {
         // Clean up the context file
         let _ = fs::remove_file(&self.activate_data);
 
-        let start_id = self.start_or_attach(&ctx)?;
+        let (start_id, is_new) = self.start_or_attach(&ctx)?;
 
-        let is_new = start_id.1;
+        // Compute hook env diff for new starts
+        let (hook_env_diff, start_state_dir_str) = if is_new {
+            let start_state_dir = start_id.start_state_dir(&ctx.activation_state_dir)?;
+            let diff = if start_state_dir.join(ENV_DIFF_END_JSON).exists() {
+                let env_diff = EnvDiff::from_files(&start_state_dir)?;
+                Some(OnActivateEnvDiff {
+                    additions: env_diff.additions,
+                    deletions: env_diff.deletions,
+                })
+            } else {
+                None
+            };
+            (diff, Some(start_state_dir.display().to_string()))
+        } else {
+            (None, None)
+        };
+
         let result = AutoStartResult {
             status: "ok".to_string(),
-            start_id: serde_json::to_string(&start_id.0)?,
+            start_id: serde_json::to_string(&start_id)?,
             is_new,
+            hook_env_diff,
+            start_state_dir: start_state_dir_str,
         };
         println!("{}", serde_json::to_string(&result)?);
 
@@ -171,7 +184,7 @@ impl AutoStartArgs {
             flox_env_log_dir: ctx.flox_env_log_dir.clone(),
             process_compose_bin: ctx.process_compose_bin.clone(),
             flox_services_socket: ctx.flox_services_socket.clone(),
-            services_to_start: Vec::new(),
+            services_to_start: ctx.services_to_start.clone(),
         };
 
         // Spawn executive if not already running
@@ -196,14 +209,46 @@ impl AutoStartArgs {
             wait_for_executive(exec_pid, signals)?;
         }
 
-        // Phase 1: Skip on-activate hooks - just mark as ready
-        // Phase 2 will add hook execution here
+        // Run on-activate hooks via the activate script
+        let mut start_command =
+            assemble_auto_activate_command(&attach_ctx, Some(&project_ctx), &ctx.mode, &start_state_dir);
+        debug!("spawning activate script for auto-activation: {:?}", start_command);
+        let status = start_command.spawn()?.wait()?;
+        if !status.success() {
+            bail!("Running hook.on-activate failed during auto-activation");
+        }
+
+        if !start_state_dir.join(ENV_DIFF_END_JSON).exists() {
+            bail!(
+                "The hook.on-activate script did not complete normally during auto-activation.\n\
+                 Review your script for the use of:\n\
+                 - 'exit' commands, which should be replaced with 'return'\n\
+                 - 'exec' commands, which should be run in a subshell: '(exec command)'"
+            );
+        }
 
         // Re-acquire lock to mark ready
         let (activations_opt, lock) = read_activations_json(activations_json_path)?;
         let mut activations = activations_opt.expect("state.json should exist");
         activations.set_ready(&start_id);
         write_activations_json(&activations, activations_json_path, lock)?;
+
+        // Start services if configured (non-fatal)
+        if !ctx.services_to_start.is_empty() && !ctx.flox_services_socket.exists() {
+            debug!(
+                services = ?ctx.services_to_start,
+                "starting services for auto-activation"
+            );
+            if let Err(e) = start_services_with_new_process_compose(
+                &ctx.activation_state_dir,
+                &ctx.process_compose_bin,
+                &ctx.flox_services_socket,
+                &ctx.services_to_start,
+            ) {
+                warn!("failed to start services during auto-activation: {e}");
+                eprintln!("flox: warning: failed to start services: {e}");
+            }
+        }
 
         Ok(StartOrAttachResult::Start { start_id })
     }

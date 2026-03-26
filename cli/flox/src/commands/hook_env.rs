@@ -6,7 +6,7 @@ use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
-use flox_core::activate::context::AutoStartCtx;
+use flox_core::activate::context::{AutoStartCtx, AutoStartResult};
 use flox_core::activate::mode::ActivateMode;
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVE_ENVIRONMENTS_VAR};
 use flox_core::activations::activation_state_dir_path;
@@ -22,9 +22,13 @@ use flox_core::hook_state::{
     HOOK_VAR_WATCHES,
     HookDiff,
     HookState,
+    OnActivateEnvDiff,
     WatchEntry,
 };
 use flox_core::trust::{TrustManager, TrustStatus};
+use flox_manifest::interfaces::CommonFields;
+use flox_manifest::lockfile::Lockfile;
+use flox_manifest::parsed::Inner;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{
     DotFlox,
@@ -210,23 +214,74 @@ impl HookEnv {
                         .get(&dot_flox.path)
                         .is_some_and(|info| info.store_path == resolved.store_path);
 
+                    // Check if this environment is in the detached cache (cd-away-and-back).
+                    let cached = prev_tracking
+                        .detached_cache
+                        .get(&dot_flox.path)
+                        .filter(|info| info.store_path == resolved.store_path)
+                        .cloned();
+
                     let activation_state_dir =
                         activation_state_dir_path(&flox.runtime_dir, &dot_flox.path);
 
                     if already_tracked {
-                        // Carry forward existing tracking info
-                        new_tracking.entries.insert(
-                            dot_flox.path.clone(),
-                            prev_tracking.entries[&dot_flox.path].clone(),
+                        // Case 1: Subsequent prompt, same dir - carry forward existing info
+                        let info = prev_tracking.entries[&dot_flox.path].clone();
+                        // Re-apply cached on-activate diff
+                        apply_on_activate_diff(&info.on_activate_diff, &mut combined_env);
+                        new_tracking
+                            .entries
+                            .insert(dot_flox.path.clone(), info);
+                    } else if let Some(cached_info) = cached {
+                        // Case 2: cd-away-and-back - re-attach PID, use cached diff
+                        spawn_auto_start(
+                            shell_pid,
+                            dot_flox,
+                            &resolved,
+                            &activation_state_dir,
                         );
+                        // Re-apply cached on-activate diff (hooks don't re-run)
+                        apply_on_activate_diff(
+                            &cached_info.on_activate_diff,
+                            &mut combined_env,
+                        );
+                        new_tracking
+                            .entries
+                            .insert(dot_flox.path.clone(), cached_info);
                     } else {
-                        // New or changed environment - spawn auto-start
-                        spawn_auto_start(shell_pid, dot_flox, &resolved, &activation_state_dir);
+                        // Case 3: Truly new or store path changed - run hooks
+                        let auto_result = spawn_auto_start(
+                            shell_pid,
+                            dot_flox,
+                            &resolved,
+                            &activation_state_dir,
+                        );
+
+                        let (on_activate_diff, start_state_dir) =
+                            if let Some(ref result) = auto_result {
+                                // Merge on-activate env diff into combined_env
+                                apply_on_activate_diff(
+                                    &result.hook_env_diff,
+                                    &mut combined_env,
+                                );
+                                (
+                                    result.hook_env_diff.clone(),
+                                    result
+                                        .start_state_dir
+                                        .as_ref()
+                                        .map(PathBuf::from),
+                                )
+                            } else {
+                                (None, None)
+                            };
+
                         new_tracking
                             .entries
                             .insert(dot_flox.path.clone(), ActivationInfo {
                                 activation_state_dir,
                                 store_path: resolved.store_path.clone(),
+                                start_state_dir,
+                                on_activate_diff,
                             });
                     }
 
@@ -254,10 +309,26 @@ impl HookEnv {
             }
         }
 
-        // Detach from environments that are no longer active.
+        // Detach from environments that are no longer active and cache their info.
         for (path, info) in &prev_tracking.entries {
             if !new_tracking.entries.contains_key(path) {
                 spawn_auto_detach(shell_pid, &info.activation_state_dir);
+                // Move to detached cache so cd-back can reuse on_activate_diff
+                new_tracking
+                    .detached_cache
+                    .insert(path.clone(), info.clone());
+            }
+        }
+
+        // Carry forward detached cache entries whose activation state dir still exists.
+        for (path, info) in &prev_tracking.detached_cache {
+            if !new_tracking.entries.contains_key(path)
+                && !new_tracking.detached_cache.contains_key(path)
+                && info.activation_state_dir.exists()
+            {
+                new_tracking
+                    .detached_cache
+                    .insert(path.clone(), info.clone());
             }
         }
 
@@ -333,6 +404,21 @@ impl HookEnv {
     }
 }
 
+/// Apply cached on-activate hook env diff into the combined environment.
+fn apply_on_activate_diff(
+    diff: &Option<OnActivateEnvDiff>,
+    combined_env: &mut HashMap<String, String>,
+) {
+    if let Some(diff) = diff {
+        for (k, v) in &diff.additions {
+            combined_env.insert(k.clone(), v.clone());
+        }
+        for k in &diff.deletions {
+            combined_env.remove(k);
+        }
+    }
+}
+
 /// Compute the value an environment variable would have after reverting the
 /// previous diff.  `emit_revert` writes shell code but does not modify this
 /// process, so we need this to know the "pristine" baseline.
@@ -368,6 +454,8 @@ struct ResolvedEnv {
     env_project: PathBuf,
     /// Services socket path
     flox_services_socket: PathBuf,
+    /// Service names to start with process-compose
+    services_to_start: Vec<String>,
 }
 
 /// Resolve environment variables from a built environment.
@@ -376,7 +464,23 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<ResolvedEnv> {
         .into_concrete_environment(flox, None)?;
 
     // Ensure the environment is locked and built.
-    env.lockfile(flox)?;
+    let lock_result = env.lockfile(flox)?;
+    let lockfile: Lockfile = lock_result.into();
+    let services_to_start = match lockfile.manifest.migrate_typed_only(Some(&lockfile)) {
+        Ok(manifest) => {
+            let services_for_system = manifest.services().copy_for_system(&flox.system);
+            services_for_system
+                .inner()
+                .keys()
+                .cloned()
+                .collect::<Vec<String>>()
+        },
+        Err(e) => {
+            debug!("failed to read services from manifest: {e}");
+            Vec::new()
+        },
+    };
+
     let rendered_links = env.rendered_env_links(flox)?;
     let link = rendered_links.for_mode(&ActivateMode::Dev);
 
@@ -436,6 +540,7 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<ResolvedEnv> {
         flox_env_log_dir,
         env_project,
         flox_services_socket,
+        services_to_start,
     })
 }
 
@@ -672,14 +777,14 @@ pub(crate) fn trust_or_log(data_dir: impl AsRef<Path>, dot_flox_path: impl AsRef
 }
 
 /// Spawn `flox-activations auto-start` to register the shell PID, spawn an
-/// executive, and set up activation state. Errors are logged but non-fatal:
-/// the environment still works for env vars, just without hooks/services.
+/// executive, run on-activate hooks, and optionally start services.
+/// Returns `AutoStartResult` on success, or `None` on failure (non-fatal).
 fn spawn_auto_start(
     shell_pid: i32,
     dot_flox: &DotFlox,
     resolved: &ResolvedEnv,
     activation_state_dir: &Path,
-) {
+) -> Option<AutoStartResult> {
     let ctx = AutoStartCtx {
         dot_flox_path: dot_flox.path.clone(),
         store_path: resolved.store_path.clone(),
@@ -693,6 +798,7 @@ fn spawn_auto_start(
         process_compose_bin: PathBuf::from(&*PROCESS_COMPOSE_BIN),
         flox_services_socket: resolved.flox_services_socket.clone(),
         interpreter_path: FLOX_INTERPRETER.clone(),
+        services_to_start: resolved.services_to_start.clone(),
         metrics_uuid: None,
     };
 
@@ -706,19 +812,19 @@ fn spawn_auto_start(
         Ok(f) => f,
         Err(e) => {
             error!("failed to create temp file for auto-start: {e}");
-            return;
+            return None;
         },
     };
 
     if let Err(e) = serde_json::to_writer(&temp_file, &ctx) {
         error!("failed to write auto-start context: {e}");
-        return;
+        return None;
     }
 
     let ctx_path = temp_file.path().to_path_buf();
     if let Err(e) = temp_file.keep() {
         error!("failed to persist auto-start context file: {e}");
-        return;
+        return None;
     }
 
     let result = Command::new(&*FLOX_ACTIVATIONS_BIN)
@@ -730,32 +836,52 @@ fn spawn_auto_start(
             &ctx_path.to_string_lossy(),
         ])
         .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
-        .status();
+        .output();
 
     // Clean up temp file if it still exists (auto-start normally removes it)
     let _ = std::fs::remove_file(&ctx_path);
 
     match result {
-        Ok(status) if status.success() => {
-            debug!(
-                path = %dot_flox.path.display(),
-                "auto-start completed successfully"
-            );
+        Ok(output) if output.status.success() => {
+            let stdout_str = String::from_utf8_lossy(&output.stdout);
+            match serde_json::from_str::<AutoStartResult>(stdout_str.trim()) {
+                Ok(auto_result) => {
+                    debug!(
+                        path = %dot_flox.path.display(),
+                        is_new = auto_result.is_new,
+                        "auto-start completed successfully"
+                    );
+                    Some(auto_result)
+                },
+                Err(e) => {
+                    debug!(
+                        path = %dot_flox.path.display(),
+                        "failed to parse auto-start result: {e}"
+                    );
+                    None
+                },
+            }
         },
-        Ok(status) => {
+        Ok(output) => {
+            let stderr_str = String::from_utf8_lossy(&output.stderr);
+            if !stderr_str.is_empty() {
+                eprintln!("{}", stderr_str.trim());
+            }
             debug!(
                 path = %dot_flox.path.display(),
-                code = ?status.code(),
+                code = ?output.status.code(),
                 "auto-start exited with non-zero status"
             );
+            None
         },
         Err(e) => {
             error!(
                 path = %dot_flox.path.display(),
                 "failed to spawn auto-start: {e}"
             );
+            None
         },
     }
 }

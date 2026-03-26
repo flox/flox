@@ -143,9 +143,28 @@ pub struct AutoStartCtx {
     /// Path to the interpreter (activation scripts)
     pub interpreter_path: PathBuf,
 
+    /// Services to start with a new process-compose instance.
+    #[serde(default)]
+    pub services_to_start: Vec<String>,
+
     /// The metrics UUID for Sentry user identification.
     #[serde(default)]
     pub metrics_uuid: Option<Uuid>,
+}
+
+/// Result returned on stdout (as JSON) by `flox-activations auto-start`.
+/// Parsed by `hook-env` to merge on-activate env diff and track state.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoStartResult {
+    pub status: String,
+    pub start_id: String,
+    pub is_new: bool,
+    /// Environment variable changes produced by on-activate hooks (only when is_new=true).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hook_env_diff: Option<crate::hook_state::OnActivateEnvDiff>,
+    /// Start state directory path (only when is_new=true).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_state_dir: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, derive_more::Display, PartialEq, Serialize)]
