@@ -229,47 +229,27 @@ impl HookEnv {
                         let info = prev_tracking.entries[&dot_flox.path].clone();
                         // Re-apply cached on-activate diff
                         apply_on_activate_diff(&info.on_activate_diff, &mut combined_env);
-                        new_tracking
-                            .entries
-                            .insert(dot_flox.path.clone(), info);
+                        new_tracking.entries.insert(dot_flox.path.clone(), info);
                     } else if let Some(cached_info) = cached {
                         // Case 2: cd-away-and-back - re-attach PID, use cached diff
-                        spawn_auto_start(
-                            shell_pid,
-                            dot_flox,
-                            &resolved,
-                            &activation_state_dir,
-                        );
+                        spawn_auto_start(shell_pid, dot_flox, &resolved, &activation_state_dir);
                         // Re-apply cached on-activate diff (hooks don't re-run)
-                        apply_on_activate_diff(
-                            &cached_info.on_activate_diff,
-                            &mut combined_env,
-                        );
+                        apply_on_activate_diff(&cached_info.on_activate_diff, &mut combined_env);
                         new_tracking
                             .entries
                             .insert(dot_flox.path.clone(), cached_info);
                     } else {
                         // Case 3: Truly new or store path changed - run hooks
-                        let auto_result = spawn_auto_start(
-                            shell_pid,
-                            dot_flox,
-                            &resolved,
-                            &activation_state_dir,
-                        );
+                        let auto_result =
+                            spawn_auto_start(shell_pid, dot_flox, &resolved, &activation_state_dir);
 
                         let (on_activate_diff, start_state_dir) =
                             if let Some(ref result) = auto_result {
                                 // Merge on-activate env diff into combined_env
-                                apply_on_activate_diff(
-                                    &result.hook_env_diff,
-                                    &mut combined_env,
-                                );
+                                apply_on_activate_diff(&result.hook_env_diff, &mut combined_env);
                                 (
                                     result.hook_env_diff.clone(),
-                                    result
-                                        .start_state_dir
-                                        .as_ref()
-                                        .map(PathBuf::from),
+                                    result.start_state_dir.as_ref().map(PathBuf::from),
                                 )
                             } else {
                                 (None, None)

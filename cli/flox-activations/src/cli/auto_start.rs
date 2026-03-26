@@ -210,9 +210,16 @@ impl AutoStartArgs {
         }
 
         // Run on-activate hooks via the activate script
-        let mut start_command =
-            assemble_auto_activate_command(&attach_ctx, Some(&project_ctx), &ctx.mode, &start_state_dir);
-        debug!("spawning activate script for auto-activation: {:?}", start_command);
+        let mut start_command = assemble_auto_activate_command(
+            &attach_ctx,
+            Some(&project_ctx),
+            &ctx.mode,
+            &start_state_dir,
+        );
+        debug!(
+            "spawning activate script for auto-activation: {:?}",
+            start_command
+        );
         let status = start_command.spawn()?.wait()?;
         if !status.success() {
             bail!("Running hook.on-activate failed during auto-activation");
