@@ -8,7 +8,34 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use flate2::Compression;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+
+/// Serialize a value to JSON, zlib compress, then base64url encode (no padding).
+fn compress_to_base64<T: Serialize>(val: &T) -> Result<String> {
+    let json = serde_json::to_string(val).context("failed to serialize to JSON")?;
+    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+    encoder
+        .write_all(json.as_bytes())
+        .context("failed to zlib compress")?;
+    let compressed = encoder
+        .finish()
+        .context("failed to finish zlib compression")?;
+    Ok(URL_SAFE_NO_PAD.encode(&compressed))
+}
+
+/// Deserialize from base64url encoded, zlib compressed JSON.
+fn decompress_from_base64<T: DeserializeOwned>(encoded: &str) -> Result<T> {
+    let compressed = URL_SAFE_NO_PAD
+        .decode(encoded)
+        .context("failed to base64url decode")?;
+    let mut decoder = ZlibDecoder::new(&compressed[..]);
+    let mut json = String::new();
+    decoder
+        .read_to_string(&mut json)
+        .context("failed to zlib decompress")?;
+    serde_json::from_str(&json).context("failed to deserialize from JSON")
+}
 
 pub const HOOK_VAR_DIFF: &str = "_FLOX_HOOK_DIFF";
 pub const HOOK_VAR_DIRS: &str = "_FLOX_HOOK_DIRS";
@@ -76,15 +103,7 @@ impl HookDiff {
 
     /// Serialize to JSON, zlib compress, then base64url encode (no padding).
     pub fn serialize(&self) -> Result<String> {
-        let json = serde_json::to_string(self).context("failed to serialize HookDiff to JSON")?;
-        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-        encoder
-            .write_all(json.as_bytes())
-            .context("failed to zlib compress HookDiff")?;
-        let compressed = encoder
-            .finish()
-            .context("failed to finish zlib compression")?;
-        Ok(URL_SAFE_NO_PAD.encode(&compressed))
+        compress_to_base64(self)
     }
 
     /// Deserialize from base64url encoded, zlib compressed JSON.
@@ -93,15 +112,7 @@ impl HookDiff {
         if encoded.is_empty() {
             return Ok(Self::default());
         }
-        let compressed = URL_SAFE_NO_PAD
-            .decode(encoded)
-            .context("failed to base64url decode HookDiff")?;
-        let mut decoder = ZlibDecoder::new(&compressed[..]);
-        let mut json = String::new();
-        decoder
-            .read_to_string(&mut json)
-            .context("failed to zlib decompress HookDiff")?;
-        serde_json::from_str(&json).context("failed to deserialize HookDiff from JSON")
+        decompress_from_base64(encoded)
     }
 }
 
@@ -144,15 +155,7 @@ impl ActivationTracking {
         if self.entries.is_empty() && self.detached_cache.is_empty() {
             return Ok(String::new());
         }
-        let json = serde_json::to_string(self).context("failed to serialize ActivationTracking")?;
-        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-        encoder
-            .write_all(json.as_bytes())
-            .context("failed to zlib compress ActivationTracking")?;
-        let compressed = encoder
-            .finish()
-            .context("failed to finish zlib compression")?;
-        Ok(URL_SAFE_NO_PAD.encode(&compressed))
+        compress_to_base64(self)
     }
 
     /// Deserialize from base64url encoded, zlib compressed JSON.
@@ -161,15 +164,7 @@ impl ActivationTracking {
         if encoded.is_empty() {
             return Ok(Self::default());
         }
-        let compressed = URL_SAFE_NO_PAD
-            .decode(encoded)
-            .context("failed to base64url decode ActivationTracking")?;
-        let mut decoder = ZlibDecoder::new(&compressed[..]);
-        let mut json = String::new();
-        decoder
-            .read_to_string(&mut json)
-            .context("failed to zlib decompress ActivationTracking")?;
-        serde_json::from_str(&json).context("failed to deserialize ActivationTracking from JSON")
+        decompress_from_base64(encoded)
     }
 }
 

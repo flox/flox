@@ -6,7 +6,7 @@ use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
-use flox_core::activate::context::{AutoStartCtx, AutoStartResult};
+use flox_core::activate::context::{AttachCtx, AttachProjectCtx, AutoStartCtx, AutoStartResult};
 use flox_core::activate::mode::ActivateMode;
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVE_ENVIRONMENTS_VAR};
 use flox_core::activations::activation_state_dir_path;
@@ -70,108 +70,19 @@ impl HookEnv {
 
         let trust_manager = TrustManager::new(&flox.data_dir);
 
-        // Fast path: CWD unchanged AND no watched files changed AND the set of
-        // discovered .flox dirs hasn't changed AND trust status hasn't changed
-        // for any active dir → exit with no output.
-        // We must check discovered dirs so that a new `flox init` in the
-        // current directory is detected without requiring a `cd` away and back.
-        // We must check trust so that `flox revoke` is detected without
-        // requiring a `cd` away and back.
-        let discovered_dirs: Vec<PathBuf> = discovered.iter().map(|d| d.path.clone()).collect();
-        let watches_changed = state.watches_changed();
-        let trust_changed = state
-            .active_dirs
-            .iter()
-            .any(|dir| !matches!(trust_manager.check(dir), Ok(TrustStatus::Trusted)));
-        if state.last_cwd.as_ref() == Some(&cwd)
-            && !watches_changed
-            && discovered_dirs == state.active_dirs
-            && !trust_changed
-        {
+        if is_fast_path(&state, &cwd, &discovered, &trust_manager) {
             return Ok(());
         }
 
-        // Prune suppressed dirs: only keep those that are still ancestors of CWD.
-        let suppressed_dirs: Vec<PathBuf> = state
-            .suppressed_dirs
-            .iter()
-            .filter(|s| cwd.starts_with(s.parent().unwrap_or(s)))
-            .cloned()
-            .collect();
-
-        // Prune notified dirs: only keep those that are still ancestors of CWD.
-        // This ensures the user is re-notified when cd'ing back into a denied
-        // or untrusted directory.
-        let mut notified_dirs: Vec<PathBuf> = state
-            .notified_dirs
-            .iter()
-            .filter(|s| cwd.starts_with(s.parent().unwrap_or(s)))
-            .cloned()
-            .collect();
-
-        // Filter discovered envs by trust and suppression.
-        let mut trusted_dot_flox: Vec<DotFlox> = Vec::new();
-
-        for dot_flox in &discovered {
-            if suppressed_dirs.contains(&dot_flox.path) {
-                debug!(path = %dot_flox.path.display(), "suppressed, skipping");
-                continue;
-            }
-
-            match trust_manager.check(&dot_flox.path) {
-                Ok(TrustStatus::Trusted) => {
-                    trusted_dot_flox.push(dot_flox.clone());
-                },
-                Ok(TrustStatus::Denied) => {
-                    debug!(path = %dot_flox.path.display(), "denied, skipping");
-                    if !notified_dirs.contains(&dot_flox.path) {
-                        let is_ancestor =
-                            cwd.starts_with(dot_flox.path.parent().unwrap_or(&dot_flox.path));
-                        if is_ancestor {
-                            eprintln!(
-                                "flox: environment at '{}' was denied. Run 'flox allow' to auto-activate it.",
-                                dot_flox.path.display()
-                            );
-                        } else {
-                            eprintln!(
-                                "flox: environment at '{}' was denied. Run 'flox allow --path {}' to auto-activate it.",
-                                dot_flox.path.display(),
-                                dot_flox.path.display()
-                            );
-                        }
-                        notified_dirs.push(dot_flox.path.clone());
-                    }
-                },
-                Ok(TrustStatus::Unknown(_)) => {
-                    if !notified_dirs.contains(&dot_flox.path) {
-                        let is_ancestor =
-                            cwd.starts_with(dot_flox.path.parent().unwrap_or(&dot_flox.path));
-                        if is_ancestor {
-                            eprintln!(
-                                "flox: environment at '{}' is not allowed. Run 'flox allow' to auto-activate it.",
-                                dot_flox.path.display()
-                            );
-                        } else {
-                            eprintln!(
-                                "flox: environment at '{}' is not allowed. Run 'flox allow --path {}' to auto-activate it.",
-                                dot_flox.path.display(),
-                                dot_flox.path.display()
-                            );
-                        }
-                        notified_dirs.push(dot_flox.path.clone());
-                    }
-                },
-                Err(e) => {
-                    debug!(path = %dot_flox.path.display(), "trust check failed: {e}");
-                },
-            }
-        }
+        let (trusted_dot_flox, suppressed_dirs, notified_dirs) =
+            filter_by_trust(&state, &cwd, &discovered, &trust_manager);
 
         let new_active_dirs: Vec<PathBuf> =
             trusted_dot_flox.iter().map(|d| d.path.clone()).collect();
 
         // Check if the set of active dirs actually changed.
         let dirs_changed = new_active_dirs != state.active_dirs;
+        let watches_changed = state.watches_changed();
 
         if !dirs_changed && !watches_changed && state.last_cwd.as_ref() == Some(&cwd) {
             // Nothing changed, just update CWD tracking.
@@ -180,190 +91,27 @@ impl HookEnv {
 
         let mut stdout = std::io::stdout().lock();
 
-        // Step 1: Revert previous diff.
+        // Revert previous diff.
         emit_revert(&state.diff, shell, &mut stdout)?;
 
-        // Step 2: Build new env vars from all trusted environments and manage
-        // activation lifecycle (PID registration, executive spawning).
-        let shell_pid = std::os::unix::process::parent_id() as i32;
-        let prev_tracking = state.activation_tracking.clone();
-        let mut new_tracking = ActivationTracking::default();
+        // Build new env vars and manage activation lifecycle.
+        let (new_tracking, combined_env, path_additions, new_watches) =
+            manage_activations(&state, &trusted_dot_flox, &flox)?;
 
-        let mut combined_env: HashMap<String, String> = HashMap::new();
-        let mut path_additions: Vec<String> = Vec::new();
-        let mut new_watches: Vec<WatchEntry> = Vec::new();
+        // Merge PATH additions and compute diff.
+        let (new_diff, combined_env) = compute_new_diff(&state.diff, combined_env, path_additions);
 
-        for dot_flox in &trusted_dot_flox {
-            // Watch the manifest file for changes.
-            let manifest_path = dot_flox.path.join("env").join("manifest.toml");
-            new_watches.push(WatchEntry {
-                path: manifest_path.clone(),
-                mtime: std::fs::metadata(&manifest_path)
-                    .ok()
-                    .and_then(|m| m.modified().ok())
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs()),
-            });
-
-            match resolve_env_vars(dot_flox, &flox) {
-                Ok(resolved) => {
-                    // Check if this environment is already tracked with the same store path.
-                    // If so, skip the auto-start subprocess (common fast path for subsequent prompts).
-                    let already_tracked = prev_tracking
-                        .entries
-                        .get(&dot_flox.path)
-                        .is_some_and(|info| info.store_path == resolved.store_path);
-
-                    // Check if this environment is in the detached cache (cd-away-and-back).
-                    let cached = prev_tracking
-                        .detached_cache
-                        .get(&dot_flox.path)
-                        .filter(|info| info.store_path == resolved.store_path)
-                        .cloned();
-
-                    let activation_state_dir =
-                        activation_state_dir_path(&flox.runtime_dir, &dot_flox.path);
-
-                    if already_tracked {
-                        // Case 1: Subsequent prompt, same dir - carry forward existing info
-                        let info = prev_tracking.entries[&dot_flox.path].clone();
-                        // Re-apply cached on-activate diff
-                        apply_on_activate_diff(&info.on_activate_diff, &mut combined_env);
-                        new_tracking.entries.insert(dot_flox.path.clone(), info);
-                    } else if let Some(cached_info) = cached {
-                        // Case 2: cd-away-and-back - re-attach PID, use cached diff
-                        spawn_auto_start(shell_pid, dot_flox, &resolved, &activation_state_dir);
-                        // Re-apply cached on-activate diff (hooks don't re-run)
-                        apply_on_activate_diff(&cached_info.on_activate_diff, &mut combined_env);
-                        new_tracking
-                            .entries
-                            .insert(dot_flox.path.clone(), cached_info);
-                    } else {
-                        // Case 3: Truly new or store path changed - run hooks
-                        let auto_result =
-                            spawn_auto_start(shell_pid, dot_flox, &resolved, &activation_state_dir);
-
-                        let (on_activate_diff, start_state_dir) =
-                            if let Some(ref result) = auto_result {
-                                // Merge on-activate env diff into combined_env
-                                apply_on_activate_diff(&result.hook_env_diff, &mut combined_env);
-                                (
-                                    result.hook_env_diff.clone(),
-                                    result.start_state_dir.as_ref().map(PathBuf::from),
-                                )
-                            } else {
-                                (None, None)
-                            };
-
-                        new_tracking
-                            .entries
-                            .insert(dot_flox.path.clone(), ActivationInfo {
-                                activation_state_dir,
-                                store_path: resolved.store_path.clone(),
-                                start_state_dir,
-                                on_activate_diff,
-                            });
-                    }
-
-                    for (k, v) in resolved.vars {
-                        match k.as_str() {
-                            "_FLOX_PATH_ADD" | "_FLOX_SBIN_ADD" => {
-                                path_additions.push(v);
-                            },
-                            _ => {
-                                combined_env.insert(k, v);
-                            },
-                        }
-                    }
-                },
-                Err(e) => {
-                    debug!(
-                        path = %dot_flox.path.display(),
-                        "failed to resolve environment: {e}"
-                    );
-                    eprintln!(
-                        "flox: failed to resolve environment at '{}': {e}",
-                        dot_flox.path.display()
-                    );
-                },
-            }
-        }
-
-        // Detach from environments that are no longer active and cache their info.
-        for (path, info) in &prev_tracking.entries {
-            if !new_tracking.entries.contains_key(path) {
-                spawn_auto_detach(shell_pid, &info.activation_state_dir);
-                // Move to detached cache so cd-back can reuse on_activate_diff
-                new_tracking
-                    .detached_cache
-                    .insert(path.clone(), info.clone());
-            }
-        }
-
-        // Carry forward detached cache entries whose activation state dir still exists.
-        for (path, info) in &prev_tracking.detached_cache {
-            if !new_tracking.entries.contains_key(path)
-                && !new_tracking.detached_cache.contains_key(path)
-                && info.activation_state_dir.exists()
-            {
-                new_tracking
-                    .detached_cache
-                    .insert(path.clone(), info.clone());
-            }
-        }
-
-        // Merge all environment bin/sbin dirs into a single PATH.
-        // Use the *reverted* PATH (what it would be after undoing the previous
-        // diff) so we don't stack new additions on top of stale entries.
-        if !path_additions.is_empty() {
-            let base_path = reverted_env_var("PATH", &state.diff).unwrap_or_default();
-            let new_path = format!("{}:{}", path_additions.join(":"), base_path);
-            combined_env.insert("PATH".to_string(), new_path);
-        }
-
-        // Step 3: Compute the new diff against the *reverted* process env
-        // (what the env would look like after emit_revert runs in the shell).
-        // We can't use std::env::var() directly because the process env still
-        // reflects the previous activation — emit_revert only writes shell
-        // commands to stdout without modifying this process.
-        let new_diff = {
-            let mut additions = HashMap::new();
-            let mut modifications = HashMap::new();
-
-            for (key, new_val) in &combined_env {
-                match reverted_env_var(key, &state.diff) {
-                    Some(orig_val) if orig_val != *new_val => {
-                        modifications.insert(key.clone(), orig_val);
-                    },
-                    None => {
-                        additions.insert(key.clone(), new_val.clone());
-                    },
-                    _ => {},
-                }
-            }
-
-            // Note: deletions are not needed here because emit_revert already
-            // handles restoring/unsetting vars from the previous diff before
-            // emit_apply runs.  The new diff only needs to track what the new
-            // activation adds or modifies relative to the pristine state.
-            HookDiff {
-                additions,
-                modifications,
-                deletions: HashMap::new(),
-            }
-        };
-
-        // Step 4: Emit new exports.
+        // Emit new exports.
         emit_apply(&new_diff, &combined_env, shell, &mut stdout)?;
 
-        // Step 5: Emit prompt modification.
+        // Emit prompt modification.
         let env_names: Vec<String> = trusted_dot_flox
             .iter()
             .map(|d| d.pointer.name().to_string())
             .collect();
         emit_prompt(&env_names, shell, &mut stdout)?;
 
-        // Step 6: Emit updated state variables.
+        // Emit updated state variables.
         emit_state_vars(
             &HookStateUpdate {
                 diff: &new_diff,
@@ -382,6 +130,300 @@ impl HookEnv {
 
         Ok(())
     }
+}
+
+/// Fast path: CWD unchanged AND no watched files changed AND the set of
+/// discovered .flox dirs hasn't changed AND trust status hasn't changed
+/// for any active dir → no work needed.
+fn is_fast_path(
+    state: &HookState,
+    cwd: &Path,
+    discovered: &[DotFlox],
+    trust_manager: &TrustManager,
+) -> bool {
+    let discovered_dirs: Vec<PathBuf> = discovered.iter().map(|d| d.path.clone()).collect();
+    let watches_changed = state.watches_changed();
+    let trust_changed = state
+        .active_dirs
+        .iter()
+        .any(|dir| !matches!(trust_manager.check(dir), Ok(TrustStatus::Trusted)));
+    state.last_cwd.as_deref() == Some(cwd)
+        && !watches_changed
+        && discovered_dirs == state.active_dirs
+        && !trust_changed
+}
+
+/// Filter discovered environments by trust and suppression status.
+///
+/// Returns (trusted_dot_flox, suppressed_dirs, notified_dirs).
+fn filter_by_trust(
+    state: &HookState,
+    cwd: &Path,
+    discovered: &[DotFlox],
+    trust_manager: &TrustManager,
+) -> (Vec<DotFlox>, Vec<PathBuf>, Vec<PathBuf>) {
+    // Prune suppressed dirs: only keep those that are still ancestors of CWD.
+    let suppressed_dirs: Vec<PathBuf> = state
+        .suppressed_dirs
+        .iter()
+        .filter(|s| cwd.starts_with(s.parent().unwrap_or(s)))
+        .cloned()
+        .collect();
+
+    // Prune notified dirs: only keep those that are still ancestors of CWD.
+    // This ensures the user is re-notified when cd'ing back into a denied
+    // or untrusted directory.
+    let mut notified_dirs: Vec<PathBuf> = state
+        .notified_dirs
+        .iter()
+        .filter(|s| cwd.starts_with(s.parent().unwrap_or(s)))
+        .cloned()
+        .collect();
+
+    let mut trusted_dot_flox: Vec<DotFlox> = Vec::new();
+
+    for dot_flox in discovered {
+        if suppressed_dirs.contains(&dot_flox.path) {
+            debug!(path = %dot_flox.path.display(), "suppressed, skipping");
+            continue;
+        }
+
+        match trust_manager.check(&dot_flox.path) {
+            Ok(TrustStatus::Trusted) => {
+                trusted_dot_flox.push(dot_flox.clone());
+            },
+            Ok(TrustStatus::Denied) => {
+                debug!(path = %dot_flox.path.display(), "denied, skipping");
+                emit_trust_notice(cwd, &dot_flox.path, "was denied", &mut notified_dirs);
+            },
+            Ok(TrustStatus::Unknown(_)) => {
+                emit_trust_notice(cwd, &dot_flox.path, "is not allowed", &mut notified_dirs);
+            },
+            Err(e) => {
+                debug!(path = %dot_flox.path.display(), "trust check failed: {e}");
+            },
+        }
+    }
+
+    (trusted_dot_flox, suppressed_dirs, notified_dirs)
+}
+
+/// Emit a trust notification message for an environment, deduplicating by path.
+fn emit_trust_notice(
+    cwd: &Path,
+    dot_flox_path: &Path,
+    status_msg: &str,
+    notified_dirs: &mut Vec<PathBuf>,
+) {
+    if notified_dirs.contains(&dot_flox_path.to_path_buf()) {
+        return;
+    }
+    let is_ancestor = cwd.starts_with(dot_flox_path.parent().unwrap_or(dot_flox_path));
+    if is_ancestor {
+        eprintln!(
+            "flox: environment at '{}' {status_msg}. Run 'flox allow' to auto-activate it.",
+            dot_flox_path.display()
+        );
+    } else {
+        eprintln!(
+            "flox: environment at '{}' {status_msg}. Run 'flox allow --path {}' to auto-activate it.",
+            dot_flox_path.display(),
+            dot_flox_path.display()
+        );
+    }
+    notified_dirs.push(dot_flox_path.to_path_buf());
+}
+
+/// Result of `manage_activations`: tracking state, combined env vars, PATH
+/// additions, and updated watch entries.
+type ActivationResult = (
+    ActivationTracking,
+    HashMap<String, String>,
+    Vec<String>,
+    Vec<WatchEntry>,
+);
+
+/// Build new env vars from all trusted environments and manage activation
+/// lifecycle (PID registration, executive spawning, detach/reattach).
+fn manage_activations(
+    state: &HookState,
+    trusted_dot_flox: &[DotFlox],
+    flox: &Flox,
+) -> Result<ActivationResult> {
+    let shell_pid = std::os::unix::process::parent_id() as i32;
+    let prev_tracking = &state.activation_tracking;
+    let mut new_tracking = ActivationTracking::default();
+
+    let mut combined_env: HashMap<String, String> = HashMap::new();
+    let mut path_additions: Vec<String> = Vec::new();
+    let mut new_watches: Vec<WatchEntry> = Vec::new();
+
+    for dot_flox in trusted_dot_flox {
+        // Watch the manifest file for changes.
+        let manifest_path = dot_flox.path.join("env").join("manifest.toml");
+        new_watches.push(WatchEntry {
+            path: manifest_path.clone(),
+            mtime: std::fs::metadata(&manifest_path)
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs()),
+        });
+
+        match resolve_env_vars(dot_flox, flox) {
+            Ok(resolved) => {
+                // Check if this environment is already tracked with the same store path.
+                // If so, skip the auto-start subprocess (common fast path for subsequent prompts).
+                let already_tracked = prev_tracking
+                    .entries
+                    .get(&dot_flox.path)
+                    .is_some_and(|info| info.store_path == resolved.store_path);
+
+                // Check if this environment is in the detached cache (cd-away-and-back).
+                let cached = prev_tracking
+                    .detached_cache
+                    .get(&dot_flox.path)
+                    .filter(|info| info.store_path == resolved.store_path)
+                    .cloned();
+
+                let activation_state_dir =
+                    activation_state_dir_path(&flox.runtime_dir, &dot_flox.path);
+
+                if already_tracked {
+                    // Case 1: Subsequent prompt, same dir - carry forward existing info
+                    let info = prev_tracking.entries[&dot_flox.path].clone();
+                    // Re-apply cached on-activate diff
+                    apply_on_activate_diff(&info.on_activate_diff, &mut combined_env);
+                    new_tracking.entries.insert(dot_flox.path.clone(), info);
+                } else if let Some(cached_info) = cached {
+                    // Case 2: cd-away-and-back - re-attach PID, use cached diff
+                    spawn_auto_start(shell_pid, dot_flox, &resolved, &activation_state_dir);
+                    // Re-apply cached on-activate diff (hooks don't re-run)
+                    apply_on_activate_diff(&cached_info.on_activate_diff, &mut combined_env);
+                    new_tracking
+                        .entries
+                        .insert(dot_flox.path.clone(), cached_info);
+                } else {
+                    // Case 3: Truly new or store path changed - run hooks
+                    let auto_result =
+                        spawn_auto_start(shell_pid, dot_flox, &resolved, &activation_state_dir);
+
+                    let (on_activate_diff, start_state_dir) = if let Some(ref result) = auto_result
+                    {
+                        // Merge on-activate env diff into combined_env
+                        apply_on_activate_diff(&result.hook_env_diff, &mut combined_env);
+                        (
+                            result.hook_env_diff.clone(),
+                            result.start_state_dir.as_ref().map(PathBuf::from),
+                        )
+                    } else {
+                        (None, None)
+                    };
+
+                    new_tracking
+                        .entries
+                        .insert(dot_flox.path.clone(), ActivationInfo {
+                            activation_state_dir,
+                            store_path: resolved.store_path.clone(),
+                            start_state_dir,
+                            on_activate_diff,
+                        });
+                }
+
+                for (k, v) in resolved.vars {
+                    match k.as_str() {
+                        "_FLOX_PATH_ADD" | "_FLOX_SBIN_ADD" => {
+                            path_additions.push(v);
+                        },
+                        _ => {
+                            combined_env.insert(k, v);
+                        },
+                    }
+                }
+            },
+            Err(e) => {
+                debug!(
+                    path = %dot_flox.path.display(),
+                    "failed to resolve environment: {e}"
+                );
+                eprintln!(
+                    "flox: failed to resolve environment at '{}': {e}",
+                    dot_flox.path.display()
+                );
+            },
+        }
+    }
+
+    // Detach from environments that are no longer active and cache their info.
+    for (path, info) in &prev_tracking.entries {
+        if !new_tracking.entries.contains_key(path) {
+            spawn_auto_detach(shell_pid, &info.activation_state_dir);
+            // Move to detached cache so cd-back can reuse on_activate_diff
+            new_tracking
+                .detached_cache
+                .insert(path.clone(), info.clone());
+        }
+    }
+
+    // Carry forward detached cache entries whose activation state dir still exists.
+    for (path, info) in &prev_tracking.detached_cache {
+        if !new_tracking.entries.contains_key(path)
+            && !new_tracking.detached_cache.contains_key(path)
+            && info.activation_state_dir.exists()
+        {
+            new_tracking
+                .detached_cache
+                .insert(path.clone(), info.clone());
+        }
+    }
+
+    Ok((new_tracking, combined_env, path_additions, new_watches))
+}
+
+/// Merge PATH additions and compute the new diff against the reverted process env.
+fn compute_new_diff(
+    old_diff: &HookDiff,
+    mut combined_env: HashMap<String, String>,
+    path_additions: Vec<String>,
+) -> (HookDiff, HashMap<String, String>) {
+    // Merge all environment bin/sbin dirs into a single PATH.
+    // Use the *reverted* PATH (what it would be after undoing the previous
+    // diff) so we don't stack new additions on top of stale entries.
+    if !path_additions.is_empty() {
+        let base_path = reverted_env_var("PATH", old_diff).unwrap_or_default();
+        let new_path = format!("{}:{}", path_additions.join(":"), base_path);
+        combined_env.insert("PATH".to_string(), new_path);
+    }
+
+    // Compute the new diff against the *reverted* process env.
+    // We can't use std::env::var() directly because the process env still
+    // reflects the previous activation — emit_revert only writes shell
+    // commands to stdout without modifying this process.
+    let mut additions = HashMap::new();
+    let mut modifications = HashMap::new();
+
+    for (key, new_val) in &combined_env {
+        match reverted_env_var(key, old_diff) {
+            Some(orig_val) if orig_val != *new_val => {
+                modifications.insert(key.clone(), orig_val);
+            },
+            None => {
+                additions.insert(key.clone(), new_val.clone());
+            },
+            _ => {},
+        }
+    }
+
+    // Note: deletions are not needed here because emit_revert already
+    // handles restoring/unsetting vars from the previous diff before
+    // emit_apply runs.
+    let new_diff = HookDiff {
+        additions,
+        modifications,
+        deletions: HashMap::new(),
+    };
+
+    (new_diff, combined_env)
 }
 
 /// Apply cached on-activate hook env diff into the combined environment.
@@ -766,19 +808,29 @@ fn spawn_auto_start(
     activation_state_dir: &Path,
 ) -> Option<AutoStartResult> {
     let ctx = AutoStartCtx {
-        dot_flox_path: dot_flox.path.clone(),
+        attach_ctx: AttachCtx {
+            env: resolved.flox_env.clone(),
+            env_cache: resolved.env_cache.clone(),
+            env_description: dot_flox.pointer.name().to_string(),
+            flox_active_environments: String::new(),
+            prompt_color_1: String::new(),
+            prompt_color_2: String::new(),
+            flox_prompt_environments: String::new(),
+            set_prompt: false,
+            flox_env_cuda_detection: String::new(),
+            interpreter_path: FLOX_INTERPRETER.clone(),
+        },
+        project_ctx: AttachProjectCtx {
+            env_project: resolved.env_project.clone(),
+            dot_flox_path: dot_flox.path.clone(),
+            flox_env_log_dir: resolved.flox_env_log_dir.clone(),
+            process_compose_bin: PathBuf::from(&*PROCESS_COMPOSE_BIN),
+            flox_services_socket: resolved.flox_services_socket.clone(),
+            services_to_start: resolved.services_to_start.clone(),
+        },
         store_path: resolved.store_path.clone(),
-        flox_env: resolved.flox_env.clone(),
         activation_state_dir: activation_state_dir.to_path_buf(),
         mode: ActivateMode::Dev,
-        env_description: dot_flox.pointer.name().to_string(),
-        env_project: resolved.env_project.clone(),
-        env_cache: resolved.env_cache.clone(),
-        flox_env_log_dir: resolved.flox_env_log_dir.clone(),
-        process_compose_bin: PathBuf::from(&*PROCESS_COMPOSE_BIN),
-        flox_services_socket: resolved.flox_services_socket.clone(),
-        interpreter_path: FLOX_INTERPRETER.clone(),
-        services_to_start: resolved.services_to_start.clone(),
         metrics_uuid: None,
     };
 

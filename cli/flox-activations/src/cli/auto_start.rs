@@ -119,13 +119,21 @@ impl AutoStartArgs {
 
         let mut activations = activations_opt.unwrap_or_else(|| {
             debug!("no existing activation state, creating new one");
-            ActivationState::new(&ctx.mode, Some(&ctx.dot_flox_path), &ctx.flox_env)
+            ActivationState::new(
+                &ctx.mode,
+                Some(&ctx.project_ctx.dot_flox_path),
+                &ctx.attach_ctx.env,
+            )
         });
 
         // Reset state if executive is not running
         if !activations.executive_running() {
             debug!("discarding activation state due to executive not running");
-            activations = ActivationState::new(&ctx.mode, Some(&ctx.dot_flox_path), &ctx.flox_env);
+            activations = ActivationState::new(
+                &ctx.mode,
+                Some(&ctx.project_ctx.dot_flox_path),
+                &ctx.attach_ctx.env,
+            );
         }
 
         match activations.start_or_attach(self.pid, &ctx.store_path) {
@@ -164,35 +172,12 @@ impl AutoStartArgs {
             .mode(0o700)
             .create(&start_state_dir)?;
 
-        // Build context structs needed by spawn_executive
-        let attach_ctx = flox_core::activate::context::AttachCtx {
-            env: ctx.flox_env.clone(),
-            env_cache: ctx.env_cache.clone(),
-            env_description: ctx.env_description.clone(),
-            flox_active_environments: String::new(),
-            prompt_color_1: String::new(),
-            prompt_color_2: String::new(),
-            flox_prompt_environments: String::new(),
-            set_prompt: false,
-            flox_env_cuda_detection: String::new(),
-            interpreter_path: ctx.interpreter_path.clone(),
-        };
-
-        let project_ctx = flox_core::activate::context::AttachProjectCtx {
-            env_project: ctx.env_project.clone(),
-            dot_flox_path: ctx.dot_flox_path.clone(),
-            flox_env_log_dir: ctx.flox_env_log_dir.clone(),
-            process_compose_bin: ctx.process_compose_bin.clone(),
-            flox_services_socket: ctx.flox_services_socket.clone(),
-            services_to_start: ctx.services_to_start.clone(),
-        };
-
         // Spawn executive if not already running
         let new_executive = if !activations.executive_started() {
             let signals = Signals::new([SIGCHLD, SIGUSR1])?;
             let exec_pid = spawn_executive(
-                &attach_ctx,
-                &project_ctx,
+                &ctx.attach_ctx,
+                &ctx.project_ctx,
                 &ctx.activation_state_dir,
                 &start_state_dir,
                 ctx.metrics_uuid,
@@ -211,8 +196,8 @@ impl AutoStartArgs {
 
         // Run on-activate hooks via the activate script
         let mut start_command = assemble_auto_activate_command(
-            &attach_ctx,
-            Some(&project_ctx),
+            &ctx.attach_ctx,
+            Some(&ctx.project_ctx),
             &ctx.mode,
             &start_state_dir,
         );
@@ -241,16 +226,18 @@ impl AutoStartArgs {
         write_activations_json(&activations, activations_json_path, lock)?;
 
         // Start services if configured (non-fatal)
-        if !ctx.services_to_start.is_empty() && !ctx.flox_services_socket.exists() {
+        if !ctx.project_ctx.services_to_start.is_empty()
+            && !ctx.project_ctx.flox_services_socket.exists()
+        {
             debug!(
-                services = ?ctx.services_to_start,
+                services = ?ctx.project_ctx.services_to_start,
                 "starting services for auto-activation"
             );
             if let Err(e) = start_services_with_new_process_compose(
                 &ctx.activation_state_dir,
-                &ctx.process_compose_bin,
-                &ctx.flox_services_socket,
-                &ctx.services_to_start,
+                &ctx.project_ctx.process_compose_bin,
+                &ctx.project_ctx.flox_services_socket,
+                &ctx.project_ctx.services_to_start,
             ) {
                 warn!("failed to start services during auto-activation: {e}");
                 eprintln!("flox: warning: failed to start services: {e}");

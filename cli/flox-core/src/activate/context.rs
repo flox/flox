@@ -105,47 +105,23 @@ pub struct ActivateCtx {
 ///
 /// Passed as JSON to `flox-activations auto-start` to register the shell PID,
 /// spawn the executive, and run lifecycle hooks.
+///
+/// Composes `AttachCtx` and `AttachProjectCtx` so that `auto_start` can pass
+/// them directly to `spawn_executive` and `assemble_auto_activate_command`
+/// without reconstructing them from flat fields.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutoStartCtx {
-    /// Path to the .flox directory
-    pub dot_flox_path: PathBuf,
+    pub attach_ctx: AttachCtx,
+    pub project_ctx: AttachProjectCtx,
 
     /// Nix store path for the built environment
     pub store_path: String,
-
-    /// Mode link path (from rendered_env_links)
-    pub flox_env: String,
 
     /// Base directory for this environment's activation state
     pub activation_state_dir: PathBuf,
 
     /// The activation mode (dev or run)
     pub mode: ActivateMode,
-
-    /// Human-readable environment description
-    pub env_description: String,
-
-    /// The project path for the environment
-    pub env_project: PathBuf,
-
-    /// The cache path for the environment
-    pub env_cache: PathBuf,
-
-    /// Environment log directory
-    pub flox_env_log_dir: PathBuf,
-
-    /// Path to process-compose binary
-    pub process_compose_bin: PathBuf,
-
-    /// Services socket path
-    pub flox_services_socket: PathBuf,
-
-    /// Path to the interpreter (activation scripts)
-    pub interpreter_path: PathBuf,
-
-    /// Services to start with a new process-compose instance.
-    #[serde(default)]
-    pub services_to_start: Vec<String>,
 
     /// The metrics UUID for Sentry user identification.
     #[serde(default)]
