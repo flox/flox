@@ -308,6 +308,10 @@ impl Auth {
 ///
 /// * updates the config file with the received token
 /// * updates the floxhub_token field in the config struct
+// TODO: `flox auth login` is currently Auth0-specific. It should be abstracted
+// to handle different auth methods — for Kerberos, it should print a warning
+// that login is not needed (Kerberos authentication is handled externally via
+// `kinit`).
 pub async fn login_flox(flox: &mut Flox) -> Result<&FloxhubToken> {
     let client = create_oauth_client()?;
     let cred = authorize(client, flox.floxhub.base_url())

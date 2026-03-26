@@ -620,6 +620,7 @@ pub async fn get_base_nixpkgs_url(
 }
 
 pub mod test_helpers {
+    use flox_catalog::AuthMethod;
     use pollster::FutureExt;
     use tempfile::TempDir;
 
@@ -698,7 +699,7 @@ pub mod test_helpers {
             extra_headers: Default::default(),
             mock_mode: CatalogMockMode::Replay(path.as_ref().to_path_buf()),
             auth_strategy: flox_catalog::auth_strategy_from_method(
-                &Default::default(),
+                &AuthMethod::Auth0,
                 None,
                 "https://not_used".to_string(),
             ),
@@ -795,7 +796,7 @@ pub mod test_helpers {
             extra_headers: Default::default(),
             mock_mode: mock_mode.clone(),
             auth_strategy: flox_catalog::auth_strategy_from_method(
-                &Default::default(),
+                &AuthMethod::Auth0,
                 auth.token().cloned(),
                 catalog_url.clone(),
             ),

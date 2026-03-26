@@ -23,6 +23,8 @@ pub enum AuthError {
 /// Strategy pattern for authentication header insertion
 pub trait AuthStrategy: Send + Sync + std::fmt::Debug {
     /// Add authorization headers to the provided HeaderMap
+    // TODO: return header key-value pairs instead of mutating the HeaderMap
+    // directly, and let the hook layer map them into headers.
     fn add_auth_headers(&self, header_map: &mut HeaderMap);
 
     /// Validate that auth is available and return the user's handle.

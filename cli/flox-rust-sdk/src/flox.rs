@@ -94,7 +94,16 @@ impl Flox {
     }
 
     /// Set a new token and rebuild the auth strategy to reflect it.
+    ///
+    /// Note: when using Kerberos authentication, the token is stored but has
+    /// no effect on the auth strategy — Kerberos does not use FloxHub tokens.
     pub fn set_floxhub_token(&mut self, token: FloxhubToken) -> Result<(), CatalogClientError> {
+        #[cfg(feature = "floxhub-authn-kerberos")]
+        if self.auth_strategy.auth_method() == AuthMethod::Kerberos {
+            tracing::debug!(
+                "set_floxhub_token called but current auth method is Kerberos; token will be stored but not used"
+            );
+        }
         let t: &mut FloxhubToken = self.floxhub_token.insert(token);
         let auth_strategy = auth_strategy_from_method(
             &self.auth_strategy.auth_method(),

@@ -47,9 +47,8 @@ impl Upload {
         let token = flox
             .floxhub_token
             .as_ref()
-            .context("FloxHub token required for upload")?
-            .clone();
-        let auth_file = write_floxhub_netrc(&flox.temp_dir, &token)?;
+            .context("FloxHub token required for upload")?;
+        let auth_file = write_floxhub_netrc(&flox.temp_dir, token)?;
 
         ClientSideCatalogStoreConfig::upload_store_path(
             &self.cache.store_url,
