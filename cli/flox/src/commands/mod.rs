@@ -25,7 +25,8 @@ mod search;
 mod services;
 mod services_socket;
 mod show;
-mod trust;
+mod allow;
+mod revoke;
 mod uninstall;
 mod upgrade;
 mod upload;
@@ -525,9 +526,13 @@ enum ManageCommands {
     )]
     Delete(#[bpaf(external(delete::delete))] delete::Delete),
 
-    /// Trust an environment for auto-activation
-    #[bpaf(command, footer("Run 'man flox-trust' for more details."))]
-    Trust(#[bpaf(external(trust::trust))] trust::Trust),
+    /// Allow an environment for auto-activation
+    #[bpaf(command, footer("Run 'man flox-allow' for more details."))]
+    Allow(#[bpaf(external(allow::allow))] allow::Allow),
+
+    /// Revoke auto-activation for an environment
+    #[bpaf(command, footer("Run 'man flox-revoke' for more details."))]
+    Revoke(#[bpaf(external(revoke::revoke))] revoke::Revoke),
 }
 
 impl ManageCommands {
@@ -536,7 +541,8 @@ impl ManageCommands {
             ManageCommands::Init(args) => args.handle(flox).await?,
             ManageCommands::Envs(args) => args.handle(flox)?,
             ManageCommands::Delete(args) => args.handle(flox).await?,
-            ManageCommands::Trust(args) => args.handle(flox)?,
+            ManageCommands::Allow(args) => args.handle(flox)?,
+            ManageCommands::Revoke(args) => args.handle(flox)?,
         }
         Ok(())
     }

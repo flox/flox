@@ -2,9 +2,9 @@
 # -*- mode: bats; -*-
 # ============================================================================ #
 #
-# Test flox trust
+# Test flox allow and flox revoke
 #
-# bats file_tags=trust
+# bats file_tags=allow
 #
 # ---------------------------------------------------------------------------- #
 
@@ -58,82 +58,81 @@ count_files() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox trust' succeeds on initialized environment" {
+@test "'flox allow' succeeds on initialized environment" {
   "$FLOX_BIN" init
 
-  run "$FLOX_BIN" trust
+  run "$FLOX_BIN" allow
   assert_success
-  assert_output --partial "Trusted environment"
-  assert_output --partial "for auto-activation"
+  assert_output --partial "Allowed auto-activation"
 
   # Verify trust file exists
   [ "$(count_files "$FLOX_DATA_DIR/trust/allowed")" -ge 1 ]
 }
 
-@test "'flox trust --deny' creates deny file" {
+@test "'flox revoke' creates deny file" {
   "$FLOX_BIN" init
 
-  run "$FLOX_BIN" trust --deny
+  run "$FLOX_BIN" revoke
   assert_success
-  assert_output --partial "Denied auto-activation"
+  assert_output --partial "Revoked auto-activation"
 
   # Verify deny file exists
   [ "$(count_files "$FLOX_DATA_DIR/trust/denied")" -ge 1 ]
 }
 
-@test "'flox trust' fails when no .flox exists" {
+@test "'flox allow' fails when no .flox exists" {
   # No flox init — empty PROJECT_DIR
-  run "$FLOX_BIN" trust
+  run "$FLOX_BIN" allow
   assert_failure
   assert_output --partial "No '.flox' environment found"
 }
 
-@test "'flox trust --path' trusts a specific directory" {
+@test "'flox allow --path' allows a specific directory" {
   mkdir -p subdir
   pushd subdir > /dev/null
   "$FLOX_BIN" init
   popd > /dev/null
 
-  run "$FLOX_BIN" trust --path subdir
+  run "$FLOX_BIN" allow --path subdir
   assert_success
-  assert_output --partial "Trusted environment"
+  assert_output --partial "Allowed auto-activation"
 }
 
-@test "'flox trust' after '--deny' revokes denial" {
+@test "'flox allow' after 'revoke' revokes denial" {
   "$FLOX_BIN" init
 
-  "$FLOX_BIN" trust --deny
+  "$FLOX_BIN" revoke
   [ "$(count_files "$FLOX_DATA_DIR/trust/denied")" -ge 1 ]
 
-  # Trust should remove the deny file
-  run "$FLOX_BIN" trust
+  # Allow should remove the deny file
+  run "$FLOX_BIN" allow
   assert_success
 
   [ "$(count_files "$FLOX_DATA_DIR/trust/denied")" -eq 0 ]
 }
 
-@test "'flox trust --deny' after trust creates deny file" {
+@test "'flox revoke' after allow creates deny file" {
   "$FLOX_BIN" init
 
-  "$FLOX_BIN" trust
+  "$FLOX_BIN" allow
   [ "$(count_files "$FLOX_DATA_DIR/trust/allowed")" -ge 1 ]
 
-  run "$FLOX_BIN" trust --deny
+  run "$FLOX_BIN" revoke
   assert_success
 
   [ "$(count_files "$FLOX_DATA_DIR/trust/denied")" -ge 1 ]
 }
 
-@test "'flox init' automatically trusts new environment" {
+@test "'flox init' automatically allows new environment" {
   run "$FLOX_BIN" init
   assert_success
 
-  # init should auto-trust the environment
+  # init should auto-allow the environment
   [ "$(count_files "$FLOX_DATA_DIR/trust/allowed")" -ge 1 ]
 }
 
-# bats test_tags=trust:install
-@test "'flox install' re-trusts after manifest change" {
+# bats test_tags=allow:install
+@test "'flox install' re-allows after manifest change" {
   "$FLOX_BIN" init
 
   local count_before
@@ -150,8 +149,8 @@ count_files() {
   [ "$count_after" -gt "$count_before" ]
 }
 
-# bats test_tags=trust:uninstall
-@test "'flox uninstall' re-trusts after manifest change" {
+# bats test_tags=allow:uninstall
+@test "'flox uninstall' re-allows after manifest change" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   "$FLOX_BIN" init
   "$FLOX_BIN" install hello
@@ -167,8 +166,8 @@ count_files() {
   [ "$count_after" -gt "$count_before" ]
 }
 
-# bats test_tags=trust:edit
-@test "'flox edit' re-trusts after manifest change" {
+# bats test_tags=allow:edit
+@test "'flox edit' re-allows after manifest change" {
   "$FLOX_BIN" init
 
   local count_before
@@ -189,19 +188,19 @@ count_files() {
   [ "$count_after" -gt "$count_before" ]
 }
 
-# bats test_tags=trust:hook-env
-@test "manual manifest edit revokes trust (verified via hook-env)" {
+# bats test_tags=allow:hook-env
+@test "manual manifest edit revokes allow (verified via hook-env)" {
   "$FLOX_BIN" init
 
-  # Verify it's currently trusted
+  # Verify it's currently allowed
   local allowed_count
   allowed_count="$(count_files "$FLOX_DATA_DIR/trust/allowed")"
   [ "$allowed_count" -ge 1 ]
 
-  # Manually edit the manifest (bypassing flox commands — no re-trust)
+  # Manually edit the manifest (bypassing flox commands — no re-allow)
   echo '# modified' >> "$MANIFEST_PATH"
 
-  # hook-env should report the environment as not trusted
+  # hook-env should report the environment as not allowed
   "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr" || true
-  grep -q "not trusted" "$BATS_TEST_TMPDIR/stderr"
+  grep -q "not allowed" "$BATS_TEST_TMPDIR/stderr"
 }

@@ -63,7 +63,7 @@ impl HookEnv {
         // for any active dir → exit with no output.
         // We must check discovered dirs so that a new `flox init` in the
         // current directory is detected without requiring a `cd` away and back.
-        // We must check trust so that `flox trust --deny` is detected without
+        // We must check trust so that `flox revoke` is detected without
         // requiring a `cd` away and back.
         let discovered_dirs: Vec<PathBuf> = discovered.iter().map(|d| d.path.clone()).collect();
         let watches_changed = state.watches_changed();
@@ -117,12 +117,12 @@ impl HookEnv {
                             cwd.starts_with(dot_flox.path.parent().unwrap_or(&dot_flox.path));
                         if is_ancestor {
                             eprintln!(
-                                "flox: environment at '{}' was denied. Run 'flox trust' to auto-activate it.",
+                                "flox: environment at '{}' was denied. Run 'flox allow' to auto-activate it.",
                                 dot_flox.path.display()
                             );
                         } else {
                             eprintln!(
-                                "flox: environment at '{}' was denied. Run 'flox trust --path {}' to auto-activate it.",
+                                "flox: environment at '{}' was denied. Run 'flox allow --path {}' to auto-activate it.",
                                 dot_flox.path.display(),
                                 dot_flox.path.display()
                             );
@@ -136,12 +136,12 @@ impl HookEnv {
                             cwd.starts_with(dot_flox.path.parent().unwrap_or(&dot_flox.path));
                         if is_ancestor {
                             eprintln!(
-                                "flox: environment at '{}' is not trusted. Run 'flox trust' to auto-activate it.",
+                                "flox: environment at '{}' is not allowed. Run 'flox allow' to auto-activate it.",
                                 dot_flox.path.display()
                             );
                         } else {
                             eprintln!(
-                                "flox: environment at '{}' is not trusted. Run 'flox trust --path {}' to auto-activate it.",
+                                "flox: environment at '{}' is not allowed. Run 'flox allow --path {}' to auto-activate it.",
                                 dot_flox.path.display(),
                                 dot_flox.path.display()
                             );

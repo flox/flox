@@ -10,19 +10,15 @@ use crate::subcommand_metric;
 use crate::utils::message;
 
 #[derive(Bpaf, Clone, Debug)]
-pub struct Trust {
-    /// Deny trust instead of granting it
-    #[bpaf(long)]
-    deny: bool,
-
-    /// Path to the .flox directory to trust (defaults to current directory)
+pub struct Revoke {
+    /// Path to the .flox directory to revoke (defaults to current directory)
     #[bpaf(long, argument("PATH"), optional)]
     path: Option<PathBuf>,
 }
 
-impl Trust {
+impl Revoke {
     pub fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("trust");
+        subcommand_metric!("revoke");
 
         let search_dir = match &self.path {
             Some(p) => p.clone(),
@@ -39,20 +35,11 @@ impl Trust {
         };
 
         let manager = TrustManager::new(&flox.data_dir);
-
-        if self.deny {
-            manager.deny(&dot_flox.path)?;
-            message::updated(format!(
-                "Denied auto-activation for environment at '{}'",
-                dot_flox.path.display()
-            ));
-        } else {
-            manager.trust(&dot_flox.path)?;
-            message::updated(format!(
-                "Trusted environment at '{}' for auto-activation",
-                dot_flox.path.display()
-            ));
-        }
+        manager.deny(&dot_flox.path)?;
+        message::updated(format!(
+            "Revoked auto-activation for environment at '{}'",
+            dot_flox.path.display()
+        ));
 
         Ok(())
     }

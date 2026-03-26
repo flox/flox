@@ -81,7 +81,8 @@ Manage environments
     init           Create an environment in the current directory
     envs           Show active and available environments
     delete         Delete an environment
-    trust          Trust an environment for auto-activation
+    allow          Allow an environment for auto-activation
+    revoke         Revoke auto-activation for an environment
 
 Use environments
     activate       Enter the environment, type 'exit' to leave

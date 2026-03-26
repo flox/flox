@@ -121,8 +121,8 @@ teardown() {
   with_latest_schema > .flox/env/manifest.toml
 
   "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr" || true
-  grep -q "not trusted" "$BATS_TEST_TMPDIR/stderr"
-  grep -q "flox trust" "$BATS_TEST_TMPDIR/stderr"
+  grep -q "not allowed" "$BATS_TEST_TMPDIR/stderr"
+  grep -q "flox allow" "$BATS_TEST_TMPDIR/stderr"
 }
 
 # bats test_tags=auto-activation:hook-env
@@ -169,7 +169,7 @@ teardown() {
 # bats test_tags=auto-activation:hook-env
 @test "'hook-env' notifies about denied environments" {
   "$FLOX_BIN" init
-  "$FLOX_BIN" trust --deny
+  "$FLOX_BIN" revoke
 
   "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr" || true
   local stderr_content
@@ -177,7 +177,7 @@ teardown() {
 
   # Denied environments should produce a "was denied" message
   [[ "$stderr_content" =~ "was denied" ]]
-  [[ "$stderr_content" =~ "flox trust" ]]
+  [[ "$stderr_content" =~ "flox allow" ]]
 
   # hook-env still emits state vars, but DIRS should be empty (env not activated)
   run "$FLOX_BIN" hook-env --shell bash
@@ -197,8 +197,8 @@ teardown() {
   # Verify the environment was activated
   [[ -n "$_FLOX_HOOK_DIRS" ]]
 
-  # Deny the environment (simulates `flox trust --deny` while in the dir)
-  "$FLOX_BIN" trust --deny
+  # Deny the environment (simulates `flox revoke` while in the dir)
+  "$FLOX_BIN" revoke
 
   # Next hook-env (same dir, no cd) should detect the trust change,
   # deactivate the env, and show the denied message.
@@ -207,7 +207,7 @@ teardown() {
   stderr_content="$(cat "$BATS_TEST_TMPDIR/stderr_deny")"
 
   [[ "$stderr_content" =~ "was denied" ]]
-  [[ "$stderr_content" =~ "flox trust" ]]
+  [[ "$stderr_content" =~ "flox allow" ]]
 }
 
 # bats test_tags=auto-activation:hook-env
@@ -217,17 +217,17 @@ teardown() {
   echo '{"name":"test","version":1}' > .flox/env.json
   with_latest_schema > .flox/env/manifest.toml
 
-  # First call — should warn about untrusted
+  # First call — should warn about not allowed
   local first_output
   first_output="$("$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr1")" || true
-  grep -q "not trusted" "$BATS_TEST_TMPDIR/stderr1"
+  grep -q "not allowed" "$BATS_TEST_TMPDIR/stderr1"
 
   # Eval state vars so hook-env sees the notified list
   eval "$first_output"
 
   # Second call — should NOT warn again (already notified)
   "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr2" || true
-  ! grep -q "not trusted" "$BATS_TEST_TMPDIR/stderr2"
+  ! grep -q "not allowed" "$BATS_TEST_TMPDIR/stderr2"
 }
 
 # ---------------------------------------------------------------------------- #
