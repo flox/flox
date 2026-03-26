@@ -9,24 +9,32 @@ use reqwest::header::{self, HeaderMap, HeaderValue};
 use tracing::debug;
 use url::Url;
 
-use super::AuthStrategy;
+use super::{AuthError, AuthStrategy};
+use crate::AuthMethod;
 
 /// Kerberos authentication strategy
 ///
 /// Uses Kerberos tickets via GSSAPI to generate SPNEGO tokens for HTTP Negotiate authentication.
+/// The principal name (handle) is resolved once at construction time and cached.
+#[derive(Debug, Clone)]
 pub struct KerberosAuthStrategy {
     catalog_url: String,
+    cached_handle: Result<String, AuthError>,
 }
 
 impl KerberosAuthStrategy {
     pub fn new(catalog_url: String) -> Self {
-        Self { catalog_url }
+        let cached_handle = resolve_principal();
+        Self {
+            catalog_url,
+            cached_handle,
+        }
     }
 }
 
 impl AuthStrategy for KerberosAuthStrategy {
     fn add_auth_headers(&self, header_map: &mut HeaderMap) {
-        match Self::generate_kerberos_token(&self.catalog_url) {
+        match generate_kerberos_token(&self.catalog_url) {
             Ok(token) => {
                 let auth_value = format!("Negotiate {}", token);
                 if let Ok(value) = HeaderValue::from_str(&auth_value) {
@@ -41,63 +49,84 @@ impl AuthStrategy for KerberosAuthStrategy {
             },
         }
     }
+
+    fn auth_method(&self) -> AuthMethod {
+        AuthMethod::Kerberos
+    }
+
+    fn get_handle(&self) -> Result<String, AuthError> {
+        self.cached_handle.clone()
+    }
 }
 
-impl KerberosAuthStrategy {
-    /// Generate a Kerberos token for the given catalog URL
-    ///
-    /// This uses Kerberos authentication via GSSAPI to generate a SPNEGO token
-    /// for HTTP Negotiate authentication.
-    fn generate_kerberos_token(catalog_url: &str) -> Result<String, String> {
-        // Parse the URL to extract the hostname
-        let url = Url::parse(catalog_url).map_err(|e| format!("Invalid URL: {}", e))?;
-        let hostname = url
-            .host_str()
-            .ok_or_else(|| "No hostname in catalog URL".to_string())?;
+/// Resolve the Kerberos principal name from the credential cache.
+fn resolve_principal() -> Result<String, AuthError> {
+    let cred = Cred::acquire(None, None, CredUsage::Initiate, None).map_err(|e| {
+        AuthError::NotAuthenticated(format!(
+            "Kerberos ticket not available. Run `kinit` to authenticate. Error: {e:?}"
+        ))
+    })?;
+    let name = cred.name().map_err(|e| {
+        AuthError::NotAuthenticated(format!("Failed to get Kerberos principal name: {e:?}"))
+    })?;
+    let display = name.display_name().map_err(|e| {
+        AuthError::NotAuthenticated(format!("Failed to display Kerberos principal name: {e:?}"))
+    })?;
+    Ok(String::from_utf8_lossy(&display[..]).to_string())
+}
 
-        // Create the service principal name (SPN) for HTTP service
-        // Format: HTTP@hostname
-        let service_name = format!("HTTP@{}", hostname);
-        debug!("Using Kerberos service principal: {}", service_name);
+/// Generate a Kerberos token for the given catalog URL
+///
+/// This uses Kerberos authentication via GSSAPI to generate a SPNEGO token
+/// for HTTP Negotiate authentication.
+fn generate_kerberos_token(catalog_url: &str) -> Result<String, String> {
+    // Parse the URL to extract the hostname
+    let url = Url::parse(catalog_url).map_err(|e| format!("Invalid URL: {}", e))?;
+    let hostname = url
+        .host_str()
+        .ok_or_else(|| "No hostname in catalog URL".to_string())?;
 
-        // Import the service name as a GSSAPI name
-        let target_name = Name::new(service_name.as_bytes(), Some(&GSS_NT_HOSTBASED_SERVICE))
-            .map_err(|e| format!("Failed to create GSSAPI name: {:?}", e))?;
+    // Create the service principal name (SPN) for HTTP service
+    // Format: HTTP@hostname
+    let service_name = format!("HTTP@{}", hostname);
+    debug!("Using Kerberos service principal: {}", service_name);
 
-        // Acquire default credentials (from Kerberos ticket cache)
-        let cred = Cred::acquire(None, None, CredUsage::Initiate, None)
-            .map_err(|e| format!("Failed to acquire GSSAPI credentials: {:?}", e))?;
+    // Import the service name as a GSSAPI name
+    let target_name = Name::new(service_name.as_bytes(), Some(&GSS_NT_HOSTBASED_SERVICE))
+        .map_err(|e| format!("Failed to create GSSAPI name: {:?}", e))?;
 
-        // Create GSSAPI context flags
-        let mut ctx_flags = CtxFlags::empty();
-        ctx_flags.insert(CtxFlags::GSS_C_MUTUAL_FLAG);
-        ctx_flags.insert(CtxFlags::GSS_C_REPLAY_FLAG);
+    // Acquire default credentials (from Kerberos ticket cache)
+    let cred = Cred::acquire(None, None, CredUsage::Initiate, None)
+        .map_err(|e| format!("Failed to acquire GSSAPI credentials: {:?}", e))?;
 
-        // Create a Kerberos-only OID set
-        let mut desired_mechs =
-            OidSet::new().map_err(|e| format!("Failed to create OID set: {:?}", e))?;
-        desired_mechs
-            .add(&GSS_MECH_KRB5)
-            .map_err(|e| format!("Failed to add Kerberos OID: {:?}", e))?;
+    // Create GSSAPI context flags
+    let mut ctx_flags = CtxFlags::empty();
+    ctx_flags.insert(CtxFlags::GSS_C_MUTUAL_FLAG);
+    ctx_flags.insert(CtxFlags::GSS_C_REPLAY_FLAG);
 
-        // Initialize the client context
-        let mut client_ctx =
-            ClientCtx::new(Some(cred), target_name, ctx_flags, Some(&GSS_MECH_KRB5));
+    // Create a Kerberos-only OID set
+    let mut desired_mechs =
+        OidSet::new().map_err(|e| format!("Failed to create OID set: {:?}", e))?;
+    desired_mechs
+        .add(&GSS_MECH_KRB5)
+        .map_err(|e| format!("Failed to add Kerberos OID: {:?}", e))?;
 
-        // Perform the initial GSSAPI handshake step
-        // First parameter: input token (None for initial step)
-        // Second parameter: channel bindings (None for no channel bindings)
-        let token = client_ctx
-            .step(None, None)
-            .map_err(|e| format!("Kerberos context initialization failed: {:?}", e))?;
+    // Initialize the client context
+    let mut client_ctx = ClientCtx::new(Some(cred), target_name, ctx_flags, Some(&GSS_MECH_KRB5));
 
-        // Check if token was generated
-        let token_bytes = token.ok_or_else(|| "No token generated by Kerberos".to_string())?;
+    // Perform the initial GSSAPI handshake step
+    // First parameter: input token (None for initial step)
+    // Second parameter: channel bindings (None for no channel bindings)
+    let token = client_ctx
+        .step(None, None)
+        .map_err(|e| format!("Kerberos context initialization failed: {:?}", e))?;
 
-        // Encode the token as base64 (convert Buf to byte slice)
-        let encoded_token = base64::engine::general_purpose::STANDARD.encode(&token_bytes[..]);
-        debug!("Generated Kerberos token ({} bytes)", token_bytes.len());
+    // Check if token was generated
+    let token_bytes = token.ok_or_else(|| "No token generated by Kerberos".to_string())?;
 
-        Ok(encoded_token)
-    }
+    // Encode the token as base64 (convert Buf to byte slice)
+    let encoded_token = base64::engine::general_purpose::STANDARD.encode(&token_bytes[..]);
+    debug!("Generated Kerberos token ({} bytes)", token_bytes.len());
+
+    Ok(encoded_token)
 }

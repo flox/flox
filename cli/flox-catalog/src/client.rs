@@ -10,18 +10,19 @@ use std::time::Duration;
 
 use async_stream::try_stream;
 use catalog_api_v1::types::{self as api_types};
-use catalog_api_v1::{Client as APIClient, Error as APIError};
+use catalog_api_v1::{Client as APIClient, Error as APIError, RequestHooks};
 use futures::stream::Stream;
 use futures::{StreamExt, TryStreamExt};
 use reqwest::header::{self, HeaderMap};
 use reqwest::StatusCode;
 use tracing::{debug, instrument};
 
+use crate::auth::AuthStrategy;
 use crate::config::CatalogClientConfig;
 use crate::error::{CatalogClientError, ResolveError, SearchError, VersionsError};
 use crate::mock::MockGuard;
 use crate::types::*;
-use crate::{AuthManager, MapApiErrorExt};
+use crate::MapApiErrorExt;
 
 #[cfg(any(test, feature = "tests"))]
 pub const EMPTY_SEARCH_RESPONSE: &api_types::PackageSearchResult =
@@ -61,8 +62,10 @@ impl CatalogClient {
             None => config.catalog_url.clone(),
         };
 
+        let hooks = Self::build_request_hooks(config.auth_strategy.clone());
+
         let http_client = build_http_client(&config)?;
-        let client = APIClient::new_with_client(&effective_url, http_client);
+        let client = APIClient::new_with_client(&effective_url, http_client, hooks);
 
         Ok(Self {
             client,
@@ -99,6 +102,30 @@ impl CatalogClient {
         update(&mut modified_config);
         *self = Self::new(modified_config)?;
         Ok(())
+    }
+
+    /// Build per-instance request hooks that inject authentication headers.
+    ///
+    /// Each `Client` carries its own `RequestHooks`, so auth strategies
+    /// producing single-use tokens (e.g. Kerberos SPNEGO) generate a fresh
+    /// token for every outgoing request without relying on global state.
+    fn build_request_hooks(auth_strategy: std::sync::Arc<dyn AuthStrategy>) -> RequestHooks {
+        RequestHooks {
+            pre_request: std::sync::Arc::new(move |request: &mut reqwest::Request| {
+                // Propagate the Sentry trace ID to catalog-server.
+                // This is a no-op when metrics are disabled because Sentry will
+                // not have been initialized.
+                if let Some(span) = sentry::configure_scope(|scope| scope.get_span()) {
+                    for (k, v) in span.iter_headers() {
+                        if let Ok(value) = reqwest::header::HeaderValue::from_str(&v) {
+                            request.headers_mut().append(k, value);
+                        }
+                    }
+                }
+
+                auth_strategy.add_auth_headers(request.headers_mut());
+            }),
+        }
     }
 }
 
@@ -547,7 +574,8 @@ where
 // HTTP client builder
 // ---------------------------------------------------------------------------
 
-/// Build HTTP client with bearer token auth for FloxHub catalog API.
+/// Build HTTP client for FloxHub catalog API.
+/// Authentication headers are injected per-request via `register_auth_hook`.
 fn build_http_client(config: &CatalogClientConfig) -> Result<reqwest::Client, CatalogClientError> {
     let mut headers = build_header_map(config);
 
@@ -565,7 +593,7 @@ fn build_http_client(config: &CatalogClientConfig) -> Result<reqwest::Client, Ca
 
     debug!(
         catalog_url = %config.catalog_url,
-        has_token = config.floxhub_token.is_some(),
+        handle = ?config.auth_strategy.get_handle(),
         extra_headers = config.extra_headers.len(),
         "building catalog HTTP client"
     );
@@ -588,12 +616,12 @@ fn build_http_client(config: &CatalogClientConfig) -> Result<reqwest::Client, Ca
         .map_err(|e| CatalogClientError::Other(e.to_string()))
 }
 
+/// Build the default header map for the HTTP client.
+///
+/// Authentication headers are NOT included here — they are injected
+/// per-request via the pre_hook registered by `register_auth_hook`.
 fn build_header_map(config: &CatalogClientConfig) -> HeaderMap {
-    // let mut headers: BTreeMap<String, String> = BTreeMap::new();
     let mut header_map = HeaderMap::new();
-
-    // Add authentication headers (compile-time strategy selection via Cargo features)
-    AuthManager::add_auth_headers(&mut header_map, config);
 
     for (key, value) in &config.extra_headers {
         header_map.insert(
@@ -619,18 +647,23 @@ pub mod tests {
     use tracing_subscriber::layer::SubscriberExt;
 
     use super::*;
+    use crate::auth_strategy_from_method;
 
     const SENTRY_TRACE_HEADER: &str = "sentry-trace";
 
     fn client_config(url: &str) -> CatalogClientConfig {
         CatalogClientConfig {
             catalog_url: url.to_string(),
-            floxhub_token: None,
             extra_headers: Default::default(),
             mock_mode: Default::default(),
-            auth_method: Default::default(),
+            auth_strategy: default_strategy(),
             user_agent: None,
         }
+    }
+
+    fn default_strategy() -> std::sync::Arc<dyn AuthStrategy> {
+        let method: crate::auth::AuthMethod = Default::default();
+        auth_strategy_from_method(&method, None, String::new())
     }
 
     #[tokio::test]

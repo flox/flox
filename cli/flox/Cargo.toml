@@ -77,3 +77,4 @@ flox-manifest = { workspace = true, features = [ "tests" ]}
 [features]
 extra-tests = ["impure-unit-tests"]
 impure-unit-tests = []
+floxhub-authn-kerberos = ["flox-rust-sdk/floxhub-authn-kerberos"]

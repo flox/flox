@@ -20,7 +20,7 @@ use indoc::{formatdoc, indoc};
 use path_dedot::ParseDot;
 use tracing::{debug, info_span, instrument};
 
-use crate::commands::{SHELL_COMPLETION_DIR, ensure_floxhub_token, environment_description};
+use crate::commands::{SHELL_COMPLETION_DIR, ensure_auth, environment_description};
 use crate::subcommand_metric;
 use crate::utils::dialog::Dialog;
 use crate::utils::message;
@@ -152,7 +152,7 @@ impl Init {
             },
             InitEnvironmentTypeSelect::FloxHub { environment_ref } => {
                 let mut flox = flox;
-                ensure_floxhub_token(&mut flox).await?;
+                ensure_auth(&mut flox).await?;
                 init_floxhub_environment_decorated(&flox, environment_ref, self.bare)?;
             },
         }

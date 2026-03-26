@@ -620,12 +620,17 @@ pub async fn get_base_nixpkgs_url(
 }
 
 pub mod test_helpers {
+    use flox_catalog::AuthMethod;
     use pollster::FutureExt;
     use tempfile::TempDir;
 
     use super::*;
     use crate::flox::Flox;
-    use crate::flox::test_helpers::{PublishTestUser, test_token_from_floxhub_test_users_file};
+    use crate::flox::test_helpers::{
+        PublishTestUser,
+        set_test_token,
+        test_token_from_floxhub_test_users_file,
+    };
     use crate::providers::auth::{Auth, AuthProvider};
 
     pub static UNIT_TEST_GENERATED: LazyLock<PathBuf> =
@@ -691,10 +696,13 @@ pub mod test_helpers {
     pub async fn catalog_replay_client(path: impl AsRef<Path>) -> Client {
         let catalog_config = CatalogClientConfig {
             catalog_url: "https://not_used".to_string(),
-            floxhub_token: None,
             extra_headers: Default::default(),
             mock_mode: CatalogMockMode::Replay(path.as_ref().to_path_buf()),
-            auth_method: Default::default(),
+            auth_strategy: flox_catalog::auth_strategy_from_method(
+                &AuthMethod::Auth0,
+                None,
+                "https://not_used".to_string(),
+            ),
             user_agent: None,
         };
         Client::Catalog(
@@ -733,7 +741,7 @@ pub mod test_helpers {
         // FloxHub with _FLOXHUB_TEST_USER_ROLES pointed at this file.
         let token = test_token_from_floxhub_test_users_file(user);
 
-        flox.floxhub_token = Some(token);
+        set_test_token(&mut flox, token);
         let auth = Auth::from_flox(&flox).unwrap();
         let base_url = "http://localhost:8010";
         let client = auto_recording_client_inner(filename, base_url, user, &auth, record);
@@ -784,11 +792,14 @@ pub mod test_helpers {
         };
 
         let catalog_config = CatalogClientConfig {
-            catalog_url,
-            floxhub_token: auth.token().map(|token| token.secret().to_string()),
+            catalog_url: catalog_url.clone(),
             extra_headers: Default::default(),
             mock_mode: mock_mode.clone(),
-            auth_method: Default::default(),
+            auth_strategy: flox_catalog::auth_strategy_from_method(
+                &AuthMethod::Auth0,
+                auth.token().cloned(),
+                catalog_url.clone(),
+            ),
             user_agent: None,
         };
         let client_inner =

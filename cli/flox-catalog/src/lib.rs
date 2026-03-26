@@ -13,14 +13,16 @@
 //!
 //! ```ignore
 //! use flox_catalog::{
-//!     CatalogClient, CatalogClientConfig, CatalogMockMode, ClientTrait,
+//!     CatalogClient, CatalogClientConfig,
+//!     CatalogMockMode, ClientTrait, auth_strategy_from_method,
 //! };
 //!
 //! let config = CatalogClientConfig {
 //!     catalog_url: "https://api.flox.dev".to_string(),
-//!     floxhub_token: Some(token),
 //!     extra_headers: BTreeMap::new(),
 //!     mock_mode: CatalogMockMode::None,
+//!     auth_strategy: auth_strategy_from_method(&Default::default(), floxhub_token, catalog_url),
+//!     user_agent: Some("flox-cli/1.0".to_string()),
 //! };
 //!
 //! let client = CatalogClient::new(config)?;
@@ -31,13 +33,14 @@ mod auth;
 mod client;
 mod config;
 mod error;
+mod token;
 mod types;
 
 pub(crate) mod mock;
 
 // Re-export catalog-api-v1 types for consumers.
 // This allows consumers to depend only on catalog-client, not directly on catalog-api-v1.
-pub use auth::{AuthManager, AuthMethod};
+pub use auth::{auth_strategy_from_method, AuthError, AuthMethod, AuthStrategy};
 pub use catalog_api_v1::{
     Client as ApiClient,
     Error as ApiError,
@@ -50,5 +53,6 @@ pub use client::{str_to_catalog_name, str_to_package_name, CatalogClient, Client
 pub use config::{CatalogClientConfig, CatalogMockMode};
 // Errors
 pub use error::*;
+pub use token::{FloxhubToken, FloxhubTokenError};
 // Types (re-exported from types module for convenience)
 pub use types::*;

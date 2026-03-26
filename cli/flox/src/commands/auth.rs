@@ -3,7 +3,6 @@ use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
-use flox_rust_sdk::providers::catalog::Client;
 use indoc::formatdoc;
 use oauth2::basic::{
     BasicClient,
@@ -309,6 +308,10 @@ impl Auth {
 ///
 /// * updates the config file with the received token
 /// * updates the floxhub_token field in the config struct
+// TODO: `flox auth login` is currently Auth0-specific. It should be abstracted
+// to handle different auth methods — for Kerberos, it should print a warning
+// that login is not needed (Kerberos authentication is handled externally via
+// `kinit`).
 pub async fn login_flox(flox: &mut Flox) -> Result<&FloxhubToken> {
     let client = create_oauth_client()?;
     let cred = authorize(client, flox.floxhub.base_url())
@@ -319,21 +322,17 @@ pub async fn login_flox(flox: &mut Flox) -> Result<&FloxhubToken> {
     debug!("Writing token to config");
 
     // set the token in the runtime config
-    let token = flox.floxhub_token.insert(FloxhubToken::new(cred.token)?);
-    let handle = token.handle();
+    let token = FloxhubToken::new(cred.token)?;
+    let handle = token.handle().to_string();
 
     // write the token to the config file
     update_config(&flox.config_dir, "floxhub_token", Some(token.clone()))
         .context("Could not write token to config")?;
 
-    // If the catalog client is catalog (not a mock), update the token by
-    // creating a new client based on the old config with the updated token
-    if let Client::Catalog(client) = &mut flox.catalog_client {
-        client.update_config(|config| config.floxhub_token = Some(token.secret().to_string()))?;
-    }
+    flox.set_floxhub_token(token.clone())?;
 
     message::updated("Authentication complete");
     message::updated(format!("Logged in as {handle}"));
 
-    Ok(token)
+    Ok(flox.floxhub_token.as_ref().unwrap())
 }

@@ -2,9 +2,17 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
+use flox_catalog::CatalogClientError;
+pub use flox_catalog::{
+    AuthError,
+    AuthMethod,
+    AuthStrategy,
+    FloxhubToken,
+    FloxhubTokenError,
+    auth_strategy_from_method,
+};
 use flox_core::vars::FLOX_VERSION_STRING;
 use serde::{Deserialize, Serialize};
-use serde_with::DeserializeFromStr;
 use thiserror::Error;
 use url::Url;
 use uuid::Uuid;
@@ -58,6 +66,10 @@ pub struct Flox {
     /// Checking for [None] can be used to check if the use is logged in.
     pub floxhub_token: Option<FloxhubToken>,
 
+    /// The authentication strategy instance, constructed from [auth_method],
+    /// [floxhub_token], and [catalog_url].
+    pub auth_strategy: std::sync::Arc<dyn AuthStrategy>,
+
     pub catalog_client: catalog::Client,
     pub installable_locker: flake_installable_locker::InstallableLockerImpl,
 
@@ -71,7 +83,46 @@ pub struct Flox {
     pub metrics_device_uuid: Option<Uuid>,
 }
 
-impl Flox {}
+impl Flox {
+    /// Validate that auth is available and return the user's handle.
+    pub fn get_handle(&self) -> Option<String> {
+        match self.auth_strategy.get_handle() {
+            Ok(handle) => Some(handle),
+            Err(AuthError::Expired { handle, message: _ }) => Some(handle),
+            Err(_) => None,
+        }
+    }
+
+    /// Set a new token and rebuild the auth strategy to reflect it.
+    ///
+    /// Note: when using Kerberos authentication, the token is stored but has
+    /// no effect on the auth strategy — Kerberos does not use FloxHub tokens.
+    pub fn set_floxhub_token(&mut self, token: FloxhubToken) -> Result<(), CatalogClientError> {
+        #[cfg(feature = "floxhub-authn-kerberos")]
+        if self.auth_strategy.auth_method() == AuthMethod::Kerberos {
+            tracing::debug!(
+                "set_floxhub_token called but current auth method is Kerberos; token will be stored but not used"
+            );
+        }
+        let t: &mut FloxhubToken = self.floxhub_token.insert(token);
+        let auth_strategy = auth_strategy_from_method(
+            &self.auth_strategy.auth_method(),
+            Some(t.clone()),
+            if let catalog::Client::Catalog(client) = &self.catalog_client {
+                client.catalog_url().to_string()
+            } else {
+                String::new()
+            },
+        );
+        self.auth_strategy = auth_strategy.clone();
+        if let catalog::Client::Catalog(client) = &mut self.catalog_client {
+            client.update_config(|config| {
+                config.auth_strategy = auth_strategy;
+            })?;
+        }
+        Ok(())
+    }
+}
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, Default)]
 pub struct Features {
@@ -83,88 +134,6 @@ pub struct Features {
 
 pub static DEFAULT_FLOXHUB_URL: LazyLock<Url> =
     LazyLock::new(|| Url::parse("https://hub.flox.dev").unwrap());
-
-/// Assertions about the owner of this token
-#[derive(Debug, Clone, Deserialize)]
-struct FloxTokenClaims {
-    /// The FloxHub handle of the user this token belongs to
-    #[serde(rename = "https://flox.dev/handle")]
-    handle: String,
-    /// The expiration time of the token (Unix timestamp)
-    exp: usize,
-}
-
-/// A token authenticating a user with FloxHub
-#[derive(Debug, Clone, DeserializeFromStr)]
-pub struct FloxhubToken {
-    /// The entire token as a string
-    token: String,
-    /// Assertions about the identity of the token's owner
-    token_data: FloxTokenClaims,
-}
-
-impl FloxhubToken {
-    /// Create a new floxhub token from a string
-    pub fn new(token: String) -> Result<Self, FloxhubTokenError> {
-        token.parse()
-    }
-
-    /// Return the token as a string
-    pub fn secret(&self) -> &str {
-        &self.token
-    }
-
-    /// Return the handle of the user the token belongs to
-    pub fn handle(&self) -> &str {
-        &self.token_data.handle
-    }
-
-    /// Returns whether the token has expired by checking the `exp` claim
-    /// against the current time.
-    pub fn is_expired(&self) -> bool {
-        let now = {
-            let start = std::time::SystemTime::now();
-            start
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("Time went backwards")
-                .as_secs() as usize
-        };
-        self.token_data.exp < now
-    }
-}
-
-impl Serialize for FloxhubToken {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.token.serialize(serializer)
-    }
-}
-
-impl FromStr for FloxhubToken {
-    type Err = FloxhubTokenError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Client side we don't need to verify the signature,
-        // as all priviledged access is guarded server side.
-        // We still decode the token to extract claims like handle and expiration.
-
-        let token = jsonwebtoken::dangerous::insecure_decode::<FloxTokenClaims>(s)
-            .map_err(FloxhubTokenError::InvalidToken)?;
-
-        Ok(FloxhubToken {
-            token: s.to_string(),
-            token_data: token.claims,
-        })
-    }
-}
-
-#[derive(Debug, Clone, Error, Eq, PartialEq)]
-pub enum FloxhubTokenError {
-    #[error("invalid token")]
-    InvalidToken(#[source] jsonwebtoken::errors::Error),
-}
 
 #[derive(Debug, Clone)]
 pub struct Floxhub {
@@ -266,6 +235,21 @@ pub mod test_helpers {
         FloxhubToken::from_str(&token).unwrap()
     }
 
+    /// Set a pre-existing token on a [Flox] instance and rebuild the auth
+    /// strategy so that `get_handle()` and friends see it immediately.
+    pub fn set_test_token(flox: &mut Flox, token: FloxhubToken) {
+        let _ = flox.set_floxhub_token(token);
+    }
+
+    /// Set up test authentication on a [Flox] instance.
+    ///
+    /// Creates a test token for the given handle, sets it on the instance,
+    /// and rebuilds the auth strategy so that `get_handle()` and friends
+    /// see the token immediately.
+    pub fn set_test_auth(flox: &mut Flox, handle: &str) {
+        set_test_token(flox, create_test_token(handle));
+    }
+
     /// Describes which test user to load:
     /// - One that has an existing personal catalog and access to other test
     ///   catalogs.
@@ -337,6 +321,10 @@ pub mod test_helpers {
             Url::from_directory_path(mock_floxhub_git_dir).unwrap()
         });
 
+        let auth_method: AuthMethod = Default::default();
+        let catalog_url = "https://api.flox.dev".to_string();
+        let auth_strategy = auth_strategy_from_method(&auth_method, None, catalog_url.clone());
+
         let flox = Flox {
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             system_user_name: "its-a-me-mario".to_string(),
@@ -354,6 +342,7 @@ pub mod test_helpers {
             )
             .unwrap(),
             floxhub_token: None,
+            auth_strategy,
             catalog_client: MockClient::default().into(),
             installable_locker: InstallableLockerImpl::Mock(InstallableLockerMock::new()),
             features: Default::default(),

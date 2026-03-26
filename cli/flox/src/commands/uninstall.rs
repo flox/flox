@@ -10,7 +10,7 @@ use tracing::{debug, info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
-use crate::commands::{EnvironmentSelectError, ensure_floxhub_token, environment_description};
+use crate::commands::{EnvironmentSelectError, ensure_auth, environment_description};
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
 use crate::{environment_subcommand_metric, subcommand_metric};
@@ -43,7 +43,7 @@ impl Uninstall {
 
         // Ensure the user is logged in for the following remote operations
         if let EnvironmentSelect::Remote(_) = self.environment {
-            ensure_floxhub_token(&mut flox).await?;
+            ensure_auth(&mut flox).await?;
         };
 
         let mut concrete_environment = match self
