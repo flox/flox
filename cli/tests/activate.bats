@@ -4019,12 +4019,11 @@ EOF
 # 1. the structure of `activations.json`
 # 2. arguments and environment variables used in activation scripts
 attach_previous_release() {
-  skip "FIXME: Temporarily disabled whilst 'activations.json' path changes"
 
   shell="${1?}"
   mode="${2?}"
 
-  incrementing_version_this_release="true"
+  incrementing_version_this_release="false"
 
   echo "$HOOK_ONLY_ONCE" | "$FLOX_BIN" edit -f -
 
@@ -4071,11 +4070,9 @@ Setting PATH from ${rc_file}"
   # Use setsid so that wait_for_background_activation can kill the process group
   # TODO: Remove unsetting of mocks when `$FLOX_LATEST_VERSION` is using YAML
   #       instead of JSON mock files.
-  # TODO: when we release a new version of Flox, we'll have to change from using
-  # activate -- to activate -c
   env -u _FLOX_USE_CATALOG_MOCK -u FLOX_INTERPRETER -u FLOX_ACTIVATIONS_BIN \
-    setsid ./result/bin/flox activate -- \
-    "$shell_path" -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" > output 2>&1 &
+    setsid ./result/bin/flox activate -c \
+    "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" > output 2>&1 &
   timeout 15s tail -f output &
 
   # Longer timeout to allow for `nix run` locking.
@@ -4109,7 +4106,7 @@ EOF
 )"
         unset RUST_BACKTRACE
       else
-        expected_message=="$(cat << EOF
+        expected_message="$(cat << EOF
 spawn ${FLOX_BIN} activate --dir ${PROJECT_DIR}
 ✔ Attached to existing activation of environment '${PROJECT_NAME}'
 To stop using this environment, type 'exit'
@@ -4181,7 +4178,10 @@ EOF
       else
         run "$shell_path" -c "$eval_command"
         assert_success
-        assert_output "$output_from_rc_files"
+        # Bash doesn't run RC files with -c
+        if [ "$shell" != "bash" ]; then
+          assert_output "$output_from_rc_files"
+        fi
       fi
       ;;
     *)
