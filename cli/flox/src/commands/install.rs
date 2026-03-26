@@ -1,6 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::io::Write;
-use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
@@ -54,6 +52,7 @@ use crate::utils::dialog::{Dialog, Select};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::format_error;
 use crate::utils::message::{self};
+use crate::utils::rc_files::{add_activation_to_rc_file, ensure_rc_file_exists, locate_rc_file};
 use crate::utils::tracing::sentry_set_tag;
 use crate::{Exit, environment_subcommand_metric, subcommand_metric};
 
@@ -705,52 +704,6 @@ fn prompt_to_modify_rc_file(env_ref: &RemoteEnvironmentRef) -> Result<bool, anyh
     Ok(true)
 }
 
-fn locate_rc_file(shell: &ShellWithPath, name: impl AsRef<str>) -> Result<PathBuf, anyhow::Error> {
-    use ShellWithPath::*;
-    let home = dirs::home_dir().context("failed to locate home directory")?;
-    let rc_file = match shell {
-        Bash(_) => home.join(name.as_ref()),
-        Zsh(_) => home.join(name.as_ref()),
-        Tcsh(_) => home.join(name.as_ref()),
-        // Note, this `.config` is _not_ what you get from `dirs::config_dir`,
-        // which points at `Application Support`
-        Fish(_) => home.join(".config/fish").join(name.as_ref()),
-    };
-    Ok(rc_file)
-}
-
-fn ensure_rc_file_exists(path: impl AsRef<Path>) -> Result<(), anyhow::Error> {
-    let path = path.as_ref();
-    if !path.exists() {
-        std::fs::create_dir_all(path.parent().context("RC file had no parent")?)
-            .context("failed to create parent directory for RC file")?;
-        std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(path)
-            .context("failed to create empty RC file")?;
-    }
-    Ok(())
-}
-
-fn add_activation_to_rc_file(
-    path: impl AsRef<Path>,
-    cmd: impl AsRef<str>,
-) -> Result<(), anyhow::Error> {
-    let backup = path.as_ref().with_extension(".pre_flox");
-    if backup.exists() {
-        std::fs::remove_file(&backup).context("failed to remove old backup of RC file")?;
-    }
-    std::fs::copy(&path, backup).context("failed to make backup of RC file")?;
-    let mut file = std::fs::OpenOptions::new()
-        .append(true)
-        .open(&path)
-        .context("failed to open RC file")?;
-    file.write(format!("{}\n", cmd.as_ref()).as_bytes())
-        .context("failed to write to RC file")?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
@@ -766,10 +719,10 @@ mod tests {
     use indoc::formatdoc;
     use tracing::instrument::WithSubscriber;
 
-    use super::{add_activation_to_rc_file, ensure_rc_file_exists};
     use crate::commands::EnvironmentSelect;
     use crate::commands::install::{Install, package_list_for_prompt};
     use crate::utils::message;
+    use crate::utils::rc_files::{add_activation_to_rc_file, ensure_rc_file_exists};
 
     /// [Install::generate_warnings] shouldn't warn for packages not in packages_to_install
     #[test]

@@ -1,4 +1,4 @@
-use std::io::{BufWriter, stdout};
+use std::io::{BufWriter, Write as _, stdout};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -431,6 +431,11 @@ impl Activate {
 
         let activation_state_dir = activation_state_dir_path(&flox.runtime_dir, &dot_flox_path);
 
+        // Clone shell and invocation_type before they're moved into ActivateCtx,
+        // since we need them later to decide whether to emit hook code.
+        let shell_for_hook = shell.clone();
+        let invocation_type_for_hook = invocation_type.clone();
+
         let activate_data = ActivateCtx {
             flox_activate_store_path: store_path.to_string_lossy().to_string(),
             attach_ctx: core,
@@ -478,6 +483,25 @@ impl Activate {
             );
             Ok(())
         } else {
+            // When activating in-place without an explicit --dir or -r target,
+            // emit auto-activation hook code before exec so that
+            // `eval "$(flox activate)"` is a single-line setup that does everything.
+            if matches!(invocation_type_for_hook, InvocationType::InPlace)
+                && matches!(self.environment, EnvironmentSelect::Unspecified)
+            {
+                let flox_bin = std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.to_str().map(String::from))
+                    .unwrap_or_else(|| "flox".to_string());
+                print!(
+                    "{}",
+                    super::hook::hook_code_for_shell(&shell_for_hook, &flox_bin)
+                );
+                // Must flush before exec() since Rust's buffered stdout
+                // is NOT automatically flushed by exec.
+                std::io::stdout().flush()?;
+            }
+
             debug!("running activation command: {:?}", command);
             // exec should never return
             // TODO: did this break in-place metrics?

@@ -448,6 +448,15 @@ fn print_welcome_message(envs: EnvRegistry, active_environments: ActiveEnvironme
 
     if active_environments.last_active().is_none() {
         message::plain("No active environments. Use 'flox envs' to list all environments.\n");
+
+        // If the default environment exists but isn't active, hint at dotfile setup
+        if let Some(home) = dirs::home_dir()
+            && home.join(DOT_FLOX).exists()
+        {
+            message::plain(
+                "Tip: Add 'eval \"$(flox activate)\"' to your shell config for the best experience.\n",
+            );
+        }
     } else {
         message::created("Active environments:");
         let envs = indent::indent_all_by(

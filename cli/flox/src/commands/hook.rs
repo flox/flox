@@ -1,11 +1,15 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use shell_gen::ShellWithPath;
+
+use super::activate::Activate;
 
 #[derive(Bpaf, Clone, Debug)]
 pub struct Hook {
-    /// Shell to emit hook code for (bash, zsh, fish, tcsh)
-    #[bpaf(positional("SHELL"))]
-    shell: String,
+    /// Shell to emit hook code for (bash, zsh, fish, tcsh).
+    /// Auto-detected from the current shell if omitted.
+    #[bpaf(positional("SHELL"), optional)]
+    shell: Option<String>,
 }
 
 impl Hook {
@@ -15,16 +19,37 @@ impl Hook {
             .and_then(|p| p.to_str().map(String::from))
             .unwrap_or_else(|| "flox".to_string());
 
-        let output = match self.shell.as_str() {
-            "bash" => bash_hook(&flox_bin),
-            "zsh" => zsh_hook(&flox_bin),
-            "fish" => fish_hook(&flox_bin),
-            "tcsh" => tcsh_hook(&flox_bin),
-            other => bail!("unsupported shell: {other}. Supported shells: bash, zsh, fish, tcsh"),
+        let output = match self.shell {
+            Some(ref shell_name) => match shell_name.as_str() {
+                "bash" => bash_hook(&flox_bin),
+                "zsh" => zsh_hook(&flox_bin),
+                "fish" => fish_hook(&flox_bin),
+                "tcsh" => tcsh_hook(&flox_bin),
+                other => {
+                    bail!("unsupported shell: {other}. Supported shells: bash, zsh, fish, tcsh")
+                },
+            },
+            None => {
+                let shell = Activate::detect_shell_for_in_place()?;
+                hook_code_for_shell(&shell, &flox_bin)
+            },
         };
 
         print!("{output}");
         Ok(())
+    }
+}
+
+/// Generate hook code for a given shell.
+///
+/// This is used by both `flox hook` and `flox activate` (eval mode)
+/// to emit auto-activation hook registration code.
+pub(crate) fn hook_code_for_shell(shell: &ShellWithPath, flox_bin: &str) -> String {
+    match shell {
+        ShellWithPath::Bash(_) => bash_hook(flox_bin),
+        ShellWithPath::Zsh(_) => zsh_hook(flox_bin),
+        ShellWithPath::Fish(_) => fish_hook(flox_bin),
+        ShellWithPath::Tcsh(_) => tcsh_hook(flox_bin),
     }
 }
 
