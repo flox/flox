@@ -101,6 +101,53 @@ pub struct ActivateCtx {
     pub metrics_uuid: Option<Uuid>,
 }
 
+/// Subset of activation context needed for auto-activation via `hook-env`.
+///
+/// Passed as JSON to `flox-activations auto-start` to register the shell PID,
+/// spawn the executive, and run lifecycle hooks.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoStartCtx {
+    /// Path to the .flox directory
+    pub dot_flox_path: PathBuf,
+
+    /// Nix store path for the built environment
+    pub store_path: String,
+
+    /// Mode link path (from rendered_env_links)
+    pub flox_env: String,
+
+    /// Base directory for this environment's activation state
+    pub activation_state_dir: PathBuf,
+
+    /// The activation mode (dev or run)
+    pub mode: ActivateMode,
+
+    /// Human-readable environment description
+    pub env_description: String,
+
+    /// The project path for the environment
+    pub env_project: PathBuf,
+
+    /// The cache path for the environment
+    pub env_cache: PathBuf,
+
+    /// Environment log directory
+    pub flox_env_log_dir: PathBuf,
+
+    /// Path to process-compose binary
+    pub process_compose_bin: PathBuf,
+
+    /// Services socket path
+    pub flox_services_socket: PathBuf,
+
+    /// Path to the interpreter (activation scripts)
+    pub interpreter_path: PathBuf,
+
+    /// The metrics UUID for Sentry user identification.
+    #[serde(default)]
+    pub metrics_uuid: Option<Uuid>,
+}
+
 #[derive(Clone, Debug, Deserialize, derive_more::Display, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InvocationType {

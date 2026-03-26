@@ -1,13 +1,19 @@
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
+use flox_core::activate::context::AutoStartCtx;
 use flox_core::activate::mode::ActivateMode;
-use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
+use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVE_ENVIRONMENTS_VAR};
+use flox_core::activations::activation_state_dir_path;
 use flox_core::hook_state::{
+    ActivationInfo,
+    ActivationTracking,
+    HOOK_VAR_ACTIVATIONS,
     HOOK_VAR_CWD,
     HOOK_VAR_DIFF,
     HOOK_VAR_DIRS,
@@ -26,9 +32,11 @@ use flox_rust_sdk::models::environment::{
     UninitializedEnvironment,
     find_all_dot_flox,
 };
+use flox_rust_sdk::providers::services::process_compose::PROCESS_COMPOSE_BIN;
+use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use regex::Regex;
 use shell_gen::{GenerateShell, SetVar, Shell, UnsetVar};
-use tracing::debug;
+use tracing::{debug, error};
 
 use crate::utils::active_environments::activated_environments;
 use crate::utils::colors::{INDIGO_300, INDIGO_400};
@@ -171,7 +179,12 @@ impl HookEnv {
         // Step 1: Revert previous diff.
         emit_revert(&state.diff, shell, &mut stdout)?;
 
-        // Step 2: Build new env vars from all trusted environments.
+        // Step 2: Build new env vars from all trusted environments and manage
+        // activation lifecycle (PID registration, executive spawning).
+        let shell_pid = std::os::unix::process::parent_id() as i32;
+        let prev_tracking = state.activation_tracking.clone();
+        let mut new_tracking = ActivationTracking::default();
+
         let mut combined_env: HashMap<String, String> = HashMap::new();
         let mut path_additions: Vec<String> = Vec::new();
         let mut new_watches: Vec<WatchEntry> = Vec::new();
@@ -189,8 +202,41 @@ impl HookEnv {
             });
 
             match resolve_env_vars(dot_flox, &flox) {
-                Ok(env_vars) => {
-                    for (k, v) in env_vars {
+                Ok(resolved) => {
+                    // Check if this environment is already tracked with the same store path.
+                    // If so, skip the auto-start subprocess (common fast path for subsequent prompts).
+                    let already_tracked = prev_tracking
+                        .entries
+                        .get(&dot_flox.path)
+                        .is_some_and(|info| info.store_path == resolved.store_path);
+
+                    let activation_state_dir =
+                        activation_state_dir_path(&flox.runtime_dir, &dot_flox.path);
+
+                    if already_tracked {
+                        // Carry forward existing tracking info
+                        new_tracking.entries.insert(
+                            dot_flox.path.clone(),
+                            prev_tracking.entries[&dot_flox.path].clone(),
+                        );
+                    } else {
+                        // New or changed environment - spawn auto-start
+                        spawn_auto_start(
+                            shell_pid,
+                            dot_flox,
+                            &resolved,
+                            &activation_state_dir,
+                        );
+                        new_tracking.entries.insert(
+                            dot_flox.path.clone(),
+                            ActivationInfo {
+                                activation_state_dir,
+                                store_path: resolved.store_path.clone(),
+                            },
+                        );
+                    }
+
+                    for (k, v) in resolved.vars {
                         match k.as_str() {
                             "_FLOX_PATH_ADD" | "_FLOX_SBIN_ADD" => {
                                 path_additions.push(v);
@@ -211,6 +257,13 @@ impl HookEnv {
                         dot_flox.path.display()
                     );
                 },
+            }
+        }
+
+        // Detach from environments that are no longer active.
+        for (path, info) in &prev_tracking.entries {
+            if !new_tracking.entries.contains_key(path) {
+                spawn_auto_detach(shell_pid, &info.activation_state_dir);
             }
         }
 
@@ -276,6 +329,7 @@ impl HookEnv {
                 cwd: &cwd,
                 trusted_dot_flox: &trusted_dot_flox,
                 prev_active_dirs: &state.active_dirs,
+                activation_tracking: &new_tracking,
             },
             shell,
             &mut stdout,
@@ -304,8 +358,26 @@ fn reverted_env_var(key: &str, old_diff: &HookDiff) -> Option<String> {
     }
 }
 
+/// Result of resolving an environment, containing both env vars and metadata.
+struct ResolvedEnv {
+    /// Environment variables to set (including special _FLOX_PATH_ADD/_FLOX_SBIN_ADD keys)
+    vars: HashMap<String, String>,
+    /// Nix store path for the built environment
+    store_path: String,
+    /// Mode link path (FLOX_ENV value)
+    flox_env: String,
+    /// Cache path for the environment
+    env_cache: PathBuf,
+    /// Log directory for the environment
+    flox_env_log_dir: PathBuf,
+    /// Project path for the environment
+    env_project: PathBuf,
+    /// Services socket path
+    flox_services_socket: PathBuf,
+}
+
 /// Resolve environment variables from a built environment.
-fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<HashMap<String, String>> {
+fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<ResolvedEnv> {
     let mut env = UninitializedEnvironment::DotFlox(dot_flox.clone())
         .into_concrete_environment(flox, None)?;
 
@@ -314,6 +386,12 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<HashMap<String, S
     let rendered_links = env.rendered_env_links(flox)?;
     let link = rendered_links.for_mode(&ActivateMode::Dev);
 
+    // Collect environment metadata for activation lifecycle.
+    let env_cache = env.cache_path()?.into_inner();
+    let flox_env_log_dir = env.log_path()?.to_path_buf();
+    let env_project = env.project_path()?;
+    let flox_services_socket = env.services_socket_path(flox)?;
+
     // Resolve the symlink to the actual store path.
     let link_path: &std::path::Path = link.as_ref();
     let store_path = std::fs::read_link(link_path).unwrap_or_else(|_| link_path.to_path_buf());
@@ -321,7 +399,8 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<HashMap<String, S
     let mut vars = HashMap::new();
 
     // Set FLOX_ENV to the link path.
-    vars.insert("FLOX_ENV".to_string(), link_path.display().to_string());
+    let flox_env = link_path.display().to_string();
+    vars.insert("FLOX_ENV".to_string(), flox_env.clone());
 
     // Collect bin and sbin directories as PATH additions.
     // These are returned in the vars map under a special key and merged by the
@@ -355,7 +434,15 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<HashMap<String, S
         }
     }
 
-    Ok(vars)
+    Ok(ResolvedEnv {
+        vars,
+        store_path: store_path.display().to_string(),
+        flox_env,
+        env_cache,
+        flox_env_log_dir,
+        env_project,
+        flox_services_socket,
+    })
 }
 
 /// Emit shell commands to revert the previous HookDiff.
@@ -406,6 +493,8 @@ struct HookStateUpdate<'a> {
     trusted_dot_flox: &'a [DotFlox],
     /// .flox dirs that were auto-activated on the *previous* hook-env call.
     prev_active_dirs: &'a [PathBuf],
+    /// Per-environment activation tracking for PID lifecycle management.
+    activation_tracking: &'a ActivationTracking,
 }
 
 /// Emit updated _FLOX_HOOK_* state variables.
@@ -471,6 +560,14 @@ fn emit_state_vars(
     }
 
     SetVar::exported_no_expansion(FLOX_ACTIVE_ENVIRONMENTS_VAR, active_envs.to_string())
+        .generate_with_newline(shell, writer)?;
+
+    // Emit activation tracking for PID lifecycle management.
+    let activations_encoded = update
+        .activation_tracking
+        .serialize()
+        .context("failed to serialize activation tracking")?;
+    SetVar::exported_no_expansion(HOOK_VAR_ACTIVATIONS, &activations_encoded)
         .generate_with_newline(shell, writer)?;
 
     Ok(())
@@ -577,5 +674,126 @@ pub(crate) fn trust_or_log(data_dir: impl AsRef<Path>, dot_flox_path: impl AsRef
     let trust_mgr = TrustManager::new(data_dir);
     if let Err(e) = trust_mgr.trust(dot_flox_path) {
         tracing::debug!("failed to re-trust environment: {e}");
+    }
+}
+
+/// Spawn `flox-activations auto-start` to register the shell PID, spawn an
+/// executive, and set up activation state. Errors are logged but non-fatal:
+/// the environment still works for env vars, just without hooks/services.
+fn spawn_auto_start(
+    shell_pid: i32,
+    dot_flox: &DotFlox,
+    resolved: &ResolvedEnv,
+    activation_state_dir: &Path,
+) {
+    let ctx = AutoStartCtx {
+        dot_flox_path: dot_flox.path.clone(),
+        store_path: resolved.store_path.clone(),
+        flox_env: resolved.flox_env.clone(),
+        activation_state_dir: activation_state_dir.to_path_buf(),
+        mode: ActivateMode::Dev,
+        env_description: dot_flox.pointer.name().to_string(),
+        env_project: resolved.env_project.clone(),
+        env_cache: resolved.env_cache.clone(),
+        flox_env_log_dir: resolved.flox_env_log_dir.clone(),
+        process_compose_bin: PathBuf::from(&*PROCESS_COMPOSE_BIN),
+        flox_services_socket: resolved.flox_services_socket.clone(),
+        interpreter_path: FLOX_INTERPRETER.clone(),
+        metrics_uuid: None,
+    };
+
+    // Write context to a temp file
+    let temp_file = match tempfile::NamedTempFile::with_prefix_in(
+        "auto_start_ctx_",
+        activation_state_dir
+            .parent()
+            .unwrap_or(activation_state_dir),
+    ) {
+        Ok(f) => f,
+        Err(e) => {
+            error!("failed to create temp file for auto-start: {e}");
+            return;
+        },
+    };
+
+    if let Err(e) = serde_json::to_writer(&temp_file, &ctx) {
+        error!("failed to write auto-start context: {e}");
+        return;
+    }
+
+    let ctx_path = temp_file.path().to_path_buf();
+    if let Err(e) = temp_file.keep() {
+        error!("failed to persist auto-start context file: {e}");
+        return;
+    }
+
+    let result = Command::new(&*FLOX_ACTIVATIONS_BIN)
+        .args([
+            "auto-start",
+            "--pid",
+            &shell_pid.to_string(),
+            "--activate-data",
+            &ctx_path.to_string_lossy(),
+        ])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .status();
+
+    // Clean up temp file if it still exists (auto-start normally removes it)
+    let _ = std::fs::remove_file(&ctx_path);
+
+    match result {
+        Ok(status) if status.success() => {
+            debug!(
+                path = %dot_flox.path.display(),
+                "auto-start completed successfully"
+            );
+        },
+        Ok(status) => {
+            debug!(
+                path = %dot_flox.path.display(),
+                code = ?status.code(),
+                "auto-start exited with non-zero status"
+            );
+        },
+        Err(e) => {
+            error!(
+                path = %dot_flox.path.display(),
+                "failed to spawn auto-start: {e}"
+            );
+        },
+    }
+}
+
+/// Spawn `flox-activations auto-detach` to remove the shell PID from activation
+/// state. Fire-and-forget: errors are logged to debug.
+pub(crate) fn spawn_auto_detach(shell_pid: i32, activation_state_dir: &Path) {
+    let result = Command::new(&*FLOX_ACTIVATIONS_BIN)
+        .args([
+            "auto-detach",
+            "--pid",
+            &shell_pid.to_string(),
+            "--activation-state-dir",
+            &activation_state_dir.to_string_lossy(),
+        ])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .status();
+
+    match result {
+        Ok(status) if status.success() => {
+            debug!("auto-detach completed successfully");
+        },
+        Ok(status) => {
+            debug!(
+                code = ?status.code(),
+                "auto-detach exited with non-zero status"
+            );
+        },
+        Err(e) => {
+            debug!("failed to spawn auto-detach: {e}");
+        },
     }
 }

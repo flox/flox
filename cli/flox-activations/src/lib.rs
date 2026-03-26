@@ -6,7 +6,7 @@ pub mod gen_rc;
 pub mod logger;
 pub mod message;
 mod process_compose;
-mod start;
+pub(crate) mod start;
 mod vars_from_env;
 
 pub type Error = anyhow::Error;

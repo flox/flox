@@ -2,6 +2,7 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
 use flox_core::hook_state::{
+    HOOK_VAR_ACTIVATIONS,
     HOOK_VAR_DIFF,
     HOOK_VAR_DIRS,
     HOOK_VAR_SUPPRESSED,
@@ -13,7 +14,7 @@ use flox_rust_sdk::models::environment::UninitializedEnvironment;
 use indoc::{formatdoc, indoc};
 use shell_gen::{GenerateShell, SetVar, Shell, UnsetVar};
 
-use super::hook_env::emit_revert;
+use super::hook_env::{emit_revert, spawn_auto_detach};
 use super::{activated_environments, uninitialized_environment_description};
 use crate::subcommand_metric;
 use crate::utils::message;
@@ -82,6 +83,12 @@ impl Exit {
                 suppressed.push(innermost.clone());
             }
 
+            // Detach shell PID from the activation state for this environment.
+            let shell_pid = std::os::unix::process::parent_id() as i32;
+            if let Some(info) = state.activation_tracking.entries.get(innermost) {
+                spawn_auto_detach(shell_pid, &info.activation_state_dir);
+            }
+
             // Remove the deactivated env from _FLOX_ACTIVE_ENVIRONMENTS
             // so that a subsequent `flox activate` doesn't see it as
             // "already active".
@@ -104,6 +111,7 @@ impl Exit {
         UnsetVar::new(HOOK_VAR_DIFF).generate_with_newline(shell, &mut stdout)?;
         UnsetVar::new(HOOK_VAR_DIRS).generate_with_newline(shell, &mut stdout)?;
         UnsetVar::new(HOOK_VAR_WATCHES).generate_with_newline(shell, &mut stdout)?;
+        UnsetVar::new(HOOK_VAR_ACTIVATIONS).generate_with_newline(shell, &mut stdout)?;
 
         Ok(())
     }

@@ -16,6 +16,7 @@ pub const HOOK_VAR_WATCHES: &str = "_FLOX_HOOK_WATCHES";
 pub const HOOK_VAR_SUPPRESSED: &str = "_FLOX_HOOK_SUPPRESSED";
 pub const HOOK_VAR_NOTIFIED: &str = "_FLOX_HOOK_NOTIFIED";
 pub const HOOK_VAR_CWD: &str = "_FLOX_HOOK_CWD";
+pub const HOOK_VAR_ACTIVATIONS: &str = "_FLOX_HOOK_ACTIVATIONS";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct HookDiff {
@@ -101,6 +102,59 @@ pub struct WatchEntry {
     pub mtime: Option<u64>,
 }
 
+/// Per-environment activation info tracked by hook-env.
+/// Maps dot_flox_path to the activation state directory and store path
+/// so that auto-detach knows where to find the activation state.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct ActivationTracking {
+    pub entries: HashMap<PathBuf, ActivationInfo>,
+}
+
+/// Metadata for a single auto-activated environment.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ActivationInfo {
+    /// Base directory for this environment's activation state
+    pub activation_state_dir: PathBuf,
+    /// Nix store path for the built environment
+    pub store_path: String,
+}
+
+impl ActivationTracking {
+    /// Serialize to JSON, zlib compress, then base64url encode (no padding).
+    pub fn serialize(&self) -> Result<String> {
+        if self.entries.is_empty() {
+            return Ok(String::new());
+        }
+        let json =
+            serde_json::to_string(self).context("failed to serialize ActivationTracking")?;
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder
+            .write_all(json.as_bytes())
+            .context("failed to zlib compress ActivationTracking")?;
+        let compressed = encoder
+            .finish()
+            .context("failed to finish zlib compression")?;
+        Ok(URL_SAFE_NO_PAD.encode(&compressed))
+    }
+
+    /// Deserialize from base64url encoded, zlib compressed JSON.
+    /// An empty string returns the default (empty) ActivationTracking.
+    pub fn deserialize(encoded: &str) -> Result<Self> {
+        if encoded.is_empty() {
+            return Ok(Self::default());
+        }
+        let compressed = URL_SAFE_NO_PAD
+            .decode(encoded)
+            .context("failed to base64url decode ActivationTracking")?;
+        let mut decoder = ZlibDecoder::new(&compressed[..]);
+        let mut json = String::new();
+        decoder
+            .read_to_string(&mut json)
+            .context("failed to zlib decompress ActivationTracking")?;
+        serde_json::from_str(&json).context("failed to deserialize ActivationTracking from JSON")
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct HookState {
     pub diff: HookDiff,
@@ -109,6 +163,7 @@ pub struct HookState {
     pub suppressed_dirs: Vec<PathBuf>,
     pub notified_dirs: Vec<PathBuf>,
     pub last_cwd: Option<PathBuf>,
+    pub activation_tracking: ActivationTracking,
 }
 
 impl HookState {
@@ -138,6 +193,10 @@ impl HookState {
             .filter(|s| !s.is_empty())
             .map(PathBuf::from);
 
+        let activations_str = std::env::var(HOOK_VAR_ACTIVATIONS).unwrap_or_default();
+        let activation_tracking = ActivationTracking::deserialize(&activations_str)
+            .context("failed to parse _FLOX_HOOK_ACTIVATIONS")?;
+
         Ok(Self {
             diff,
             active_dirs,
@@ -145,6 +204,7 @@ impl HookState {
             suppressed_dirs,
             notified_dirs,
             last_cwd,
+            activation_tracking,
         })
     }
 
@@ -274,5 +334,34 @@ mod tests {
     fn test_parse_empty_path_list() {
         let paths = HookState::parse_path_list("");
         assert_eq!(paths, Vec::<PathBuf>::new());
+    }
+
+    #[test]
+    fn test_activation_tracking_serialize_deserialize_roundtrip() {
+        let mut tracking = ActivationTracking::default();
+        tracking.entries.insert(
+            PathBuf::from("/home/user/project/.flox"),
+            ActivationInfo {
+                activation_state_dir: PathBuf::from("/run/user/1000/flox/activations/abc12345-project"),
+                store_path: "/nix/store/abc-env".to_string(),
+            },
+        );
+
+        let encoded = tracking.serialize().unwrap();
+        let decoded = ActivationTracking::deserialize(&encoded).unwrap();
+        assert_eq!(decoded, tracking);
+    }
+
+    #[test]
+    fn test_activation_tracking_deserialize_empty_string() {
+        let tracking = ActivationTracking::deserialize("").unwrap();
+        assert_eq!(tracking, ActivationTracking::default());
+    }
+
+    #[test]
+    fn test_activation_tracking_serialize_empty_returns_empty_string() {
+        let tracking = ActivationTracking::default();
+        let encoded = tracking.serialize().unwrap();
+        assert_eq!(encoded, "");
     }
 }

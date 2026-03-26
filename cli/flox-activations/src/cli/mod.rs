@@ -6,6 +6,8 @@ use flox_core::vars::FLOX_VERSION_STRING;
 
 pub mod activate;
 pub mod attach;
+pub mod auto_detach;
+pub mod auto_start;
 pub mod executive;
 mod fix_fpath;
 pub mod fix_paths;
@@ -14,6 +16,8 @@ mod profile_scripts;
 pub mod set_env_dirs;
 
 use activate::ActivateArgs;
+use auto_detach::AutoDetachArgs;
+use auto_start::AutoStartArgs;
 use executive::ExecutiveArgs;
 use fix_fpath::FixFpathArgs;
 use fix_paths::FixPathsArgs;
@@ -47,6 +51,10 @@ pub enum Command {
     Attach(AttachArgs),
     #[command(about = "Activate a Flox environment.")]
     Activate(ActivateArgs),
+    #[command(about = "Auto-start an activation for hook-env (register PID, spawn executive).")]
+    AutoStart(AutoStartArgs),
+    #[command(about = "Auto-detach a PID from an activation for hook-env.")]
+    AutoDetach(AutoDetachArgs),
     #[command(about = "Start an activation and then run the executive")]
     Executive(ExecutiveArgs),
     #[command(about = "Print sourceable output fixing PATH and MANPATH for a shell.")]
