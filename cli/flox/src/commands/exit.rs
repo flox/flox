@@ -1,5 +1,6 @@
 use anyhow::Result;
 use bpaf::Bpaf;
+use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
 use flox_core::hook_state::{
     HOOK_VAR_DIFF,
     HOOK_VAR_DIRS,
@@ -8,6 +9,7 @@ use flox_core::hook_state::{
     HookState,
 };
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment::UninitializedEnvironment;
 use indoc::{formatdoc, indoc};
 use shell_gen::{GenerateShell, SetVar, Shell, UnsetVar};
 
@@ -72,12 +74,30 @@ impl Exit {
         // Revert the diff and restore the prompt.
         emit_revert(&state.diff, shell, &mut stdout)?;
 
-        // Add all active dirs to suppressed list so hook won't re-activate them.
+        // Only suppress the innermost (CWD-nearest) directory so that
+        // `flox deactivate` peels off one environment at a time.
         let mut suppressed = state.suppressed_dirs.clone();
-        for dir in &state.active_dirs {
-            if !suppressed.contains(dir) {
-                suppressed.push(dir.clone());
+        if let Some(innermost) = state.active_dirs.last() {
+            if !suppressed.contains(innermost) {
+                suppressed.push(innermost.clone());
             }
+
+            // Remove the deactivated env from _FLOX_ACTIVE_ENVIRONMENTS
+            // so that a subsequent `flox activate` doesn't see it as
+            // "already active".
+            let mut active_envs = activated_environments();
+            active_envs.retain(|env| {
+                if let UninitializedEnvironment::DotFlox(d) = env {
+                    d.path != *innermost
+                } else {
+                    true
+                }
+            });
+            SetVar::exported_no_expansion(
+                FLOX_ACTIVE_ENVIRONMENTS_VAR,
+                active_envs.to_string(),
+            )
+            .generate_with_newline(shell, &mut stdout)?;
         }
         let suppressed_str = HookState::format_path_list(&suppressed);
         SetVar::exported_no_expansion(HOOK_VAR_SUPPRESSED, &suppressed_str)

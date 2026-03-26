@@ -284,6 +284,89 @@ teardown() {
   assert_output ""
 }
 
+# bats test_tags=auto-activation:deactivate
+@test "deactivate clears _FLOX_ACTIVE_ENVIRONMENTS" {
+  "$FLOX_BIN" init
+
+  # Activate via hook-env — eval only _FLOX_HOOK_* state vars
+  local hook_output
+  hook_output="$("$FLOX_BIN" hook-env --shell bash 2>/dev/null)"
+  eval "$(echo "$hook_output" | grep -E '^export (_FLOX_HOOK_|_FLOX_ACTIVE_ENVIRONMENTS)')"
+
+  # Verify env is in _FLOX_ACTIVE_ENVIRONMENTS
+  [ -n "$_FLOX_ACTIVE_ENVIRONMENTS" ]
+
+  # Deactivate — eval the output
+  local deactivate_output
+  deactivate_output="$("$FLOX_BIN" deactivate --shell bash 2>/dev/null)"
+  eval "$(echo "$deactivate_output" | grep -E '^(export _FLOX_|unset _FLOX_)')"
+
+  # _FLOX_ACTIVE_ENVIRONMENTS should no longer contain the environment
+  # (it should be empty or not contain the project's .flox path)
+  [[ "$_FLOX_ACTIVE_ENVIRONMENTS" != *"$PROJECT_DIR"* ]]
+}
+
+# bats test_tags=auto-activation:deactivate
+@test "deactivate in nested hierarchy only suppresses innermost" {
+  # Create outer env
+  mkdir -p outer
+  pushd outer > /dev/null
+  "$FLOX_BIN" init
+  popd > /dev/null
+
+  # Create inner env
+  mkdir -p outer/inner
+  pushd outer/inner > /dev/null
+  "$FLOX_BIN" init
+  popd > /dev/null
+
+  # cd to inner, run hook-env to activate both
+  pushd outer/inner > /dev/null
+  local hook_output
+  hook_output="$("$FLOX_BIN" hook-env --shell bash 2>/dev/null)"
+  eval "$(echo "$hook_output" | grep -E '^export (_FLOX_HOOK_|_FLOX_ACTIVE_ENVIRONMENTS)')"
+
+  # Verify both dirs are active
+  [[ "$_FLOX_HOOK_DIRS" =~ "outer" ]]
+
+  # Deactivate — should only suppress the innermost (inner)
+  local deactivate_output
+  deactivate_output="$("$FLOX_BIN" deactivate --shell bash 2>/dev/null)"
+  eval "$(echo "$deactivate_output" | grep -E '^(export _FLOX_|unset _FLOX_)')"
+
+  # _FLOX_HOOK_SUPPRESSED should contain only the inner .flox path
+  [[ "$_FLOX_HOOK_SUPPRESSED" =~ "inner" ]]
+
+  # Next hook-env should re-activate outer but not inner
+  local hook_output2
+  hook_output2="$("$FLOX_BIN" hook-env --shell bash 2>/dev/null)"
+  local dirs_line
+  dirs_line="$(echo "$hook_output2" | grep "_FLOX_HOOK_DIRS")"
+  [[ "$dirs_line" =~ "outer" ]]
+  [[ ! "$dirs_line" =~ "inner" ]]
+  popd > /dev/null
+}
+
+# bats test_tags=auto-activation:deactivate
+@test "flox activate works after flox deactivate" {
+  "$FLOX_BIN" init
+
+  # Activate via hook-env
+  local hook_output
+  hook_output="$("$FLOX_BIN" hook-env --shell bash 2>/dev/null)"
+  eval "$(echo "$hook_output" | grep -E '^export (_FLOX_HOOK_|_FLOX_ACTIVE_ENVIRONMENTS)')"
+
+  # Deactivate
+  local deactivate_output
+  deactivate_output="$("$FLOX_BIN" deactivate --shell bash 2>/dev/null)"
+  eval "$(echo "$deactivate_output" | grep -E '^(export _FLOX_|unset _FLOX_)')"
+
+  # flox activate should NOT error with "already active"
+  run "$FLOX_BIN" activate -- echo "activated successfully"
+  assert_success
+  assert_output --partial "activated successfully"
+}
+
 # ---------------------------------------------------------------------------- #
 # Composition tests
 # ---------------------------------------------------------------------------- #
