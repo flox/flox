@@ -110,6 +110,17 @@ impl HookEnv {
             // re-resolving all environments (avoids redundant lock/build/symlink
             // reads).
             let mut stdout = std::io::stdout().lock();
+
+            // On the first hook-env call in a subshell (last_cwd is None),
+            // emit the prompt so that manually-activated environments show
+            // the PS1 prefix. Without this, neither set-prompt.zsh/bash
+            // (which defers to hook-env when exclude vars are set) nor the
+            // full update path (which isn't reached) would set the prompt.
+            if state.last_cwd.is_none() {
+                let all_names = build_prompt_names(&trusted_dot_flox);
+                emit_prompt(&all_names, shell, &mut stdout)?;
+            }
+
             if cwd_changed {
                 SetVar::exported_no_expansion(HOOK_VAR_CWD, cwd.display().to_string())
                     .generate_with_newline(shell, &mut stdout)?;
@@ -143,24 +154,8 @@ impl HookEnv {
         emit_apply(&new_diff, &combined_env, shell, &mut stdout)?;
 
         // Build unified prompt with both excluded (manually-activated) and
-        // auto-activated environment names.
-        // Excluded env names come first (innermost, manually-activated).
-        let exclude_names: Vec<String> = std::env::var(HOOK_VAR_EXCLUDE_NAMES)
-            .unwrap_or_default()
-            .split(':')
-            .filter(|s| !s.is_empty())
-            .map(String::from)
-            .collect();
-
-        // Auto-activated env names (innermost-first = reversed discovery order).
-        let auto_names: Vec<String> = trusted_dot_flox
-            .iter()
-            .rev()
-            .map(|d| d.pointer.name().to_string())
-            .collect();
-
-        // Combined: excluded first, then auto-activated.
-        let all_names = [exclude_names, auto_names].concat();
+        // auto-activated environment names, then emit it.
+        let all_names = build_prompt_names(&trusted_dot_flox);
         emit_prompt(&all_names, shell, &mut stdout)?;
 
         // Emit updated state variables.
@@ -797,6 +792,28 @@ fn emit_state_vars(
         .generate_with_newline(shell, writer)?;
 
     Ok(())
+}
+
+/// Build a list of environment names for the prompt, combining manually-activated
+/// (excluded) names with auto-activated names.
+fn build_prompt_names(trusted_dot_flox: &[DotFlox]) -> Vec<String> {
+    // Excluded env names come first (innermost, manually-activated).
+    let exclude_names: Vec<String> = std::env::var(HOOK_VAR_EXCLUDE_NAMES)
+        .unwrap_or_default()
+        .split(':')
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect();
+
+    // Auto-activated env names (innermost-first = reversed discovery order).
+    let auto_names: Vec<String> = trusted_dot_flox
+        .iter()
+        .rev()
+        .map(|d| d.pointer.name().to_string())
+        .collect();
+
+    // Combined: excluded first, then auto-activated.
+    [exclude_names, auto_names].concat()
 }
 
 /// Emit shell-specific code to modify the prompt with active environment names.

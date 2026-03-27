@@ -370,6 +370,33 @@ teardown() {
   assert_output --partial "activated successfully"
 }
 
+# bats test_tags=auto-activation:deactivate
+@test "hook-env emits prompt on first call in subshell with exclude vars" {
+  "$FLOX_BIN" init
+
+  # Simulate the subshell state after `flox activate` spawns a subshell
+  # for a project env: hook state is cleared, but exclude vars are set.
+  local dot_flox_path
+  dot_flox_path="$(pwd)/.flox"
+  local env_name
+  env_name="$(basename "$(pwd)")"
+
+  # Clear hook state (as clear_hook_state does)
+  unset _FLOX_HOOK_DIFF _FLOX_HOOK_DIRS _FLOX_HOOK_WATCHES
+  unset _FLOX_HOOK_SUPPRESSED _FLOX_HOOK_NOTIFIED _FLOX_HOOK_CWD
+  unset _FLOX_HOOK_ACTIVATIONS _FLOX_HOOK_SAVE_PS1
+
+  # Set exclude vars (as set_hook_exclude_vars does)
+  export _FLOX_HOOK_EXCLUDE_DIRS="$dot_flox_path"
+  export _FLOX_HOOK_EXCLUDE_NAMES="$env_name"
+
+  # First hook-env call should emit prompt-setting code
+  run "$FLOX_BIN" hook-env --shell bash
+  assert_success
+  assert_output --partial "PS1="
+  assert_output --partial "$env_name"
+}
+
 # ---------------------------------------------------------------------------- #
 # Composition tests
 # ---------------------------------------------------------------------------- #
