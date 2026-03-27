@@ -113,6 +113,13 @@ impl Exit {
         UnsetVar::new(HOOK_VAR_WATCHES).generate_with_newline(shell, &mut stdout)?;
         UnsetVar::new(HOOK_VAR_ACTIVATIONS).generate_with_newline(shell, &mut stdout)?;
 
+        // Hint: `flox deactivate` suppresses auto-activation for this
+        // session only. Suggest `flox revoke` for persistent denial.
+        eprintln!(
+            "flox: environment deactivated for this session. \
+             Use 'flox revoke' to permanently prevent auto-activation."
+        );
+
         Ok(())
     }
 }

@@ -66,6 +66,9 @@ impl TrustManager {
     }
 
     /// Mark a `.flox` path as trusted. Removes any existing deny file.
+    ///
+    /// The allow file stores the canonical path so that `deny()` can later
+    /// scan and remove stale allow files for the same environment.
     pub fn trust(&self, dot_flox_path: impl AsRef<Path>) -> Result<()> {
         let dot_flox_path = dot_flox_path.as_ref();
         let abs = fs::canonicalize(dot_flox_path)
@@ -88,7 +91,9 @@ impl TrustManager {
         let allow_file = self
             .allowed_dir
             .join(self.allow_hash(&abs, &manifest_content));
-        fs::write(&allow_file, "")
+        // Store the canonical path inside the allow file so `deny()` can
+        // identify and remove stale allow files for the same environment.
+        fs::write(&allow_file, abs.display().to_string())
             .with_context(|| format!("writing allow file {}", allow_file.display()))?;
 
         Ok(())
@@ -131,18 +136,28 @@ impl TrustManager {
         hex.to_string()
     }
 
-    /// Remove all allow files that could match a given path (across any
-    /// manifest content). Since we can't reverse the hash, we just list the
-    /// directory. In practice the directory is small, but this is a brute-force
-    /// approach used only during `deny()`.
-    fn remove_allow_files_for_path(&self, _abs_path: &Path) -> Result<()> {
-        // We can't determine which allow files correspond to this path without
-        // storing additional metadata. Instead, the deny file takes priority at
-        // check time, so stale allow files are harmless. However, for
-        // cleanliness we record the path prefix in each allow file and scan.
-        //
-        // For now, we simply leave allow files in place — deny always wins in
-        // `check()`.
+    /// Remove all allow files that match a given path (across any manifest
+    /// content). Scans allow files whose content matches the canonical path.
+    /// In practice the directory is small, so this linear scan is acceptable.
+    fn remove_allow_files_for_path(&self, abs_path: &Path) -> Result<()> {
+        let abs_str = abs_path.display().to_string();
+        let entries = match fs::read_dir(&self.allowed_dir) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => {
+                return Err(e).with_context(|| format!("reading {}", self.allowed_dir.display()));
+            },
+        };
+        for entry in entries {
+            let entry = entry?;
+            if let Ok(content) = fs::read_to_string(entry.path())
+                && content.trim() == abs_str
+            {
+                fs::remove_file(entry.path()).with_context(|| {
+                    format!("removing stale allow file {}", entry.path().display())
+                })?;
+            }
+        }
         Ok(())
     }
 }
@@ -222,6 +237,31 @@ mod tests {
 
         mgr.trust(&dot_flox).unwrap();
         assert_eq!(mgr.check(&dot_flox).unwrap(), TrustStatus::Trusted);
+    }
+
+    #[test]
+    fn deny_cleans_up_stale_allow_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data_dir = tmp.path().join("data");
+        let dot_flox = create_dot_flox(tmp.path(), "[install]");
+
+        let mgr = TrustManager::new(&data_dir);
+
+        // Trust with one manifest, then change manifest and trust again.
+        // This creates two allow files for the same path.
+        mgr.trust(&dot_flox).unwrap();
+        let manifest_path = dot_flox.join("env").join("manifest.toml");
+        fs::write(&manifest_path, "[install]\nhello = {}").unwrap();
+        mgr.trust(&dot_flox).unwrap();
+
+        // Count allow files: should be 2
+        let allow_count = fs::read_dir(&mgr.allowed_dir).unwrap().count();
+        assert_eq!(allow_count, 2);
+
+        // Deny should remove both allow files
+        mgr.deny(&dot_flox).unwrap();
+        let allow_count = fs::read_dir(&mgr.allowed_dir).unwrap().count();
+        assert_eq!(allow_count, 0);
     }
 
     #[test]

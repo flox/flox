@@ -238,21 +238,30 @@ impl HookState {
         false
     }
 
-    /// Format a list of paths as a colon-separated string.
+    /// Serialize a list of paths as a JSON array string.
+    ///
+    /// Uses JSON instead of colon-separated format to correctly handle
+    /// paths containing colons (e.g. `/home/user/my:project/.flox`).
     pub fn format_path_list(paths: &[PathBuf]) -> String {
-        paths
-            .iter()
-            .map(|p| p.display().to_string())
-            .collect::<Vec<_>>()
-            .join(":")
+        if paths.is_empty() {
+            return String::new();
+        }
+        serde_json::to_string(paths).unwrap_or_default()
     }
 
-    /// Parse a colon-separated string into a list of paths.
+    /// Deserialize a list of paths from a JSON array string.
+    /// Falls back to colon-separated parsing for backward compatibility
+    /// with state written before the JSON migration.
     /// An empty string returns an empty list.
     pub fn parse_path_list(s: &str) -> Vec<PathBuf> {
         if s.is_empty() {
             return Vec::new();
         }
+        // Try JSON first (new format)
+        if let Ok(paths) = serde_json::from_str::<Vec<PathBuf>>(s) {
+            return paths;
+        }
+        // Fall back to colon-separated (legacy format, for in-flight sessions)
         s.split(':').map(PathBuf::from).collect()
     }
 }
@@ -349,6 +358,39 @@ mod tests {
     fn test_parse_empty_path_list() {
         let paths = HookState::parse_path_list("");
         assert_eq!(paths, Vec::<PathBuf>::new());
+    }
+
+    #[test]
+    fn test_path_list_with_colons() {
+        let paths = vec![
+            PathBuf::from("/home/user/my:project/.flox"),
+            PathBuf::from("/home/user/normal/.flox"),
+        ];
+        let serialized = HookState::format_path_list(&paths);
+        let deserialized = HookState::parse_path_list(&serialized);
+        assert_eq!(deserialized, paths);
+    }
+
+    #[test]
+    fn test_path_list_with_spaces() {
+        let paths = vec![
+            PathBuf::from("/home/First Last/project/.flox"),
+            PathBuf::from("/home/user/my project/.flox"),
+        ];
+        let serialized = HookState::format_path_list(&paths);
+        let deserialized = HookState::parse_path_list(&serialized);
+        assert_eq!(deserialized, paths);
+    }
+
+    #[test]
+    fn test_path_list_legacy_colon_format() {
+        // Backward compatibility: parsing legacy colon-separated format
+        let legacy = "/home/user/.flox/env1:/home/user/.flox/env2";
+        let paths = HookState::parse_path_list(legacy);
+        assert_eq!(paths, vec![
+            PathBuf::from("/home/user/.flox/env1"),
+            PathBuf::from("/home/user/.flox/env2"),
+        ]);
     }
 
     #[test]
