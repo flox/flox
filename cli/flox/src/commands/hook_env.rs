@@ -148,8 +148,12 @@ impl HookEnv {
             manage_activations(&state, &trusted_dot_flox, &flox)?;
 
         // Merge PATH/FLOX_ENV_DIRS/MANPATH additions and compute diff.
-        let (new_diff, combined_env) =
-            compute_new_diff(&state.diff, combined_env, path_additions, env_dirs_additions);
+        let (new_diff, combined_env) = compute_new_diff(
+            &state.diff,
+            combined_env,
+            path_additions,
+            env_dirs_additions,
+        );
 
         // Emit new exports.
         emit_apply(&new_diff, &combined_env, shell, &mut stdout)?;
@@ -681,7 +685,10 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<ResolvedEnv> {
     vars.insert("FLOX_ENV".to_string(), flox_env.clone());
 
     // Set additional user-facing environment variables.
-    vars.insert("FLOX_ENV_CACHE".to_string(), env_cache.display().to_string());
+    vars.insert(
+        "FLOX_ENV_CACHE".to_string(),
+        env_cache.display().to_string(),
+    );
     vars.insert(
         "FLOX_ENV_PROJECT".to_string(),
         env_project.display().to_string(),
