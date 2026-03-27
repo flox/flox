@@ -8,146 +8,141 @@
   </a>
 </h1>
 
-<h2 align="center">
-  Developer environments you can take with you
-</h2>
-
-<!-- TODO: here comes the graphic
- show immediate value proposition
- a short demo of basics would be good for now
- a bold statement: Free yourself from container walls.
--->
-
 <h3 align="center">
-   &emsp;
-   <a href="https://discourse.flox.dev"><b>Discourse</b></a>
-   &emsp; | &emsp;
-   <a href="https://flox.dev/docs"><b>Documentation</b></a>
-   &emsp; | &emsp;
-   <a href="https://flox.dev/blog"><b>Blog</b></a>
-   &emsp; | &emsp;
-   <a href="https://twitter.com/floxdevelopment"><b>Twitter</b></a>
-   &emsp; | &emsp;
-   <a href="https://go.flox.dev/slack"><b>Slack</b></a>
-   &emsp;
+  Reproducible developer environments for any stack — install 120,000+ packages, share environments with your team, and build container images. Powered by Nix, but you don't have to know Nix.
 </h3>
 
 <p align="center">
-  <a href="https://github.com/flox/flox/blob/main/LICENSE">
-    <img alt="GitHub" src="https://img.shields.io/github/license/flox/flox?style=flat-square">
-  </a>
-  <a href="https://github.com/flox/flox/blob/main/CONTRIBUTING.md">
-    <img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square"/>
+  <a href="https://github.com/flox/flox/actions/workflows/ci.yml">
+    <img alt="CI" src="https://github.com/flox/flox/actions/workflows/ci.yml/badge.svg" />
   </a>
   <a href="https://github.com/flox/flox/releases">
-    <img alt="flox version" src="https://img.shields.io/github/v/release/flox/flox?style=flat-square"/>
-    <!-- <img alt="GitHub tag (latest by date)" src="https://img.shields.io/github/v/tag/flox/flox?label=Version&style=flat-square"> -->
+    <img alt="Latest Release" src="https://img.shields.io/github/v/release/flox/flox?style=flat-square" />
+  </a>
+  <a href="https://github.com/flox/flox/blob/main/LICENSE">
+    <img alt="License: GPL v2" src="https://img.shields.io/badge/License-GPL%20v2-blue.svg?style=flat-square" />
+  </a>
+<a href="https://discourse.flox.dev">
+    <img alt="Discourse" src="https://img.shields.io/badge/community-Discourse-blue?style=flat-square" />
+  </a>
+  <a href="https://go.flox.dev/slack">
+    <img alt="Slack" src="https://img.shields.io/badge/community-Slack-purple?style=flat-square&logo=slack" />
   </a>
 </p>
 
-[Flox][website] is a virtual environment and package manager all in one. With Flox you
-create environments that layer and replace dependencies just where
-it matters, making them portable across the full software lifecycle.
+<p align="center">
+  <img src="img/demo.gif" alt="Flox introductory demo" />
+</p>
 
-Install packages from [the biggest open source repository
-(nixpkgs)][post-nixpkgs] that contains **more than 80.000 packages**.
+---
 
-With `flox` you can:<br/>
-&rarr; [Create environments](https://flox.dev/docs/tutorials/creating-environments)<br/>
-&rarr; [Share your environments with others](https://flox.dev/docs/tutorials/sharing-environments)<br/>
-&rarr; [Build container images](https://flox.dev/docs/tutorials/sharing-environments/#sharing-with-containers)<br/>
-&rarr; [... and much more][docs]<br/>
+## Why Flox?
 
-<div align="center">
-  <a href="https://flox.dev/docs/install-flox/install/">
-    <img alt="install flox" src="https://img.shields.io/badge/Install-flox-brightgreen?style=for-the-badge"/>
-  </a>
-</div>
+- **Works on macOS and Linux** — no containers, no VMs, no configuration. Just install and go.
+- **Perfectly reproducible** — share an environment and it reproduces exactly on any machine, every time.
+- **120,000+ packages** — powered by [Nixpkgs][post-nixpkgs], the largest open source package repository, updated continuously.
 
-<!-- TODO: Compare with others
-- [Flox vs Docker]
-- [Flox vs Homebrew]
-- [Flox vs Bazel]
-- .. more (point to the website)
--->
+## Install
 
-## ⚡️ Quick start
+Flox provides native packages for each supported platform:
 
-``` text
-$ flox init           # <- Create an environment in current directory ✨.
+- **macOS** — `pkg` installer or Homebrew
+- **Linux** — `.deb`, `.rpm`, or standalone tarball
 
-$ flox search hello   # <- Search for a package 🚀.
+See the [installation guide](https://flox.dev/docs/install-flox/install/) for step-by-step instructions.
 
-$ flox install hello  # <- Install packages into current directory's environment 🔨.
+## Quick Start
 
-$ flox activate       # <- Enter the current directory's environment 🎆.
+```text
+$ flox init                        # Create an environment in your project
+✨ Created environment my-project
 
-flox [my-project] $ hello   # <- Have fun 🎉.
-Hello world!
+$ flox install python3 nodejs      # Install packages — any combination of tools
+✅ python3 installed
+✅ nodejs installed
 
-flox [my-project] $ exit    # <- Exit environment 💃.
+$ flox activate                    # Enter the environment
+flox [my-project] $ python3 --version
+Python 3.12.4
+flox [my-project] $ node --version
+v20.15.0
+
+flox [my-project] $ exit           # Leave — and the tools are gone
+$ python3 --version
+python3: command not found
 ```
 
-## ❓ Why
+That's the core idea: **tools appear when you activate, and disappear when you leave.** Your global system stays clean. Your project stays reproducible.
 
-We all build software on top of a dynamic set of tools,
-frameworks and packages, allowing us to move quickly and only
-build what’s necessary. However, each new wave of dev tooling
-innovation results in an entirely new set of dependencies that
-need to be managed. What starts as a simple app or microservice
-quickly grows complex, and
-turns into an expanding and fragmented supply
-chain. Flox brings reproducibility and consistency to complex
-software development life-cycles.
+📖 Ready to dive deeper? Check out the [full documentation](https://flox.dev/docs) for tutorials and guides.
 
-## 📘 Origins
+⭐ If Flox looks useful, [give us a star](https://github.com/flox/flox) — it helps others discover the project. ⭐
 
-Flox began its life during the deployment of Nix at
-the D. E. Shaw group, where it quickly proved invaluable
-by making Nix easier for newcomers and offering centralized
-control over packages. As a result, their successful project
-became one of the largest, most impactful enterprise deployments
-of Nix.
+---
 
-## 📫 Have a question? Want to chat? Ran into a problem?
+## What You Can Do with Flox
 
-We are happy to welcome you to our [Discourse forum][discourse] and answer your
-questions! You can always reach out to us directly via the [Flox twitter
-account][twitter] or chat with us directly on [Slack][slack].
+| | Capability | What it means |
+|---|---|---|
+| **Create** | `flox init` | Declarative environments that live alongside your code and activate automatically |
+| **Search** | `flox search` | Find any package from 120,000+ in Nixpkgs instantly |
+| **Share** | `flox push` / `flox pull` | Push to [FloxHub](https://hub.flox.dev); anyone on your team pulls an identical environment |
+| **Containerize** | `flox containerize` | Generate OCI-compatible images directly from your Flox environment — no Dockerfile required |
+| **Services** | `flox services start` | Run databases, queues, and background processes as part of your environment — they start on activate and stop on exit |
+| **Configure** | `manifest.toml` | Define environment variables, shell hooks, and activation scripts declaratively alongside your code |
+| **Editor support** | [Flox extension](https://marketplace.visualstudio.com/items?itemName=flox.flox) | Available for VS Code and any VS Code-compatible editor — manage environments without leaving your IDE |
+| **AI-ready** | Works with Claude Code, Cursor, Copilot, and Codex | Prompt any AI coding assistant to create or modify a Flox environment and it Just Works — see [flox-agentic](https://github.com/flox/flox-agentic) |
 
-## 🤝 Found a bug? Missing a specific feature?
+> **Origin:** Flox emerged from one of the largest enterprise Nix deployments in the world, at the D.E. Shaw group, where it made Nix accessible at scale across a large engineering organization.
 
-Feel free to [file a new issue][new-issue] with a respective title and
-description on the `flox/flox` repository. If you already found a solution
-to your problem, we would love to review your pull request!
+### [Already using Nix?](https://flox.dev/docs/install-flox/install/#__tabbed_1_5)
 
-## 🔒 Security
+Flox is a higher-level interface that adds environment sharing, activation hooks, and FloxHub without changing how you use nixpkgs. **Not using Nix?** You don't need to learn it — Flox handles everything.
 
-We encourage responsible disclosure of potential security issues, questions, or
-concerns—even if you are unsure whether an issue constitutes a vulnerability.
-For any security-related inquiry, please contact us at:
+---
 
-security@flox.dev
+## Community & Support
 
+- [Documentation](https://flox.dev/docs) — tutorials, reference, and guides
+- [FloxHub](https://hub.flox.dev) — discover and share environments
+- [Discourse](https://discourse.flox.dev) — questions, discussions, and announcements
+- [Blog](https://flox.dev/blog) — deep dives and workflows
+- [Slack](https://go.flox.dev/slack) — real-time chat with the team
+- [YouTube](https://www.youtube.com/@floxdev) — demos and walkthroughs
+- [GitHub Issues](https://github.com/flox/flox/issues/new/choose) — bug reports and feature requests
 
-## ⭐️ Contribute
+**Questions? Want help getting started?** [Join us on Slack](https://go.flox.dev/slack) — we'll walk you through it.
 
-We welcome contributions to this project. Please read the [Contributor
-guide](./CONTRIBUTING.md) first.
+## Security
 
-## 🪪 License
+We encourage responsible disclosure of potential security issues.
+For any security-related inquiry, please contact us at: **security@flox.dev**
+
+## Contributing
+
+We welcome contributions! Please read the [Contributor guide](./CONTRIBUTING.md) first.
+
+## Star History
+
+⭐ If you find Flox useful, star the repo — it helps others discover the project and keeps us going.
+
+<a href="https://star-history.com/#flox/flox&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=flox/flox&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=flox/flox&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=flox/flox&type=Date" width="600" />
+ </picture>
+</a>
+
+## License
 
 The Flox CLI is licensed under the GPLv2. See [LICENSE](./LICENSE).
 
+<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=199c01a0-67c0-4d95-a4c1-5c2d78aa7743" />
 
 [website]: https://flox.dev
 [discourse]: https://discourse.flox.dev
 [nix]: https://nixos.org
-[basics]:https://flox.dev/docs
-[share-envs]: https://flox.dev/docs/share-environments
-[images]: docs/tutorials/sharing-environments/#sharing-with-containers
 [docs]: https://flox.dev/docs
-[twitter]: https://twitter.com/floxdevelopment
-[slack]: https://go.flox.dev/slack
 [new-issue]: https://github.com/flox/flox/issues/new/choose
 [post-nixpkgs]: https://flox.dev/blog/nixpkgs
