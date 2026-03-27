@@ -44,6 +44,8 @@ pub const HOOK_VAR_SUPPRESSED: &str = "_FLOX_HOOK_SUPPRESSED";
 pub const HOOK_VAR_NOTIFIED: &str = "_FLOX_HOOK_NOTIFIED";
 pub const HOOK_VAR_CWD: &str = "_FLOX_HOOK_CWD";
 pub const HOOK_VAR_ACTIVATIONS: &str = "_FLOX_HOOK_ACTIVATIONS";
+pub const HOOK_VAR_EXCLUDE_DIRS: &str = "_FLOX_HOOK_EXCLUDE_DIRS";
+pub const HOOK_VAR_EXCLUDE_NAMES: &str = "_FLOX_HOOK_EXCLUDE_NAMES";
 
 /// Environment variable changes produced by on-activate hooks.
 /// Passed from `flox-activations` back to `hook-env` via `AutoStartResult`,

@@ -17,6 +17,8 @@ use flox_core::hook_state::{
     HOOK_VAR_CWD,
     HOOK_VAR_DIFF,
     HOOK_VAR_DIRS,
+    HOOK_VAR_EXCLUDE_DIRS,
+    HOOK_VAR_EXCLUDE_NAMES,
     HOOK_VAR_NOTIFIED,
     HOOK_VAR_SUPPRESSED,
     HOOK_VAR_WATCHES,
@@ -74,8 +76,18 @@ impl HookEnv {
             return Ok(());
         }
 
-        let (trusted_dot_flox, suppressed_dirs, notified_dirs) =
+        let (mut trusted_dot_flox, suppressed_dirs, notified_dirs) =
             filter_by_trust(&state, &cwd, &discovered, &trust_manager);
+
+        // Filter out environments that are manually activated via `flox activate`
+        // subshells — these are tracked by _FLOX_HOOK_EXCLUDE_DIRS.
+        let exclude_dirs: Vec<PathBuf> = std::env::var(HOOK_VAR_EXCLUDE_DIRS)
+            .unwrap_or_default()
+            .split(':')
+            .filter(|s| !s.is_empty())
+            .map(PathBuf::from)
+            .collect();
+        trusted_dot_flox.retain(|d| !exclude_dirs.contains(&d.path));
 
         let new_active_dirs: Vec<PathBuf> =
             trusted_dot_flox.iter().map(|d| d.path.clone()).collect();
@@ -104,14 +116,26 @@ impl HookEnv {
         // Emit new exports.
         emit_apply(&new_diff, &combined_env, shell, &mut stdout)?;
 
-        // Emit prompt modification.  Reverse to innermost-first order so the
-        // auto-activation prompt matches the convention used by `flox activate`.
-        let env_names: Vec<String> = trusted_dot_flox
+        // Build unified prompt with both excluded (manually-activated) and
+        // auto-activated environment names.
+        // Excluded env names come first (innermost, manually-activated).
+        let exclude_names: Vec<String> = std::env::var(HOOK_VAR_EXCLUDE_NAMES)
+            .unwrap_or_default()
+            .split(':')
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .collect();
+
+        // Auto-activated env names (innermost-first = reversed discovery order).
+        let auto_names: Vec<String> = trusted_dot_flox
             .iter()
             .rev()
             .map(|d| d.pointer.name().to_string())
             .collect();
-        emit_prompt(&env_names, shell, &mut stdout)?;
+
+        // Combined: excluded first, then auto-activated.
+        let all_names = [exclude_names, auto_names].concat();
+        emit_prompt(&all_names, shell, &mut stdout)?;
 
         // Emit updated state variables.
         emit_state_vars(
@@ -143,7 +167,19 @@ fn is_fast_path(
     discovered: &[DotFlox],
     trust_manager: &TrustManager,
 ) -> bool {
-    let discovered_dirs: Vec<PathBuf> = discovered.iter().map(|d| d.path.clone()).collect();
+    // Filter out excluded dirs (manually-activated subshell environments)
+    // so the fast-path comparison matches the filtered active_dirs.
+    let exclude_dirs: Vec<PathBuf> = std::env::var(HOOK_VAR_EXCLUDE_DIRS)
+        .unwrap_or_default()
+        .split(':')
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .collect();
+    let discovered_dirs: Vec<PathBuf> = discovered
+        .iter()
+        .filter(|d| !exclude_dirs.contains(&d.path))
+        .map(|d| d.path.clone())
+        .collect();
     let watches_changed = state.watches_changed();
     let trust_changed = state
         .active_dirs

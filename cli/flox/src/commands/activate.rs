@@ -449,6 +449,18 @@ impl Activate {
         let shell_for_hook = shell.clone();
         let invocation_type_for_hook = invocation_type.clone();
 
+        // Pre-compute hook registration code for Interactive invocations so that
+        // subshells preserve auto-activation functionality.
+        let hook_code = if matches!(invocation_type, InvocationType::Interactive) {
+            let flox_bin = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.to_str().map(String::from))
+                .unwrap_or_else(|| "flox".to_string());
+            Some(super::hook::hook_code_for_shell(&shell, &flox_bin))
+        } else {
+            None
+        };
+
         let activate_data = ActivateCtx {
             flox_activate_store_path: store_path.to_string_lossy().to_string(),
             attach_ctx: core,
@@ -459,6 +471,7 @@ impl Activate {
             invocation_type: Some(invocation_type),
             remove_after_reading: true,
             metrics_uuid: flox.metrics_device_uuid,
+            hook_code,
         };
 
         let tempfile = tempfile::NamedTempFile::new_in(flox.temp_dir)?;

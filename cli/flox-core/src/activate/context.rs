@@ -99,6 +99,12 @@ pub struct ActivateCtx {
     /// When None, metrics are disabled and Sentry is not initialized.
     #[serde(default)]
     pub metrics_uuid: Option<Uuid>,
+
+    /// Pre-computed hook registration code (shell-specific) for auto-activation
+    /// in subshells. Set for Interactive invocations so that `flox activate`
+    /// subshells preserve auto-activation functionality.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hook_code: Option<String>,
 }
 
 /// Subset of activation context needed for auto-activation via `hook-env`.
