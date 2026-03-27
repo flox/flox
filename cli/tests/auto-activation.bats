@@ -109,8 +109,9 @@ teardown() {
   # Empty dir, no flox init
   run "$FLOX_BIN" hook-env --shell bash
   assert_success
-  # hook-env emits state tracking vars even with no envs, but DIRS should be empty
-  assert_output --partial "_FLOX_HOOK_DIRS=''"
+  # No envs discovered and no dirs changed, so only CWD tracking is emitted.
+  # DIRS is not emitted (unchanged from its default empty state).
+  refute_output --partial "_FLOX_HOOK_DIRS"
 }
 
 # bats test_tags=auto-activation:hook-env
@@ -179,10 +180,12 @@ teardown() {
   [[ "$stderr_content" =~ "was denied" ]]
   [[ "$stderr_content" =~ "flox allow" ]]
 
-  # hook-env still emits state vars, but DIRS should be empty (env not activated)
+  # Second call (without eval'ing first call's state) — denied env is not
+  # activated, so DIRS remains unchanged (not emitted).  Only CWD and the
+  # updated NOTIFIED list are emitted.
   run "$FLOX_BIN" hook-env --shell bash
   assert_success
-  assert_output --partial "_FLOX_HOOK_DIRS=''"
+  refute_output --partial "_FLOX_HOOK_DIRS"
 }
 
 # bats test_tags=auto-activation:hook-env

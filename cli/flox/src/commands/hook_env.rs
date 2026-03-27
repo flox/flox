@@ -98,15 +98,32 @@ impl HookEnv {
         let watches_changed = state.watches_changed();
 
         if !dirs_changed && !watches_changed {
-            if state.last_cwd.as_ref() == Some(&cwd) {
+            let notified_changed = notified_dirs != state.notified_dirs;
+            let suppressed_changed = suppressed_dirs != state.suppressed_dirs;
+            let cwd_changed = state.last_cwd.as_ref() != Some(&cwd);
+
+            if !cwd_changed && !notified_changed && !suppressed_changed {
                 // Nothing changed at all.
                 return Ok(());
             }
-            // Only CWD changed — update CWD tracking without re-resolving
-            // all environments (avoids redundant lock/build/symlink reads).
+            // Only CWD/notified/suppressed changed — update tracking without
+            // re-resolving all environments (avoids redundant lock/build/symlink
+            // reads).
             let mut stdout = std::io::stdout().lock();
-            SetVar::exported_no_expansion(HOOK_VAR_CWD, cwd.display().to_string())
-                .generate_with_newline(shell, &mut stdout)?;
+            if cwd_changed {
+                SetVar::exported_no_expansion(HOOK_VAR_CWD, cwd.display().to_string())
+                    .generate_with_newline(shell, &mut stdout)?;
+            }
+            if notified_changed {
+                let notified_str = HookState::format_path_list(&notified_dirs);
+                SetVar::exported_no_expansion(HOOK_VAR_NOTIFIED, &notified_str)
+                    .generate_with_newline(shell, &mut stdout)?;
+            }
+            if suppressed_changed {
+                let suppressed_str = HookState::format_path_list(&suppressed_dirs);
+                SetVar::exported_no_expansion(HOOK_VAR_SUPPRESSED, &suppressed_str)
+                    .generate_with_newline(shell, &mut stdout)?;
+            }
             return Ok(());
         }
 
