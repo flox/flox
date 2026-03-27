@@ -144,11 +144,12 @@ impl HookEnv {
         emit_revert(&state.diff, shell, &mut stdout)?;
 
         // Build new env vars and manage activation lifecycle.
-        let (new_tracking, combined_env, path_additions, new_watches) =
+        let (new_tracking, combined_env, path_additions, env_dirs_additions, new_watches) =
             manage_activations(&state, &trusted_dot_flox, &flox)?;
 
-        // Merge PATH additions and compute diff.
-        let (new_diff, combined_env) = compute_new_diff(&state.diff, combined_env, path_additions);
+        // Merge PATH/FLOX_ENV_DIRS/MANPATH additions and compute diff.
+        let (new_diff, combined_env) =
+            compute_new_diff(&state.diff, combined_env, path_additions, env_dirs_additions);
 
         // Emit new exports.
         emit_apply(&new_diff, &combined_env, shell, &mut stdout)?;
@@ -294,10 +295,11 @@ fn emit_trust_notice(
 }
 
 /// Result of `manage_activations`: tracking state, combined env vars, PATH
-/// additions, and updated watch entries.
+/// additions, FLOX_ENV_DIRS additions, and updated watch entries.
 type ActivationResult = (
     ActivationTracking,
     HashMap<String, String>,
+    Vec<String>,
     Vec<String>,
     Vec<WatchEntry>,
 );
@@ -315,6 +317,7 @@ fn manage_activations(
 
     let mut combined_env: HashMap<String, String> = HashMap::new();
     let mut path_additions: Vec<String> = Vec::new();
+    let mut env_dirs_additions: Vec<String> = Vec::new();
     let mut new_watches: Vec<WatchEntry> = Vec::new();
 
     for dot_flox in trusted_dot_flox {
@@ -408,6 +411,9 @@ fn manage_activations(
                         });
                 }
 
+                // Collect the FLOX_ENV value for FLOX_ENV_DIRS computation.
+                env_dirs_additions.push(resolved.flox_env.clone());
+
                 for (k, v) in resolved.vars {
                     match k.as_str() {
                         "_FLOX_PATH_ADD" | "_FLOX_SBIN_ADD" => {
@@ -455,7 +461,13 @@ fn manage_activations(
         }
     }
 
-    Ok((new_tracking, combined_env, path_additions, new_watches))
+    Ok((
+        new_tracking,
+        combined_env,
+        path_additions,
+        env_dirs_additions,
+        new_watches,
+    ))
 }
 
 /// Compute the environment diff as if `emit_revert` had already run.
@@ -472,6 +484,7 @@ fn compute_new_diff(
     old_diff: &HookDiff,
     mut combined_env: HashMap<String, String>,
     path_additions: Vec<String>,
+    env_dirs_additions: Vec<String>,
 ) -> (HookDiff, HashMap<String, String>) {
     // Merge all environment bin/sbin dirs into a single PATH.
     // Use the *reverted* PATH (what it would be after undoing the previous
@@ -480,6 +493,48 @@ fn compute_new_diff(
         let base_path = reverted_env_var("PATH", old_diff).unwrap_or_default();
         let new_path = format!("{}:{}", path_additions.join(":"), base_path);
         combined_env.insert("PATH".to_string(), new_path);
+    }
+
+    // Compute FLOX_ENV_DIRS from all auto-activated environments.
+    // Use the on-activate value if present (hooks may have modified it),
+    // otherwise fall back to the reverted baseline.
+    if !env_dirs_additions.is_empty() {
+        let base_env_dirs = combined_env
+            .get("FLOX_ENV_DIRS")
+            .cloned()
+            .or_else(|| reverted_env_var("FLOX_ENV_DIRS", old_diff))
+            .unwrap_or_default();
+        let new_env_dirs = if base_env_dirs.is_empty() {
+            env_dirs_additions.join(":")
+        } else {
+            format!("{}:{}", env_dirs_additions.join(":"), base_env_dirs)
+        };
+        combined_env.insert("FLOX_ENV_DIRS".to_string(), new_env_dirs);
+
+        // Compute MANPATH from the new FLOX_ENV_DIRS.
+        let base_manpath = combined_env
+            .get("MANPATH")
+            .cloned()
+            .or_else(|| reverted_env_var("MANPATH", old_diff))
+            .unwrap_or_default();
+        let man_dirs: Vec<String> = env_dirs_additions
+            .iter()
+            .map(|d| format!("{d}/share/man"))
+            .collect();
+        let mut new_manpath = if base_manpath.is_empty() {
+            man_dirs.join(":")
+        } else {
+            format!("{}:{}", man_dirs.join(":"), base_manpath)
+        };
+        // Ensure trailing colon so the standard man page search path is
+        // included, matching fix_manpath_var behavior.
+        let has_trailing = new_manpath.ends_with(':');
+        let has_double = new_manpath.contains("::");
+        let has_leading = new_manpath.starts_with(':');
+        if !(has_trailing || has_double || has_leading) {
+            new_manpath.push(':');
+        }
+        combined_env.insert("MANPATH".to_string(), new_manpath);
     }
 
     // Compute the new diff against the *reverted* process env.
@@ -565,6 +620,8 @@ struct ResolvedEnv {
     flox_services_socket: PathBuf,
     /// Service names to start with process-compose
     services_to_start: Vec<String>,
+    /// CUDA detection setting from manifest options ("0" or "1")
+    cuda_detection: String,
 }
 
 /// Resolve environment variables from a built environment.
@@ -581,19 +638,27 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<ResolvedEnv> {
     );
     let lock_result = env.lockfile(flox)?;
     let lockfile: Lockfile = lock_result.into();
-    let services_to_start = match lockfile.manifest.migrate_typed_only(Some(&lockfile)) {
-        Ok(manifest) => {
-            let services_for_system = manifest.services().copy_for_system(&flox.system);
-            services_for_system
-                .inner()
-                .keys()
-                .cloned()
-                .collect::<Vec<String>>()
-        },
-        Err(e) => {
-            debug!("failed to read services from manifest: {e}");
-            Vec::new()
-        },
+    let (services_to_start, cuda_detection) =
+        match lockfile.manifest.migrate_typed_only(Some(&lockfile)) {
+            Ok(manifest) => {
+                let services_for_system = manifest.services().copy_for_system(&flox.system);
+                let services = services_for_system
+                    .inner()
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<String>>();
+                let cuda = manifest.options().cuda_detection;
+                (services, cuda)
+            },
+            Err(e) => {
+                debug!("failed to read services from manifest: {e}");
+                (Vec::new(), None)
+            },
+        };
+
+    let cuda_detection_str = match cuda_detection {
+        Some(false) => "0".to_string(),
+        _ => "1".to_string(),
     };
 
     let rendered_links = env.rendered_env_links(flox)?;
@@ -614,6 +679,21 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<ResolvedEnv> {
     // Set FLOX_ENV to the link path.
     let flox_env = link_path.display().to_string();
     vars.insert("FLOX_ENV".to_string(), flox_env.clone());
+
+    // Set additional user-facing environment variables.
+    vars.insert("FLOX_ENV_CACHE".to_string(), env_cache.display().to_string());
+    vars.insert(
+        "FLOX_ENV_PROJECT".to_string(),
+        env_project.display().to_string(),
+    );
+    vars.insert(
+        "FLOX_ENV_DESCRIPTION".to_string(),
+        dot_flox.pointer.name().to_string(),
+    );
+    vars.insert(
+        "_FLOX_ENV_CUDA_DETECTION".to_string(),
+        cuda_detection_str.clone(),
+    );
 
     // Collect bin and sbin directories as PATH additions.
     // These are returned in the vars map under a special key and merged by the
@@ -662,6 +742,7 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<ResolvedEnv> {
         env_project,
         flox_services_socket,
         services_to_start,
+        cuda_detection: cuda_detection_str,
     })
 }
 
@@ -818,8 +899,18 @@ fn build_prompt_names(trusted_dot_flox: &[DotFlox]) -> Vec<String> {
 
 /// Emit shell-specific code to modify the prompt with active environment names.
 /// If `env_names` is empty, only the restore is emitted (via emit_prompt_restore).
+///
+/// Respects:
+/// - `_FLOX_SET_PROMPT`: if "false", skip prompt modification
+/// - `NO_COLOR`: if set to a non-empty, non-"0" value, emit plain text
+/// - `FLOX_PROMPT`: custom prefix text (default "flox")
 fn emit_prompt(env_names: &[String], shell: Shell, writer: &mut impl Write) -> Result<()> {
     if env_names.is_empty() {
+        return Ok(());
+    }
+
+    // Check _FLOX_SET_PROMPT: skip prompt modification if set to "false".
+    if std::env::var("_FLOX_SET_PROMPT").as_deref() == Ok("false") {
         return Ok(());
     }
 
@@ -840,47 +931,89 @@ fn emit_prompt(env_names: &[String], shell: Shell, writer: &mut impl Write) -> R
         })
         .collect();
     let env_list = sanitized.join(" ");
+
+    // Check NO_COLOR: suppress ANSI colors when set to a non-empty, non-"0"
+    // value, matching manual activation's set-prompt.bash/zsh behavior.
+    let no_color = std::env::var("NO_COLOR")
+        .map(|v| !v.is_empty() && v != "0")
+        .unwrap_or(false);
+
+    // Check FLOX_PROMPT for custom prefix (default "flox").
+    let flox_prompt = std::env::var("FLOX_PROMPT").unwrap_or_else(|_| "flox".to_string());
+
     let color1 = INDIGO_400.to_ansi256();
     let color2 = INDIGO_300.to_ansi256();
 
     match shell {
         Shell::Zsh => {
-            writeln!(
-                writer,
-                r#"if [ -z "${{_FLOX_HOOK_SAVE_PS1+x}}" ]; then _FLOX_HOOK_SAVE_PS1="$PS1"; fi;
-PS1="%B%F{{{color1}}}flox%f%b %F{{{color2}}}[{env_list}]%f $_FLOX_HOOK_SAVE_PS1";"#,
-                color1 = color1,
-                color2 = color2,
-                env_list = env_list,
-            )?;
+            if no_color {
+                writeln!(
+                    writer,
+                    r#"if [ -z "${{_FLOX_HOOK_SAVE_PS1+x}}" ]; then _FLOX_HOOK_SAVE_PS1="$PS1"; fi;
+PS1="{flox_prompt} [{env_list}] $_FLOX_HOOK_SAVE_PS1";"#,
+                )?;
+            } else {
+                writeln!(
+                    writer,
+                    r#"if [ -z "${{_FLOX_HOOK_SAVE_PS1+x}}" ]; then _FLOX_HOOK_SAVE_PS1="$PS1"; fi;
+PS1="%B%F{{{color1}}}{flox_prompt}%f%b %F{{{color2}}}[{env_list}]%f $_FLOX_HOOK_SAVE_PS1";"#,
+                    color1 = color1,
+                    color2 = color2,
+                )?;
+            }
         },
         Shell::Bash => {
-            writeln!(
-                writer,
-                r#"if [ -z "${{_FLOX_HOOK_SAVE_PS1+x}}" ]; then _FLOX_HOOK_SAVE_PS1="$PS1"; fi;
-PS1="\[\x1b[1m\]\[\x1b[38;5;{color1}m\]flox\[\x1b[0m\] \[\x1b[38;5;{color2}m\][{env_list}]\[\x1b[0m\] $_FLOX_HOOK_SAVE_PS1";"#,
-                color1 = color1,
-                color2 = color2,
-                env_list = env_list,
-            )?;
+            if no_color {
+                writeln!(
+                    writer,
+                    r#"if [ -z "${{_FLOX_HOOK_SAVE_PS1+x}}" ]; then _FLOX_HOOK_SAVE_PS1="$PS1"; fi;
+_flox_prefix="{flox_prompt} [{env_list}] ";
+case "$_FLOX_HOOK_SAVE_PS1" in *\\n*) PS1="${{_FLOX_HOOK_SAVE_PS1/\\n/\\n$_flox_prefix}}" ;; *\\012*) PS1="${{_FLOX_HOOK_SAVE_PS1/\\012/\\012$_flox_prefix}}" ;; *) PS1="$_flox_prefix$_FLOX_HOOK_SAVE_PS1" ;; esac;
+unset _flox_prefix;"#,
+                )?;
+            } else {
+                writeln!(
+                    writer,
+                    r#"if [ -z "${{_FLOX_HOOK_SAVE_PS1+x}}" ]; then _FLOX_HOOK_SAVE_PS1="$PS1"; fi;
+_flox_prefix="\[\x1b[1m\]\[\x1b[38;5;{color1}m\]{flox_prompt}\[\x1b[0m\] \[\x1b[38;5;{color2}m\][{env_list}]\[\x1b[0m\] ";
+case "$_FLOX_HOOK_SAVE_PS1" in *\\n*) PS1="${{_FLOX_HOOK_SAVE_PS1/\\n/\\n$_flox_prefix}}" ;; *\\012*) PS1="${{_FLOX_HOOK_SAVE_PS1/\\012/\\012$_flox_prefix}}" ;; *) PS1="$_flox_prefix$_FLOX_HOOK_SAVE_PS1" ;; esac;
+unset _flox_prefix;"#,
+                    color1 = color1,
+                    color2 = color2,
+                )?;
+            }
         },
         Shell::Fish => {
-            writeln!(
-                writer,
-                r#"if not set -q _FLOX_HOOK_SAVE_PROMPT; functions -q fish_prompt; and functions --copy fish_prompt _flox_hook_saved_prompt; set -g _FLOX_HOOK_SAVE_PROMPT 1; end;
-function fish_prompt; set_color --bold; set_color 875fff; echo -n 'flox'; set_color normal; echo -n ' '; set_color af87ff; echo -n '[{env_list}]'; set_color normal; echo -n ' '; _flox_hook_saved_prompt; end;"#,
-                env_list = env_list,
-            )?;
+            if no_color {
+                writeln!(
+                    writer,
+                    r#"if not set -q _FLOX_HOOK_SAVE_PROMPT; functions -q fish_prompt; and functions --copy fish_prompt _flox_hook_saved_prompt; set -g _FLOX_HOOK_SAVE_PROMPT 1; end;
+function fish_prompt; echo -n '{flox_prompt} [{env_list}] '; _flox_hook_saved_prompt; end;"#,
+                )?;
+            } else {
+                writeln!(
+                    writer,
+                    r#"if not set -q _FLOX_HOOK_SAVE_PROMPT; functions -q fish_prompt; and functions --copy fish_prompt _flox_hook_saved_prompt; set -g _FLOX_HOOK_SAVE_PROMPT 1; end;
+function fish_prompt; set_color --bold; set_color 875fff; echo -n '{flox_prompt}'; set_color normal; echo -n ' '; set_color af87ff; echo -n '[{env_list}]'; set_color normal; echo -n ' '; _flox_hook_saved_prompt; end;"#,
+                )?;
+            }
         },
         Shell::Tcsh => {
-            writeln!(
-                writer,
-                r#"if ( ! $?_FLOX_HOOK_SAVE_PROMPT ) setenv _FLOX_HOOK_SAVE_PROMPT "$prompt";
-set prompt = "%{{\033[1m\033[38;5;{color1}m%}}flox%{{\033[0m%}} %{{\033[38;5;{color2}m%}}[{env_list}]%{{\033[0m%}} $_FLOX_HOOK_SAVE_PROMPT";"#,
-                color1 = color1,
-                color2 = color2,
-                env_list = env_list,
-            )?;
+            if no_color {
+                writeln!(
+                    writer,
+                    r#"if ( ! $?_FLOX_HOOK_SAVE_PROMPT ) setenv _FLOX_HOOK_SAVE_PROMPT "$prompt";
+set prompt = "{flox_prompt} [{env_list}] $_FLOX_HOOK_SAVE_PROMPT";"#,
+                )?;
+            } else {
+                writeln!(
+                    writer,
+                    r#"if ( ! $?_FLOX_HOOK_SAVE_PROMPT ) setenv _FLOX_HOOK_SAVE_PROMPT "$prompt";
+set prompt = "%{{\033[1m\033[38;5;{color1}m%}}{flox_prompt}%{{\033[0m%}} %{{\033[38;5;{color2}m%}}[{env_list}]%{{\033[0m%}} $_FLOX_HOOK_SAVE_PROMPT";"#,
+                    color1 = color1,
+                    color2 = color2,
+                )?;
+            }
         },
     }
     Ok(())
@@ -939,7 +1072,7 @@ fn spawn_auto_start(
             prompt_color_2: String::new(),
             flox_prompt_environments: String::new(),
             set_prompt: false,
-            flox_env_cuda_detection: String::new(),
+            flox_env_cuda_detection: resolved.cuda_detection.clone(),
             interpreter_path: FLOX_INTERPRETER.clone(),
         },
         project_ctx: AttachProjectCtx {
