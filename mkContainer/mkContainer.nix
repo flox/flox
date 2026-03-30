@@ -30,6 +30,7 @@ let
   inherit (pkgs.lib)
     optionalAttrs
     optionals
+    optionalString
     toIntBase10
     assertMsg
     isValidPosixName
@@ -42,6 +43,8 @@ let
   containerConfig = fromJSON containerConfigJSON;
 
   nixStoreOwner = (containerConfig.User or "0:0");
+
+  workingDir = (containerConfig.WorkingDir or null);
 
   isNixStoreUserOwnedRegex = "^(root|0):\?(root|0)\?$";
 
@@ -139,6 +142,10 @@ let
       # single user installation inside the container
       fakeRootCommands = ''
         chown -R ${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid} /run
+      ''
+      + optionalString (workingDir != null) ''
+        mkdir -p -m 0755 "${workingDir}"
+        chown ${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid} "${workingDir}"
       '';
       enableFakechroot = true;
     }

@@ -411,6 +411,11 @@ EOF
 }
 "SIGKILL"
 EOF
+
+  # Verify working-dir exists and is owned by the specified user
+  run podman run --rm "test:$TAG" stat -c '%U %a' /working/dir
+  assert_success
+  assert_output --partial "user 755"
 }
 
 @test "cmd can run binary from activated environment" {

@@ -73,7 +73,9 @@ Configuration for the container image produced by `flox containerize` may be spe
 > `containerize.config` is **experimental**,
 > and its behaviour is subject to change
 
-The following options from the OCI spec are supported, specified in `kebab-case` rather than `PascalCase`:
+The following options from the OCI spec are supported, specified in `kebab-case` rather than `PascalCase`.
+Some options are passed through directly as container image config, while others are also used at container build time.
+See details below.
 ```
 ContainerizeConfig ::= {
   user                      = null | <STRING>
@@ -93,6 +95,7 @@ ContainerizeConfig ::= {
     If `group`/`gid` is not specified, the default group and supplementary groups of the given `user`/`uid` in `/etc/passwd` and `/etc/group` from the container are applied.
     If `group`/`gid` is specified, supplementary groups from the container are ignored.
     This will add an entry to /etc/passwd and /etc/groups inside the container, so no manual useradd is required.
+    If both `user` and `working-dir` are specified, `working-dir` will be created with `user` as owner.
 
 `exposed-ports`
 :   A set of ports to expose from a container running this image.
@@ -114,6 +117,7 @@ ContainerizeConfig ::= {
 `working-dir`
 :   Sets the current working directory of the entrypoint process in the container.
     This value acts as a default and may be replaced by a working directory specified when creating a container.
+    If both `user` and `working-dir` are specified, `working-dir` will be created with `user` as owner.
 
 `labels`
 :   This field contains arbitrary metadata for the container.
