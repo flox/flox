@@ -1,12 +1,13 @@
 use std::collections::{HashMap, HashSet};
-use std::env;
 use std::ffi::OsStr;
+use std::fmt::Display;
 use std::hash::Hash;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::thread::ScopedJoinHandle;
+use std::{env, fmt};
 
 use flox_catalog::{CatalogClientError, ClientTrait, StoreInfo};
 use flox_core::activate::mode::ActivateMode;
@@ -53,6 +54,44 @@ const NIXPKGS_CATALOG_URL_PREFIX: &str = "https://github.com/flox/nixpkgs?rev=";
 /// which enables building packages without common evaluation checks,
 /// such as unfree and broken.
 const FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE: &str = "flox-nixpkgs:v0/flox";
+
+/// Name to use in error messages when a package can't be downloaded from
+/// `cache.nixos.org` as a fallback for other locations.
+const LOCATION_FALLBACK_NAME: &str = "base catalog";
+
+///A collection of failed attempts to download a package from specific sources.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DownloadAttempts(pub Vec<DownloadAttempt>);
+
+impl Display for DownloadAttempts {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (i, attempt) in self.0.iter().enumerate() {
+            if i > 0 {
+                f.write_str("\n\n")?;
+            }
+            write!(f, "{attempt}")?;
+        }
+        Ok(())
+    }
+}
+
+/// A failed attempt to download a package from a specific source.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DownloadAttempt {
+    pub location: String,
+    pub error: String,
+}
+
+impl Display for DownloadAttempt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}:\n{}",
+            self.location,
+            indent::indent_all_by(2, self.error.trim_end())
+        )
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum BuildEnvError {
@@ -109,10 +148,11 @@ pub enum BuildEnvError {
         "Can't find download location for package '{0}'.\nYou may not be authenticated or package may have been deleted.\nTry logging in with 'flox auth login'"
     )]
     NoPackageStoreLocation(String),
-    // TODO: we should unravel the nix copy spaghetti in
-    // try_substitute_published_package and give the actual reason `nix copy` failed
-    #[error("Couldn't download package '{0}' for unknown reason")]
-    BuildPublishedPackage(String),
+    #[error("Couldn't download package '{install_id}' from the following locations\n\n{attempts}")]
+    BuildPublishedPackage {
+        install_id: String,
+        attempts: DownloadAttempts,
+    },
 
     /// A custom package has been uploaded, but the current user hasn't configured
     /// a trusted public key that matches a signature of this package.
@@ -516,7 +556,8 @@ where
             progress = format!("Downloading '{}'", locked_pkg.attr_path)
         );
         let _span_guard = span.enter();
-        let mut location_succeeded = vec![];
+        let mut download_attempts = DownloadAttempts(vec![]);
+        let mut any_location_succeeded = false;
         for location in locations {
             // nix copy
             let mut copy_command = nix_base_command();
@@ -572,7 +613,10 @@ where
                     auth_error = Some(BuildEnvError::NixCopyError(stderr.to_string()));
                 }
 
-                location_succeeded.push(false);
+                download_attempts.0.push(DownloadAttempt {
+                    location: location_url.clone(),
+                    error: stderr.to_string(),
+                });
 
                 // If we failed, log the error and try the next location.
                 debug!(%attr_path, %drv, %location_url, %stderr, "Failed to copy custom package from store");
@@ -588,7 +632,7 @@ where
                     gc_root_base_dir.join(format!("by-iid/{}", locked_pkg.install_id)),
                 )?;
 
-                location_succeeded.push(true);
+                any_location_succeeded = true;
 
                 break;
             }
@@ -597,8 +641,7 @@ where
         // Consider the package not found if (1) we never had any locations to
         // download from in the first place, or (2) we did have locations to
         // download from and we failed to find the package in any of them.
-        let not_found_in_custom_catalogs =
-            locations.is_empty() || !location_succeeded.iter().all(|&b| b);
+        let not_found_in_custom_catalogs = locations.is_empty() || !any_location_succeeded;
 
         // Some custom packages are just re-uploads of stuff in nixpkgs with
         // no modifications, so the package may be found in `cache.nixos.org`.
@@ -612,22 +655,28 @@ where
                 span,
                 semaphore,
             );
-            if res.is_err() {
-                // We want to differentiate between these two cases:
-                // - Catalog server knows where we *should* be able to find
-                //   this package, and we failed to download it for some reason.
-                // - Catalog server didn't know where to download this from
-                //   and our fallback to `cache.nixos.org` failed.
-                if locations.is_empty() {
-                    return Err(BuildEnvError::NoPackageStoreLocation(
-                        locked_pkg.install_id.clone(),
-                    ));
-                }
-                return Err(BuildEnvError::BuildPublishedPackage(
-                    locked_pkg.install_id.clone(),
-                ));
-            } else {
-                return Ok(());
+            match res {
+                Ok(()) => return Ok(()),
+                Err(fallback_err) => {
+                    // We want to differentiate between these two cases:
+                    // - Catalog server knows where we *should* be able to find
+                    //   this package, and we failed to download it for some reason.
+                    // - Catalog server didn't know where to download this from
+                    //   and our fallback to `cache.nixos.org` failed.
+                    if locations.is_empty() {
+                        return Err(BuildEnvError::NoPackageStoreLocation(
+                            locked_pkg.install_id.clone(),
+                        ));
+                    }
+                    download_attempts.0.push(DownloadAttempt {
+                        location: LOCATION_FALLBACK_NAME.to_string(),
+                        error: fallback_err.to_string(),
+                    });
+                    return Err(BuildEnvError::BuildPublishedPackage {
+                        install_id: locked_pkg.install_id.clone(),
+                        attempts: download_attempts,
+                    });
+                },
             }
         }
 
@@ -1338,6 +1387,8 @@ mod realise_nixpkgs_tests {
         locked_published_package,
     };
     use flox_test_utils::GENERATED_DATA;
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
     use test_helpers::buildenv_instance;
 
     use super::*;
@@ -1633,10 +1684,18 @@ mod realise_nixpkgs_tests {
             Span::current(),
             &Semaphore::new(1, 1),
         );
-        assert!(matches!(
-            result,
-            Err(BuildEnvError::BuildPublishedPackage(_))
-        ));
+        let err = result.unwrap_err();
+        assert!(matches!(err, BuildEnvError::BuildPublishedPackage { .. }));
+        assert_eq!(err.to_string(), indoc! {r#"
+            Couldn't download package 'hello' from the following locations
+
+            daemon:
+              don't know how to build these paths:
+                /nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid
+              error: path '/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid' is required, but there is no substituter that can build it
+
+            base catalog:
+              encountered an error interpreting the lockfile: Locked package 'hello' is a base catalog package, but the locked url 'github:super/custom/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' does not start with the expected prefix 'https://github.com/flox/nixpkgs?rev='"#});
     }
 
     /// Ensure that we can build, or (attempt to build) a package from the catalog,
