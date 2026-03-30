@@ -69,17 +69,10 @@ impl PackageTreeBuilder {
 
         // Process intermediate components (all guaranteed to be package sets)
         for (index, attribute) in parent_attributes.iter().enumerate() {
-            match current_node {
+            let entries = match current_node {
                 PackageTreeNode::PackageSet { entries } => {
                     // Ensure package set exists and handle conflict resolution
-                    let entry = entries.entry(attribute.clone()).or_insert_with(|| {
-                        PackageTreeNode::PackageSet {
-                            entries: BTreeMap::new(),
-                        }
-                    });
-
-                    // Navigate to child package set
-                    current_node = entry
+                    entries
                 },
                 PackageTreeNode::Package { .. } => {
                     // If the entry is a package, replace it with a package set
@@ -92,11 +85,32 @@ impl PackageTreeBuilder {
                     *current_node = PackageTreeNode::PackageSet {
                         entries: BTreeMap::new(),
                     };
+
+                    // Navigate to child package set
+                    let PackageTreeNode::PackageSet { entries } = current_node else {
+                        unreachable!()
+                    };
+                    entries
                 },
-            }
+            };
+            current_node =
+                entries
+                    .entry(attribute.clone())
+                    .or_insert(PackageTreeNode::PackageSet {
+                        entries: BTreeMap::new(),
+                    });
         }
 
         // Insert final package using final component as key
+        let package = {
+            // Use the parsed flake reference data directly
+            let source_value = source.as_parsed().clone();
+
+            PackageTreeNode::Package {
+                build_type,
+                source: source_value,
+            }
+        };
         match current_node {
             PackageTreeNode::PackageSet { entries } => {
                 // Check if there's already a package set at this location
@@ -110,16 +124,11 @@ impl PackageTreeBuilder {
                     return Ok(());
                 }
 
-                // Use the parsed flake reference data directly
-                let source_value = source.as_parsed().clone();
-
-                entries.insert(final_attribute.clone(), PackageTreeNode::Package {
-                    build_type,
-                    source: source_value,
-                });
+                entries.insert(final_attribute.clone(), package);
             },
             PackageTreeNode::Package { .. } => {
-                // If the entry is a package, replace it with a package set
+                // Replace package with package set, then
+                // fall through to insert the final package
                 //
                 // TODO: allow user driven handling of conflicts, e.g. via excludes
                 warn!(
@@ -127,7 +136,7 @@ impl PackageTreeBuilder {
                     attr_path.join(".")
                 );
                 *current_node = PackageTreeNode::PackageSet {
-                    entries: BTreeMap::new(),
+                    entries: BTreeMap::from([(final_attribute.clone(), package)]),
                 };
             },
         }
