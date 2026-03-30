@@ -233,7 +233,9 @@ mod tests {
 
     #[test]
     fn package_set_overrides_package_on_conflict() {
-        // Create package first
+        // Add "conflict" as a leaf package, then add
+        // "conflict.child" which forces "conflict" to become
+        // a package set.
         let mut builder = PackageTreeBuilder::new();
         let flakeref = create_test_flakeref();
 
@@ -250,7 +252,7 @@ mod tests {
             .add_package(
                 vec!["conflict".to_string(), "child".to_string()],
                 BuildType::Manifest,
-                flakeref,
+                flakeref.clone(),
             )
             .unwrap();
 
@@ -263,7 +265,9 @@ mod tests {
             "entries": {
                 "conflict": {
                     "type": "package_set",
-                    "entries": {}
+                    "entries": {
+                        "child": make_package_json(&flakeref)
+                    }
                 }
             }
         }))
