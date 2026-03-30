@@ -33,19 +33,26 @@ Mid-term updating the client library and proposing it as a PR will be done by au
 
 [mitmproxy](https://mitmproxy.org/) can be used to debug requests and responses from the Catalog API.
 
-1. Start the interface and leave it running in a separate terminal:
-    ```
-    nix run github:flox/nixpkgs/stable.20240203#mitmproxy
-    ```
-    Note that `mitmproxy` has been broken on Darwin for some time now,
-    hence the need to run it from an old nixpkgs revision.
-    Of course once we implement catalog binary cache verification
-    then using this will be as simple as `flox install mitmproxy`,
-    but in the meantime we just run it from the most recent stable
-    nixpkgs revision on which it is known to build.
-1. Install the Certificate Authority per [these instructions](https://docs.mitmproxy.org/stable/concepts-certificates/).
-1. Run a `flox` command, using the catalog and the proxy:
+1. Start the interface in one terminal:
 
-        HTTPS_PROXY=http://localhost:8080 SSL_CERT_FILE=~/.mitmproxy/mitmproxy-ca-cert.pem flox show bash
+        flox activate -r dcarley/mitmproxy -- mitmproxy
 
-1. Explore the recorded flows in the `mitmproxy` interface.
+1. Proxy a `flox` command in another terminal:
+
+        % flox activate -r dcarley/mitmproxy
+        ✔ Attached to existing activation of environment 'dcarley/mitmproxy (local)'
+        To stop using this environment, type 'exit'
+
+        Start the proxy in one terminal:
+          mitmproxy    (TUI)
+          mitmweb      (web interface)
+          mitmdump     (non-interactive)
+
+        Then route commands through it with:
+          proxy <command>
+          proxy curl https://example.com
+
+        % proxy flox show bash
+        …
+
+1. Inspect the recorded flows in the first terminal.
