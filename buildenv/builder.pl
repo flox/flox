@@ -19,8 +19,20 @@ $ENV{"extraPrefix"} = "";
 $ENV{"ignoreCollisions"} = "0";
 $ENV{"checkCollisionContents"} = "0";
 
+# TODO: make this configurable in buildenv.nix, AND allow the STDERR of the
+# buildenv invocation to be emitted directly to STDERR. once we do this then
+# `flox build -v` can display debug output (which would be a good thing).
+my $FLOX_VERBOSE = 0;
+
 # Global variable to toggle the recursive linking of propagated-build-inputs.
 my $FLOX_RECURSIVE_LINK = 0;
+
+# Global counter for assigning package priorities above 1000, which by convention
+# are assigned to packages that are propagated by other packages rather than explicitly
+# installed by the user. The specific value of the counter doesn't matter as long as
+# it is incremented for each propagated package to prevent collisions between them, and
+# starting at 1000 ensures that they have lower priority than explicitly installed packages.
+my $ignoreCollisionCounter = 0;
 # </flox>
 
 my $out = $ENV{"out"};
@@ -222,7 +234,6 @@ sub findFiles {
             # Improve upon the default collision message from upstream.
             my ($targetName, $targetVersion, $targetBasename) = parseStorePath($target);
             my ($oldTargetName, $oldTargetVersion, $oldTargetBasename) = parseStorePath($oldTarget);
-            my $origPriority = $oldPriority / 1000; # Convert to original priority value
             my $errmsg = "'$oldTargetName' conflicts with '$targetName'. ";
             if ($targetBasename eq $oldTargetBasename) {
                 $errmsg .= "Both packages provide the file '$targetBasename'";
@@ -233,7 +244,7 @@ sub findFiles {
             die $errmsg . "\n\n" .
                 "Resolve by uninstalling one of the conflicting packages or " .
                 "setting the priority of the preferred package to a value " .
-                "lower than '$origPriority'\n";
+                "lower than '$oldPriority'\n";
         }
     }
 
@@ -249,6 +260,7 @@ my %postponed;
 
 sub addPkg {
     my ($pkgDir, $ignoreCollisions, $checkCollisionContents, $priority)  = @_;
+    info("adding package '%s' (priority %d)", $pkgDir, $priority);
 
     return if (defined $done{$pkgDir});
     $done{$pkgDir} = 1;
@@ -266,30 +278,31 @@ sub addPkg {
     # during a potentially-unbounded instantiation.
     #
     if ($FLOX_RECURSIVE_LINK) {
-        foreach my $propagatedFN (
-            "$pkgDir/nix-support/propagated-user-env-packages", "$pkgDir/nix-support/propagated-build-inputs"
-        ) {
-            if (-e $propagatedFN) {
-                open PROP, "<$propagatedFN" or die;
-                my $propagated = <PROP>;
-                close PROP;
-                my @propagated = split ' ', $propagated;
-                foreach my $p (@propagated) {
-                    # This is a hack to prevent packages with `stub` outputs
-                    # from being recursively linked into the `/lib` directory
-                    # of the environment. There's only one known package
-                    # that does this (cudaPackages.cuda_cudart).
-                    #
-                    # The line below matches on store paths ending in `-stubs`
-                    # (e.g. a store path for a pkg with a `stubs` output)
-                    # and skips them, since at this point we only have store
-                    # paths rather than attribute paths, output names, etc.
-                    next if $p =~ /-stubs$/;
-                    $postponed{$p} = 1 unless defined $done{$p};
-                }
+        my $propagatedFN = "$pkgDir/nix-support/propagated-build-inputs";
+        if (-e $propagatedFN) {
+            open PROP, "<$propagatedFN" or die;
+            my $propagated = <PROP>;
+            close PROP;
+            my @propagated = split ' ', $propagated;
+            foreach my $p (@propagated) {
+                # This is a hack to prevent packages with `stub` outputs
+                # from being recursively linked into the `/lib` directory
+                # of the environment. There's only one known package
+                # that does this (cudaPackages.cuda_cudart).
+                #
+                # The line below matches on store paths ending in `-stubs`
+                # (e.g. a store path for a pkg with a `stubs` output)
+                # and skips them, since at this point we only have store
+                # paths rather than attribute paths, output names, etc.
+                next if $p =~ /-stubs$/;
+                # N.B. use the values of the %postponed hash to denote the priority
+                # of the package that is propagating the dependency, so that these
+                # packages can similarly have precedence (or not) over collisions.
+                info("identified '%s' as propagated build input of '%s'", $p, $pkgDir);
+                $postponed{$p} = $priority unless defined $done{$p};
             }
         }
-    } else {
+    }
     # </flox>
 
     my $propagatedFN = "$pkgDir/nix-support/propagated-user-env-packages";
@@ -299,13 +312,10 @@ sub addPkg {
         close PROP;
         my @propagated = split ' ', $propagated;
         foreach my $p (@propagated) {
-            $postponed{$p} = 1 unless defined $done{$p};
+            info("identified '%s' as propagated user env package of '%s'", $p, $pkgDir);
+            $postponed{$p} = $priority unless defined $done{$p};
         }
     }
-
-    # <flox>
-    }
-    # </flox>
 
 }
 
@@ -380,6 +390,26 @@ if ($manifest) {
 # <flox>
 } else {
 
+    sub stderrOutput {
+        my $debugOrInfo = shift;
+        my $format = shift;
+        if (scalar @_) {
+            printf STDERR "$debugOrInfo: $format\n", @_;
+        } else {
+            print STDERR "$debugOrInfo: $format\n";
+        }
+    }
+
+    sub debug {
+        if ($FLOX_VERBOSE >= 2) {
+            stderrOutput("DEBUG", @_);
+        }
+    }
+
+    sub info {
+        stderrOutput("INFO", @_);
+    }
+
     # For each reference being walked, make sure we don't trip over cyclic links.
     my %seen;
 
@@ -407,10 +437,6 @@ if ($manifest) {
             my $manifest = shift;
             my $packages = shift;
             my @retarray = ();
-
-            # Counter for ensuring that all "other" outputs are added with a unique
-            # priority value for v1 manifests.
-            my $otherOutputPriorityCounter = 1;
 
             # Helper function to validate that requested outputs exist
             sub getValidAttrs {
@@ -471,7 +497,7 @@ if ($manifest) {
                 if (defined $package->{"store_path"}) {
                     push @retarray, {
                         "paths" => [ $package->{"store_path"} ],
-                        "priority" => (1000 * $package->{"priority"})
+                        "priority" => $package->{"priority"}
                     };
                     next;
                 }
@@ -483,7 +509,7 @@ if ($manifest) {
                     next unless scalar @paths;
                     push @retarray, {
                         "paths" => \@paths,
-                        "priority" => (1000 * $package->{"priority"})
+                        "priority" => $package->{"priority"}
                     };
                     next;
                 }
@@ -527,15 +553,17 @@ if ($manifest) {
                     if (scalar @outputsToInstallPaths) {
                         push @retarray, {
                             "paths" => \@outputsToInstallPaths,
-                            "priority" => (1000 * $package->{"priority"})
+                            "priority" => $package->{"priority"}
                         };
                     }
 
-                    # Add other outputs with incrementing priority
+                    # Add other outputs with incremented priority so that they do not trigger
+                    # collision failures but will have lower precedence than other installed
+                    # packages in case of collisions.
                     foreach my $otherPath (@otherOutputPaths) {
                         push @retarray, {
                             "paths" => [ $otherPath ],
-                            "priority" => ((1000 * $package->{"priority"}) + $otherOutputPriorityCounter++)
+                            "priority" => ((1000 * $package->{"priority"}) + $ignoreCollisionCounter++)
                         };
                     }
                 } elsif (exists $manifest->{"schema-version"}) {
@@ -545,13 +573,10 @@ if ($manifest) {
 
                     next unless scalar @paths;
 
-                    # Increment the priority as we add outputs to avoid collisions
-                    # between outputs from the same package.
-                    my $outputPriorityCounter = 0;
                     foreach my $path (@paths) {
                         push @retarray, {
                             "paths" => [ $path ],
-                            "priority" => ((1000 * $package->{"priority"}) + $outputPriorityCounter++)
+                            "priority" => $package->{"priority"}
                         };
                     }
                 } elsif (exists $manifest->{"schema-version"}) {
@@ -725,6 +750,8 @@ if ($manifest) {
         my $pkgs = shift;
         my $t0 = [gettimeofday];
 
+        info("building environment '%s'", $envName);
+
         # Flox: the remainder of this function is copied from above.
 
         # Symlink to the packages that have been installed explicitly by the
@@ -743,14 +770,28 @@ if ($manifest) {
         # installed by the user (i.e., package X declares that it wants Y
         # installed as well).  We do these later because they have a lower
         # priority in case of collisions.
-        my $priorityCounter = 1000; # don't care about collisions
-        while (scalar(keys %postponed) > 0) {
-            my @pkgDirs = keys %postponed;
-            %postponed = ();
-            foreach my $pkgDir (sort byPackageName @pkgDirs) {
-                addPkg($pkgDir, 2, $ENV{"checkCollisionContents"} eq "1", $priorityCounter++);
-            }
+        #
+        # <flox>
+        # The nixpkgs builder.pl script assigned incrementing priorities
+        # for all propagated packages starting with 1000, but that does
+        # not respect priority values assigned to the packages that are
+        # propagating these dependencies. To address this, we too assign
+        # non-colliding priorities for propagated packages starting at
+        # 1000, but we also assign values based on the priority of the
+        # package that is propagating them, so that they can similarly have
+        # precedence (or not) over collisions.
+        foreach my $pkgDir (keys %postponed) {
+            my $priority = $postponed{$pkgDir};
+            # Propagated dependencies can include other propagated dependencies
+            # so only bump the priority for pkgs with priority less than 1000.
+            $priority *= 1000 if $priority < 1000;
+            # Add the package using a priority based on that of the package that
+            # originally triggered the propagation, and add to that an ever-
+            # increasing counter to prevent collisions for propagated packages.
+            addPkg($pkgDir, 2, $ENV{"checkCollisionContents"} eq "1", $priority + $ignoreCollisionCounter++);
+            delete $postponed{$pkgDir};
         }
+        # </flox>
 
         # Create the symlinks.
         my $nrLinks = 0;
@@ -759,17 +800,18 @@ if ($manifest) {
             my $abs = "$out" . "$extraPrefix" . "/$relName";
             next unless isInPathsToLink $relName;
             if ($target eq "") {
-                #print "creating directory $relName\n";
+                debug("creating directory '$relName'");
                 mkpath $abs or die "cannot create directory `$abs': $!";
             } else {
-                #print "creating symlink $relName to $target\n";
+                debug("creating symlink '$relName' to '$target'");
                 symlink $target, $abs ||
                     die "error creating link `$abs': $!";
                 $nrLinks++;
             }
         }
 
-        printf STDERR "created $nrLinks symlinks in $envName environment in %.06f seconds\n", tv_interval ( $t0 );
+        info("created %d symlinks in '%s' environment in %.06f seconds",
+            $nrLinks, $envName, tv_interval ( $t0 ));
 
         unless ( -e "$out" ) {
             mkdir $out or die "cannot create directory `$out': $!";
