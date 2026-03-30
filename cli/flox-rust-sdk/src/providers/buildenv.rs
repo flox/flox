@@ -1,12 +1,13 @@
 use std::collections::{HashMap, HashSet};
-use std::env;
 use std::ffi::OsStr;
+use std::fmt::Display;
 use std::hash::Hash;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::thread::ScopedJoinHandle;
+use std::{env, fmt};
 
 use flox_core::activate::mode::ActivateMode;
 use flox_core::canonical_path::CanonicalPath;
@@ -54,6 +55,44 @@ const NIXPKGS_CATALOG_URL_PREFIX: &str = "https://github.com/flox/nixpkgs?rev=";
 /// which enables building packages without common evaluation checks,
 /// such as unfree and broken.
 const FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE: &str = "flox-nixpkgs:v0/flox";
+
+/// Name to use in error messages when a package can't be downloaded from
+/// `cache.nixos.org` as a fallback for other locations.
+const LOCATION_FALLBACK_NAME: &str = "base catalog";
+
+///A collection of failed attempts to download a package from specific sources.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DownloadAttempts(pub Vec<DownloadAttempt>);
+
+impl Display for DownloadAttempts {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (i, attempt) in self.0.iter().enumerate() {
+            if i > 0 {
+                f.write_str("\n\n")?;
+            }
+            write!(f, "{attempt}")?;
+        }
+        Ok(())
+    }
+}
+
+/// A failed attempt to download a package from a specific source.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DownloadAttempt {
+    pub location: String,
+    pub error: String,
+}
+
+impl Display for DownloadAttempt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}:\n{}",
+            self.location,
+            indent::indent_all_by(2, self.error.trim_end())
+        )
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum BuildEnvError {
@@ -110,8 +149,11 @@ pub enum BuildEnvError {
         "Can't find download location for package '{0}'.\nYou may not be authenticated or package may have been deleted.\nTry logging in with 'flox auth login'"
     )]
     NoPackageStoreLocation(String),
-    #[error("Couldn't download package '{install_id}':\n{reason}")]
-    BuildPublishedPackage { install_id: String, reason: String },
+    #[error("Couldn't download package '{install_id}' from the following locations\n\n{attempts}")]
+    BuildPublishedPackage {
+        install_id: String,
+        attempts: DownloadAttempts,
+    },
 
     /// A custom package has been uploaded, but the current user hasn't configured
     /// a trusted public key that matches a signature of this package.
@@ -515,7 +557,7 @@ where
             progress = format!("Downloading '{}'", locked_pkg.attr_path)
         );
         let _span_guard = span.enter();
-        let mut location_errors: Vec<String> = vec![];
+        let mut download_attempts = DownloadAttempts(vec![]);
         let mut any_location_succeeded = false;
         for location in locations {
             // nix copy
@@ -572,7 +614,10 @@ where
                     auth_error = Some(BuildEnvError::NixCopyError(stderr.to_string()));
                 }
 
-                location_errors.push(format!("{location_url}: {stderr}"));
+                download_attempts.0.push(DownloadAttempt {
+                    location: location_url.clone(),
+                    error: stderr.to_string(),
+                });
 
                 // If we failed, log the error and try the next location.
                 debug!(%attr_path, %drv, %location_url, %stderr, "Failed to copy custom package from store");
@@ -624,14 +669,13 @@ where
                             locked_pkg.install_id.clone(),
                         ));
                     }
-                    let reason = if location_errors.is_empty() {
-                        fallback_err.to_string()
-                    } else {
-                        location_errors.join("\n")
-                    };
+                    download_attempts.0.push(DownloadAttempt {
+                        location: LOCATION_FALLBACK_NAME.to_string(),
+                        error: fallback_err.to_string(),
+                    });
                     return Err(BuildEnvError::BuildPublishedPackage {
                         install_id: locked_pkg.install_id.clone(),
-                        reason,
+                        attempts: download_attempts,
                     });
                 },
             }
@@ -1344,6 +1388,8 @@ mod realise_nixpkgs_tests {
         locked_published_package,
     };
     use flox_test_utils::GENERATED_DATA;
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
     use test_helpers::buildenv_instance;
 
     use super::*;
@@ -1641,20 +1687,17 @@ mod realise_nixpkgs_tests {
             &Semaphore::new(1, 1),
         );
         let err = result.unwrap_err();
-        match &err {
-            BuildEnvError::BuildPublishedPackage { install_id, reason } => {
-                assert_eq!(install_id, &locked_package.install_id);
-                assert!(
-                    !reason.is_empty(),
-                    "reason should contain actual error details, got empty string"
-                );
-                assert!(
-                    !reason.contains("unknown reason"),
-                    "reason should not contain 'unknown reason', got: {reason}"
-                );
-            },
-            other => panic!("expected BuildPublishedPackage, got: {other:?}"),
-        }
+        assert!(matches!(err, BuildEnvError::BuildPublishedPackage { .. }));
+        assert_eq!(err.to_string(), indoc! {r#"
+            Couldn't download package 'hello' from the following locations
+
+            daemon:
+              don't know how to build these paths:
+                /nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid
+              error: path '/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid' is required, but there is no substituter that can build it
+
+            base catalog:
+              encountered an error interpreting the lockfile: Locked package 'hello' is a base catalog package, but the locked url 'github:super/custom/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' does not start with the expected prefix 'https://github.com/flox/nixpkgs?rev='"#});
     }
 
     /// Ensure that we can build, or (attempt to build) a package from the catalog,
