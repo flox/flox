@@ -284,6 +284,48 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+# Regression test for #2958: explicitly installed packages should take
+# priority over propagated dependencies from other packages.
+# See test_data/input_data/propagated-priority-test-packages.nix for the
+# synthetic packages used here:
+# - "python3-explicit-test" provides bin/python3 (installed explicitly)
+# - "propagator-test" propagates "python3-propagated-test" which also
+#   provides bin/python3
+# The explicit install must win over the propagated dependency.
+# bats test_tags=edit:priority-propagated-deps
+@test "'flox edit' explicit package wins over propagated dependency" {
+  "$FLOX_BIN" init
+
+  # Inject the coreutils store path so mkdir/chmod are available inside
+  # the nix build sandbox (bare derivations only have /bin/sh).
+  coreutils_store_path="$(dirname "$(dirname "$(command -v mkdir)")")"
+  test_packages="$INPUT_DATA/propagated-priority-test-packages.nix"
+
+  explicit_python3="$(nix-build "$test_packages" -A python3-explicit --arg coreutils "$coreutils_store_path" --no-out-link)"
+  propagator="$(nix-build "$test_packages" -A propagator --arg coreutils "$coreutils_store_path" --no-out-link)"
+
+  MANIFEST=$(cat <<EOF
+version = 1
+[install]
+explicit-python.store-path = "$explicit_python3"
+explicit-python.systems = ["$NIX_SYSTEM"]
+propagator.store-path = "$propagator"
+propagator.systems = ["$NIX_SYSTEM"]
+EOF
+)
+
+  run "$FLOX_BIN" edit -f <(echo "$MANIFEST")
+  assert_success
+
+  # Verify that python3 in the environment comes from the explicitly
+  # installed package, not from the propagated dependency.
+  run "$FLOX_BIN" activate -- bash -c 'realpath "$(command -v python3)"'
+  assert_success
+  assert_output --partial "python3-explicit-test"
+}
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=edit:install-store-path
 @test "'flox edit' install-store-path" {
   "$FLOX_BIN" init

@@ -362,6 +362,7 @@ cmd = "flox install python2"
 pre_cmd = "flox init"
 cmd = "flox install python3"
 
+
 [resolve.python3_pip]
 pre_cmd = "flox init"
 cmd = "flox install -i pip python311Packages.pip python3"
