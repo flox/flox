@@ -97,7 +97,9 @@ EOF
   RUST_BACKTRACE=0 run "$FLOX_BIN" list
   assert_failure
   assert_output - << 'EOF'
-✘ ERROR: invalid manifest: Expected a version string or { version = "<version>", reason = "<reason>" }
+✘ ERROR: Failed to parse manifest:
+
+Expected a version string or { version = "<version>", reason = "<reason>" }
 in `minimum-cli-version`
 EOF
 }
