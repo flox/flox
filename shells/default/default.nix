@@ -11,7 +11,6 @@
   krb5,
   lib,
   rustPlatform,
-  mitmproxy,
   mkShell,
   nix-unit,
   nixfmt-rfc-style,
@@ -20,7 +19,6 @@
   procps,
   pstree,
   shfmt,
-  stdenv,
   treefmt,
   writeShellScript,
   yamlfmt,
@@ -50,13 +48,6 @@ let
       treefmt
       yamlfmt
       yq
-    ]
-    ++ lib.optionals stdenv.isLinux [
-      # The python3Packages.mitmproxy-macos package is broken on mac:
-      #   nix-repl> legacyPackages.aarch64-darwin.python3Packages.mitmproxy-macos.meta.broken
-      #   true
-      # ... so only install it on Linux. It's only an optional dev dependency.
-      mitmproxy
     ];
 
   envWrapper = writeShellScript "wrapper" ''
