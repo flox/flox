@@ -82,4 +82,4 @@ jobs:
           additional_permissions: |
             actions: read
           claude_args: '--dangerously-skip-permissions'
-          prompt: '/code-review --comment'
+          prompt: '/code-review:code-review --comment'
