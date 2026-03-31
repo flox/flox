@@ -37,6 +37,7 @@ use super::{
 };
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
+use crate::models::environment::install::compute_install_modifications;
 use crate::providers::auth::{Auth, AuthError};
 use crate::providers::buildenv::{
     self,
@@ -354,27 +355,30 @@ impl CoreEnvironment<ReadOnly> {
 
     /// Install packages to the environment atomically
     ///
-    /// Returns the new manifest content if the environment was modified. Also
-    /// returns a map of the packages that were already installed. The installation
-    /// will proceed if at least one of the requested packages were added to the
-    /// manifest.
+    /// Skips rebuilding if all packages are already installed
     pub fn install(
         &mut self,
         packages: &[PackageToInstall],
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError> {
         let manifest = self.manifest(flox)?;
-        let insertion = manifest.add_packages(packages)?;
-        let built_environments = insertion
-            .new_manifest
-            .as_ref()
-            .map(|m| self.transact_with_manifest(m, flox))
-            .transpose()?
-            .map(|(store_path, _)| store_path);
+        // TODO: this could lead to double resolution and surprising errors
+        // (e.g. if you try to install a package and we fail to resolve a different package)
+        // We need a lockfile for logic about output merging
+        let lockfile: Lockfile = self.lock(flox)?.into();
+
+        let modifications = compute_install_modifications(packages, &manifest, &lockfile)?;
+
+        let built_environments = if modifications.is_empty() {
+            None
+        } else {
+            let new_manifest = manifest.modify_packages(&modifications)?;
+            let (built_environments, _) = self.transact_with_manifest(&new_manifest, flox)?;
+            Some(built_environments)
+        };
 
         Ok(InstallationAttempt {
-            manifest_modified: built_environments.is_some(),
-            already_installed: insertion.already_installed,
+            modifications,
             built_environments,
         })
     }
@@ -389,6 +393,9 @@ impl CoreEnvironment<ReadOnly> {
         uninstall_specs: Vec<UninstallSpec>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
+        // TODO: this could lead to double resolution and surprising errors
+        // (e.g. if you try to uninstall a package and we fail to resolve that package)
+        // We need a lockfile for logic about output mergine
         let lockfile: Lockfile = self.lock(flox)?.into();
 
         let manifest = self.manifest(flox)?;

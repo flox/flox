@@ -14,6 +14,7 @@ use serde_with::skip_serializing_none;
 
 use crate::parsed::common::PackageDescriptorStorePath;
 use crate::parsed::v1;
+use crate::raw::RawSelectedOutputs;
 use crate::util::is_custom_package;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
@@ -236,6 +237,14 @@ pub enum SelectedOutputs {
 impl SelectedOutputs {
     pub fn all() -> Self {
         SelectedOutputs::All(AllSentinel::All)
+    }
+}
+
+impl std::fmt::Display for SelectedOutputs {
+    // Although SelectedOutputs and RawSelectedOutputs may be serialized differently,
+    // we should display them the same way in messages
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Into::<RawSelectedOutputs>::into(self.clone()).fmt(f)
     }
 }
 

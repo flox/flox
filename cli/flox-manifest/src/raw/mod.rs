@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::LazyLock;
@@ -13,6 +13,7 @@ use tracing::{debug, trace};
 
 use crate::interfaces::CommonFields;
 use crate::parsed::common::{self, KnownSchemaVersion, VersionKind};
+use crate::parsed::latest::ManifestPackageDescriptor;
 use crate::parsed::v1_10_0::SelectedOutputs;
 use crate::parsed::{Inner, v1, v1_10_0};
 use crate::util::is_custom_package;
@@ -191,13 +192,6 @@ pub enum TomlEditError {
     UnsupportedAttributeV1(String),
 }
 
-/// Records the result of trying to install a collection of packages to the
-#[derive(Debug)]
-pub struct PackageInsertion {
-    pub new_manifest: Option<Manifest<Migrated>>,
-    pub already_installed: HashMap<String, bool>,
-}
-
 /// Any kind of package that can be installed via `flox install`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PackageToInstall {
@@ -254,6 +248,16 @@ impl PackageToInstall {
             PackageToInstall::Catalog(pkg) => pkg.systems.clone(),
             PackageToInstall::Flake(_) => None,
             PackageToInstall::StorePath(pkg) => Some(vec![pkg.system.clone()]),
+        }
+    }
+
+    /// Return the requested outputs for this package, if any.
+    /// Store path packages do not support outputs and always return `None`.
+    pub fn outputs(&self) -> Option<&RawSelectedOutputs> {
+        match self {
+            PackageToInstall::Catalog(pkg) => pkg.outputs.as_ref(),
+            PackageToInstall::Flake(pkg) => pkg.outputs.as_ref(),
+            PackageToInstall::StorePath(_) => None,
         }
     }
 }
@@ -382,6 +386,15 @@ impl From<&RawSelectedOutputs> for SelectedOutputs {
         match value {
             RawSelectedOutputs::All => SelectedOutputs::all(),
             RawSelectedOutputs::Specific(items) => SelectedOutputs::Specific(items.clone()),
+        }
+    }
+}
+
+impl From<SelectedOutputs> for RawSelectedOutputs {
+    fn from(value: SelectedOutputs) -> Self {
+        match value {
+            SelectedOutputs::All(_) => RawSelectedOutputs::All,
+            SelectedOutputs::Specific(items) => RawSelectedOutputs::Specific(items),
         }
     }
 }
@@ -630,13 +643,14 @@ impl StorePath {
     }
 }
 
-/// The kind of modification to apply to a package during uninstall.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PackageModification {
     /// Remove the package entirely.
     Remove,
     /// Update the package's outputs to the given list.
-    UpdateOutputs(Vec<String>),
+    UpdateOutputs(SelectedOutputs),
+    /// Install a new package to the manifest.
+    Add(PackageToInstall),
 }
 
 /// A resolved package modification to apply.
@@ -737,94 +751,77 @@ impl From<&CatalogPackage> for InlineTable {
 }
 
 pub trait ModifyPackages {
-    /// Adds new packages to the manifest, returning a new manifest if one was created
-    /// along with a map of which of the newly added packages were already installed.
-    fn add_packages(&self, pkgs: &[PackageToInstall]) -> Result<PackageInsertion, ManifestError>;
-    /// Apply a set of modifications to existing packages (removals or output updates)
-    /// in the manifest.
+    /// Apply a list of packagemodifications (adds, removals, or output updates)
     fn modify_packages(
         &self,
         modifications: &[PackageToModify],
     ) -> Result<Manifest<Migrated>, ManifestError>;
 }
 
-impl ModifyPackages for Manifest<Migrated> {
-    fn add_packages(&self, pkgs: &[PackageToInstall]) -> Result<PackageInsertion, ManifestError> {
-        let mut manifest = self.clone();
-        let pkg_map = manifest.inner.migrated_parsed.install.inner_mut();
-        let mut already_installed: HashMap<String, bool> = HashMap::new();
-        for pkg in pkgs.iter() {
-            if pkg_map.contains_key(pkg.id()) {
-                already_installed.insert(pkg.id().to_string(), true);
-                debug!("package already installed: id={}", pkg.id());
-                continue;
-            }
-            already_installed.insert(pkg.id().to_string(), false);
-            match pkg {
-                PackageToInstall::Catalog(pkg_raw) => {
-                    let pkg_group = if pkg_raw.is_custom_catalog() {
-                        Some(pkg.id().to_string())
-                    } else {
-                        None
-                    };
-                    let catalog_descriptor = v1_10_0::PackageDescriptorCatalog {
-                        pkg_path: pkg_raw.pkg_path.clone(),
-                        pkg_group,
-                        priority: None,
-                        version: pkg_raw.version.clone(),
-                        systems: pkg_raw.systems.clone(),
-                        outputs: pkg_raw.outputs.clone().map(|outputs| outputs.into()),
-                    };
-                    let descriptor =
-                        v1_10_0::ManifestPackageDescriptor::Catalog(catalog_descriptor);
-                    pkg_map.insert(pkg.id().to_string(), descriptor);
-                    debug!(
-                        "package newly installed: id={}, pkg-path={}",
-                        pkg_raw.id, pkg_raw.pkg_path
-                    );
-                },
-                PackageToInstall::Flake(flake_raw) => {
-                    let flake_descriptor = v1_10_0::PackageDescriptorFlake {
-                        flake: flake_raw.url.to_string(),
-                        priority: None,
-                        systems: pkg.systems(),
-                        outputs: flake_raw.outputs.as_ref().map(|o| o.into()),
-                    };
-                    let descriptor = v1_10_0::ManifestPackageDescriptor::FlakeRef(flake_descriptor);
-                    pkg_map.insert(pkg.id().to_string(), descriptor);
-                    debug!(
-                        "package newly installed: id={}, flakeref={}",
-                        flake_raw.id,
-                        flake_raw.url.to_string()
-                    );
-                },
-                PackageToInstall::StorePath(store_path_raw) => {
-                    let store_path_descriptor = common::PackageDescriptorStorePath {
-                        store_path: store_path_raw.store_path.to_string_lossy().to_string(),
-                        systems: None,
-                        priority: None,
-                    };
-                    let descriptor =
-                        v1_10_0::ManifestPackageDescriptor::StorePath(store_path_descriptor);
-                    pkg_map.insert(pkg.id().to_string(), descriptor);
-                    debug!(id=pkg.id(), store_path=%store_path_raw.store_path.display(),
-                        "store path newly installed"
-                    );
-                },
-            }
+impl Manifest<Migrated> {
+    /// Add a package to the typed manifest
+    /// The caller is responsible for calling
+    /// `update_raw_packages_from_typed_manifest()` afterwards
+    /// It's assumed that `pkg` does not yet exist in the manifest
+    fn add_package(
+        pkg: &PackageToInstall,
+        pkg_map: &mut BTreeMap<String, ManifestPackageDescriptor>,
+    ) {
+        match pkg {
+            PackageToInstall::Catalog(pkg_raw) => {
+                let pkg_group = if pkg_raw.is_custom_catalog() {
+                    Some(pkg.id().to_string())
+                } else {
+                    None
+                };
+                let catalog_descriptor = v1_10_0::PackageDescriptorCatalog {
+                    pkg_path: pkg_raw.pkg_path.clone(),
+                    pkg_group,
+                    priority: None,
+                    version: pkg_raw.version.clone(),
+                    systems: pkg_raw.systems.clone(),
+                    outputs: pkg_raw.outputs.clone().map(|outputs| outputs.into()),
+                };
+                let descriptor = v1_10_0::ManifestPackageDescriptor::Catalog(catalog_descriptor);
+                pkg_map.insert(pkg.id().to_string(), descriptor);
+                debug!(
+                    "package newly installed: id={}, pkg-path={}",
+                    pkg_raw.id, pkg_raw.pkg_path
+                );
+            },
+            PackageToInstall::Flake(flake_raw) => {
+                let flake_descriptor = v1_10_0::PackageDescriptorFlake {
+                    flake: flake_raw.url.to_string(),
+                    priority: None,
+                    systems: pkg.systems(),
+                    outputs: flake_raw.outputs.as_ref().map(|o| o.into()),
+                };
+                let descriptor = v1_10_0::ManifestPackageDescriptor::FlakeRef(flake_descriptor);
+                pkg_map.insert(pkg.id().to_string(), descriptor);
+                debug!(
+                    "package newly installed: id={}, flakeref={}",
+                    flake_raw.id,
+                    flake_raw.url.to_string()
+                );
+            },
+            PackageToInstall::StorePath(store_path_raw) => {
+                let store_path_descriptor = common::PackageDescriptorStorePath {
+                    store_path: store_path_raw.store_path.to_string_lossy().to_string(),
+                    systems: None,
+                    priority: None,
+                };
+                let descriptor =
+                    v1_10_0::ManifestPackageDescriptor::StorePath(store_path_descriptor);
+                pkg_map.insert(pkg.id().to_string(), descriptor);
+                debug!(id=pkg.id(), store_path=%store_path_raw.store_path.display(),
+                    "store path newly installed"
+                );
+            },
         }
-        let new_manifest = if already_installed.values().all(|p| *p) {
-            None
-        } else {
-            manifest.update_raw_packages_from_typed_manifest()?;
-            Some(manifest)
-        };
-        Ok(PackageInsertion {
-            new_manifest,
-            already_installed,
-        })
     }
+}
 
+impl ModifyPackages for Manifest<Migrated> {
     fn modify_packages(
         &self,
         modifications: &[PackageToModify],
@@ -834,6 +831,7 @@ impl ModifyPackages for Manifest<Migrated> {
         let pkg_map = manifest.inner.migrated_parsed.install.inner_mut();
         for modification in modifications {
             match &modification.modification {
+                PackageModification::Add(pkg) => Self::add_package(pkg, pkg_map),
                 PackageModification::Remove => {
                     if !pkg_map.contains_key(&modification.install_id) {
                         return Err(ManifestError::PackageNotFound(
@@ -843,13 +841,12 @@ impl ModifyPackages for Manifest<Migrated> {
                     pkg_map.remove(&modification.install_id);
                     debug!(id = modification.install_id, "package removed");
                 },
-                // As this is currently only used for uninstalls, we don't worry about ever setting to all
                 PackageModification::UpdateOutputs(outputs) => {
                     let descriptor =
                         pkg_map.get_mut(&modification.install_id).ok_or_else(|| {
                             ManifestError::PackageNotFound(modification.install_id.clone())
                         })?;
-                    descriptor.set_outputs(Some(SelectedOutputs::Specific(outputs.clone())));
+                    descriptor.set_outputs(Some(outputs.clone()));
                     debug!(
                         id = modification.install_id,
                         ?outputs,
@@ -1543,54 +1540,41 @@ mod test {
 
     #[test]
     fn insert_adds_new_package() {
-        let test_packages = vec![PackageToInstall::Catalog(
-            CatalogPackage::from_str("python").unwrap(),
-        )];
+        let test_packages = vec![PackageToModify {
+            install_id: "python".to_owned(),
+            modification: PackageModification::Add(PackageToInstall::Catalog(
+                CatalogPackage::from_str("python").unwrap(),
+            )),
+        }];
         let pre_addition_manifest = dummy_manifest();
         let pre_addition_toml = pre_addition_manifest.inner.migrated_raw.clone();
-        assert!(!contains_package(&pre_addition_toml, test_packages[0].id()));
-        let insertion = pre_addition_manifest.add_packages(&test_packages).unwrap();
-        assert!(
-            insertion.new_manifest.is_some(),
-            "manifest was changed by install"
-        );
-        let new_toml = insertion.new_manifest.unwrap().inner.migrated_raw;
-        assert!(contains_package(&new_toml, test_packages[0].id()));
-    }
-
-    #[test]
-    fn no_change_adding_existing_package() {
-        let test_packages = vec![PackageToInstall::Catalog(
-            CatalogPackage::from_str("hello").unwrap(),
-        )];
-        let pre_addition_manifest = dummy_manifest();
-        let pre_addition_toml = pre_addition_manifest.inner.migrated_raw.clone();
-        // dummy manifest already contains `hello`
-        assert!(contains_package(&pre_addition_toml, test_packages[0].id()));
-        let insertion = pre_addition_manifest.add_packages(&test_packages).unwrap();
-        assert!(
-            insertion.new_manifest.is_none(),
-            "manifest shouldn't be changed installing existing package"
-        );
-        assert!(
-            insertion.already_installed.values().all(|p| *p),
-            "all of the packages should be listed as already installed"
-        );
+        assert!(!contains_package(
+            &pre_addition_toml,
+            &test_packages[0].install_id
+        ));
+        let new_manifest = pre_addition_manifest
+            .modify_packages(&test_packages)
+            .unwrap();
+        assert!(contains_package(
+            &new_manifest.inner.migrated_raw,
+            &test_packages[0].install_id
+        ));
     }
 
     #[test]
     fn insert_adds_install_table_when_missing() {
-        let test_packages = vec![PackageToInstall::Catalog(
-            CatalogPackage::from_str("foo").unwrap(),
-        )];
+        let test_packages = vec![PackageToModify {
+            install_id: "foo".to_owned(),
+            modification: PackageModification::Add(PackageToInstall::Catalog(
+                CatalogPackage::from_str("foo").unwrap(),
+            )),
+        }];
         let manifest = dummy_manifest();
-        let insertion = manifest.add_packages(&test_packages).unwrap();
-        let toml = insertion.new_manifest.unwrap().inner.migrated_raw;
-        assert!(contains_package(&toml, test_packages[0].id()));
-        assert!(
-            !insertion.already_installed.values().all(|p| *p),
-            "none of the packages should be listed as already installed"
-        );
+        let new_manifest = manifest.modify_packages(&test_packages).unwrap();
+        assert!(contains_package(
+            &new_manifest.inner.migrated_raw,
+            &test_packages[0].install_id
+        ));
     }
 
     #[test]
@@ -1636,23 +1620,22 @@ mod test {
     #[test]
     fn inserts_package_needing_quotes() {
         let attrs = r#"foo."bar.baz".qux"#;
-        let test_packages = vec![PackageToInstall::Catalog(
-            CatalogPackage::from_str(attrs).unwrap(),
-        )];
+        let test_packages = vec![PackageToModify {
+            install_id: "qux".to_owned(),
+            modification: PackageModification::Add(PackageToInstall::Catalog(
+                CatalogPackage::from_str(attrs).unwrap(),
+            )),
+        }];
         let pre_addition = dummy_manifest();
         assert!(!contains_package(
             &pre_addition.inner.migrated_raw,
-            test_packages[0].id()
+            &test_packages[0].install_id
         ));
-        let insertion = pre_addition
-            .add_packages(&test_packages)
+        let new_manifest = pre_addition
+            .modify_packages(&test_packages)
             .expect("couldn't add package");
-        assert!(
-            insertion.new_manifest.is_some(),
-            "manifest was changed by install"
-        );
-        let new_toml = insertion.new_manifest.unwrap().inner.migrated_raw;
-        assert!(contains_package(&new_toml, test_packages[0].id()));
+        let new_toml = new_manifest.inner.migrated_raw;
+        assert!(contains_package(&new_toml, &test_packages[0].install_id));
         let inserted_path = new_toml["install"]["qux"]["pkg-path"].as_str().unwrap();
         assert_eq!(inserted_path, r#"foo."bar.baz".qux"#);
     }
@@ -1820,16 +1803,14 @@ mod test {
 schema-version = \"1.10.0\"
         ";
         let manifest = mk_test_manifest_from_contents(contents);
-        let insertion = manifest
-            .add_packages(&[package])
+        let new_manifest = manifest
+            .modify_packages(&[PackageToModify {
+                install_id: package.id().to_string(),
+                modification: PackageModification::Add(package),
+            }])
             .expect("couldn't add package");
         assert_eq!(
-            insertion
-                .new_manifest
-                .unwrap()
-                .inner
-                .migrated_raw
-                .to_string(),
+            new_manifest.inner.migrated_raw.to_string(),
             "
 schema-version = \"1.10.0\"
 
