@@ -59,6 +59,7 @@ pub use core_environment::{
 pub mod fetcher;
 pub mod floxmeta_branch;
 pub mod generations;
+mod install;
 pub mod managed_environment;
 pub mod path_environment;
 pub mod remote_environment;
@@ -83,12 +84,10 @@ pub const FLOX_SERVICES_SOCKET_OVERRIDE_VAR: &str = "_FLOX_SERVICES_SOCKET_OVERR
 
 pub use flox_core::N_HASH_CHARS;
 
-/// The result of an installation attempt that contains whether the manifest
-/// was modified along with whether each package was already installed
 #[derive(Debug)]
 pub struct InstallationAttempt {
-    pub manifest_modified: bool,
-    pub already_installed: HashMap<String, bool>,
+    /// The modifications that were actually made
+    pub modifications: Vec<PackageToModify>,
     /// The store paths of environment that was built to validate the install.
     /// This is used as an optimization to skip builds that we've already done.
     pub built_environments: Option<BuildEnvOutputs>,
@@ -842,7 +841,7 @@ pub enum InstallOrUninstallError {
     PackageOnlyIncluded(String, String),
 
     #[error("'{0}' was not found in Lockfile")]
-    PackageNotInLockfile(String),
+    PackageInManifestNotInLockfile(String),
 
     #[error("'{1}' does not have an output '{0}'")]
     InvalidOutputForPackage(String, String),

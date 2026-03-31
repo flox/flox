@@ -157,9 +157,13 @@ fn compute_uninstall_modifications(
         let current_outputs = manifest_descriptor.as_ref().and_then(|d| d.get_outputs());
 
         // Get all available outputs and outputs_to_install from lockfile
+        // We resolved an install_id in the caller, so we know the install_id is
+        // already in the manifest
         let locked_pkg = lockfile
             .locked_package_with_id(&install_id)
-            .ok_or_else(|| InstallOrUninstallError::PackageNotInLockfile(install_id.clone()))?;
+            .ok_or_else(|| {
+                InstallOrUninstallError::PackageInManifestNotInLockfile(install_id.clone())
+            })?;
 
         let locked_outputs_to_install = locked_pkg.outputs_to_install();
         let all_outputs = locked_pkg.all_outputs();
@@ -232,7 +236,7 @@ fn modification_for_outputs(
         return PackageModification::Remove;
     }
 
-    PackageModification::UpdateOutputs(remaining_outputs)
+    PackageModification::UpdateOutputs(SelectedOutputs::Specific(remaining_outputs))
 }
 
 #[cfg(test)]
@@ -261,7 +265,10 @@ mod tests {
         );
         assert_eq!(
             result,
-            PackageModification::UpdateOutputs(vec!["out".to_string(), "dev".to_string()])
+            PackageModification::UpdateOutputs(SelectedOutputs::Specific(vec![
+                "out".to_string(),
+                "dev".to_string()
+            ]))
         );
     }
 
@@ -275,7 +282,10 @@ mod tests {
         );
         assert_eq!(
             result,
-            PackageModification::UpdateOutputs(vec!["out".to_string(), "dev".to_string()])
+            PackageModification::UpdateOutputs(SelectedOutputs::Specific(vec![
+                "out".to_string(),
+                "dev".to_string()
+            ]))
         );
     }
 
@@ -290,7 +300,7 @@ mod tests {
         );
         assert_eq!(
             result,
-            PackageModification::UpdateOutputs(vec!["out".to_string()])
+            PackageModification::UpdateOutputs(SelectedOutputs::Specific(vec!["out".to_string()]))
         );
     }
 
@@ -408,7 +418,10 @@ mod tests {
 
         assert_eq!(result, vec![PackageToModify {
             install_id: "hello".into(),
-            modification: PackageModification::UpdateOutputs(vec!["dev".into(), "out".into()]),
+            modification: PackageModification::UpdateOutputs(SelectedOutputs::Specific(vec![
+                "dev".into(),
+                "out".into()
+            ])),
         }]);
     }
 
@@ -515,7 +528,10 @@ mod tests {
 
         assert_eq!(result, vec![PackageToModify {
             install_id: "hello".into(),
-            modification: PackageModification::UpdateOutputs(vec!["dev".into(), "out".into()]),
+            modification: PackageModification::UpdateOutputs(SelectedOutputs::Specific(vec![
+                "dev".into(),
+                "out".into()
+            ])),
         }]);
     }
 
@@ -605,7 +621,7 @@ mod tests {
         assert!(
             matches!(
                 err,
-                InstallOrUninstallError::PackageNotInLockfile(ref id) if id == "hello"
+                InstallOrUninstallError::PackageInManifestNotInLockfile(ref id) if id == "hello"
             ),
             "expected PackageNotInLockfile, got: {err:?}"
         );

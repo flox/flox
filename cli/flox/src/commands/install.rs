@@ -12,7 +12,13 @@ use flox_manifest::compose::{
     package_overrides_for_manifest_id,
 };
 use flox_manifest::lockfile::LockedPackage;
-use flox_manifest::raw::{CatalogPackage, PackageToInstall, catalog_packages_to_install};
+use flox_manifest::parsed::latest::SelectedOutputs;
+use flox_manifest::raw::{
+    CatalogPackage,
+    PackageModification,
+    PackageToInstall,
+    catalog_packages_to_install,
+};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::{
@@ -110,6 +116,7 @@ struct PartitionedPackages {
     successes: Vec<PackageToInstall>,
     system_subsets: Vec<PackageToInstall>,
     already_installed: Vec<PackageToInstall>,
+    outputs_updated: Vec<(PackageToInstall, SelectedOutputs)>,
 }
 
 impl Install {
@@ -260,8 +267,7 @@ impl Install {
                 })
                 .collect::<Vec<_>>()
         };
-        let partitioned =
-            Self::partition_installed_packages(&installed, &installation.already_installed);
+        let partitioned = Self::partition_installed_packages(&installed, &installation);
 
         // Print status messages for the installation attempt
         let install_ids = partitioned
@@ -273,9 +279,10 @@ impl Install {
         message::packages_with_additional_outputs(&install_ids, &lockfile, &flox.system);
         message::packages_installed_with_system_subsets(&partitioned.system_subsets);
         message::packages_already_installed(&partitioned.already_installed, &description);
+        message::packages_outputs_updated(&partitioned.outputs_updated, &description);
         message::packages_newly_overridden_by_composer(&new_package_overrides);
 
-        if installation.manifest_modified {
+        if !installation.modifications.is_empty() {
             for warning in Self::generate_unfree_and_broken_warnings(
                 &lockfile.packages,
                 &catalog_packages_to_install(&packages_to_install),
@@ -301,7 +308,7 @@ impl Install {
 
     fn partition_installed_packages(
         pkgs: &[PackageToInstallRetry],
-        already_installed_map: &HashMap<String, bool>,
+        installation: &InstallationAttempt,
     ) -> PartitionedPackages {
         let (partials, maybe_successes): (Vec<_>, Vec<_>) =
             pkgs.iter().partition(|p| p.system_subset);
@@ -315,13 +322,35 @@ impl Install {
             .cloned()
             .map(|p| p.pkg)
             .collect::<Vec<_>>();
-        let (successes, already_installed): (Vec<_>, Vec<_>) = maybe_successes
-            .into_iter()
-            .partition(|p| already_installed_map.get(p.id()).is_some_and(|v| !*v));
+
+        let mut successes = Vec::new();
+        let mut already_installed = Vec::new();
+        let mut outputs_updated = Vec::new();
+
+        for pkg in maybe_successes {
+            let id = pkg.id();
+            if let Some(m) = installation
+                .modifications
+                .iter()
+                .find(|m| m.install_id == id)
+            {
+                match &m.modification {
+                    PackageModification::Add(_) => successes.push(pkg),
+                    PackageModification::UpdateOutputs(outputs) => {
+                        outputs_updated.push((pkg, outputs.clone()))
+                    },
+                    PackageModification::Remove => unreachable!(),
+                }
+            } else {
+                already_installed.push(pkg);
+            }
+        }
+
         PartitionedPackages {
             successes,
             system_subsets: partials,
             already_installed,
+            outputs_updated,
         }
     }
 

@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use flox_manifest::parsed::latest::SelectedOutputs;
 use flox_manifest::raw::PackageModification;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::uninstall::UninstallSpec;
@@ -107,12 +108,17 @@ impl Uninstall {
                         ));
                     }
                 },
-                PackageModification::UpdateOutputs(ref outputs) => {
+                PackageModification::UpdateOutputs(SelectedOutputs::Specific(ref outputs)) => {
                     message::deleted(format!(
                         "Updated outputs of {install_id} to [{}] from environment {description}",
                         outputs.join(", ")
                     ));
                 },
+                PackageModification::UpdateOutputs(SelectedOutputs::All(_)) => {
+                    unreachable!("if we removed something we shouldn't be left with all outputs")
+                },
+                // Add is only used for installs, never uninstalls.
+                PackageModification::Add(_) => unreachable!(),
             }
         }
 

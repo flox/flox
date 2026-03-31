@@ -194,6 +194,55 @@ EOF
   assert_regex "$manifest" 'hello\.pkg-path = "hello"'
 }
 
+# This covers a few of the main cases when installing a package with outputs
+# - How it interacts with includes
+# - Merging outputs
+# More specific cases are unit tested
+@test "'flox install' with outputs selected" {
+  # Included environment with bash already installed for the first output.
+  "$FLOX_BIN" init -d included
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/bash_v1_10_0_out.yaml" \
+    "$FLOX_BIN" install -d included -i bash "bashNonInteractive^out"
+
+  # Composing environment that pulls bash in via the include.
+  "$FLOX_BIN" init -n "composer"
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/bash_v1_10_0_out.yaml" \
+    "$FLOX_BIN" edit -f - <<< "$(with_latest_schema '[include]
+environments = [
+  { dir = "included" }
+]')"
+
+  # Install a second output in the composer; should override the include.
+  run "$FLOX_BIN" install -i bash "bashNonInteractive^man"
+  assert_success
+  assert_output <<EOF
+✔ 'bash' installed to environment 'composer'
+ℹ 'bash' has additional outputs, use 'flox list -a' to see more
+ℹ This environment now overrides package with id 'bash'
+EOF
+
+  outputs="$(tomlq -r -c '.install.bash.outputs' < "$MANIFEST_PATH")"
+  assert_equal "$outputs" '["man"]'
+
+  # The composer's dev environment should expose bash's `man` output (from
+  # the override) but not its `out` output (which the include provides).
+  [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.composer.dev/share/man/man1/bash.1.gz" ]
+  [ ! -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.composer.dev/bin/bash" ]
+
+  # Adding `out` on top should merge with the existing `man` override.
+  run "$FLOX_BIN" install -i bash "bashNonInteractive^out"
+  assert_success
+  assert_output <<EOF
+✔ 'bash' outputs updated to 'man,out' in environment 'composer'
+EOF
+
+  outputs="$(tomlq -r -c '.install.bash.outputs' < "$MANIFEST_PATH")"
+  assert_equal "$outputs" '["man","out"]'
+
+  [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.composer.dev/share/man/man1/bash.1.gz" ]
+  [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.composer.dev/bin/bash" ]
+}
+
 # This is also checking we can build an unfree package
 @test "'flox install' warns about unfree packages" {
   "$FLOX_BIN" init
