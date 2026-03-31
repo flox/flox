@@ -27,6 +27,7 @@ use tracing::{debug, trace};
 use walkdir;
 
 use self::errors::IoError;
+use crate::models::floxmeta::FLOXHUB_TOKEN_ENV_VAR;
 
 pub static FLOX_INTERPRETER: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(env::var("FLOX_INTERPRETER").unwrap_or(env!("FLOX_INTERPRETER").to_string()))
@@ -128,10 +129,16 @@ impl Display for DisplayCommand<'_> {
                     return format!("-u {}", k.to_string_lossy());
                 };
 
+                let v = v.to_string_lossy();
+                let redacted_value = k
+                    .to_str()
+                    .and_then(|s| (s == FLOXHUB_TOKEN_ENV_VAR).then_some("***"))
+                    .unwrap_or(&v);
+
                 format!(
                     "{k}={v}",
                     k = k.to_string_lossy(),
-                    v = shell_escape::escape(v.to_string_lossy())
+                    v = shell_escape::escape(redacted_value.into())
                 )
             })
             .peekable();
