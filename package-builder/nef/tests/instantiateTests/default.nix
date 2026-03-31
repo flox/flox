@@ -6,12 +6,12 @@
 let
   instantiate = lib.nef.instantiate;
 
-  singleLevel = instantiate {
+  singleLevel = instantiate.instantiateFromSourceInfo {
     inherit nixpkgs;
     sourceInfo = builtins.fetchTree "path:${fixtures}/single-level/root";
   };
 
-  multiLevel = instantiate {
+  multiLevel = instantiate.instantiateFromSourceInfo {
     inherit nixpkgs;
     sourceInfo = builtins.fetchTree "path:${fixtures}/multi-level/root";
   };
