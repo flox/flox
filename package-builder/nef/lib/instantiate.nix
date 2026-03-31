@@ -124,7 +124,7 @@
                       sourceInfo
                       // lib.optionalAttrs (lockedPackageSpec.source ? dir) { inherit (lockedPackageSpec.source) dir; };
 
-                    instantiatedCatalog = lib.nef.instantiate {
+                    instantiatedCatalog = lib.nef.instantiate.instantiateFromSourceInfo {
                       inherit nixpkgs sourceInfo;
                     };
                     instantiatedPackage = lib.getAttrFromPath path instantiatedCatalog.reflect.packages;

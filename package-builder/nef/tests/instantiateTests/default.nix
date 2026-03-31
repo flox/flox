@@ -57,48 +57,72 @@ in
   };
 
   # FloxHub catalog tests
-  "test: floxhub catalog with simple package" = {
-    expr =
-      let
-        # Create a mock FloxHub catalog structure
-        mockFloxHubLock = {
-          catalogs = {
-            myorg = {
-              type = "floxhub";
-              packages = {
-                type = "package_set";
-                children = {
-                  curl = {
-                    type = "package";
-                    build_type = "nef";
-                    source = {
-                      type = "path";
-                      path = "${fixtures}/single-level/child";
-                    };
+
+  "test: floxhub catalog instantiates package" =
+    let
+      result = instantiate.instantiateCatalog nixpkgs {
+        type = "floxhub";
+        packages = {
+          type = "package_set";
+          entries = {
+            dep = {
+              type = "package";
+              build_type = "nef";
+              source = {
+                type = "path";
+                path = "${fixtures}/single-level/child";
+              };
+            };
+          };
+        };
+      };
+    in
+    {
+      expr = result.packages.dep;
+      expected = "i am dep";
+    };
+
+  "test: floxhub catalog nested package set" =
+    let
+      result = instantiate.instantiateCatalog nixpkgs {
+        type = "floxhub";
+        packages = {
+          type = "package_set";
+          entries = {
+            nested = {
+              type = "package_set";
+              entries = {
+                deep = {
+                  type = "package";
+                  build_type = "nef";
+                  source = {
+                    type = "path";
+                    path = "${fixtures}/single-level/child";
                   };
                 };
               };
             };
           };
         };
+      };
+    in
+    {
+      expr = result.packages.nested.deep;
+      expected = "i am nested";
+    };
 
-        # Write mock lock file
-        mockLockFile = builtins.toJSON mockFloxHubLock;
-        mockLockPath = builtins.storePath "floxhub-test-lock.json";
-
-        # Create a source with the mock lock file
-        mockSource = {
-          outPath = fixtures;
-          dir = "floxhub-test";
+  "test: floxhub catalog type is preserved" =
+    let
+      result = instantiate.instantiateCatalog nixpkgs {
+        type = "floxhub";
+        packages = {
+          type = "package_set";
+          entries = { };
         };
-
-        # Create a mock nix-builds.lock file
-        mockCatalogsLock = builtins.toJSON mockFloxHubLock;
-
-      in
-      # This test verifies that the catalog type dispatch works
-      # and that FloxHub catalogs are recognized
-      true;
-    expected = true;
-  };
+      };
+    in
+    {
+      expr = result.type;
+      expected = "floxhub";
+    };
 }
