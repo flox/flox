@@ -62,11 +62,11 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v6"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
-        uses: owenthereal/action-upterm@v1
+        uses: owenthereal/action-upterm@f26ebc11e22a09b8365f39d2cdafd06f63b42053 # v1
         with:
           limit-access-to-actor: true
           limit-access-to-users: ${{ inputs.allowedUptermUsers }}
@@ -98,11 +98,11 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v6"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
-        uses: owenthereal/action-upterm@v1
+        uses: owenthereal/action-upterm@f26ebc11e22a09b8365f39d2cdafd06f63b42053 # v1
         with:
           limit-access-to-actor: true
           limit-access-to-users: ${{ inputs.allowedUptermUsers }}
@@ -141,11 +141,11 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v6"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
-        uses: owenthereal/action-upterm@v1
+        uses: owenthereal/action-upterm@f26ebc11e22a09b8365f39d2cdafd06f63b42053 # v1
         with:
           limit-access-to-actor: true
           limit-access-to-users: ${{ inputs.allowedUptermUsers }}
@@ -162,7 +162,7 @@ jobs:
           SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
 
       - name: "Cache Cargo"
-        uses: "actions/cache@v5"
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
         with:
           path: |
             ~/.cargo/bin/
@@ -184,7 +184,7 @@ jobs:
         run: nix develop -L --no-update-lock-file --command just impure-tests
 
       - name: "Upload CLI Unit Test Results"
-        uses: "codecov/test-results-action@v1"
+        uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3 # v1
         if: ${{ !cancelled() && steps.unit-tests.outcome != 'skipped' }}
         with:
           disable_search: true
@@ -228,14 +228,14 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v6"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         # needed for git describe to work
         with:
           fetch-depth: 0
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
-        uses: owenthereal/action-upterm@v1
+        uses: owenthereal/action-upterm@f26ebc11e22a09b8365f39d2cdafd06f63b42053 # v1
         with:
           limit-access-to-actor: true
           limit-access-to-users: ${{ inputs.allowedUptermUsers }}
@@ -257,7 +257,7 @@ jobs:
           SETUP_NIX: "false"
 
       - name: "Configure AWS Credentials"
-        uses: "aws-actions/configure-aws-credentials@v6"
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6
         with:
           role-to-assume: "arn:aws:iam::759020684799:role/github-oidc-role-flox-cache-public"
           role-session-name: "${{ github.run_id }}"
@@ -306,13 +306,13 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v6"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
-        uses: owenthereal/action-upterm@v1
+        uses: owenthereal/action-upterm@f26ebc11e22a09b8365f39d2cdafd06f63b42053 # v1
         with:
           limit-access-to-actor: true
           limit-access-to-users: ${{ inputs.allowedUptermUsers }}
@@ -334,7 +334,7 @@ jobs:
           SETUP_NIX: "false"
 
       - name: "Configure AWS Credentials"
-        uses: "aws-actions/configure-aws-credentials@v6"
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6
         with:
           role-to-assume: "arn:aws:iam::759020684799:role/github-oidc-role-flox-cache-public"
           role-session-name: "${{ github.run_id }}"
@@ -369,7 +369,7 @@ jobs:
     steps:
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
-        uses: owenthereal/action-upterm@v1
+        uses: owenthereal/action-upterm@f26ebc11e22a09b8365f39d2cdafd06f63b42053 # v1
         with:
           limit-access-to-actor: true
           limit-access-to-users: ${{ inputs.allowedUptermUsers }}
@@ -377,7 +377,7 @@ jobs:
 
       - name: "Trigger flox-installers workflow"
         id: "trigger-workflow"
-        uses: "convictional/trigger-workflow-and-wait@v1.6.5"
+        uses: convictional/trigger-workflow-and-wait@f69fa9eedd3c62a599220f4d5745230e237904be # v1.6.5
         with:
           owner: "flox"
           repo: "flox-installers"
@@ -405,7 +405,7 @@ jobs:
           cat shipit.json | jq
 
       - name: "Upload artifact"
-        uses: "actions/upload-artifact@v7"
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         if: ${{ success() || failure() }}
         with:
           name: "shipit"
@@ -428,14 +428,14 @@ jobs:
     steps:
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
-        uses: owenthereal/action-upterm@v1
+        uses: owenthereal/action-upterm@f26ebc11e22a09b8365f39d2cdafd06f63b42053 # v1
         with:
           limit-access-to-actor: true
           limit-access-to-users: ${{ inputs.allowedUptermUsers }}
           wait-timeout-minutes: 15
 
       - name: "Slack Notification"
-        uses: "rtCamp/action-slack-notify@v2"
+        uses: rtCamp/action-slack-notify@e31e87e03dd19038e411e38ae27cbad084a90661 # v2
         env:
           SLACK_TITLE: "Something broke CI for flox/flox on ${{ github.ref_name }}"
           SLACK_FOOTER: "Thank you for caring"
@@ -482,11 +482,11 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: "actions/checkout@v6"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
-        uses: owenthereal/action-upterm@v1
+        uses: owenthereal/action-upterm@f26ebc11e22a09b8365f39d2cdafd06f63b42053 # v1
         with:
           limit-access-to-actor: true
           limit-access-to-users: ${{ inputs.allowedUptermUsers }}
@@ -514,7 +514,7 @@ jobs:
         run: ./.github/scripts/remote-execute-integration-tests.sh
 
       - name: "Upload Bats Tests results"
-        uses: "codecov/test-results-action@v1"
+        uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3 # v1
         if: ${{ !cancelled() }}
         with:
           disable_search: true
