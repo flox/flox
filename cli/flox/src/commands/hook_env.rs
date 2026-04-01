@@ -807,12 +807,13 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<ResolvedEnv> {
     let (services_to_start, cuda_detection) =
         match lockfile.manifest.migrate_typed_only(Some(&lockfile)) {
             Ok(manifest) => {
-                let services_for_system = manifest.services().copy_for_system(&flox.system);
-                let services = services_for_system
-                    .inner()
-                    .keys()
-                    .cloned()
-                    .collect::<Vec<String>>();
+                let auto_start = manifest.options().services.auto_start.unwrap_or(false);
+                let services = if auto_start {
+                    let services_for_system = manifest.services().copy_for_system(&flox.system);
+                    services_for_system.inner().keys().cloned().collect::<Vec<String>>()
+                } else {
+                    Vec::new()
+                };
                 let cuda = manifest.options().cuda_detection;
                 (services, cuda)
             },

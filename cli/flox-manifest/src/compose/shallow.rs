@@ -23,6 +23,7 @@ use crate::parsed::common::{
     Profile,
     SemverOptions,
     Services,
+    ServicesOptions,
     Vars,
 };
 use crate::parsed::latest::{Install, ManifestLatest, MinimumCliVersion};
@@ -195,6 +196,12 @@ impl ShallowMerger {
             high_priority.activate.mode.clone(),
         );
 
+        let (merged_services_auto_start, services_auto_start_warning) = shallow_merge_options(
+            root_key.extend(["services", "auto-start"]),
+            low_priority.services.auto_start,
+            high_priority.services.auto_start,
+        );
+
         let merged = Options {
             systems: merged_systems,
             allow: Allows {
@@ -209,6 +216,9 @@ impl ShallowMerger {
             activate: ActivateOptions {
                 mode: merged_activate_mode,
             },
+            services: ServicesOptions {
+                auto_start: merged_services_auto_start,
+            },
         };
 
         warnings.extend(
@@ -220,6 +230,7 @@ impl ShallowMerger {
                 allow_pre_releases_warning,
                 cuda_detection_warning,
                 systems_warning,
+                services_auto_start_warning,
             ]
             .into_iter()
             .flatten(),

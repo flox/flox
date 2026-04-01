@@ -394,10 +394,11 @@ impl Activate {
         };
 
         // Determine services to start with a new process-compose
+        let auto_start = manifest.options().services.auto_start.unwrap_or(false);
         let is_ephemeral = !services_for_ephemeral_activation.is_empty();
         let services_to_start = if is_ephemeral {
             services_for_ephemeral_activation
-        } else if self.start_services {
+        } else if self.start_services || auto_start {
             Self::gather_services_for_flag(manifest, &flox.system, &socket_path)
         } else {
             Vec::new()

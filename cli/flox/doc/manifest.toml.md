@@ -749,6 +749,7 @@ Options ::= {
 , allow                     = null | Allows
 , semver                    = null | Semver
 , cuda-detection            = null | <BOOL>
+, services                  = null | ServicesOptions
 }
 
 Activate ::= {
@@ -763,6 +764,10 @@ Allows ::= {
 
 Semver ::= {
   allow-pre-releases = <BOOL>
+}
+
+ServicesOptions ::= {
+  auto-start = null | <BOOL>
 }
 ```
 
@@ -817,6 +822,14 @@ Semver ::= {
     The default is `true`.
     When enabled, Flox will detect if you have an Nvidia device and attempt to
     locate `libcuda` in well-known paths.
+
+`services.auto-start`
+:   Whether services defined in the manifest should automatically start
+    when the environment is activated (both manual and auto-activation).
+    The default is `false`. Set to `true` to have services start
+    automatically; they can also be started manually with
+    `flox activate --start-services` or
+    [`flox services start`](./flox-services-start.md).
 
 # SEE ALSO
 [`flox-init(1)`](./flox-init.md),
