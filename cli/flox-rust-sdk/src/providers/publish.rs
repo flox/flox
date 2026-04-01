@@ -294,14 +294,15 @@ impl ClientSideCatalogStoreConfig {
 
     /// Returns the URL string identifying where narinfos were collected from.
     ///
-    /// For NixCopy this is the egress URL. For MetadataOnly this is "daemon"
-    /// since narinfos are collected from the local Nix daemon store.
+    /// For NixCopy this is the egress URL. For MetadataOnly this is
+    /// "daemon://" since narinfos are collected from the local Nix
+    /// daemon store.
     pub fn narinfos_source_url(&self) -> Option<String> {
         match self {
             ClientSideCatalogStoreConfig::NixCopy { egress_uri, .. } => {
                 Some(egress_uri.to_string())
             },
-            ClientSideCatalogStoreConfig::MetadataOnly => Some("daemon".to_string()),
+            ClientSideCatalogStoreConfig::MetadataOnly => Some("daemon://".to_string()),
             ClientSideCatalogStoreConfig::Null => None,
             ClientSideCatalogStoreConfig::Publisher { .. } => None,
         }
@@ -1622,8 +1623,8 @@ pub mod tests {
         let config = ClientSideCatalogStoreConfig::MetadataOnly;
         assert_eq!(
             config.narinfos_source_url(),
-            Some("daemon".to_string()),
-            "MetadataOnly should report 'daemon' as narinfos source"
+            Some("daemon://".to_string()),
+            "MetadataOnly should report 'daemon://' as narinfos source"
         );
     }
 
