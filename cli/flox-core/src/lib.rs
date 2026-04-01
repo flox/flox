@@ -7,6 +7,7 @@ pub mod hook_state;
 pub mod proc_status;
 pub mod process_compose;
 pub mod sentry;
+pub mod preference;
 pub mod trust;
 pub mod util;
 pub mod vars;

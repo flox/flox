@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
-use flox_core::trust::TrustManager;
+use flox_core::preference::PreferenceManager;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::find_dot_flox;
 
@@ -10,15 +10,15 @@ use crate::subcommand_metric;
 use crate::utils::message;
 
 #[derive(Bpaf, Clone, Debug)]
-pub struct Revoke {
-    /// Path to the .flox directory to revoke (defaults to current directory)
+pub struct Disable {
+    /// Path to the .flox directory to disable (defaults to current directory)
     #[bpaf(long, argument("PATH"), optional)]
     path: Option<PathBuf>,
 }
 
-impl Revoke {
+impl Disable {
     pub fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("revoke");
+        subcommand_metric!("disable");
 
         let search_dir = match &self.path {
             Some(p) => p.clone(),
@@ -34,10 +34,11 @@ impl Revoke {
             );
         };
 
-        let manager = TrustManager::new(&flox.data_dir);
-        manager.deny(&dot_flox.path)?;
+        let preference_manager = PreferenceManager::new(&flox.state_dir);
+        preference_manager.disable(&dot_flox.path)?;
+
         message::updated(format!(
-            "Revoked auto-activation for environment at '{}'",
+            "Disabled auto-activation for environment at '{}'",
             dot_flox.path.display()
         ));
 

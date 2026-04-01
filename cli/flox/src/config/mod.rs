@@ -75,6 +75,11 @@ pub struct FloxConfig {
     #[serde(default)]
     pub trusted_environments: HashMap<RemoteEnvironmentRef, EnvironmentTrust>,
 
+    /// Controls auto-activation behavior for unregistered environments.
+    /// Valid values are "prompt" (default), "always", and "never".
+    #[serde(default)]
+    pub auto_activate: AutoActivateConfig,
+
     /// The URL of the FloxHub instance to use
     pub floxhub_url: Option<Url>,
 
@@ -125,6 +130,15 @@ pub struct FloxConfig {
 pub enum EnvironmentTrust {
     Trust,
     Deny,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum AutoActivateConfig {
+    #[default]
+    Prompt,
+    Always,
+    Never,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]

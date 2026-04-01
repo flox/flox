@@ -115,20 +115,20 @@ teardown() {
 }
 
 # bats test_tags=auto-activation:hook-env
-@test "'hook-env' emits 'not trusted' warning for untrusted environment" {
+@test "'hook-env' prompts for unregistered environment" {
   # Manually create .flox to bypass auto-trust from flox init
   mkdir -p .flox/env
   echo '{"name":"test","version":1}' > .flox/env.json
   with_latest_schema > .flox/env/manifest.toml
 
   "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr" || true
-  grep -q "not allowed" "$BATS_TEST_TMPDIR/stderr"
-  grep -q "flox allow" "$BATS_TEST_TMPDIR/stderr"
+  grep -q "flox enable" "$BATS_TEST_TMPDIR/stderr"
 }
 
 # bats test_tags=auto-activation:hook-env
-@test "'hook-env' emits state variables for trusted environment" {
+@test "'hook-env' emits state variables for enabled environment" {
   "$FLOX_BIN" init
+  "$FLOX_BIN" enable
 
   run "$FLOX_BIN" hook-env --shell bash
   assert_success
@@ -139,8 +139,9 @@ teardown() {
 }
 
 # bats test_tags=auto-activation:hook-env
-@test "'hook-env' sets prompt for trusted environment" {
+@test "'hook-env' sets prompt for enabled environment" {
   "$FLOX_BIN" init
+  "$FLOX_BIN" enable
 
   run "$FLOX_BIN" hook-env --shell bash
   assert_success
@@ -168,19 +169,19 @@ teardown() {
 }
 
 # bats test_tags=auto-activation:hook-env
-@test "'hook-env' notifies about denied environments" {
+@test "'hook-env' notifies about disabled environments" {
   "$FLOX_BIN" init
-  "$FLOX_BIN" revoke
+  "$FLOX_BIN" disable
 
   "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr" || true
   local stderr_content
   stderr_content="$(cat "$BATS_TEST_TMPDIR/stderr")"
 
-  # Denied environments should produce a "was denied" message
-  [[ "$stderr_content" =~ "was denied" ]]
-  [[ "$stderr_content" =~ "flox allow" ]]
+  # Disabled environments should produce a "disabled" message
+  [[ "$stderr_content" =~ "disabled" ]]
+  [[ "$stderr_content" =~ "flox enable" ]]
 
-  # Second call (without eval'ing first call's state) — denied env is not
+  # Second call (without eval'ing first call's state) — disabled env is not
   # activated, so DIRS remains unchanged (not emitted).  Only CWD and the
   # updated NOTIFIED list are emitted.
   run "$FLOX_BIN" hook-env --shell bash
@@ -189,10 +190,11 @@ teardown() {
 }
 
 # bats test_tags=auto-activation:hook-env
-@test "'hook-env' detects deny after prior activation (no cd required)" {
+@test "'hook-env' detects disable after prior activation (no cd required)" {
   "$FLOX_BIN" init
+  "$FLOX_BIN" enable
 
-  # First hook-env: activates the trusted environment
+  # First hook-env: activates the enabled environment
   local first_output
   first_output="$("$FLOX_BIN" hook-env --shell bash 2>/dev/null)"
   eval "$(echo "$first_output" | grep '^export _FLOX_HOOK_')"
@@ -200,37 +202,216 @@ teardown() {
   # Verify the environment was activated
   [[ -n "$_FLOX_HOOK_DIRS" ]]
 
-  # Deny the environment (simulates `flox revoke` while in the dir)
-  "$FLOX_BIN" revoke
+  # Disable the environment (simulates `flox disable` while in the dir)
+  "$FLOX_BIN" disable
 
-  # Next hook-env (same dir, no cd) should detect the trust change,
-  # deactivate the env, and show the denied message.
-  "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr_deny" || true
+  # Next hook-env (same dir, no cd) should detect the preference change,
+  # deactivate the env, and show the disabled message.
+  "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr_disable" || true
   local stderr_content
-  stderr_content="$(cat "$BATS_TEST_TMPDIR/stderr_deny")"
+  stderr_content="$(cat "$BATS_TEST_TMPDIR/stderr_disable")"
 
-  [[ "$stderr_content" =~ "was denied" ]]
-  [[ "$stderr_content" =~ "flox allow" ]]
+  [[ "$stderr_content" =~ "disabled" ]]
+  [[ "$stderr_content" =~ "flox enable" ]]
 }
 
 # bats test_tags=auto-activation:hook-env
-@test "'hook-env' notifies about untrusted environment only once" {
+@test "'hook-env' notifies about unregistered environment only once" {
   # Manually create .flox to bypass auto-trust
   mkdir -p .flox/env
   echo '{"name":"test","version":1}' > .flox/env.json
   with_latest_schema > .flox/env/manifest.toml
 
-  # First call — should warn about not allowed
+  # First call — should suggest flox enable
   local first_output
   first_output="$("$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr1")" || true
-  grep -q "not allowed" "$BATS_TEST_TMPDIR/stderr1"
+  grep -q "flox enable" "$BATS_TEST_TMPDIR/stderr1"
 
   # Eval state vars so hook-env sees the notified list
   eval "$first_output"
 
   # Second call — should NOT warn again (already notified)
   "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr2" || true
-  ! grep -q "not allowed" "$BATS_TEST_TMPDIR/stderr2"
+  ! grep -q "flox enable" "$BATS_TEST_TMPDIR/stderr2"
+}
+
+# bats test_tags=auto-activation:hook-env
+@test "'flox init' does NOT auto-enable auto-activation" {
+  "$FLOX_BIN" init
+
+  # Without 'flox enable', hook-env should not activate the environment.
+  # It should suggest running 'flox enable'.
+  "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr" || true
+  grep -q "flox enable" "$BATS_TEST_TMPDIR/stderr"
+  # DIRS should not be emitted (env not activated)
+  run "$FLOX_BIN" hook-env --shell bash
+  assert_success
+  refute_output --partial "_FLOX_HOOK_DIRS"
+}
+
+# bats test_tags=auto-activation:hook-env
+@test "'flox enable' enables auto-activation and sets trust for local envs" {
+  "$FLOX_BIN" init
+  "$FLOX_BIN" enable
+
+  run "$FLOX_BIN" hook-env --shell bash
+  assert_success
+  assert_output --partial "_FLOX_HOOK_DIRS"
+}
+
+# bats test_tags=auto-activation:hook-env
+@test "'flox enable' then 'flox disable' toggles correctly" {
+  "$FLOX_BIN" init
+  "$FLOX_BIN" enable
+
+  # Verify it activates
+  run "$FLOX_BIN" hook-env --shell bash
+  assert_success
+  assert_output --partial "_FLOX_HOOK_DIRS"
+
+  # Disable
+  "$FLOX_BIN" disable
+
+  # Should no longer activate
+  "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr" || true
+  grep -q "disabled" "$BATS_TEST_TMPDIR/stderr"
+}
+
+# bats test_tags=auto-activation:hook-env
+@test "environment with trust but no preference does NOT auto-activate" {
+  # Manually create .flox and trust it, but don't enable preference
+  mkdir -p .flox/env
+  echo '{"name":"test","version":1}' > .flox/env.json
+  with_latest_schema > .flox/env/manifest.toml
+
+  # This would only set trust, not preference (old behavior)
+  # We can't easily call TrustManager directly from bats, but flox init
+  # sets trust. So just verify that init + no enable = no activation.
+  "$FLOX_BIN" init
+
+  "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr" || true
+  grep -q "flox enable" "$BATS_TEST_TMPDIR/stderr"
+}
+
+# bats test_tags=auto-activation:hook-env
+@test "preference persists across manifest changes (not content-sensitive)" {
+  "$FLOX_BIN" init
+  "$FLOX_BIN" enable
+
+  # Verify it activates
+  local first_output
+  first_output="$("$FLOX_BIN" hook-env --shell bash 2>/dev/null)"
+  eval "$(echo "$first_output" | grep '^export _FLOX_HOOK_')"
+  [[ -n "$_FLOX_HOOK_DIRS" ]]
+
+  # Modify the manifest
+  echo "" >> "$MANIFEST_PATH"
+
+  # Preference should still be enabled (not content-sensitive)
+  run "$FLOX_BIN" hook-env --shell bash
+  assert_success
+  # Should still emit DIRS (environment still enabled)
+  assert_output --partial "_FLOX_HOOK_DIRS"
+}
+
+# bats test_tags=auto-activation:hook-env
+@test "auto_activate 'always' skips prompt for unregistered environments" {
+  "$FLOX_BIN" init
+  # Set config to always auto-activate
+  "$FLOX_BIN" config --set auto_activate '"always"'
+
+  run "$FLOX_BIN" hook-env --shell bash
+  assert_success
+  assert_output --partial "_FLOX_HOOK_DIRS"
+}
+
+# bats test_tags=auto-activation:hook-env
+@test "auto_activate 'never' disables all auto-activation globally" {
+  "$FLOX_BIN" init
+  "$FLOX_BIN" enable
+
+  # Set config to never auto-activate
+  "$FLOX_BIN" config --set auto_activate '"never"'
+
+  "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr" || true
+  grep -q "disabled globally" "$BATS_TEST_TMPDIR/stderr"
+}
+
+# bats test_tags=auto-activation:hook-env
+@test "'hook-env' shows notice after decline and cd away/back" {
+  "$FLOX_BIN" init
+  "$FLOX_BIN" disable  # Simulates what interactive "N" now does
+
+  # First call — notice shown
+  local first_output
+  first_output="$("$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr1")" || true
+  grep -q "flox enable" "$BATS_TEST_TMPDIR/stderr1"
+  eval "$first_output"
+
+  # cd away
+  pushd .. > /dev/null
+  local away_output
+  away_output="$("$FLOX_BIN" hook-env --shell bash 2>/dev/null)" || true
+  eval "$away_output"
+  popd > /dev/null
+
+  # cd back — notice should re-appear (informational, not interactive)
+  "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr_back" || true
+  grep -q "flox enable" "$BATS_TEST_TMPDIR/stderr_back"
+}
+
+# bats test_tags=auto-activation:hook-env
+@test "'hook-env' does not double-prompt on sequential calls (chpwd+precmd)" {
+  mkdir -p .flox/env
+  echo '{"name":"test","version":1}' > .flox/env.json
+  with_latest_schema > .flox/env/manifest.toml
+
+  # First call — prompts (non-interactive → auto-decline)
+  local first_output
+  first_output="$("$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr1")" || true
+  eval "$first_output"
+
+  # Second call (simulating precmd after chpwd) — should NOT prompt/notify
+  "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr2" || true
+  ! grep -q "flox enable" "$BATS_TEST_TMPDIR/stderr2"
+}
+
+# bats test_tags=auto-activation:hook-env
+@test "'hook-env' decline persists across sessions" {
+  "$FLOX_BIN" init
+  "$FLOX_BIN" disable  # Simulates interactive "N" persistence
+
+  # First "session"
+  "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr1" || true
+  grep -q "flox enable" "$BATS_TEST_TMPDIR/stderr1"
+
+  # Clear all hook state to simulate new session
+  unset _FLOX_HOOK_DIFF _FLOX_HOOK_DIRS _FLOX_HOOK_WATCHES
+  unset _FLOX_HOOK_SUPPRESSED _FLOX_HOOK_NOTIFIED _FLOX_HOOK_CWD
+  unset _FLOX_HOOK_ACTIVATIONS
+
+  # New "session" — should show notice (not prompt), because disable is persisted to disk
+  "$FLOX_BIN" hook-env --shell bash 2>"$BATS_TEST_TMPDIR/stderr2" || true
+  grep -q "flox enable" "$BATS_TEST_TMPDIR/stderr2"
+}
+
+# bats test_tags=auto-activation:hook-env
+@test "'flox enable --path' works for non-CWD environments" {
+  # Create env in a subdirectory
+  mkdir -p subdir
+  pushd subdir > /dev/null
+  "$FLOX_BIN" init
+  popd > /dev/null
+
+  # Enable from parent directory using --path
+  "$FLOX_BIN" enable --path subdir
+
+  # cd to subdir and verify it activates
+  pushd subdir > /dev/null
+  run "$FLOX_BIN" hook-env --shell bash
+  assert_success
+  assert_output --partial "_FLOX_HOOK_DIRS"
+  popd > /dev/null
 }
 
 # ---------------------------------------------------------------------------- #
@@ -244,6 +425,7 @@ teardown() {
 # bats test_tags=auto-activation:deactivate
 @test "'flox deactivate --shell bash' emits revert commands" {
   "$FLOX_BIN" init
+  "$FLOX_BIN" enable
 
   # Capture hook-env output and eval ONLY the _FLOX_HOOK_* state vars.
   # Eval-ing the full output would set Nix store paths (SSL_CERT_FILE, etc.)
@@ -266,6 +448,7 @@ teardown() {
 # bats test_tags=auto-activation:deactivate
 @test "deactivate prevents re-activation on next hook-env" {
   "$FLOX_BIN" init
+  "$FLOX_BIN" enable
 
   # Eval only _FLOX_HOOK_* state vars to avoid SSL env contamination
   local hook_output
@@ -290,6 +473,7 @@ teardown() {
 # bats test_tags=auto-activation:deactivate
 @test "deactivate clears _FLOX_ACTIVE_ENVIRONMENTS" {
   "$FLOX_BIN" init
+  "$FLOX_BIN" enable
 
   # Activate via hook-env — eval only _FLOX_HOOK_* state vars
   local hook_output
@@ -315,12 +499,14 @@ teardown() {
   mkdir -p outer
   pushd outer > /dev/null
   "$FLOX_BIN" init
+  "$FLOX_BIN" enable
   popd > /dev/null
 
   # Create inner env
   mkdir -p outer/inner
   pushd outer/inner > /dev/null
   "$FLOX_BIN" init
+  "$FLOX_BIN" enable
   popd > /dev/null
 
   # cd to inner, run hook-env to activate both
@@ -353,6 +539,7 @@ teardown() {
 # bats test_tags=auto-activation:deactivate
 @test "flox activate works after flox deactivate" {
   "$FLOX_BIN" init
+  "$FLOX_BIN" enable
 
   # Activate via hook-env
   local hook_output
@@ -373,6 +560,7 @@ teardown() {
 # bats test_tags=auto-activation:deactivate
 @test "hook-env emits prompt on first call in subshell with exclude vars" {
   "$FLOX_BIN" init
+  "$FLOX_BIN" enable
 
   # Simulate the subshell state after `flox activate` spawns a subshell
   # for a project env: hook state is cleared, but exclude vars are set.
@@ -407,12 +595,14 @@ teardown() {
   mkdir -p outer
   pushd outer > /dev/null
   "$FLOX_BIN" init
+  "$FLOX_BIN" enable
   popd > /dev/null
 
   # Create inner env
   mkdir -p outer/inner
   pushd outer/inner > /dev/null
   "$FLOX_BIN" init
+  "$FLOX_BIN" enable
   popd > /dev/null
 
   # cd to inner, run hook-env
@@ -435,12 +625,14 @@ teardown() {
   mkdir -p projA
   pushd projA > /dev/null
   "$FLOX_BIN" init
+  "$FLOX_BIN" enable
   popd > /dev/null
 
   # Init env B
   mkdir -p projB
   pushd projB > /dev/null
   "$FLOX_BIN" init
+  "$FLOX_BIN" enable
   popd > /dev/null
 
   # Activate in projA — eval only _FLOX_HOOK_* state vars

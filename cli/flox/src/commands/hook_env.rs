@@ -28,6 +28,7 @@ use flox_core::hook_state::{
     OnActivateEnvDiff,
     WatchEntry,
 };
+use flox_core::preference::{PreferenceManager, PreferenceStatus};
 use flox_core::trust::{TrustManager, TrustStatus};
 use flox_manifest::interfaces::CommonFields;
 use flox_manifest::lockfile::Lockfile;
@@ -36,6 +37,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{
     DotFlox,
     Environment,
+    EnvironmentPointer,
     UninitializedEnvironment,
     find_all_dot_flox,
 };
@@ -45,6 +47,7 @@ use regex::Regex;
 use shell_gen::{GenerateShell, SetVar, Shell, UnsetVar};
 use tracing::{debug, error};
 
+use crate::config::{AutoActivateConfig, Config};
 use crate::utils::active_environments::activated_environments;
 use crate::utils::colors::{INDIGO_300, INDIGO_400};
 
@@ -56,7 +59,7 @@ pub struct HookEnv {
 }
 
 impl HookEnv {
-    pub fn handle(self, flox: Flox) -> Result<()> {
+    pub fn handle(self, config: Config, flox: Flox) -> Result<()> {
         let shell: Shell = self
             .shell
             .parse()
@@ -72,13 +75,28 @@ impl HookEnv {
         });
 
         let trust_manager = TrustManager::new(&flox.data_dir);
+        let preference_manager = PreferenceManager::new(&flox.state_dir);
+        let auto_activate_config = &config.flox.auto_activate;
 
-        if is_fast_path(&state, &cwd, &discovered, &trust_manager) {
+        if is_fast_path(
+            &state,
+            &cwd,
+            &discovered,
+            &trust_manager,
+            &preference_manager,
+            auto_activate_config,
+        ) {
             return Ok(());
         }
 
-        let (mut trusted_dot_flox, suppressed_dirs, notified_dirs) =
-            filter_by_trust(&state, &cwd, &discovered, &trust_manager);
+        let (mut trusted_dot_flox, suppressed_dirs, notified_dirs) = filter_by_eligibility(
+            &state,
+            &cwd,
+            &discovered,
+            &trust_manager,
+            &preference_manager,
+            auto_activate_config,
+        );
 
         // Filter out environments that are manually activated via `flox activate`
         // subshells — these are tracked by _FLOX_HOOK_EXCLUDE_DIRS.
@@ -185,14 +203,21 @@ impl HookEnv {
 }
 
 /// Fast path: CWD unchanged AND no watched files changed AND the set of
-/// discovered .flox dirs hasn't changed AND trust status hasn't changed
-/// for any active dir → no work needed.
+/// discovered .flox dirs hasn't changed AND trust/preference status hasn't
+/// changed for any active dir → no work needed.
 fn is_fast_path(
     state: &HookState,
     cwd: &Path,
     discovered: &[DotFlox],
     trust_manager: &TrustManager,
+    preference_manager: &PreferenceManager,
+    auto_activate_config: &AutoActivateConfig,
 ) -> bool {
+    // Global "never" can change between prompts — if set, always re-evaluate.
+    if *auto_activate_config == AutoActivateConfig::Never {
+        return false;
+    }
+
     // Filter out excluded dirs (manually-activated subshell environments)
     // so the fast-path comparison matches the filtered active_dirs.
     let exclude_dirs: Vec<PathBuf> = std::env::var(HOOK_VAR_EXCLUDE_DIRS)
@@ -211,20 +236,32 @@ fn is_fast_path(
         .active_dirs
         .iter()
         .any(|dir| !matches!(trust_manager.check(dir), Ok(TrustStatus::Trusted)));
+    let preference_changed = state.active_dirs.iter().any(|dir| {
+        !matches!(
+            preference_manager.check(dir),
+            Ok(PreferenceStatus::Enabled)
+        )
+    });
     state.last_cwd.as_deref() == Some(cwd)
         && !watches_changed
         && discovered_dirs == state.active_dirs
         && !trust_changed
+        && !preference_changed
 }
 
-/// Filter discovered environments by trust and suppression status.
+/// Filter discovered environments by preference, trust, and suppression status.
 ///
-/// Returns (trusted_dot_flox, suppressed_dirs, notified_dirs).
-fn filter_by_trust(
+/// Two-gate model: an environment must have both (a) auto-activation enabled
+/// (preference gate) and (b) be trusted (security gate) to be eligible.
+///
+/// Returns (eligible_dot_flox, suppressed_dirs, notified_dirs).
+fn filter_by_eligibility(
     state: &HookState,
     cwd: &Path,
     discovered: &[DotFlox],
     trust_manager: &TrustManager,
+    preference_manager: &PreferenceManager,
+    auto_activate_config: &AutoActivateConfig,
 ) -> (Vec<DotFlox>, Vec<PathBuf>, Vec<PathBuf>) {
     // Prune suppressed dirs: only keep those that are still ancestors of CWD.
     let suppressed_dirs: Vec<PathBuf> = state
@@ -234,17 +271,30 @@ fn filter_by_trust(
         .cloned()
         .collect();
 
-    // Prune notified dirs: only keep those that are still ancestors of CWD.
-    // This ensures the user is re-notified when cd'ing back into a denied
-    // or untrusted directory.
+    // Prune notified dirs to those still relevant to CWD. This allows
+    // the Disabled-branch notice to re-appear when the user cd's back,
+    // reinforcing that `flox enable` is available.
     let mut notified_dirs: Vec<PathBuf> = state
         .notified_dirs
         .iter()
-        .filter(|s| cwd.starts_with(s.parent().unwrap_or(s)))
+        .filter(|n| cwd.starts_with(n.parent().unwrap_or(n)))
         .cloned()
         .collect();
 
-    let mut trusted_dot_flox: Vec<DotFlox> = Vec::new();
+    let mut eligible_dot_flox: Vec<DotFlox> = Vec::new();
+
+    // Global "never" — skip all environments with a single notice.
+    if *auto_activate_config == AutoActivateConfig::Never {
+        if !discovered.is_empty() {
+            emit_eligibility_notice(
+                cwd,
+                &discovered[0].path,
+                "Auto-activation is disabled globally. Run 'flox config --set auto_activate prompt' to enable.",
+                &mut notified_dirs,
+            );
+        }
+        return (eligible_dot_flox, suppressed_dirs, notified_dirs);
+    }
 
     for dot_flox in discovered {
         if suppressed_dirs.contains(&dot_flox.path) {
@@ -252,31 +302,153 @@ fn filter_by_trust(
             continue;
         }
 
-        match trust_manager.check(&dot_flox.path) {
-            Ok(TrustStatus::Trusted) => {
-                trusted_dot_flox.push(dot_flox.clone());
+        // Gate 1: Preference check
+        let preference_ok = match preference_manager.check(&dot_flox.path) {
+            Ok(PreferenceStatus::Enabled) => true,
+            Ok(PreferenceStatus::Disabled) => {
+                debug!(path = %dot_flox.path.display(), "preference disabled, skipping");
+                emit_eligibility_notice(
+                    cwd,
+                    &dot_flox.path,
+                    "Auto-activation is disabled. Run 'flox enable' to re-enable.",
+                    &mut notified_dirs,
+                );
+                continue;
             },
-            Ok(TrustStatus::Denied) => {
-                debug!(path = %dot_flox.path.display(), "denied, skipping");
-                emit_trust_notice(cwd, &dot_flox.path, "was denied", &mut notified_dirs);
-            },
-            Ok(TrustStatus::Unknown(_)) => {
-                emit_trust_notice(cwd, &dot_flox.path, "is not allowed", &mut notified_dirs);
+            Ok(PreferenceStatus::Unregistered) => {
+                match auto_activate_config {
+                    AutoActivateConfig::Always => true,
+                    AutoActivateConfig::Prompt => {
+                        // Already prompted/notified this session — don't prompt again
+                        if notified_dirs.contains(&dot_flox.path.to_path_buf()) {
+                            continue;
+                        }
+                        let is_local = matches!(dot_flox.pointer, EnvironmentPointer::Path(_));
+                        if prompt_auto_activate(
+                            &dot_flox.path,
+                            preference_manager,
+                            trust_manager,
+                            is_local,
+                        ) {
+                            true
+                        } else {
+                            // Non-interactive fallback or user said no
+                            emit_eligibility_notice(
+                                cwd,
+                                &dot_flox.path,
+                                "Run 'flox enable' to auto-activate this environment.",
+                                &mut notified_dirs,
+                            );
+                            continue;
+                        }
+                    },
+                    AutoActivateConfig::Never => unreachable!(), // handled above
+                }
             },
             Err(e) => {
-                debug!(path = %dot_flox.path.display(), "trust check failed: {e}");
+                debug!(path = %dot_flox.path.display(), "preference check failed: {e}");
+                continue;
             },
+        };
+
+        if !preference_ok {
+            continue;
+        }
+
+        // Gate 2: Trust check
+        // For local environments, trust is implicit (set by `flox enable`).
+        let is_local = matches!(dot_flox.pointer, EnvironmentPointer::Path(_));
+        if is_local {
+            eligible_dot_flox.push(dot_flox.clone());
+        } else {
+            // Managed/remote environments require explicit trust
+            match trust_manager.check(&dot_flox.path) {
+                Ok(TrustStatus::Trusted) => {
+                    eligible_dot_flox.push(dot_flox.clone());
+                },
+                Ok(TrustStatus::Denied) => {
+                    debug!(path = %dot_flox.path.display(), "trust denied, skipping");
+                    emit_eligibility_notice(
+                        cwd,
+                        &dot_flox.path,
+                        "Environment is not trusted. Run 'flox activate -t' to trust it.",
+                        &mut notified_dirs,
+                    );
+                },
+                Ok(TrustStatus::Unknown(_)) => {
+                    emit_eligibility_notice(
+                        cwd,
+                        &dot_flox.path,
+                        "Environment is not trusted. Run 'flox activate -t' to trust it.",
+                        &mut notified_dirs,
+                    );
+                },
+                Err(e) => {
+                    debug!(path = %dot_flox.path.display(), "trust check failed: {e}");
+                },
+            }
         }
     }
 
-    (trusted_dot_flox, suppressed_dirs, notified_dirs)
+    (eligible_dot_flox, suppressed_dirs, notified_dirs)
 }
 
-/// Emit a trust notification message for an environment, deduplicating by path.
-fn emit_trust_notice(
+/// Check whether we can prompt the user from within the hook.
+///
+/// In all shell hooks, `hook-env` runs inside `$()` so stdout is captured.
+/// But stdin is inherited from the interactive shell and stderr goes to
+/// the terminal, so we can prompt via stderr and read from stdin.
+fn can_prompt_from_hook() -> bool {
+    use std::io::IsTerminal;
+    std::io::stdin().is_terminal() && std::io::stderr().is_terminal()
+}
+
+/// Prompt the user whether to auto-activate an environment.
+/// Returns true if the user accepted. Persists the preference on acceptance
+/// or decline (as Disabled), so the decision survives across shell sessions.
+fn prompt_auto_activate(
+    dot_flox_path: &Path,
+    preference_manager: &PreferenceManager,
+    trust_manager: &TrustManager,
+    is_local: bool,
+) -> bool {
+    if !can_prompt_from_hook() {
+        return false;
+    }
+    let project_dir = dot_flox_path.parent().unwrap_or(dot_flox_path);
+    eprint!(
+        "Auto-activate environment in {}? [y/N] ",
+        project_dir.display()
+    );
+    let _ = std::io::stderr().flush();
+
+    let mut input = String::new();
+    match std::io::stdin().read_line(&mut input) {
+        Ok(_) if input.trim().eq_ignore_ascii_case("y") => {
+            // Persist the preference
+            let _ = preference_manager.enable(dot_flox_path);
+            if is_local {
+                let _ = trust_manager.trust(dot_flox_path);
+            }
+            true
+        },
+        Ok(_) => {
+            // User explicitly declined — persist so it survives across sessions.
+            // Moves the environment from Unregistered → Disabled, so future visits
+            // show a non-interactive notice instead of re-prompting.
+            let _ = preference_manager.disable(dot_flox_path);
+            false
+        },
+        Err(_) => false,
+    }
+}
+
+/// Emit an eligibility notification message for an environment,
+/// deduplicating by path.
+fn emit_eligibility_notice(
     cwd: &Path,
     dot_flox_path: &Path,
-    status_msg: &str,
+    message: &str,
     notified_dirs: &mut Vec<PathBuf>,
 ) {
     if notified_dirs.contains(&dot_flox_path.to_path_buf()) {
@@ -284,14 +456,10 @@ fn emit_trust_notice(
     }
     let is_ancestor = cwd.starts_with(dot_flox_path.parent().unwrap_or(dot_flox_path));
     if is_ancestor {
-        eprintln!(
-            "flox: environment at '{}' {status_msg}. Run 'flox allow' to auto-activate it.",
-            dot_flox_path.display()
-        );
+        eprintln!("flox: environment at '{}': {message}", dot_flox_path.display());
     } else {
         eprintln!(
-            "flox: environment at '{}' {status_msg}. Run 'flox allow --path {}' to auto-activate it.",
-            dot_flox_path.display(),
+            "flox: environment at '{}': {message}",
             dot_flox_path.display()
         );
     }

@@ -1,6 +1,6 @@
 mod activate;
 mod activation_state;
-mod allow;
+mod disable;
 mod auth;
 mod build;
 mod check_for_upgrades;
@@ -22,7 +22,7 @@ mod lock_manifest;
 mod publish;
 mod pull;
 mod push;
-mod revoke;
+mod enable;
 mod search;
 mod services;
 mod services_socket;
@@ -372,7 +372,7 @@ impl FloxArgs {
                 Commands::Modify(args) => args.handle(config, flox).await,
                 Commands::Share(args) => args.handle(config, flox).await,
                 Commands::Admin(args) => args.handle(config, flox).await,
-                Commands::Internal(args) => args.handle(flox).await,
+                Commands::Internal(args) => args.handle(config, flox).await,
             };
 
             // This will print the update notification after output from a successful
@@ -535,13 +535,13 @@ enum ManageCommands {
     )]
     Delete(#[bpaf(external(delete::delete))] delete::Delete),
 
-    /// Allow an environment for auto-activation
-    #[bpaf(command, footer("Run 'man flox-allow' for more details."))]
-    Allow(#[bpaf(external(allow::allow))] allow::Allow),
+    /// Enable auto-activation for an environment
+    #[bpaf(command, footer("Run 'man flox-enable' for more details."))]
+    Enable(#[bpaf(external(enable::enable))] enable::Enable),
 
-    /// Revoke auto-activation for an environment
-    #[bpaf(command, footer("Run 'man flox-revoke' for more details."))]
-    Revoke(#[bpaf(external(revoke::revoke))] revoke::Revoke),
+    /// Disable auto-activation for an environment
+    #[bpaf(command, footer("Run 'man flox-disable' for more details."))]
+    Disable(#[bpaf(external(disable::disable))] disable::Disable),
 }
 
 impl ManageCommands {
@@ -550,8 +550,8 @@ impl ManageCommands {
             ManageCommands::Init(args) => args.handle(flox).await?,
             ManageCommands::Envs(args) => args.handle(flox)?,
             ManageCommands::Delete(args) => args.handle(flox).await?,
-            ManageCommands::Allow(args) => args.handle(flox)?,
-            ManageCommands::Revoke(args) => args.handle(flox)?,
+            ManageCommands::Enable(args) => args.handle(flox)?,
+            ManageCommands::Disable(args) => args.handle(flox)?,
         }
         Ok(())
     }
@@ -836,7 +836,7 @@ enum InternalCommands {
 }
 
 impl InternalCommands {
-    async fn handle(self, flox: Flox) -> Result<()> {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             InternalCommands::ResetMetrics(args) => args.handle(flox).await?,
             InternalCommands::Upload(args) => args.handle(flox).await?,
@@ -846,7 +846,7 @@ impl InternalCommands {
             InternalCommands::ActivationState(args) => args.handle(flox)?,
             InternalCommands::ServicesSocket(args) => args.handle(flox)?,
             InternalCommands::Hook(args) => args.handle()?,
-            InternalCommands::HookEnv(args) => args.handle(flox)?,
+            InternalCommands::HookEnv(args) => args.handle(config, flox)?,
         }
         Ok(())
     }
