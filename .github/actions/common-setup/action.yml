@@ -34,10 +34,11 @@ runs:
   steps:
     - name: "Install newer Nix"
       if: ${{ inputs.SETUP_NIX }} == "true"
-      uses: "cachix/install-nix-action@v31"
+      uses: cachix/install-nix-action@96951a368ba55167b55f1c916f7d416bac6505fe # v31
 
     - name: "Configure Nix"
-      uses: "flox/configure-nix-action@main"
+      uses: flox/configure-nix-action@1ee58d63463cb1870ab73d9df0acfd9d8ba671f8 # main
+
       if: ${{ inputs.SETUP_NIX }} == "true"
       with:
         github-access-token: "${{ inputs.GITHUB_ACCESS_TOKEN }}"
@@ -59,7 +60,8 @@ runs:
         } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
     - name: "Setup Tailscale"
-      uses: "tailscale/github-action@v4"
+      uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4
+
       if: ${{ inputs.TAILSCALE_AUTH_KEY }}
       with:
         oauth-secret: "${{ inputs.TAILSCALE_AUTH_KEY }}"
