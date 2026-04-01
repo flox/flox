@@ -452,18 +452,11 @@ fn emit_eligibility_notice(
     if notified_dirs.contains(&dot_flox_path.to_path_buf()) {
         return;
     }
-    let is_ancestor = cwd.starts_with(dot_flox_path.parent().unwrap_or(dot_flox_path));
-    if is_ancestor {
-        eprintln!(
-            "flox: environment at '{}': {message}",
-            dot_flox_path.display()
-        );
-    } else {
-        eprintln!(
-            "flox: environment at '{}': {message}",
-            dot_flox_path.display()
-        );
-    }
+    let _ = cwd; // reserved for future use (e.g. ancestor-aware messaging)
+    eprintln!(
+        "flox: environment at '{}': {message}",
+        dot_flox_path.display()
+    );
     notified_dirs.push(dot_flox_path.to_path_buf());
 }
 
