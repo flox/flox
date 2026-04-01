@@ -26,3 +26,8 @@ updates:
       all:
         patterns:
           - "*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/.github/actions/common-setup"
+    schedule:
+      interval: "weekly"
