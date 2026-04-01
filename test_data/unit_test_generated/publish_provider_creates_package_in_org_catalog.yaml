@@ -35,7 +35,7 @@ then:
 when:
   path: /api/v1/catalog/catalogs/publish_tests_read_write/packages/mypkg4/builds
   method: POST
-  body: '{"build_type":"manifest","derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"mypkg4","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"pname":"mypkg4","system":"x86_64-linux","version":"1.0.0"},"dot_flox_dir":"","locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","ref":"dummy","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"https://dummy.local"}'
+  body: '{"build_type":"manifest","derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"mypkg4","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"pname":"mypkg4","system":"x86_64-linux","version":"1.0.0"},"dot_flox_dir":"","locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","narinfos_source_url":"daemon","ref":"dummy","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"https://dummy.local"}'
 then:
   status: 200
   header:

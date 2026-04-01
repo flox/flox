@@ -12,7 +12,6 @@ use flox_catalog::{
     CatalogStoreConfig,
     CatalogStoreConfigNixCopy,
     ClientTrait,
-    NarInfo,
     NarInfos,
     PackageOutput,
     PackageOutputs,
@@ -293,6 +292,21 @@ impl ClientSideCatalogStoreConfig {
         }
     }
 
+    /// Returns the URL string identifying where narinfos were collected from.
+    ///
+    /// For NixCopy this is the egress URL. For MetadataOnly this is "daemon"
+    /// since narinfos are collected from the local Nix daemon store.
+    pub fn narinfos_source_url(&self) -> Option<String> {
+        match self {
+            ClientSideCatalogStoreConfig::NixCopy { egress_uri, .. } => {
+                Some(egress_uri.to_string())
+            },
+            ClientSideCatalogStoreConfig::MetadataOnly => Some("daemon".to_string()),
+            ClientSideCatalogStoreConfig::Null => None,
+            ClientSideCatalogStoreConfig::Publisher { .. } => None,
+        }
+    }
+
     /// Returns the path of the local signing key if one is configured.
     pub fn local_signing_key_path(&self) -> Option<PathBuf> {
         if let ClientSideCatalogStoreConfig::NixCopy {
@@ -348,9 +362,19 @@ impl ClientSideCatalogStoreConfig {
             ClientSideCatalogStoreConfig::MetadataOnly => {
                 debug!(
                     reason = "metadata-only catalog store",
-                    "skipping artifact upload"
+                    "skipping artifact upload, collecting narinfo from local store"
                 );
-                Ok(None)
+                match Self::get_build_output_nar_infos_local(build_outputs) {
+                    Ok(nar_infos) => Ok(Some(nar_infos)),
+                    Err(e) => {
+                        debug!(
+                            error = %e,
+                            "failed to collect narinfo from local store, \
+                             continuing without narinfo"
+                        );
+                        Ok(None)
+                    },
+                }
             },
             ClientSideCatalogStoreConfig::Null => {
                 debug!(reason = "null catalog store", "skipping artifact upload");
@@ -465,6 +489,10 @@ impl ClientSideCatalogStoreConfig {
     /// Constructs a `nix path-info` command that will get the NAR info for a
     /// store path from the specified store, including the optional information
     /// about the closure size of the store path.
+    ///
+    /// Uses `--recursive` to collect narinfo for the full closure (the store
+    /// path and all its transitive dependencies), matching the behavior of
+    /// the catalog-publisher.
     fn nar_info_cmd(store_url: &str, store_path: &str, auth_netrc_path: &Path) -> Command {
         let mut cmd = nix_base_command();
         cmd.stdout(Stdio::piped());
@@ -472,6 +500,7 @@ impl ClientSideCatalogStoreConfig {
         cmd.arg("--netrc-file").arg(auth_netrc_path);
         cmd.args([
             "path-info",
+            "--recursive",
             "--closure-size",
             "--json",
             "--store",
@@ -481,16 +510,32 @@ impl ClientSideCatalogStoreConfig {
         cmd
     }
 
-    /// Gets the NAR info for a single store path and returns it in the format that the
-    /// catalog server expects e.g. one that is tolerant of the different NAR info formats
-    /// that the `nix` CLI can return.
-    #[instrument(skip_all, fields(progress = format!("Collecting extra build metadata for '{store_path}'")))]
-    fn get_nar_info(
-        source_url: &str,
-        store_path: &str,
-        auth_netrc_path: &Path,
-    ) -> Result<NarInfo, PublishError> {
-        let mut cmd = Self::nar_info_cmd(source_url, store_path, auth_netrc_path);
+    /// Constructs a `nix path-info` command that queries the local Nix daemon
+    /// store. Used for metadata-only publishes where there is no remote egress
+    /// store to query.
+    ///
+    /// Uses `--recursive` to collect narinfo for the full closure, matching
+    /// the behavior of the catalog-publisher.
+    fn nar_info_cmd_local(store_path: &str) -> Command {
+        let mut cmd = nix_base_command();
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+        cmd.args([
+            "path-info",
+            "--recursive",
+            "--closure-size",
+            "--json",
+            "--store",
+            "daemon",
+            store_path,
+        ]);
+        cmd
+    }
+
+    /// Runs a `nix path-info` command and parses the full recursive narinfo
+    /// response.  With `--recursive`, nix returns narinfo for the queried
+    /// store path **and** all its transitive dependencies.
+    fn run_nar_info_cmd(mut cmd: Command, store_path: &str) -> Result<NarInfos, PublishError> {
         debug!(cmd = %cmd.display(), "running nix path-info command");
         let output = cmd.output().map_err(|e| {
             PublishError::Catchall(format!("failed to execute NAR info command: {e}"))
@@ -502,18 +547,40 @@ impl ClientSideCatalogStoreConfig {
         }
         let narinfos = serde_json::from_slice::<NarInfos>(&output.stdout)
             .map_err(PublishError::ParseNarInfo)?;
-        if narinfos.contains_key(store_path) {
-            Ok(narinfos[store_path].clone())
-        } else {
-            Err(PublishError::GetNarInfo(formatdoc! {
+        if !narinfos.contains_key(store_path) {
+            return Err(PublishError::GetNarInfo(formatdoc! {
                 "NAR info for store path '{store_path}' not found in response: {narinfos:?}"
-            }))
+            }));
         }
+        Ok(narinfos)
+    }
+
+    /// Gets the recursive NAR info for a store path from a remote store.
+    #[instrument(skip_all, fields(progress = format!("Collecting extra build metadata for '{store_path}'")))]
+    fn get_nar_info(
+        source_url: &str,
+        store_path: &str,
+        auth_netrc_path: &Path,
+    ) -> Result<NarInfos, PublishError> {
+        let cmd = Self::nar_info_cmd(source_url, store_path, auth_netrc_path);
+        Self::run_nar_info_cmd(cmd, store_path)
+    }
+
+    /// Gets the recursive NAR info for a store path from the local daemon
+    /// store.
+    #[instrument(skip_all, fields(progress = format!("Collecting extra build metadata for '{store_path}'")))]
+    fn get_nar_info_local(store_path: &str) -> Result<NarInfos, PublishError> {
+        let cmd = Self::nar_info_cmd_local(store_path);
+        Self::run_nar_info_cmd(cmd, store_path)
     }
 
     /// Gets the NAR info for each build output and returns it in the format
     /// that the catalog server expects e.g. one that is tolerant of the different
     /// NAR info formats that the `nix` CLI can return.
+    ///
+    /// With `--recursive`, each per-output query returns the full closure.
+    /// Results are merged so that narinfos for all outputs and their transitive
+    /// dependencies are included.
     fn get_build_output_nar_infos(
         source_url: &Url,
         auth_netrc_path: &Path,
@@ -527,9 +594,30 @@ impl ClientSideCatalogStoreConfig {
                 store = source_url.as_str(),
                 "querying NAR info for build output"
             );
-            let nar_info =
+            let output_nar_infos =
                 Self::get_nar_info(source_url.as_str(), &output.store_path, auth_netrc_path)?;
-            nar_infos.insert(output.store_path.clone(), nar_info);
+            nar_infos.extend(output_nar_infos.0.into_iter());
+        }
+        Ok(nar_infos.into())
+    }
+
+    /// Gets the NAR info for each build output from the local daemon store.
+    ///
+    /// Used for metadata-only publishes where there is no remote store.
+    /// With `--recursive`, each per-output query returns the full closure.
+    fn get_build_output_nar_infos_local(
+        build_outputs: &[PackageOutput],
+    ) -> Result<NarInfos, PublishError> {
+        let mut nar_infos = HashMap::new();
+        for output in build_outputs.iter() {
+            debug!(
+                output = output.name,
+                store_path = output.store_path,
+                store = "daemon",
+                "querying NAR info for build output from local store"
+            );
+            let output_nar_infos = Self::get_nar_info_local(&output.store_path)?;
+            nar_infos.extend(output_nar_infos.0.into_iter());
         }
         Ok(nar_infos.into())
     }
@@ -651,10 +739,8 @@ where
             ref_: Some(self.env_metadata.build_repo_meta.ref_.clone()),
             cache_uri: catalog_store_config.upload_url().map(|url| url.to_string()),
             narinfos,
-            // The URL where the narinfos were downloaded from.
-            narinfos_source_url: catalog_store_config
-                .download_url()
-                .map(|url| url.to_string()),
+            // The URL where the narinfos were collected from.
+            narinfos_source_url: catalog_store_config.narinfos_source_url(),
             // This is the version of the narinfo being submitted.  Until we
             // define changes, we'll use the service defaults.
             narinfos_source_version: None,
@@ -1473,6 +1559,89 @@ pub mod tests {
         assert!(res.is_ok(), "Expected publish to succeed, got: {:?}", res);
     }
 
+    #[test]
+    fn metadata_only_collects_narinfos_from_local_store() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
+        let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
+
+        let env_metadata = check_environment_metadata(&flox, &env).unwrap();
+        let package_metadata = check_package_metadata(
+            &mock_base_catalog_url(),
+            env_metadata.toplevel_catalog_ref.as_ref(),
+            EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
+        )
+        .unwrap();
+
+        let build_metadata = check_build_metadata(
+            &flox,
+            env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            None,
+            &env_metadata,
+            &package_metadata.package,
+        )
+        .unwrap();
+
+        let config = ClientSideCatalogStoreConfig::MetadataOnly;
+
+        let narinfos = config
+            .maybe_upload_artifacts(&build_metadata.outputs)
+            .expect("metadata-only narinfo collection should succeed");
+
+        // MetadataOnly should now return Some(narinfos), not None
+        let narinfos = narinfos.expect("narinfos should be Some for metadata-only");
+
+        // Should contain at least the build output store path
+        assert!(
+            !narinfos.is_empty(),
+            "Expected narinfos to be non-empty for metadata-only"
+        );
+
+        // The build output's store path should be in the narinfos
+        for output in build_metadata.outputs.iter() {
+            assert!(
+                narinfos.contains_key(&output.store_path),
+                "Expected narinfos to contain build output store path: {}",
+                output.store_path
+            );
+        }
+
+        // With --recursive, there should be more entries than just the
+        // build outputs (transitive dependencies)
+        assert!(
+            narinfos.len() > build_metadata.outputs.len(),
+            "Expected recursive narinfos to include transitive dependencies, \
+             got {} entries for {} outputs",
+            narinfos.len(),
+            build_metadata.outputs.len()
+        );
+    }
+
+    #[test]
+    fn metadata_only_narinfos_source_url() {
+        let config = ClientSideCatalogStoreConfig::MetadataOnly;
+        assert_eq!(
+            config.narinfos_source_url(),
+            Some("daemon".to_string()),
+            "MetadataOnly should report 'daemon' as narinfos source"
+        );
+    }
+
+    #[test]
+    fn nix_copy_narinfos_source_url() {
+        let config = ClientSideCatalogStoreConfig::NixCopy {
+            ingress_uri: Url::parse("s3://example-bucket").unwrap(),
+            egress_uri: Url::parse("https://example.com").unwrap(),
+            signing_private_key_path: PathBuf::from("/tmp/key"),
+            auth_netrc_path: PathBuf::from("/tmp/netrc"),
+        };
+        assert_eq!(
+            config.narinfos_source_url(),
+            Some("https://example.com/".to_string()),
+            "NixCopy should report egress URL as narinfos source"
+        );
+    }
+
     /// Generate dummy CheckedBuildMetadata and CheckedEnvironmentMetadata that
     /// can be passed to publish()
     ///
@@ -1917,12 +2086,17 @@ pub mod tests {
             full_path.pop(); // drop `bin/`
             full_path
         };
-        let narinfo = ClientSideCatalogStoreConfig::get_nar_info(
-            "daemon",
-            store_path.to_str().unwrap(),
-            &auth_file,
-        )
-        .unwrap();
+        let store_path_str = store_path.to_str().unwrap();
+        let narinfos =
+            ClientSideCatalogStoreConfig::get_nar_info("daemon", store_path_str, &auth_file)
+                .unwrap();
+        // With --recursive, narinfos contains the queried path and its
+        // transitive dependencies.
+        assert!(
+            narinfos.contains_key(store_path_str),
+            "Expected narinfos to contain the queried store path"
+        );
+        let narinfo = &narinfos[store_path_str];
         assert!(
             narinfo.closure_size.is_some(),
             "Expected narinfo to have a closure size"
@@ -1938,6 +2112,12 @@ pub mod tests {
         assert!(
             narinfo.references.is_some(),
             "Expected narinfo to have a references field"
+        );
+        // --recursive should return more entries than just the queried path
+        assert!(
+            narinfos.len() > 1,
+            "Expected --recursive narinfo to include transitive dependencies, got {} entries",
+            narinfos.len()
         );
     }
 
