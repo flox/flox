@@ -175,13 +175,14 @@ sub findFiles {
     # Two-level priority comparison: positive = new wins, negative = old wins, 0 = collision.
     # Public priority compared first (lower wins). Internal priority only breaks
     # ties between outputs of the same package (same parentPath).
-    my $newTargetWins = 0;
-    if (defined $oldTarget) {
-
-        $newTargetWins = $oldPriority - $priority;
-        if ($newTargetWins == 0 && defined $oldParentPath && $parentPath eq $oldParentPath) {
-            $newTargetWins = $oldInternalPriority - $internalPriority;
-        }
+    my $newTargetWins = defined $oldTarget ? $oldPriority - $priority : 0;
+    if (
+        defined $oldTarget
+        && $newTargetWins == 0
+        && defined $oldParentPath
+        && $parentPath eq $oldParentPath
+    ) {
+        $newTargetWins = $oldInternalPriority - $internalPriority;
     }
 
     # If target doesn't exist, create it. If it already exists as a
