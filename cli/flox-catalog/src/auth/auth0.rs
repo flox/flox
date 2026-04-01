@@ -4,8 +4,8 @@ use reqwest::header::{self, HeaderMap, HeaderValue};
 use tracing::debug;
 
 use super::{AuthError, AuthStrategy};
-use crate::token::FloxhubToken;
 use crate::AuthMethod;
+use crate::token::FloxhubToken;
 
 /// Auth0 authentication strategy
 ///
