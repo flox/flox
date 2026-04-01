@@ -362,7 +362,7 @@ impl ClientSideCatalogStoreConfig {
             ClientSideCatalogStoreConfig::MetadataOnly => {
                 debug!(
                     reason = "metadata-only catalog store",
-                    "skipping artifact upload, collecting narinfo from local store"
+                    "collecting narinfo from local store (no artifact upload)"
                 );
                 match Self::get_build_output_nar_infos_local(build_outputs) {
                     Ok(nar_infos) => Ok(Some(nar_infos)),
