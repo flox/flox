@@ -18,6 +18,9 @@ default-members = ["cli/flox", "cli/flox-activations"]
 
 resolver = "2"
 
+[workspace.package]
+edition = "2024"
+
 [workspace.dependencies]
 anyhow = "1"
 async-stream = "0.3.6"
@@ -137,3 +140,4 @@ opt-level = "z"
 strip = true
 lto = true
 codegen-units = 1
+
