@@ -3,7 +3,7 @@
 use std::cmp::min;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::future::{ready, Future};
+use std::future::{Future, ready};
 use std::num::NonZeroU32;
 use std::str::FromStr;
 use std::time::Duration;
@@ -13,16 +13,16 @@ use catalog_api_v1::types::{self as api_types};
 use catalog_api_v1::{Client as APIClient, Error as APIError, RequestHooks};
 use futures::stream::Stream;
 use futures::{StreamExt, TryStreamExt};
-use reqwest::header::{self, HeaderMap};
 use reqwest::StatusCode;
+use reqwest::header::{self, HeaderMap};
 use tracing::{debug, instrument};
 
+use crate::MapApiErrorExt;
 use crate::auth::AuthStrategy;
 use crate::config::CatalogClientConfig;
 use crate::error::{CatalogClientError, ResolveError, SearchError, VersionsError};
 use crate::mock::MockGuard;
 use crate::types::*;
-use crate::MapApiErrorExt;
 
 #[cfg(any(test, feature = "tests"))]
 pub const EMPTY_SEARCH_RESPONSE: &api_types::PackageSearchResult =
@@ -205,7 +205,7 @@ pub trait ClientTrait {
     /// Checks whether the provided store paths have been successfully
     /// published.
     async fn is_publish_complete(&self, store_paths: &[String])
-        -> Result<bool, CatalogClientError>;
+    -> Result<bool, CatalogClientError>;
 
     /// Get information about the base catalog and available stabilities.
     async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, CatalogClientError>;
