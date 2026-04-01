@@ -3,11 +3,11 @@ pub mod activations;
 pub mod canonical_path;
 pub mod data;
 pub mod hook_state;
+pub mod preference;
 #[cfg(feature = "proc_status")]
 pub mod proc_status;
 pub mod process_compose;
 pub mod sentry;
-pub mod preference;
 pub mod trust;
 pub mod util;
 pub mod vars;

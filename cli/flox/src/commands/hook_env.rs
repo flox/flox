@@ -236,12 +236,10 @@ fn is_fast_path(
         .active_dirs
         .iter()
         .any(|dir| !matches!(trust_manager.check(dir), Ok(TrustStatus::Trusted)));
-    let preference_changed = state.active_dirs.iter().any(|dir| {
-        !matches!(
-            preference_manager.check(dir),
-            Ok(PreferenceStatus::Enabled)
-        )
-    });
+    let preference_changed = state
+        .active_dirs
+        .iter()
+        .any(|dir| !matches!(preference_manager.check(dir), Ok(PreferenceStatus::Enabled)));
     state.last_cwd.as_deref() == Some(cwd)
         && !watches_changed
         && discovered_dirs == state.active_dirs
@@ -456,7 +454,10 @@ fn emit_eligibility_notice(
     }
     let is_ancestor = cwd.starts_with(dot_flox_path.parent().unwrap_or(dot_flox_path));
     if is_ancestor {
-        eprintln!("flox: environment at '{}': {message}", dot_flox_path.display());
+        eprintln!(
+            "flox: environment at '{}': {message}",
+            dot_flox_path.display()
+        );
     } else {
         eprintln!(
             "flox: environment at '{}': {message}",

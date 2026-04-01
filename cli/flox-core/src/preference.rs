@@ -143,7 +143,10 @@ mod tests {
         let dot_flox = create_dot_flox(tmp.path());
 
         let mgr = PreferenceManager::new(&state_dir);
-        assert_eq!(mgr.check(&dot_flox).unwrap(), PreferenceStatus::Unregistered);
+        assert_eq!(
+            mgr.check(&dot_flox).unwrap(),
+            PreferenceStatus::Unregistered
+        );
     }
 
     #[test]
