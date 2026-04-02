@@ -575,13 +575,8 @@ impl ClientSideCatalogStoreConfig {
         Self::run_nar_info_cmd(cmd, store_path)
     }
 
-    /// Gets the NAR info for each build output and returns it in the format
-    /// that the catalog server expects e.g. one that is tolerant of the different
-    /// NAR info formats that the `nix` CLI can return.
-    ///
-    /// With `--recursive`, each per-output query returns the full closure.
-    /// Results are merged so that narinfos for all outputs and their transitive
-    /// dependencies are included.
+    /// Retrieves and merges the [NarInfos] closures of the provided
+    /// build outputs from the given store.
     fn get_build_output_nar_infos(
         source_url: &Url,
         auth_netrc_path: &Path,
@@ -602,10 +597,8 @@ impl ClientSideCatalogStoreConfig {
         Ok(nar_infos.into())
     }
 
-    /// Gets the NAR info for each build output from the local daemon store.
-    ///
-    /// Used for metadata-only publishes where there is no remote store.
-    /// With `--recursive`, each per-output query returns the full closure.
+    /// Retrieves and merges the [NarInfos] closures of the provided
+    /// build outputs from the local daemon store.
     fn get_build_output_nar_infos_local(
         build_outputs: &[PackageOutput],
     ) -> Result<NarInfos, PublishError> {
