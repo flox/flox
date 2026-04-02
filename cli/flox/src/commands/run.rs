@@ -288,7 +288,8 @@ mod tests {
         std::fs::create_dir(&bin_dir).unwrap();
         std::fs::write(bin_dir.join("cowsay"), "").unwrap();
 
-        assert_eq!(resolve_binary("cowsay", &bin_dir, "cowsay").unwrap(), "cowsay");
+        let result = resolve_binary("cowsay", &bin_dir, "cowsay").unwrap();
+        assert_eq!(result, "cowsay");
     }
 
     #[test]
@@ -298,7 +299,8 @@ mod tests {
         std::fs::create_dir(&bin_dir).unwrap();
         std::fs::write(bin_dir.join("node"), "").unwrap();
 
-        assert_eq!(resolve_binary("nodejs", &bin_dir, "nodejs").unwrap(), "node");
+        let result = resolve_binary("nodejs", &bin_dir, "nodejs").unwrap();
+        assert_eq!(result, "node");
     }
 
     #[test]
@@ -311,7 +313,8 @@ mod tests {
         std::fs::write(bin_dir.join("npx"), "").unwrap();
 
         // "nodejs" starts with "node", so "node" is the reverse prefix match
-        assert_eq!(resolve_binary("nodejs", &bin_dir, "nodejs").unwrap(), "node");
+        let result = resolve_binary("nodejs", &bin_dir, "nodejs").unwrap();
+        assert_eq!(result, "node");
     }
 
     #[test]
