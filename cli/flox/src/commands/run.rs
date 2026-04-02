@@ -9,8 +9,8 @@ use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
 use tracing::debug;
 
-use super::activate::{Activate, CommandSelect};
 use super::EnvironmentSelect;
+use super::activate::{Activate, CommandSelect};
 use crate::config::Config;
 use crate::subcommand_metric;
 
@@ -67,14 +67,17 @@ impl Run {
         std::fs::create_dir_all(&run_temp_dir)
             .context("Failed to create temporary directory for flox run")?;
 
-        let env_name = EnvironmentName::from_str("run-temp")
-            .expect("'run-temp' is a valid environment name");
+        let env_name =
+            EnvironmentName::from_str("run-temp").expect("'run-temp' is a valid environment name");
         let pointer = PathPointer::new(env_name);
 
         let mut path_env = PathEnvironment::init_bare(pointer, &run_temp_dir, &flox)
             .context("Failed to create temporary environment")?;
 
-        debug!("Installing package '{}' into temporary environment", self.package);
+        debug!(
+            "Installing package '{}' into temporary environment",
+            self.package
+        );
 
         path_env
             .install(&[package], &flox)
