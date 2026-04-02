@@ -5,7 +5,9 @@ use clap::{Parser, Subcommand};
 
 pub mod activate;
 pub mod attach;
+mod dump_env;
 pub mod executive;
+mod fix_env;
 mod fix_fpath;
 pub mod fix_paths;
 mod prepend_and_dedup;
@@ -13,7 +15,9 @@ mod profile_scripts;
 pub mod set_env_dirs;
 
 use activate::ActivateArgs;
+use dump_env::DumpEnvArgs;
 use executive::ExecutiveArgs;
+use fix_env::FixEnvArgs;
 use fix_fpath::FixFpathArgs;
 use fix_paths::FixPathsArgs;
 use prepend_and_dedup::PrependAndDedupArgs;
@@ -57,6 +61,10 @@ pub enum Command {
     PrependAndDedup(PrependAndDedupArgs),
     #[command(about = "Print sourceable output fixing fpath/FPATH for zsh.")]
     FixFpath(FixFpathArgs),
+    #[command(about = "Dump current environment variables as JSON.")]
+    DumpEnv(DumpEnvArgs),
+    #[command(about = "Set FLOX_ENV_DIRS, PATH, and MANPATH in one call.")]
+    FixEnv(FixEnvArgs),
 }
 
 /// Splits PATH-like variables into individual paths, removing any empty strings.

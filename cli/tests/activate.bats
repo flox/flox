@@ -2581,7 +2581,7 @@ EOF
     "$FLOX_BIN" install rustPlatform.rustLibSrc
 
   SCRIPT="$(cat <<'EOF'
-    if ! [ -e "$FLOX_ENV/etc/profile.d/0501_rust.sh" ]; then
+    if ! [ -e "$FLOX_ENV/etc/profile.d/0500_languages.sh" ]; then
       echo "profile script did not exist" >&3
       exit 1
     fi

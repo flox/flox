@@ -26,7 +26,6 @@ fi
 
 _dirname="@coreutils@/bin/dirname"
 _getopt="@getopt@/bin/getopt"
-_jq="@jq@/bin/jq"
 _flox_activations="@flox_activations@"
 
 set -euo pipefail
@@ -200,18 +199,19 @@ if [ "$_command_mode" = "true" ]; then
     fi
   done
 
+  "$_flox_activate_tracer" "fix-env" START
   # shellcheck disable=SC1090
-  source <("$_flox_activations" set-env-dirs --shell bash --flox-env "$FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
-  # shellcheck disable=SC1090
-  source <("$_flox_activations" fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
+  source <("$_flox_activations" fix-env --shell bash --flox-env "$_FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}" --path "$PATH" --manpath "${MANPATH:-}")
+  "$_flox_activate_tracer" "fix-env" END
 fi
 
 if [ "$_command_mode" = "false" ]; then
   # Set umask to ensure files are created with 0600 (may contain secrets)
   umask 077
   # First activation of this environment. Snapshot environment to start.
-  _start_env_json="$_start_state_dir/start.env.json"
-  $_jq -nS env > "$_start_env_json"
+  "$_flox_activate_tracer" "env-snapshot-start" START
+  "$_flox_activations" dump-env -o "$_start_env_json"
+  "$_flox_activate_tracer" "env-snapshot-start" END
 fi
 
 case "$_FLOX_ENV_ACTIVATION_MODE" in
@@ -264,8 +264,9 @@ fi
 
 if [ "$_command_mode" = "false" ]; then
   # Capture ending environment.
-  _end_env_json="$_start_state_dir/end.env.json"
-  $_jq -nS env > "$_end_env_json"
+  "$_flox_activate_tracer" "env-snapshot-end" START
+  "$_flox_activations" dump-env -o "$_end_env_json"
+  "$_flox_activate_tracer" "env-snapshot-end" END
 fi
 
 "$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" END

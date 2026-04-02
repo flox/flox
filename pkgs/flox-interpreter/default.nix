@@ -7,7 +7,6 @@
   getopt,
   gnused,
   iconv,
-  jq,
   ld-floxlib,
   nawk,
   process-compose,
@@ -61,7 +60,6 @@ let
       coreutils
       findutils
       getopt
-      jq
       nawk
       ;
     # Note that substitution doesn't work with variables containing "-"

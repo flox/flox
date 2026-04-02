@@ -18,7 +18,13 @@ fn try_main() -> Result<(), Error> {
         return executive_args.handle();
     };
 
-    let subsystem_verbosity =
+    // dump-env is a simple command that doesn't need the logger or profiling.
+    // Skip initialization to minimize startup overhead.
+    if let cli::Command::DumpEnv(dump_env_args) = args.command {
+        return dump_env_args.handle();
+    };
+
+    let (subsystem_verbosity, _profiling_guard) =
         logger::init_stderr_logger(args.verbosity).context("failed to initialize logger")?;
 
     // Propagate PID field to all spans.
@@ -47,5 +53,7 @@ fn try_main() -> Result<(), Error> {
             args.handle();
             Ok(())
         },
+        cli::Command::DumpEnv(args) => args.handle(),
+        cli::Command::FixEnv(args) => args.handle(),
     }
 }
