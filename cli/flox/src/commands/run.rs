@@ -83,7 +83,32 @@ impl Run {
             .install(&[package], &flox)
             .with_context(|| format!("Failed to install package '{}'", self.package))?;
 
-        let concrete_environment = ConcreteEnvironment::Path(path_env);
+        let mut concrete_environment = ConcreteEnvironment::Path(path_env);
+
+        // Resolve the binary to run. If --bin was explicitly provided, use it as-is.
+        // Otherwise, try to find the best binary in the built environment.
+        let rendered = concrete_environment
+            .rendered_env_links(&flox)
+            .context("Failed to get environment paths")?;
+        let bin_dir = rendered.runtime.join("bin");
+        let binary_name = if self.bin.is_some() {
+            // User explicitly chose a binary — validate it exists
+            if bin_dir.is_dir() && !bin_dir.join(&binary_name).exists() {
+                let available = list_binaries(&bin_dir);
+                let list = if available.is_empty() {
+                    String::new()
+                } else {
+                    format!("\n\nAvailable binaries: {}", available.join(", "))
+                };
+                bail!(
+                    "Binary '{binary_name}' not found in package '{package}'.{list}",
+                    package = self.package,
+                );
+            }
+            binary_name
+        } else {
+            resolve_binary(&binary_name, &bin_dir, &self.package)?
+        };
 
         // Build the exec command: [binary_name, args...]
         let mut exec_args = vec![binary_name.clone()];
@@ -136,6 +161,97 @@ fn derive_binary_name(package_spec: &str) -> String {
         .to_string()
 }
 
+/// List binary names available in a bin directory.
+fn list_binaries(bin_dir: &std::path::Path) -> Vec<String> {
+    let mut bins: Vec<String> = std::fs::read_dir(bin_dir)
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.file_type()
+                .map(|ft| ft.is_file() || ft.is_symlink())
+                .unwrap_or(false)
+        })
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .collect();
+    bins.sort();
+    bins
+}
+
+/// Resolve the best binary to run from a package's bin directory.
+///
+/// Strategy:
+/// 1. If the derived name exists in bin/, use it (e.g. "cowsay" → "cowsay")
+/// 2. If only one binary exists, use it
+/// 3. If the derived name is a prefix of exactly one binary, use it (e.g. "python3" → "python3.11")
+/// 4. If a binary is a prefix of the derived name, use it (e.g. "nodejs" → "node")
+/// 5. Otherwise, error with the list of available binaries
+fn resolve_binary(
+    derived_name: &str,
+    bin_dir: &std::path::Path,
+    package_spec: &str,
+) -> Result<String> {
+    // Exact match
+    if bin_dir.join(derived_name).exists() {
+        return Ok(derived_name.to_string());
+    }
+
+    // No bin directory or empty — fall through to exec (let it fail naturally)
+    if !bin_dir.is_dir() {
+        return Ok(derived_name.to_string());
+    }
+
+    let available = list_binaries(bin_dir);
+    if available.is_empty() {
+        return Ok(derived_name.to_string());
+    }
+
+    // Only one binary — use it
+    if available.len() == 1 {
+        let bin = available[0].clone();
+        debug!(
+            "Binary '{}' not found, using only available binary '{}'",
+            derived_name, bin
+        );
+        return Ok(bin);
+    }
+
+    // Derived name is a prefix of exactly one binary (python3 → python3.11)
+    let prefix_matches: Vec<&String> = available
+        .iter()
+        .filter(|b| b.starts_with(derived_name))
+        .collect();
+    if prefix_matches.len() == 1 {
+        let bin = prefix_matches[0].clone();
+        debug!(
+            "Binary '{}' not found, using prefix match '{}'",
+            derived_name, bin
+        );
+        return Ok(bin);
+    }
+
+    // A binary is a prefix of the derived name (nodejs → node)
+    let reverse_matches: Vec<&String> = available
+        .iter()
+        .filter(|b| derived_name.starts_with(b.as_str()))
+        .collect();
+    if reverse_matches.len() == 1 {
+        let bin = reverse_matches[0].clone();
+        debug!(
+            "Binary '{}' not found, using reverse prefix match '{}'",
+            derived_name, bin
+        );
+        return Ok(bin);
+    }
+
+    bail!(
+        "Binary '{derived_name}' not found in package '{package_spec}'.\n\
+         Try: flox run --bin <BINARY> {package_spec} -- ...\n\n\
+         Available binaries: {}",
+        available.join(", ")
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,5 +279,52 @@ mod tests {
     #[test]
     fn test_derive_binary_name_version_and_path() {
         assert_eq!(derive_binary_name("python3Packages.numpy@1.24"), "numpy");
+    }
+
+    #[test]
+    fn test_resolve_binary_exact_match() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin_dir = dir.path().join("bin");
+        std::fs::create_dir(&bin_dir).unwrap();
+        std::fs::write(bin_dir.join("cowsay"), "").unwrap();
+
+        assert_eq!(resolve_binary("cowsay", &bin_dir, "cowsay").unwrap(), "cowsay");
+    }
+
+    #[test]
+    fn test_resolve_binary_single_available() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin_dir = dir.path().join("bin");
+        std::fs::create_dir(&bin_dir).unwrap();
+        std::fs::write(bin_dir.join("node"), "").unwrap();
+
+        assert_eq!(resolve_binary("nodejs", &bin_dir, "nodejs").unwrap(), "node");
+    }
+
+    #[test]
+    fn test_resolve_binary_reverse_prefix() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin_dir = dir.path().join("bin");
+        std::fs::create_dir(&bin_dir).unwrap();
+        std::fs::write(bin_dir.join("node"), "").unwrap();
+        std::fs::write(bin_dir.join("corepack"), "").unwrap();
+        std::fs::write(bin_dir.join("npx"), "").unwrap();
+
+        // "nodejs" starts with "node", so "node" is the reverse prefix match
+        assert_eq!(resolve_binary("nodejs", &bin_dir, "nodejs").unwrap(), "node");
+    }
+
+    #[test]
+    fn test_resolve_binary_no_match_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin_dir = dir.path().join("bin");
+        std::fs::create_dir(&bin_dir).unwrap();
+        std::fs::write(bin_dir.join("foo"), "").unwrap();
+        std::fs::write(bin_dir.join("bar"), "").unwrap();
+
+        let result = resolve_binary("baz", &bin_dir, "somepkg");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Available binaries: bar, foo"));
     }
 }
