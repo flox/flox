@@ -19,6 +19,7 @@ mod lock_manifest;
 mod publish;
 mod pull;
 mod push;
+mod run;
 mod search;
 mod services;
 mod services_socket;
@@ -561,6 +562,10 @@ enum UseCommands {
         )]
         services::ServicesCommands,
     ),
+
+    /// Run a command from a package without installing it
+    #[bpaf(command, footer("Run 'man flox-run' for more details."))]
+    Run(#[bpaf(external(run::run))] run::Run),
 }
 
 impl UseCommands {
@@ -568,6 +573,7 @@ impl UseCommands {
         match self {
             UseCommands::Activate(args) => args.handle(config, flox).await?,
             UseCommands::Services(args) => args.handle(config, flox).await?,
+            UseCommands::Run(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
