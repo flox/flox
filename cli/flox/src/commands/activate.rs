@@ -174,31 +174,41 @@ impl Activate {
             || invocation_type == InvocationType::InPlace)
             && config.flox.upgrade_notifications.unwrap_or(true)
         {
-            // Read the results of a previous upgrade check
-            // and print a message if an upgrade is available.
             notify_upgrades_if_available(&flox, &mut concrete_environment, &self.environment)?;
-        } else {
-            debug!("Upgrade notification disabled");
         }
 
-        // Spawn a detached process to check for upgrades in the background.
+        // Spawn the background upgrade check on a thread so the fork+exec
+        // runs concurrently with activate_build_command rather than blocking it.
         let environment =
             UninitializedEnvironment::from_concrete_environment(&concrete_environment);
-        spawn_detached_check_for_upgrades_process(
-            &environment,
-            None,
-            &concrete_environment.log_path()?,
-            None,
-        )?;
+        let log_path = concrete_environment.log_path()?.to_path_buf();
+        let upgrade_check_handle = tokio::task::spawn_blocking(move || {
+            if let Err(e) = spawn_detached_check_for_upgrades_process(
+                &environment,
+                None,
+                &log_path,
+                None,
+            ) {
+                debug!("Background upgrade check failed: {e:#}");
+            }
+        });
 
-        self.activate(
-            config,
-            flox,
-            concrete_environment,
-            invocation_type,
-            Vec::new(),
-        )
-        .await
+        let result = self
+            .activate(
+                config,
+                flox,
+                concrete_environment,
+                invocation_type,
+                Vec::new(),
+            )
+            .await;
+
+        // Wait for the upgrade check to finish before returning — it should
+        // have completed during activate, but we don't want to
+        // leave an orphan task if activate was fast.
+        let _ = upgrade_check_handle.await;
+
+        result
     }
 
     /// This function contains the bulk of the implementation for
