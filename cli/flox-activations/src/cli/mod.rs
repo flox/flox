@@ -13,6 +13,7 @@ pub mod fix_paths;
 mod prepend_and_dedup;
 mod profile_scripts;
 pub mod set_env_dirs;
+mod setup_env;
 
 use activate::ActivateArgs;
 use dump_env::DumpEnvArgs;
@@ -23,6 +24,7 @@ use fix_paths::FixPathsArgs;
 use prepend_and_dedup::PrependAndDedupArgs;
 use profile_scripts::ProfileScriptsArgs;
 use set_env_dirs::SetEnvDirsArgs;
+use setup_env::SetupEnvArgs;
 
 const SHORT_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
 const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
@@ -65,6 +67,8 @@ pub enum Command {
     DumpEnv(DumpEnvArgs),
     #[command(about = "Set FLOX_ENV_DIRS, PATH, and MANPATH in one call.")]
     FixEnv(FixEnvArgs),
+    #[command(about = "Compute all profile.d env var changes in a single process.")]
+    SetupEnv(SetupEnvArgs),
 }
 
 /// Splits PATH-like variables into individual paths, removing any empty strings.

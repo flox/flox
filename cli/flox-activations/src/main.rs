@@ -18,10 +18,13 @@ fn try_main() -> Result<(), Error> {
         return executive_args.handle();
     };
 
-    // dump-env is a simple command that doesn't need the logger or profiling.
-    // Skip initialization to minimize startup overhead.
+    // dump-env and setup-env are simple commands that don't need the logger
+    // or profiling. Skip initialization to minimize startup overhead.
     if let cli::Command::DumpEnv(dump_env_args) = args.command {
         return dump_env_args.handle();
+    };
+    if let cli::Command::SetupEnv(setup_env_args) = args.command {
+        return setup_env_args.handle();
     };
 
     let (subsystem_verbosity, _profiling_guard) =
@@ -55,5 +58,6 @@ fn try_main() -> Result<(), Error> {
         },
         cli::Command::DumpEnv(args) => args.handle(),
         cli::Command::FixEnv(args) => args.handle(),
+        cli::Command::SetupEnv(args) => args.handle(),
     }
 }
