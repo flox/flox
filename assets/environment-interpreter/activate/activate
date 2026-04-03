@@ -40,10 +40,6 @@ set -euo pipefail
 # These all derive from the `flox-interpreter` package.
 export _activate_d="__OUT__/activate.d"
 
-# Source helpers for set_manifest_vars (still needed for envrc sourcing)
-# shellcheck source-path=SCRIPTDIR/activate.d
-source "${_activate_d}/helpers.bash"
-
 # Options can come from env vars (fast path from Rust caller) or CLI args
 # (standalone invocation / tests).
 if [ -n "${_FLOX_ACTIVATE_ENV:-}" ]; then
@@ -55,7 +51,12 @@ if [ -n "${_FLOX_ACTIVATE_ENV:-}" ]; then
   # No command mode when called from Rust (commands are handled there)
   _command_mode="false"
 else
-  # Fallback: parse CLI args for standalone/test invocation
+  # Fallback: parse CLI args for standalone/test invocation.
+  # Source helpers only in fallback path (provides source_profile_d,
+  # set_manifest_vars for standalone/test use). The Rust fast path
+  # inlines set_manifest_vars and uses setup-env instead of profile.d.
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/helpers.bash"
   _getopt="@getopt@/bin/getopt"
   OPTIONS="e:c:m:"
   LONGOPTS="command:,env:,env-project:,mode:,start-state-dir:,skip-hook-on-activate"
@@ -155,9 +156,13 @@ fi
 source <("$_flox_activations" setup-env "${_setup_env_args[@]}")
 _trace "setup-env" END
 
-# Set static environment variables from the manifest.
+# Set static environment variables from the manifest (inlined from
+# helpers.bash to avoid sourcing the full helpers file on the fast path).
 _trace "set_manifest_vars" START
-set_manifest_vars "$_FLOX_ENV"
+if [ -f "$_FLOX_ENV/activate.d/envrc" ]; then
+  # shellcheck disable=SC1091 # from rendered environment
+  source "$_FLOX_ENV/activate.d/envrc"
+fi
 _trace "set_manifest_vars" END
 
 if [ "$_skip_hook_on_activate" = "false" ]; then
