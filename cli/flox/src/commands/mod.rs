@@ -184,8 +184,10 @@ impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
     pub async fn handle(self, mut config: crate::config::Config) -> Result<()> {
         // ensure xdg dirs exist
-        tokio::fs::create_dir_all(&config.flox.config_dir).await?;
-        tokio::fs::create_dir_all(&config.flox.data_dir).await?;
+        // Use sync fs to avoid tokio thread pool overhead — these are fast stat
+        // calls when dirs already exist (which is the common case).
+        std::fs::create_dir_all(&config.flox.config_dir)?;
+        std::fs::create_dir_all(&config.flox.data_dir)?;
         let flox_dirs = BaseDirectories::with_prefix(FLOX_DIR_NAME);
         // runtime_dir is used for socket paths,
         // so we have to try to keep it short.
@@ -194,11 +196,11 @@ impl FloxArgs {
             Ok(runtime_dir) => runtime_dir.to_path_buf(),
             Err(_) => config.flox.cache_dir.join("run"),
         };
-        tokio::fs::create_dir_all(&runtime_dir).await?;
+        std::fs::create_dir_all(&runtime_dir)?;
 
         // prepare a temp dir for the run:
         let process_dir = config.flox.cache_dir.join("process");
-        tokio::fs::create_dir_all(&process_dir).await?;
+        std::fs::create_dir_all(&process_dir)?;
 
         // `temp_dir` will automatically be removed from disk when the function returns
         let temp_dir = TempDir::new_in(process_dir)?;
