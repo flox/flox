@@ -1,5 +1,6 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2154 # _flox_activate_tracer is set by the caller (activate script)
+# shellcheck disable=SC2153 # FLOX_ENV is set by the Rust caller, not a misspelling of _FLOX_ENV
 
 _flox_activations="@flox_activations@"
 
