@@ -32,6 +32,9 @@ use signal_hook::iterator::Signals;
 use tracing::{debug, error};
 
 use crate::activate_script_builder::old_cli_envs;
+use crate::activate_script_builder::FLOX_ENV_DIRS_VAR;
+use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
+use crate::cli::set_env_dirs::fix_env_dirs_var;
 use crate::cli::executive::ExecutiveCtx;
 use crate::cli::setup_env::{
     ProfileEnvConfig, ToolPaths, compute_profile_env, parse_envrc,
@@ -212,10 +215,7 @@ fn run_activation(
     let config = ProfileEnvConfig {
         mode: context.mode.to_string(),
         flox_env: flox_env_path.to_path_buf(),
-        env_dirs: vars_from_env
-            .flox_env_dirs
-            .clone()
-            .unwrap_or_default(),
+        env_dirs: new_env_dirs,
         ld_floxlib: tool_paths.ld_floxlib,
         ldconfig: tool_paths.ldconfig,
         find_bin: tool_paths.find,
@@ -228,35 +228,33 @@ fn run_activation(
         "computed profile env vars in-process"
     );
 
-    // 3. Parse envrc (manifest [vars] + SSL/locale defaults)
+    // 4. Parse envrc (manifest [vars] + SSL/locale defaults)
     let envrc_path = flox_env_path.join("activate.d/envrc");
     let envrc_vars = parse_envrc(&envrc_path)?;
     debug!(num_vars = envrc_vars.len(), "parsed envrc vars");
 
-    // 4. Check if hook-on-activate exists
+    // 5. Check if hook-on-activate exists
     let hook_path = flox_env_path.join("activate.d/hook-on-activate");
     let has_hook = hook_path.exists();
 
     if has_hook {
-        // Hook exists: must run bash to source the hook and capture env changes.
-        // Build a minimal bash command that:
-        //   a) sources the hook
-        //   b) writes end.env.json
         debug!("hook-on-activate exists, running via bash");
         run_activation_with_hook(
             context,
-            subsystem_verbosity,
-            vars_from_env,
             start_state_dir,
+            &activation_vars,
             &profile_env,
             &envrc_vars,
             &hook_path,
         )?;
     } else {
         // No hook: compute end environment entirely in Rust.
-        // The end env = start env + profile vars + envrc vars.
+        // end env = start env + activation context + profile vars + envrc vars
         debug!("no hook-on-activate, skipping bash entirely");
         let mut end_env = start_env;
+        for (k, v) in &activation_vars {
+            end_env.insert(k.clone(), v.clone());
+        }
         for (k, v) in &profile_env {
             end_env.insert(k.clone(), v.clone());
         }
@@ -271,13 +269,13 @@ fn run_activation(
 }
 
 /// Run activation with a hook-on-activate script via a minimal bash process.
-/// All profile.d and envrc vars are pre-applied as env vars on the Command,
-/// so bash only needs to source the hook and dump the final environment.
+/// All env vars (activation context, profile.d, envrc) are pre-applied via
+/// Command::envs(), so bash only needs to source the hook and dump the
+/// final environment.
 fn run_activation_with_hook(
     context: &ActivateCtx,
-    subsystem_verbosity: u32,
-    vars_from_env: &VarsFromEnvironment,
     start_state_dir: &Path,
+    activation_vars: &HashMap<String, String>,
     profile_env: &HashMap<String, String>,
     envrc_vars: &HashMap<String, String>,
     hook_path: &Path,
@@ -285,8 +283,7 @@ fn run_activation_with_hook(
     let flox_activations_bin = (*FLOX_ACTIVATIONS_BIN).clone();
     let end_json_path = start_state_dir.join(ENV_DIFF_END_JSON);
 
-    // Build a minimal bash script that ONLY sources the hook and captures env.
-    // All other env setup (profile.d, envrc) is pre-applied via Command::envs().
+    // Minimal bash script: source the hook and capture final env.
     let bash_script = format!(
         r#"set +euo pipefail
 source "{hook}" 1>&2
@@ -300,28 +297,10 @@ set -euo pipefail
     let mut command = Command::new("bash");
     command.args(["-c", &bash_script]);
 
-    // Apply the standard activation env vars that other scripts may need
-    command.envs(old_cli_envs(
-        &context.attach_ctx,
-        context.project_ctx.as_ref(),
-    ));
-
-    // Apply profile.d computed vars
+    // Apply all pre-computed env vars so the hook runs in the correct environment
+    command.envs(activation_vars);
     command.envs(profile_env);
-
-    // Apply envrc vars
     command.envs(envrc_vars);
-
-    // Apply FLOX_ENV and other required vars
-    command.env("FLOX_ENV", &context.attach_ctx.env);
-    if let Some(project) = &context.project_ctx {
-        command.env("FLOX_ENV_PROJECT", &project.env_project);
-    }
-    command.env(
-        "FLOX_ENV_CACHE",
-        &context.attach_ctx.env_cache,
-    );
-    command.env("FLOX_ENV_DESCRIPTION", &context.attach_ctx.env_description);
 
     debug!("spawning minimal bash for hook-on-activate");
     let status = {
@@ -345,9 +324,16 @@ set -euo pipefail
     Ok(())
 }
 
-/// Write an environment variable HashMap to a JSON file.
+/// Write an environment variable HashMap to a JSON file with 0600 permissions.
+/// Uses restrictive permissions since env snapshots may contain secrets.
 fn write_env_json(path: &Path, env: &HashMap<String, String>) -> Result<()> {
-    let file = fs::File::create(path)?;
+    use std::os::unix::fs::OpenOptionsExt;
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
     let mut writer = std::io::BufWriter::new(file);
     serde_json::to_writer(&mut writer, env)?;
     writer.write_all(b"\n")?;
