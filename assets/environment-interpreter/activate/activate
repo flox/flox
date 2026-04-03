@@ -125,21 +125,9 @@ if [ "$_command_mode" = "true" ]; then
   _trace "fix-env" END
 fi
 
-if [ "$_command_mode" = "false" ]; then
-  # Set umask to ensure files are created with 0600 (may contain secrets)
-  umask 077
-  _start_env_json="$_start_state_dir/start.env.json"
-  _end_env_json="$_start_state_dir/end.env.json"
-  # First activation of this environment. Snapshot environment to start.
-  _trace "env-snapshot-start" START
-  "$_flox_activations" dump-env -o "$_start_env_json"
-  _trace "env-snapshot-start" END
-fi
-
-# Compute all profile.d env var changes in a single Rust process.
-# This replaces sourcing 4+ shell scripts, spawning python3 for version
-# detection, uname for platform detection, and find/ldconfig/nawk for CUDA.
-_trace "setup-env" START
+# Build setup-env arguments. This single Rust command replaces sourcing 4+
+# shell scripts, spawning python3 for version detection, uname for platform
+# detection, and find/ldconfig/nawk for CUDA.
 _setup_env_args=(
   --mode "$_FLOX_ENV_ACTIVATION_MODE"
   --flox-env "$_FLOX_ENV"
@@ -152,6 +140,19 @@ _setup_env_args=(
 if [ -n "${FLOX_ENV_PROJECT:-}" ]; then
   _setup_env_args+=(--env-project "$FLOX_ENV_PROJECT")
 fi
+
+if [ "$_command_mode" = "false" ]; then
+  # Set umask to ensure files are created with 0600 (may contain secrets)
+  umask 077
+  _start_env_json="$_start_state_dir/start.env.json"
+  _end_env_json="$_start_state_dir/end.env.json"
+  # Combine env snapshot + profile.d setup into one process spawn.
+  # The --dump-env-start flag writes start.env.json BEFORE computing
+  # profile changes, saving one process spawn (~5-6ms).
+  _setup_env_args+=(--dump-env-start "$_start_env_json")
+fi
+
+_trace "setup-env" START
 # shellcheck disable=SC1090
 source <("$_flox_activations" setup-env "${_setup_env_args[@]}")
 _trace "setup-env" END

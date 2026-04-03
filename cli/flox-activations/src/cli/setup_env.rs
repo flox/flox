@@ -49,10 +49,27 @@ pub struct SetupEnvArgs {
     /// Path to FLOX_ENV_PROJECT (optional, for pip.ini creation).
     #[arg(long)]
     pub env_project: Option<PathBuf>,
+
+    /// If set, dump current environment as JSON to this path before computing
+    /// profile changes. Combines the dump-env-start step with setup-env to
+    /// eliminate one process spawn (~5-6ms savings).
+    #[arg(long)]
+    pub dump_env_start: Option<PathBuf>,
 }
 
 impl SetupEnvArgs {
     pub fn handle(&self) -> Result<()> {
+        // If requested, dump the current environment snapshot before computing
+        // profile changes. This must happen before any env modifications.
+        if let Some(ref path) = self.dump_env_start {
+            let env_map: std::collections::HashMap<String, String> =
+                std::env::vars().collect();
+            let file = fs::File::create(path)?;
+            let mut writer = std::io::BufWriter::new(file);
+            serde_json::to_writer(&mut writer, &env_map)?;
+            std::io::Write::write_all(&mut writer, b"\n")?;
+        }
+
         let mut stdout = std::io::stdout();
         self.handle_inner(&mut stdout)
     }
@@ -556,6 +573,7 @@ mod test {
             ldconfig: "__LINUX_ONLY__".to_string(),
             find_bin: "".to_string(),
             env_project: None,
+            dump_env_start: None,
         };
         args.handle_inner(&mut buf).unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -575,6 +593,7 @@ mod test {
             ldconfig: "__LINUX_ONLY__".to_string(),
             find_bin: "".to_string(),
             env_project: None,
+            dump_env_start: None,
         };
         args.handle_inner(&mut buf).unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -601,6 +620,7 @@ mod test {
             ldconfig: "__LINUX_ONLY__".to_string(),
             find_bin: "".to_string(),
             env_project: None,
+            dump_env_start: None,
         };
         let exports = vec![("FOO", "bar".to_string())];
         let result = args.format_exports(&exports);
@@ -618,6 +638,7 @@ mod test {
             ldconfig: "__LINUX_ONLY__".to_string(),
             find_bin: "".to_string(),
             env_project: None,
+            dump_env_start: None,
         };
         let exports = vec![("FOO", "bar".to_string())];
         let result = args.format_exports(&exports);
@@ -648,6 +669,7 @@ mod test {
                 ldconfig: "__LINUX_ONLY__".to_string(),
                 find_bin: "".to_string(),
                 env_project: None,
+                dump_env_start: None,
             };
             args.handle_inner(&mut buf).unwrap();
             let output = String::from_utf8(buf).unwrap();
