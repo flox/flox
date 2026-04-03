@@ -28,8 +28,16 @@ impl EnvDiff {
         let start_json = activation_state_dir.as_ref().join("start.env.json");
         let end_json = activation_state_dir.as_ref().join("end.env.json");
 
-        let start_env = parse_env_json(start_json)?;
-        let end_env = parse_env_json(end_json)?;
+        // Read both files in parallel to reduce I/O latency
+        let end_json_clone = end_json.clone();
+        let end_handle = std::thread::spawn(move || parse_env_json(&end_json_clone));
+
+        let start_env = parse_env_json(&start_json)
+            .with_context(|| format!("Failed to read {}", start_json.display()))?;
+        let end_env = end_handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("thread panicked reading {}", end_json.display()))?
+            .with_context(|| format!("Failed to read {}", end_json.display()))?;
 
         Ok(from_parsed_files(&start_env, &end_env))
     }
