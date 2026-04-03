@@ -13,7 +13,7 @@ pub mod fix_paths;
 mod prepend_and_dedup;
 mod profile_scripts;
 pub mod set_env_dirs;
-mod setup_env;
+pub mod setup_env;
 
 use activate::ActivateArgs;
 use dump_env::DumpEnvArgs;

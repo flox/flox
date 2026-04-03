@@ -1,0 +1,5 @@
+{
+  "ld_floxlib": "@ld_floxlib@/lib/ld-floxlib.so",
+  "ldconfig": "@iconv@/bin/ldconfig",
+  "find": "@findutils@/bin/find"
+}
