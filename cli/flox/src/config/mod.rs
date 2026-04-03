@@ -294,22 +294,42 @@ fn raw_config_from_parts(
             .required(false),
     );
 
-    // Override via env variables
-    let builder = {
-        let mut flox_envs = env
-            .into_iter()
-            .filter_map(|(k, v)| k.strip_prefix("FLOX_").map(|k| (k.to_owned(), v)))
-            .collect::<Vec<_>>();
-        builder
-            .add_source(mk_environment(&mut flox_envs, "NIX"))
-            .add_source(mk_environment(&mut flox_envs, "GITHUB"))
-            .add_source(mk_environment(&mut flox_envs, "FEATURES"))
-            .add_source(
-                Environment::default()
-                    .source(Some(HashMap::from_iter(flox_envs)))
-                    .try_parsing(true),
-            )
-    };
+    // Override config with FLOX_* environment variables in a single pass,
+    // rather than creating 4 separate Environment sources that each
+    // iterate+clone the env var list.
+    // Maps env var names to config keys:
+    //   FLOX_NIX_FOO      → nix.foo
+    //   FLOX_GITHUB_FOO   → github.foo
+    //   FLOX_FEATURES_FOO → features.foo
+    //   FLOX_FOO           → foo
+    let mut builder = builder;
+    for (key, value) in env {
+        let suffix = match key.strip_prefix("FLOX_") {
+            Some(s) => s,
+            None => continue,
+        };
+        let config_key = if let Some(rest) = suffix.strip_prefix("NIX_") {
+            format!("nix.{}", rest.to_lowercase())
+        } else if let Some(rest) = suffix.strip_prefix("GITHUB_") {
+            format!("github.{}", rest.to_lowercase())
+        } else if let Some(rest) = suffix.strip_prefix("FEATURES_") {
+            format!("features.{}", rest.to_lowercase())
+        } else {
+            suffix.to_lowercase()
+        };
+        // Parse value types the same way the config crate's Environment
+        // source does with try_parsing(true): bools, ints, floats, strings.
+        let typed_value: config::Value = if let Ok(b) = value.parse::<bool>() {
+            b.into()
+        } else if let Ok(i) = value.parse::<i64>() {
+            i.into()
+        } else if let Ok(f) = value.parse::<f64>() {
+            f.into()
+        } else {
+            value.into()
+        };
+        builder = builder.set_override(&config_key, typed_value)?;
+    }
 
     let final_config = builder.build()?;
     Ok(final_config)
@@ -463,21 +483,6 @@ impl Config {
     }
 }
 
-fn mk_environment(envs: &mut Vec<(String, String)>, prefix: &str) -> Environment {
-    let (prefixed_envs, flox_envs): (HashMap<String, String>, Vec<(String, String)>) = envs
-        .iter()
-        .partition_map(|(k, v)| match k.strip_prefix(&format!("{prefix}_")) {
-            Some(suffix) => Either::Left((format!("{prefix}#{suffix}"), v.to_owned())),
-            None => Either::Right((k.to_owned(), v.to_owned())),
-        });
-    let environment = Environment::with_prefix(prefix)
-        .keep_prefix(true)
-        .separator("#")
-        .source(Some(prefixed_envs))
-        .try_parsing(true);
-    *envs = flox_envs;
-    environment
-}
 
 #[cfg(test)]
 mod tests {
