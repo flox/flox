@@ -72,7 +72,7 @@ my %symlinks;
 #
 # That ensures the whole directory tree needed by pathsToLink is
 # created as directories and not symlinks.
-$symlinks{""} = ["", 0, 0, ""];
+$symlinks{""} = ["", 0];
 for my $p (@pathsToLink) {
     my @parts = split '/', $p;
 
@@ -80,14 +80,14 @@ for my $p (@pathsToLink) {
     for my $x (@parts) {
         $cur = $cur . "/$x";
         $cur = "" if $cur eq "/";
-        $symlinks{$cur} = ["", 0, 0, ""];
+        $symlinks{$cur} = ["", 0];
     }
 }
 
 sub findFiles;
 
 sub findFilesInDir {
-    my ($relName, $target, $ignoreCollisions, $checkCollisionContents, $priority, $internalPriority, $parentPath) = @_;
+    my ($relName, $target, $ignoreCollisions, $checkCollisionContents, $priority) = @_;
 
     opendir DIR, "$target" or die "cannot open `$target': $!";
     my @names = readdir DIR or die;
@@ -95,7 +95,7 @@ sub findFilesInDir {
 
     foreach my $name (sort @names) {
         next if $name eq "." || $name eq "..";
-        findFiles("$relName/$name", "$target/$name", $name, $ignoreCollisions, $checkCollisionContents, $priority, $internalPriority, $parentPath);
+        findFiles("$relName/$name", "$target/$name", $name, $ignoreCollisions, $checkCollisionContents, $priority);
     }
 }
 
@@ -150,7 +150,7 @@ sub parseStorePath($) {
 }
 
 sub findFiles {
-    my ($relName, $target, $baseName, $ignoreCollisions, $checkCollisionContents, $priority, $internalPriority, $parentPath) = @_;
+    my ($relName, $target, $baseName, $ignoreCollisions, $checkCollisionContents, $priority) = @_;
 
     # The store path must not be a file
     if (-f $target && isStorePath $target) {
@@ -167,31 +167,18 @@ sub findFiles {
         $baseName eq "log" ||
         ! (hasPathsToLink($relName) || isInPathsToLink($relName));
 
-    my ($oldTarget, $oldPriority, $oldInternalPriority, $oldParentPath) = @{$symlinks{$relName} // [undef, undef, undef, undef]};
-
-    # Two-level priority comparison: positive = new wins, negative = old wins, 0 = collision.
-    # Public priority compared first (lower wins). Internal priority only breaks
-    # ties between outputs of the same package (same parentPath).
-    my $newTargetWins = defined $oldTarget ? $oldPriority - $priority : 0;
-    if (
-        defined $oldTarget
-        && $newTargetWins == 0
-        && defined $oldParentPath
-        && $parentPath eq $oldParentPath
-    ) {
-        $newTargetWins = $oldInternalPriority - $internalPriority;
-    }
+    my ($oldTarget, $oldPriority) = @{$symlinks{$relName} // [undef, undef]};
 
     # If target doesn't exist, create it. If it already exists as a
     # symlink to a file (not a directory) in a lower-priority package,
     # overwrite it.
-    if (!defined $oldTarget || ($newTargetWins > 0 && ($oldTarget ne "" && ! -d $oldTarget))) {
+    if (!defined $oldTarget || ($priority < $oldPriority && ($oldTarget ne "" && ! -d $oldTarget))) {
         # If target is a dangling symlink, emit a warning.
         if (-l $target && ! -e $target) {
             my $link = readlink $target;
             warn "creating dangling symlink `$out$extraPrefix/$relName' -> `$target' -> `$link'\n";
         }
-        $symlinks{$relName} = [$target, $priority, $internalPriority, $parentPath];
+        $symlinks{$relName} = [$target, $priority];
         return;
     }
 
@@ -203,14 +190,14 @@ sub findFiles {
     ) {
         # Prefer the target that is not a symlink, if any
         if (-l $oldTarget && ! -l $target) {
-            $symlinks{$relName} = [$target, $priority, $internalPriority, $parentPath];
+            $symlinks{$relName} = [$target, $priority];
         }
         return;
     }
 
     # If target already exists as a symlink to a file (not a
     # directory) in a higher-priority package, skip.
-    if (defined $oldTarget && $newTargetWins < 0 && $oldTarget ne "" && ! -d $oldTarget) {
+    if (defined $oldTarget && $priority > $oldPriority && $oldTarget ne "" && ! -d $oldTarget) {
         return;
     }
 
@@ -235,6 +222,7 @@ sub findFiles {
             # Improve upon the default collision message from upstream.
             my ($targetName, $targetVersion, $targetBasename) = parseStorePath($target);
             my ($oldTargetName, $oldTargetVersion, $oldTargetBasename) = parseStorePath($oldTarget);
+            my $origPriority = $oldPriority / 1000; # Convert to original priority value
             my $errmsg = "'$oldTargetName' conflicts with '$targetName'. ";
             if ($targetBasename eq $oldTargetBasename) {
                 $errmsg .= "Both packages provide the file '$targetBasename'";
@@ -245,14 +233,14 @@ sub findFiles {
             die $errmsg . "\n\n" .
                 "Resolve by uninstalling one of the conflicting packages or " .
                 "setting the priority of the preferred package to a value " .
-                "lower than '$oldPriority'\n";
+                "lower than '$origPriority'\n";
         }
     }
 
-    findFilesInDir($relName, $oldTarget, $ignoreCollisions, $checkCollisionContents, $oldPriority, $oldInternalPriority, $oldParentPath) unless $oldTarget eq "";
-    findFilesInDir($relName, $target, $ignoreCollisions, $checkCollisionContents, $priority, $internalPriority, $parentPath);
+    findFilesInDir($relName, $oldTarget, $ignoreCollisions, $checkCollisionContents, $oldPriority) unless $oldTarget eq "";
+    findFilesInDir($relName, $target, $ignoreCollisions, $checkCollisionContents, $priority);
 
-    $symlinks{$relName} = ["", $priority, $internalPriority, $parentPath]; # denotes directory
+    $symlinks{$relName} = ["", $priority]; # denotes directory
 }
 
 
@@ -260,12 +248,12 @@ my %done;
 my %postponed;
 
 sub addPkg {
-    my ($pkgDir, $ignoreCollisions, $checkCollisionContents, $priority, $internalPriority, $parentPath)  = @_;
+    my ($pkgDir, $ignoreCollisions, $checkCollisionContents, $priority)  = @_;
 
     return if (defined $done{$pkgDir});
     $done{$pkgDir} = 1;
 
-    findFiles("", $pkgDir, "", $ignoreCollisions, $checkCollisionContents, $priority, $internalPriority, $parentPath);
+    findFiles("", $pkgDir, "", $ignoreCollisions, $checkCollisionContents, $priority);
 
     # <flox>
     #
@@ -297,7 +285,10 @@ sub addPkg {
                     # and skips them, since at this point we only have store
                     # paths rather than attribute paths, output names, etc.
                     next if $p =~ /-stubs$/;
-                    $postponed{$p} = 1 unless defined $done{$p};
+                    # N.B. use the values of the %postponed hash to denote the priority
+                    # of the package that is propagating the dependency, so that these
+                    # packages can similarly have precedence (or not) over collisions.
+                    $postponed{$p} = $priority unless defined $done{$p};
                 }
             }
         }
@@ -311,7 +302,7 @@ sub addPkg {
         close PROP;
         my @propagated = split ' ', $propagated;
         foreach my $p (@propagated) {
-            $postponed{$p} = 1 unless defined $done{$p};
+            $postponed{$p} = $priority unless defined $done{$p};
         }
     }
 
@@ -343,9 +334,7 @@ for my $pkg (@{decode_json $pkgs}) {
         addPkg($path,
                $ENV{"ignoreCollisions"} eq "1",
                $ENV{"checkCollisionContents"} eq "1",
-               $pkg->{priority},
-               $pkg->{internalPriority},
-               $pkg->{parentPath})
+               $pkg->{priority})
            if -e $path;
     }
 }
@@ -360,7 +349,7 @@ while (scalar(keys %postponed) > 0) {
     my @pkgDirs = keys %postponed;
     %postponed = ();
     foreach my $pkgDir (sort @pkgDirs) {
-        addPkg($pkgDir, 2, $ENV{"checkCollisionContents"} eq "1", $priorityCounter++, 0, $pkgDir);
+        addPkg($pkgDir, 2, $ENV{"checkCollisionContents"} eq "1", $priorityCounter++);
     }
 }
 
@@ -485,9 +474,7 @@ if ($manifest) {
                 if (defined $package->{"store_path"}) {
                     push @retarray, {
                         "paths" => [ $package->{"store_path"} ],
-                        "priority" => $package->{"priority"},
-                        "internalPriority" => 0,
-                        "parentPath" => $package->{"store_path"}
+                        "priority" => (1000 * $package->{"priority"})
                     };
                     next;
                 }
@@ -497,12 +484,9 @@ if ($manifest) {
                 if (!exists $package->{"install_id"}) {
                     my @paths = values %{$package->{"outputs"}};
                     next unless scalar @paths;
-                    my $syntheticParent = (values %{$package->{"outputs"}})[0];
                     push @retarray, {
                         "paths" => \@paths,
-                        "priority" => $package->{"priority"},
-                        "internalPriority" => 0,
-                        "parentPath" => $syntheticParent
+                        "priority" => (1000 * $package->{"priority"})
                     };
                     next;
                 }
@@ -546,9 +530,7 @@ if ($manifest) {
                     if (scalar @outputsToInstallPaths) {
                         push @retarray, {
                             "paths" => \@outputsToInstallPaths,
-                            "priority" => $package->{"priority"},
-                            "internalPriority" => 0,
-                            "parentPath" => $package->{"install_id"}
+                            "priority" => (1000 * $package->{"priority"})
                         };
                     }
 
@@ -556,9 +538,7 @@ if ($manifest) {
                     foreach my $otherPath (@otherOutputPaths) {
                         push @retarray, {
                             "paths" => [ $otherPath ],
-                            "priority" => $package->{"priority"},
-                            "internalPriority" => $otherOutputPriorityCounter++,
-                            "parentPath" => $package->{"install_id"}
+                            "priority" => ((1000 * $package->{"priority"}) + $otherOutputPriorityCounter++)
                         };
                     }
                 } elsif (exists $manifest->{"schema-version"}) {
@@ -574,9 +554,7 @@ if ($manifest) {
                     foreach my $path (@paths) {
                         push @retarray, {
                             "paths" => [ $path ],
-                            "priority" => $package->{"priority"},
-                            "internalPriority" => $outputPriorityCounter++,
-                            "parentPath" => $package->{"install_id"}
+                            "priority" => ((1000 * $package->{"priority"}) + $outputPriorityCounter++)
                         };
                     }
                 } elsif (exists $manifest->{"schema-version"}) {
@@ -759,9 +737,7 @@ if ($manifest) {
                 addPkg($path,
                        $ENV{"ignoreCollisions"} eq "1",
                        $ENV{"checkCollisionContents"} eq "1",
-                       $pkg->{priority},
-                       $pkg->{internalPriority},
-                       $pkg->{parentPath})
+                       $pkg->{priority})
                    if -e $path;
             }
         }
@@ -770,14 +746,28 @@ if ($manifest) {
         # installed by the user (i.e., package X declares that it wants Y
         # installed as well).  We do these later because they have a lower
         # priority in case of collisions.
-        my $priorityCounter = 1000; # don't care about collisions
-        while (scalar(keys %postponed) > 0) {
-            my @pkgDirs = keys %postponed;
-            %postponed = ();
-            foreach my $pkgDir (sort byPackageName @pkgDirs) {
-                addPkg($pkgDir, 2, $ENV{"checkCollisionContents"} eq "1", $priorityCounter++, 0, $pkgDir);
-            }
+        #
+        # <flox>
+        # The nixpkgs builder.pl script assigned incrementing priorities
+        # for all propagated packages starting with 1000, but that does
+        # not respect priority values assigned to the packages that are
+        # propagating these dependencies. To address this, we too assign
+        # non-colliding priorities for propagated packages starting at
+        # 1000, but we also assign values based on the priority of the
+        # package that is propagating them, so that they can similarly have
+        # precedence (or not) over collisions.
+        my $count = 0; # counter to prevent propagated deps from colliding
+        while (my ($pkgDir, $priority) = each %postponed) {
+            # Propagated dependencies can include other propagated dependencies
+            # so only bump the priority for pkgs with priority less than 1000.
+            $priority *= 1000 if $priority < 1000;
+            # Add the package using a priority based on that of the package that
+            # originally triggered the propagation, and add to that an ever-
+            # increasing counter to prevent collisions for propagated packages.
+            addPkg($pkgDir, 2, $ENV{"checkCollisionContents"} eq "1", $priority + $count++);
         }
+        %postponed = ();
+        # </flox>
 
         # Create the symlinks.
         my $nrLinks = 0;
