@@ -1,14 +1,11 @@
 #! @perl@ -w
 
-use strict;
-use Cwd 'abs_path';
-use IO::Handle;
-use File::Copy;
-use File::Path;
-use File::Basename;
-use File::Compare;
-use JSON::PP;
-use Time::HiRes qw( gettimeofday tv_interval );
+# <flox>
+# We split all perl lib imports out into its own module so that it can be used
+# as the basis for (re)building the flox-perl package only as necessary.
+# </flox>
+use lib '@out@/lib';
+use BuilderLibs;
 
 STDOUT->autoflush(1);
 
