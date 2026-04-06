@@ -316,12 +316,20 @@ impl Drop for MockRecorder {
 /// This is a wrapper around the auto-generated APIClient.
 #[derive(Debug)]
 pub struct CatalogClient {
-    client: APIClient,
+    /// Lazily initialized API client — defers the expensive reqwest HTTP
+    /// client + TLS setup until the first actual catalog API call.
+    client: std::sync::OnceLock<APIClient>,
     config: CatalogClientConfig,
+    /// Config with mock URL applied (if any), used for lazy client creation.
+    effective_config: CatalogClientConfig,
     _mock_guard: Option<MockGuard>,
 }
 
 impl CatalogClient {
+    /// Create a new catalog client from configuration.
+    ///
+    /// This is cheap — it only stores config and defers HTTP client
+    /// construction to the first API call.
     pub fn new(config: CatalogClientConfig) -> Self {
         // Remove the existing output file if it exists so we don't merge with
         // a previous `flox` invocation
@@ -331,18 +339,22 @@ impl CatalogClient {
         }
 
         let mock_guard = MockGuard::new(&config);
-        let mut config_mut = config.clone();
+        let mut effective_config = config.clone();
         if let Some(ref mock) = mock_guard {
-            config_mut.catalog_url = mock.url();
+            effective_config.catalog_url = mock.url();
         }
 
         Self {
-            client: Self::create_client(&config_mut),
-            // Copy the original config so that `Self::update_config` has access to
-            // the non-mocked URL when making subsequent updates.
+            client: std::sync::OnceLock::new(),
             config,
+            effective_config,
             _mock_guard: mock_guard,
         }
+    }
+
+    /// Access the underlying API client, lazily building it on first use.
+    fn client(&self) -> &APIClient {
+        self.client.get_or_init(|| Self::create_client(&self.effective_config))
     }
 
     pub fn update_config(&mut self, update: impl FnOnce(&mut CatalogClientConfig)) {
@@ -542,7 +554,7 @@ impl ClientTrait for CatalogClient {
         //       from catalog-server, we can change this `None` to the number
         //       of candidate pages we *want*.
         let response = self
-            .client
+            .client()
             .resolve_api_v1_catalog_resolve_post(None, &package_groups)
             .await
             .map_api_error()
@@ -608,7 +620,7 @@ impl ClientTrait for CatalogClient {
         let stream = make_depaging_stream(
             |page_number, page_size| async move {
                 let response = self
-                    .client
+                    .client()
                     .search_api_v1_catalog_search_get(
                         // Default behavior for empty 'catalogs' is all catalogs.
                         None,
@@ -647,7 +659,7 @@ impl ClientTrait for CatalogClient {
         let stream = make_depaging_stream(
             |page_number, page_size| async move {
                 let response = self
-                    .client
+                    .client()
                     .packages_api_v1_catalog_packages_attr_path_get(
                         attr_path,
                         Some(page_number),
@@ -687,7 +699,7 @@ impl ClientTrait for CatalogClient {
         let package = str_to_package_name(package_name)?;
         // Body contents aren't important for this request.
         let body = api_types::PublishInfoRequest(serde_json::Map::new());
-        self.client.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post(&catalog, &package, &body)
+        self.client().publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post(&catalog, &package, &body)
             .await
             .map_api_error()
             .await
@@ -721,7 +733,7 @@ impl ClientTrait for CatalogClient {
                 .to_string(),
             ))
         })?;
-        self.client
+        self.client()
             .create_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_post(
                 &catalog, &package, &body,
             )
@@ -741,7 +753,7 @@ impl ClientTrait for CatalogClient {
     ) -> Result<(), CatalogClientError> {
         let catalog = str_to_catalog_name(catalog_name)?;
         let package = str_to_package_name(package_name)?;
-        self.client
+        self.client()
             .create_package_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_post(
                 &catalog, &package, build_info,
             )
@@ -760,7 +772,7 @@ impl ClientTrait for CatalogClient {
             outpaths: derivations.iter().map(|s| s.to_string()).collect(),
         };
         let response = self
-            .client
+            .client()
             .get_store_info_api_v1_catalog_store_post(&body)
             .await
             .map_api_error()
@@ -778,7 +790,7 @@ impl ClientTrait for CatalogClient {
             outpaths: store_paths.to_vec(),
         };
         let statuses = self
-            .client
+            .client()
             .get_storepath_status_api_v1_catalog_store_status_post(&req)
             .await
             .map_api_error()
@@ -798,7 +810,7 @@ impl ClientTrait for CatalogClient {
 
     #[instrument(skip_all)]
     async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, CatalogClientError> {
-        self.client
+        self.client()
             .get_base_catalog_api_v1_catalog_info_base_catalog_get()
             .await
             .map_api_error()
@@ -1990,7 +2002,7 @@ pub mod test_helpers {
         let catalog_name = str_to_catalog_name(name)?;
 
         let resp = client
-            .client
+            .client()
             .create_catalog_api_v1_catalog_catalogs_post(&catalog_name)
             .await;
         match resp {
@@ -2010,7 +2022,7 @@ pub mod test_helpers {
         }
 
         client
-            .client
+            .client()
             .set_catalog_store_config_api_v1_catalog_catalogs_catalog_name_store_config_put(
                 &catalog_name,
                 config,
