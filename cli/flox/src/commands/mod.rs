@@ -1,11 +1,11 @@
 mod activate;
 mod activation_state;
+mod allow;
 mod auth;
 mod build;
 mod check_for_upgrades;
 mod containerize;
 mod delete;
-mod allow;
 mod deny;
 mod edit;
 mod envs;

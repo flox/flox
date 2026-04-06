@@ -515,7 +515,10 @@ mod tests {
             let activate = ActivateOptions {
                 mode: options2.activate.mode.or(options1.activate.mode),
             };
-            let expected = Options { systems, allow, semver, cuda_detection, activate };
+            let services = ServicesOptions {
+                auto_start: options2.services.auto_start.or(options1.services.auto_start),
+            };
+            let expected = Options { systems, allow, semver, cuda_detection, activate, services };
             prop_assert_eq!(merged, expected);
         }
 
