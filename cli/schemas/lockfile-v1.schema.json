@@ -1854,7 +1854,16 @@
           "additionalProperties": {
             "$ref": "#/$defs/ServiceDescriptor"
           },
-          "description": "A map of service names to service definitions",
+          "description": "Service configuration for an environment, including optional auto-start\nbehavior and a map of service names to service definitions.",
+          "properties": {
+            "auto-start": {
+              "description": "Whether to start all services automatically on `flox activate`.\nCan be suppressed with `--no-start-services`.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
           "type": "object"
         },
         "Unit": {
