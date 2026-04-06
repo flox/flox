@@ -335,7 +335,10 @@ impl SkipSerializing for Services {
     fn skip_serializing(&self) -> bool {
         // Destructuring here prevents us from missing new fields if they're
         // added in the future.
-        let Services { auto_start, services } = self;
+        let Services {
+            auto_start,
+            services,
+        } = self;
         auto_start.is_none() && services.is_empty()
     }
 }
