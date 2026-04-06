@@ -1,5 +1,8 @@
-version = 1
+schema-version = "1.10.0"
 
 [install]
 gcc.pkg-path = "gcc"
+gcc-unwrapped.pkg-path = "gcc-unwrapped"
+gcc-unwrapped.outputs = [ "lib" ]
 boost.pkg-path = "boost"
+boost.outputs = "all"
