@@ -238,7 +238,13 @@ impl ShallowMerger {
             low_priority.inner(),
             high_priority.inner(),
         );
-        Ok((Services(merged), warnings))
+        // High priority auto_start wins; fall back to low priority if high
+        // priority doesn't set it
+        let auto_start = high_priority.auto_start.or(low_priority.auto_start);
+        Ok((Services {
+            auto_start,
+            services: merged,
+        }, warnings))
     }
 
     #[instrument(skip_all)]
@@ -425,8 +431,8 @@ mod tests {
         // in the merged output.
         #[test]
         fn merges_services_section(maps in btree_maps_overlapping_keys::<ServiceDescriptor>(1, 3)) {
-            let services1 = Services(maps.map1.clone());
-            let services2 = Services(maps.map2.clone());
+            let services1 = Services { auto_start: None, services: maps.map1.clone() };
+            let services2 = Services { auto_start: None, services: maps.map2.clone() };
             let (merged, warnings) = ShallowMerger::merge_services(&services1, &services2).unwrap();
             let merged = merged.inner();
             for key in maps.unique_keys_map1.iter() {

@@ -277,6 +277,83 @@ mod tests {
     }
 
     #[test]
+    fn parses_services_auto_start_true() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [services]
+            auto-start = true
+            postgres.command = "postgres"
+        "#});
+
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        assert_eq!(parsed.services.auto_start, Some(true));
+        assert_eq!(parsed.services.inner().len(), 1);
+        assert!(parsed.services.inner().contains_key("postgres"));
+    }
+
+    #[test]
+    fn parses_services_auto_start_false() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [services]
+            auto-start = false
+            postgres.command = "postgres"
+        "#});
+
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        assert_eq!(parsed.services.auto_start, Some(false));
+        assert_eq!(parsed.services.inner().len(), 1);
+    }
+
+    #[test]
+    fn parses_services_without_auto_start() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [services]
+            postgres.command = "postgres"
+        "#});
+
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        assert_eq!(parsed.services.auto_start, None);
+    }
+
+    #[test]
+    fn auto_start_is_not_treated_as_service_name() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [services]
+            auto-start = true
+            postgres.command = "postgres"
+        "#});
+
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        // "auto-start" must not appear as a service name
+        assert!(!parsed.services.inner().contains_key("auto-start"));
+        assert_eq!(parsed.services.inner().len(), 1);
+    }
+
+    #[test]
+    fn copy_for_system_preserves_auto_start() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [services]
+            auto-start = true
+            postgres.command = "postgres"
+            mysql.command = "mysql"
+            mysql.systems = ["x86_64-linux"]
+        "#});
+
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+        let filtered = parsed
+            .services
+            .copy_for_system(&"aarch64-darwin".to_string());
+
+        // auto_start is preserved after system filtering
+        assert_eq!(filtered.auto_start, Some(true));
+        assert_eq!(filtered.inner().len(), 1);
+        assert!(filtered.inner().contains_key("postgres"));
+    }
+
+    #[test]
     fn filter_services_by_system() {
         let manifest = with_latest_schema(indoc! {r#"
             [services]

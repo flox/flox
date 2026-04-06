@@ -306,24 +306,47 @@ impl SkipSerializing for ActivateOptions {
     }
 }
 
-/// A map of service names to service definitions
+/// Service configuration for an environment, including optional auto-start
+/// behavior and a map of service names to service definitions.
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
-pub struct Services(
+pub struct Services {
+    /// Whether to start all services automatically on `flox activate`.
+    /// Can be suppressed with `--no-start-services`.
+    #[serde(rename = "auto-start")]
+    pub auto_start: Option<bool>,
+
+    /// Map of service names to service definitions
     #[cfg_attr(
-        test,
+        any(test, feature = "tests"),
         proptest(strategy = "btree_map_strategy::<ServiceDescriptor>(5, 3)")
     )]
-    pub(crate) BTreeMap<String, ServiceDescriptor>,
-);
+    #[serde(flatten)]
+    pub(crate) services: BTreeMap<String, ServiceDescriptor>,
+}
 
 impl SkipSerializing for Services {
     fn skip_serializing(&self) -> bool {
-        self.0.is_empty()
+        self.auto_start.is_none() && self.services.is_empty()
     }
 }
 
-impl_into_inner!(Services, BTreeMap<String, ServiceDescriptor>);
+impl crate::parsed::Inner for Services {
+    type Inner = BTreeMap<String, ServiceDescriptor>;
+
+    fn inner(&self) -> &Self::Inner {
+        &self.services
+    }
+
+    fn inner_mut(&mut self) -> &mut Self::Inner {
+        &mut self.services
+    }
+
+    fn into_inner(self) -> Self::Inner {
+        self.services
+    }
+}
 
 /// The definition of a service in a manifest
 #[skip_serializing_none]
@@ -365,7 +388,7 @@ pub struct ServiceDescriptor {
 impl Services {
     pub fn validate(&self) -> Result<(), ManifestError> {
         let mut bad_services = vec![];
-        for (name, desc) in self.0.iter() {
+        for (name, desc) in self.services.iter() {
             let daemonizes = desc.is_daemon.is_some_and(|_self| _self);
             let has_shutdown_cmd = desc.shutdown.is_some();
             if daemonizes && !has_shutdown_cmd {
@@ -389,14 +412,15 @@ impl Services {
         }
     }
 
-    /// Create a new [ManifestServices] instance with services
+    /// Create a new [Services] instance with services
     /// for systems other than `system` filtered out.
     ///
     /// Clone the services rather than filter in place
     /// to avoid accidental mutation of the original in memory manifest/lockfile.
+    /// Preserves `auto_start` setting.
     pub fn copy_for_system(&self, system: &System) -> Self {
         let mut services = BTreeMap::new();
-        for (name, desc) in self.0.iter() {
+        for (name, desc) in self.services.iter() {
             if desc
                 .systems
                 .as_ref()
@@ -405,7 +429,10 @@ impl Services {
                 services.insert(name.clone(), desc.clone());
             }
         }
-        Services(services)
+        Services {
+            auto_start: self.auto_start,
+            services,
+        }
     }
 }
 

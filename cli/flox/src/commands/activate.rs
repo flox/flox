@@ -110,6 +110,10 @@ pub struct Activate {
     #[bpaf(long, short)]
     pub start_services: bool,
 
+    /// Suppress automatic service startup even if configured in manifest
+    #[bpaf(long)]
+    pub no_start_services: bool,
+
     /// Activate the environment in either "dev" or "run" mode.
     /// Overrides the "options.activate.mode" setting in the manifest.
     #[bpaf(short, long)]
@@ -384,7 +388,9 @@ impl Activate {
         let is_ephemeral = !services_for_ephemeral_activation.is_empty();
         let services_to_start = if is_ephemeral {
             services_for_ephemeral_activation
-        } else if self.start_services {
+        } else if self.start_services
+            || (manifest.services().auto_start == Some(true) && !self.no_start_services)
+        {
             Self::gather_services_for_flag(manifest, &flox.system, &socket_path)
         } else {
             Vec::new()
