@@ -279,14 +279,14 @@ impl ContainerSink for RuntimeSink {
 /// The container registry to load the container into
 /// Currently only supports Docker and Podman
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Runtime {
+pub(crate) enum Runtime {
     Docker,
     Podman,
 }
 
 impl Runtime {
     /// Detect the container runtime from the PATH environment variable.
-    fn detect_from_path() -> Option<Self> {
+    pub(crate) fn detect_from_path() -> Option<Self> {
         let path_var = match std::env::var("PATH") {
             Err(e) => {
                 debug!("Could not read PATH variable: {e}");
@@ -310,7 +310,7 @@ impl Runtime {
     }
 
     /// Get the unqualified command name for the runtime.
-    fn to_cmd(&self) -> &str {
+    pub(crate) fn to_cmd(&self) -> &str {
         match self {
             Runtime::Docker => "docker",
             Runtime::Podman => "podman",

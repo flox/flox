@@ -119,12 +119,91 @@ pub struct Activate {
     #[bpaf(long, short)]
     pub generation: Option<GenerationId>,
 
+    /// Run in a sandboxed container (requires Docker or Podman).
+    /// The environment runs inside an isolated Linux container
+    /// with only the packages declared in the manifest available.
+    #[bpaf(long)]
+    pub sandbox: bool,
+
     #[bpaf(external(command_select), optional)]
     pub command: Option<CommandSelect>,
 }
 
 impl Activate {
+    /// Run the environment inside an isolated container using Docker or Podman.
+    ///
+    /// This constructs a `docker run` (or `podman run`) command that launches
+    /// the `flox/run` image with the specified environment reference. The Nix
+    /// store is persisted in a named Docker volume (`flox-store`) so that
+    /// subsequent runs reuse cached packages.
+    fn sandbox_activate(&self) -> Result<()> {
+        use crate::commands::containerize::Runtime;
+
+        let runtime = Runtime::detect_from_path().ok_or_else(|| {
+            anyhow!(
+                "Sandbox mode requires Docker or Podman.\n\
+                 Neither was found in PATH."
+            )
+        })?;
+
+        let mut cmd = std::process::Command::new(runtime.to_cmd());
+        cmd.arg("run").arg("--rm");
+
+        // Interactive mode if no command specified
+        if self.command.is_none() {
+            cmd.arg("-it");
+        }
+
+        // Shared Nix store volume (persists across runs for caching)
+        cmd.arg("-v").arg("flox-store:/nix");
+
+        // For local environments, mount the working directory into the container
+        let is_local = !matches!(&self.environment, EnvironmentSelect::Remote(_));
+        if is_local {
+            let cwd = std::env::current_dir().context("Could not determine current directory")?;
+            cmd.arg("-v")
+                .arg(format!("{}:/work", cwd.display()));
+            cmd.arg("-w").arg("/work");
+        }
+
+        // Container image
+        cmd.arg("flox/run:latest");
+
+        // Environment reference (passed to the container entrypoint)
+        match &self.environment {
+            EnvironmentSelect::Remote(env_ref) => {
+                cmd.arg(env_ref.to_string());
+            },
+            _ => {
+                cmd.arg("--local");
+            },
+        }
+
+        // User command (after --)
+        if let Some(ref command_select) = self.command {
+            cmd.arg("--");
+            match command_select {
+                CommandSelect::ExecCommand { command, args } => {
+                    cmd.arg(command);
+                    cmd.args(args);
+                },
+                CommandSelect::ShellCommand { shell_command } => {
+                    cmd.arg("sh").arg("-c").arg(shell_command);
+                },
+            }
+        }
+
+        debug!("Launching sandbox: {:?}", cmd);
+
+        // Replace the current process with Docker/Podman
+        Err(cmd.exec().into())
+    }
+
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+        if self.sandbox {
+            return self.sandbox_activate();
+        }
+
         let mut concrete_environment = match self
             .environment
             .to_concrete_environment(&flox, self.generation)
