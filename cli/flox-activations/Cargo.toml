@@ -13,6 +13,7 @@ clap = { version = "4.5.56", default-features = false, features = [
     "derive",
 ] }
 tracing = "0.1"
+tracing-chrome = { workspace = true, optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "ansi"] }
 tracing-appender = "0.2"
 flox-core.workspace = true
@@ -43,3 +44,6 @@ expect-test.workspace = true
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 procfs = "0.18.0"
+
+[features]
+profiling = ["tracing-chrome", "flox-core/profiling"]

@@ -262,6 +262,8 @@ fn activate_exec_command(
 
     debug!("executing command directly: {:?}", command);
 
+    // Flush chrome trace data before exec() replaces the process
+    crate::logger::flush_chrome_trace();
     // exec replaces the current process - only returns on error
     let err = command.exec();
     match err.kind() {
@@ -387,6 +389,8 @@ fn activate_shell_command(
 
     debug!("running activation command: {:?}", command);
 
+    // Flush chrome trace data before exec() replaces the process
+    crate::logger::flush_chrome_trace();
     // exec should never return
     Err(command.exec().into())
 }
@@ -491,6 +495,8 @@ fn activate_interactive(
 
     debug!("running activation command: {:?}", command);
 
+    // Flush chrome trace data before exec() replaces the process
+    crate::logger::flush_chrome_trace();
     // exec should never return
     Err(command.exec().into())
 }

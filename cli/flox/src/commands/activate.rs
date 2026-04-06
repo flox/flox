@@ -476,6 +476,8 @@ impl Activate {
             Ok(())
         } else {
             debug!("running activation command: {:?}", command);
+            // Flush chrome trace data before exec() replaces the process
+            crate::utils::init::flush_chrome_trace();
             // exec should never return
             // TODO: did this break in-place metrics?
             Err(command.exec().into())

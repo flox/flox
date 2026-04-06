@@ -1,11 +1,26 @@
 use std::io;
 use std::io::IsTerminal;
 use std::path::Path;
+#[cfg(feature = "profiling")]
+use std::sync::Mutex;
 
 use flox_core::activate::vars::FLOX_ACTIVATIONS_VERBOSITY_VAR;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry, fmt, reload};
+
+#[cfg(feature = "profiling")]
+static CHROME_GUARD: Mutex<Option<tracing_chrome::FlushGuard>> = Mutex::new(None);
+
+/// Flush Chrome trace data to disk before exec() replaces the process.
+pub fn flush_chrome_trace() {
+    #[cfg(feature = "profiling")]
+    {
+        let mut guard = CHROME_GUARD.lock().expect("chrome guard mutex poisoned");
+        // Dropping the guard flushes the trace file
+        guard.take();
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Verbosity {
@@ -67,10 +82,28 @@ pub fn init_stderr_logger(verbosity_arg: Option<u32>) -> Result<u32, anyhow::Err
         .with_target(true)
         .boxed();
 
-    tracing_subscriber::registry()
-        .with(stderr_layer)
-        .with(env_filter)
-        .init();
+    #[cfg(feature = "profiling")]
+    {
+        let (chrome_layer, guard) = flox_core::profiling::create_chrome_layer::<
+            tracing_subscriber::Registry,
+        >("flox-activations");
+        // Store guard in static so flush_chrome_trace() can flush before exec()
+        *CHROME_GUARD.lock().expect("chrome guard mutex poisoned") = guard;
+
+        tracing_subscriber::registry()
+            .with(chrome_layer)
+            .with(stderr_layer)
+            .with(env_filter)
+            .init();
+    }
+
+    #[cfg(not(feature = "profiling"))]
+    {
+        tracing_subscriber::registry()
+            .with(stderr_layer)
+            .with(env_filter)
+            .init();
+    }
 
     Ok(subsystem_verbosity)
 }

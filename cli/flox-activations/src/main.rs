@@ -2,7 +2,7 @@ use anyhow::Context;
 use clap::Parser;
 use flox_activations::cli::Cli;
 use flox_activations::{Error, cli, logger, message};
-use tracing::{debug, debug_span};
+use tracing::{debug, debug_span, info_span};
 
 fn main() {
     if let Err(e) = try_main() {
@@ -30,14 +30,20 @@ fn try_main() -> Result<(), Error> {
     let subsystem_verbosity =
         logger::init_stderr_logger(args.verbosity).context("failed to initialize logger")?;
 
-    // Propagate PID field to all spans.
-    // We can set this eagerly because the PID doesn't change after this entry
-    // point. Re-execs of activate->executive will cross this entry point again.
-    let pid = std::process::id();
-    let root_span = debug_span!("flox_activations", pid = pid);
-    let _guard = root_span.entered();
+    let subsystem_verbosity = {
+        let _startup = info_span!("flox_activations_startup").entered();
 
-    debug!("{args:?}");
+        // Propagate PID field to all spans.
+        // We can set this eagerly because the PID doesn't change after this entry
+        // point. Re-execs of activate->executive will cross this entry point again.
+        let pid = std::process::id();
+        let root_span = debug_span!("flox_activations", pid = pid);
+        let _guard = root_span.entered();
+
+        debug!("{args:?}");
+
+        subsystem_verbosity
+    };
 
     match args.command {
         cli::Command::Attach(args) => args.handle(),

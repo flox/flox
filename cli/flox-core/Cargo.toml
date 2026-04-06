@@ -23,6 +23,8 @@ shell_gen = { path = "../shell_gen" }
 supports-color.workspace = true
 sysinfo.workspace = true
 tracing.workspace = true
+tracing-chrome = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
 tempfile.workspace = true
 time.workspace = true
 thiserror.workspace = true
@@ -34,4 +36,5 @@ indoc.workspace = true
 [features]
 default = ["proc_status"]
 proc_status = []
+profiling = ["tracing-chrome", "tracing-subscriber"]
 tests = []

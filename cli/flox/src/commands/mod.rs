@@ -182,6 +182,7 @@ impl fmt::Debug for Commands {
 
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
+    #[tracing::instrument(name = "init_flox", skip_all)]
     pub async fn handle(self, mut config: crate::config::Config) -> Result<()> {
         // ensure xdg dirs exist
         // Use sync fs to avoid tokio thread pool overhead — these are fast stat

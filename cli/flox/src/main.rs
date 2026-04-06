@@ -84,40 +84,40 @@ fn main() -> ExitCode {
     };
 
     init_logger(Some(verbosity));
-    debug!("FLOX_VERSION={}", *FLOX_VERSION);
 
-    if let Err(err) = set_user() {
-        message::error(err.to_string());
-        return ExitCode::from(1);
-    }
+    let (_sentry_guard, _metrics_guard, args) = {
+        let _span = tracing::info_span!("cli_startup").entered();
+        debug!("FLOX_VERSION={}", *FLOX_VERSION);
 
-    let disable_metrics = config::Config::parse()
-        .unwrap_or_default()
-        .flox
-        .disable_metrics;
+        if let Err(err) = set_user() {
+            message::error(err.to_string());
+            return ExitCode::from(1);
+        }
 
-    // Sentry client must be initialized before starting an async runtime or spawning threads
-    // https://docs.sentry.io/platforms/rust/#async-main-function
-    let _sentry_guard = (!disable_metrics).then(init_sentry);
-    let _metrics_guard = Hub::global().try_guard().ok();
+        let disable_metrics = config::Config::parse()
+            .unwrap_or_default()
+            .flox
+            .disable_metrics;
 
-    // Pass down the verbosity level to all sub-processes
-    unsafe {
-        std::env::set_var(
-            "_FLOX_SUBSYSTEM_VERBOSITY",
-            format!("{}", verbosity.to_i32()),
-        );
-    }
-    debug!("set _FLOX_SUBSYSTEM_VERBOSITY={}", verbosity.to_i32());
+        // Sentry client must be initialized before starting an async runtime or spawning threads
+        // https://docs.sentry.io/platforms/rust/#async-main-function
+        let _sentry_guard = (!disable_metrics).then(init_sentry);
+        let _metrics_guard = Hub::global().try_guard().ok();
 
-    // Run the argument parser
-    //
-    // Pass through Completion "failure"; In completion mode this needs to be printed as is
-    // to work with the shell completion frontends
-    //
-    // Pass through Stdout failure; This represents `--help`
-    // todo: just `run()` the parser? Unless we still need to control which std{err/out} to use
-    let args = commands::flox_cli().run_inner(Args::current_args());
+        // Pass down the verbosity level to all sub-processes
+        unsafe {
+            std::env::set_var(
+                "_FLOX_SUBSYSTEM_VERBOSITY",
+                format!("{}", verbosity.to_i32()),
+            );
+        }
+        debug!("set _FLOX_SUBSYSTEM_VERBOSITY={}", verbosity.to_i32());
+
+        // Run the argument parser
+        let args = commands::flox_cli().run_inner(Args::current_args());
+
+        (_sentry_guard, _metrics_guard, args)
+    };
 
     if let Some(parse_err) = args.as_ref().err() {
         match parse_err {
