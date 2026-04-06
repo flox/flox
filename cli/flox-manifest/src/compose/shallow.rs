@@ -726,6 +726,62 @@ mod tests {
     }
 
     #[test]
+    fn merge_services_auto_start_high_priority_some_true_overrides_low_priority_some_false() {
+        let high = Services {
+            auto_start: Some(true),
+            services: Default::default(),
+        };
+        let low = Services {
+            auto_start: Some(false),
+            services: Default::default(),
+        };
+        let (merged, _) = ShallowMerger::merge_services(&low, &high).unwrap();
+        assert_eq!(merged.auto_start, Some(true));
+    }
+
+    #[test]
+    fn merge_services_auto_start_high_priority_none_falls_back_to_low_priority() {
+        let high = Services {
+            auto_start: None,
+            services: Default::default(),
+        };
+        let low = Services {
+            auto_start: Some(true),
+            services: Default::default(),
+        };
+        let (merged, _) = ShallowMerger::merge_services(&low, &high).unwrap();
+        assert_eq!(merged.auto_start, Some(true));
+    }
+
+    #[test]
+    fn merge_services_auto_start_high_priority_some_false_overrides_low_priority_some_true() {
+        let high = Services {
+            auto_start: Some(false),
+            services: Default::default(),
+        };
+        let low = Services {
+            auto_start: Some(true),
+            services: Default::default(),
+        };
+        let (merged, _) = ShallowMerger::merge_services(&low, &high).unwrap();
+        assert_eq!(merged.auto_start, Some(false));
+    }
+
+    #[test]
+    fn merge_services_auto_start_both_none_results_in_none() {
+        let high = Services {
+            auto_start: None,
+            services: Default::default(),
+        };
+        let low = Services {
+            auto_start: None,
+            services: Default::default(),
+        };
+        let (merged, _) = ShallowMerger::merge_services(&low, &high).unwrap();
+        assert_eq!(merged.auto_start, None);
+    }
+
+    #[test]
     fn containerize_does_trivial_merge() {
         let (merged, _warnings) = ShallowMerger::merge_containerize(None, None).unwrap();
         assert_eq!(None, merged);

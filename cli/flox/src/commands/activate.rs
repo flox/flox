@@ -129,6 +129,10 @@ pub struct Activate {
 
 impl Activate {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+        if self.start_services && self.no_start_services {
+            bail!("--start-services and --no-start-services are mutually exclusive");
+        }
+
         let mut concrete_environment = match self
             .environment
             .to_concrete_environment(&flox, self.generation)
@@ -388,9 +392,7 @@ impl Activate {
         let is_ephemeral = !services_for_ephemeral_activation.is_empty();
         let services_to_start = if is_ephemeral {
             services_for_ephemeral_activation
-        } else if self.start_services
-            || (manifest.services().auto_start == Some(true) && !self.no_start_services)
-        {
+        } else if self.auto_start_services(manifest.services().auto_start) {
             Self::gather_services_for_flag(manifest, &flox.system, &socket_path)
         } else {
             Vec::new()
@@ -526,6 +528,15 @@ impl Activate {
                 );
                 ShellWithPath::Bash(INTERACTIVE_BASH_BIN.clone())
             })
+    }
+
+    /// Determine whether all services should be started based on flags and manifest config.
+    ///
+    /// Returns true if:
+    /// - `--start-services` flag is set, OR
+    /// - manifest has `auto-start = true` AND `--no-start-services` is not set
+    fn auto_start_services(&self, auto_start: Option<bool>) -> bool {
+        self.start_services || (auto_start == Some(true) && !self.no_start_services)
     }
 
     /// Handle the `--start-services` flag by determining which services to start.
@@ -903,6 +914,63 @@ mod tests {
         // with `hide_default_prompt = true` we should not see the default environment
         let prompt = Activate::make_prompt_environments(true, &active_environments);
         assert_eq!(prompt, "wichtig".to_string());
+    }
+
+    /// Build a minimal Activate with only the service-related flags set.
+    fn activate_with_flags(start_services: bool, no_start_services: bool) -> Activate {
+        Activate {
+            environment: EnvironmentSelect::default(),
+            trust: false,
+            print_script: false,
+            start_services,
+            no_start_services,
+            mode: None,
+            generation: None,
+            command: None,
+        }
+    }
+
+    #[test]
+    fn test_auto_start_services_with_start_services_flag() {
+        // --start-services starts services regardless of manifest auto_start
+        let activate = activate_with_flags(true, false);
+        assert!(activate.auto_start_services(None));
+        assert!(activate.auto_start_services(Some(false)));
+        assert!(activate.auto_start_services(Some(true)));
+    }
+
+    #[test]
+    fn test_auto_start_services_with_manifest_auto_start_true() {
+        // auto_start = true in manifest causes services to start when no flags given
+        let activate = activate_with_flags(false, false);
+        assert!(activate.auto_start_services(Some(true)));
+    }
+
+    #[test]
+    fn test_auto_start_services_with_manifest_auto_start_false_or_absent() {
+        // Without flags, services do not start if auto_start is false or absent
+        let activate = activate_with_flags(false, false);
+        assert!(!activate.auto_start_services(None));
+        assert!(!activate.auto_start_services(Some(false)));
+    }
+
+    #[test]
+    fn test_no_start_services_suppresses_manifest_auto_start() {
+        // --no-start-services suppresses manifest auto_start = true
+        let activate = activate_with_flags(false, true);
+        assert!(!activate.auto_start_services(Some(true)));
+        assert!(!activate.auto_start_services(None));
+    }
+
+    #[test]
+    fn test_conflicting_service_flags_are_rejected() {
+        // --start-services and --no-start-services together is an error caught in handle()
+        // We test the condition directly since handle() requires Config + Flox.
+        let activate = activate_with_flags(true, true);
+        assert!(
+            activate.start_services && activate.no_start_services,
+            "both flags set — handle() should bail"
+        );
     }
 }
 

@@ -318,6 +318,11 @@ pub struct Services {
     pub auto_start: Option<bool>,
 
     /// Map of service names to service definitions
+    ///
+    /// Note: `deny_unknown_fields` is NOT on `Services` itself because that
+    /// would conflict with `#[serde(flatten)]` here — serde cannot validate
+    /// unknown fields when the map is inlined into the parent. Unknown field
+    /// rejection is instead enforced per entry on `ServiceDescriptor`.
     #[cfg_attr(
         any(test, feature = "tests"),
         proptest(strategy = "btree_map_strategy::<ServiceDescriptor>(5, 3)")
@@ -328,7 +333,10 @@ pub struct Services {
 
 impl SkipSerializing for Services {
     fn skip_serializing(&self) -> bool {
-        self.auto_start.is_none() && self.services.is_empty()
+        // Destructuring here prevents us from missing new fields if they're
+        // added in the future.
+        let Services { auto_start, services } = self;
+        auto_start.is_none() && services.is_empty()
     }
 }
 
