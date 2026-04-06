@@ -161,8 +161,7 @@ impl Activate {
         let is_local = !matches!(&self.environment, EnvironmentSelect::Remote(_));
         if is_local {
             let cwd = std::env::current_dir().context("Could not determine current directory")?;
-            cmd.arg("-v")
-                .arg(format!("{}:/work", cwd.display()));
+            cmd.arg("-v").arg(format!("{}:/work", cwd.display()));
             cmd.arg("-w").arg("/work");
         }
 
