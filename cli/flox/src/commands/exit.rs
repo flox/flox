@@ -114,10 +114,10 @@ impl Exit {
         UnsetVar::new(HOOK_VAR_ACTIVATIONS).generate_with_newline(shell, &mut stdout)?;
 
         // Hint: `flox deactivate` suppresses auto-activation for this
-        // session only. Suggest `flox disable` for persistent denial.
+        // session only. Suggest `flox deny` for persistent denial.
         eprintln!(
             "flox: environment deactivated for this session. \
-             Use 'flox disable' to permanently prevent auto-activation."
+             Use 'flox deny' to permanently prevent auto-activation."
         );
 
         Ok(())

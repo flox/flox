@@ -11,39 +11,39 @@ const PREFERENCE_HASH_CHARS: usize = 64;
 /// Status of auto-activation preference for a `.flox` environment path.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PreferenceStatus {
-    Enabled,
-    Disabled,
+    Allowed,
+    Denied,
     Unregistered,
 }
 
-/// Manages enabled/disabled preference files that control whether the user
+/// Manages allowed/denied preference files that control whether the user
 /// wants auto-activation for a `.flox` environment.
 ///
 /// Unlike [`TrustManager`](crate::trust::TrustManager), preference is **not
 /// content-sensitive**: the hash key is `blake3(absolute_path + "\n")` (path
 /// only), so manifest changes do not affect the preference.
 ///
-/// A single record per environment is maintained: `enable()` removes any
-/// `disabled/` file, and `disable()` removes any `enabled/` file.
+/// A single record per environment is maintained: `allow()` removes any
+/// `denied/` file, and `deny()` removes any `allowed/` file.
 #[derive(Clone, Debug)]
 pub struct PreferenceManager {
-    enabled_dir: PathBuf,
-    disabled_dir: PathBuf,
+    allowed_dir: PathBuf,
+    denied_dir: PathBuf,
 }
 
 impl PreferenceManager {
     pub fn new(state_dir: impl AsRef<Path>) -> Self {
         let base = state_dir.as_ref().join("preference");
         Self {
-            enabled_dir: base.join("enabled"),
-            disabled_dir: base.join("disabled"),
+            allowed_dir: base.join("allowed"),
+            denied_dir: base.join("denied"),
         }
     }
 
-    /// Check whether a `.flox` path has auto-activation enabled, disabled,
+    /// Check whether a `.flox` path has auto-activation allowed, denied,
     /// or unregistered.
     ///
-    /// Disabled takes priority over enabled (though in practice only one
+    /// Denied takes priority over allowed (though in practice only one
     /// file should exist at a time).
     pub fn check(&self, dot_flox_path: impl AsRef<Path>) -> Result<PreferenceStatus> {
         let dot_flox_path = dot_flox_path.as_ref();
@@ -51,64 +51,64 @@ impl PreferenceManager {
             .with_context(|| format!("canonicalizing {}", dot_flox_path.display()))?;
 
         let hash = self.path_hash(&abs);
-        if self.disabled_dir.join(&hash).exists() {
-            return Ok(PreferenceStatus::Disabled);
+        if self.denied_dir.join(&hash).exists() {
+            return Ok(PreferenceStatus::Denied);
         }
-        if self.enabled_dir.join(&hash).exists() {
-            return Ok(PreferenceStatus::Enabled);
+        if self.allowed_dir.join(&hash).exists() {
+            return Ok(PreferenceStatus::Allowed);
         }
 
         Ok(PreferenceStatus::Unregistered)
     }
 
-    /// Enable auto-activation for a `.flox` path. Removes any existing
-    /// disabled file.
-    pub fn enable(&self, dot_flox_path: impl AsRef<Path>) -> Result<()> {
+    /// Allow auto-activation for a `.flox` path. Removes any existing
+    /// denied file.
+    pub fn allow(&self, dot_flox_path: impl AsRef<Path>) -> Result<()> {
         let dot_flox_path = dot_flox_path.as_ref();
         let abs = fs::canonicalize(dot_flox_path)
             .with_context(|| format!("canonicalizing {}", dot_flox_path.display()))?;
 
         let hash = self.path_hash(&abs);
 
-        // Remove any disabled file first
-        let disabled_file = self.disabled_dir.join(&hash);
-        if disabled_file.exists() {
-            fs::remove_file(&disabled_file)
-                .with_context(|| format!("removing disabled file {}", disabled_file.display()))?;
+        // Remove any denied file first
+        let denied_file = self.denied_dir.join(&hash);
+        if denied_file.exists() {
+            fs::remove_file(&denied_file)
+                .with_context(|| format!("removing denied file {}", denied_file.display()))?;
         }
 
-        fs::create_dir_all(&self.enabled_dir)
-            .with_context(|| format!("creating {}", self.enabled_dir.display()))?;
+        fs::create_dir_all(&self.allowed_dir)
+            .with_context(|| format!("creating {}", self.allowed_dir.display()))?;
 
-        let enabled_file = self.enabled_dir.join(&hash);
-        fs::write(&enabled_file, abs.display().to_string())
-            .with_context(|| format!("writing enabled file {}", enabled_file.display()))?;
+        let allowed_file = self.allowed_dir.join(&hash);
+        fs::write(&allowed_file, abs.display().to_string())
+            .with_context(|| format!("writing allowed file {}", allowed_file.display()))?;
 
         Ok(())
     }
 
-    /// Disable auto-activation for a `.flox` path. Removes any existing
-    /// enabled file.
-    pub fn disable(&self, dot_flox_path: impl AsRef<Path>) -> Result<()> {
+    /// Deny auto-activation for a `.flox` path. Removes any existing
+    /// allowed file.
+    pub fn deny(&self, dot_flox_path: impl AsRef<Path>) -> Result<()> {
         let dot_flox_path = dot_flox_path.as_ref();
         let abs = fs::canonicalize(dot_flox_path)
             .with_context(|| format!("canonicalizing {}", dot_flox_path.display()))?;
 
         let hash = self.path_hash(&abs);
 
-        // Remove any enabled file first
-        let enabled_file = self.enabled_dir.join(&hash);
-        if enabled_file.exists() {
-            fs::remove_file(&enabled_file)
-                .with_context(|| format!("removing enabled file {}", enabled_file.display()))?;
+        // Remove any allowed file first
+        let allowed_file = self.allowed_dir.join(&hash);
+        if allowed_file.exists() {
+            fs::remove_file(&allowed_file)
+                .with_context(|| format!("removing allowed file {}", allowed_file.display()))?;
         }
 
-        fs::create_dir_all(&self.disabled_dir)
-            .with_context(|| format!("creating {}", self.disabled_dir.display()))?;
+        fs::create_dir_all(&self.denied_dir)
+            .with_context(|| format!("creating {}", self.denied_dir.display()))?;
 
-        let disabled_file = self.disabled_dir.join(&hash);
-        fs::write(&disabled_file, "")
-            .with_context(|| format!("writing disabled file {}", disabled_file.display()))?;
+        let denied_file = self.denied_dir.join(&hash);
+        fs::write(&denied_file, "")
+            .with_context(|| format!("writing denied file {}", denied_file.display()))?;
 
         Ok(())
     }
@@ -150,55 +150,55 @@ mod tests {
     }
 
     #[test]
-    fn enable_then_check() {
+    fn allow_then_check() {
         let tmp = tempfile::tempdir().unwrap();
         let state_dir = tmp.path().join("state");
         let dot_flox = create_dot_flox(tmp.path());
 
         let mgr = PreferenceManager::new(&state_dir);
-        mgr.enable(&dot_flox).unwrap();
+        mgr.allow(&dot_flox).unwrap();
 
-        assert_eq!(mgr.check(&dot_flox).unwrap(), PreferenceStatus::Enabled);
+        assert_eq!(mgr.check(&dot_flox).unwrap(), PreferenceStatus::Allowed);
     }
 
     #[test]
-    fn disable_then_check() {
+    fn deny_then_check() {
         let tmp = tempfile::tempdir().unwrap();
         let state_dir = tmp.path().join("state");
         let dot_flox = create_dot_flox(tmp.path());
 
         let mgr = PreferenceManager::new(&state_dir);
-        mgr.disable(&dot_flox).unwrap();
+        mgr.deny(&dot_flox).unwrap();
 
-        assert_eq!(mgr.check(&dot_flox).unwrap(), PreferenceStatus::Disabled);
+        assert_eq!(mgr.check(&dot_flox).unwrap(), PreferenceStatus::Denied);
     }
 
     #[test]
-    fn enable_after_disable() {
+    fn allow_after_deny() {
         let tmp = tempfile::tempdir().unwrap();
         let state_dir = tmp.path().join("state");
         let dot_flox = create_dot_flox(tmp.path());
 
         let mgr = PreferenceManager::new(&state_dir);
-        mgr.disable(&dot_flox).unwrap();
-        assert_eq!(mgr.check(&dot_flox).unwrap(), PreferenceStatus::Disabled);
+        mgr.deny(&dot_flox).unwrap();
+        assert_eq!(mgr.check(&dot_flox).unwrap(), PreferenceStatus::Denied);
 
-        mgr.enable(&dot_flox).unwrap();
-        assert_eq!(mgr.check(&dot_flox).unwrap(), PreferenceStatus::Enabled);
+        mgr.allow(&dot_flox).unwrap();
+        assert_eq!(mgr.check(&dot_flox).unwrap(), PreferenceStatus::Allowed);
     }
 
     #[test]
-    fn disable_after_enable() {
+    fn deny_after_allow() {
         let tmp = tempfile::tempdir().unwrap();
         let state_dir = tmp.path().join("state");
         let dot_flox = create_dot_flox(tmp.path());
 
         let mgr = PreferenceManager::new(&state_dir);
-        mgr.enable(&dot_flox).unwrap();
-        assert_eq!(mgr.check(&dot_flox).unwrap(), PreferenceStatus::Enabled);
+        mgr.allow(&dot_flox).unwrap();
+        assert_eq!(mgr.check(&dot_flox).unwrap(), PreferenceStatus::Allowed);
 
-        mgr.disable(&dot_flox).unwrap();
-        assert_eq!(mgr.check(&dot_flox).unwrap(), PreferenceStatus::Disabled);
+        mgr.deny(&dot_flox).unwrap();
+        assert_eq!(mgr.check(&dot_flox).unwrap(), PreferenceStatus::Denied);
     }
 
     #[test]
@@ -208,13 +208,13 @@ mod tests {
         let dot_flox = create_dot_flox(tmp.path());
 
         let mgr = PreferenceManager::new(&state_dir);
-        mgr.enable(&dot_flox).unwrap();
-        assert_eq!(mgr.check(&dot_flox).unwrap(), PreferenceStatus::Enabled);
+        mgr.allow(&dot_flox).unwrap();
+        assert_eq!(mgr.check(&dot_flox).unwrap(), PreferenceStatus::Allowed);
 
-        // Modify the manifest — preference should remain enabled
+        // Modify the manifest — preference should remain allowed
         let manifest_path = dot_flox.join("env").join("manifest.toml");
         fs::write(&manifest_path, "[install]\nhello = {}").unwrap();
 
-        assert_eq!(mgr.check(&dot_flox).unwrap(), PreferenceStatus::Enabled);
+        assert_eq!(mgr.check(&dot_flox).unwrap(), PreferenceStatus::Allowed);
     }
 }

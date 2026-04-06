@@ -239,7 +239,7 @@ fn is_fast_path(
     let preference_changed = state
         .active_dirs
         .iter()
-        .any(|dir| !matches!(preference_manager.check(dir), Ok(PreferenceStatus::Enabled)));
+        .any(|dir| !matches!(preference_manager.check(dir), Ok(PreferenceStatus::Allowed)));
     state.last_cwd.as_deref() == Some(cwd)
         && !watches_changed
         && discovered_dirs == state.active_dirs
@@ -270,8 +270,8 @@ fn filter_by_eligibility(
         .collect();
 
     // Prune notified dirs to those still relevant to CWD. This allows
-    // the Disabled-branch notice to re-appear when the user cd's back,
-    // reinforcing that `flox enable` is available.
+    // the Denied-branch notice to re-appear when the user cd's back,
+    // reinforcing that `flox allow` is available.
     let mut notified_dirs: Vec<PathBuf> = state
         .notified_dirs
         .iter()
@@ -302,20 +302,19 @@ fn filter_by_eligibility(
 
         // Gate 1: Preference check
         let preference_ok = match preference_manager.check(&dot_flox.path) {
-            Ok(PreferenceStatus::Enabled) => true,
-            Ok(PreferenceStatus::Disabled) => {
-                debug!(path = %dot_flox.path.display(), "preference disabled, skipping");
+            Ok(PreferenceStatus::Allowed) => true,
+            Ok(PreferenceStatus::Denied) => {
+                debug!(path = %dot_flox.path.display(), "preference denied, skipping");
                 emit_eligibility_notice(
                     cwd,
                     &dot_flox.path,
-                    "Auto-activation is disabled. Run 'flox enable' to re-enable.",
+                    "Auto-activation is denied. Run 'flox allow' to re-enable.",
                     &mut notified_dirs,
                 );
                 continue;
             },
             Ok(PreferenceStatus::Unregistered) => {
                 match auto_activate_config {
-                    AutoActivateConfig::Always => true,
                     AutoActivateConfig::Prompt => {
                         // Already prompted/notified this session — don't prompt again
                         if notified_dirs.contains(&dot_flox.path.to_path_buf()) {
@@ -334,7 +333,7 @@ fn filter_by_eligibility(
                             emit_eligibility_notice(
                                 cwd,
                                 &dot_flox.path,
-                                "Run 'flox enable' to auto-activate this environment.",
+                                "Run 'flox allow' to auto-activate this environment.",
                                 &mut notified_dirs,
                             );
                             continue;
@@ -354,7 +353,7 @@ fn filter_by_eligibility(
         }
 
         // Gate 2: Trust check
-        // For local environments, trust is implicit (set by `flox enable`).
+        // For local environments, trust is implicit (set by `flox allow`).
         let is_local = matches!(dot_flox.pointer, EnvironmentPointer::Path(_));
         if is_local {
             eligible_dot_flox.push(dot_flox.clone());
@@ -403,7 +402,7 @@ fn can_prompt_from_hook() -> bool {
 
 /// Prompt the user whether to auto-activate an environment.
 /// Returns true if the user accepted. Persists the preference on acceptance
-/// or decline (as Disabled), so the decision survives across shell sessions.
+/// or decline (as Denied), so the decision survives across shell sessions.
 fn prompt_auto_activate(
     dot_flox_path: &Path,
     preference_manager: &PreferenceManager,
@@ -424,7 +423,7 @@ fn prompt_auto_activate(
     match std::io::stdin().read_line(&mut input) {
         Ok(_) if input.trim().eq_ignore_ascii_case("y") => {
             // Persist the preference
-            let _ = preference_manager.enable(dot_flox_path);
+            let _ = preference_manager.allow(dot_flox_path);
             if is_local {
                 let _ = trust_manager.trust(dot_flox_path);
             }
@@ -432,9 +431,9 @@ fn prompt_auto_activate(
         },
         Ok(_) => {
             // User explicitly declined — persist so it survives across sessions.
-            // Moves the environment from Unregistered → Disabled, so future visits
+            // Moves the environment from Unregistered → Denied, so future visits
             // show a non-interactive notice instead of re-prompting.
-            let _ = preference_manager.disable(dot_flox_path);
+            let _ = preference_manager.deny(dot_flox_path);
             false
         },
         Err(_) => false,

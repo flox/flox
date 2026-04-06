@@ -76,7 +76,7 @@ pub struct FloxConfig {
     pub trusted_environments: HashMap<RemoteEnvironmentRef, EnvironmentTrust>,
 
     /// Controls auto-activation behavior for unregistered environments.
-    /// Valid values are "prompt" (default), "always", and "never".
+    /// Valid values are "prompt" and "never" (default).
     #[serde(default)]
     pub auto_activate: AutoActivateConfig,
 
@@ -135,9 +135,8 @@ pub enum EnvironmentTrust {
 #[derive(Clone, Debug, Deserialize, Serialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum AutoActivateConfig {
-    #[default]
     Prompt,
-    Always,
+    #[default]
     Never,
 }
 

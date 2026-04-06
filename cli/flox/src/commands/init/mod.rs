@@ -279,7 +279,7 @@ async fn init_local_environment(
               $ flox install <package>   <- Install a package into an environment
               $ flox activate            <- Enter the environment
               $ flox edit                <- Add environment variables and shell hooks
-              $ flox enable              <- Enable auto-activation for this environment"
+              $ flox allow               <- Allow auto-activation for this environment"
         });
 
         // Don't recommend `flox push` if the env is in a git repo because they

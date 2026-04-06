@@ -2,9 +2,9 @@
 # -*- mode: bats; -*-
 # ============================================================================ #
 #
-# Test flox enable and flox disable
+# Test flox allow and flox deny
 #
-# bats file_tags=enable
+# bats file_tags=allow
 #
 # ---------------------------------------------------------------------------- #
 
@@ -58,83 +58,83 @@ count_files() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox enable' succeeds on initialized environment" {
+@test "'flox allow' succeeds on initialized environment" {
   "$FLOX_BIN" init
 
-  run "$FLOX_BIN" enable
+  run "$FLOX_BIN" allow
   assert_success
-  assert_output --partial "Enabled auto-activation"
+  assert_output --partial "Allowed auto-activation"
 
   # Verify preference file exists
-  [ "$(count_files "$FLOX_STATE_DIR/preference/enabled")" -ge 1 ]
+  [ "$(count_files "$FLOX_STATE_DIR/preference/allowed")" -ge 1 ]
   # For local envs, trust is also set
   [ "$(count_files "$FLOX_DATA_DIR/trust/allowed")" -ge 1 ]
 }
 
-@test "'flox disable' creates disabled preference file" {
+@test "'flox deny' creates denied preference file" {
   "$FLOX_BIN" init
 
-  run "$FLOX_BIN" disable
+  run "$FLOX_BIN" deny
   assert_success
-  assert_output --partial "Disabled auto-activation"
+  assert_output --partial "Denied auto-activation"
 
-  # Verify disabled preference file exists
-  [ "$(count_files "$FLOX_STATE_DIR/preference/disabled")" -ge 1 ]
+  # Verify denied preference file exists
+  [ "$(count_files "$FLOX_STATE_DIR/preference/denied")" -ge 1 ]
 }
 
-@test "'flox enable' fails when no .flox exists" {
+@test "'flox allow' fails when no .flox exists" {
   # No flox init — empty PROJECT_DIR
-  run "$FLOX_BIN" enable
+  run "$FLOX_BIN" allow
   assert_failure
   assert_output --partial "No '.flox' environment found"
 }
 
-@test "'flox enable --path' enables a specific directory" {
+@test "'flox allow --path' allows a specific directory" {
   mkdir -p subdir
   pushd subdir > /dev/null
   "$FLOX_BIN" init
   popd > /dev/null
 
-  run "$FLOX_BIN" enable --path subdir
+  run "$FLOX_BIN" allow --path subdir
   assert_success
-  assert_output --partial "Enabled auto-activation"
+  assert_output --partial "Allowed auto-activation"
 }
 
-@test "'flox enable' after 'disable' removes disabled file" {
+@test "'flox allow' after 'deny' removes denied file" {
   "$FLOX_BIN" init
 
-  "$FLOX_BIN" disable
-  [ "$(count_files "$FLOX_STATE_DIR/preference/disabled")" -ge 1 ]
+  "$FLOX_BIN" deny
+  [ "$(count_files "$FLOX_STATE_DIR/preference/denied")" -ge 1 ]
 
-  # Enable should remove the disabled file
-  run "$FLOX_BIN" enable
+  # Allow should remove the denied file
+  run "$FLOX_BIN" allow
   assert_success
 
-  [ "$(count_files "$FLOX_STATE_DIR/preference/disabled")" -eq 0 ]
+  [ "$(count_files "$FLOX_STATE_DIR/preference/denied")" -eq 0 ]
 }
 
-@test "'flox disable' after enable removes enabled file" {
+@test "'flox deny' after allow removes allowed file" {
   "$FLOX_BIN" init
 
-  "$FLOX_BIN" enable
-  [ "$(count_files "$FLOX_STATE_DIR/preference/enabled")" -ge 1 ]
+  "$FLOX_BIN" allow
+  [ "$(count_files "$FLOX_STATE_DIR/preference/allowed")" -ge 1 ]
 
-  run "$FLOX_BIN" disable
+  run "$FLOX_BIN" deny
   assert_success
 
-  [ "$(count_files "$FLOX_STATE_DIR/preference/disabled")" -ge 1 ]
-  [ "$(count_files "$FLOX_STATE_DIR/preference/enabled")" -eq 0 ]
+  [ "$(count_files "$FLOX_STATE_DIR/preference/denied")" -ge 1 ]
+  [ "$(count_files "$FLOX_STATE_DIR/preference/allowed")" -eq 0 ]
 }
 
 @test "'flox init' automatically trusts new environment" {
   run "$FLOX_BIN" init
   assert_success
 
-  # init should auto-trust the environment (but NOT auto-enable preference)
+  # init should auto-trust the environment (but NOT auto-allow preference)
   [ "$(count_files "$FLOX_DATA_DIR/trust/allowed")" -ge 1 ]
 }
 
-# bats test_tags=enable:install
+# bats test_tags=allow:install
 @test "'flox install' re-trusts after manifest change" {
   "$FLOX_BIN" init
 
@@ -152,7 +152,7 @@ count_files() {
   [ "$count_after" -gt "$count_before" ]
 }
 
-# bats test_tags=enable:uninstall
+# bats test_tags=allow:uninstall
 @test "'flox uninstall' re-trusts after manifest change" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   "$FLOX_BIN" init
@@ -169,7 +169,7 @@ count_files() {
   [ "$count_after" -gt "$count_before" ]
 }
 
-# bats test_tags=enable:edit
+# bats test_tags=allow:edit
 @test "'flox edit' re-trusts after manifest change" {
   "$FLOX_BIN" init
 
@@ -191,10 +191,10 @@ count_files() {
   [ "$count_after" -gt "$count_before" ]
 }
 
-# bats test_tags=enable:hook-env
+# bats test_tags=allow:hook-env
 @test "manual manifest edit revokes trust (verified via hook-env)" {
   "$FLOX_BIN" init
-  "$FLOX_BIN" enable
+  "$FLOX_BIN" allow
 
   # Verify it's currently trusted
   local allowed_count
@@ -202,12 +202,12 @@ count_files() {
   [ "$allowed_count" -ge 1 ]
 
   # Manually edit the manifest (bypassing flox commands — no re-trust).
-  # For local envs with preference enabled, trust is implicit so this
+  # For local envs with preference allowed, trust is implicit so this
   # test verifies that the trust gate is bypassed for local envs.
   echo '# modified' >> "$MANIFEST_PATH"
 
   # hook-env should still activate the environment because for local envs
-  # trust is implicit when preference is enabled
+  # trust is implicit when preference is allowed
   run "$FLOX_BIN" hook-env --shell bash
   assert_success
   assert_output --partial "_FLOX_HOOK_DIRS"
