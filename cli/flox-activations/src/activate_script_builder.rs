@@ -165,9 +165,7 @@ fn add_old_activate_script_exports(
     exports.extend(fixed_vars_to_export(&context.env, vars_from_environment));
 
     // Propagate profiling env vars to the activate script
-    if flox_core::profiling::is_profiling()
-        && let Ok(dir) = std::env::var("_FLOX_PROFILE_DIR")
-    {
+    if let Ok(dir) = std::env::var("_FLOX_PROFILE_DIR") {
         exports.insert("FLOX_PROFILE", "1".to_string());
         exports.insert("_FLOX_PROFILE_DIR", dir);
     }
@@ -191,7 +189,7 @@ fn fixed_vars_to_export(
     );
     let new_path = fix_path_var(
         &new_flox_env_dirs,
-        &vars_from_environment.path.unwrap_or("".to_string()),
+        &vars_from_environment.path,
     );
     let new_manpath = fix_manpath_var(
         &new_flox_env_dirs,

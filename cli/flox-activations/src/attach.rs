@@ -258,7 +258,6 @@ fn activate_exec_command(
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
-        &startup_ctx.start_state_dir,
     );
 
     debug!("executing command directly: {:?}", command);
@@ -286,7 +285,6 @@ fn activate_shell_command(
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
-        &startup_ctx.start_state_dir,
     );
 
     let rcfile = startup_ctx
@@ -410,7 +408,6 @@ fn activate_interactive(
         subsystem_verbosity,
         vars_from_env,
         &startup_ctx.env_diff,
-        &startup_ctx.start_state_dir,
     );
 
     let rcfile = startup_ctx

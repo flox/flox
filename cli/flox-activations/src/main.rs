@@ -27,7 +27,7 @@ fn try_main() -> Result<(), Error> {
         return setup_env_args.handle();
     };
 
-    let (subsystem_verbosity, _profiling_guard) =
+    let subsystem_verbosity =
         logger::init_stderr_logger(args.verbosity).context("failed to initialize logger")?;
 
     // Propagate PID field to all spans.

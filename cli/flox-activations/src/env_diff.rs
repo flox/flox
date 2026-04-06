@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use itertools::Itertools;
 use shell_gen::{GenerateShell, SetVar, Statement, UnsetVar};
 

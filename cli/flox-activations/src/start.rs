@@ -13,6 +13,7 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use anyhow::{Result, anyhow, bail};
+use indoc::indoc;
 use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use flox_core::activations::{
@@ -29,7 +30,7 @@ use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::{Pid, getpid};
 use signal_hook::consts::{SIGCHLD, SIGUSR1};
 use signal_hook::iterator::Signals;
-use tracing::{debug, error};
+use tracing::{debug, error, info_span, instrument};
 
 use crate::activate_script_builder::old_cli_envs;
 use crate::activate_script_builder::FLOX_ENV_DIRS_VAR;
@@ -39,7 +40,9 @@ use crate::cli::executive::ExecutiveCtx;
 use crate::cli::setup_env::{
     ProfileEnvConfig, ToolPaths, compute_profile_env, parse_envrc,
 };
-use crate::env_diff::{ENV_DIFF_END_JSON, ENV_DIFF_START_JSON};
+// env diff file names (hardcoded, matching EnvDiff::from_files)
+const ENV_DIFF_START_JSON: &str = "start.env.json";
+const ENV_DIFF_END_JSON: &str = "end.env.json";
 use crate::process_compose::{
     process_compose_down,
     start_services_via_socket,
@@ -186,11 +189,11 @@ fn run_activation(
     );
     let new_path = fix_path_var(
         &new_env_dirs,
-        &vars_from_env.path.clone().unwrap_or_default(),
+        &vars_from_env.path,
     );
     let new_manpath = fix_manpath_var(
         &new_env_dirs,
-        &vars_from_env.manpath.clone().unwrap_or_default(),
+        &vars_from_env.manpath.as_deref().unwrap_or_default(),
     );
     activation_vars.insert(FLOX_ENV_DIRS_VAR.to_string(), new_env_dirs.clone());
     activation_vars.insert("PATH".to_string(), new_path);
