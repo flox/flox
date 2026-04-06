@@ -241,10 +241,13 @@ impl ShallowMerger {
         // High priority auto_start wins; fall back to low priority if high
         // priority doesn't set it
         let auto_start = high_priority.auto_start.or(low_priority.auto_start);
-        Ok((Services {
-            auto_start,
-            services: merged,
-        }, warnings))
+        Ok((
+            Services {
+                auto_start,
+                services: merged,
+            },
+            warnings,
+        ))
     }
 
     #[instrument(skip_all)]
