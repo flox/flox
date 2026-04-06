@@ -136,7 +136,7 @@ impl Activate {
     /// the `flox/run` image with the specified environment reference. The Nix
     /// store is persisted in a named Docker volume (`flox-store`) so that
     /// subsequent runs reuse cached packages.
-    fn sandbox_activate(&self) -> Result<()> {
+    fn sandbox_activate(&self, flox: &Flox) -> Result<()> {
         use crate::commands::containerize::Runtime;
 
         let runtime = Runtime::detect_from_path().ok_or_else(|| {
@@ -157,12 +157,19 @@ impl Activate {
         // Shared Nix store volume (persists across runs for caching)
         cmd.arg("-v").arg("flox-store:/nix");
 
-        // For local environments, mount the working directory into the container
-        let is_local = !matches!(&self.environment, EnvironmentSelect::Remote(_));
-        if is_local {
-            let cwd = std::env::current_dir().context("Could not determine current directory")?;
-            cmd.arg("-v").arg(format!("{}:/work", cwd.display()));
-            cmd.arg("-w").arg("/work");
+        // Always mount CWD so user files are accessible in the container
+        let cwd = std::env::current_dir().context("Could not determine current directory")?;
+        cmd.arg("-v").arg(format!("{}:/work", cwd.display()));
+        cmd.arg("-w").arg("/work");
+
+        // Pass FloxHub config (auth token, custom URLs) into the container
+        // if it exists. Same pattern as the macOS containerize proxy.
+        let flox_toml = flox.config_dir.join("flox.toml");
+        if flox_toml.exists() {
+            cmd.arg("-v").arg(format!(
+                "{}:/root/.config/flox/flox.toml:ro",
+                flox_toml.display()
+            ));
         }
 
         // Container image
@@ -200,7 +207,7 @@ impl Activate {
 
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         if self.sandbox {
-            return self.sandbox_activate();
+            return self.sandbox_activate(&flox);
         }
 
         let mut concrete_environment = match self
