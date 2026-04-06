@@ -292,22 +292,6 @@ impl ClientSideCatalogStoreConfig {
         }
     }
 
-    /// Returns the URL string identifying where narinfos were collected from.
-    ///
-    /// For NixCopy this is the egress URL. For MetadataOnly this is
-    /// "daemon://" since narinfos are collected from the local Nix
-    /// daemon store.
-    pub fn narinfos_source_url(&self) -> Option<String> {
-        match self {
-            ClientSideCatalogStoreConfig::NixCopy { egress_uri, .. } => {
-                Some(egress_uri.to_string())
-            },
-            ClientSideCatalogStoreConfig::MetadataOnly => Some("daemon://".to_string()),
-            ClientSideCatalogStoreConfig::Null => None,
-            ClientSideCatalogStoreConfig::Publisher { .. } => None,
-        }
-    }
-
     /// Returns the path of the local signing key if one is configured.
     pub fn local_signing_key_path(&self) -> Option<PathBuf> {
         if let ClientSideCatalogStoreConfig::NixCopy {
@@ -329,10 +313,13 @@ impl ClientSideCatalogStoreConfig {
 
     /// Depending on whether the catalog store is configured to accept uploaded artifacts,
     /// upload the build outputs and their NAR infos or skip the upload entirely.
+    ///
+    /// Returns the narinfos and the URL string identifying where the narinfos
+    /// were collected from, or `None` when no narinfos are available.
     pub fn maybe_upload_artifacts(
         &self,
         build_outputs: &[PackageOutput],
-    ) -> Result<Option<NarInfos>, PublishError> {
+    ) -> Result<Option<(NarInfos, String)>, PublishError> {
         if build_outputs.is_empty() {
             debug!(reason = "no build outputs", "skipping artifact upload");
             return Ok(None);
@@ -361,7 +348,7 @@ impl ClientSideCatalogStoreConfig {
                     Some(auth_netrc_path.as_path()),
                     build_outputs,
                 )?;
-                Ok(Some(nar_infos))
+                Ok(Some((nar_infos, egress_uri.to_string())))
             },
             ClientSideCatalogStoreConfig::MetadataOnly => {
                 debug!(
@@ -369,7 +356,7 @@ impl ClientSideCatalogStoreConfig {
                     "collecting narinfo from local store (no artifact upload)"
                 );
                 match Self::get_build_output_nar_infos("daemon", None, build_outputs) {
-                    Ok(nar_infos) => Ok(Some(nar_infos)),
+                    Ok(nar_infos) => Ok(Some((nar_infos, "daemon://".to_string()))),
                     Err(e) => {
                         debug!(
                             error = %e,
@@ -661,7 +648,11 @@ where
             &netrc_path,
             publish_response,
         )?;
-        let narinfos = catalog_store_config.maybe_upload_artifacts(&build_metadata.outputs)?;
+        let upload_result = catalog_store_config.maybe_upload_artifacts(&build_metadata.outputs)?;
+        let (narinfos, narinfos_source_url) = match upload_result {
+            Some((nar_infos, source_url)) => (Some(nar_infos), Some(source_url)),
+            None => (None, None),
+        };
 
         let build_info = UserBuildPublish {
             derivation: UserDerivationInfo {
@@ -689,8 +680,7 @@ where
             ref_: Some(self.env_metadata.build_repo_meta.ref_.clone()),
             cache_uri: catalog_store_config.upload_url().map(|url| url.to_string()),
             narinfos,
-            // The URL where the narinfos were collected from.
-            narinfos_source_url: catalog_store_config.narinfos_source_url(),
+            narinfos_source_url,
             // This is the version of the narinfo being submitted.  Until we
             // define changes, we'll use the service defaults.
             narinfos_source_version: None,
@@ -1534,12 +1524,18 @@ pub mod tests {
 
         let config = ClientSideCatalogStoreConfig::MetadataOnly;
 
-        let narinfos = config
+        let result = config
             .maybe_upload_artifacts(&build_metadata.outputs)
             .expect("metadata-only narinfo collection should succeed");
 
-        // MetadataOnly should now return Some(narinfos), not None
-        let narinfos = narinfos.expect("narinfos should be Some for metadata-only");
+        // MetadataOnly should return Some((narinfos, source_url))
+        let (narinfos, source_url) = result.expect("narinfos should be Some for metadata-only");
+
+        // The source URL should be "daemon://" for metadata-only
+        assert_eq!(
+            source_url, "daemon://",
+            "MetadataOnly should report 'daemon://' as narinfos source"
+        );
 
         // Should contain at least the build output store path
         assert!(
@@ -1568,28 +1564,27 @@ pub mod tests {
     }
 
     #[test]
-    fn metadata_only_narinfos_source_url() {
+    fn metadata_only_returns_daemon_source_url() {
         let config = ClientSideCatalogStoreConfig::MetadataOnly;
-        assert_eq!(
-            config.narinfos_source_url(),
-            Some("daemon://".to_string()),
-            "MetadataOnly should report 'daemon://' as narinfos source"
-        );
+        // MetadataOnly with no build outputs returns None (no narinfos to collect)
+        let result = config.maybe_upload_artifacts(&[]).unwrap();
+        assert!(result.is_none(), "empty outputs should return None");
+
+        // With actual outputs we cannot test in a unit test (requires nix store),
+        // but the source URL is verified in
+        // metadata_only_collects_narinfos_from_local_store below.
     }
 
     #[test]
-    fn nix_copy_narinfos_source_url() {
-        let config = ClientSideCatalogStoreConfig::NixCopy {
-            ingress_uri: Url::parse("s3://example-bucket").unwrap(),
-            egress_uri: Url::parse("https://example.com").unwrap(),
-            signing_private_key_path: PathBuf::from("/tmp/key"),
-            auth_netrc_path: PathBuf::from("/tmp/netrc"),
-        };
-        assert_eq!(
-            config.narinfos_source_url(),
-            Some("https://example.com/".to_string()),
-            "NixCopy should report egress URL as narinfos source"
-        );
+    fn null_store_returns_no_narinfos() {
+        let config = ClientSideCatalogStoreConfig::Null;
+        let result = config
+            .maybe_upload_artifacts(&[PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/fake-path".to_string(),
+            }])
+            .unwrap();
+        assert!(result.is_none(), "Null store should return None");
     }
 
     /// Generate dummy CheckedBuildMetadata and CheckedEnvironmentMetadata that
