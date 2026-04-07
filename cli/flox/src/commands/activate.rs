@@ -133,7 +133,7 @@ impl Activate {
     /// Run the environment inside an isolated container using Docker or Podman.
     ///
     /// This constructs a `docker run` (or `podman run`) command that launches
-    /// the `flox/run` image with the specified environment reference. The Nix
+    /// the `flox/thin` image with the specified environment reference. The Nix
     /// store is persisted in a named Docker volume (`flox-store`) so that
     /// subsequent runs reuse cached packages.
     fn sandbox_activate(&self, flox: &Flox) -> Result<()> {
@@ -173,7 +173,7 @@ impl Activate {
         }
 
         // Container image
-        cmd.arg("flox/run:latest");
+        cmd.arg("flox/thin:latest");
 
         // Environment reference (passed to the container entrypoint)
         match &self.environment {
