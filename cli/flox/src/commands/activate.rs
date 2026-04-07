@@ -40,7 +40,7 @@ use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use indoc::{formatdoc, indoc};
 use shell_gen::ShellWithPath;
-use tracing::{debug, trace, warn};
+use tracing::{debug, info_span, trace, warn};
 
 use super::{
     EnvironmentSelect,
@@ -125,27 +125,68 @@ pub struct Activate {
     #[bpaf(long)]
     pub sandbox: bool,
 
+    /// Container image to use for sandbox mode.
+    /// Defaults to 'flox/thin:latest' from Docker Hub.
+    /// Use this to specify a private registry or custom image.
+    #[bpaf(long("container-image"), argument("image"))]
+    pub container_image: Option<String>,
+
     #[bpaf(external(command_select), optional)]
     pub command: Option<CommandSelect>,
 }
+
+/// Default container image used for sandbox mode.
+const DEFAULT_SANDBOX_IMAGE: &str = "flox/thin:latest";
 
 impl Activate {
     /// Run the environment inside an isolated container using Docker or Podman.
     ///
     /// This constructs a `docker run` (or `podman run`) command that launches
-    /// the `flox/thin` image with the specified environment reference. The Nix
-    /// store is persisted in a named Docker volume (`flox-store`) so that
-    /// subsequent runs reuse cached packages.
+    /// the sandbox container image with the specified environment reference.
+    /// The Nix store is persisted in a named Docker volume (`flox-store`) so
+    /// that subsequent runs reuse cached packages.
+    ///
+    /// Before launching, performs pre-flight checks:
+    /// 1. Verifies a container runtime (Docker/Podman) is in PATH
+    /// 2. Verifies the runtime daemon is responsive
+    /// 3. Pulls the container image if not available locally
     fn sandbox_activate(&self, flox: &Flox) -> Result<()> {
         use crate::commands::containerize::Runtime;
 
+        let image = self
+            .container_image
+            .as_deref()
+            .unwrap_or(DEFAULT_SANDBOX_IMAGE);
+
+        // --- Pre-flight: detect container runtime ---
         let runtime = Runtime::detect_from_path().ok_or_else(|| {
             anyhow!(
                 "Sandbox mode requires Docker or Podman.\n\
-                 Neither was found in PATH."
+                 Neither was found in PATH.\n\n\
+                 Install Docker: https://docs.docker.com/get-docker/\n\
+                 Install Podman: https://podman.io/docs/installation"
             )
         })?;
 
+        // --- Pre-flight: check daemon is running ---
+        {
+            let _span = info_span!(
+                "sandbox_preflight",
+                progress = format!("Checking {} daemon", runtime.to_cmd())
+            )
+            .entered();
+            runtime.check_daemon_running()?;
+        }
+
+        // --- Pre-flight: ensure image is available ---
+        if !runtime.image_exists_locally(image) {
+            message::info(format!(
+                "Container image '{image}' not found locally, pulling..."
+            ));
+            runtime.pull_image(image)?;
+        }
+
+        // --- Build docker run command ---
         let mut cmd = std::process::Command::new(runtime.to_cmd());
         cmd.arg("run").arg("--rm");
 
@@ -172,8 +213,12 @@ impl Activate {
             ));
         }
 
+        // Pass SHELL into the container so flox activate doesn't warn about
+        // failing to detect the shell. The container typically only has bash.
+        cmd.arg("-e").arg("SHELL=/bin/bash");
+
         // Container image
-        cmd.arg("flox/thin:latest");
+        cmd.arg(image);
 
         // Environment reference (passed to the container entrypoint)
         match &self.environment {
@@ -200,6 +245,7 @@ impl Activate {
         }
 
         debug!("Launching sandbox: {:?}", cmd);
+        message::info("Entering sandbox (container isolation)...");
 
         // Replace the current process with Docker/Podman
         Err(cmd.exec().into())

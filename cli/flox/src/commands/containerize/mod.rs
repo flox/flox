@@ -330,6 +330,85 @@ impl Runtime {
         }
     }
 
+    /// Check whether the container runtime daemon is accessible.
+    ///
+    /// Runs `docker info` / `podman info` as a child process.
+    /// Returns `Ok(())` if the daemon responds, or an error with
+    /// platform-specific guidance on how to start it.
+    pub(crate) fn check_daemon_running(&self) -> Result<()> {
+        let output = Command::new(self.to_cmd())
+            .arg("info")
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .output()
+            .context(format!("Failed to run '{} info'", self.to_cmd()))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            debug!("{} info failed: {}", self.to_cmd(), stderr);
+
+            let help = match (self, std::env::consts::OS) {
+                (Runtime::Docker, "macos") => {
+                    "Start Docker Desktop from your Applications folder,\n\
+                     or run: open -a Docker"
+                },
+                (Runtime::Docker, "linux") => {
+                    "Start the Docker daemon with:\n  \
+                     sudo systemctl start docker\n\n\
+                     Or install Docker: https://docs.docker.com/engine/install/"
+                },
+                (Runtime::Podman, "macos") => {
+                    "Initialize and start a Podman machine:\n  \
+                     podman machine init\n  \
+                     podman machine start"
+                },
+                (Runtime::Podman, "linux") => {
+                    "Start the Podman service, or verify your installation:\n  \
+                     https://podman.io/docs/installation"
+                },
+                _ => "Ensure your container runtime daemon is running.",
+            };
+
+            bail!("The {} daemon is not running.\n\n{help}", self.to_cmd());
+        }
+        Ok(())
+    }
+
+    /// Check if a container image exists locally.
+    ///
+    /// Runs `docker image inspect <image>` which returns exit code 0 if present.
+    pub(crate) fn image_exists_locally(&self, image: &str) -> bool {
+        Command::new(self.to_cmd())
+            .args(["image", "inspect", image])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+
+    /// Pull a container image, showing Docker's native progress output.
+    ///
+    /// Stdout and stderr are inherited so the user sees layer-by-layer progress.
+    pub(crate) fn pull_image(&self, image: &str) -> Result<()> {
+        let status = Command::new(self.to_cmd())
+            .args(["pull", image])
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
+            .context(format!("Failed to run '{} pull {}'", self.to_cmd(), image))?;
+
+        if !status.success() {
+            bail!(
+                "Failed to pull container image '{image}'.\n\n\
+                 If you are behind a firewall or using a private registry,\n\
+                 use --container-image to specify an alternative image location:\n  \
+                 flox activate --sandbox --container-image myregistry.example.com/flox/thin:latest"
+            );
+        }
+        Ok(())
+    }
+
     /// Get a writer to the registry,
     /// Essentially spawns a `docker load` or `podman load` process
     /// and returns a handle to its stdin.
