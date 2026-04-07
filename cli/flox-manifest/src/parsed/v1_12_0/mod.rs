@@ -7,7 +7,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-pub use crate::parsed::v1_11_0::MinimumCliVersion;
 use crate::interfaces::{AsTypedOnlyManifest, CommonFields, SchemaVersion, impl_pkg_lookup};
 use crate::parsed::common::{
     Build,
@@ -21,6 +20,7 @@ use crate::parsed::common::{
     Vars,
 };
 use crate::parsed::v1_10_0::{Install, ManifestPackageDescriptor};
+pub use crate::parsed::v1_11_0::MinimumCliVersion;
 use crate::parsed::{Inner, SkipSerializing};
 use crate::{Manifest, ManifestError, Parsed, TypedOnly};
 
