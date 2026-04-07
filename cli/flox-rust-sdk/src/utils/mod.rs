@@ -29,6 +29,14 @@ use walkdir;
 use self::errors::IoError;
 use crate::models::floxmeta::FLOXHUB_TOKEN_ENV_VAR;
 
+/// Environment variable names whose values should be redacted in logs.
+const SENSITIVE_ENV_VARS: &[&str] = &[
+    FLOXHUB_TOKEN_ENV_VAR,
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+];
+
 pub static FLOX_INTERPRETER: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(env::var("FLOX_INTERPRETER").unwrap_or(env!("FLOX_INTERPRETER").to_string()))
 });
@@ -132,7 +140,7 @@ impl Display for DisplayCommand<'_> {
                 let v = v.to_string_lossy();
                 let redacted_value = k
                     .to_str()
-                    .and_then(|s| (s == FLOXHUB_TOKEN_ENV_VAR).then_some("***"))
+                    .and_then(|s| SENSITIVE_ENV_VARS.contains(&s).then_some("***"))
                     .unwrap_or(&v);
 
                 format!(
