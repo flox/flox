@@ -1,6 +1,6 @@
 [package]
 name = "catalog-api-v1"
-version = "0.0.0"
+version.workspace = true
 edition.workspace = true
 
 [package.metadata.cargo-machete]

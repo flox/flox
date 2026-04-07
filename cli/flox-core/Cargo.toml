@@ -1,6 +1,6 @@
 [package]
 name = "flox-core"
-version = "0.0.0"
+version.workspace = true
 edition.workspace = true
 
 [package.metadata.cargo-machete]
