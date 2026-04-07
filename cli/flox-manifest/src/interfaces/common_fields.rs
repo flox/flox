@@ -9,6 +9,14 @@ pub trait CommonFields {
     fn build(&self) -> &parsed::common::Build;
     fn containerize(&self) -> Option<&parsed::common::Containerize>;
     fn options(&self) -> &parsed::common::Options;
+    /// Returns whether services should auto-start on activation.
+    ///
+    /// Returns `false` for all schema versions before V1_12_0.
+    /// V1_12_0 and later read this from the manifest's `[services] auto-start`
+    /// field.
+    fn services_auto_start(&self) -> bool {
+        false
+    }
 
     fn vars_mut(&mut self) -> &mut parsed::common::Vars;
     fn hook_mut(&mut self) -> Option<&mut parsed::common::Hook>;
@@ -26,6 +34,7 @@ impl CommonFields for Parsed {
             Parsed::V1(inner) => inner.vars(),
             Parsed::V1_10_0(inner) => inner.vars(),
             Parsed::V1_11_0(inner) => inner.vars(),
+            Parsed::V1_12_0(inner) => inner.vars(),
         }
     }
 
@@ -34,6 +43,7 @@ impl CommonFields for Parsed {
             Parsed::V1(inner) => inner.hook(),
             Parsed::V1_10_0(inner) => inner.hook(),
             Parsed::V1_11_0(inner) => inner.hook(),
+            Parsed::V1_12_0(inner) => inner.hook(),
         }
     }
 
@@ -42,6 +52,7 @@ impl CommonFields for Parsed {
             Parsed::V1(inner) => inner.profile(),
             Parsed::V1_10_0(inner) => inner.profile(),
             Parsed::V1_11_0(inner) => inner.profile(),
+            Parsed::V1_12_0(inner) => inner.profile(),
         }
     }
 
@@ -50,6 +61,7 @@ impl CommonFields for Parsed {
             Parsed::V1(inner) => inner.services(),
             Parsed::V1_10_0(inner) => inner.services(),
             Parsed::V1_11_0(inner) => inner.services(),
+            Parsed::V1_12_0(inner) => inner.services(),
         }
     }
 
@@ -58,6 +70,7 @@ impl CommonFields for Parsed {
             Parsed::V1(inner) => inner.include(),
             Parsed::V1_10_0(inner) => inner.include(),
             Parsed::V1_11_0(inner) => inner.include(),
+            Parsed::V1_12_0(inner) => inner.include(),
         }
     }
 
@@ -66,6 +79,7 @@ impl CommonFields for Parsed {
             Parsed::V1(inner) => inner.build(),
             Parsed::V1_10_0(inner) => inner.build(),
             Parsed::V1_11_0(inner) => inner.build(),
+            Parsed::V1_12_0(inner) => inner.build(),
         }
     }
 
@@ -74,6 +88,7 @@ impl CommonFields for Parsed {
             Parsed::V1(inner) => inner.containerize(),
             Parsed::V1_10_0(inner) => inner.containerize(),
             Parsed::V1_11_0(inner) => inner.containerize(),
+            Parsed::V1_12_0(inner) => inner.containerize(),
         }
     }
 
@@ -82,6 +97,16 @@ impl CommonFields for Parsed {
             Parsed::V1(inner) => inner.options(),
             Parsed::V1_10_0(inner) => inner.options(),
             Parsed::V1_11_0(inner) => inner.options(),
+            Parsed::V1_12_0(inner) => inner.options(),
+        }
+    }
+
+    fn services_auto_start(&self) -> bool {
+        match self {
+            Parsed::V1(inner) => inner.services_auto_start(),
+            Parsed::V1_10_0(inner) => inner.services_auto_start(),
+            Parsed::V1_11_0(inner) => inner.services_auto_start(),
+            Parsed::V1_12_0(inner) => inner.services_auto_start(),
         }
     }
 
@@ -90,6 +115,7 @@ impl CommonFields for Parsed {
             Parsed::V1(inner) => inner.vars_mut(),
             Parsed::V1_10_0(inner) => inner.vars_mut(),
             Parsed::V1_11_0(inner) => inner.vars_mut(),
+            Parsed::V1_12_0(inner) => inner.vars_mut(),
         }
     }
 
@@ -98,6 +124,7 @@ impl CommonFields for Parsed {
             Parsed::V1(inner) => inner.hook_mut(),
             Parsed::V1_10_0(inner) => inner.hook_mut(),
             Parsed::V1_11_0(inner) => inner.hook_mut(),
+            Parsed::V1_12_0(inner) => inner.hook_mut(),
         }
     }
 
@@ -106,6 +133,7 @@ impl CommonFields for Parsed {
             Parsed::V1(inner) => inner.profile_mut(),
             Parsed::V1_10_0(inner) => inner.profile_mut(),
             Parsed::V1_11_0(inner) => inner.profile_mut(),
+            Parsed::V1_12_0(inner) => inner.profile_mut(),
         }
     }
 
@@ -114,6 +142,7 @@ impl CommonFields for Parsed {
             Parsed::V1(inner) => inner.services_mut(),
             Parsed::V1_10_0(inner) => inner.services_mut(),
             Parsed::V1_11_0(inner) => inner.services_mut(),
+            Parsed::V1_12_0(inner) => inner.services_mut(),
         }
     }
 
@@ -122,6 +151,7 @@ impl CommonFields for Parsed {
             Parsed::V1(inner) => inner.include_mut(),
             Parsed::V1_10_0(inner) => inner.include_mut(),
             Parsed::V1_11_0(inner) => inner.include_mut(),
+            Parsed::V1_12_0(inner) => inner.include_mut(),
         }
     }
 
@@ -130,6 +160,7 @@ impl CommonFields for Parsed {
             Parsed::V1(inner) => inner.build_mut(),
             Parsed::V1_10_0(inner) => inner.build_mut(),
             Parsed::V1_11_0(inner) => inner.build_mut(),
+            Parsed::V1_12_0(inner) => inner.build_mut(),
         }
     }
 
@@ -138,6 +169,7 @@ impl CommonFields for Parsed {
             Parsed::V1(inner) => inner.containerize_mut(),
             Parsed::V1_10_0(inner) => inner.containerize_mut(),
             Parsed::V1_11_0(inner) => inner.containerize_mut(),
+            Parsed::V1_12_0(inner) => inner.containerize_mut(),
         }
     }
 
@@ -146,6 +178,7 @@ impl CommonFields for Parsed {
             Parsed::V1(inner) => inner.options_mut(),
             Parsed::V1_10_0(inner) => inner.options_mut(),
             Parsed::V1_11_0(inner) => inner.options_mut(),
+            Parsed::V1_12_0(inner) => inner.options_mut(),
         }
     }
 }

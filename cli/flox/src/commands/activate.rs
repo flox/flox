@@ -392,7 +392,7 @@ impl Activate {
         let is_ephemeral = !services_for_ephemeral_activation.is_empty();
         let services_to_start = if is_ephemeral {
             services_for_ephemeral_activation
-        } else if self.auto_start_services(manifest.services().auto_start) {
+        } else if self.auto_start_services(manifest.services_auto_start()) {
             Self::gather_services_for_flag(manifest, &flox.system, &socket_path)
         } else {
             Vec::new()
@@ -535,8 +535,8 @@ impl Activate {
     /// Returns true if:
     /// - `--start-services` flag is set, OR
     /// - manifest has `auto-start = true` AND `--no-start-services` is not set
-    fn auto_start_services(&self, auto_start: Option<bool>) -> bool {
-        self.start_services || (auto_start == Some(true) && !self.no_start_services)
+    fn auto_start_services(&self, auto_start: bool) -> bool {
+        self.start_services || (auto_start && !self.no_start_services)
     }
 
     /// Handle the `--start-services` flag by determining which services to start.
@@ -934,32 +934,30 @@ mod tests {
     fn test_auto_start_services_with_start_services_flag() {
         // --start-services starts services regardless of manifest auto_start
         let activate = activate_with_flags(true, false);
-        assert!(activate.auto_start_services(None));
-        assert!(activate.auto_start_services(Some(false)));
-        assert!(activate.auto_start_services(Some(true)));
+        assert!(activate.auto_start_services(false));
+        assert!(activate.auto_start_services(true));
     }
 
     #[test]
     fn test_auto_start_services_with_manifest_auto_start_true() {
         // auto_start = true in manifest causes services to start when no flags given
         let activate = activate_with_flags(false, false);
-        assert!(activate.auto_start_services(Some(true)));
+        assert!(activate.auto_start_services(true));
     }
 
     #[test]
     fn test_auto_start_services_with_manifest_auto_start_false_or_absent() {
         // Without flags, services do not start if auto_start is false or absent
         let activate = activate_with_flags(false, false);
-        assert!(!activate.auto_start_services(None));
-        assert!(!activate.auto_start_services(Some(false)));
+        assert!(!activate.auto_start_services(false));
     }
 
     #[test]
     fn test_no_start_services_suppresses_manifest_auto_start() {
         // --no-start-services suppresses manifest auto_start = true
         let activate = activate_with_flags(false, true);
-        assert!(!activate.auto_start_services(Some(true)));
-        assert!(!activate.auto_start_services(None));
+        assert!(!activate.auto_start_services(true));
+        assert!(!activate.auto_start_services(false));
     }
 
     #[test]
