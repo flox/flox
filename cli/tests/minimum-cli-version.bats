@@ -104,7 +104,7 @@ EOF
 
 @test "minimum-cli-version: warning includes reason from table form" {
   cat > .flox/env/manifest.toml << 'EOF'
-schema-version = "1.11.0"
+schema-version = "1.12.0"
 
 [minimum-cli-version]
 version = "99.99.99"
