@@ -1,3 +1,4 @@
+use std::error::Error as _;
 use std::ops::Deref;
 
 use flox_rust_sdk::data::CanonicalizeError;
@@ -191,6 +192,7 @@ pub fn format_error(err: &EnvironmentError) -> String {
 
             Please make sure that you have write permissions to '.flox'.
         "},
+        EnvironmentError::ManifestError(manifest_err) => format_manifest_error(manifest_err),
         EnvironmentError::Core(core_error) => format_core_error(core_error),
         EnvironmentError::ManagedEnvironment(managed_error) => format_managed_error(managed_error),
         EnvironmentError::RemoteEnvironment(remote_error) => format_remote_error(remote_error),
@@ -212,9 +214,9 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
 
             {err}
         ",
-            // The message adds a newline at the end,
-            // trim to make the error look better
-            err = err.message().trim()
+            // Use the full Display output which includes line/column
+            // span information, rather than .message() which strips it.
+            err = err.to_string().trim()
         },
         CoreEnvironmentError::MigrateManifest(err) => formatdoc! {
             "Could not automatically migrate manifest to version 1:
@@ -223,9 +225,9 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
 
             Use 'flox edit' to resolve errors and then try again.
         ",
-            // The message adds a newline at the end,
-            // trim to make the error look better
-            err = err.message().trim()
+            // Use the full Display output which includes line/column
+            // span information, rather than .message() which strips it.
+            err = err.to_string().trim()
         },
         CoreEnvironmentError::LockForMigration(err) => formatdoc! {
             "Failed to create version 1 lock:
@@ -312,7 +314,7 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         "},
         CoreEnvironmentError::CreateTempdir(_) => display_chain(err),
         CoreEnvironmentError::Auth(err) => display_chain(err),
-        CoreEnvironmentError::Manifest(err) => display_chain(err),
+        CoreEnvironmentError::Manifest(manifest_err) => format_manifest_error(manifest_err),
         CoreEnvironmentError::Lockfile(err) => display_chain(err),
         CoreEnvironmentError::EnvError(err) => display_chain(err),
     }
@@ -467,7 +469,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             format_core_error(core_environment_error)
         },
         ManagedEnvironmentError::Environment(_) => display_chain(err),
-        ManagedEnvironmentError::Manifest(_) => display_chain(err),
+        ManagedEnvironmentError::Manifest(manifest_err) => format_manifest_error(manifest_err),
     }
 }
 
@@ -694,7 +696,7 @@ pub fn format_resolve_error(err: &ResolveError) -> String {
         ResolveError::MissingPackageDescriptor(_) => display_chain(err),
         ResolveError::LockFlakeNixError(_) => display_chain(err),
         ResolveError::InstallIdNotInManifest(_) => display_chain(err),
-        ResolveError::Manifest(_) => display_chain(err),
+        ResolveError::Manifest(manifest_err) => format_manifest_error(manifest_err),
     }
 }
 
@@ -770,4 +772,60 @@ pub fn display_chain(mut err: &dyn std::error::Error) -> String {
     }
 
     fmt
+}
+
+/// Format a `ManifestError` by surfacing the inner source error (which
+/// includes line/column span information) when available.
+fn format_manifest_error(err: &flox_manifest::ManifestError) -> String {
+    if let Some(source) = err.source() {
+        formatdoc! {
+            "Failed to parse manifest:
+
+            {source}
+        "}
+    } else {
+        format!("Failed to parse manifest: {err}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use flox_manifest::Manifest;
+    use flox_rust_sdk::models::environment::EnvironmentError;
+
+    use super::*;
+
+    #[test]
+    fn manifest_toml_syntax_error_includes_line_number() {
+        // This manifest has a TOML syntax error: a key with no value
+        let bad_manifest = "version = 1\n\n[install]\nhello.pkg-path\n";
+        let err = Manifest::parse_toml_typed(bad_manifest).unwrap_err();
+        let env_err = EnvironmentError::from(err);
+        let formatted = format_error(&env_err);
+
+        assert!(
+            formatted.contains("line"),
+            "Error should contain line information, got: {formatted}"
+        );
+    }
+
+    #[test]
+    fn manifest_invalid_field_error_is_formatted() {
+        // Valid TOML but invalid manifest structure (unknown field)
+        let bad_manifest =
+            "version = 1\n\n[install]\nhello.pkg-path = \"hello\"\nhello.bogus-field = true\n";
+        let err = Manifest::parse_toml_typed(bad_manifest).unwrap_err();
+        let env_err = EnvironmentError::from(err);
+        let formatted = format_error(&env_err);
+
+        assert!(
+            formatted.contains("Failed to parse manifest"),
+            "Error should have 'Failed to parse manifest' header, got: {formatted}"
+        );
+        // The source error should include details about the invalid field
+        assert!(
+            formatted.contains("install.hello"),
+            "Error should reference the invalid install descriptor, got: {formatted}"
+        );
+    }
 }

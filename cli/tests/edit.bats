@@ -139,7 +139,9 @@ EOF
   RUST_BACKTRACE=0 run "$FLOX_BIN" edit -f ./manifest.toml
   assert_failure
   assert_output - <<'EOF'
-✘ ERROR: manifest contents were not valid TOML: TOML parse error at line 1, column 7
+✘ ERROR: Failed to parse manifest:
+
+TOML parse error at line 1, column 7
   |
 1 | foo = ;
   |       ^
@@ -160,7 +162,9 @@ EOF
   RUST_BACKTRACE=0 run sh -c "echo 'foo = ;' | ${FLOX_BIN} edit -f -"
   assert_failure
   assert_output - <<'EOF'
-✘ ERROR: manifest contents were not valid TOML: TOML parse error at line 1, column 7
+✘ ERROR: Failed to parse manifest:
+
+TOML parse error at line 1, column 7
   |
 1 | foo = ;
   |       ^
