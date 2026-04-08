@@ -215,6 +215,20 @@ pub trait ClientTrait {
 
     /// Get information about the base catalog and available stabilities.
     async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, CatalogClientError>;
+
+    /// Check if a build already exists in the catalog.
+    ///
+    /// Returns provenance data (source rev date, rev, catalog page URL) when
+    /// `already_published` is true. Used for dedup pre-check before building.
+    async fn check_build(
+        &self,
+        catalog_name: impl AsRef<str> + Send + Sync,
+        package_name: impl AsRef<str> + Send + Sync,
+        source_url: &str,
+        source_rev: &str,
+        nixpkgs_rev: &str,
+        system: &str,
+    ) -> Result<CheckBuildResponse, CatalogClientError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -500,6 +514,32 @@ impl ClientTrait for CatalogClient {
             .map_api_error()
             .await
             .map(|res| res.into_inner().into())
+    }
+
+    async fn check_build(
+        &self,
+        catalog_name: impl AsRef<str> + Send + Sync,
+        package_name: impl AsRef<str> + Send + Sync,
+        source_url: &str,
+        source_rev: &str,
+        nixpkgs_rev: &str,
+        system: &str,
+    ) -> Result<CheckBuildResponse, CatalogClientError> {
+        let catalog = str_to_catalog_name(catalog_name)?;
+        let package = str_to_package_name(package_name)?;
+        self.client
+            .check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_get(
+                &catalog,
+                &package,
+                nixpkgs_rev,
+                source_rev,
+                source_url,
+                system,
+            )
+            .await
+            .map_api_error()
+            .await
+            .map(|resp| resp.into_inner())
     }
 }
 

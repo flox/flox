@@ -12,6 +12,7 @@ use flox_catalog::{
     CatalogClientError,
     CatalogMockMode,
     CatalogStoreConfig,
+    CheckBuildResponse,
     ClientTrait,
     LockedSourceItem,
     PackageDetails,
@@ -81,6 +82,7 @@ pub enum Response {
     CreatePackage,
     PublishBuild,
     GetBaseCatalog(BaseCatalogInfo),
+    CheckBuild(CheckBuildResponse),
 }
 
 #[derive(Debug, Error)]
@@ -255,6 +257,41 @@ impl ClientTrait for Client {
         match self {
             Client::Catalog(c) => c.get_catalog_locked_sources(catalog_name).await,
             Client::Mock(c) => c.get_catalog_locked_sources(catalog_name).await,
+        }
+    }
+
+    async fn check_build(
+        &self,
+        catalog_name: impl AsRef<str> + Send + Sync,
+        package_name: impl AsRef<str> + Send + Sync,
+        source_url: &str,
+        source_rev: &str,
+        nixpkgs_rev: &str,
+        system: &str,
+    ) -> Result<CheckBuildResponse, CatalogClientError> {
+        match self {
+            Client::Catalog(c) => {
+                c.check_build(
+                    catalog_name,
+                    package_name,
+                    source_url,
+                    source_rev,
+                    nixpkgs_rev,
+                    system,
+                )
+                .await
+            },
+            Client::Mock(c) => {
+                c.check_build(
+                    catalog_name,
+                    package_name,
+                    source_url,
+                    source_rev,
+                    nixpkgs_rev,
+                    system,
+                )
+                .await
+            },
         }
     }
 }
@@ -527,6 +564,32 @@ impl ClientTrait for MockClient {
         _catalog_name: impl AsRef<str> + Send + Sync,
     ) -> Result<ResultsPage<LockedSourceItem>, CatalogClientError> {
         unimplemented!("get_catalog_locked_sources not implemented for MockClient")
+    }
+
+    async fn check_build(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+        _package_name: impl AsRef<str> + Send + Sync,
+        _source_url: &str,
+        _source_rev: &str,
+        _nixpkgs_rev: &str,
+        _system: &str,
+    ) -> Result<CheckBuildResponse, CatalogClientError> {
+        let mock_resp = self
+            .mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .pop_front();
+        match mock_resp {
+            Some(Response::CheckBuild(resp)) => Ok(resp),
+            Some(Response::Error(err)) => Err(CatalogClientError::APIError(
+                flox_catalog::ApiError::ErrorResponse(
+                    err.try_into()
+                        .expect("couldn't convert mock error response"),
+                ),
+            )),
+            _ => panic!("expected check_build response, found {:?}", &mock_resp),
+        }
     }
 }
 

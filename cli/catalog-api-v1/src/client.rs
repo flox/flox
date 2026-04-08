@@ -691,53 +691,6 @@ manifest packages were built via the traditional flox manifest workflow.*/
             }
         }
     }
-    ///Request body for the check-build endpoint.
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "CheckBuildRequest",
-    ///  "description": "Request body for the check-build endpoint.",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "nixpkgs_rev",
-    ///    "source_rev",
-    ///    "source_url",
-    ///    "system"
-    ///  ],
-    ///  "properties": {
-    ///    "nixpkgs_rev": {
-    ///      "title": "Nixpkgs Rev",
-    ///      "type": "string"
-    ///    },
-    ///    "source_rev": {
-    ///      "title": "Source Rev",
-    ///      "type": "string"
-    ///    },
-    ///    "source_url": {
-    ///      "title": "Source Url",
-    ///      "type": "string"
-    ///    },
-    ///    "system": {
-    ///      "$ref": "#/components/schemas/PackageSystem"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    pub struct CheckBuildRequest {
-        pub nixpkgs_rev: ::std::string::String,
-        pub source_rev: ::std::string::String,
-        pub source_url: ::std::string::String,
-        pub system: PackageSystem,
-    }
-    impl ::std::convert::From<&CheckBuildRequest> for CheckBuildRequest {
-        fn from(value: &CheckBuildRequest) -> Self {
-            value.clone()
-        }
-    }
     ///Response from the check-build endpoint.
     ///
     /// <details><summary>JSON schema</summary>
@@ -755,13 +708,12 @@ manifest packages were built via the traditional flox manifest workflow.*/
     ///      "title": "Already Published",
     ///      "type": "boolean"
     ///    },
-    ///    "published_at": {
-    ///      "title": "Published At",
+    ///    "catalog_page_url": {
+    ///      "title": "Catalog Page Url",
     ///      "type": [
     ///        "string",
     ///        "null"
-    ///      ],
-    ///      "format": "date-time"
+    ///      ]
     ///    },
     ///    "source_rev": {
     ///      "title": "Source Rev",
@@ -786,9 +738,7 @@ manifest packages were built via the traditional flox manifest workflow.*/
     pub struct CheckBuildResponse {
         pub already_published: bool,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub published_at: ::std::option::Option<
-            ::chrono::DateTime<::chrono::offset::Utc>,
-        >,
+        pub catalog_page_url: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub source_rev: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -5507,7 +5457,7 @@ Path Parameters:
 - **catalog_name**: The name of the catalog
 - **package_name**: The name of the package
 
-Request Body:
+Query Parameters:
 - **source_url**: Source repository URL
 - **source_rev**: Source revision
 - **nixpkgs_rev**: Nixpkgs revision used for the build
@@ -5517,16 +5467,19 @@ Returns:
 - **CheckBuildResponse** with already_published=true and provenance
   if a matching build exists, or already_published=false otherwise.
 
-Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/check-build`
+Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/check-build`
 
 */
-    pub async fn check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_post<
+    pub async fn check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_get<
         'a,
     >(
         &'a self,
         catalog_name: &'a types::CatalogName,
         package_name: &'a types::PackageName,
-        body: &'a types::CheckBuildRequest,
+        nixpkgs_rev: &'a str,
+        source_rev: &'a str,
+        source_url: &'a str,
+        system: &'a str,
     ) -> Result<ResponseValue<types::CheckBuildResponse>, Error<types::ErrorResponse>> {
         let url = format!(
             "{}/api/v1/catalog/catalogs/{}/packages/{}/check-build", self.baseurl,
@@ -5542,16 +5495,19 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
         #[allow(unused_mut)]
         let mut request = self
             .client
-            .post(url)
+            .get(url)
             .header(
                 ::reqwest::header::ACCEPT,
                 ::reqwest::header::HeaderValue::from_static("application/json"),
             )
-            .json(&body)
+            .query(&progenitor_client::QueryParam::new("nixpkgs_rev", &nixpkgs_rev))
+            .query(&progenitor_client::QueryParam::new("source_rev", &source_rev))
+            .query(&progenitor_client::QueryParam::new("source_url", &source_url))
+            .query(&progenitor_client::QueryParam::new("system", &system))
             .headers(header_map)
             .build()?;
         let info = OperationInfo {
-            operation_id: "check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_post",
+            operation_id: "check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_get",
         };
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
