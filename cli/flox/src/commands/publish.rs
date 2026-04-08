@@ -2,10 +2,10 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
+use flox_catalog::ClientTrait;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
-use flox_catalog::ClientTrait;
 use flox_rust_sdk::providers::auth::Auth;
 use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget};
 use flox_rust_sdk::providers::publish::{
@@ -252,11 +252,7 @@ impl Publish {
             .catalog_client
             .check_build(
                 &catalog_name,
-                publish_provider
-                    .package_metadata
-                    .package
-                    .name()
-                    .as_ref(),
+                publish_provider.package_metadata.package.name().as_ref(),
                 &publish_provider.env_metadata.build_repo_meta.url,
                 &publish_provider.env_metadata.build_repo_meta.rev,
                 nixpkgs_rev,
@@ -287,9 +283,7 @@ impl Publish {
             Err(e) => {
                 // Pre-check failed; show user-visible warning and proceed
                 // with build (graceful degradation per D3).
-                message::warning(
-                    "Dedup check unavailable — proceeding with full build.",
-                );
+                message::warning("Dedup check unavailable — proceeding with full build.");
                 tracing::warn!(
                     error = %e,
                     "Dedup pre-check failed, proceeding with build"
@@ -404,7 +398,14 @@ mod tests {
         })]);
 
         let result = client
-            .check_build("myorg", "mypkg", "https://example.com", "abc123", "rev1", "x86_64-linux")
+            .check_build(
+                "myorg",
+                "mypkg",
+                "https://example.com",
+                "abc123",
+                "rev1",
+                "x86_64-linux",
+            )
             .await
             .expect("check_build should succeed");
 
@@ -449,9 +450,19 @@ mod tests {
         // the Err arm in Publish::publish() would have been taken if check_build
         // had returned an error — the match structure is verified by inspection.
         let result = client
-            .check_build("myorg", "mypkg", "https://example.com", "abc123", "rev1", "x86_64-linux")
+            .check_build(
+                "myorg",
+                "mypkg",
+                "https://example.com",
+                "abc123",
+                "rev1",
+                "x86_64-linux",
+            )
             .await;
-        assert!(result.is_ok(), "check_build should return Ok for non-error mock");
+        assert!(
+            result.is_ok(),
+            "check_build should return Ok for non-error mock"
+        );
         assert!(!result.unwrap().already_published);
     }
 
@@ -470,7 +481,14 @@ mod tests {
         })]);
 
         let result = client
-            .check_build("myorg", "mypkg", "https://example.com", "abc123", "rev1", "x86_64-linux")
+            .check_build(
+                "myorg",
+                "mypkg",
+                "https://example.com",
+                "abc123",
+                "rev1",
+                "x86_64-linux",
+            )
             .await
             .expect("check_build should succeed");
 
