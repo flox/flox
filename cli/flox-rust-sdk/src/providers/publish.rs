@@ -503,10 +503,14 @@ impl ClientSideCatalogStoreConfig {
         cmd
     }
 
-    /// Runs a `nix path-info` command and parses the full recursive narinfo
-    /// response.  With `--recursive`, nix returns narinfo for the queried
-    /// store path **and** all its transitive dependencies.
-    fn run_nar_info_cmd(mut cmd: Command, store_path: &str) -> Result<NarInfos, PublishError> {
+    /// Gets the NAR info for **the closure** of a store path from the given store.
+    #[instrument(skip_all, fields(progress = format!("Collecting extra build metadata for '{store_path}'")))]
+    fn get_nar_info(
+        source_url: &str,
+        store_path: &str,
+        auth_netrc_path: Option<&Path>,
+    ) -> Result<NarInfos, PublishError> {
+        let mut cmd = Self::nar_info_cmd(source_url, store_path, auth_netrc_path);
         debug!(cmd = %cmd.display(), "running nix path-info command");
         let output = cmd.output().map_err(|e| {
             PublishError::Catchall(format!("failed to execute NAR info command: {e}"))
@@ -524,17 +528,6 @@ impl ClientSideCatalogStoreConfig {
             }));
         }
         Ok(narinfos)
-    }
-
-    /// Gets the recursive NAR info for a store path from the given store.
-    #[instrument(skip_all, fields(progress = format!("Collecting extra build metadata for '{store_path}'")))]
-    fn get_nar_info(
-        source_url: &str,
-        store_path: &str,
-        auth_netrc_path: Option<&Path>,
-    ) -> Result<NarInfos, PublishError> {
-        let cmd = Self::nar_info_cmd(source_url, store_path, auth_netrc_path);
-        Self::run_nar_info_cmd(cmd, store_path)
     }
 
     /// Retrieves and merges the [NarInfos] closures of the provided
