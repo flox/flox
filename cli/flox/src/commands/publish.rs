@@ -242,7 +242,14 @@ impl Publish {
             .base_catalog_ref
             .to_string();
         // Format is "https://...?rev=<40-char-hex>"
-        let nixpkgs_rev = base_url_str.split("?rev=").nth(1).unwrap_or("");
+        let nixpkgs_rev = base_url_str.split("?rev=").nth(1).unwrap_or_else(|| {
+            tracing::warn!(
+                url = %base_url_str,
+                "could not extract nixpkgs rev from base catalog URL; \
+                 dedup check will likely miss"
+            );
+            ""
+        });
         let system = publish_config
             .system_override
             .system
