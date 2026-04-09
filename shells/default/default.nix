@@ -7,6 +7,7 @@
   flox-cli,
   flox-nix-plugins,
   hivemind,
+  jq,
   just,
   krb5,
   lib,
@@ -38,6 +39,7 @@ let
       daemonize
       flox-cli-tests
       hivemind
+      jq
       just
       nix-unit
       nixfmt-rfc-style
