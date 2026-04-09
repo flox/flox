@@ -257,7 +257,6 @@ EOF
 
 # bats test_tags=edit:priority
 @test "'flox edit' priority" {
-  skip "TODO: revisit this test after #3887"
   "$FLOX_BIN" init
 
 WITHOUT_PRIORITY=$(cat <<EOF
@@ -285,6 +284,55 @@ EOF
 
   run "$FLOX_BIN" edit -f <(echo "$WITHOUT_PRIORITY")
   assert_failure
+}
+
+# ---------------------------------------------------------------------------- #
+
+# Regression test for #2958: explicitly installed packages should take
+# priority over propagated dependencies from other packages.
+# Two builds: 'foo' provides bin/collide (FAIL) and 'bar' also provides
+# bin/collide (SUCCESS) while propagating foo via propagated-build-inputs.
+# When bar is installed, bar's own bin/collide must win over foo's propagated one.
+# bats test_tags=edit:priority-propagated-deps
+@test "'flox edit' explicit package wins over propagated dependency" {
+  "$FLOX_BIN" init
+
+  MANIFEST=$(cat << "EOF"
+version = 1
+
+[install]
+hello.pkg-path = "hello"
+
+[build]
+foo.command = """
+  mkdir -p $out/bin
+  printf '#!/bin/sh\necho FAIL && false\n' > $out/bin/collide
+  chmod +x $out/bin/collide
+"""
+
+bar.command = """
+  mkdir -p $out/bin $out/nix-support
+  printf '#!/bin/sh\necho SUCCESS && true\n' > $out/bin/collide
+  chmod +x $out/bin/collide
+  echo ${foo} > $out/nix-support/propagated-build-inputs
+"""
+EOF
+  )
+
+  echo "$MANIFEST" | \
+    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    "$FLOX_BIN" edit -f -
+  "$FLOX_BIN" build bar
+
+  # Install bar into a separate environment and verify bar's own
+  # bin/collide wins over the propagated foo's bin/collide.
+  consumer_dir="${BATS_TEST_TMPDIR}/consumer"
+  "$FLOX_BIN" init -d "$consumer_dir"
+  "$FLOX_BIN" install -d "$consumer_dir" "$(readlink result-bar)"
+
+  run "$FLOX_BIN" activate -d "$consumer_dir" -- collide
+  assert_success
+  assert_output "SUCCESS"
 }
 
 # ---------------------------------------------------------------------------- #
