@@ -1459,7 +1459,7 @@ dependencies = [
 
 [[package]]
 name = "flox-catalog"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "async-stream",
  "base64",
@@ -1517,7 +1517,7 @@ dependencies = [
 
 [[package]]
 name = "flox-manifest"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "catalog-api-v1",
  "chrono",
@@ -1603,7 +1603,7 @@ dependencies = [
 
 [[package]]
 name = "flox-test-utils"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2758,7 +2758,7 @@ dependencies = [
 
 [[package]]
 name = "mk_data"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2790,7 +2790,7 @@ dependencies = [
 
 [[package]]
 name = "nef-lock-catalog"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -4439,7 +4439,7 @@ checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 
 [[package]]
 name = "shell_gen"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "serde",
  "shell-escape",
@@ -4709,7 +4709,7 @@ dependencies = [
 
 [[package]]
 name = "systemd"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "indoc",
  "schemars 1.2.1",
@@ -5978,7 +5978,7 @@ checksum = "2fb433233f2df9344722454bc7e96465c9d03bff9d77c248f9e7523fe79585b5"
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
