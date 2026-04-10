@@ -121,8 +121,7 @@ pub struct Activate {
 
     /// Include `$FLOX_ENV/sbin` directories in PATH when activating.
     /// Overrides the `options.activate.add-sbin` setting in the manifest.
-    /// Defaults to excluding `sbin` so that e.g. BusyBox's `sbin/ifconfig`
-    /// does not shadow a dedicated networking package's `bin/ifconfig`.
+    /// Defaults to excluding `sbin`.
     #[bpaf(long("add-sbin"))]
     pub add_sbin: bool,
 

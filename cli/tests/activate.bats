@@ -4836,7 +4836,7 @@ nested_activation_get_output() {
 #
 # In this context, "repaired" means that both the outer and default environments
 # are present in PATH, and the outer environment appears first. `sbin` is
-# excluded by default (see ENT-17): only `bin` subdirectories are prepended.
+# excluded by default: only `bin` subdirectories are prepended.
 nested_activation_assertions() {
   # Check that PATH is repaired
   assert_output --partial "$outer_stub/bin:$default_stub/bin:before_path"
@@ -4906,8 +4906,7 @@ check_nested_activation_repairs_path_and_manpath() {
 # ---------------------------------------------------------------------------- #
 # `options.activate.add-sbin` / `flox activate --add-sbin`
 #
-# ENT-17: sbin is excluded from PATH by default so that e.g. BusyBox's
-# sbin/ifconfig doesn't shadow a dedicated networking package's bin/ifconfig.
+# sbin is excluded from PATH by default
 # The CLI flag `--add-sbin` and the manifest setting
 # `options.activate.add-sbin = true` opt back in.
 # ---------------------------------------------------------------------------- #

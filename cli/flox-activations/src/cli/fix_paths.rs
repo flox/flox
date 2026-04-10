@@ -127,8 +127,7 @@ pub fn prepend_dirs_to_pathlike_var(
 ///
 /// When `add_sbin` is `true`, both `bin` and `sbin` subdirectories of each
 /// FLOX_ENV_DIRS entry are prepended. When `false`, only `bin` is prepended
-/// so that `sbin` binaries don't shadow binaries from other packages (e.g.
-/// BusyBox's `sbin/ifconfig` shadowing a dedicated networking package).
+/// so that `sbin` binaries don't shadow binaries from other packages.
 pub fn fix_path_var(flox_env_dirs_var: &str, path_var: &str, add_sbin: bool) -> String {
     let path_dirs = separate_dir_list(path_var);
     let flox_env_dirs = separate_dir_list(flox_env_dirs_var);

@@ -14,7 +14,7 @@ IFS=: read -ra path_array <<< "$PATH"
   echo "ERROR: first PATH element not $FLOX_ENV/bin" >&2;
   exit 1;
 }
-# 2) does NOT contain "$FLOX_ENV/sbin" at all (ENT-17: sbin is excluded by
+# 2) does NOT contain "$FLOX_ENV/sbin" at all, sbin is excluded by
 #    default; a separate test exercises the --add-sbin opt-in).
 for p in "${path_array[@]}"; do
     if [ "$p" = "$FLOX_ENV/sbin" ]; then

@@ -40,7 +40,7 @@ pub struct AttachCtx {
 
     /// Whether to include `$FLOX_ENV/sbin` directories in PATH when activating.
     /// Defaults to `false` so that `sbin` binaries don't shadow binaries from
-    /// other packages (e.g. BusyBox's `sbin/ifconfig`).
+    /// other packages.
     #[serde(default)]
     pub add_sbin: bool,
 

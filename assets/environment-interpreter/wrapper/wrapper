@@ -120,8 +120,7 @@ fi
 # prepend path
 # Honor the same _FLOX_ADD_SBIN signal that the main activate script uses
 # (set by the Rust caller from the CLI flag / manifest option). Defaults to
-# excluding sbin so that e.g. BusyBox's sbin binaries don't shadow other
-# packages' bin entries.
+# excluding sbin.
 if [ "${_FLOX_ADD_SBIN:-}" = "true" ]; then
   export PATH="$FLOX_ENV/bin:$FLOX_ENV/sbin:$PATH"
 else
