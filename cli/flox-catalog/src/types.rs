@@ -77,6 +77,7 @@ pub use api_types::{
     CatalogStoreConfig,
     CatalogStoreConfigNixCopy,
     CatalogStoreConfigPublisher,
+    CheckBuildRequest,
     CheckBuildResponse,
     MessageLevel,
     NarInfo,

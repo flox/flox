@@ -691,6 +691,53 @@ manifest packages were built via the traditional flox manifest workflow.*/
             }
         }
     }
+    ///Request body for the check-build endpoint.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "CheckBuildRequest",
+    ///  "description": "Request body for the check-build endpoint.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "nixpkgs_rev",
+    ///    "source_rev",
+    ///    "source_url",
+    ///    "system"
+    ///  ],
+    ///  "properties": {
+    ///    "nixpkgs_rev": {
+    ///      "title": "Nixpkgs Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "source_rev": {
+    ///      "title": "Source Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "source_url": {
+    ///      "title": "Source Url",
+    ///      "type": "string"
+    ///    },
+    ///    "system": {
+    ///      "$ref": "#/components/schemas/PackageSystem"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct CheckBuildRequest {
+        pub nixpkgs_rev: ::std::string::String,
+        pub source_rev: ::std::string::String,
+        pub source_url: ::std::string::String,
+        pub system: PackageSystem,
+    }
+    impl ::std::convert::From<&CheckBuildRequest> for CheckBuildRequest {
+        fn from(value: &CheckBuildRequest) -> Self {
+            value.clone()
+        }
+    }
     ///Response from the check-build endpoint.
     ///
     /// <details><summary>JSON schema</summary>
@@ -5457,7 +5504,7 @@ Path Parameters:
 - **catalog_name**: The name of the catalog
 - **package_name**: The name of the package
 
-Query Parameters:
+Request Body:
 - **source_url**: Source repository URL
 - **source_rev**: Source revision
 - **nixpkgs_rev**: Nixpkgs revision used for the build
@@ -5467,19 +5514,16 @@ Returns:
 - **CheckBuildResponse** with already_published=true and provenance
   if a matching build exists, or already_published=false otherwise.
 
-Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/check-build`
+Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/check-build`
 
 */
-    pub async fn check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_get<
+    pub async fn check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_post<
         'a,
     >(
         &'a self,
         catalog_name: &'a types::CatalogName,
         package_name: &'a types::PackageName,
-        nixpkgs_rev: &'a str,
-        source_rev: &'a str,
-        source_url: &'a str,
-        system: &'a str,
+        body: &'a types::CheckBuildRequest,
     ) -> Result<ResponseValue<types::CheckBuildResponse>, Error<types::ErrorResponse>> {
         let url = format!(
             "{}/api/v1/catalog/catalogs/{}/packages/{}/check-build", self.baseurl,
@@ -5495,19 +5539,16 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
         #[allow(unused_mut)]
         let mut request = self
             .client
-            .get(url)
+            .post(url)
             .header(
                 ::reqwest::header::ACCEPT,
                 ::reqwest::header::HeaderValue::from_static("application/json"),
             )
-            .query(&progenitor_client::QueryParam::new("nixpkgs_rev", &nixpkgs_rev))
-            .query(&progenitor_client::QueryParam::new("source_rev", &source_rev))
-            .query(&progenitor_client::QueryParam::new("source_url", &source_url))
-            .query(&progenitor_client::QueryParam::new("system", &system))
+            .json(&body)
             .headers(header_map)
             .build()?;
         let info = OperationInfo {
-            operation_id: "check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_get",
+            operation_id: "check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_post",
         };
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;

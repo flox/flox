@@ -527,14 +527,22 @@ impl ClientTrait for CatalogClient {
     ) -> Result<CheckBuildResponse, CatalogClientError> {
         let catalog = str_to_catalog_name(catalog_name)?;
         let package = str_to_package_name(package_name)?;
+        let system = api_types::PackageSystem::from_str(system).map_err(|_| {
+            CatalogClientError::APIError(APIError::InvalidRequest(format!(
+                "system {system} is not a valid PackageSystem value"
+            )))
+        })?;
+        let body = api_types::CheckBuildRequest {
+            source_url: source_url.to_string(),
+            source_rev: source_rev.to_string(),
+            nixpkgs_rev: nixpkgs_rev.to_string(),
+            system,
+        };
         self.client
-            .check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_get(
+            .check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_post(
                 &catalog,
                 &package,
-                nixpkgs_rev,
-                source_rev,
-                source_url,
-                system,
+                &body,
             )
             .await
             .map_api_error()
