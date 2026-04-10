@@ -316,7 +316,7 @@ impl ManifestMergeTrait for ShallowMerger {
 
         trace!(section = "options", "merging manifest section");
         let (options, options_warnings) =
-            Self::merge_options(low_priority.options(), high_priority.options())?;
+            Self::merge_options(&low_priority.options, &high_priority.options)?;
 
         trace!(section = "services", "merging manifest section");
         let (services, services_warnings) =

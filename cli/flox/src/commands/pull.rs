@@ -565,7 +565,7 @@ impl Pull {
         let mut manifest = env
             .manifest_without_migrating(flox)?
             .migrate(lockfile.as_ref())?;
-        let maybe_systems = manifest.options_mut().systems.as_mut();
+        let maybe_systems = manifest.systems_mut().as_mut();
         if let Some(systems) = maybe_systems {
             if systems.contains(&flox.system) {
                 return Ok(manifest);

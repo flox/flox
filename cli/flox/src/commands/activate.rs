@@ -305,7 +305,7 @@ impl Activate {
         let mode = self
             .mode
             .clone()
-            .unwrap_or(manifest.options().activate.mode.clone().unwrap_or_default());
+            .unwrap_or(manifest.activate_mode().cloned().unwrap_or_default());
         let mode_link_path = rendered_env_path.clone().for_mode(&mode);
         let store_path = fs::read_link(&mode_link_path).with_context(|| {
             format!(
@@ -383,7 +383,7 @@ impl Activate {
 
         let socket_path = concrete_environment.services_socket_path(&flox)?;
 
-        let flox_env_cuda_detection = match manifest.options().cuda_detection {
+        let flox_env_cuda_detection = match manifest.cuda_detection() {
             Some(false) => "0", // manifest opts-out
             _ => "1",           // default to enabling CUDA
         };

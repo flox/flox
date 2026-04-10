@@ -1068,7 +1068,7 @@ where
         // Without this check the lockfile would succeed to build on any system,
         // but (in the general case) contain no packages,
         // because the lockfile won't contain locks of packages for the current system.
-        if let Some(ref systems) = lockfile.manifest.options().systems
+        if let Some(systems) = lockfile.manifest.systems()
             && !systems.contains(&env!("NIX_TARGET_SYSTEM").to_string())
         {
             return Err(BuildEnvError::LockfileIncompatible {

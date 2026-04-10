@@ -1308,6 +1308,7 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     use flox_core::activate::mode::ActivateMode;
+    use flox_manifest::interfaces::CommonFields;
     use flox_manifest::parsed::Inner;
     use flox_manifest::raw::CatalogPackage;
     use flox_manifest::test_helpers::{with_latest_schema, with_schema};
@@ -1710,7 +1711,7 @@ mod tests {
         // Make a non-formatting change to the lock
         {
             let mut lockfile = environment.existing_lockfile().unwrap().unwrap();
-            lockfile.manifest.options_mut().activate.mode = Some(ActivateMode::Dev);
+            *lockfile.manifest.activate_mode_mut() = Some(ActivateMode::Dev);
             let lockfile_contents = serialize_json_with_newline(&lockfile).unwrap();
             let lockfile_path = environment.lockfile_path();
             let mut lockfile = OpenOptions::new().write(true).open(lockfile_path).unwrap();

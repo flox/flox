@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use flox_core::activate::mode::ActivateMode;
 use flox_core::data::System;
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
@@ -9,6 +10,7 @@ use serde_with::skip_serializing_none;
 
 use crate::interfaces::{AsTypedOnlyManifest, CommonFields, SchemaVersion, impl_pkg_lookup};
 use crate::parsed::common::{
+    Allows,
     Build,
     Containerize,
     Hook,
@@ -16,6 +18,7 @@ use crate::parsed::common::{
     KnownSchemaVersion,
     Options,
     Profile,
+    SemverOptions,
     ServiceDescriptor,
     Vars,
 };
@@ -147,8 +150,24 @@ impl CommonFields for ManifestV1_12_0 {
         self.containerize.as_ref()
     }
 
-    fn options(&self) -> &super::common::Options {
-        &self.options
+    fn systems(&self) -> Option<&Vec<System>> {
+        self.options.systems.as_ref()
+    }
+
+    fn allows(&self) -> &Allows {
+        &self.options.allow
+    }
+
+    fn semver_options(&self) -> &SemverOptions {
+        &self.options.semver
+    }
+
+    fn cuda_detection(&self) -> Option<bool> {
+        self.options.cuda_detection
+    }
+
+    fn activate_mode(&self) -> Option<&ActivateMode> {
+        self.options.activate.mode.as_ref()
     }
 
     fn vars_mut(&mut self) -> &mut super::common::Vars {
@@ -179,8 +198,12 @@ impl CommonFields for ManifestV1_12_0 {
         self.containerize.as_mut()
     }
 
-    fn options_mut(&mut self) -> &mut super::common::Options {
-        &mut self.options
+    fn systems_mut(&mut self) -> &mut Option<Vec<System>> {
+        &mut self.options.systems
+    }
+
+    fn activate_mode_mut(&mut self) -> &mut Option<ActivateMode> {
+        &mut self.options.activate.mode
     }
 
     fn services_auto_start(&self) -> bool {

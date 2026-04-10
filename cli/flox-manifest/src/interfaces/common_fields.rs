@@ -1,5 +1,18 @@
+use flox_core::activate::mode::ActivateMode;
+use flox_core::data::System;
+
 use crate::{Manifest, Migrated, MigratedTypedOnly, Parsed, TypedOnly, Validated, parsed};
 
+/// Accessors for fields that are shared across all schema versions.
+///
+/// The trait historically exposed `options()` / `options_mut()` returning
+/// `&parsed::common::Options`, but that could not accommodate schema versions
+/// that need to store version-local types nested inside `options` (e.g.
+/// `options.activate.add-sbin` in V1_12_0). Instead the trait exposes
+/// per-field accessors for each option that is actually read or written by
+/// callers. New option fields added in later schema versions should be
+/// surfaced as new trait methods with default impls returning `None`/`false`
+/// so that pre-existing schema versions remain unchanged.
 pub trait CommonFields {
     fn vars(&self) -> &parsed::common::Vars;
     fn hook(&self) -> Option<&parsed::common::Hook>;
@@ -8,7 +21,14 @@ pub trait CommonFields {
     fn include(&self) -> &parsed::common::Include;
     fn build(&self) -> &parsed::common::Build;
     fn containerize(&self) -> Option<&parsed::common::Containerize>;
-    fn options(&self) -> &parsed::common::Options;
+
+    // `options.*` accessors.
+    fn systems(&self) -> Option<&Vec<System>>;
+    fn allows(&self) -> &parsed::common::Allows;
+    fn semver_options(&self) -> &parsed::common::SemverOptions;
+    fn cuda_detection(&self) -> Option<bool>;
+    fn activate_mode(&self) -> Option<&ActivateMode>;
+
     /// Returns whether services should auto-start on activation.
     ///
     /// Returns `false` for all schema versions before V1_12_0.
@@ -25,7 +45,10 @@ pub trait CommonFields {
     fn include_mut(&mut self) -> &mut parsed::common::Include;
     fn build_mut(&mut self) -> &mut parsed::common::Build;
     fn containerize_mut(&mut self) -> Option<&mut parsed::common::Containerize>;
-    fn options_mut(&mut self) -> &mut parsed::common::Options;
+
+    // `options.*` mutable accessors.
+    fn systems_mut(&mut self) -> &mut Option<Vec<System>>;
+    fn activate_mode_mut(&mut self) -> &mut Option<ActivateMode>;
 }
 
 impl CommonFields for Parsed {
@@ -92,12 +115,48 @@ impl CommonFields for Parsed {
         }
     }
 
-    fn options(&self) -> &parsed::common::Options {
+    fn systems(&self) -> Option<&Vec<System>> {
         match self {
-            Parsed::V1(inner) => inner.options(),
-            Parsed::V1_10_0(inner) => inner.options(),
-            Parsed::V1_11_0(inner) => inner.options(),
-            Parsed::V1_12_0(inner) => inner.options(),
+            Parsed::V1(inner) => inner.systems(),
+            Parsed::V1_10_0(inner) => inner.systems(),
+            Parsed::V1_11_0(inner) => inner.systems(),
+            Parsed::V1_12_0(inner) => inner.systems(),
+        }
+    }
+
+    fn allows(&self) -> &parsed::common::Allows {
+        match self {
+            Parsed::V1(inner) => inner.allows(),
+            Parsed::V1_10_0(inner) => inner.allows(),
+            Parsed::V1_11_0(inner) => inner.allows(),
+            Parsed::V1_12_0(inner) => inner.allows(),
+        }
+    }
+
+    fn semver_options(&self) -> &parsed::common::SemverOptions {
+        match self {
+            Parsed::V1(inner) => inner.semver_options(),
+            Parsed::V1_10_0(inner) => inner.semver_options(),
+            Parsed::V1_11_0(inner) => inner.semver_options(),
+            Parsed::V1_12_0(inner) => inner.semver_options(),
+        }
+    }
+
+    fn cuda_detection(&self) -> Option<bool> {
+        match self {
+            Parsed::V1(inner) => inner.cuda_detection(),
+            Parsed::V1_10_0(inner) => inner.cuda_detection(),
+            Parsed::V1_11_0(inner) => inner.cuda_detection(),
+            Parsed::V1_12_0(inner) => inner.cuda_detection(),
+        }
+    }
+
+    fn activate_mode(&self) -> Option<&ActivateMode> {
+        match self {
+            Parsed::V1(inner) => inner.activate_mode(),
+            Parsed::V1_10_0(inner) => inner.activate_mode(),
+            Parsed::V1_11_0(inner) => inner.activate_mode(),
+            Parsed::V1_12_0(inner) => inner.activate_mode(),
         }
     }
 
@@ -173,276 +232,122 @@ impl CommonFields for Parsed {
         }
     }
 
-    fn options_mut(&mut self) -> &mut parsed::common::Options {
+    fn systems_mut(&mut self) -> &mut Option<Vec<System>> {
         match self {
-            Parsed::V1(inner) => inner.options_mut(),
-            Parsed::V1_10_0(inner) => inner.options_mut(),
-            Parsed::V1_11_0(inner) => inner.options_mut(),
-            Parsed::V1_12_0(inner) => inner.options_mut(),
+            Parsed::V1(inner) => inner.systems_mut(),
+            Parsed::V1_10_0(inner) => inner.systems_mut(),
+            Parsed::V1_11_0(inner) => inner.systems_mut(),
+            Parsed::V1_12_0(inner) => inner.systems_mut(),
+        }
+    }
+
+    fn activate_mode_mut(&mut self) -> &mut Option<ActivateMode> {
+        match self {
+            Parsed::V1(inner) => inner.activate_mode_mut(),
+            Parsed::V1_10_0(inner) => inner.activate_mode_mut(),
+            Parsed::V1_11_0(inner) => inner.activate_mode_mut(),
+            Parsed::V1_12_0(inner) => inner.activate_mode_mut(),
         }
     }
 }
 
-impl CommonFields for Manifest<Validated> {
-    fn vars(&self) -> &parsed::common::Vars {
-        self.inner.parsed.vars()
-    }
+/// Forwarding impls for the `Manifest<S>` type-state wrappers. Each delegates
+/// to the underlying `parsed` / `migrated_parsed` which is itself a `Parsed`.
+macro_rules! impl_common_fields_for_manifest {
+    ($state:ty, $field:ident) => {
+        impl CommonFields for Manifest<$state> {
+            fn vars(&self) -> &parsed::common::Vars {
+                self.inner.$field.vars()
+            }
 
-    fn hook(&self) -> Option<&parsed::common::Hook> {
-        self.inner.parsed.hook()
-    }
+            fn hook(&self) -> Option<&parsed::common::Hook> {
+                self.inner.$field.hook()
+            }
 
-    fn profile(&self) -> Option<&parsed::common::Profile> {
-        self.inner.parsed.profile()
-    }
+            fn profile(&self) -> Option<&parsed::common::Profile> {
+                self.inner.$field.profile()
+            }
 
-    fn services(&self) -> &parsed::common::Services {
-        self.inner.parsed.services()
-    }
+            fn services(&self) -> &parsed::common::Services {
+                self.inner.$field.services()
+            }
 
-    fn include(&self) -> &parsed::common::Include {
-        self.inner.parsed.include()
-    }
+            fn include(&self) -> &parsed::common::Include {
+                self.inner.$field.include()
+            }
 
-    fn build(&self) -> &parsed::common::Build {
-        self.inner.parsed.build()
-    }
+            fn build(&self) -> &parsed::common::Build {
+                self.inner.$field.build()
+            }
 
-    fn containerize(&self) -> Option<&parsed::common::Containerize> {
-        self.inner.parsed.containerize()
-    }
+            fn containerize(&self) -> Option<&parsed::common::Containerize> {
+                self.inner.$field.containerize()
+            }
 
-    fn options(&self) -> &parsed::common::Options {
-        self.inner.parsed.options()
-    }
+            fn systems(&self) -> Option<&Vec<System>> {
+                self.inner.$field.systems()
+            }
 
-    fn vars_mut(&mut self) -> &mut parsed::common::Vars {
-        self.inner.parsed.vars_mut()
-    }
+            fn allows(&self) -> &parsed::common::Allows {
+                self.inner.$field.allows()
+            }
 
-    fn hook_mut(&mut self) -> Option<&mut parsed::common::Hook> {
-        self.inner.parsed.hook_mut()
-    }
+            fn semver_options(&self) -> &parsed::common::SemverOptions {
+                self.inner.$field.semver_options()
+            }
 
-    fn profile_mut(&mut self) -> Option<&mut parsed::common::Profile> {
-        self.inner.parsed.profile_mut()
-    }
+            fn cuda_detection(&self) -> Option<bool> {
+                self.inner.$field.cuda_detection()
+            }
 
-    fn services_mut(&mut self) -> &mut parsed::common::Services {
-        self.inner.parsed.services_mut()
-    }
+            fn activate_mode(&self) -> Option<&ActivateMode> {
+                self.inner.$field.activate_mode()
+            }
 
-    fn include_mut(&mut self) -> &mut parsed::common::Include {
-        self.inner.parsed.include_mut()
-    }
+            fn services_auto_start(&self) -> bool {
+                self.inner.$field.services_auto_start()
+            }
 
-    fn build_mut(&mut self) -> &mut parsed::common::Build {
-        self.inner.parsed.build_mut()
-    }
+            fn vars_mut(&mut self) -> &mut parsed::common::Vars {
+                self.inner.$field.vars_mut()
+            }
 
-    fn containerize_mut(&mut self) -> Option<&mut parsed::common::Containerize> {
-        self.inner.parsed.containerize_mut()
-    }
+            fn hook_mut(&mut self) -> Option<&mut parsed::common::Hook> {
+                self.inner.$field.hook_mut()
+            }
 
-    fn options_mut(&mut self) -> &mut parsed::common::Options {
-        self.inner.parsed.options_mut()
-    }
+            fn profile_mut(&mut self) -> Option<&mut parsed::common::Profile> {
+                self.inner.$field.profile_mut()
+            }
+
+            fn services_mut(&mut self) -> &mut parsed::common::Services {
+                self.inner.$field.services_mut()
+            }
+
+            fn include_mut(&mut self) -> &mut parsed::common::Include {
+                self.inner.$field.include_mut()
+            }
+
+            fn build_mut(&mut self) -> &mut parsed::common::Build {
+                self.inner.$field.build_mut()
+            }
+
+            fn containerize_mut(&mut self) -> Option<&mut parsed::common::Containerize> {
+                self.inner.$field.containerize_mut()
+            }
+
+            fn systems_mut(&mut self) -> &mut Option<Vec<System>> {
+                self.inner.$field.systems_mut()
+            }
+
+            fn activate_mode_mut(&mut self) -> &mut Option<ActivateMode> {
+                self.inner.$field.activate_mode_mut()
+            }
+        }
+    };
 }
 
-impl CommonFields for Manifest<TypedOnly> {
-    fn vars(&self) -> &parsed::common::Vars {
-        self.inner.parsed.vars()
-    }
-
-    fn hook(&self) -> Option<&parsed::common::Hook> {
-        self.inner.parsed.hook()
-    }
-
-    fn profile(&self) -> Option<&parsed::common::Profile> {
-        self.inner.parsed.profile()
-    }
-
-    fn services(&self) -> &parsed::common::Services {
-        self.inner.parsed.services()
-    }
-
-    fn include(&self) -> &parsed::common::Include {
-        self.inner.parsed.include()
-    }
-
-    fn build(&self) -> &parsed::common::Build {
-        self.inner.parsed.build()
-    }
-
-    fn containerize(&self) -> Option<&parsed::common::Containerize> {
-        self.inner.parsed.containerize()
-    }
-
-    fn options(&self) -> &parsed::common::Options {
-        self.inner.parsed.options()
-    }
-
-    fn vars_mut(&mut self) -> &mut parsed::common::Vars {
-        self.inner.parsed.vars_mut()
-    }
-
-    fn hook_mut(&mut self) -> Option<&mut parsed::common::Hook> {
-        self.inner.parsed.hook_mut()
-    }
-
-    fn profile_mut(&mut self) -> Option<&mut parsed::common::Profile> {
-        self.inner.parsed.profile_mut()
-    }
-
-    fn services_mut(&mut self) -> &mut parsed::common::Services {
-        self.inner.parsed.services_mut()
-    }
-
-    fn include_mut(&mut self) -> &mut parsed::common::Include {
-        self.inner.parsed.include_mut()
-    }
-
-    fn build_mut(&mut self) -> &mut parsed::common::Build {
-        self.inner.parsed.build_mut()
-    }
-
-    fn containerize_mut(&mut self) -> Option<&mut parsed::common::Containerize> {
-        self.inner.parsed.containerize_mut()
-    }
-
-    fn options_mut(&mut self) -> &mut parsed::common::Options {
-        self.inner.parsed.options_mut()
-    }
-}
-
-impl CommonFields for Manifest<MigratedTypedOnly> {
-    fn vars(&self) -> &parsed::common::Vars {
-        self.inner.migrated_parsed.vars()
-    }
-
-    fn hook(&self) -> Option<&parsed::common::Hook> {
-        self.inner.migrated_parsed.hook()
-    }
-
-    fn profile(&self) -> Option<&parsed::common::Profile> {
-        self.inner.migrated_parsed.profile()
-    }
-
-    fn services(&self) -> &parsed::common::Services {
-        self.inner.migrated_parsed.services()
-    }
-
-    fn include(&self) -> &parsed::common::Include {
-        self.inner.migrated_parsed.include()
-    }
-
-    fn build(&self) -> &parsed::common::Build {
-        self.inner.migrated_parsed.build()
-    }
-
-    fn containerize(&self) -> Option<&parsed::common::Containerize> {
-        self.inner.migrated_parsed.containerize()
-    }
-
-    fn options(&self) -> &parsed::common::Options {
-        self.inner.migrated_parsed.options()
-    }
-
-    fn vars_mut(&mut self) -> &mut parsed::common::Vars {
-        self.inner.migrated_parsed.vars_mut()
-    }
-
-    fn hook_mut(&mut self) -> Option<&mut parsed::common::Hook> {
-        self.inner.migrated_parsed.hook_mut()
-    }
-
-    fn profile_mut(&mut self) -> Option<&mut parsed::common::Profile> {
-        self.inner.migrated_parsed.profile_mut()
-    }
-
-    fn services_mut(&mut self) -> &mut parsed::common::Services {
-        self.inner.migrated_parsed.services_mut()
-    }
-
-    fn include_mut(&mut self) -> &mut parsed::common::Include {
-        self.inner.migrated_parsed.include_mut()
-    }
-
-    fn build_mut(&mut self) -> &mut parsed::common::Build {
-        self.inner.migrated_parsed.build_mut()
-    }
-
-    fn containerize_mut(&mut self) -> Option<&mut parsed::common::Containerize> {
-        self.inner.migrated_parsed.containerize_mut()
-    }
-
-    fn options_mut(&mut self) -> &mut parsed::common::Options {
-        self.inner.migrated_parsed.options_mut()
-    }
-}
-
-impl CommonFields for Manifest<Migrated> {
-    fn vars(&self) -> &parsed::common::Vars {
-        self.inner.migrated_parsed.vars()
-    }
-
-    fn hook(&self) -> Option<&parsed::common::Hook> {
-        self.inner.migrated_parsed.hook()
-    }
-
-    fn profile(&self) -> Option<&parsed::common::Profile> {
-        self.inner.migrated_parsed.profile()
-    }
-
-    fn services(&self) -> &parsed::common::Services {
-        self.inner.migrated_parsed.services()
-    }
-
-    fn include(&self) -> &parsed::common::Include {
-        self.inner.migrated_parsed.include()
-    }
-
-    fn build(&self) -> &parsed::common::Build {
-        self.inner.migrated_parsed.build()
-    }
-
-    fn containerize(&self) -> Option<&parsed::common::Containerize> {
-        self.inner.migrated_parsed.containerize()
-    }
-
-    fn options(&self) -> &parsed::common::Options {
-        self.inner.migrated_parsed.options()
-    }
-
-    fn vars_mut(&mut self) -> &mut parsed::common::Vars {
-        self.inner.migrated_parsed.vars_mut()
-    }
-
-    fn hook_mut(&mut self) -> Option<&mut parsed::common::Hook> {
-        self.inner.migrated_parsed.hook_mut()
-    }
-
-    fn profile_mut(&mut self) -> Option<&mut parsed::common::Profile> {
-        self.inner.migrated_parsed.profile_mut()
-    }
-
-    fn services_mut(&mut self) -> &mut parsed::common::Services {
-        self.inner.migrated_parsed.services_mut()
-    }
-
-    fn include_mut(&mut self) -> &mut parsed::common::Include {
-        self.inner.migrated_parsed.include_mut()
-    }
-
-    fn build_mut(&mut self) -> &mut parsed::common::Build {
-        self.inner.migrated_parsed.build_mut()
-    }
-
-    fn containerize_mut(&mut self) -> Option<&mut parsed::common::Containerize> {
-        self.inner.migrated_parsed.containerize_mut()
-    }
-
-    fn options_mut(&mut self) -> &mut parsed::common::Options {
-        self.inner.migrated_parsed.options_mut()
-    }
-}
+impl_common_fields_for_manifest!(Validated, parsed);
+impl_common_fields_for_manifest!(TypedOnly, parsed);
+impl_common_fields_for_manifest!(MigratedTypedOnly, migrated_parsed);
+impl_common_fields_for_manifest!(Migrated, migrated_parsed);

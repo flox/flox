@@ -658,7 +658,7 @@ impl LockManifest {
             already_locked_packages
                 .iter()
                 .filter_map(LockedPackage::as_catalog_package_ref),
-            &manifest.options().allow,
+            manifest.allows(),
         )?;
 
         // Update the priority of already locked packages to match the manifest.

@@ -873,7 +873,7 @@ pub mod tests {
 
         // modify the lockfile  -> rebuild necessary
         let mut lockfile = env.existing_lockfile(&flox).unwrap().unwrap();
-        lockfile.manifest.options_mut().activate.mode = Some(ActivateMode::Dev);
+        *lockfile.manifest.activate_mode_mut() = Some(ActivateMode::Dev);
         let lockfile_contents = serialize_json_with_newline(&lockfile).unwrap();
         fs::write(env.lockfile_path(&flox).unwrap(), lockfile_contents).unwrap();
         assert!(env.needs_rebuild().unwrap());

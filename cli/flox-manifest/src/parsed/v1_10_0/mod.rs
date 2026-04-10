@@ -149,8 +149,24 @@ impl CommonFields for ManifestV1_10_0 {
         self.containerize.as_ref()
     }
 
-    fn options(&self) -> &super::common::Options {
-        &self.options
+    fn systems(&self) -> Option<&Vec<flox_core::data::System>> {
+        self.options.systems.as_ref()
+    }
+
+    fn allows(&self) -> &super::common::Allows {
+        &self.options.allow
+    }
+
+    fn semver_options(&self) -> &super::common::SemverOptions {
+        &self.options.semver
+    }
+
+    fn cuda_detection(&self) -> Option<bool> {
+        self.options.cuda_detection
+    }
+
+    fn activate_mode(&self) -> Option<&flox_core::activate::mode::ActivateMode> {
+        self.options.activate.mode.as_ref()
     }
 
     fn vars_mut(&mut self) -> &mut super::common::Vars {
@@ -181,8 +197,12 @@ impl CommonFields for ManifestV1_10_0 {
         self.containerize.as_mut()
     }
 
-    fn options_mut(&mut self) -> &mut super::common::Options {
-        &mut self.options
+    fn systems_mut(&mut self) -> &mut Option<Vec<flox_core::data::System>> {
+        &mut self.options.systems
+    }
+
+    fn activate_mode_mut(&mut self) -> &mut Option<flox_core::activate::mode::ActivateMode> {
+        &mut self.options.activate.mode
     }
 }
 

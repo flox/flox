@@ -893,11 +893,8 @@ impl SyncTypedToRaw for Manifest<Validated> {
     }
 
     fn update_systems(&mut self) -> Result<(), ManifestError> {
-        update_systems(
-            &mut self.inner.raw,
-            self.inner.parsed.options().systems.as_ref(),
-        )
-        .map_err(ManifestError::TomlEdit)
+        update_systems(&mut self.inner.raw, self.inner.parsed.systems())
+            .map_err(ManifestError::TomlEdit)
     }
 
     fn update_raw_packages_from_typed_manifest(&mut self) -> Result<(), ManifestError> {
@@ -913,7 +910,7 @@ impl SyncTypedToRaw for Manifest<Migrated> {
     fn update_systems(&mut self) -> Result<(), ManifestError> {
         update_systems(
             &mut self.inner.migrated_raw,
-            self.inner.migrated_parsed.options().systems.as_ref(),
+            self.inner.migrated_parsed.systems(),
         )
         .map_err(ManifestError::TomlEdit)
     }
@@ -2104,7 +2101,7 @@ curl.outputs = [\"bin\", \"man\"]
         "#});
         let mut manifest = Manifest::parse_toml_typed(&toml_str).unwrap();
         let systems = vec!["x86_64-linux".to_string()];
-        manifest.options_mut().systems = Some(systems.clone());
+        *manifest.systems_mut() = Some(systems.clone());
         manifest.update_systems().unwrap();
         let updated_systems = manifest.inner.raw["options"]["systems"]
             .as_array()
@@ -2123,7 +2120,7 @@ curl.outputs = [\"bin\", \"man\"]
             allow.unfree = true
         "#});
         let mut manifest = Manifest::parse_toml_typed(&toml_str).unwrap();
-        manifest.options_mut().systems = None;
+        *manifest.systems_mut() = None;
         manifest.update_systems().unwrap();
         let opts = manifest.inner.raw["options"].clone();
         assert!(opts["allow"]["unfree"].as_bool().unwrap());
@@ -2444,7 +2441,7 @@ curl.outputs = [\"bin\", \"man\"]
             ]
         "#});
         let mut manifest = Manifest::parse_toml_typed(&toml_str).unwrap();
-        manifest.options_mut().systems = Some(vec![
+        *manifest.systems_mut() = Some(vec![
             "aarch64-darwin".to_string(),
             "x86_64-linux".to_string(),
         ]);
