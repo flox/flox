@@ -9,7 +9,7 @@ $ nix develop;
 # Build `flox' and its subsystems
 $ just build;
 # Run the build
-$ ./cli/target/debug/flox --help;
+$ ./target/debug/flox --help;
 # Run the test suite
 $ just test-all;
 ```
@@ -136,13 +136,12 @@ Flox must be buildable using `flox` or `nix`.
 
 - build and run flox
    ```console
-   $ pushd cli;
-   $ cargo run -- <args>;
+   $ cargo run -p flox -- <args>;
    ```
 - build a debug build of flox and all the necessary subsystems
    ```console
    $ just build;
-   # builds to ./cli/target/debug/flox
+   # builds to ./target/debug/flox
    ```
 - run flox unit tests
    ```console
@@ -157,7 +156,6 @@ Flox must be buildable using `flox` or `nix`.
 
 - format rust code:
   ```console
-  $ pushd cli;
   $ cargo fmt
   $ cargo fmt --check # just check
   ```
@@ -172,7 +170,6 @@ Flox must be buildable using `flox` or `nix`.
   A pre-commit hook is set up to check nix file formatting.
 - lint rust
   ```console
-  $ pushd cli;
   $ cargo clippy --all
   ```
 - lint all files (including for formatting):
@@ -320,7 +317,7 @@ $ just integ-tests
 #### Running tests against the Nix-built flox binary
 
 By default integration tests are run against the development build of `flox`
-that's at `./cli/target/debug/flox`.
+that's at `./target/debug/flox`.
 If you want to verify some behavior of the `flox` binary that's built with Nix,
 you can do that as well:
 
