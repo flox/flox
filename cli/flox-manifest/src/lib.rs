@@ -353,7 +353,7 @@ impl Manifest<TomlParsed> {
                 parsed,
             },
         };
-        manifest.services().validate()?;
+        manifest.inner.parsed.services().validate()?;
         Ok(manifest)
     }
 }

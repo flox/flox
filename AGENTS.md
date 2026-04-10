@@ -186,11 +186,19 @@ correct manifest lifecycle at compile time. Follow these rules strictly.
   `manifest.as_writable().write_to_file(path)`, which handle schema version
   selection and format preservation.
 
-- **Use trait methods, not inner type access** - prefer trait methods
-  (`CommonFields`, `PackageLookup`, `SchemaVersion`, `AsLatestSchema`) over
-  extracting and mutating inner types directly. Only use
-  `as_latest_schema()` / `as_latest_schema_mut()` when you genuinely need
-  latest-schema-specific fields.
+- **Outside `flox-manifest`, operate on `ManifestLatest`** - do not introduce
+  or expand adapter traits like `CommonFields` so callers can pretend all
+  schema versions are interchangeable. The intended model is: migrate to the
+  latest schema, then operate on `ManifestLatest`.
+
+- The pattern for `PackageLookup` and `SchemaVersion` doesn't quite match the
+  pattern we want to use for operating on `ManifestLatest`, but for now we'll
+  keep using the `PackageLookup` trait.
+
+- **Use lockfile migration helpers** - when reading manifest data from a
+  `Lockfile`, prefer `lockfile.migrated_manifest()` for the merged manifest and
+  `lockfile.migrated_user_manifest()` for the user-authored manifest instead of
+  calling `lockfile.manifest.migrate_typed_only(...)` directly at call sites.
 
 - **Tests: use test helpers** (behind `feature = "tests"`):
   - `flox_manifest::raw::test_helpers`: `mk_test_manifest_from_contents()`,
