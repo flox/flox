@@ -14,27 +14,22 @@ IFS=: read -ra path_array <<< "$PATH"
   echo "ERROR: first PATH element not $FLOX_ENV/bin" >&2;
   exit 1;
 }
-# 2) contains "$FLOX_ENV/sbin" as its second element
-[ "${path_array[1]}" = "$FLOX_ENV/sbin" ] || {
-  echo "ERROR: second PATH element not $FLOX_ENV/sbin" >&2;
-  exit 1;
-}
-# 3) contains neither of the above more than once
+# 2) does NOT contain "$FLOX_ENV/sbin" at all (ENT-17: sbin is excluded by
+#    default; a separate test exercises the --add-sbin opt-in).
+for p in "${path_array[@]}"; do
+    if [ "$p" = "$FLOX_ENV/sbin" ]; then
+        echo "ERROR: PATH unexpectedly contains $FLOX_ENV/sbin" >&2;
+        exit 1;
+    fi
+done
+# 3) does not contain "$FLOX_ENV/bin" more than once
 declare seen_bin=""
-declare seen_sbin=""
 for p in "${path_array[@]}"; do
     if [ "$p" = "$FLOX_ENV/bin" ]; then
         if [ -n "$seen_bin" ]; then
             exit 1
         else
             seen_bin=1
-        fi
-    fi
-    if [ "$p" = "$FLOX_ENV/sbin" ]; then
-        if [ -n "$seen_sbin" ]; then
-            exit 1
-        else
-            seen_sbin=1
         fi
     fi
 done
