@@ -7,7 +7,7 @@ use flox_core::activate::mode::ActivateMode;
 use flox_core::activations::{activation_state_dir_path, read_activations_json, state_json_path};
 use flox_core::data::System;
 use flox_core::proc_status::is_descendant_of;
-use flox_manifest::interfaces::CommonFields;
+use flox_manifest::interfaces::{AsLatestSchema, CommonFields};
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::Services;
@@ -247,17 +247,12 @@ pub fn guard_service_commands_available(
     services_environment: &ServicesEnvironment,
     system: &System,
 ) -> Result<()> {
-    if !services_environment.socket.exists()
-        && services_environment.manifest.services().inner().is_empty()
-    {
+    let manifest_services = &services_environment.manifest.as_latest_schema().services;
+
+    if !services_environment.socket.exists() && manifest_services.inner().is_empty() {
         return Err(ServicesCommandsError::NoDefinedServices.into());
     } else if !services_environment.socket.exists()
-        && services_environment
-            .manifest
-            .services()
-            .copy_for_system(system)
-            .inner()
-            .is_empty()
+        && manifest_services.copy_for_system(system).inner().is_empty()
     {
         return Err(ServicesCommandsError::NoDefinedServicesForSystem {
             system: system.clone(),
