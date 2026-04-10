@@ -420,6 +420,30 @@
           },
           "type": "object"
         },
+        "ActivateOptions2": {
+          "additionalProperties": false,
+          "description": "V1_12_0-local `ActivateOptions`: adds `add-sbin` alongside `mode`.\n\nThis is duplicated from `parsed::common::ActivateOptions` (rather than\nflattened) because `common::ActivateOptions` carries\n`#[serde(deny_unknown_fields)]`, which conflicts with `#[serde(flatten)]`.\nThe `mode` field continues to reference the shared `common::ActivateMode`\nenum.",
+          "properties": {
+            "add-sbin": {
+              "description": "Whether to include `$FLOX_ENV/sbin` in PATH when activating.\nDefaults to `None` (treated as `false`) so that `sbin` binaries don't\nshadow binaries from other packages.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "mode": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ActivateMode"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "type": "object"
+        },
         "AllSentinel": {
           "enum": [
             "all"
@@ -1047,7 +1071,7 @@
               "description": "The minimum CLI version that can activate this environment."
             },
             "options": {
-              "$ref": "#/$defs/Options",
+              "$ref": "#/$defs/Options2",
               "default": {},
               "description": "Options that control the behavior of the manifest."
             },
@@ -1114,6 +1138,42 @@
           "properties": {
             "activate": {
               "$ref": "#/$defs/ActivateOptions",
+              "description": "Options that control the behavior of activations."
+            },
+            "allow": {
+              "$ref": "#/$defs/Allows",
+              "description": "Options that control what types of packages are allowed."
+            },
+            "cuda-detection": {
+              "description": "Whether to detect CUDA devices and libs during activation.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "semver": {
+              "$ref": "#/$defs/SemverOptions",
+              "description": "Options that control how semver versions are resolved."
+            },
+            "systems": {
+              "description": "A list of systems that each package is resolved for.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "Options2": {
+          "additionalProperties": false,
+          "description": "V1_12_0-local `Options`: duplicates `parsed::common::Options` but uses the\nV1_12_0-local `ActivateOptions` (which adds `add-sbin`). All other leaf\ntypes (`Allows`, `SemverOptions`) continue to be imported from\n`parsed::common`.",
+          "properties": {
+            "activate": {
+              "$ref": "#/$defs/ActivateOptions2",
               "description": "Options that control the behavior of activations."
             },
             "allow": {
