@@ -22,15 +22,18 @@ pub struct FixPathsArgs {
     #[arg(help = "The contents of MANPATH.")]
     #[arg(short, long, value_name = "STRING")]
     pub manpath: String,
+    #[arg(help = "Include $FLOX_ENV/sbin directories in PATH.")]
+    #[arg(long, default_value_t = false)]
+    pub add_sbin: bool,
 }
 
 impl FixPathsArgs {
     pub fn handle_inner(&self, output: &mut impl Write) -> Result<(), anyhow::Error> {
         debug!(
-            "Preparing to fix path vars, FLOX_ENV_DIRS={}",
-            self.env_dirs
+            "Preparing to fix path vars, FLOX_ENV_DIRS={}, add_sbin={}",
+            self.env_dirs, self.add_sbin
         );
-        let new_path = fix_path_var(&self.env_dirs, &self.path);
+        let new_path = fix_path_var(&self.env_dirs, &self.path, self.add_sbin);
         let new_manpath = fix_manpath_var(&self.env_dirs, &self.manpath);
         let sourceable_commands = match self.shell.as_ref() {
             "bash" => {
@@ -121,11 +124,16 @@ pub fn prepend_dirs_to_pathlike_var(
 }
 
 /// Calculate the new PATH variable from FLOX_ENV_DIRS and the existing PATH.
-pub fn fix_path_var(flox_env_dirs_var: &str, path_var: &str) -> String {
+///
+/// When `add_sbin` is `true`, both `bin` and `sbin` subdirectories of each
+/// FLOX_ENV_DIRS entry are prepended. When `false`, only `bin` is prepended
+/// so that `sbin` binaries don't shadow binaries from other packages (e.g.
+/// BusyBox's `sbin/ifconfig` shadowing a dedicated networking package).
+pub fn fix_path_var(flox_env_dirs_var: &str, path_var: &str, add_sbin: bool) -> String {
     let path_dirs = separate_dir_list(path_var);
     let flox_env_dirs = separate_dir_list(flox_env_dirs_var);
-    let suffixes = ["bin", "sbin"];
-    let fixed_path_dirs = prepend_dirs_to_pathlike_var(&flox_env_dirs, &suffixes, &path_dirs);
+    let suffixes: &[&str] = if add_sbin { &["bin", "sbin"] } else { &["bin"] };
+    let fixed_path_dirs = prepend_dirs_to_pathlike_var(&flox_env_dirs, suffixes, &path_dirs);
     join_dir_list(fixed_path_dirs)
 }
 
@@ -269,6 +277,7 @@ mod test {
                 env_dirs: env_dirs.to_string(),
                 path: path.to_string(),
                 manpath: manpath.to_string(),
+                add_sbin: false,
             }
             .handle_inner(&mut buf)
             .unwrap();
@@ -295,6 +304,25 @@ mod test {
     }
 
     #[test]
+    fn sbin_excluded_by_default() {
+        let env_dirs = "/flox_env1:/flox_env2";
+        let path = "/path1:/path2";
+        let fixed = fix_path_var(env_dirs, path, false);
+        assert_eq!(fixed, "/flox_env1/bin:/flox_env2/bin:/path1:/path2");
+    }
+
+    #[test]
+    fn sbin_included_when_add_sbin_true() {
+        let env_dirs = "/flox_env1:/flox_env2";
+        let path = "/path1:/path2";
+        let fixed = fix_path_var(env_dirs, path, true);
+        assert_eq!(
+            fixed,
+            "/flox_env1/bin:/flox_env1/sbin:/flox_env2/bin:/flox_env2/sbin:/path1:/path2"
+        );
+    }
+
+    #[test]
     fn handles_blank_manpath() {
         let env_dirs = "/env1:/env2";
         let manpath = "";
@@ -315,9 +343,9 @@ mod test {
         let env_dirs = "/env1:/env2";
         let path = "/foo:/bar";
         let manpath = "/baz:/qux";
-        let fixed_path = fix_path_var(env_dirs, path);
+        let fixed_path = fix_path_var(env_dirs, path, true);
         let fixed_manpath = fix_manpath_var(env_dirs, manpath);
-        let fixed_path_again = fix_path_var(env_dirs, &fixed_path);
+        let fixed_path_again = fix_path_var(env_dirs, &fixed_path, true);
         let fixed_manpath_again = fix_manpath_var(env_dirs, &fixed_manpath);
         assert_eq!(fixed_path, fixed_path_again);
         assert_eq!(fixed_manpath, fixed_manpath_again);

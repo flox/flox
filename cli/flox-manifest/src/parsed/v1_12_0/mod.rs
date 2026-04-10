@@ -16,7 +16,6 @@ use crate::parsed::common::{
     Hook,
     Include,
     KnownSchemaVersion,
-    Options,
     Profile,
     SemverOptions,
     ServiceDescriptor,
@@ -170,6 +169,10 @@ impl CommonFields for ManifestV1_12_0 {
         self.options.activate.mode.as_ref()
     }
 
+    fn activate_add_sbin(&self) -> Option<bool> {
+        self.options.activate.add_sbin
+    }
+
     fn vars_mut(&mut self) -> &mut super::common::Vars {
         &mut self.vars
     }
@@ -209,6 +212,68 @@ impl CommonFields for ManifestV1_12_0 {
     fn services_auto_start(&self) -> bool {
         self.services.auto_start == Some(true)
     }
+}
+
+/// V1_12_0-local `ActivateOptions`: adds `add-sbin` alongside `mode`.
+///
+/// This is duplicated from `parsed::common::ActivateOptions` (rather than
+/// flattened) because `common::ActivateOptions` carries
+/// `#[serde(deny_unknown_fields)]`, which conflicts with `#[serde(flatten)]`.
+/// The `mode` field continues to reference the shared `common::ActivateMode`
+/// enum.
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct ActivateOptions {
+    pub mode: Option<ActivateMode>,
+    /// Whether to include `$FLOX_ENV/sbin` in PATH when activating.
+    /// Defaults to `None` (treated as `false`) so that `sbin` binaries don't
+    /// shadow binaries from other packages.
+    pub add_sbin: Option<bool>,
+}
+
+impl SkipSerializing for ActivateOptions {
+    fn skip_serializing(&self) -> bool {
+        // Destructuring here prevents us from missing new fields if they're
+        // added in the future.
+        let ActivateOptions { mode, add_sbin } = self;
+        mode.is_none() && add_sbin.is_none()
+    }
+}
+
+/// V1_12_0-local `Options`: duplicates `parsed::common::Options` but uses the
+/// V1_12_0-local `ActivateOptions` (which adds `add-sbin`). All other leaf
+/// types (`Allows`, `SemverOptions`) continue to be imported from
+/// `parsed::common`.
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct Options {
+    /// A list of systems that each package is resolved for.
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "flox_test_utils::proptest::optional_vec_of_strings(3, 4)")
+    )]
+    pub systems: Option<Vec<System>>,
+    /// Options that control what types of packages are allowed.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Allows::skip_serializing")]
+    pub allow: Allows,
+    /// Options that control how semver versions are resolved.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "SemverOptions::skip_serializing")]
+    pub semver: SemverOptions,
+    /// Whether to detect CUDA devices and libs during activation.
+    // TODO: Migrate to `ActivateOptions`.
+    pub cuda_detection: Option<bool>,
+    /// Options that control the behavior of activations.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "ActivateOptions::skip_serializing")]
+    pub activate: ActivateOptions,
 }
 
 /// Service configuration for V1_12_0: adds optional auto-start behavior
@@ -281,5 +346,57 @@ impl Inner for Services {
 
     fn into_inner(self) -> Self::Inner {
         self.service_map.into_inner()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+    use crate::test_helpers::with_latest_schema;
+
+    /// `options.activate.add-sbin = true` round-trips through v1.12.0.
+    #[test]
+    fn parses_add_sbin_true() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [options.activate]
+            add-sbin = true
+        "#});
+        let parsed: ManifestV1_12_0 = toml_edit::de::from_str(&manifest).unwrap();
+        assert_eq!(parsed.options.activate, ActivateOptions {
+            mode: None,
+            add_sbin: Some(true),
+        });
+    }
+
+    /// Omitting `add-sbin` leaves the field as `None`.
+    #[test]
+    fn add_sbin_defaults_to_none() {
+        let manifest = with_latest_schema("");
+        let parsed: ManifestV1_12_0 = toml_edit::de::from_str(&manifest).unwrap();
+        assert_eq!(parsed.options.activate, ActivateOptions::default());
+        assert_eq!(parsed.options.activate.add_sbin, None);
+    }
+
+    /// A manifest whose `ActivateOptions` defaults to `None`/`None` must not
+    /// emit any keys into the serialized output.
+    #[test]
+    fn add_sbin_none_skipped_in_serialization() {
+        let opts = ActivateOptions::default();
+        assert!(opts.skip_serializing());
+    }
+
+    /// A manifest with `add-sbin = Some(false)` still needs to be serialized
+    /// so that downstream tooling can distinguish "unset" from "explicitly
+    /// off".
+    #[test]
+    fn add_sbin_explicit_false_is_serialized() {
+        let opts = ActivateOptions {
+            mode: None,
+            add_sbin: Some(false),
+        };
+        assert!(!opts.skip_serializing());
     }
 }

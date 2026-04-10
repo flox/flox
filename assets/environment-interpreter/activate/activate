@@ -183,8 +183,17 @@ if [ "$_command_mode" = "true" ]; then
 
   # shellcheck disable=SC1090
   source <("$_flox_activations" set-env-dirs --shell bash --flox-env "$_FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
+
+  # Build fix-paths invocation, conditionally adding --add-sbin when the
+  # Rust-side caller set _FLOX_ADD_SBIN=true (from the `--add-sbin` CLI flag
+  # or the manifest's `options.activate.add-sbin` setting).
+  _flox_fix_paths_args=(fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
+  if [ "${_FLOX_ADD_SBIN:-}" = "true" ]; then
+    _flox_fix_paths_args+=(--add-sbin)
+  fi
   # shellcheck disable=SC1090
-  source <("$_flox_activations" fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
+  source <("$_flox_activations" "${_flox_fix_paths_args[@]}")
+  unset _flox_fix_paths_args
 fi
 
 if [ "$_command_mode" = "false" ]; then

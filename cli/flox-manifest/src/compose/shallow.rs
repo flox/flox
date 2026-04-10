@@ -13,19 +13,17 @@ use super::{
 use crate::interfaces::CommonFields;
 use crate::parsed::Inner;
 use crate::parsed::common::{
-    ActivateOptions,
     Allows,
     Build,
     Containerize,
     Hook,
     Include,
-    Options,
     Profile,
     SemverOptions,
     Vars,
 };
 use crate::parsed::latest::{Install, ManifestLatest, MinimumCliVersion};
-use crate::parsed::v1_12_0::Services;
+use crate::parsed::v1_12_0::{ActivateOptions, Options, Services};
 
 /// Merges two manifests by applying `manifest2` on top of `manifest1` and
 /// overwriting any conflicts for keys within the top-level of each `ManifestV1`
@@ -195,6 +193,12 @@ impl ShallowMerger {
             high_priority.activate.mode.clone(),
         );
 
+        let (merged_activate_add_sbin, activate_add_sbin_warning) = shallow_merge_options(
+            root_key.extend(["activate", "add-sbin"]),
+            low_priority.activate.add_sbin,
+            high_priority.activate.add_sbin,
+        );
+
         let merged = Options {
             systems: merged_systems,
             allow: Allows {
@@ -208,12 +212,14 @@ impl ShallowMerger {
             cuda_detection: merged_cuda_detection,
             activate: ActivateOptions {
                 mode: merged_activate_mode,
+                add_sbin: merged_activate_add_sbin,
             },
         };
 
         warnings.extend(
             [
                 activate_mode_warning,
+                activate_add_sbin_warning,
                 allow_unfree_warning,
                 allow_broken_warning,
                 allow_licenses_warning,
@@ -518,6 +524,7 @@ mod tests {
             let cuda_detection = options2.cuda_detection.or(options1.cuda_detection);
             let activate = ActivateOptions {
                 mode: options2.activate.mode.or(options1.activate.mode),
+                add_sbin: options2.activate.add_sbin.or(options1.activate.add_sbin),
             };
             let expected = Options { systems, allow, semver, cuda_detection, activate };
             prop_assert_eq!(merged, expected);

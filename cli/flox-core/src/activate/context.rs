@@ -38,6 +38,12 @@ pub struct AttachCtx {
     /// CUDA detection enabled
     pub flox_env_cuda_detection: String,
 
+    /// Whether to include `$FLOX_ENV/sbin` directories in PATH when activating.
+    /// Defaults to `false` so that `sbin` binaries don't shadow binaries from
+    /// other packages (e.g. BusyBox's `sbin/ifconfig`).
+    #[serde(default)]
+    pub add_sbin: bool,
+
     /// Path to the interpreter (activate scripts)
     pub interpreter_path: PathBuf,
 }

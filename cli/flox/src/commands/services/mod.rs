@@ -408,6 +408,8 @@ pub async fn start_services_with_new_process_compose(
         start_services: true,
         no_start_services: false,
         mode: Some(activate_mode),
+        // Preserve the manifest's add-sbin setting by not forcing it on.
+        add_sbin: false,
         generation,
         // this isn't actually used because we pass invocation type below
         command: Some(CommandSelect::ExecCommand {

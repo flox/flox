@@ -487,6 +487,7 @@ mod test {
             flox_prompt_environments: "".to_string(),
             set_prompt: false,
             flox_env_cuda_detection: "".to_string(),
+            add_sbin: false,
             flox_active_environments: "".to_string(),
         };
         let project = AttachProjectCtx {

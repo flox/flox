@@ -161,7 +161,13 @@ fn add_old_activate_script_exports(
         removals.push("FLOX_ENV_PROJECT");
     }
 
-    exports.extend(fixed_vars_to_export(&context.env, vars_from_environment));
+    exports.insert("_FLOX_ADD_SBIN", context.add_sbin.to_string());
+
+    exports.extend(fixed_vars_to_export(
+        &context.env,
+        vars_from_environment,
+        context.add_sbin,
+    ));
 
     command.envs(&exports);
     for var in &removals {
@@ -173,6 +179,7 @@ fn add_old_activate_script_exports(
 fn fixed_vars_to_export(
     flox_env: impl AsRef<str>,
     vars_from_environment: VarsFromEnvironment,
+    add_sbin: bool,
 ) -> HashMap<&'static str, String> {
     let new_flox_env_dirs = fix_env_dirs_var(
         flox_env.as_ref(),
@@ -183,6 +190,7 @@ fn fixed_vars_to_export(
     let new_path = fix_path_var(
         &new_flox_env_dirs,
         &vars_from_environment.path.unwrap_or("".to_string()),
+        add_sbin,
     );
     let new_manpath = fix_manpath_var(
         &new_flox_env_dirs,

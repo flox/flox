@@ -119,6 +119,13 @@ pub struct Activate {
     #[bpaf(short, long)]
     pub mode: Option<ActivateMode>,
 
+    /// Include `$FLOX_ENV/sbin` directories in PATH when activating.
+    /// Overrides the `options.activate.add-sbin` setting in the manifest.
+    /// Defaults to excluding `sbin` so that e.g. BusyBox's `sbin/ifconfig`
+    /// does not shadow a dedicated networking package's `bin/ifconfig`.
+    #[bpaf(long("add-sbin"))]
+    pub add_sbin: bool,
+
     /// Activate a FloxHub environment at a specific generation.
     #[bpaf(long, short)]
     pub generation: Option<GenerationId>,
@@ -306,6 +313,11 @@ impl Activate {
             .mode
             .clone()
             .unwrap_or(manifest.activate_mode().cloned().unwrap_or_default());
+
+        // Precedence: CLI flag wins when set (`--add-sbin`), otherwise
+        // fall back to the manifest's `options.activate.add-sbin`, otherwise
+        // default to `false` (exclude sbin).
+        let add_sbin = self.add_sbin || manifest.activate_add_sbin().unwrap_or(false);
         let mode_link_path = rendered_env_path.clone().for_mode(&mode);
         let store_path = fs::read_link(&mode_link_path).with_context(|| {
             format!(
@@ -423,6 +435,7 @@ impl Activate {
             flox_prompt_environments,
             set_prompt,
             flox_env_cuda_detection: flox_env_cuda_detection.to_string(),
+            add_sbin,
             interpreter_path,
         };
 
@@ -925,6 +938,7 @@ mod tests {
             start_services,
             no_start_services,
             mode: None,
+            add_sbin: false,
             generation: None,
             command: None,
         }

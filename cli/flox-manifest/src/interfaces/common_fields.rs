@@ -29,6 +29,14 @@ pub trait CommonFields {
     fn cuda_detection(&self) -> Option<bool>;
     fn activate_mode(&self) -> Option<&ActivateMode>;
 
+    /// Returns whether `$FLOX_ENV/sbin` directories should be prepended to
+    /// PATH when activating. Returns `None` for all schema versions before
+    /// V1_12_0 (callers should treat `None` as `false`). V1_12_0 reads this
+    /// from the manifest's `options.activate.add-sbin` field.
+    fn activate_add_sbin(&self) -> Option<bool> {
+        None
+    }
+
     /// Returns whether services should auto-start on activation.
     ///
     /// Returns `false` for all schema versions before V1_12_0.
@@ -157,6 +165,15 @@ impl CommonFields for Parsed {
             Parsed::V1_10_0(inner) => inner.activate_mode(),
             Parsed::V1_11_0(inner) => inner.activate_mode(),
             Parsed::V1_12_0(inner) => inner.activate_mode(),
+        }
+    }
+
+    fn activate_add_sbin(&self) -> Option<bool> {
+        match self {
+            Parsed::V1(inner) => inner.activate_add_sbin(),
+            Parsed::V1_10_0(inner) => inner.activate_add_sbin(),
+            Parsed::V1_11_0(inner) => inner.activate_add_sbin(),
+            Parsed::V1_12_0(inner) => inner.activate_add_sbin(),
         }
     }
 
@@ -302,6 +319,10 @@ macro_rules! impl_common_fields_for_manifest {
 
             fn activate_mode(&self) -> Option<&ActivateMode> {
                 self.inner.$field.activate_mode()
+            }
+
+            fn activate_add_sbin(&self) -> Option<bool> {
+                self.inner.$field.activate_add_sbin()
             }
 
             fn services_auto_start(&self) -> bool {
