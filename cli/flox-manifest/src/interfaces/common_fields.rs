@@ -1,6 +1,6 @@
 use crate::{Manifest, Migrated, MigratedTypedOnly, Parsed, TypedOnly, Validated, parsed};
 
-pub trait CommonFields {
+pub(crate) trait CommonFields {
     fn vars(&self) -> &parsed::common::Vars;
     fn hook(&self) -> Option<&parsed::common::Hook>;
     fn profile(&self) -> Option<&parsed::common::Profile>;

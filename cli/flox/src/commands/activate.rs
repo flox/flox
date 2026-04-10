@@ -245,7 +245,7 @@ impl Activate {
             },
             LockResult::Unchanged(lockfile) => lockfile,
         };
-        let manifest = &lockfile.manifest.migrate_typed_only(Some(&lockfile))?;
+        let manifest = &lockfile.migrated_manifest()?;
 
         if !self.trust
             && let Some(compose) = &lockfile.compose

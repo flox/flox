@@ -7,7 +7,7 @@ use flox_core::activate::mode::ActivateMode;
 use flox_core::activations::{activation_state_dir_path, read_activations_json, state_json_path};
 use flox_core::data::System;
 use flox_core::proc_status::is_descendant_of;
-use flox_manifest::interfaces::{AsLatestSchema, CommonFields};
+use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::Services;
@@ -156,7 +156,7 @@ impl ServicesEnvironment {
     ) -> Result<Self> {
         let socket = environment.services_socket_path(flox)?;
         let lockfile: Lockfile = environment.lockfile(flox)?.into();
-        let manifest = lockfile.manifest.migrate_typed_only(Some(&lockfile))?;
+        let manifest = lockfile.migrated_manifest()?;
 
         Ok(Self {
             environment,
@@ -365,10 +365,10 @@ pub async fn start_services_with_new_process_compose(
     let lockfile: Lockfile = concrete_environment.lockfile(&flox)?.into();
     let system = flox.system.clone();
 
+    let manifest = lockfile.migrated_manifest()?;
+    let services = &manifest.as_latest_schema().services;
     let names: Vec<String> = if names.is_empty() {
-        lockfile
-            .manifest
-            .services()
+        services
             .copy_for_system(&system)
             .inner()
             .keys()
@@ -379,8 +379,8 @@ pub async fn start_services_with_new_process_compose(
         // for starting `process-compose`. This does a similar job as
         // `processes_by_name_or_default_to_all` where we don't yet have a
         // running `process-compose` instance.
-        let all_services = lockfile.manifest.services().inner();
-        let system_services = lockfile.manifest.services().copy_for_system(&system);
+        let all_services = services.inner();
+        let system_services = services.copy_for_system(&system);
         let system_services = system_services.inner();
 
         for name in names {

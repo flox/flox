@@ -605,6 +605,16 @@ impl Serialize for Manifest<MigratedTypedOnly> {
     }
 }
 
+impl From<Manifest<MigratedTypedOnly>> for Manifest<TypedOnly> {
+    fn from(migrated: Manifest<MigratedTypedOnly>) -> Self {
+        Manifest {
+            inner: TypedOnly {
+                parsed: Parsed::from_latest(migrated.inner.migrated_parsed),
+            },
+        }
+    }
+}
+
 impl Default for Manifest<TypedOnly> {
     fn default() -> Self {
         let manifest = ManifestLatest::default();

@@ -9,7 +9,7 @@ mod write_manifest;
 
 pub use as_latest_schema::AsLatestSchema;
 pub use as_typed_only::AsTypedOnlyManifest;
-pub use common_fields::CommonFields;
+pub(crate) use common_fields::CommonFields;
 pub use contents_match::ContentsMatch;
 pub use inner_manifest::{GetInnerManifest, InnerManifest, InnerManifestMarker};
 pub use pkg_lookup::PackageLookup;

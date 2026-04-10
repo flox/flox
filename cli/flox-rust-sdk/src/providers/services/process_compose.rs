@@ -15,7 +15,7 @@ use std::sync::mpsc::{Receiver, Sender};
 
 use flox_core::process_compose::PROCESS_NEVER_EXIT_NAME;
 use flox_core::traceable_path;
-use flox_manifest::interfaces::CommonFields;
+use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::{ServiceShutdown, Services};
@@ -65,7 +65,7 @@ pub enum ServiceError {
     #[error("failed to create pipe for log output")]
     PipeCreation(#[source] nix::Error),
     #[error("{0}")] // just pass through whatever the message is
-    InvalidConfig(String),
+    Passthrough(String),
 }
 
 impl ServiceError {
@@ -318,16 +318,13 @@ pub fn maybe_make_service_config_file(
     flox: &Flox,
     lockfile: &Lockfile,
 ) -> Result<Option<PathBuf>, ServiceError> {
-    let service_config_path = if !lockfile.manifest.services().inner().is_empty() {
+    let manifest = lockfile
+        .migrated_manifest()
+        .map_err(|err| ServiceError::Passthrough(err.to_string()))?;
+    let services = &manifest.as_latest_schema().services;
+    let service_config_path = if !services.inner().is_empty() {
         let config_path = service_config_write_location(&flox.temp_dir)?;
-        write_process_compose_config(
-            &lockfile
-                .manifest
-                .services()
-                .copy_for_system(&flox.system)
-                .into(),
-            &config_path,
-        )?;
+        write_process_compose_config(&services.copy_for_system(&flox.system).into(), &config_path)?;
         tracing::debug!(path = traceable_path(&config_path), "wrote service config");
         Some(config_path)
     } else {
