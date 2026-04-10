@@ -188,7 +188,7 @@ jobs:
         if: ${{ !cancelled() && steps.unit-tests.outcome != 'skipped' }}
         with:
           disable_search: true
-          files: "./cli/target/nextest/ci/junit.xml"
+          files: "./target/nextest/ci/junit.xml"
           flags: "dev-unittests, ${{ matrix.test-tags }}, ${{ matrix.os }}"
           verbose: true
           use_oidc: true

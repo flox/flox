@@ -53,8 +53,8 @@ just build-release             # Build optimized release version
 just build-cli                 # Build only CLI (faster for Rust-only changes)
 
 # Running
-./cli/target/debug/flox --help # Run built binary
-pushd cli; cargo run -- <args>; popd # Run via cargo
+./target/debug/flox --help     # Run built binary
+cargo run -p flox -- <args>    # Run via cargo
 
 # Testing
 just test-all                  # Full test suite (nix-plugins, unit, integration)
@@ -70,8 +70,8 @@ just integ-tests activate.bats -- --filter regex  # Run integration tests, filte
 
 # Formatting and Linting
 just format                    # Format all code
-pushd cli; cargo fmt; popd           # Format Rust
-pushd cli; cargo clippy --all; popd  # Lint Rust
+cargo fmt                      # Format Rust
+cargo clippy --all             # Lint Rust
 treefmt -f nix .               # Format Nix
 pre-commit run -a              # Run all linters
 ```
