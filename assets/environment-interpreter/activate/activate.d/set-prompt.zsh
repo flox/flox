@@ -1,5 +1,12 @@
 "$_flox_activate_tracer" "$_activate_d/set-prompt.zsh" START
 
+# When auto-activation hooks manage the prompt, skip manual prompt setting
+# to avoid double "flox [...]" prefixes.
+if [ -n "${_FLOX_HOOK_EXCLUDE_DIRS:-}" ]; then
+  "$_flox_activate_tracer" "$_activate_d/set-prompt.zsh" END
+  return 0
+fi
+
 # Tweak the (already customized) prompt: add a flox indicator.
 
 _floxPrompt1="${FLOX_PROMPT-flox}"

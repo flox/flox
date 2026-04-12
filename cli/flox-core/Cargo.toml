@@ -8,9 +8,11 @@ ignored = ["proptest"]
 
 [dependencies]
 anyhow.workspace = true
+base64.workspace = true
 blake3.workspace = true
 crossterm.workspace = true
 derive_more.workspace = true
+flate2.workspace = true
 fslock.workspace = true
 log.workspace = true
 # should be a dev-dependency but test doesn't apply across crates

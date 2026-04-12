@@ -3,6 +3,7 @@ use std::path::Path;
 use std::process::Command;
 
 use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
+use flox_core::activate::mode::ActivateMode;
 use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
@@ -22,20 +23,14 @@ pub(super) fn assemble_activate_command(
     vars_from_env: VarsFromEnvironment,
     start_state_dir: &Path,
 ) -> Command {
-    let mut command = Command::new(context.attach_ctx.interpreter_path.join("activate"));
-    command.envs(old_cli_envs(
+    build_activate_command_inner(
         &context.attach_ctx,
         context.project_ctx.as_ref(),
-    ));
-    add_old_activate_script_exports(
-        &mut command,
-        &context.attach_ctx,
-        context.project_ctx.as_ref(),
+        &context.mode,
+        start_state_dir,
         subsystem_verbosity,
         vars_from_env,
-    );
-    add_activate_script_options(&mut command, context, start_state_dir);
-    command
+    )
 }
 
 /// Set (and unset) environment variables needed to be activated.
@@ -100,18 +95,30 @@ pub fn old_cli_envs(
     exports
 }
 
-/// Options parsed by getopt in the activate script
-fn add_activate_script_options(
-    command: &mut Command,
-    context: &ActivateCtx,
+/// Build an activate command with all required env vars and CLI args.
+/// Both `assemble_activate_command` and `assemble_auto_activate_command`
+/// delegate to this to avoid duplication.
+fn build_activate_command_inner(
+    attach_ctx: &AttachCtx,
+    project_ctx: Option<&AttachProjectCtx>,
+    mode: &ActivateMode,
     start_state_dir: &Path,
-) {
-    command.arg("--env").arg(&context.attach_ctx.env);
-
-    // Pass down the activation mode
-    command.arg("--mode").arg(context.mode.to_string());
-
+    subsystem_verbosity: u32,
+    vars_from_env: VarsFromEnvironment,
+) -> Command {
+    let mut command = Command::new(attach_ctx.interpreter_path.join("activate"));
+    command.envs(old_cli_envs(attach_ctx, project_ctx));
+    add_old_activate_script_exports(
+        &mut command,
+        attach_ctx,
+        project_ctx,
+        subsystem_verbosity,
+        vars_from_env,
+    );
+    command.arg("--env").arg(&attach_ctx.env);
+    command.arg("--mode").arg(mode.to_string());
     command.args(["--start-state-dir", &start_state_dir.to_string_lossy()]);
+    command
 }
 
 /// Prior to the refactor, these variables were exported in the activate script
@@ -193,6 +200,34 @@ fn fixed_vars_to_export(
         ("PATH", new_path),
         ("MANPATH", new_manpath),
     ])
+}
+
+/// Assemble an activate command for auto-activation (hook-env path).
+///
+/// Unlike `assemble_activate_command`, this takes component parts instead of
+/// a full `ActivateCtx`, since auto-start doesn't have shell/invocation_type.
+/// Uses `VarsFromEnvironment::get()` because auto-start inherits the shell
+/// environment via hook-env.
+pub(crate) fn assemble_auto_activate_command(
+    attach_ctx: &AttachCtx,
+    project_ctx: Option<&AttachProjectCtx>,
+    mode: &ActivateMode,
+    start_state_dir: &Path,
+) -> Command {
+    let vars_from_env = VarsFromEnvironment::get().unwrap_or(VarsFromEnvironment {
+        flox_env_dirs: None,
+        path: None,
+        manpath: None,
+    });
+
+    build_activate_command_inner(
+        attach_ctx,
+        project_ctx,
+        mode,
+        start_state_dir,
+        0,
+        vars_from_env,
+    )
 }
 
 /// The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.

@@ -1,4 +1,4 @@
-use std::io::{BufWriter, stdout};
+use std::io::{BufWriter, Write as _, stdout};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -131,6 +131,19 @@ impl Activate {
         {
             Ok(concrete_environment) => concrete_environment,
             Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
+                // In eval mode with no explicit environment, just emit hook code
+                // so that `eval "$(flox activate)"` sets up auto-activation
+                // without requiring an environment in the current directory.
+                let is_in_place = self.print_script || !stdout().is_tty();
+                if is_in_place && matches!(self.environment, EnvironmentSelect::Unspecified) {
+                    let shell = Self::detect_shell_for_in_place()?;
+                    let flox_bin = std::env::current_exe()
+                        .ok()
+                        .and_then(|p| p.to_str().map(String::from))
+                        .unwrap_or_else(|| "flox".to_string());
+                    print!("{}", super::hook::hook_code_for_shell(&shell, &flox_bin));
+                    return Ok(());
+                }
                 bail!(formatdoc! {"
             {e}
 
@@ -381,10 +394,11 @@ impl Activate {
         };
 
         // Determine services to start with a new process-compose
+        let auto_start = manifest.options().services.auto_start.unwrap_or(false);
         let is_ephemeral = !services_for_ephemeral_activation.is_empty();
         let services_to_start = if is_ephemeral {
             services_for_ephemeral_activation
-        } else if self.start_services {
+        } else if self.start_services || auto_start {
             Self::gather_services_for_flag(manifest, &flox.system, &socket_path)
         } else {
             Vec::new()
@@ -431,6 +445,23 @@ impl Activate {
 
         let activation_state_dir = activation_state_dir_path(&flox.runtime_dir, &dot_flox_path);
 
+        // Clone shell and invocation_type before they're moved into ActivateCtx,
+        // since we need them later to decide whether to emit hook code.
+        let shell_for_hook = shell.clone();
+        let invocation_type_for_hook = invocation_type.clone();
+
+        // Pre-compute hook registration code for Interactive invocations so that
+        // subshells preserve auto-activation functionality.
+        let hook_code = if matches!(invocation_type, InvocationType::Interactive) {
+            let flox_bin = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.to_str().map(String::from))
+                .unwrap_or_else(|| "flox".to_string());
+            Some(super::hook::hook_code_for_shell(&shell, &flox_bin))
+        } else {
+            None
+        };
+
         let activate_data = ActivateCtx {
             flox_activate_store_path: store_path.to_string_lossy().to_string(),
             attach_ctx: core,
@@ -441,6 +472,7 @@ impl Activate {
             invocation_type: Some(invocation_type),
             remove_after_reading: true,
             metrics_uuid: flox.metrics_device_uuid,
+            hook_code,
         };
 
         let tempfile = tempfile::NamedTempFile::new_in(flox.temp_dir)?;
@@ -478,6 +510,24 @@ impl Activate {
             );
             Ok(())
         } else {
+            // Emit auto-activation hook code before exec so that
+            // `eval "$(flox activate ...)"` sets up auto-activation hooks
+            // in addition to activating the specified environment.
+            // The hook code is idempotent and harmless in all contexts.
+            if matches!(invocation_type_for_hook, InvocationType::InPlace) {
+                let flox_bin = std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.to_str().map(String::from))
+                    .unwrap_or_else(|| "flox".to_string());
+                print!(
+                    "{}",
+                    super::hook::hook_code_for_shell(&shell_for_hook, &flox_bin)
+                );
+                // Must flush before exec() since Rust's buffered stdout
+                // is NOT automatically flushed by exec.
+                std::io::stdout().flush()?;
+            }
+
             debug!("running activation command: {:?}", command);
             // exec should never return
             // TODO: did this break in-place metrics?

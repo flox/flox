@@ -1,5 +1,14 @@
 $_flox_activate_tracer $_activate_d/set-prompt.tcsh START
 
+# When auto-activation hooks manage the prompt, skip manual prompt setting
+# to avoid double "flox [...]" prefixes.
+if ( $?_FLOX_HOOK_EXCLUDE_DIRS ) then
+  if ( "$_FLOX_HOOK_EXCLUDE_DIRS" != "" ) then
+    $_flox_activate_tracer $_activate_d/set-prompt.tcsh END
+    exit 0
+  endif
+endif
+
 # Tweak the (already customized) prompt: add a flox indicator.
 if ( ! $?FLOX_PROMPT ) then
     set FLOX_PROMPT = "flox"

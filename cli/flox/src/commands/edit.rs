@@ -105,7 +105,9 @@ impl Edit {
 
                 let contents = Self::provided_manifest_contents(file)?;
 
-                Self::edit_manifest(&flox, &mut detected_environment, contents).await?
+                Self::edit_manifest(&flox, &mut detected_environment, contents).await?;
+
+                super::hook_env::trust_or_log(&flox.data_dir, detected_environment.dot_flox_path());
             },
             EditAction::Rename { name } => {
                 let span = tracing::info_span!("rename");

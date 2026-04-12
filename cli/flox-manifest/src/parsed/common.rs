@@ -236,6 +236,10 @@ pub struct Options {
     #[serde(default)]
     #[serde(skip_serializing_if = "ActivateOptions::skip_serializing")]
     pub activate: ActivateOptions,
+    /// Options that control service behavior.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "ServicesOptions::skip_serializing")]
+    pub services: ServicesOptions,
 }
 
 #[skip_serializing_none]
@@ -303,6 +307,23 @@ impl SkipSerializing for ActivateOptions {
     /// explicitly check fields which we might forget to update.
     fn skip_serializing(&self) -> bool {
         self == &ActivateOptions::default()
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct ServicesOptions {
+    /// Whether services should automatically start on activation.
+    /// Defaults to false when not set (None).
+    pub auto_start: Option<bool>,
+}
+
+impl SkipSerializing for ServicesOptions {
+    fn skip_serializing(&self) -> bool {
+        self == &ServicesOptions::default()
     }
 }
 

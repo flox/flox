@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use crossterm::tty::IsTty;
 use flox_catalog::{ClientTrait, PackageDescriptor, PackageGroup, PackageResolutionInfo};
 use flox_core::activate::mode::ActivateMode;
 use flox_core::data::environment_ref::{DEFAULT_NAME, EnvironmentName, RemoteEnvironmentRef};
@@ -20,10 +21,18 @@ use indoc::{formatdoc, indoc};
 use path_dedot::ParseDot;
 use tracing::{debug, info_span, instrument};
 
+use crate::commands::activate::Activate;
 use crate::commands::{SHELL_COMPLETION_DIR, ensure_auth, environment_description};
 use crate::subcommand_metric;
-use crate::utils::dialog::Dialog;
+use crate::utils::dialog::{Dialog, Select};
 use crate::utils::message;
+use crate::utils::rc_files::{
+    activate_command_for_shell,
+    add_activation_to_rc_file,
+    ensure_rc_file_exists,
+    locate_rc_file,
+    rc_file_names_for_shell,
+};
 
 mod go;
 mod node;
@@ -241,6 +250,8 @@ async fn init_local_environment(
         PathEnvironment::init(path_pointer, dir, &customization, flox)?
     };
 
+    super::hook_env::trust_or_log(&flox.data_dir, env.dot_flox_path());
+
     let env_in_git_repo = GitCommandProvider::discover(dir).is_ok();
 
     message::created(format!(
@@ -255,25 +266,33 @@ async fn init_local_environment(
         }
     }
 
-    message::plain(indoc! {"
+    let is_default_env = Some(dir) == dirs::home_dir().as_deref();
 
-        Next:
-          $ flox search <package>    <- Search for a package
-          $ flox install <package>   <- Install a package into an environment
-          $ flox activate            <- Enter the environment
-          $ flox edit                <- Add environment variables and shell hooks"
-    });
+    if is_default_env {
+        // For the default environment, prompt to add to dotfiles
+        prompt_dotfile_setup()?;
+    } else {
+        message::plain(indoc! {"
 
-    // Don't recommend `flox push` if the env is in a git repo because they
-    // can already git track it and there's a higher likelihood of using
-    // build+publish, subsets of which require a git repo, and don't work
-    // with remote environments.
-    if !env_in_git_repo {
-        let hint_indentation = "  ";
-        message::plain(formatdoc! {"
-            {}$ flox push                <- Use the environment from other machines or
-                                            share it with someone on FloxHub"
-        , hint_indentation});
+            Next:
+              $ flox search <package>    <- Search for a package
+              $ flox install <package>   <- Install a package into an environment
+              $ flox activate            <- Enter the environment
+              $ flox edit                <- Add environment variables and shell hooks
+              $ flox allow               <- Allow auto-activation for this environment"
+        });
+
+        // Don't recommend `flox push` if the env is in a git repo because they
+        // can already git track it and there's a higher likelihood of using
+        // build+publish, subsets of which require a git repo, and don't work
+        // with remote environments.
+        if !env_in_git_repo {
+            let hint_indentation = "  ";
+            message::plain(formatdoc! {"
+                {}$ flox push                <- Use the environment from other machines or
+                                                share it with someone on FloxHub"
+            , hint_indentation});
+        }
     }
 
     message::plain("");
@@ -691,6 +710,76 @@ fn group_for_single_package(attr_path: &str, version: Option<&str>) -> PackageGr
         }],
         name: attr_path.to_string(),
     }
+}
+
+/// Prompt the user to add `eval "$(flox activate)"` to their shell dotfiles
+/// after creating the default environment in $HOME.
+fn prompt_dotfile_setup() -> Result<()> {
+    let shell = match Activate::detect_shell_for_in_place() {
+        Ok(shell) => shell,
+        Err(e) => {
+            debug!("Could not detect shell for dotfile setup: {e}");
+            message::plain(indoc! {"
+
+                Next:
+                  Add 'eval \"$(flox activate)\"' to your shell configuration file,
+                  then restart your shell."
+            });
+            return Ok(());
+        },
+    };
+
+    let shell_cmd = activate_command_for_shell(&shell);
+    let rc_names = rc_file_names_for_shell(&shell);
+    let joined = rc_names.join(" and ");
+
+    if std::io::stderr().is_tty() {
+        // Interactive: prompt to modify RC files
+        let file_or_files = if rc_names.len() > 1 { "files" } else { "file" };
+        message::plain(formatdoc! {"
+
+            Activate the default environment for every new shell by adding
+            one line to your {joined} {file_or_files}:
+              {shell_cmd}
+        "});
+
+        let prompt = format!("Would you like Flox to add this to {joined} now?");
+        let (choice_idx, _) = Dialog {
+            message: &prompt,
+            help_message: None,
+            typed: Select {
+                options: vec!["Yes", "No"],
+            },
+        }
+        .raw_prompt()?;
+
+        if choice_idx == 0 {
+            for rc_name in &rc_names {
+                let rc_file_path = locate_rc_file(&shell, rc_name)?;
+                ensure_rc_file_exists(&rc_file_path)?;
+                add_activation_to_rc_file(&rc_file_path, &shell_cmd)?;
+                message::updated(format!("Configuration added to your {rc_name} file."));
+            }
+            message::plain(formatdoc! {"
+                The default environment will be activated for every new shell.
+                -> Restart your shell to continue using the default environment."
+            });
+        }
+    } else {
+        // Non-interactive: just print the suggestion prominently
+        message::plain(formatdoc! {"
+
+            Next:
+              Add the following to your {joined} to activate the default
+              environment for every new shell:
+
+                {shell_cmd}
+
+              Then restart your shell."
+        });
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

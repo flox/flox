@@ -99,6 +99,54 @@ pub struct ActivateCtx {
     /// When None, metrics are disabled and Sentry is not initialized.
     #[serde(default)]
     pub metrics_uuid: Option<Uuid>,
+
+    /// Pre-computed hook registration code (shell-specific) for auto-activation
+    /// in subshells. Set for Interactive invocations so that `flox activate`
+    /// subshells preserve auto-activation functionality.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hook_code: Option<String>,
+}
+
+/// Subset of activation context needed for auto-activation via `hook-env`.
+///
+/// Passed as JSON to `flox-activations auto-start` to register the shell PID,
+/// spawn the executive, and run lifecycle hooks.
+///
+/// Composes `AttachCtx` and `AttachProjectCtx` so that `auto_start` can pass
+/// them directly to `spawn_executive` and `assemble_auto_activate_command`
+/// without reconstructing them from flat fields.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoStartCtx {
+    pub attach_ctx: AttachCtx,
+    pub project_ctx: AttachProjectCtx,
+
+    /// Nix store path for the built environment
+    pub store_path: String,
+
+    /// Base directory for this environment's activation state
+    pub activation_state_dir: PathBuf,
+
+    /// The activation mode (dev or run)
+    pub mode: ActivateMode,
+
+    /// The metrics UUID for Sentry user identification.
+    #[serde(default)]
+    pub metrics_uuid: Option<Uuid>,
+}
+
+/// Result returned on stdout (as JSON) by `flox-activations auto-start`.
+/// Parsed by `hook-env` to merge on-activate env diff and track state.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoStartResult {
+    pub status: String,
+    pub start_id: String,
+    pub is_new: bool,
+    /// Environment variable changes produced by on-activate hooks (only when is_new=true).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hook_env_diff: Option<crate::hook_state::OnActivateEnvDiff>,
+    /// Start state directory path (only when is_new=true).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_state_dir: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, derive_more::Display, PartialEq, Serialize)]

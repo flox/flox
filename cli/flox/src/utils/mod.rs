@@ -14,6 +14,7 @@ pub mod init;
 pub mod message;
 pub mod metrics;
 pub mod openers;
+pub mod rc_files;
 pub mod search;
 pub mod tracing;
 pub mod update_notifications;

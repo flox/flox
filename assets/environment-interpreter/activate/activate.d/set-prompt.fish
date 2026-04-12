@@ -1,5 +1,12 @@
 "$_flox_activate_tracer" "$_activate_d/set-prompt.fish" START
 
+# When auto-activation hooks manage the prompt, skip manual prompt setting
+# to avoid double "flox [...]" prefixes.
+if set -q _FLOX_HOOK_EXCLUDE_DIRS && test -n "$_FLOX_HOOK_EXCLUDE_DIRS"
+  "$_flox_activate_tracer" "$_activate_d/set-prompt.fish" END
+  return 0
+end
+
 if set -q FLOX_PROMPT_ENVIRONMENTS && test -n "$FLOX_PROMPT_ENVIRONMENTS" && [ "$_FLOX_SET_PROMPT" != false ]
     if not set -q FLOX_PROMPT
         set FLOX_PROMPT flox

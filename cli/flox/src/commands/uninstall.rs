@@ -117,6 +117,8 @@ impl Uninstall {
 
         warn_manifest_changes_for_services(&flox, &concrete_environment);
 
+        super::hook_env::trust_or_log(&flox.data_dir, concrete_environment.dot_flox_path());
+
         Ok(())
     }
 }

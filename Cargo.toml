@@ -38,6 +38,7 @@ derive_more = { version = "2.1.1", features= ["as_ref", "deref", "deref_mut", "d
 dirs = "6.0.0"
 enum_dispatch = "0.3.13"
 flox-activations = { path = "cli/flox-activations" }
+flate2 = "1"
 flox-core = { path = "cli/flox-core" }
 flox-rust-sdk = { path = "cli/flox-rust-sdk" }
 flox-test-utils = { path = "cli/flox-test-utils" }

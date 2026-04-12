@@ -33,6 +33,8 @@ fn try_main() -> Result<(), Error> {
     match args.command {
         cli::Command::Attach(args) => args.handle(),
         cli::Command::Activate(args) => args.handle(subsystem_verbosity),
+        cli::Command::AutoStart(args) => args.handle(),
+        cli::Command::AutoDetach(args) => args.handle(),
         cli::Command::Executive(_) => {
             unreachable!("executive already handled above")
         },

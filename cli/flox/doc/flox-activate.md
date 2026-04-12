@@ -28,7 +28,7 @@ Configures a shell with everything defined by the environment:
 * Downloads packages and adds their `bin` directories to your `$PATH`.
 * Sets environment variables and aliases.
 * Runs hooks.
-* Starts services (if `--start-services` is specified).
+* Starts services (if `--start-services` is specified or `options.services.auto-start` is `true` in the manifest).
 
 `flox activate` may run in one of four modes:
 
@@ -112,6 +112,11 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
 
    A remote environment can only have a single set of running services,
    regardless of how many times the environment is activated concurrently.
+
+   Services can also be started automatically by setting
+   `options.services.auto-start = true` in the manifest. This works for both
+   manual and auto-activation. The `-s` flag is not needed when this option
+   is set.
 
 `-m (dev|run)`, `--mode (dev|run)`
 :  Activate the environment in either "dev" or "run" mode.

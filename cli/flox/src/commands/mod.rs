@@ -1,16 +1,20 @@
 mod activate;
 mod activation_state;
+mod allow;
 mod auth;
 mod build;
 mod check_for_upgrades;
 mod containerize;
 mod delete;
+mod deny;
 mod edit;
 mod envs;
 mod exit;
 mod gc;
 mod general;
 mod generations;
+pub mod hook;
+mod hook_env;
 mod include;
 mod init;
 mod install;
@@ -369,7 +373,7 @@ impl FloxArgs {
                 Commands::Modify(args) => args.handle(config, flox).await,
                 Commands::Share(args) => args.handle(config, flox).await,
                 Commands::Admin(args) => args.handle(config, flox).await,
-                Commands::Internal(args) => args.handle(flox).await,
+                Commands::Internal(args) => args.handle(config, flox).await,
             };
 
             // This will print the update notification after output from a successful
@@ -445,6 +449,15 @@ fn print_welcome_message(envs: EnvRegistry, active_environments: ActiveEnvironme
 
     if active_environments.last_active().is_none() {
         message::plain("No active environments. Use 'flox envs' to list all environments.\n");
+
+        // If the default environment exists but isn't active, hint at dotfile setup
+        if let Some(home) = dirs::home_dir()
+            && home.join(DOT_FLOX).exists()
+        {
+            message::plain(
+                "Tip: Add 'eval \"$(flox activate)\"' to your shell config for the best experience.\n",
+            );
+        }
     } else {
         message::created("Active environments:");
         let envs = indent::indent_all_by(
@@ -522,6 +535,14 @@ enum ManageCommands {
         footer("Run 'man flox-delete' for more details.")
     )]
     Delete(#[bpaf(external(delete::delete))] delete::Delete),
+
+    /// Allow auto-activation for an environment
+    #[bpaf(command, footer("Run 'man flox-allow' for more details."))]
+    Allow(#[bpaf(external(allow::allow))] allow::Allow),
+
+    /// Deny auto-activation for an environment
+    #[bpaf(command, footer("Run 'man flox-deny' for more details."))]
+    Deny(#[bpaf(external(deny::deny))] deny::Deny),
 }
 
 impl ManageCommands {
@@ -530,6 +551,8 @@ impl ManageCommands {
             ManageCommands::Init(args) => args.handle(flox).await?,
             ManageCommands::Envs(args) => args.handle(flox)?,
             ManageCommands::Delete(args) => args.handle(flox).await?,
+            ManageCommands::Allow(args) => args.handle(flox)?,
+            ManageCommands::Deny(args) => args.handle(flox)?,
         }
         Ok(())
     }
@@ -803,10 +826,18 @@ enum InternalCommands {
     ServicesSocket(
         #[bpaf(external(services_socket::services_socket))] services_socket::ServicesSocket,
     ),
+
+    /// Emit shell hook code for auto-activation
+    #[bpaf(command, hide)]
+    Hook(#[bpaf(external(hook::hook))] hook::Hook),
+
+    /// Compute env changes for auto-activation (called on every prompt)
+    #[bpaf(command("hook-env"), hide)]
+    HookEnv(#[bpaf(external(hook_env::hook_env))] hook_env::HookEnv),
 }
 
 impl InternalCommands {
-    async fn handle(self, flox: Flox) -> Result<()> {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             InternalCommands::ResetMetrics(args) => args.handle(flox).await?,
             InternalCommands::Upload(args) => args.handle(flox).await?,
@@ -815,6 +846,8 @@ impl InternalCommands {
             InternalCommands::Exit(args) => args.handle(flox)?,
             InternalCommands::ActivationState(args) => args.handle(flox)?,
             InternalCommands::ServicesSocket(args) => args.handle(flox)?,
+            InternalCommands::Hook(args) => args.handle()?,
+            InternalCommands::HookEnv(args) => args.handle(config, flox)?,
         }
         Ok(())
     }
@@ -881,6 +914,9 @@ pub enum EnvironmentSelect {
         #[bpaf(long("reference"), long("ref"), short('r'), argument("owner>/<name"))]
         environment_ref::RemoteEnvironmentRef,
     ),
+    /// Use the authenticated user's default environment
+    #[bpaf(long("default"), short('D'))]
+    Default,
     #[default]
     #[bpaf(hide)]
     Unspecified,
@@ -999,6 +1035,20 @@ impl EnvironmentSelect {
                     .map_err(anyhow::Error::new)?;
                 ConcreteEnvironment::Remote(env)
             },
+            EnvironmentSelect::Default => {
+                debug!("getting concrete environment for user's default environment");
+                let handle = flox
+                    .get_handle()
+                    .ok_or_else(|| anyhow!("Not authenticated. Run 'flox auth login' first."))?;
+                let owner = environment_ref::EnvironmentOwner::from_str(&handle)
+                    .map_err(anyhow::Error::new)?;
+                let name = environment_ref::EnvironmentName::from_str(DEFAULT_NAME)
+                    .map_err(anyhow::Error::new)?;
+                let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
+                let env = RemoteEnvironment::new(flox, pointer, generation)
+                    .map_err(anyhow::Error::new)?;
+                ConcreteEnvironment::Remote(env)
+            },
         };
         warn_minimum_cli_version(&env, flox);
         Ok(env)
@@ -1040,6 +1090,23 @@ impl EnvironmentSelect {
 
                 ConcreteEnvironment::Remote(env)
             },
+            EnvironmentSelect::Default => {
+                let handle = flox
+                    .get_handle()
+                    .ok_or_else(|| anyhow!("Not authenticated. Run 'flox auth login' first."))?;
+                let owner = environment_ref::EnvironmentOwner::from_str(&handle)
+                    .map_err(anyhow::Error::new)?;
+                let name = environment_ref::EnvironmentName::from_str(DEFAULT_NAME)
+                    .map_err(anyhow::Error::new)?;
+                let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
+
+                let generation = activated_environments()
+                    .is_active_with_generation(&UninitializedEnvironment::Remote(pointer.clone()));
+
+                let env = RemoteEnvironment::new(flox, pointer, generation)
+                    .map_err(anyhow::Error::new)?;
+                ConcreteEnvironment::Remote(env)
+            },
         };
         warn_minimum_cli_version(&env, flox);
         Ok(env)
@@ -1051,6 +1118,7 @@ impl EnvironmentSelect {
                 Some(vec!["-d".to_string(), path.display().to_string()])
             },
             EnvironmentSelect::Remote(env_ref) => Some(vec!["-r".to_string(), env_ref.to_string()]),
+            EnvironmentSelect::Default => Some(vec!["--default".to_string()]),
             EnvironmentSelect::Unspecified => None,
         }
     }

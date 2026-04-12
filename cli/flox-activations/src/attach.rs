@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::fs::OpenOptions;
-use std::io::{ErrorKind, IsTerminal};
+use std::io::{ErrorKind, IsTerminal, Write as _};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -9,6 +9,17 @@ use anyhow::{Result, anyhow};
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use flox_core::activations::StartIdentifier;
+use flox_core::hook_state::{
+    HOOK_VAR_ACTIVATIONS,
+    HOOK_VAR_CWD,
+    HOOK_VAR_DIFF,
+    HOOK_VAR_DIRS,
+    HOOK_VAR_EXCLUDE_DIRS,
+    HOOK_VAR_EXCLUDE_NAMES,
+    HOOK_VAR_NOTIFIED,
+    HOOK_VAR_SUPPRESSED,
+    HOOK_VAR_WATCHES,
+};
 use indoc::formatdoc;
 use itertools::Itertools;
 use nix::unistd::{close, dup2_stdin, pipe, write};
@@ -287,11 +298,21 @@ fn activate_shell_command(
         &startup_ctx.env_diff,
     );
 
+    // Clear inherited hook state so the subshell starts fresh and set
+    // exclusion vars so auto-activation skips the manually-activated env.
+    clear_hook_state(&mut command);
+    set_hook_exclude_vars(&mut command, &startup_ctx.act_ctx);
+
     let rcfile = startup_ctx
         .rc_path
         .clone()
         .expect("rc_path should be some for command invocation");
     write_to_path(&startup_ctx, &rcfile)?;
+
+    // Append hook registration code to the RC file so the subshell
+    // has auto-activation hooks available.
+    append_hook_code(&startup_ctx.act_ctx, &rcfile)?;
+
     let rcfile = rcfile.to_string_lossy();
 
     match startup_ctx.act_ctx.shell {
@@ -410,11 +431,21 @@ fn activate_interactive(
         &startup_ctx.env_diff,
     );
 
+    // Clear inherited hook state so the subshell starts fresh and set
+    // exclusion vars so auto-activation skips the manually-activated env.
+    clear_hook_state(&mut command);
+    set_hook_exclude_vars(&mut command, &startup_ctx.act_ctx);
+
     let rcfile = startup_ctx
         .rc_path
         .clone()
         .expect("rc_path should be some for interactive invocation");
     write_to_path(&startup_ctx, &rcfile)?;
+
+    // Append hook registration code to the RC file so the subshell
+    // has auto-activation hooks available.
+    append_hook_code(&startup_ctx.act_ctx, &rcfile)?;
+
     let rcfile = rcfile.to_string_lossy();
 
     match startup_ctx.act_ctx.shell {
@@ -602,6 +633,55 @@ pub fn quote_run_args(run_args: &[String]) -> String {
             }
         })
         .join(" ")
+}
+
+/// Clear inherited `_FLOX_HOOK_*` state variables from a command so that
+/// a subshell starts with a fresh auto-activation state.
+fn clear_hook_state(command: &mut Command) {
+    command.env_remove(HOOK_VAR_DIFF);
+    command.env_remove(HOOK_VAR_DIRS);
+    command.env_remove(HOOK_VAR_WATCHES);
+    command.env_remove(HOOK_VAR_SUPPRESSED);
+    command.env_remove(HOOK_VAR_NOTIFIED);
+    command.env_remove(HOOK_VAR_CWD);
+    command.env_remove(HOOK_VAR_ACTIVATIONS);
+    // Also clear the saved prompt so auto-activation captures the correct baseline.
+    command.env_remove("_FLOX_HOOK_SAVE_PS1");
+}
+
+/// Set `_FLOX_HOOK_EXCLUDE_DIRS` and `_FLOX_HOOK_EXCLUDE_NAMES` on a command
+/// so that `hook-env` skips the manually-activated environment.
+fn set_hook_exclude_vars(command: &mut Command, ctx: &ActivateCtx) {
+    let project_ctx = match ctx.project_ctx.as_ref() {
+        Some(p) => p,
+        None => return,
+    };
+
+    let dot_flox = project_ctx.dot_flox_path.display().to_string();
+    let env_name = &ctx.attach_ctx.env_description;
+
+    // Append to existing values (colon-separated) so nested subshells accumulate.
+    let exclude_dirs = match std::env::var(HOOK_VAR_EXCLUDE_DIRS) {
+        Ok(existing) if !existing.is_empty() => format!("{existing}:{dot_flox}"),
+        _ => dot_flox,
+    };
+    let exclude_names = match std::env::var(HOOK_VAR_EXCLUDE_NAMES) {
+        Ok(existing) if !existing.is_empty() => format!("{existing}:{env_name}"),
+        _ => env_name.clone(),
+    };
+
+    command.env(HOOK_VAR_EXCLUDE_DIRS, exclude_dirs);
+    command.env(HOOK_VAR_EXCLUDE_NAMES, exclude_names);
+}
+
+/// Append pre-computed hook registration code to the RC file so that
+/// the subshell has auto-activation hooks available.
+fn append_hook_code(ctx: &ActivateCtx, rcfile: &Path) -> Result<()> {
+    if let Some(ref hook_code) = ctx.hook_code {
+        let mut file = OpenOptions::new().append(true).open(rcfile)?;
+        write!(file, "\n{hook_code}")?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
