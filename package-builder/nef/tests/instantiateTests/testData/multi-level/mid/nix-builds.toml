@@ -1,2 +1,4 @@
+version = 1
+
 [catalogs.leaf]
 url = "path:../leaf"

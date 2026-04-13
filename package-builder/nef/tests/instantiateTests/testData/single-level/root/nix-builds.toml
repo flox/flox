@@ -1,2 +1,3 @@
+version = 1
 [catalogs.child]
 url = "path:../child"
