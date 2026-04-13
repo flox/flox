@@ -97,10 +97,6 @@ impl NixFlakeref {
     pub fn as_parsed(&self) -> &Value {
         &self.parsed
     }
-
-    pub fn as_json_value(&self) -> &Value {
-        &self.parsed
-    }
 }
 
 /// Lock a flakeref url

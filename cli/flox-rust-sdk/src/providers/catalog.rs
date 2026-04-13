@@ -13,12 +13,14 @@ use flox_catalog::{
     CatalogMockMode,
     CatalogStoreConfig,
     ClientTrait,
+    LockedSourceItem,
     PackageDetails,
     PackageGroup,
     PackageSystem,
     PublishResponse,
     ResolveError,
     ResolvedPackageGroup,
+    ResultsPage,
     SearchError,
     SearchLimit,
     SearchResults,
@@ -38,11 +40,6 @@ use tracing::info;
 
 use super::publish::CheckedEnvironmentMetadata;
 use crate::flox::Flox;
-
-pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
-pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
-
-pub const DEFAULT_CATALOG_URL: &str = "https://api.flox.dev";
 
 // Arc allows you to push things into the client from outside the client if necessary
 // Mutex allows you to share across threads (necessary because of tokio)
@@ -248,6 +245,16 @@ impl ClientTrait for Client {
         match self {
             Client::Catalog(c) => c.get_base_catalog_info().await,
             Client::Mock(c) => c.get_base_catalog_info().await,
+        }
+    }
+
+    async fn get_catalog_locked_sources(
+        &self,
+        catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<ResultsPage<LockedSourceItem>, CatalogClientError> {
+        match self {
+            Client::Catalog(c) => c.get_catalog_locked_sources(catalog_name).await,
+            Client::Mock(c) => c.get_catalog_locked_sources(catalog_name).await,
         }
     }
 }
@@ -514,6 +521,13 @@ impl ClientTrait for MockClient {
 
         Ok(resp)
     }
+
+    async fn get_catalog_locked_sources(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<ResultsPage<LockedSourceItem>, CatalogClientError> {
+        unimplemented!("get_catalog_locked_sources not implemented for MockClient")
+    }
 }
 
 /// An alias so the flox crate doesn't have to depend on the catalog-api crate
@@ -620,7 +634,7 @@ pub async fn get_base_nixpkgs_url(
 }
 
 pub mod test_helpers {
-    use flox_catalog::AuthMethod;
+    use flox_catalog::{AuthMethod, DEFAULT_CATALOG_URL};
     use pollster::FutureExt;
     use tempfile::TempDir;
 

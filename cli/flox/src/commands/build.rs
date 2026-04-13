@@ -413,7 +413,7 @@ impl Build {
         Ok(())
     }
 
-    async fn update_catalogs(_flox: &Flox, env: ConcreteEnvironment) -> Result<()> {
+    async fn update_catalogs(flox: &Flox, env: ConcreteEnvironment) -> Result<()> {
         match &env {
             ConcreteEnvironment::Path(_) => (),
             ConcreteEnvironment::Managed(_) => {
@@ -438,7 +438,7 @@ impl Build {
         };
 
         let config = read_config(&config_path)?;
-        let lockfile = lock_config(&config)?;
+        let lockfile = lock_config(&config, &flox.catalog_client).await?;
 
         write_lock(&lockfile, config_path.with_extension("lock"))?;
 

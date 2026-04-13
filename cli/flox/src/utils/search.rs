@@ -176,6 +176,7 @@ mod tests {
             pkg_path: name.to_string(),
             description: description.map(|s| s.to_string()),
             version: None,
+            deprecation: None,
         }
     }
 

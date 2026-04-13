@@ -6,12 +6,12 @@
 let
   instantiate = lib.nef.instantiate;
 
-  singleLevel = instantiate {
+  singleLevel = instantiate.instantiateFromSourceInfo {
     inherit nixpkgs;
     sourceInfo = builtins.fetchTree "path:${fixtures}/single-level/root";
   };
 
-  multiLevel = instantiate {
+  multiLevel = instantiate.instantiateFromSourceInfo {
     inherit nixpkgs;
     sourceInfo = builtins.fetchTree "path:${fixtures}/multi-level/root";
   };
@@ -55,4 +55,74 @@ in
     expr = multiLevel.pkgs.hello;
     expected = "i am leaf";
   };
+
+  # FloxHub catalog tests
+
+  "test: floxhub catalog instantiates package" =
+    let
+      result = instantiate.instantiateCatalog nixpkgs {
+        type = "floxhub";
+        packages = {
+          type = "package_set";
+          entries = {
+            dep = {
+              type = "package";
+              build_type = "nef";
+              source = {
+                type = "path";
+                path = "${fixtures}/single-level/child";
+              };
+            };
+          };
+        };
+      };
+    in
+    {
+      expr = result.packages.dep;
+      expected = "i am dep";
+    };
+
+  "test: floxhub catalog nested package set" =
+    let
+      result = instantiate.instantiateCatalog nixpkgs {
+        type = "floxhub";
+        packages = {
+          type = "package_set";
+          entries = {
+            nested = {
+              type = "package_set";
+              entries = {
+                deep = {
+                  type = "package";
+                  build_type = "nef";
+                  source = {
+                    type = "path";
+                    path = "${fixtures}/single-level/child";
+                  };
+                };
+              };
+            };
+          };
+        };
+      };
+    in
+    {
+      expr = result.packages.nested.deep;
+      expected = "i am nested";
+    };
+
+  "test: floxhub catalog type is preserved" =
+    let
+      result = instantiate.instantiateCatalog nixpkgs {
+        type = "floxhub";
+        packages = {
+          type = "package_set";
+          entries = { };
+        };
+      };
+    in
+    {
+      expr = result.type;
+      expected = "floxhub";
+    };
 }

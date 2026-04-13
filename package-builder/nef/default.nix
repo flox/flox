@@ -34,6 +34,6 @@ let
       sourceInfo // lib.optionalAttrs (parsedRef ? dir) { inherit (parsedRef) dir; };
 
 in
-lib.nef.instantiate {
+lib.nef.instantiate.instantiateFromSourceInfo {
   inherit nixpkgs sourceInfo;
 }

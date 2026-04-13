@@ -3,16 +3,21 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use flox_catalog::ClientTrait;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use tracing::instrument;
 use url::Url;
 
 use crate::CatalogId;
-use crate::lock::lock_url_with_options;
+use crate::lock::{NixFlakeref, lock_url_with_options};
 use crate::nix_build_lock::{BuildLock, CatalogLock};
+use crate::tree::PackageTreeBuilder;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 enum CatalogType {
+    #[serde(rename = "floxhub")]
+    FloxHub,
     #[serde(untagged)]
     Nix(String),
 }
@@ -39,10 +44,15 @@ enum CatalogType {
 ///
 /// [1]: https://nix.dev/manual/nix/2.31/language/builtins.html#source-types
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "type", rename_all = "lowercase")]
 enum CatalogSpec {
+    FloxHub {},
+    #[serde(untagged)]
     Full(NixSourceTypeSpec),
-    Url { url: Url },
+    #[serde(untagged)]
+    Url {
+        url: Url,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,15 +91,23 @@ pub struct LockOptions {
 
 /// Lock a [BuildConfig] using the default Flox conventions.
 #[tracing::instrument(skip_all)]
-pub fn lock_config(config: &BuildConfig) -> Result<BuildLock> {
-    lock_config_with_options(config, &LockOptions {
+pub async fn lock_config(
+    config: &BuildConfig,
+    client: &(impl ClientTrait + Send + Sync),
+) -> Result<BuildLock> {
+    lock_config_with_options(config, client, &LockOptions {
         nef_base_dir: Some(".flox".to_string()),
     })
+    .await
 }
 
 /// Lock a [BuildConfig] with explicit path options.
 #[tracing::instrument(skip_all)]
-pub fn lock_config_with_options(config: &BuildConfig, options: &LockOptions) -> Result<BuildLock> {
+pub async fn lock_config_with_options(
+    config: &BuildConfig,
+    client: &(impl ClientTrait + Send + Sync),
+    options: &LockOptions,
+) -> Result<BuildLock> {
     let BuildConfig {
         catalogs: catalog_spec,
     } = config;
@@ -104,6 +122,7 @@ pub fn lock_config_with_options(config: &BuildConfig, options: &LockOptions) -> 
         .entered();
 
         let locked_catalog = match catalog {
+            CatalogSpec::FloxHub {} => lock_floxhub_catalog(client, name).await?,
             CatalogSpec::Full(source_type) => {
                 let prefetch = lock_url_with_options(
                     &serde_json::to_value(source_type)?.try_into()?,
@@ -122,5 +141,37 @@ pub fn lock_config_with_options(config: &BuildConfig, options: &LockOptions) -> 
 
     Ok(BuildLock {
         catalogs: locked_catalogs,
+    })
+}
+
+/// Lock a FloxHub catalog by fetching locked sources and building tree structure
+#[instrument(skip(client))]
+async fn lock_floxhub_catalog(
+    client: &(impl ClientTrait + Send + Sync),
+    catalog_id: &CatalogId,
+) -> Result<CatalogLock> {
+    // Fetch locked sources from FloxHub
+    let locked_items = client
+        .get_catalog_locked_sources(&catalog_id.0)
+        .await
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to fetch locked sources for catalog '{}': {}",
+                catalog_id.0,
+                e
+            )
+        })?;
+
+    // Build tree structure from locked items using PackageTreeBuilder
+    let mut builder = PackageTreeBuilder::new();
+    for item in locked_items.results {
+        // Convert LockedSourceItem to NixFlakeref for the builder
+        let source = NixFlakeref::try_from(serde_json::to_value(item.source)?)?;
+        builder.add_package(item.attr_path_components, item.build_type, source)?;
+    }
+    let tree_node = builder.into_root();
+
+    Ok(CatalogLock::FloxHub {
+        packages: tree_node,
     })
 }
