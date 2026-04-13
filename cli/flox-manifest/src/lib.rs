@@ -48,7 +48,7 @@ use crate::raw::{
     SyncTypedToRaw,
     TomlEditError,
     get_json_schema_version_kind,
-    get_schema_version_kind,
+    get_schema_version_kind, update_schema_version,
 };
 
 pub mod compose;
@@ -440,7 +440,9 @@ impl Manifest<Migrated> {
                 parsed: typed_only.inner.parsed,
             },
         };
-        validated.update_toml()?;
+        // as_maybe_backwards_compatible() shouldn't change anything other than
+        // schema_version, so that's all we need to sync back to the raw document
+        update_schema_version(&mut validated.inner.raw, validated.inner.parsed.schema_version());
         Ok(validated)
     }
 

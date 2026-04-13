@@ -887,24 +887,6 @@ pub trait SyncTypedToRaw {
     fn update_raw_packages_from_typed_manifest(&mut self) -> Result<(), ManifestError>;
 }
 
-impl SyncTypedToRaw for Manifest<Validated> {
-    fn update_schema_version(&mut self) {
-        update_schema_version(&mut self.inner.raw, self.inner.parsed.schema_version());
-    }
-
-    fn update_systems(&mut self) -> Result<(), ManifestError> {
-        update_systems(
-            &mut self.inner.raw,
-            self.inner.parsed.options().systems.as_ref(),
-        )
-        .map_err(ManifestError::TomlEdit)
-    }
-
-    fn update_raw_packages_from_typed_manifest(&mut self) -> Result<(), ManifestError> {
-        update_raw_packages_from_typed_manifest(&mut self.inner.raw, &self.inner.parsed)
-    }
-}
-
 impl SyncTypedToRaw for Manifest<Migrated> {
     fn update_schema_version(&mut self) {
         update_schema_version(&mut self.inner.migrated_raw, KnownSchemaVersion::latest());
@@ -926,7 +908,7 @@ impl SyncTypedToRaw for Manifest<Migrated> {
     }
 }
 
-fn update_schema_version(raw: &mut DocumentMut, schema_version: KnownSchemaVersion) {
+pub(crate) fn update_schema_version(raw: &mut DocumentMut, schema_version: KnownSchemaVersion) {
     let (old_key, new_key, new_value) = match schema_version {
         KnownSchemaVersion::V1 => (
             "schema-version",
@@ -2201,7 +2183,7 @@ curl.outputs = [\"bin\", \"man\"]
             # bat is a better cat
             bat.pkg-path = "bat"
         "#});
-        let mut manifest = Manifest::parse_toml_typed(&toml_str).unwrap();
+        let mut manifest = Manifest::parse_toml_typed(&toml_str).unwrap().migrate(lockfile);
         remove_from_install(&mut manifest, "hello");
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
