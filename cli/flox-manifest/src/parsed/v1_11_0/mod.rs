@@ -9,7 +9,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-use crate::interfaces::{AsTypedOnlyManifest, CommonFields, SchemaVersion, impl_pkg_lookup};
+use crate::interfaces::{AsTypedOnlyManifest, SchemaVersion, impl_pkg_lookup};
 use crate::parsed::common::{
     Build,
     Containerize,
@@ -116,72 +116,6 @@ impl AsTypedOnlyManifest for ManifestV1_11_0 {
 impl SchemaVersion for ManifestV1_11_0 {
     fn get_schema_version(&self) -> KnownSchemaVersion {
         KnownSchemaVersion::V1_11_0
-    }
-}
-
-impl CommonFields for ManifestV1_11_0 {
-    fn vars(&self) -> &Vars {
-        &self.vars
-    }
-
-    fn hook(&self) -> Option<&Hook> {
-        self.hook.as_ref()
-    }
-
-    fn profile(&self) -> Option<&Profile> {
-        self.profile.as_ref()
-    }
-
-    fn services(&self) -> &Services {
-        &self.services
-    }
-
-    fn include(&self) -> &Include {
-        &self.include
-    }
-
-    fn build(&self) -> &Build {
-        &self.build
-    }
-
-    fn containerize(&self) -> Option<&super::common::Containerize> {
-        self.containerize.as_ref()
-    }
-
-    fn options(&self) -> &super::common::Options {
-        &self.options
-    }
-
-    fn vars_mut(&mut self) -> &mut super::common::Vars {
-        &mut self.vars
-    }
-
-    fn hook_mut(&mut self) -> Option<&mut super::common::Hook> {
-        self.hook.as_mut()
-    }
-
-    fn profile_mut(&mut self) -> Option<&mut super::common::Profile> {
-        self.profile.as_mut()
-    }
-
-    fn services_mut(&mut self) -> &mut super::common::Services {
-        &mut self.services
-    }
-
-    fn include_mut(&mut self) -> &mut super::common::Include {
-        &mut self.include
-    }
-
-    fn build_mut(&mut self) -> &mut super::common::Build {
-        &mut self.build
-    }
-
-    fn containerize_mut(&mut self) -> Option<&mut super::common::Containerize> {
-        self.containerize.as_mut()
-    }
-
-    fn options_mut(&mut self) -> &mut super::common::Options {
-        &mut self.options
     }
 }
 

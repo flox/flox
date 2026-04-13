@@ -5,7 +5,7 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::sync::LazyLock;
 
 use flox_catalog::BaseCatalogUrl;
-use flox_manifest::interfaces::{AsLatestSchema, CommonFields};
+use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
@@ -719,7 +719,7 @@ impl PackageTargets {
         manifest: &Manifest<MigratedTypedOnly>,
         expression_ref: &NixFlakeref,
     ) -> Result<PackageTargets, PackageTargetError> {
-        let environment_packages = manifest.as_latest_schema().build();
+        let environment_packages = &manifest.as_latest_schema().build;
 
         let nix_expression_packages = get_nix_expression_targets(expression_ref)
             .map_err(|e| PackageTargetError::new(e.to_string()))?;

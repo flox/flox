@@ -20,7 +20,7 @@ use flox_core::activations::activation_state_dir_path;
 use flox_core::data::System;
 use flox_core::data::environment_ref::DEFAULT_NAME;
 use flox_core::traceable_path;
-use flox_manifest::interfaces::{AsWritableManifest, CommonFields, WriteManifest};
+use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::IncludeDescriptor;
 use flox_manifest::{Manifest, MigratedTypedOnly};
@@ -245,7 +245,7 @@ impl Activate {
             },
             LockResult::Unchanged(lockfile) => lockfile,
         };
-        let manifest = &lockfile.manifest.migrate_typed_only(Some(&lockfile))?;
+        let manifest = &lockfile.migrated_manifest()?;
 
         if !self.trust
             && let Some(compose) = &lockfile.compose
@@ -294,10 +294,15 @@ impl Activate {
         let lockfile_version = lockfile.version();
         subcommand_metric!("activate#version", lockfile_version = lockfile_version);
 
-        let mode = self
-            .mode
-            .clone()
-            .unwrap_or(manifest.options().activate.mode.clone().unwrap_or_default());
+        let mode = self.mode.clone().unwrap_or(
+            manifest
+                .as_latest_schema()
+                .options
+                .activate
+                .mode
+                .clone()
+                .unwrap_or_default(),
+        );
         let mode_link_path = rendered_env_path.clone().for_mode(&mode);
         let store_path = fs::read_link(&mode_link_path).with_context(|| {
             format!(
@@ -375,7 +380,7 @@ impl Activate {
 
         let socket_path = concrete_environment.services_socket_path(&flox)?;
 
-        let flox_env_cuda_detection = match manifest.options().cuda_detection {
+        let flox_env_cuda_detection = match manifest.as_latest_schema().options.cuda_detection {
             Some(false) => "0", // manifest opts-out
             _ => "1",           // default to enabling CUDA
         };
@@ -533,12 +538,14 @@ impl Activate {
         system: &System,
         socket_path: &Path,
     ) -> Vec<String> {
-        if manifest.services().inner().is_empty() {
+        let manifest_services = &manifest.as_latest_schema().services;
+
+        if manifest_services.inner().is_empty() {
             message::warning(ServicesCommandsError::NoDefinedServices);
             return Vec::new();
         }
 
-        let services_for_system = manifest.services().copy_for_system(system);
+        let services_for_system = manifest_services.copy_for_system(system);
         if services_for_system.inner().is_empty() {
             message::warning(ServicesCommandsError::NoDefinedServicesForSystem {
                 system: system.clone(),

@@ -193,7 +193,7 @@ impl Build {
         let flox_env_build_outputs = env.build(&flox)?;
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
 
-        let lockfile_manifest = lockfile.manifest.migrate_typed_only(Some(&lockfile))?;
+        let lockfile_manifest = lockfile.migrated_manifest()?;
         let packages_to_clean = packages_to_build(&lockfile_manifest, &expression_ref, &packages)?;
         let target_names = packages_to_clean
             .iter()
@@ -234,7 +234,7 @@ impl Build {
         // Used for non building expressions and manifest builds
         prefetch_flake_ref(&COMMON_NIXPKGS_URL)?;
 
-        let lockfile_manifest = lockfile.manifest.migrate_typed_only(Some(&lockfile))?;
+        let lockfile_manifest = lockfile.migrated_manifest()?;
         let (packages_to_build, expression_ref) = {
             // TODO: decouple from env
             let expression_parent_dir = env.dot_flox_path();
@@ -777,10 +777,7 @@ mod test {
             "#})]);
 
         let lockfile: Lockfile = env.lockfile(&flox).unwrap().into();
-        let lockfile_manifest = lockfile
-            .manifest
-            .migrate_typed_only(Some(&lockfile))
-            .unwrap();
+        let lockfile_manifest = lockfile.migrated_manifest().unwrap();
         let result = packages_to_build(&lockfile_manifest, &expressions_ref, &Vec::<String>::new());
         assert!(result.is_err());
     }

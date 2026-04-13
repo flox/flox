@@ -171,7 +171,7 @@ impl Publish {
         // Used for non building expressions and manifest builds
         prefetch_flake_ref(&COMMON_NIXPKGS_URL)?;
 
-        let lockfile_manifest = lockfile.manifest.migrate_typed_only(Some(&lockfile))?;
+        let lockfile_manifest = lockfile.migrated_manifest()?;
         let package = {
             let expression_dir_parent = path_env.dot_flox_path();
             let expression_ref_local = NixFlakeref::from_path(&expression_dir_parent)?;

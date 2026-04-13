@@ -10,7 +10,6 @@ use super::{
     map_union,
     shallow_merge_options,
 };
-use crate::interfaces::CommonFields;
 use crate::parsed::Inner;
 use crate::parsed::common::{
     ActivateOptions,
@@ -297,29 +296,33 @@ impl ManifestMergeTrait for ShallowMerger {
             Self::merge_install(&low_priority.install, &high_priority.install)?;
 
         trace!(section = "vars", "merging manifest section");
-        let (vars, vars_warnings) = Self::merge_vars(low_priority.vars(), high_priority.vars())?;
+        let (vars, vars_warnings) = Self::merge_vars(&low_priority.vars, &high_priority.vars)?;
 
         trace!(section = "hook", "merging manifest section");
-        let hook = Self::merge_hook(low_priority.hook(), high_priority.hook())?;
+        let hook = Self::merge_hook(low_priority.hook.as_ref(), high_priority.hook.as_ref())?;
 
         trace!(section = "profile", "merging manifest section");
-        let profile = Self::merge_profile(low_priority.profile(), high_priority.profile())?;
+        let profile = Self::merge_profile(
+            low_priority.profile.as_ref(),
+            high_priority.profile.as_ref(),
+        )?;
 
         trace!(section = "options", "merging manifest section");
         let (options, options_warnings) =
-            Self::merge_options(low_priority.options(), high_priority.options())?;
+            Self::merge_options(&low_priority.options, &high_priority.options)?;
 
         trace!(section = "services", "merging manifest section");
         let (services, services_warnings) =
-            Self::merge_services(low_priority.services(), high_priority.services())?;
+            Self::merge_services(&low_priority.services, &high_priority.services)?;
 
         trace!(section = "build", "merging manifest section");
-        let (build, build_warnings) =
-            Self::merge_build(low_priority.build(), high_priority.build())?;
+        let (build, build_warnings) = Self::merge_build(&low_priority.build, &high_priority.build)?;
 
         trace!(section = "containerize", "merging manifest section");
-        let (containerize, containerize_warnings) =
-            Self::merge_containerize(low_priority.containerize(), high_priority.containerize())?;
+        let (containerize, containerize_warnings) = Self::merge_containerize(
+            low_priority.containerize.as_ref(),
+            high_priority.containerize.as_ref(),
+        )?;
 
         debug!("manifest pair merged successfully");
 

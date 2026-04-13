@@ -21,7 +21,6 @@ use flox_manifest::compose::{CompositeManifest, ManifestMerger, MergeError};
 use flox_manifest::interfaces::{
     AsLatestSchema,
     AsTypedOnlyManifest,
-    CommonFields,
     OriginalSchemaVersion,
     PackageLookup,
     SchemaVersion,
@@ -426,7 +425,7 @@ impl LockManifest {
         merger: ManifestMerger,
         mut to_upgrade: Option<Vec<String>>,
     ) -> Result<(ManifestLatest, Option<Compose>), RecoverableMergeError> {
-        if manifest.include().environments.is_empty() {
+        if manifest.include.environments.is_empty() {
             if to_upgrade.is_some() {
                 return Err(RecoverableMergeError::Catchall(
                     "environment has no included environments".to_string(),
@@ -445,7 +444,7 @@ impl LockManifest {
             .as_ref()
             .map(|to_upgrade| to_upgrade.is_empty())
             .unwrap_or(false);
-        for include_environment in &manifest.include().environments {
+        for include_environment in &manifest.include.environments {
             debug!(
                 name = include_environment.to_string(),
                 "inspecting included environment"
@@ -658,7 +657,7 @@ impl LockManifest {
             already_locked_packages
                 .iter()
                 .filter_map(LockedPackage::as_catalog_package_ref),
-            &manifest.options().allow,
+            &manifest.options.allow,
         )?;
 
         // Update the priority of already locked packages to match the manifest.

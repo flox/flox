@@ -353,7 +353,7 @@ impl Manifest<TomlParsed> {
                 parsed,
             },
         };
-        manifest.services().validate()?;
+        manifest.inner.parsed.services().validate()?;
         Ok(manifest)
     }
 }
@@ -602,6 +602,16 @@ impl Serialize for Manifest<MigratedTypedOnly> {
         S: serde::Serializer,
     {
         self.inner.serialize(serializer)
+    }
+}
+
+impl From<Manifest<MigratedTypedOnly>> for Manifest<TypedOnly> {
+    fn from(migrated: Manifest<MigratedTypedOnly>) -> Self {
+        Manifest {
+            inner: TypedOnly {
+                parsed: Parsed::from_latest(migrated.inner.migrated_parsed),
+            },
+        }
     }
 }
 
