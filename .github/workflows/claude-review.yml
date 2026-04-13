@@ -31,6 +31,7 @@ jobs:
           # This is an optional setting that allows Claude to read CI results on PRs
           additional_permissions: |
             actions: read
+          plugin_marketplaces: https://github.com/anthropics/claude-plugins-official.git
           claude_args: '--dangerously-skip-permissions'
-          plugins: 'code-review@claude-code-plugins'
+          plugins: 'code-review@claude-plugins-official'
           prompt: '/code-review:code-review'
