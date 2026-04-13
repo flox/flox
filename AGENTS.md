@@ -153,6 +153,31 @@ FLOX_ACTIVATE_TRACE=1 result/bin/flox activate [args]
   - Use `assert_eq!` on entire structs in tests so that it's easier to debug failures and catch new fields; don't `assert!` or `assert_eq!` on individual fields
   - Add `use` statements to modules; don't inline absolute paths and don't add to nearest function
   - Always update `use` statements when moving code between modules; don't re-export existing names
+- **Error handling architecture:**
+  - When improving error messages, first understand the existing error type
+    hierarchy before adding string-matching at call sites. Extend error
+    enums with new variants rather than parsing `.to_string()` output.
+  - The git provider layer has a classification pattern:
+    `GitCommandError` → `GitRemoteCommandError` (with typed variants like
+    `AccessDenied`, `Diverged`, `RefNotFound`). New failure modes should
+    be added as variants here, not detected by string matching downstream.
+  - Credential sanitization, access-denied detection, and similar
+    cross-cutting concerns belong in `Display` impls or `From` conversions
+    on the error types, not sprinkled at individual call sites.
+- **Don't constrain generics to a single concrete type:** If you find
+  yourself writing `impl Trait<AssocType = ConcreteError>` because you
+  need to match on concrete error variants, that's a sign the error
+  handling belongs at a lower layer. Either extend the trait's error
+  types to expose what you need, or take the concrete type directly.
+  Using generics with the trait is generally correct when the trait
+  is meaningful; pinning associated types to defeat the abstraction
+  is not.
+- **Understand semantics before rewriting messages:** Before changing an
+  error message, verify what condition actually triggers it. The message
+  must describe what is actually wrong, not an approximation inferred
+  from a surface reading of the code.
+- **Use `formatdoc!`** (from `indoc`) for multiline formatted strings
+  rather than `\n\` line continuations.
 - **Commits:** Conventional commits format (`feat:`, `fix:`, `chore:`, etc.). Use `cz commit` for interactive commits
 - **Rust 2024 edition** for main crates
 
