@@ -32,5 +32,5 @@ jobs:
           additional_permissions: |
             actions: read
           claude_args: '--dangerously-skip-permissions'
-          plugins: 'code-review@claude-plugins-official'
+          plugins: 'code-review@claude-code-plugins'
           prompt: '/code-review:code-review'
