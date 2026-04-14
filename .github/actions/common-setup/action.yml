@@ -34,7 +34,7 @@ runs:
   steps:
     - name: "Install newer Nix"
       if: ${{ inputs.SETUP_NIX }} == "true"
-      uses: cachix/install-nix-action@96951a368ba55167b55f1c916f7d416bac6505fe # v31
+      uses: cachix/install-nix-action@616559265b40713947b9c190a8ff4b507b5df49b # v31
 
     - name: "Configure Nix"
       uses: flox/configure-nix-action@1ee58d63463cb1870ab73d9df0acfd9d8ba671f8 # main
