@@ -195,6 +195,16 @@ FLOX_ACTIVATE_TRACE=1 result/bin/flox activate [args]
     bodies. Proc-macro attributes (`#[error(...)]`,
     `#[bpaf(...)]`) require string literals and cannot use
     macros.
+  - **User-facing string literals:** Prefer stretching past the
+    line-width limit rather than breaking messages with `\`
+    continuations. The output the user sees matters more than
+    source line length. Quote suggested commands with single
+    quotes (e.g., `'git push'`).
+  - **Test naming:** Do not prefix test functions with `test_`.
+    The `#[cfg(test)]` module and `#[test]` attribute already
+    identify them as tests. Name tests descriptively for what
+    they verify (e.g.,
+    `gather_repo_meta_no_upstream_suggests_set_upstream`).
 - **Commits:** Conventional commits format (`feat:`, `fix:`, `chore:`, etc.). Use `cz commit` for interactive commits
 - **Rust 2024 edition** for main crates
 
