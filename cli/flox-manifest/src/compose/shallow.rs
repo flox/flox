@@ -21,10 +21,10 @@ use crate::parsed::common::{
     Options,
     Profile,
     SemverOptions,
-    Services,
     Vars,
 };
 use crate::parsed::latest::{Install, ManifestLatest, MinimumCliVersion};
+use crate::parsed::v1_12_0::Services;
 
 /// Merges two manifests by applying `manifest2` on top of `manifest1` and
 /// overwriting any conflicts for keys within the top-level of each `ManifestV1`
@@ -232,12 +232,21 @@ impl ShallowMerger {
         low_priority: &Services,
         high_priority: &Services,
     ) -> Result<(Services, Vec<Warning>), MergeError> {
-        let (merged, warnings) = map_union(
+        let (merged_map, warnings) = map_union(
             KeyPath::from_iter(["services"]),
             low_priority.inner(),
             high_priority.inner(),
         );
-        Ok((Services(merged), warnings))
+        // High priority auto_start wins; fall back to low priority if high
+        // priority doesn't set it.
+        let auto_start = high_priority.auto_start.or(low_priority.auto_start);
+        Ok((
+            Services {
+                auto_start,
+                service_map: crate::parsed::common::Services(merged_map),
+            },
+            warnings,
+        ))
     }
 
     #[instrument(skip_all)]
@@ -428,9 +437,16 @@ mod tests {
         // in the merged output.
         #[test]
         fn merges_services_section(maps in btree_maps_overlapping_keys::<ServiceDescriptor>(1, 3)) {
-            let services1 = Services(maps.map1.clone());
-            let services2 = Services(maps.map2.clone());
+            let services1 = Services {
+                auto_start: None,
+                service_map: crate::parsed::common::Services(maps.map1.clone()),
+            };
+            let services2 = Services {
+                auto_start: None,
+                service_map: crate::parsed::common::Services(maps.map2.clone()),
+            };
             let (merged, warnings) = ShallowMerger::merge_services(&services1, &services2).unwrap();
+            prop_assert_eq!(merged.auto_start, None);
             let merged = merged.inner();
             for key in maps.unique_keys_map1.iter() {
                 prop_assert_eq!(maps.map1.get(key), merged.get(key));
@@ -717,6 +733,34 @@ mod tests {
             let expected_cfg = expected_cfg.unwrap();
             prop_assert_eq!(merged_cfg, expected_cfg);
         }
+    }
+
+    #[test]
+    fn merge_services_auto_start_high_priority_some_true_overrides_low_priority_some_false() {
+        let high = Services {
+            auto_start: Some(true),
+            service_map: Default::default(),
+        };
+        let low = Services {
+            auto_start: Some(false),
+            service_map: Default::default(),
+        };
+        let (merged, _) = ShallowMerger::merge_services(&low, &high).unwrap();
+        assert_eq!(merged.auto_start, Some(true));
+    }
+
+    #[test]
+    fn merge_services_auto_start_high_priority_some_false_overrides_low_priority_some_true() {
+        let high = Services {
+            auto_start: Some(false),
+            service_map: Default::default(),
+        };
+        let low = Services {
+            auto_start: Some(true),
+            service_map: Default::default(),
+        };
+        let (merged, _) = ShallowMerger::merge_services(&low, &high).unwrap();
+        assert_eq!(merged.auto_start, Some(false));
     }
 
     #[test]
