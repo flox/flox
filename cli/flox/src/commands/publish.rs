@@ -291,7 +291,9 @@ impl Publish {
             Err(e) => {
                 // Pre-check failed; show user-visible warning and proceed
                 // with build (graceful degradation per D3).
-                message::warning("Dedup check unavailable — proceeding with full build.");
+                message::warning(
+                    "Unable to check if already published — continuing with build and publish.",
+                );
                 warn!(
                     error = %e,
                     "Dedup pre-check failed, proceeding with build"
