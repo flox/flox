@@ -1435,9 +1435,10 @@ pub mod tests {
             Err(PublishError::UnsupportedEnvironmentState(msg)) => {
                 assert_eq!(
                     msg,
-                    build_repo_err_msg(indoc! {"
+                    indoc! {"
                     The following environment files are not tracked by git:
-                    - subdir_for_flox_stuff/.flox/env.json"})
+                    - subdir_for_flox_stuff/.flox/env.json"}
+                    .to_string()
                 );
             },
             _ => panic!("Expected UnsupportedEnvironmentState error"),
@@ -2375,5 +2376,89 @@ pub mod tests {
             )
             .await;
         assert!(res.is_err());
+    }
+
+    // ---- gather_build_repo_meta error differentiation tests ----
+
+    #[test]
+    fn test_gather_repo_meta_no_upstream_suggests_set_upstream() {
+        // A repo with a commit and a remote but no upstream tracking
+        // branch should produce an error using the actual remote name.
+        let (_remote_tempdir, _remote_repo, remote_uri) = example_git_remote_repo();
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "init.txt");
+        git.add_remote("upstream", &remote_uri).unwrap();
+
+        let err = gather_build_repo_meta(&git).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("--set-upstream-to=upstream/main"),
+            "Expected suggestion with actual remote name, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_gather_repo_meta_no_upstream_no_remote_uses_placeholder() {
+        // A repo with no remotes at all should use a placeholder in
+        // the set-upstream-to suggestion.
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "init.txt");
+
+        let err = gather_build_repo_meta(&git).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("--set-upstream-to=<remote>/main"),
+            "Expected placeholder <remote> in suggestion, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_gather_repo_meta_revision_not_on_remote_suggests_push() {
+        // When the local revision is not present on the remote, the
+        // error should mention the remote/branch and suggest `git push`.
+        let (_remote_tempdir, _remote_repo, remote_uri) = example_git_remote_repo();
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "first.txt");
+        git.add_remote("origin", &remote_uri).unwrap();
+        git.push("origin", true).unwrap();
+
+        // Create a local commit that hasn't been pushed
+        commit_file(&git, "local_only.txt");
+
+        let err = gather_build_repo_meta(&git).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("origin/main"),
+            "Expected 'origin/main' in message, got: {msg}"
+        );
+        assert!(
+            msg.contains("git push"),
+            "Expected 'git push' suggestion, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_gather_repo_meta_dirty_repo_mentions_dirty_files() {
+        // A repo with uncommitted changes should produce an error
+        // about dirty tracked files.
+        let (_remote_tempdir, _remote_repo, remote_uri) = example_git_remote_repo();
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "init.txt");
+        git.add_remote("origin", &remote_uri).unwrap();
+        git.push("origin", true).unwrap();
+
+        // Dirty the repo by modifying a tracked file without committing
+        std::fs::write(git.path().join("init.txt"), "modified").unwrap();
+
+        let err = gather_build_repo_meta(&git).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("dirty"),
+            "Expected 'dirty' in message, got: {msg}"
+        );
     }
 }
