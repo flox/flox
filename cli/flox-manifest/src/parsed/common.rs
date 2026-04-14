@@ -53,12 +53,13 @@ pub enum KnownSchemaVersion {
     V1,
     V1_10_0,
     V1_11_0,
+    V1_12_0,
 }
 
 impl KnownSchemaVersion {
     /// Returns the latest schema version.
     pub fn latest() -> Self {
-        KnownSchemaVersion::V1_11_0
+        KnownSchemaVersion::V1_12_0
     }
 
     /// Returns the oldest supported schema version.
@@ -72,6 +73,7 @@ impl KnownSchemaVersion {
             KnownSchemaVersion::V1,
             KnownSchemaVersion::V1_10_0,
             KnownSchemaVersion::V1_11_0,
+            KnownSchemaVersion::V1_12_0,
         ]
         .into_iter()
     }
@@ -95,6 +97,7 @@ impl TryFrom<VersionKind> for KnownSchemaVersion {
             VersionKind::SchemaVersion(v) => match v.as_str() {
                 "1.10.0" => Ok(KnownSchemaVersion::V1_10_0),
                 "1.11.0" => Ok(KnownSchemaVersion::V1_11_0),
+                "1.12.0" => Ok(KnownSchemaVersion::V1_12_0),
                 _ => Err(ManifestError::InvalidSchemaVersion(v.to_string())),
             },
         }
@@ -107,6 +110,7 @@ impl std::fmt::Display for KnownSchemaVersion {
             KnownSchemaVersion::V1 => write!(f, "1"),
             KnownSchemaVersion::V1_10_0 => write!(f, "1.10.0"),
             KnownSchemaVersion::V1_11_0 => write!(f, "1.11.0"),
+            KnownSchemaVersion::V1_12_0 => write!(f, "1.12.0"),
         }
     }
 }
@@ -306,12 +310,12 @@ impl SkipSerializing for ActivateOptions {
     }
 }
 
-/// A map of service names to service definitions
+/// A map of service names to service definitions.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct Services(
     #[cfg_attr(
-        test,
+        any(test, feature = "tests"),
         proptest(strategy = "btree_map_strategy::<ServiceDescriptor>(5, 3)")
     )]
     pub(crate) BTreeMap<String, ServiceDescriptor>,
@@ -389,7 +393,7 @@ impl Services {
         }
     }
 
-    /// Create a new [ManifestServices] instance with services
+    /// Create a new [Services] instance with services
     /// for systems other than `system` filtered out.
     ///
     /// Clone the services rather than filter in place

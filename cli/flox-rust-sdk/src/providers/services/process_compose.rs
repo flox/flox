@@ -17,8 +17,8 @@ use flox_core::process_compose::PROCESS_NEVER_EXIT_NAME;
 use flox_core::traceable_path;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
-use flox_manifest::parsed::Inner;
-use flox_manifest::parsed::common::{ServiceShutdown, Services};
+use flox_manifest::parsed::common::ServiceShutdown;
+use flox_manifest::parsed::{Inner, v1_12_0};
 #[cfg(test)]
 use flox_test_utils::proptest::alphanum_string;
 #[cfg(test)]
@@ -220,8 +220,8 @@ pub fn generate_never_exit_process() -> ProcessConfig {
     }
 }
 
-impl From<Services> for ProcessComposeConfig {
-    fn from(services: Services) -> Self {
+impl From<v1_12_0::Services> for ProcessComposeConfig {
+    fn from(services: v1_12_0::Services) -> Self {
         let processes = services
             .into_inner()
             .into_iter()

@@ -110,6 +110,10 @@ pub struct Activate {
     #[bpaf(long, short)]
     pub start_services: bool,
 
+    /// Suppress automatic service startup even if configured in manifest
+    #[bpaf(long)]
+    pub no_start_services: bool,
+
     /// Activate the environment in either "dev" or "run" mode.
     /// Overrides the "options.activate.mode" setting in the manifest.
     #[bpaf(short, long)]
@@ -124,7 +128,18 @@ pub struct Activate {
 }
 
 impl Activate {
+    /// Validate that `--start-services` and `--no-start-services` are not
+    /// used together, since they are mutually exclusive.
+    fn validate_service_flags(&self) -> Result<()> {
+        if self.start_services && self.no_start_services {
+            bail!("--start-services and --no-start-services are mutually exclusive");
+        }
+        Ok(())
+    }
+
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+        self.validate_service_flags()?;
+
         let mut concrete_environment = match self
             .environment
             .to_concrete_environment(&flox, self.generation)
@@ -389,10 +404,8 @@ impl Activate {
         let is_ephemeral = !services_for_ephemeral_activation.is_empty();
         let services_to_start = if is_ephemeral {
             services_for_ephemeral_activation
-        } else if self.start_services {
-            Self::gather_services_for_flag(manifest, &flox.system, &socket_path)
         } else {
-            Vec::new()
+            self.services_to_start(manifest, &flox.system, &socket_path)
         };
         debug!(
             is_ephemeral,
@@ -527,18 +540,35 @@ impl Activate {
             })
     }
 
-    /// Handle the `--start-services` flag by determining which services to start.
+    /// Determine which services to start on activation.
     ///
-    /// Returns None (with warning) if:
+    /// Services are started when `--start-services` is set or when the manifest
+    /// has `[services] auto-start = true` and `--no-start-services` is not set.
+    ///
+    /// Returns an empty list (with a warning) if:
+    /// - Neither flag nor manifest requests service startup
     /// - No services are defined in the manifest
     /// - No services are defined for the current system
     /// - Services are already running
-    fn gather_services_for_flag(
+    fn services_to_start(
+        &self,
         manifest: &Manifest<MigratedTypedOnly>,
         system: &System,
         socket_path: &Path,
     ) -> Vec<String> {
         let manifest_services = &manifest.as_latest_schema().services;
+        let auto_start = manifest_services.auto_start == Some(true);
+
+        let should_start = self.start_services || (auto_start && !self.no_start_services);
+        if !should_start {
+            return Vec::new();
+        }
+
+        // Only emit warnings for conditions the user can act on when they
+        // explicitly requested service startup via `--start-services`. When
+        // auto-start triggers silently on every activation, these messages
+        // would be noisy and surprising.
+        let warn = self.start_services;
 
         if manifest_services.inner().is_empty() {
             message::warning(ServicesCommandsError::NoDefinedServices);
@@ -547,9 +577,11 @@ impl Activate {
 
         let services_for_system = manifest_services.copy_for_system(system);
         if services_for_system.inner().is_empty() {
-            message::warning(ServicesCommandsError::NoDefinedServicesForSystem {
-                system: system.clone(),
-            });
+            if warn {
+                message::warning(ServicesCommandsError::NoDefinedServicesForSystem {
+                    system: system.clone(),
+                });
+            }
             return Vec::new();
         }
 
@@ -558,7 +590,9 @@ impl Activate {
             .unwrap_or(false);
 
         if has_running_services {
-            message::warning("Skipped starting services, services are already running");
+            if warn {
+                message::warning("Skipped starting services, services are already running");
+            }
             return Vec::new();
         }
 
@@ -904,6 +938,26 @@ mod tests {
         // with `hide_default_prompt = true` we should not see the default environment
         let prompt = Activate::make_prompt_environments(true, &active_environments);
         assert_eq!(prompt, "wichtig".to_string());
+    }
+
+    /// Build a minimal Activate with only the service-related flags set.
+    fn activate_with_flags(start_services: bool, no_start_services: bool) -> Activate {
+        Activate {
+            environment: EnvironmentSelect::default(),
+            trust: false,
+            print_script: false,
+            start_services,
+            no_start_services,
+            mode: None,
+            generation: None,
+            command: None,
+        }
+    }
+
+    #[test]
+    fn test_conflicting_service_flags_are_rejected() {
+        let activate = activate_with_flags(true, true);
+        assert!(activate.validate_service_flags().is_err());
     }
 }
 
