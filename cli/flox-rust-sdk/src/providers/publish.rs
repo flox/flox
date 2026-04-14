@@ -43,7 +43,7 @@ use super::build::{
     PackageTargetKind,
     find_toplevel_group_nixpkgs,
 };
-use super::git::{GitCommandError, GitCommandProvider, StatusInfo};
+use super::git::{GitCommandError, GitCommandGetOriginError, GitCommandProvider, StatusInfo};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError, copy_dir_recursive, open_path};
@@ -936,22 +936,9 @@ pub fn check_build_metadata(
     Ok(metadata)
 }
 
-/// Creates the error message for a build repo that's in an invalid state
-/// by filling out a template with a provided specific error message.
-fn build_repo_err_msg(msg: &str) -> String {
-    formatdoc! {"
-        \n{msg}
-
-        The build repository must satisfy a few requirements in order to use the 'flox publish' command:
-        - It must be a git repository.
-        - All of the tracked files must be in a clean state.
-        - A remote must be configured.
-        - The current revision must be pushed to a remote.
-    "}
-}
-
+/// Creates an error for a build repo that's in an invalid state.
 pub fn build_repo_err(msg: &str) -> PublishError {
-    PublishError::UnsupportedEnvironmentState(build_repo_err_msg(msg))
+    PublishError::UnsupportedEnvironmentState(msg.to_string())
 }
 
 /// Verify that the critical environment files are tracked by git.
@@ -987,9 +974,11 @@ fn check_env_files_tracked(
 /// This entails checking that:
 /// - The repo has a remote configured.
 /// - The tracked source files are clean.
-/// - The current revision is the latest one on the remote.
+/// - The current revision exists on the tracked remote branch.
 #[instrument(skip_all, fields(progress = "Checking repository state"))]
-fn gather_build_repo_meta(git: &impl GitProvider) -> Result<RemoteBuildRepoMetadata, PublishError> {
+fn gather_build_repo_meta(
+    git: &GitCommandProvider,
+) -> Result<RemoteBuildRepoMetadata, PublishError> {
     let status = git
         .status()
         .map_err(|_e| build_repo_err("Unable to get repository status."))?;
@@ -1000,14 +989,74 @@ fn gather_build_repo_meta(git: &impl GitProvider) -> Result<RemoteBuildRepoMetad
         ));
     }
 
-    let remote_info = git
-        .get_current_branch_remote_info()
-        .map_err(|e| build_repo_err(&e.to_string()))?;
+    let remote_info = git.get_current_branch_remote_info().map_err(|e| match e {
+        GitCommandGetOriginError::NoUpstream => {
+            let remote_hint = git
+                .remotes()
+                .ok()
+                .and_then(|r| match r.as_slice() {
+                    [single] if !single.is_empty() => Some(single.clone()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| "<remote>".to_string());
 
-    if remote_info.revision.as_ref() != Some(&status.rev) {
-        return Err(build_repo_err(
-            "Revisions of local branch and tracked remote branch differ.",
-        ));
+            if let Some(branch) = status
+                .ref_
+                .as_deref()
+                .and_then(|r| r.strip_prefix("refs/heads/"))
+            {
+                build_repo_err(&formatdoc! {"
+                    Current branch '{branch}' has no upstream \
+                    remote configured.
+                    Set one with: git branch \
+                    --set-upstream-to={remote_hint}/{branch}"
+                })
+            } else {
+                build_repo_err(&formatdoc! {"
+                    Repository is in detached HEAD state and has \
+                    no upstream remote configured.
+                    Check out a branch before publishing: \
+                    git checkout -b <branch-name>"
+                })
+            }
+        },
+        GitCommandGetOriginError::AccessDenied(ref cmd_err) => build_repo_err(&formatdoc! {"
+            Could not access the remote repository: {cmd_err}
+            Check your SSH agent (`ssh-add -l`) or \
+            credential configuration."
+        }),
+        GitCommandGetOriginError::Command(ref cmd_err) => build_repo_err(&cmd_err.to_string()),
+    })?;
+
+    let rev_on_remote = match git.rev_exists_on_remote(&status.rev, &remote_info.name) {
+        Ok(exists) => exists,
+        Err(ref cmd_err) if cmd_err.is_access_denied() => {
+            return Err(build_repo_err(&formatdoc! {"
+                Could not access remote '{remote_name}' while \
+                verifying the local revision: {cmd_err}
+                Check your SSH agent (`ssh-add -l`) or \
+                credential configuration.",
+                remote_name = remote_info.name,
+            }));
+        },
+        Err(cmd_err) => {
+            return Err(build_repo_err(&formatdoc! {"
+                Failed to check whether local revision exists \
+                on remote '{remote_name}/{remote_branch}': \
+                {cmd_err}",
+                remote_name = remote_info.name,
+                remote_branch = remote_info.reference,
+            }));
+        },
+    };
+    if !rev_on_remote {
+        return Err(build_repo_err(&formatdoc! {"
+            Local revision is not present on remote \
+            '{remote_name}/{remote_branch}'.
+            Push your commits with: git push",
+            remote_name = remote_info.name,
+            remote_branch = remote_info.reference,
+        }));
     }
 
     let url =
