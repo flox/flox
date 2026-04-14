@@ -1006,24 +1006,20 @@ fn gather_build_repo_meta(
                 .and_then(|r| r.strip_prefix("refs/heads/"))
             {
                 build_repo_err(&formatdoc! {"
-                    Current branch '{branch}' has no upstream \
-                    remote configured.
-                    Set one with: git branch \
-                    --set-upstream-to={remote_hint}/{branch}"
+                    Current branch '{branch}' has no upstream remote configured.
+                    Set one with 'git branch --set-upstream-to={remote_hint}/{branch}'"
                 })
             } else {
                 build_repo_err(&formatdoc! {"
-                    Repository is in detached HEAD state and has \
-                    no upstream remote configured.
+                    Repository is in detached HEAD state and has no upstream remote configured.
                     Check out a branch before publishing: \
-                    git checkout -b <branch-name>"
+                        git checkout -b <branch-name>"
                 })
             }
         },
         GitCommandGetOriginError::AccessDenied(ref cmd_err) => build_repo_err(&formatdoc! {"
             Could not access the remote repository: {cmd_err}
-            Check your SSH agent (`ssh-add -l`) or \
-            credential configuration."
+            Check your SSH agent (`ssh-add -l`) or credential configuration."
         }),
         GitCommandGetOriginError::Command(ref cmd_err) => build_repo_err(&cmd_err.to_string()),
     })?;
@@ -1032,18 +1028,14 @@ fn gather_build_repo_meta(
         Ok(exists) => exists,
         Err(ref cmd_err) if cmd_err.is_access_denied() => {
             return Err(build_repo_err(&formatdoc! {"
-                Could not access remote '{remote_name}' while \
-                verifying the local revision: {cmd_err}
-                Check your SSH agent (`ssh-add -l`) or \
-                credential configuration.",
+                Could not access remote '{remote_name}' while verifying the local revision: {cmd_err}
+                Check your SSH agent (`ssh-add -l`) or credential configuration.",
                 remote_name = remote_info.name,
             }));
         },
         Err(cmd_err) => {
             return Err(build_repo_err(&formatdoc! {"
-                Failed to check whether local revision exists \
-                on remote '{remote_name}/{remote_branch}': \
-                {cmd_err}",
+                Failed to check whether local revision exists on remote '{remote_name}/{remote_branch}': {cmd_err}",
                 remote_name = remote_info.name,
                 remote_branch = remote_info.reference,
             }));
@@ -1051,9 +1043,8 @@ fn gather_build_repo_meta(
     };
     if !rev_on_remote {
         return Err(build_repo_err(&formatdoc! {"
-            Local revision is not present on remote \
-            '{remote_name}/{remote_branch}'.
-            Push your commits with: git push",
+            Local revision is not present on remote '{remote_name}/{remote_branch}'.
+            Push your commits with 'git push'",
             remote_name = remote_info.name,
             remote_branch = remote_info.reference,
         }));
