@@ -82,7 +82,6 @@ pub enum Response {
     CreatePackage,
     PublishBuild,
     GetBaseCatalog(BaseCatalogInfo),
-    CheckBuild(CheckBuildResponse),
 }
 
 #[derive(Debug, Error)]
@@ -575,21 +574,7 @@ impl ClientTrait for MockClient {
         _nixpkgs_rev: &str,
         _system: &str,
     ) -> Result<CheckBuildResponse, CatalogClientError> {
-        let mock_resp = self
-            .mock_responses
-            .lock()
-            .expect("couldn't acquire mock lock")
-            .pop_front();
-        match mock_resp {
-            Some(Response::CheckBuild(resp)) => Ok(resp),
-            Some(Response::Error(err)) => Err(CatalogClientError::APIError(
-                flox_catalog::ApiError::ErrorResponse(
-                    err.try_into()
-                        .expect("couldn't convert mock error response"),
-                ),
-            )),
-            _ => panic!("expected check_build response, found {:?}", &mock_resp),
-        }
+        unimplemented!("check_build_already_recorded is not supported in MockClient")
     }
 }
 
