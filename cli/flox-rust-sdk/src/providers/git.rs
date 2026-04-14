@@ -91,6 +91,8 @@ pub trait GitProvider: Sized + std::fmt::Debug {
     fn status(&self) -> Result<StatusInfo, Self::StatusError>;
     fn checkout(&self, name: &str, orphan: bool) -> Result<(), Self::CheckoutError>;
     fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError>;
+    /// List untracked and non-ignored files under the given path.
+    fn list_files_untracked(&self, path: &Path) -> Result<Vec<String>, GitCommandError>;
     fn rename_branch(&self, new_name: &str) -> Result<(), Self::RenameError>;
     fn remote_branches_containing_revision(
         &self,
@@ -1154,6 +1156,20 @@ impl GitProvider for GitCommandProvider {
         Ok(info)
     }
 
+    fn list_files_untracked(&self, path: &Path) -> Result<Vec<String>, GitCommandError> {
+        let mut command = self.new_command();
+        command.args(["ls-files", "--others", "--exclude-standard", "-z", "--"]);
+        command.arg(path);
+        let output = GitCommandProvider::run_command(&mut command)?;
+        let stdout = output.to_string_lossy();
+        let files = stdout
+            .split('\0')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect();
+        Ok(files)
+    }
+
     fn fetch(&self) -> Result<(), Self::FetchError> {
         GitCommandProvider::run_command(self.new_command().arg("fetch").arg("--all"))?;
         Ok(())
@@ -1866,6 +1882,42 @@ pub mod tests {
         .unwrap_err();
 
         assert!(matches!(dbg!(err), GitRemoteCommandError::AccessDenied));
+    }
+
+    #[test]
+    fn list_files_untracked_returns_untracked_and_excludes_gitignored() {
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
+
+        let subdir = repo.path.join("subdir");
+        fs::create_dir(&subdir).unwrap();
+        commit_file(&repo, "subdir/tracked");
+        fs::write(subdir.join("untracked"), "u").unwrap();
+        fs::write(subdir.join("ignored"), "i").unwrap();
+        fs::write(subdir.join(".gitignore"), "ignored\n").unwrap();
+
+        let mut result = repo.list_files_untracked(&subdir).unwrap();
+        result.sort();
+        assert_eq!(result, vec![
+            "subdir/.gitignore".to_string(),
+            "subdir/untracked".to_string(),
+        ]);
+    }
+
+    #[test]
+    fn list_files_untracked_empty_when_all_tracked() {
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
+
+        let subdir = repo.path.join("subdir");
+        fs::create_dir(&subdir).unwrap();
+        let tracked = subdir.join("tracked");
+        fs::write(&tracked, "t").unwrap();
+        repo.add(&[&tracked]).unwrap();
+        repo.commit("add tracked").unwrap();
+
+        let result = repo.list_files_untracked(&subdir).unwrap();
+        assert_eq!(result, Vec::<String>::new());
     }
 
     #[test]
