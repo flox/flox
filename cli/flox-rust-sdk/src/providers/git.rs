@@ -151,6 +151,19 @@ pub enum GitCommandError {
     InvalidUrl(#[source] url::ParseError),
 }
 
+impl GitCommandError {
+    /// Whether this error indicates an authentication or permissions failure.
+    pub fn is_access_denied(&self) -> bool {
+        matches!(
+            self,
+            GitCommandError::BadExit(_, _, stderr)
+                if stderr.contains("DENIED")
+                    || stderr.contains("Authentication failed")
+                    || stderr.contains("Permission denied")
+        )
+    }
+}
+
 /// Representation of the git push status.
 /// See: https://git-scm.com/docs/git-push#Documentation/git-push.txt-flag
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -704,9 +717,22 @@ pub enum GitCommandOpenError {
 #[derive(Error, Debug)]
 pub enum GitCommandGetOriginError {
     #[error(transparent)]
-    Command(#[from] GitCommandError),
+    Command(GitCommandError),
     #[error("Couldn't determine upstream remote name for the current HEAD")]
     NoUpstream,
+    #[error("access denied: {0}")]
+    AccessDenied(GitCommandError),
+}
+
+impl From<GitCommandError> for GitCommandGetOriginError {
+    fn from(err: GitCommandError) -> Self {
+        if err.is_access_denied() {
+            debug!("Access denied: {err}");
+            GitCommandGetOriginError::AccessDenied(err)
+        } else {
+            GitCommandGetOriginError::Command(err)
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -750,9 +776,7 @@ const REMOTE_BRANCH_NOT_FOUND_IN_UPSTREAM_ERR_PREFIX: &str = "fatal: Remote bran
 impl From<GitCommandError> for GitRemoteCommandError {
     fn from(err: GitCommandError) -> Self {
         match err {
-            GitCommandError::BadExit(_, _, ref stderr)
-                if stderr.contains("DENIED") || stderr.contains("Authentication failed") =>
-            {
+            ref e if e.is_access_denied() => {
                 debug!("Access denied: {err}");
                 GitRemoteCommandError::AccessDenied
             },
@@ -1956,5 +1980,33 @@ pub mod tests {
                 .rev_exists_on_remote(&status.rev, "some_remote")
                 .unwrap()
         );
+    }
+
+    #[test]
+    fn test_is_access_denied() {
+        let denied = GitCommandError::BadExit(
+            128,
+            String::new(),
+            "ERROR: Repository not found. DENIED".to_string(),
+        );
+        assert!(denied.is_access_denied());
+
+        let auth_failed = GitCommandError::BadExit(
+            128,
+            String::new(),
+            "Authentication failed for 'https://github.com/foo/bar'".to_string(),
+        );
+        assert!(auth_failed.is_access_denied());
+
+        let permission = GitCommandError::BadExit(
+            128,
+            String::new(),
+            "Permission denied (publickey)".to_string(),
+        );
+        assert!(permission.is_access_denied());
+
+        let other =
+            GitCommandError::BadExit(1, String::new(), "fatal: not a git repository".to_string());
+        assert!(!other.is_access_denied());
     }
 }
