@@ -635,11 +635,10 @@ where
             .await
             .map_err(PublishError::CatalogError)?;
 
-        let netrc_path = self.auth.create_netrc().ok();
         let catalog_store_config = get_client_side_catalog_store_config(
             metadata_only,
             key_file,
-            netrc_path.as_deref(),
+            &self.auth,
             publish_response,
         )?;
         let upload_result = catalog_store_config.maybe_upload_artifacts(&build_metadata.outputs)?;
@@ -756,7 +755,7 @@ where
 fn get_client_side_catalog_store_config(
     metadata_only: bool,
     key_file: Option<PathBuf>,
-    auth_netrc_path: Option<&Path>,
+    auth: &dyn AuthProvider,
     publish_response: PublishResponse,
 ) -> Result<ClientSideCatalogStoreConfig, PublishError> {
     if metadata_only {
@@ -772,7 +771,7 @@ fn get_client_side_catalog_store_config(
                 ..
             } = nix_copy_config;
             if let Some(path) = key_file {
-                let netrc = auth_netrc_path.ok_or(PublishError::Auth(AuthError::NoToken))?;
+                let netrc = auth.create_netrc().map_err(PublishError::Auth)?;
                 ClientSideCatalogStoreConfig::NixCopy {
                     ingress_uri: Url::parse(&ingress_uri).map_err(|e| {
                         PublishError::Catchall(format!("failed to parse ingress URI: {e}"))
