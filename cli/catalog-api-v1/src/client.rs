@@ -755,12 +755,13 @@ manifest packages were built via the traditional flox manifest workflow.*/
     ///      "title": "Already Published",
     ///      "type": "boolean"
     ///    },
-    ///    "catalog_page_url": {
-    ///      "title": "Catalog Page Url",
+    ///    "published_at": {
+    ///      "title": "Published At",
     ///      "type": [
     ///        "string",
     ///        "null"
-    ///      ]
+    ///      ],
+    ///      "format": "date-time"
     ///    },
     ///    "source_rev": {
     ///      "title": "Source Rev",
@@ -785,7 +786,9 @@ manifest packages were built via the traditional flox manifest workflow.*/
     pub struct CheckBuildResponse {
         pub already_published: bool,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub catalog_page_url: ::std::option::Option<::std::string::String>,
+        pub published_at: ::std::option::Option<
+            ::chrono::DateTime<::chrono::offset::Utc>,
+        >,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub source_rev: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
