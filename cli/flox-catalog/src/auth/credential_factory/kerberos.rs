@@ -1,61 +1,28 @@
-//! Kerberos authentication strategy
+//! Kerberos credential creation
+
+use std::sync::Arc;
 
 use base64::Engine as _;
 use libgssapi::context::{ClientCtx, CtxFlags};
 use libgssapi::credential::{Cred, CredUsage};
 use libgssapi::name::Name;
 use libgssapi::oid::{GSS_MECH_KRB5, GSS_NT_HOSTBASED_SERVICE, OidSet};
-use reqwest::header::{self, HeaderMap, HeaderValue};
 use tracing::debug;
 use url::Url;
 
-use super::{AuthError, AuthStrategy};
-use crate::AuthMethod;
+use crate::auth::{AuthError, Credential};
 
-/// Kerberos authentication strategy
+/// Create a Kerberos credential by resolving the principal from the ccache.
 ///
-/// Uses Kerberos tickets via GSSAPI to generate SPNEGO tokens for HTTP Negotiate authentication.
-/// The principal name (handle) is resolved once at construction time and cached.
-#[derive(Debug, Clone)]
-pub struct KerberosAuthStrategy {
-    catalog_url: String,
-    cached_handle: Result<String, AuthError>,
-}
-
-impl KerberosAuthStrategy {
-    pub fn new(catalog_url: String) -> Self {
-        let cached_handle = resolve_principal();
-        Self {
-            catalog_url,
-            cached_handle,
-        }
-    }
-}
-
-impl AuthStrategy for KerberosAuthStrategy {
-    fn add_auth_headers(&self, header_map: &mut HeaderMap) {
-        match generate_kerberos_token(&self.catalog_url) {
-            Ok(token) => {
-                let auth_value = format!("Negotiate {}", token);
-                if let Ok(value) = HeaderValue::from_str(&auth_value) {
-                    header_map.insert(header::AUTHORIZATION, value);
-                    debug!("Added Kerberos Negotiate authorization header");
-                } else {
-                    tracing::warn!("Failed to create header value from Kerberos token");
-                }
-            },
-            Err(e) => {
-                tracing::warn!("Failed to generate Kerberos token: {}", e);
-            },
-        }
-    }
-
-    fn auth_method(&self) -> AuthMethod {
-        AuthMethod::Kerberos
-    }
-
-    fn get_handle(&self) -> Result<String, AuthError> {
-        self.cached_handle.clone()
+/// Returns `Credential::Kerberos` with a SPNEGO token generator on success,
+/// or `Credential::None` if the principal cannot be resolved.
+pub fn kerberos_credential() -> Credential {
+    match resolve_principal() {
+        Ok(principal) => Credential::Kerberos {
+            principal: principal.clone(),
+            generate_token: Arc::new(move |url: &Url| generate_kerberos_token(url.as_str())),
+        },
+        Err(_) => Credential::None,
     }
 }
 

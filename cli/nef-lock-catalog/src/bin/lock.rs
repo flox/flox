@@ -38,7 +38,7 @@ async fn main() -> Result<()> {
             .ok()
             .map(|token| token.parse())
             .transpose()?;
-        let auth = flox_catalog::auth_strategy_from_method(
+        let credential = flox_catalog::credential_from_method(
             &flox_catalog::AuthMethod::Auth0,
             floxhub_token,
             catalog_url.clone(),
@@ -48,7 +48,7 @@ async fn main() -> Result<()> {
             catalog_url,
             extra_headers: Default::default(),
             mock_mode: CatalogMockMode::default_from_env(),
-            auth_strategy: auth,
+            credential,
             user_agent: None,
         };
 

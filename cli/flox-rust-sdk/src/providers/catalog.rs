@@ -712,7 +712,7 @@ pub mod test_helpers {
             catalog_url: "https://not_used".to_string(),
             extra_headers: Default::default(),
             mock_mode: CatalogMockMode::Replay(path.as_ref().to_path_buf()),
-            auth_strategy: flox_catalog::auth_strategy_from_method(
+            credential: flox_catalog::credential_from_method(
                 &AuthMethod::Auth0,
                 None,
                 "https://not_used".to_string(),
@@ -809,7 +809,7 @@ pub mod test_helpers {
             catalog_url: catalog_url.clone(),
             extra_headers: Default::default(),
             mock_mode: mock_mode.clone(),
-            auth_strategy: flox_catalog::auth_strategy_from_method(
+            credential: flox_catalog::credential_from_method(
                 &AuthMethod::Auth0,
                 auth.token().cloned(),
                 catalog_url.clone(),

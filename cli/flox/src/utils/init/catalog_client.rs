@@ -7,7 +7,7 @@ use flox_catalog::{
     CatalogMockMode,
     DEFAULT_CATALOG_URL,
     FloxhubToken,
-    auth_strategy_from_method,
+    credential_from_method,
 };
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::providers::catalog::Client;
@@ -48,7 +48,7 @@ pub fn init_catalog_client(
             .unwrap_or_else(|| DEFAULT_CATALOG_URL.to_string()),
         extra_headers,
         mock_mode,
-        auth_strategy: auth_strategy_from_method(
+        credential: credential_from_method(
             &config.flox.floxhub_authn_mode,
             config.flox.floxhub_token.as_deref().and_then(|s| {
                 if s.is_empty() {
