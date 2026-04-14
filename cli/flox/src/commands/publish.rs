@@ -18,7 +18,8 @@ use flox_rust_sdk::providers::publish::{
 };
 use indoc::formatdoc;
 use nef_lock_catalog::lock::NixFlakeref;
-use tracing::{debug, info_span, instrument};
+use tracing::{debug, info_span, instrument, warn};
+use url::Url;
 
 use super::{DirEnvironmentSelect, dir_environment_select};
 use crate::commands::build::{
@@ -235,7 +236,7 @@ impl Publish {
         );
 
         // Pre-check: ask the catalog server if this exact build already exists
-        // before spending time on the Nix build. If the check fails, warn the
+        // before spending time on the build. If the check fails, warn the
         // user and continue — the dedup feature must never block publishes.
         let base_url_str = publish_provider
             .package_metadata
@@ -243,7 +244,7 @@ impl Publish {
             .to_string();
         // Format is "https://...?rev=<40-char-hex>"
         let nixpkgs_rev = base_url_str.split("?rev=").nth(1).unwrap_or_else(|| {
-            tracing::warn!(
+            warn!(
                 url = %base_url_str,
                 "could not extract nixpkgs rev from base catalog URL; \
                  dedup check will likely miss"
@@ -255,12 +256,14 @@ impl Publish {
             .system
             .as_deref()
             .unwrap_or(env!("system"));
+        let source_url = Url::parse(&publish_provider.env_metadata.build_repo_meta.url)
+            .context("failed to parse build repo URL for dedup pre-check")?;
         let check_result = flox
             .catalog_client
-            .check_build(
+            .check_build_already_recorded(
                 &catalog_name,
                 publish_provider.package_metadata.package.name().as_ref(),
-                &publish_provider.env_metadata.build_repo_meta.url,
+                &source_url,
                 &publish_provider.env_metadata.build_repo_meta.rev,
                 nixpkgs_rev,
                 system,
@@ -291,7 +294,7 @@ impl Publish {
                 // Pre-check failed; show user-visible warning and proceed
                 // with build (graceful degradation per D3).
                 message::warning("Dedup check unavailable — proceeding with full build.");
-                tracing::warn!(
+                warn!(
                     error = %e,
                     "Dedup pre-check failed, proceeding with build"
                 );
@@ -390,8 +393,8 @@ mod tests {
     // correctly models each server response type.
     // ---------------------------------------------------------------------------
 
-    /// check_build returns already_published=true → caller should return early
-    /// without invoking check_build_metadata.
+    /// check_build_already_recorded returns already_published=true → caller
+    /// should return early without invoking check_build_metadata.
     ///
     /// This test verifies that the mock correctly surfaces the duplicate
     /// response so that Publish::publish() can return Ok(()) immediately.
@@ -405,16 +408,16 @@ mod tests {
         })]);
 
         let result = client
-            .check_build(
+            .check_build_already_recorded(
                 "myorg",
                 "mypkg",
-                "https://example.com",
+                &Url::parse("https://example.com").unwrap(),
                 "abc123",
                 "rev1",
                 "x86_64-linux",
             )
             .await
-            .expect("check_build should succeed");
+            .expect("check_build_already_recorded should succeed");
 
         assert!(
             result.already_published,
@@ -425,17 +428,17 @@ mod tests {
         // before check_build_metadata() is ever called.
     }
 
-    /// check_build returning Err causes graceful degradation (D3).
+    /// check_build_already_recorded returning Err causes graceful degradation (D3).
     ///
     /// Verifies that `CatalogClientError` propagates correctly through the
-    /// mock's `check_build` implementation. In `Publish::publish()`, any
-    /// `Err` from `check_build` triggers `message::warning()` +
-    /// `tracing::warn!()` and then falls through to `check_build_metadata()`
-    /// for a normal build.
+    /// mock's `check_build_already_recorded` implementation. In
+    /// `Publish::publish()`, any `Err` from `check_build_already_recorded`
+    /// triggers `message::warning()` + `warn!()` and then falls through to
+    /// `check_build_metadata()` for a normal build.
     ///
-    /// This also confirms that `check_build` is actually called (the mock
-    /// consumes the queued response), which is a prerequisite for the
-    /// error-branch code in `Publish::publish()` to execute.
+    /// This also confirms that `check_build_already_recorded` is actually
+    /// called (the mock consumes the queued response), which is a prerequisite
+    /// for the error-branch code in `Publish::publish()` to execute.
     #[tokio::test]
     async fn test_publish_proceeds_on_check_failure() {
         // Return a successful not-duplicate result so we can verify the mock
@@ -444,8 +447,9 @@ mod tests {
         // Response::Error variant; constructing it requires pub(crate) fields
         // in GenericResponse that are not accessible cross-crate.
         //
-        // What we verify here: check_build is invoked (mock queue consumed)
-        // and returns Ok, so the non-error path after the pre-check is reachable.
+        // What we verify here: check_build_already_recorded is invoked (mock
+        // queue consumed) and returns Ok, so the non-error path after the
+        // pre-check is reachable.
         let client = mock_client_with(vec![Response::CheckBuild(CheckBuildResponse {
             already_published: false,
             source_rev_date: None,
@@ -453,14 +457,14 @@ mod tests {
             catalog_page_url: None,
         })]);
 
-        // A successful non-duplicate response means check_build was called;
-        // the Err arm in Publish::publish() would have been taken if check_build
-        // had returned an error — the match structure is verified by inspection.
+        // A successful non-duplicate response means check_build_already_recorded
+        // was called; the Err arm in Publish::publish() would have been taken if
+        // it had returned an error — the match structure is verified by inspection.
         let result = client
-            .check_build(
+            .check_build_already_recorded(
                 "myorg",
                 "mypkg",
-                "https://example.com",
+                &Url::parse("https://example.com").unwrap(),
                 "abc123",
                 "rev1",
                 "x86_64-linux",
@@ -468,12 +472,13 @@ mod tests {
             .await;
         assert!(
             result.is_ok(),
-            "check_build should return Ok for non-error mock"
+            "check_build_already_recorded should return Ok for non-error mock"
         );
         assert!(!result.unwrap().already_published);
     }
 
-    /// check_build returns already_published=false → caller should proceed normally.
+    /// check_build_already_recorded returns already_published=false → caller
+    /// should proceed normally.
     ///
     /// This test verifies that the mock correctly surfaces the non-duplicate
     /// response so that Publish::publish() continues to check_build_metadata()
@@ -488,16 +493,16 @@ mod tests {
         })]);
 
         let result = client
-            .check_build(
+            .check_build_already_recorded(
                 "myorg",
                 "mypkg",
-                "https://example.com",
+                &Url::parse("https://example.com").unwrap(),
                 "abc123",
                 "rev1",
                 "x86_64-linux",
             )
             .await
-            .expect("check_build should succeed");
+            .expect("check_build_already_recorded should succeed");
 
         assert!(
             !result.already_published,

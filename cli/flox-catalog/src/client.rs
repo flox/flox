@@ -16,6 +16,7 @@ use futures::{StreamExt, TryStreamExt};
 use reqwest::StatusCode;
 use reqwest::header::{self, HeaderMap};
 use tracing::{debug, instrument};
+use url::Url;
 
 use crate::MapApiErrorExt;
 use crate::auth::AuthStrategy;
@@ -216,15 +217,18 @@ pub trait ClientTrait {
     /// Get information about the base catalog and available stabilities.
     async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, CatalogClientError>;
 
-    /// Check if a build already exists in the catalog.
+    /// Query the catalog to check whether a build matching the given source
+    /// tuple (source URL, source rev, nixpkgs rev, system, package name) has
+    /// already been recorded/published.
     ///
-    /// Returns provenance data (source rev date, rev, catalog page URL) when
-    /// `already_published` is true. Used for dedup pre-check before building.
-    async fn check_build(
+    /// Returns provenance data (source rev date, rev) in `CheckBuildResponse`
+    /// when `already_published` is true. Used for dedup pre-check before
+    /// running the build.
+    async fn check_build_already_recorded(
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
-        source_url: &str,
+        source_url: &Url,
         source_rev: &str,
         nixpkgs_rev: &str,
         system: &str,
@@ -516,22 +520,18 @@ impl ClientTrait for CatalogClient {
             .map(|res| res.into_inner().into())
     }
 
-    async fn check_build(
+    async fn check_build_already_recorded(
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
-        source_url: &str,
+        source_url: &Url,
         source_rev: &str,
         nixpkgs_rev: &str,
         system: &str,
     ) -> Result<CheckBuildResponse, CatalogClientError> {
         let catalog = str_to_catalog_name(catalog_name)?;
         let package = str_to_package_name(package_name)?;
-        let system = api_types::PackageSystem::from_str(system).map_err(|_| {
-            CatalogClientError::APIError(APIError::InvalidRequest(format!(
-                "system {system} is not a valid PackageSystem value"
-            )))
-        })?;
+        let system = str_to_system(system)?;
         let body = api_types::CheckBuildRequest {
             source_url: source_url.to_string(),
             source_rev: source_rev.to_string(),
@@ -575,6 +575,18 @@ pub fn str_to_package_name(
         CatalogClientError::APIError(APIError::InvalidRequest(format!(
             "package name {} does not meet API requirements.",
             name.as_ref()
+        )))
+    })
+}
+
+/// Converts a system string to a semantic type with API format validation.
+pub fn str_to_system(
+    system: impl AsRef<str>,
+) -> Result<api_types::PackageSystem, CatalogClientError> {
+    api_types::PackageSystem::from_str(system.as_ref()).map_err(|_| {
+        CatalogClientError::APIError(APIError::InvalidRequest(format!(
+            "system {} is not a valid PackageSystem value",
+            system.as_ref()
         )))
     })
 }

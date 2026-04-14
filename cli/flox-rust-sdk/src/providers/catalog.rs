@@ -260,18 +260,18 @@ impl ClientTrait for Client {
         }
     }
 
-    async fn check_build(
+    async fn check_build_already_recorded(
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
-        source_url: &str,
+        source_url: &url::Url,
         source_rev: &str,
         nixpkgs_rev: &str,
         system: &str,
     ) -> Result<CheckBuildResponse, CatalogClientError> {
         match self {
             Client::Catalog(c) => {
-                c.check_build(
+                c.check_build_already_recorded(
                     catalog_name,
                     package_name,
                     source_url,
@@ -282,7 +282,7 @@ impl ClientTrait for Client {
                 .await
             },
             Client::Mock(c) => {
-                c.check_build(
+                c.check_build_already_recorded(
                     catalog_name,
                     package_name,
                     source_url,
@@ -566,11 +566,11 @@ impl ClientTrait for MockClient {
         unimplemented!("get_catalog_locked_sources not implemented for MockClient")
     }
 
-    async fn check_build(
+    async fn check_build_already_recorded(
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
         _package_name: impl AsRef<str> + Send + Sync,
-        _source_url: &str,
+        _source_url: &url::Url,
         _source_rev: &str,
         _nixpkgs_rev: &str,
         _system: &str,
