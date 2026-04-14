@@ -22,6 +22,7 @@ use crate::utils::{HEADER_DEVICE_UUID, HEADER_INVOCATION_SOURCE, INVOCATION_SOUR
 
 pub const FLOXMETA_DIR_NAME: &str = "meta";
 pub const BRANCH_NAME_PATH_SEPARATOR: &str = ".";
+pub const FLOXHUB_TOKEN_ENV_VAR: &str = "FLOX_FLOXHUB_TOKEN";
 
 #[derive(Debug, Clone)]
 pub struct FloxMeta {
@@ -254,10 +255,10 @@ pub fn floxmeta_git_options(
     //
     // If no token is provided, we still set the credential helper and pass an empty string as password
     // to enforce authentication failures and avoid fallback to pinentry
-    options.add_env_var("FLOX_FLOXHUB_TOKEN", token);
+    options.add_env_var(FLOXHUB_TOKEN_ENV_VAR, token);
     options.add_config_flag(
         &format!("credential.{floxhub_git_url}.helper"),
-        r#"!f(){ echo "username=oauth"; echo "password=$FLOX_FLOXHUB_TOKEN"; }; f"#,
+        format!(r#"!f(){{ echo "username=oauth"; echo "password=${FLOXHUB_TOKEN_ENV_VAR}"; }}; f"#),
     );
 
     if let Some(uuid) = metrics_device_uuid {

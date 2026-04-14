@@ -67,6 +67,7 @@ pub fn catalog_auth_to_envs(auth: &CatalogAuth) -> Result<HashMap<String, String
         ));
     };
 
+    // If we pass through additional secrets, we should add them to SENSITIVE_ENV_VARS
     let envs = serde_json::from_value(envs_value.clone())
         .map_err(|e| AuthError::CatchAll(format!("Expected 'envs' to be a map: {e}")))?;
 
