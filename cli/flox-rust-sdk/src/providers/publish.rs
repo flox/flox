@@ -2372,7 +2372,7 @@ pub mod tests {
     // ---- gather_build_repo_meta error differentiation tests ----
 
     #[test]
-    fn test_gather_repo_meta_no_upstream_suggests_set_upstream() {
+    fn gather_repo_meta_no_upstream_suggests_set_upstream() {
         // A repo with a commit and a remote but no upstream tracking
         // branch should produce an error using the actual remote name.
         let (_remote_tempdir, _remote_repo, remote_uri) = example_git_remote_repo();
@@ -2390,7 +2390,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_gather_repo_meta_no_upstream_no_remote_uses_placeholder() {
+    fn gather_repo_meta_no_upstream_no_remote_uses_placeholder() {
         // A repo with no remotes at all should use a placeholder in
         // the set-upstream-to suggestion.
         let (git, _tempdir) = init_temp_repo(false);
@@ -2406,7 +2406,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_gather_repo_meta_revision_not_on_remote_suggests_push() {
+    fn gather_repo_meta_revision_not_on_remote_suggests_push() {
         // When the local revision is not present on the remote, the
         // error should mention the remote/branch and suggest `git push`.
         let (_remote_tempdir, _remote_repo, remote_uri) = example_git_remote_repo();
@@ -2432,7 +2432,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_gather_repo_meta_dirty_repo_mentions_dirty_files() {
+    fn gather_repo_meta_dirty_repo_mentions_dirty_files() {
         // A repo with uncommitted changes should produce an error
         // about dirty tracked files.
         let (_remote_tempdir, _remote_repo, remote_uri) = example_git_remote_repo();

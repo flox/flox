@@ -1983,7 +1983,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_is_access_denied() {
+    fn is_access_denied() {
         let denied = GitCommandError::BadExit(
             128,
             String::new(),
