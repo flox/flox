@@ -1323,15 +1323,12 @@ impl ManagedEnvironment {
         let checkedout_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
         let temp_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
 
-        // Caller decides whether to set token
-        let token = flox.floxhub_token.as_ref();
-
         let git_url = flox.floxhub.git_url();
 
         let options = floxmeta_git_options(
             git_url,
             &pointer.owner,
-            token,
+            &flox.credential,
             flox.metrics_device_uuid.as_ref(),
         );
 

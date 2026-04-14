@@ -2,12 +2,12 @@ use std::path::{Path, PathBuf};
 
 use flox_core::data::environment_ref::EnvironmentOwner;
 use thiserror::Error;
-use tracing::{debug, instrument};
+use tracing::instrument;
 use url::Url;
 use uuid::Uuid;
 
 use super::environment::ManagedPointer;
-use crate::flox::{Flox, Floxhub, FloxhubError, FloxhubToken};
+use crate::flox::{Credential, Flox, Floxhub, FloxhubError};
 use crate::models::environment::floxmeta_branch::remote_branch_name;
 use crate::providers::git::{
     GitCommandBranchHashError,
@@ -18,6 +18,7 @@ use crate::providers::git::{
     GitProvider,
     GitRemoteCommandError,
 };
+use crate::providers::git_auth;
 use crate::utils::{HEADER_DEVICE_UUID, HEADER_INVOCATION_SOURCE, INVOCATION_SOURCES};
 
 pub const FLOXMETA_DIR_NAME: &str = "meta";
@@ -65,8 +66,6 @@ impl FloxMeta {
         flox: &Flox,
         pointer: &ManagedPointer,
     ) -> Result<Self, FloxMetaError> {
-        let token = flox.floxhub_token.as_ref();
-
         let floxhub = Floxhub::new(
             pointer.floxhub_base_url.to_owned(),
             pointer.floxhub_git_url_override.clone(),
@@ -78,7 +77,7 @@ impl FloxMeta {
         let git_options = floxmeta_git_options(
             git_url,
             &pointer.owner,
-            token,
+            &flox.credential,
             flox.metrics_device_uuid.as_ref(),
         );
         let branch = remote_branch_name(pointer);
@@ -125,8 +124,6 @@ impl FloxMeta {
         flox: &Flox,
         pointer: &ManagedPointer,
     ) -> Result<Self, FloxMetaError> {
-        let token = flox.floxhub_token.as_ref();
-
         let floxhub = Floxhub::new(
             pointer.floxhub_base_url.to_owned(),
             pointer.floxhub_git_url_override.clone(),
@@ -138,7 +135,7 @@ impl FloxMeta {
         let git_options = floxmeta_git_options(
             git_url,
             &pointer.owner,
-            token,
+            &flox.credential,
             flox.metrics_device_uuid.as_ref(),
         );
 
@@ -174,8 +171,6 @@ impl FloxMeta {
         flox: &Flox,
         pointer: &ManagedPointer,
     ) -> Result<Self, FloxMetaError> {
-        let token = flox.floxhub_token.as_ref();
-
         let floxhub = Floxhub::new(
             pointer.floxhub_base_url.to_owned(),
             pointer.floxhub_git_url_override.clone(),
@@ -187,7 +182,7 @@ impl FloxMeta {
         let git_options = floxmeta_git_options(
             git_url,
             &pointer.owner,
-            token,
+            &flox.credential,
             flox.metrics_device_uuid.as_ref(),
         );
 
@@ -211,7 +206,7 @@ impl FloxMeta {
 pub fn floxmeta_git_options(
     floxhub_git_url: &Url,
     floxhub_owner: &str,
-    floxhub_token: Option<&FloxhubToken>,
+    credential: &Credential,
     metrics_device_uuid: Option<&Uuid>,
 ) -> GitCommandOptions {
     let mut options = GitCommandOptions::default();
@@ -238,28 +233,8 @@ pub fn floxmeta_git_options(
         format!("{floxhub_git_url}/{floxhub_owner}/floxmeta"),
     );
 
-    let token = if let Some(token) = floxhub_token {
-        if token.is_expired() {
-            debug!("FloxHub token is expired, sending for identification");
-        } else {
-            debug!("using valid FloxHub token");
-        }
-        token.secret()
-    } else {
-        debug!("no FloxHub token configured");
-        ""
-    };
-
-    // Set authentication with the FloxHub token using an inline credential helper.
-    // The credential helper should help avoiding a leak of the token in the process list.
-    //
-    // If no token is provided, we still set the credential helper and pass an empty string as password
-    // to enforce authentication failures and avoid fallback to pinentry
-    options.add_env_var(FLOXHUB_TOKEN_ENV_VAR, token);
-    options.add_config_flag(
-        &format!("credential.{floxhub_git_url}.helper"),
-        format!(r#"!f(){{ echo "username=oauth"; echo "password=${FLOXHUB_TOKEN_ENV_VAR}"; }}; f"#),
-    );
+    // Delegate authentication to the credential
+    git_auth::apply_git_auth(credential, floxhub_git_url, &mut options);
 
     if let Some(uuid) = metrics_device_uuid {
         options.add_http_header(HEADER_DEVICE_UUID, &uuid.to_string());
@@ -320,7 +295,7 @@ mod header_tests {
 
             let owner = "testowner";
             let server_url = Url::parse(&server.base_url()).unwrap();
-            let options = floxmeta_git_options(&server_url, owner, None, Some(&uuid));
+            let options = floxmeta_git_options(&server_url, owner, &Credential::None, Some(&uuid));
             clone_against_mock(&server, owner, options);
             mock.assert();
         });
@@ -342,7 +317,7 @@ mod header_tests {
 
             let owner = "testowner";
             let server_url = Url::parse(&server.base_url()).unwrap();
-            let options = floxmeta_git_options(&server_url, owner, None, uuid);
+            let options = floxmeta_git_options(&server_url, owner, &Credential::None, uuid);
             clone_against_mock(&server, owner, options);
             mock.assert();
         });
