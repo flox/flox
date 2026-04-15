@@ -310,7 +310,11 @@ impl ClientTrait for CatalogClient {
 
                 let packages = response.into_inner();
 
-                Ok::<_, SearchError>((packages.total_count, packages.items))
+                Ok::<_, SearchError>(StreamPage {
+                    total_count: packages.total_count,
+                    items: packages.items,
+                    first_page_metadata: None::<()>,
+                })
             },
             page_size,
         );
@@ -349,15 +353,22 @@ impl ClientTrait for CatalogClient {
 
                 let packages = response.into_inner();
 
-                Ok::<_, VersionsError>((packages.total_count, packages.items))
+                Ok::<_, VersionsError>(StreamPage {
+                    total_count: packages.total_count,
+                    items: packages.items,
+                    first_page_metadata: packages.deprecation,
+                })
             },
             RESPONSE_PAGE_SIZE,
         );
 
-        let (count, results) = collect_search_results(stream, None).await?;
-        let search_results = PackageDetails { results, count };
+        let (count, deprecation, results) = collect_all_results_with_metadata(stream).await?;
 
-        Ok(search_results)
+        Ok(PackageDetails {
+            results,
+            count: Some(count),
+            deprecation,
+        })
     }
 
     async fn get_catalog_locked_sources(
@@ -382,7 +393,11 @@ impl ClientTrait for CatalogClient {
                     .await?
                     .into_inner();
 
-                Ok::<_, CatalogClientError>((response.total_count, response.items))
+                Ok::<_, CatalogClientError>(StreamPage {
+                    total_count: response.total_count,
+                    items: response.items,
+                    first_page_metadata: None::<()>,
+                })
             },
             RESPONSE_PAGE_SIZE,
         );
@@ -532,8 +547,8 @@ pub fn str_to_package_name(
 }
 
 /// Collects a stream of results into a container, returning the total count.
-async fn collect_search_results<T, E>(
-    stream: impl Stream<Item = Result<StreamItem<T>, E>>,
+async fn collect_search_results<T, M, E>(
+    stream: impl Stream<Item = Result<StreamItem<T, M>, E>>,
     limit: SearchLimit,
 ) -> Result<(ResultCount, Vec<T>), E> {
     let mut count = None;
@@ -549,6 +564,7 @@ async fn collect_search_results<T, E>(
                     count = Some(total);
                     None
                 },
+                StreamItem::FirstPageMetadata(_) => None,
                 StreamItem::Result(res) => Some(res),
             };
             ready(Ok(new_item))
@@ -560,15 +576,29 @@ async fn collect_search_results<T, E>(
 }
 
 /// Collects all results from a stream, returning the total count and all items.
-async fn collect_all_results<T, E: std::convert::From<CatalogClientError>>(
-    stream: impl Stream<Item = Result<StreamItem<T>, E>>,
+async fn collect_all_results<T, M, E: std::convert::From<CatalogClientError>>(
+    stream: impl Stream<Item = Result<StreamItem<T, M>, E>>,
 ) -> Result<(u64, Vec<T>), E> {
+    let (count, _metadata, results) = collect_all_results_with_metadata(stream).await?;
+    Ok((count, results))
+}
+
+/// Collects all results from a stream, returning the total count, first-page
+/// metadata, and all items.
+async fn collect_all_results_with_metadata<T, M, E: std::convert::From<CatalogClientError>>(
+    stream: impl Stream<Item = Result<StreamItem<T, M>, E>>,
+) -> Result<(u64, Option<M>, Vec<T>), E> {
     let mut count = None;
+    let mut metadata = None;
     let results = stream
         .try_filter_map(|item| {
             let new_item = match item {
                 StreamItem::TotalCount(total) => {
                     count = Some(total);
+                    None
+                },
+                StreamItem::FirstPageMetadata(value) => {
+                    metadata = Some(value);
                     None
                 },
                 StreamItem::Result(res) => Some(res),
@@ -582,16 +612,24 @@ async fn collect_all_results<T, E: std::convert::From<CatalogClientError>>(
         .ok_or_else(|| CatalogClientError::Other("Missing total count in response".to_string()))
         .map_err(|e| E::from(e))?;
 
-    Ok((count, results))
+    Ok((count, metadata, results))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct StreamPage<T, M> {
+    total_count: i64,
+    items: Vec<T>,
+    first_page_metadata: Option<M>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum StreamItem<T> {
+enum StreamItem<T, M> {
     TotalCount(u64),
+    FirstPageMetadata(M),
     Result(T),
 }
 
-impl<T> From<T> for StreamItem<T> {
+impl<T, M> From<T> for StreamItem<T, M> {
     fn from(value: T) -> Self {
         Self::Result(value)
     }
@@ -599,27 +637,41 @@ impl<T> From<T> for StreamItem<T> {
 
 /// Create a depaging stream from a page-fetching function.
 ///
-/// Takes a function that returns `(total_count, items)` for a given page, and
-/// yields `TotalCount` once followed by all `Result` items across pages.
-fn make_depaging_stream<T, E, Fut>(
+/// Takes a function that returns a page of results and optional first-page
+/// metadata, and yields `TotalCount` once followed by any first-page metadata
+/// and all `Result` items across pages.
+fn make_depaging_stream<T, M, E, Fut>(
     generator: impl Fn(i64, i64) -> Fut,
     page_size: NonZeroU32,
-) -> impl Stream<Item = Result<StreamItem<T>, E>>
+) -> impl Stream<Item = Result<StreamItem<T, M>, E>>
 where
-    Fut: Future<Output = Result<(i64, Vec<T>), E>>,
+    Fut: Future<Output = Result<StreamPage<T, M>, E>>,
 {
     try_stream! {
         let mut page_number = 0;
         let mut total_count_yielded = false;
+        let mut metadata_yielded = false;
 
         loop {
-            let (total_count, results) = generator(page_number, page_size.get().into()).await?;
+            let StreamPage {
+                total_count,
+                items: results,
+                first_page_metadata,
+            } = generator(page_number, page_size.get().into()).await?;
 
             let items_on_page = results.len();
 
             if !total_count_yielded {
                 yield StreamItem::TotalCount(total_count as u64);
                 total_count_yielded = true;
+            }
+            if !metadata_yielded {
+                if let Some(metadata) = first_page_metadata {
+                    yield StreamItem::FirstPageMetadata(metadata);
+                }
+                metadata_yielded = true;
+            } else if first_page_metadata.is_some() {
+                tracing::debug!("ignoring metadata on page {page_number} (already yielded from first page)");
             }
 
             for result in results {
@@ -820,6 +872,35 @@ pub mod tests {
         mock.assert();
     }
 
+    #[tokio::test]
+    async fn package_versions_preserves_top_level_deprecation() {
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|_, then| {
+            then.status(200).json_body(json!({
+                "deprecation": {
+                    "kind": "renamed",
+                    "replacement": "replacement-package"
+                },
+                "items": [],
+                "total_count": 0
+            }));
+        });
+
+        let client = CatalogClient::new(client_config(server.base_url().as_str())).unwrap();
+        let result = client.package_versions("some-package").await.unwrap();
+
+        assert_eq!(result, PackageDetails {
+            results: vec![],
+            count: Some(0),
+            deprecation: Some(DeprecationInfo {
+                kind: DeprecationKind::Renamed,
+                message: None,
+                replacement: Some("replacement-package".to_string()),
+            }),
+        });
+        mock.assert();
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn tracing_headers_present_when_sentry_enabled() {
         let server = MockServer::start_async().await;
@@ -978,20 +1059,28 @@ pub mod tests {
         let results = vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]];
         let n_pages = results.len();
         let page_size = NonZeroU32::new(3).unwrap();
-        let expected_results = results
+        let expected_results: Vec<StreamItem<i32, ()>> = results
             .iter()
             .flat_map(|chunk| chunk.iter())
             .map(|&item| StreamItem::from(item))
-            .collect::<Vec<_>>();
+            .collect();
         let total_results = results.iter().flat_map(|chunk| chunk.iter()).count() as i64;
         let results = &results;
         let stream = make_depaging_stream(
             |page_number, _page_size| async move {
                 if page_number as usize >= n_pages {
-                    return Ok((total_results, vec![]));
+                    return Ok(StreamPage {
+                        total_count: total_results,
+                        items: vec![],
+                        first_page_metadata: None,
+                    });
                 }
                 let page_data = results[page_number as usize].clone();
-                Ok::<_, VersionsError>((total_results, page_data))
+                Ok::<_, VersionsError>(StreamPage {
+                    total_count: total_results,
+                    items: page_data,
+                    first_page_metadata: None,
+                })
             },
             page_size,
         );
@@ -1016,17 +1105,25 @@ pub mod tests {
         let stream = make_depaging_stream(
             |page_number, _page_size| async move {
                 if page_number >= results.len() as i64 {
-                    return Ok((total_results, vec![]));
+                    return Ok(StreamPage {
+                        total_count: total_results,
+                        items: vec![],
+                        first_page_metadata: None,
+                    });
                 }
                 // This is a bad response from the server since 9 should actually be 3
                 let page_data = results[page_number as usize].clone();
-                Ok::<_, VersionsError>((total_results, page_data))
+                Ok::<_, VersionsError>(StreamPage {
+                    total_count: total_results,
+                    items: page_data,
+                    first_page_metadata: None,
+                })
             },
             page_size,
         );
 
         // First item is the total count, skip it
-        let collected: Vec<StreamItem<i32>> = stream.skip(1).try_collect().await.unwrap();
+        let collected: Vec<StreamItem<i32, ()>> = stream.skip(1).try_collect().await.unwrap();
 
         assert_eq!(collected, (1..=3).map(StreamItem::from).collect::<Vec<_>>());
     }
@@ -1047,14 +1144,22 @@ pub mod tests {
         let stream = make_depaging_stream(
             |page_number, _page_size| async move {
                 if page_number >= results.len() as i64 {
-                    return Ok((total_count, vec![]));
+                    return Ok(StreamPage {
+                        total_count,
+                        items: vec![],
+                        first_page_metadata: None,
+                    });
                 }
-                Ok::<_, VersionsError>((total_count, results[page_number as usize].clone()))
+                Ok::<_, VersionsError>(StreamPage {
+                    total_count,
+                    items: results[page_number as usize].clone(),
+                    first_page_metadata: None,
+                })
             },
             page_size,
         );
 
-        let collected: Vec<StreamItem<i32>> = stream.try_collect().await.unwrap();
+        let collected: Vec<StreamItem<i32, ()>> = stream.try_collect().await.unwrap();
 
         assert_eq!(collected, [
             StreamItem::TotalCount(3),
@@ -1064,13 +1169,38 @@ pub mod tests {
         ]);
     }
 
+    /// make_depaging_stream yields FirstPageMetadata from the first page only
+    #[tokio::test]
+    async fn depage_yields_first_page_metadata() {
+        let page_size = NonZeroU32::new(10).unwrap();
+        let stream = make_depaging_stream(
+            |page_number, _page_size| async move {
+                Ok::<_, VersionsError>(StreamPage {
+                    total_count: 2,
+                    items: if page_number == 0 { vec![1, 2] } else { vec![] },
+                    first_page_metadata: if page_number == 0 { Some("meta") } else { None },
+                })
+            },
+            page_size,
+        );
+
+        let collected: Vec<StreamItem<i32, &str>> = stream.try_collect().await.unwrap();
+
+        assert_eq!(collected, [
+            StreamItem::TotalCount(2),
+            StreamItem::FirstPageMetadata("meta"),
+            StreamItem::Result(1),
+            StreamItem::Result(2),
+        ]);
+    }
+
     proptest! {
         #[test]
         fn collects_correct_number_of_results(results in proptest::collection::vec(any::<i32>(), 0..10), raw_limit in 0..10_u8) {
             let total = results.len();
             let results_ref = &results;
             let stream = async_stream::stream! {
-                yield Ok::<StreamItem<i32>, String>(StreamItem::TotalCount(total as u64));
+                yield Ok::<StreamItem<i32, ()>, String>(StreamItem::TotalCount(total as u64));
                 for item in results_ref.iter() {
                     yield Ok(StreamItem::Result(*item));
                 }

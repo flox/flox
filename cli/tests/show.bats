@@ -88,6 +88,27 @@ setup_file() {
   assert_equal "${lines[10]}" "    hello@2.10"
 }
 
+# ---------------------------------------------------------------------------- #
+
+@test "'flox show' warns when a package has been renamed" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/deprecated_renamed.yaml"
+  run --separate-stderr "$FLOX_BIN" show foo
+  assert_success
+  assert_equal "${lines[0]}" "foo - Deprecated package alias"
+  assert_regex "$stderr" "'foo' has been renamed to 'bar'. Use the new package path."
+}
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox show' warns about removed packages before reporting no matches" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/deprecated_removed.yaml"
+  export RUST_BACKTRACE=0
+  run --separate-stderr "$FLOX_BIN" show old-foo
+  assert_failure
+  assert_regex "$stderr" "'old-foo' has been removed."
+  assert_regex "$stderr" "no packages matched this pkg-path: 'old-foo'"
+}
+
 # bats test_tags=python
 
 # Check pkg-path is handled correctly
