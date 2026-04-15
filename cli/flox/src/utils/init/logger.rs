@@ -85,8 +85,10 @@ pub fn create_registry_and_filter_reload_handle() -> (
         .with_target(false);
     let message_layer = tracing_subscriber::fmt::layer()
         .with_writer(writer.clone())
-        // Colors are broken, see https://github.com/tokio-rs/tracing/issues/3369
         .with_ansi(use_colors)
+        // Without this, colored output is broken,
+        // see https://github.com/tokio-rs/tracing/issues/3369
+        .with_ansi_sanitization(false)
         .event_format(message_fmt)
         .with_filter(filter::filter_fn(|meta| {
             meta.target().starts_with("flox::utils::message")
@@ -108,8 +110,10 @@ pub fn create_registry_and_filter_reload_handle() -> (
     // here: a test for the field name "progress".
     let log_layer = tracing_subscriber::fmt::layer()
         .with_writer(writer.clone())
-        // Colors are broken, see https://github.com/tokio-rs/tracing/issues/3369
         .with_ansi(use_colors)
+        // Without this, colored output is broken,
+        // see https://github.com/tokio-rs/tracing/issues/3369
+        .with_ansi_sanitization(false)
         .map_fmt_fields(|format| {
             FilteredFormatFields::new(format, |field| field.name() != PROGRESS_TAG)
         })
