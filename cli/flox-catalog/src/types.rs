@@ -88,6 +88,31 @@ pub use api_types::{
     StorepathStatusResponse,
 };
 
+// ---------------------------------------------------------------------------
+// Binary lookup types
+// ---------------------------------------------------------------------------
+
+/// A package that provides a given binary, as returned by the by-binary endpoint.
+///
+/// The `GET /api/v1/catalog/packages/by-binary/{binary_name}` endpoint returns
+/// these records. Fields mirror [`SearchResult`] / [`PackageInfoSearch`] for
+/// consistency.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PackageByBinary {
+    /// Full attribute path (e.g. "binutils").
+    pub attr_path: String,
+    /// Package name (e.g. "binutils").
+    pub pname: String,
+    /// Human-readable description.
+    pub description: Option<String>,
+    /// Package version.
+    pub version: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Resolution message types
+// ---------------------------------------------------------------------------
+
 /// The content of a generic message.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MsgGeneral {

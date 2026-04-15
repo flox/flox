@@ -84,6 +84,7 @@ pub enum Response {
     CreatePackage,
     PublishBuild,
     GetBaseCatalog(BaseCatalogInfo),
+    ByBinary(Vec<flox_catalog::PackageByBinary>),
 }
 
 #[derive(Debug, Error)]
@@ -250,6 +251,17 @@ impl ClientTrait for Client {
             Client::Mock(c) => c.get_base_catalog_info().await,
         }
     }
+
+    async fn packages_by_binary(
+        &self,
+        binary_name: impl AsRef<str> + Send + Sync,
+        system: PackageSystem,
+    ) -> Result<Vec<flox_catalog::PackageByBinary>, CatalogClientError> {
+        match self {
+            Client::Catalog(c) => c.packages_by_binary(binary_name, system).await,
+            Client::Mock(c) => c.packages_by_binary(binary_name, system).await,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, derive_more::Display, PartialEq)]
@@ -311,6 +323,14 @@ impl MockClient {
             .lock()
             .expect("couldn't acquire mock lock")
             .push_back(Response::GetStoreInfo(resp));
+    }
+
+    /// Push a by-binary response into the list of mock responses.
+    pub fn push_by_binary_response(&mut self, resp: Vec<flox_catalog::PackageByBinary>) {
+        self.mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .push_back(Response::ByBinary(resp));
     }
 
     /// See [test_helpers::reset_mocks].
@@ -513,6 +533,28 @@ impl ClientTrait for MockClient {
         };
 
         Ok(resp)
+    }
+
+    async fn packages_by_binary(
+        &self,
+        _binary_name: impl AsRef<str> + Send + Sync,
+        _system: PackageSystem,
+    ) -> Result<Vec<flox_catalog::PackageByBinary>, CatalogClientError> {
+        let mock_resp = self
+            .mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .pop_front();
+        match mock_resp {
+            Some(Response::ByBinary(resp)) => Ok(resp),
+            Some(Response::Error(err)) => Err(CatalogClientError::APIError(
+                flox_catalog::ApiError::ErrorResponse(
+                    err.try_into()
+                        .expect("couldn't convert mock error response"),
+                ),
+            )),
+            _ => panic!("expected ByBinary response, found {:?}", &mock_resp),
+        }
     }
 }
 

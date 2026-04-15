@@ -1,0 +1,9 @@
+when:
+  path: /api/v1/catalog/search
+  method: GET
+then:
+  status: 200
+  header:
+  - name: content-type
+    value: application/json
+  body: '{"items":[{"attr_path":"vim","catalog":null,"pkg_path":"vim","name":"vim-9.1.1100","pname":"vi","version":"9.1.1100","description":"Vi IMproved, a text editor","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"neovim","catalog":null,"pkg_path":"neovim","name":"neovim-0.10.4","pname":"vi","version":"0.10.4","description":"Vim text editor fork focused on extensibility and agility","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"vimer","catalog":null,"pkg_path":"vimer","name":"vimer-0.0.4","pname":"vi","version":"0.0.4","description":"Vim-er is a minimal Vim distribution","stabilities":[],"system":"aarch64-darwin"}],"total_count":3}'

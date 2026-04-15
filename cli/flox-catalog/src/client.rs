@@ -209,6 +209,23 @@ pub trait ClientTrait {
 
     /// Get information about the base catalog and available stabilities.
     async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, CatalogClientError>;
+
+    /// Look up packages that provide a given binary name.
+    ///
+    /// Calls `GET /api/v1/catalog/packages/by-binary/{binary_name}?system=...`.
+    ///
+    /// Returns a list of candidate packages. The default implementation
+    /// returns an error indicating the endpoint is not available, allowing
+    /// callers to fall back gracefully until the backend is deployed.
+    async fn packages_by_binary(
+        &self,
+        _binary_name: impl AsRef<str> + Send + Sync,
+        _system: api_types::PackageSystem,
+    ) -> Result<Vec<PackageByBinary>, CatalogClientError> {
+        Err(CatalogClientError::Other(
+            "binary lookup endpoint not yet implemented".to_string(),
+        ))
+    }
 }
 
 // ---------------------------------------------------------------------------
