@@ -2795,6 +2795,7 @@ dependencies = [
  "anyhow",
  "clap",
  "flox-catalog",
+ "flox-core",
  "indexmap 2.13.0",
  "serde",
  "serde_json",

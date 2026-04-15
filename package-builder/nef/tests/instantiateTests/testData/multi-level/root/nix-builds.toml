@@ -1,2 +1,4 @@
+version = 1
+
 [catalogs.mid]
 url = "path:../mid"

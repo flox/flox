@@ -215,7 +215,15 @@ in
 
       catalogs =
         if builtins.pathExists catalogsLock then
-          (lib.importJSON catalogsLock).catalogs
+          let
+            lockfile = (lib.importJSON catalogsLock);
+          in
+          # We have _internally_ published a few builds without a lockfile version.
+          # TODO: require a version before GA?
+          if !(lockfile ? version) || lockfile.version == 1 then
+            lockfile.catalogs
+          else
+            builtins.throw "unsupported catalog lockfile version"
         else
           builtins.throw ''
             `nix-builds.lock` not found, run `flox build update-catalogs` to generate it

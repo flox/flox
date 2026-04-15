@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use flox_core::Version;
 use serde::Serialize;
 use tracing::debug;
 
@@ -39,6 +40,8 @@ pub(crate) enum CatalogLock {
 /// sources of declared dependencies.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct BuildLock {
+    #[serde(rename = "version")]
+    pub(crate) _version: Version<1>,
     pub(crate) catalogs: BTreeMap<CatalogId, CatalogLock>,
 }
 
