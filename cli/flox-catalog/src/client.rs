@@ -226,6 +226,19 @@ pub trait ClientTrait {
             "binary lookup endpoint not yet implemented".to_string(),
         ))
     }
+
+    /// Make an authenticated GET request to the catalog API.
+    ///
+    /// This is a low-level helper for endpoints that don't have generated
+    /// client methods yet (e.g., `/packages/by-binary`).
+    async fn authenticated_get(
+        &self,
+        _url: &str,
+    ) -> Result<reqwest::Response, CatalogClientError> {
+        Err(CatalogClientError::Other(
+            "authenticated_get not available on this client".to_string(),
+        ))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -476,6 +489,74 @@ impl ClientTrait for CatalogClient {
             .map_api_error()
             .await
             .map(|res| res.into_inner().into())
+    }
+
+    async fn authenticated_get(
+        &self,
+        url: &str,
+    ) -> Result<reqwest::Response, CatalogClientError> {
+        let http_client = build_http_client(&self.config)?;
+        let mut request = http_client
+            .get(url)
+            .build()
+            .map_err(|e| CatalogClientError::Other(e.to_string()))?;
+        self.config
+            .auth_strategy
+            .add_auth_headers(request.headers_mut());
+        http_client
+            .execute(request)
+            .await
+            .map_err(|e| CatalogClientError::Other(e.to_string()))
+    }
+
+    async fn packages_by_binary(
+        &self,
+        binary_name: impl AsRef<str> + Send + Sync,
+        system: api_types::PackageSystem,
+    ) -> Result<Vec<PackageByBinary>, CatalogClientError> {
+        let binary = binary_name.as_ref();
+        let url = format!(
+            "{}/api/v1/catalog/packages/by-binary/{}?system={}&page=0&pageSize=20",
+            self.config.catalog_url, binary, system,
+        );
+        debug!(binary, %url, "querying by-binary endpoint");
+
+        let response = self.authenticated_get(&url).await?;
+
+        if !response.status().is_success() {
+            return Err(CatalogClientError::Other(format!(
+                "by-binary endpoint returned status {}",
+                response.status(),
+            )));
+        }
+
+        // The endpoint returns { "items": [...], "total_count": N, ... }
+        // where each item has the same shape as a package search result.
+        let body: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| CatalogClientError::Other(e.to_string()))?;
+
+        let items = body["items"]
+            .as_array()
+            .ok_or_else(|| {
+                CatalogClientError::Other("unexpected by-binary response shape".to_string())
+            })?;
+
+        let candidates = items
+            .iter()
+            .map(|item| PackageByBinary {
+                attr_path: item["attr_path"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string(),
+                pname: item["pname"].as_str().unwrap_or_default().to_string(),
+                description: item["description"].as_str().map(|s| s.to_string()),
+                version: item["version"].as_str().map(|s| s.to_string()),
+            })
+            .collect();
+
+        Ok(candidates)
     }
 }
 
