@@ -205,6 +205,36 @@ FLOX_ACTIVATE_TRACE=1 result/bin/flox activate [args]
     identify them as tests. Name tests descriptively for what
     they verify (e.g.,
     `gather_repo_meta_no_upstream_suggests_set_upstream`).
+  - **Type safety at function boundaries:** Prefer domain types
+    over `String`/`&str` at function signatures. Parse strings
+    at entry points (CLI arg parsing, API response
+    deserialization) — not deep in business logic. Before
+    accepting a string parameter, check whether a domain type
+    already exists: `Url` for URLs, `PackageSystem` for
+    architecture names, `NixFlakeRef` for flake refs,
+    `BaseCatalogUrl` for catalog URLs. Check
+    `cli/flox-catalog/src/types.rs` and the relevant
+    provider module for existing types.
+  - **User-visible message vocabulary:** Warning and error
+    messages must use user vocabulary, not internal subsystem
+    names or implementation details. Before shipping a message,
+    ask: "Would a user who has never read the source understand
+    this?" Describe what the user was trying to do, what
+    failed, and what happens next — not what internal component
+    failed or what code path was taken.
+  - **Naming new helpers:** Before introducing a helper
+    function, search for the naming convention used by similar
+    helpers in the same file. Follow established patterns
+    (`str_to_x` for query-param parsers in `flox-catalog`,
+    `with_x` / `from_x` patterns elsewhere) rather than
+    introducing a new convention.
+  - **Deprecated infrastructure:** Before adding an
+    implementation to an existing pattern, check for
+    `// deprecated`, `// todo: remove`, or inline notes
+    indicating the pattern is being phased out. When trait
+    methods must be satisfied but the implementation is
+    intentionally unused, use `unimplemented!()` and note
+    it in the PR rather than adding to the deprecated pattern.
 - **Commits:** Conventional commits format (`feat:`, `fix:`, `chore:`, etc.). Use `cz commit` for interactive commits
 - **Rust 2024 edition** for main crates
 
