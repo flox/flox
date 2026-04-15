@@ -15,7 +15,7 @@ flox [<general-options>] run
      [-p=<package>]
      [--reselect]
      <binary>
-     [<arguments>...]
+     [-- <arguments>...]
 ```
 
 # DESCRIPTION
@@ -59,13 +59,9 @@ the available packages and suggesting `--package`.
 
 ## Passing Arguments
 
-Everything after the binary name is passed directly to the binary.
-Flox options such as `--package` and `--reselect` must appear
-*before* the binary name.
-
-A `--` separator is accepted but not required.
-It can be useful for readability or when you want to be explicit
-about where `flox run` options end and binary arguments begin.
+Use `--` to separate `flox run` options from arguments intended
+for the invoked binary.
+Everything after `--` is passed directly to the binary.
 
 # OPTIONS
 
@@ -89,10 +85,9 @@ about where `flox run` options end and binary arguments begin.
     In non-interactive contexts this will fail with an error
     listing the available packages.
 
-`<arguments>`
-:   All arguments after the binary name are passed directly to the
-    invoked binary.
-    A `--` separator is accepted but not required.
+`-- <arguments>`
+:   Pass all remaining arguments to the invoked binary.
+    Options after `--` are not interpreted by `flox run`.
 
 ```{.include}
 ./include/general-options.md
@@ -103,14 +98,14 @@ about where `flox run` options end and binary arguments begin.
 Run a command from a package:
 
 ```
-$ flox run cowsay "Hello, world!"
+$ flox run cowsay -- "Hello, world!"
 ```
 
 Run a binary whose name differs from its package
 (`readelf` is provided by `binutils`):
 
 ```
-$ flox run readelf --version
+$ flox run readelf -- --version
 ```
 
 Specify the package explicitly:
@@ -122,19 +117,13 @@ $ flox run --package vim vi
 Pipe input to a command:
 
 ```
-$ echo '{"name":"Flox"}' | flox run jq '.name'
+$ echo '{"name":"Flox"}' | flox run jq -- '.name'
 ```
 
 Clear a cached choice and re-select:
 
 ```
 $ flox run --reselect vi
-```
-
-The `--` separator is optional but still accepted:
-
-```
-$ flox run curl -- -sL http://example.com
 ```
 
 # SEE ALSO

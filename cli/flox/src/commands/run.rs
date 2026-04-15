@@ -20,19 +20,6 @@ use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::message;
 
-/// Filter for [`bpaf::any`]: consume every token except `--help` / `-h`
-/// so that those still trigger the built-in help. Silently drops a bare
-/// `--` separator (accepted but not required).
-fn not_help(s: String) -> Option<String> {
-    if s == "--help" || s == "-h" {
-        return None; // let bpaf handle it
-    }
-    if s == "--" {
-        return None; // drop the separator quietly
-    }
-    Some(s)
-}
-
 /// Run a binary from a package without installing it into an environment.
 ///
 /// Looks up the binary name in the Flox catalog to find which package provides
@@ -56,10 +43,8 @@ pub struct Run {
     #[bpaf(positional("binary"))]
     pub binary: String,
 
-    /// Arguments passed to the binary.
-    /// Everything after the binary name is forwarded directly.
-    /// A `--` separator is accepted but not required.
-    #[bpaf(any("ARGS", not_help), many)]
+    /// Arguments passed to the binary (after --)
+    #[bpaf(positional("args"), strict, many)]
     pub args: Vec<String>,
 }
 
