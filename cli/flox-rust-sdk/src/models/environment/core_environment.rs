@@ -544,12 +544,22 @@ impl CoreEnvironment<ReadOnly> {
         write_lockfile: bool,
     ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
+        let manifest_without_migrating = self.manifest_without_migrating()?;
+        let original_schema = manifest_without_migrating.get_schema_version();
+
         let manifest = self.manifest(flox)?;
 
         Self::ensure_valid_upgrade(groups_or_iids, &manifest)?;
         tracing::debug!("using catalog client to upgrade");
 
         let mut result = self.upgrade_with_catalog_client(flox, groups_or_iids, &manifest)?;
+
+        if write_lockfile {
+            // If the merged manifest required a newer schema than the on-disk
+            // manifest (e.g. due to outputs migration), migrate the on-disk
+            // manifest to match.
+            self.ensure_manifest_schemas_match(original_schema, &mut result.new_lockfile)?;
+        }
 
         // SAFETY: serde_json::to_string_pretty is only documented to fail if
         // the "Serialize decides to fail, or if T contains a map with non-string keys",
