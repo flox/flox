@@ -22,12 +22,8 @@ flox [<general-options>] run
 
 Run a binary from a Nix package without installing it to an environment.
 
-`flox run` is designed for one-off invocations where creating an
-environment would be unnecessary overhead.
-It creates a temporary environment behind the scenes,
-installs the required package,
-executes the binary,
-and cleans up when the command exits.
+`flox run` is designed for one-off invocations.
+Instead of requiring the overhead of an environment, it fetches the required package and executes the binary, all in one command.
 
 ## Binary Lookup
 
@@ -35,8 +31,8 @@ When you run `flox run <binary>`,
 Flox queries FloxHub to find which packages provide that binary.
 You do not need to know the package name.
 For example,
-`flox run readelf` will find and run the `readelf` binary from
-the `binutils` package without you needing to specify `binutils`.
+`flox run grep` will find and run the `grep` binary from
+the `gnugrep` package without you needing to specify `gnugrep`.
 
 If the binary cannot be found,
 Flox will print an error with suggestions and
