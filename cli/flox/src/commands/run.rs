@@ -82,8 +82,7 @@ impl BinaryPreferences {
         let path = preferences_path(state_dir);
         std::fs::create_dir_all(state_dir)
             .with_context(|| format!("Failed to create state directory {state_dir:?}"))?;
-        let contents =
-            toml::to_string(self).context("Failed to serialize binary preferences")?;
+        let contents = toml::to_string(self).context("Failed to serialize binary preferences")?;
         // Write to a temp file and rename for atomicity.
         let tmp = path.with_extension("tmp");
         std::fs::write(&tmp, &contents)
@@ -162,10 +161,7 @@ impl std::fmt::Display for PackageCandidate {
 ///
 /// When the real endpoint is added to the catalog API and codegen, replace
 /// the body of this function with a direct API call.
-pub async fn lookup_binary_candidates(
-    binary: &str,
-    flox: &Flox,
-) -> Result<Vec<PackageCandidate>> {
+pub async fn lookup_binary_candidates(binary: &str, flox: &Flox) -> Result<Vec<PackageCandidate>> {
     // Try the dedicated by-binary endpoint first.
     // The method returns Err if the endpoint doesn't exist or returns an
     // error, in which case we fall back to search.
@@ -353,12 +349,9 @@ impl Run {
                     },
                     _ => {
                         // Multiple candidates: disambiguate.
-                        message::plain(format!(
-                            "Multiple packages provide '{binary}'."
-                        ));
+                        message::plain(format!("Multiple packages provide '{binary}'."));
 
-                        let chosen =
-                            choose_package_interactive(binary, &candidates).await?;
+                        let chosen = choose_package_interactive(binary, &candidates).await?;
 
                         match chosen {
                             Some(candidate) => {
@@ -367,10 +360,7 @@ impl Run {
                                 pkg.clone()
                             },
                             None => {
-                                bail!(
-                                    "{}",
-                                    non_interactive_ambiguity_error(binary, &candidates)
-                                );
+                                bail!("{}", non_interactive_ambiguity_error(binary, &candidates));
                             },
                         }
                     },
@@ -416,9 +406,7 @@ impl Run {
 
         path_env
             .install(&[package], &flox)
-            .with_context(|| {
-                format!("Failed to install package '{}'", package_spec)
-            })?;
+            .with_context(|| format!("Failed to install package '{}'", package_spec))?;
 
         let mut concrete_environment = ConcreteEnvironment::Path(path_env);
 
@@ -496,11 +484,7 @@ fn list_binaries(bin_dir: &Path) -> Vec<String> {
 /// 4. If a binary is a prefix of the name, use it
 ///    (e.g. "nodejs" → "node")
 /// 5. Otherwise, error with the list of available binaries
-pub fn resolve_binary(
-    derived_name: &str,
-    bin_dir: &Path,
-    package_spec: &str,
-) -> Result<String> {
+pub fn resolve_binary(derived_name: &str, bin_dir: &Path, package_spec: &str) -> Result<String> {
     // Exact match
     if bin_dir.join(derived_name).exists() {
         return Ok(derived_name.to_string());
