@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
@@ -10,11 +9,12 @@ use flox_manifest::raw::PackageToInstall;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tracing::debug;
 
 use super::EnvironmentSelect;
 use super::activate::{Activate, CommandSelect};
+use super::general::update_config;
 use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select};
@@ -49,69 +49,27 @@ pub struct Run {
 }
 
 // ---------------------------------------------------------------------------
-// Cache types
+// Preference helpers
 // ---------------------------------------------------------------------------
 
-/// User-scoped cache for binary → package choices.
-///
-/// Persisted as TOML at `state_dir/binary_preferences.toml`.
-/// Mirrors the `trusted_environments` pattern in `flox.toml`.
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub struct BinaryPreferences {
-    /// Map from binary name to chosen package attr_path.
-    #[serde(default)]
-    pub choices: HashMap<String, String>,
+/// Save a binary → package preference to the config framework.
+fn save_preference(config_dir: &Path, binary: &str, pkg: &str) -> Result<()> {
+    update_config(
+        config_dir,
+        format!("binary_preferences.{binary}"),
+        Some(pkg),
+    )
+    .with_context(|| format!("Failed to save preference for '{binary}'"))
 }
 
-impl BinaryPreferences {
-    /// Load from disk, returning a default empty cache if file does not exist.
-    pub fn load(state_dir: &Path) -> Result<Self> {
-        let path = preferences_path(state_dir);
-        if !path.exists() {
-            return Ok(Self::default());
-        }
-        let contents = std::fs::read_to_string(&path)
-            .with_context(|| format!("Failed to read binary preferences from {path:?}"))?;
-        let prefs = toml::from_str(&contents)
-            .with_context(|| format!("Failed to parse binary preferences from {path:?}"))?;
-        Ok(prefs)
-    }
-
-    /// Persist to disk atomically.
-    pub fn save(&self, state_dir: &Path) -> Result<()> {
-        let path = preferences_path(state_dir);
-        std::fs::create_dir_all(state_dir)
-            .with_context(|| format!("Failed to create state directory {state_dir:?}"))?;
-        let contents = toml::to_string(self).context("Failed to serialize binary preferences")?;
-        // Write to a temp file and rename for atomicity.
-        let tmp = path.with_extension("tmp");
-        std::fs::write(&tmp, &contents)
-            .with_context(|| format!("Failed to write binary preferences to {tmp:?}"))?;
-        std::fs::rename(&tmp, &path)
-            .with_context(|| format!("Failed to rename {tmp:?} to {path:?}"))?;
-        Ok(())
-    }
-
-    /// Get the cached choice for a binary, if any.
-    pub fn get(&self, binary: &str) -> Option<&str> {
-        self.choices.get(binary).map(|s| s.as_str())
-    }
-
-    /// Set a choice and persist it.
-    pub fn set_and_save(&mut self, binary: &str, pkg: &str, state_dir: &Path) -> Result<()> {
-        self.choices.insert(binary.to_string(), pkg.to_string());
-        self.save(state_dir)
-    }
-
-    /// Clear the choice for a binary and persist.
-    pub fn clear_and_save(&mut self, binary: &str, state_dir: &Path) -> Result<()> {
-        self.choices.remove(binary);
-        self.save(state_dir)
-    }
-}
-
-fn preferences_path(state_dir: &Path) -> PathBuf {
-    state_dir.join("binary_preferences.toml")
+/// Clear a binary → package preference from the config framework.
+fn clear_preference(config_dir: &Path, binary: &str) -> Result<()> {
+    update_config(
+        config_dir,
+        format!("binary_preferences.{binary}"),
+        None::<String>,
+    )
+    .with_context(|| format!("Failed to clear preference for '{binary}'"))
 }
 
 // ---------------------------------------------------------------------------
@@ -300,25 +258,21 @@ impl Run {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("run");
 
-        let state_dir = &config.flox.state_dir;
+        let config_dir = &config.flox.config_dir;
         let binary = &self.binary;
 
         // Determine which package attr_path to use.
         let pkg_attr_path = if let Some(ref pkg) = self.package {
-            // Explicit --package: use it, update cache.
+            // Explicit --package: use it, save as preference.
             debug!(binary, pkg, "using explicit --package override");
-            let mut prefs = BinaryPreferences::load(state_dir)?;
-            prefs.set_and_save(binary, pkg, state_dir)?;
+            save_preference(config_dir, binary, pkg)?;
             pkg.clone()
         } else {
-            // Binary-first: look up the binary in the catalog.
-            let mut prefs = BinaryPreferences::load(state_dir)?;
-
-            // --reselect: clear cached choice before proceeding.
+            // --reselect: clear saved preference before proceeding.
             if self.reselect {
-                debug!(binary, "clearing cached choice due to --reselect");
+                debug!(binary, "clearing saved preference due to --reselect");
                 if Dialog::<()>::can_prompt() {
-                    prefs.clear_and_save(binary, state_dir)?;
+                    clear_preference(config_dir, binary)?;
                 } else {
                     bail!(
                         "--reselect requires an interactive terminal.\n\
@@ -327,10 +281,10 @@ impl Run {
                 }
             }
 
-            // Check cache first (unless --reselect cleared it).
-            if let Some(cached) = prefs.get(binary) {
-                debug!(binary, pkg = cached, "using cached package choice");
-                cached.to_string()
+            // Check saved preference first (unless --reselect cleared it).
+            if let Some(saved) = config.flox.binary_preferences.get(binary.as_str()) {
+                debug!(binary, pkg = saved.as_str(), "using saved preference");
+                saved.clone()
             } else {
                 // Look up candidates.
                 let candidates = lookup_binary_candidates(binary, &flox).await?;
@@ -340,10 +294,10 @@ impl Run {
                         bail!("{}", not_found_error(binary));
                     },
                     1 => {
-                        // Single candidate: use it and cache silently.
+                        // Single candidate: use it and save preference.
                         let pkg = &candidates[0].attr_path;
                         debug!(binary, pkg, "single candidate found, using it");
-                        prefs.set_and_save(binary, pkg, state_dir)?;
+                        save_preference(config_dir, binary, pkg)?;
                         pkg.clone()
                     },
                     _ => {
@@ -355,7 +309,7 @@ impl Run {
                         match chosen {
                             Some(candidate) => {
                                 let pkg = &candidate.attr_path;
-                                prefs.set_and_save(binary, pkg, state_dir)?;
+                                save_preference(config_dir, binary, pkg)?;
                                 pkg.clone()
                             },
                             None => {
@@ -650,67 +604,52 @@ mod tests {
         assert!(err.contains("Available binaries: bar, foo"));
     }
 
-    // ----- BinaryPreferences -----
+    // ----- Preference helpers (config framework) -----
 
     #[test]
-    fn test_binary_prefs_round_trip() {
+    fn test_save_and_read_preference() {
         let dir = tempfile::tempdir().unwrap();
-        let state_dir = dir.path();
+        let config_dir = dir.path();
+        save_preference(config_dir, "vi", "vim").unwrap();
 
-        let mut prefs = BinaryPreferences::default();
-        prefs.set_and_save("vi", "vim", state_dir).unwrap();
-
-        let loaded = BinaryPreferences::load(state_dir).unwrap();
-        assert_eq!(loaded.get("vi"), Some("vim"));
+        let contents = std::fs::read_to_string(config_dir.join("flox.toml")).unwrap();
+        assert!(contents.contains("[binary_preferences]"));
+        assert!(contents.contains("vi = \"vim\""));
     }
 
     #[test]
-    fn test_binary_prefs_empty_default() {
+    fn test_save_preference_overwrite() {
         let dir = tempfile::tempdir().unwrap();
-        let state_dir = dir.path();
+        let config_dir = dir.path();
+        save_preference(config_dir, "vi", "vim").unwrap();
+        save_preference(config_dir, "vi", "neovim").unwrap();
 
-        let prefs = BinaryPreferences::load(state_dir).unwrap();
-        assert_eq!(prefs.get("vi"), None);
+        let contents = std::fs::read_to_string(config_dir.join("flox.toml")).unwrap();
+        assert!(contents.contains("vi = \"neovim\""));
+        assert!(!contents.contains("vi = \"vim\""));
     }
 
     #[test]
-    fn test_binary_prefs_overwrite() {
+    fn test_clear_preference() {
         let dir = tempfile::tempdir().unwrap();
-        let state_dir = dir.path();
+        let config_dir = dir.path();
+        save_preference(config_dir, "vi", "vim").unwrap();
+        clear_preference(config_dir, "vi").unwrap();
 
-        let mut prefs = BinaryPreferences::default();
-        prefs.set_and_save("vi", "vim", state_dir).unwrap();
-        prefs.set_and_save("vi", "neovim", state_dir).unwrap();
-
-        let loaded = BinaryPreferences::load(state_dir).unwrap();
-        assert_eq!(loaded.get("vi"), Some("neovim"));
+        let contents = std::fs::read_to_string(config_dir.join("flox.toml")).unwrap();
+        assert!(!contents.contains("vi"));
     }
 
     #[test]
-    fn test_binary_prefs_clear() {
+    fn test_save_multiple_preferences() {
         let dir = tempfile::tempdir().unwrap();
-        let state_dir = dir.path();
+        let config_dir = dir.path();
+        save_preference(config_dir, "vi", "vim").unwrap();
+        save_preference(config_dir, "jq", "jq").unwrap();
 
-        let mut prefs = BinaryPreferences::default();
-        prefs.set_and_save("vi", "vim", state_dir).unwrap();
-        prefs.clear_and_save("vi", state_dir).unwrap();
-
-        let loaded = BinaryPreferences::load(state_dir).unwrap();
-        assert_eq!(loaded.get("vi"), None);
-    }
-
-    #[test]
-    fn test_binary_prefs_multiple_entries() {
-        let dir = tempfile::tempdir().unwrap();
-        let state_dir = dir.path();
-
-        let mut prefs = BinaryPreferences::default();
-        prefs.set_and_save("vi", "vim", state_dir).unwrap();
-        prefs.set_and_save("jq", "jq", state_dir).unwrap();
-
-        let loaded = BinaryPreferences::load(state_dir).unwrap();
-        assert_eq!(loaded.get("vi"), Some("vim"));
-        assert_eq!(loaded.get("jq"), Some("jq"));
+        let contents = std::fs::read_to_string(config_dir.join("flox.toml")).unwrap();
+        assert!(contents.contains("vi = \"vim\""));
+        assert!(contents.contains("jq = \"jq\""));
     }
 
     // ----- non_interactive_ambiguity_error -----

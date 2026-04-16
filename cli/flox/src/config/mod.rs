@@ -75,6 +75,12 @@ pub struct FloxConfig {
     #[serde(default)]
     pub trusted_environments: HashMap<RemoteEnvironmentRef, EnvironmentTrust>,
 
+    /// Saved binary → package preferences for `flox run`.
+    /// When a user resolves an ambiguous binary to a specific package,
+    /// the choice is saved here as a preference.
+    #[serde(default)]
+    pub binary_preferences: HashMap<String, String>,
+
     /// The URL of the FloxHub instance to use
     pub floxhub_url: Option<Url>,
 
