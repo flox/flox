@@ -35,7 +35,7 @@ pub struct Run {
     #[bpaf(long("package"), short('p'), argument("PKG"))]
     pub package: Option<String>,
 
-    /// Clear the cached package choice and re-prompt
+    /// Clear the saved preference and re-prompt
     #[bpaf(long("reselect"))]
     pub reselect: bool,
 
@@ -271,15 +271,14 @@ pub async fn choose_package_interactive<'a>(
 
 /// Build a helpful error message for ambiguous binary in non-interactive mode.
 fn non_interactive_ambiguity_error(binary: &str, candidates: &[PackageCandidate]) -> String {
-    let list = candidates
+    let pkg_list = candidates
         .iter()
-        .map(|c| format!("  - {}", c.attr_path))
+        .map(|c| c.attr_path.as_str())
         .collect::<Vec<_>>()
-        .join("\n");
+        .join(", ");
     format!(
-        "Multiple packages provide '{binary}' and no cached choice exists.\n\
-         Cannot prompt in non-interactive mode.\n\n\
-         Packages that provide '{binary}':\n{list}\n\n\
+        "Multiple packages provide '{binary}' and no preference is saved.\n\
+         Packages with this binary: {pkg_list}\n\
          Use 'flox run --package <pkg> {binary}' to specify a package.",
     )
 }
