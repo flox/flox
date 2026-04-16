@@ -43,8 +43,10 @@ pub struct Run {
     #[bpaf(positional("binary"))]
     pub binary: String,
 
-    /// Arguments passed to the binary (after --)
-    #[bpaf(positional("args"), strict, many)]
+    /// Arguments passed to the binary.
+    /// Bare arguments are passed through automatically.
+    /// Use `--` to pass option-style arguments (e.g. `-f`, `--verbose`).
+    #[bpaf(positional("args"), many)]
     pub args: Vec<String>,
 }
 
