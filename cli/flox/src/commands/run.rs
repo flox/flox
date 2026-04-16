@@ -283,8 +283,15 @@ impl Run {
                 }
             }
 
-            // Check saved preference first (unless --reselect cleared it).
-            if let Some(saved) = config.flox.binary_preferences.get(binary.as_str()) {
+            // Check saved preference. Skip when --reselect is set because
+            // the in-memory config is stale after clear_preference wrote
+            // to disk — we need to fall through to the lookup/prompt.
+            let saved = if self.reselect {
+                None
+            } else {
+                config.flox.binary_preferences.get(binary.as_str())
+            };
+            if let Some(saved) = saved {
                 debug!(binary, pkg = saved.as_str(), "using saved preference");
                 saved.clone()
             } else {
