@@ -119,7 +119,7 @@ fn preferences_path(state_dir: &Path) -> PathBuf {
 // ---------------------------------------------------------------------------
 
 /// A candidate package that provides the requested binary.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PackageCandidate {
     pub attr_path: String,
     pub pname: String,

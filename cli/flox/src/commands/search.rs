@@ -1,13 +1,15 @@
 use std::fmt::Write;
 use std::num::NonZeroU8;
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_catalog::{ClientTrait, SearchResults};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::catalog::SearchTerm;
 use indoc::{formatdoc, indoc};
 use tracing::{debug, instrument};
+
+use super::run::lookup_binary_candidates;
 
 use crate::config::Config;
 use crate::subcommand_metric;
@@ -37,6 +39,10 @@ pub struct Search {
     #[bpaf(short, long)]
     pub all: bool,
 
+    /// Search for packages that provide a specific binary
+    #[bpaf(long)]
+    pub binary: bool,
+
     /// The package to search for in the format '<pkg-path>'.
     ///
     /// ex. python310Packages.pip
@@ -55,6 +61,14 @@ impl Search {
         subcommand_metric!("search", search_term = search_term);
 
         debug!("performing search for term: {}", search_term);
+
+        // Binary search mode: use the by-binary endpoint instead of
+        // normal package name/description search.
+        if self.binary {
+            return self
+                .handle_binary_search(search_term, &flox)
+                .await;
+        }
 
         let limit = if self.all {
             None
@@ -136,6 +150,38 @@ impl Search {
             // https://github.com/tokio-rs/tracing/issues/3369
             eprintln!("{hints}");
         }
+        Ok(())
+    }
+
+    /// Handle `flox search --binary <name>`: search for packages that
+    /// provide a specific binary via the FloxHub binary-to-package index.
+    async fn handle_binary_search(&self, binary_name: &str, flox: &Flox) -> Result<()> {
+        debug!("performing binary search for: {}", binary_name);
+
+        let candidates = lookup_binary_candidates(binary_name, flox)
+            .await
+            .context("Failed to look up packages by binary name")?;
+
+        if candidates.is_empty() {
+            bail!(
+                "No packages found that provide the binary '{}'.",
+                binary_name,
+            );
+        }
+
+        if self.json {
+            let json = serde_json::to_string(&candidates)?;
+            println!("{json}");
+        } else {
+            for candidate in &candidates {
+                let desc = candidate
+                    .description
+                    .as_deref()
+                    .unwrap_or("<no description provided>");
+                println!("{:<30} {}", candidate.attr_path, desc);
+            }
+        }
+
         Ok(())
     }
 }

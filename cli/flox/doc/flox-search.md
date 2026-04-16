@@ -15,6 +15,7 @@ flox-search - search for packages
 flox [<general options>] search
      [--json]
      [-a]
+     [--binary]
      <search-term>
 ```
 
@@ -51,9 +52,31 @@ portion of the pkg-path or description.
 `-a`, `--all`
 :   Display all search results (default: at most 10).
 
+`--binary`
+:   Search for packages that provide a specific binary.
+    Instead of matching package names and descriptions,
+    this searches for packages whose `bin/` directory contains
+    the specified binary name.
+    For example, `flox search --binary rg` finds `ripgrep`.
+
 ```{.include}
 ./include/general-options.md
 ```
 
+# EXAMPLES
+
+Search for a package by name:
+
+```
+$ flox search curl
+```
+
+Search for packages that provide a binary:
+
+```
+$ flox search --binary rg
+```
+
 # SEE ALSO
-[`flox-show(1)`](./flox-show.md)
+[`flox-show(1)`](./flox-show.md),
+[`flox-run(1)`](./flox-run.md)
