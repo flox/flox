@@ -38,9 +38,13 @@ mod types;
 
 pub(crate) mod mock;
 
+pub const DEFAULT_CATALOG_URL: &str = "https://api.flox.dev";
+pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
+pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
+
 // Re-export catalog-api-v1 types for consumers.
 // This allows consumers to depend only on catalog-client, not directly on catalog-api-v1.
-pub use auth::{auth_strategy_from_method, AuthError, AuthMethod, AuthStrategy};
+pub use auth::{AuthError, AuthMethod, AuthStrategy, auth_strategy_from_method};
 pub use catalog_api_v1::{
     Client as ApiClient,
     Error as ApiError,
@@ -49,7 +53,7 @@ pub use catalog_api_v1::{
 #[cfg(any(test, feature = "tests"))]
 // Client
 pub use client::EMPTY_SEARCH_RESPONSE;
-pub use client::{str_to_catalog_name, str_to_package_name, CatalogClient, ClientTrait};
+pub use client::{CatalogClient, ClientTrait, str_to_catalog_name, str_to_package_name};
 pub use config::{CatalogClientConfig, CatalogMockMode};
 // Errors
 pub use error::*;

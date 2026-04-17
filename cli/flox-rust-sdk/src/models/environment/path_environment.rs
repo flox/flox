@@ -753,7 +753,7 @@ pub mod tests {
     use std::fs::OpenOptions;
     use std::io::Write;
 
-    use flox_manifest::interfaces::CommonFields;
+    use flox_manifest::interfaces::AsLatestSchema;
     use flox_manifest::parsed::Inner;
     use flox_manifest::parsed::v1::test_helpers::manifest_without_install_or_include;
     use flox_test_utils::proptest::{alphanum_string, lowercase_alphanum_string};
@@ -873,7 +873,9 @@ pub mod tests {
 
         // modify the lockfile  -> rebuild necessary
         let mut lockfile = env.existing_lockfile(&flox).unwrap().unwrap();
-        lockfile.manifest.options_mut().activate.mode = Some(ActivateMode::Dev);
+        let mut manifest = lockfile.migrated_manifest().unwrap();
+        manifest.as_latest_schema_mut().options.activate.mode = Some(ActivateMode::Dev);
+        lockfile.manifest = manifest.into();
         let lockfile_contents = serialize_json_with_newline(&lockfile).unwrap();
         fs::write(env.lockfile_path(&flox).unwrap(), lockfile_contents).unwrap();
         assert!(env.needs_rebuild().unwrap());
@@ -998,7 +1000,8 @@ pub mod tests {
             new_path_environment_in(&flox, composer_manifest_contents, composer_path);
         let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
 
-        assert_eq!(lockfile.manifest.vars().inner()["foo"], "v1");
+        let manifest = lockfile.migrated_manifest().unwrap();
+        assert_eq!(manifest.as_latest_schema().vars.inner()["foo"], "v1");
 
         // Call include_upgrade() with a name of an included environment that does not exist
         let err = composer

@@ -5,7 +5,7 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::sync::LazyLock;
 
 use flox_catalog::BaseCatalogUrl;
-use flox_manifest::interfaces::{AsLatestSchema, CommonFields};
+use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
@@ -719,7 +719,7 @@ impl PackageTargets {
         manifest: &Manifest<MigratedTypedOnly>,
         expression_ref: &NixFlakeref,
     ) -> Result<PackageTargets, PackageTargetError> {
-        let environment_packages = manifest.as_latest_schema().build();
+        let environment_packages = &manifest.as_latest_schema().build;
 
         let nix_expression_packages = get_nix_expression_targets(expression_ref)
             .map_err(|e| PackageTargetError::new(e.to_string()))?;
@@ -2246,8 +2246,7 @@ mod tests {
                 mkdir -p $out/bin
                 cp {bin_name} $out/bin/{bin_name}
             """
-            # FIXME: replace with gcc.lib once we support outputs
-            runtime-packages = [ "boost", "gcc" ]
+            runtime-packages = [ "boost", "gcc", "gcc-unwrapped" ]
             sandbox = "{}"
             "#, if sandbox { "pure" } else { "off" }};
         env.edit(&flox, build_manifest).unwrap();
@@ -2334,8 +2333,7 @@ mod tests {
                 mkdir -p $out/bin
                 cp {bin_name} $out/bin/{bin_name}
             """
-            # FIXME: replace with gcc.lib once we support outputs
-            runtime-packages = [ "gcc" ]
+            runtime-packages = [ "gcc", "gcc-unwrapped" ]
             sandbox = "{}"
             "#, if sandbox { "pure" } else { "off" }};
         env.edit(&flox, build_manifest).unwrap();

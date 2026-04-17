@@ -3,11 +3,13 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use flox_core::Version;
 use serde::Serialize;
 use tracing::debug;
 
 use crate::CatalogId;
 use crate::lock::NixPrefetchResult;
+use crate::tree::PackageTreeNode;
 
 /// Locked source information to nix expression catalog.
 /// That is either:
@@ -26,6 +28,11 @@ pub(crate) enum CatalogLock {
         #[serde(flatten)]
         prefetch: NixPrefetchResult,
     },
+    #[serde(rename = "floxhub")]
+    FloxHub {
+        /// Tree structure of locked packages from FloxHub
+        packages: PackageTreeNode,
+    },
 }
 
 /// A `BuildLock` is a collection of locked sources for each catalog.
@@ -33,6 +40,8 @@ pub(crate) enum CatalogLock {
 /// sources of declared dependencies.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct BuildLock {
+    #[serde(rename = "version")]
+    pub(crate) _version: Version<1>,
     pub(crate) catalogs: BTreeMap<CatalogId, CatalogLock>,
 }
 

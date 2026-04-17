@@ -48,6 +48,7 @@ Valid string values are:
 
 - `1.10.0`: introduced package outputs
 - `1.11.0`: introduced `minimum-cli-version`
+- `1.12.0`: introduced services `auto-start`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema

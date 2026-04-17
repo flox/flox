@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
-use flox_manifest::interfaces::CommonFields;
+use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::parsed::Inner;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::services::process_compose::{
@@ -42,6 +42,7 @@ impl Status {
         guard_service_commands_available(&env, &flox.system)?;
 
         let processes = ProcessStates::read(env.socket());
+        let manifest_services = &env.manifest.as_latest_schema().services;
 
         let process_states_display = match processes {
             // When services haven't been started, there's no socket yet. Rather than
@@ -50,8 +51,7 @@ impl Status {
             Err(ServiceError::LoggedError(LoggedError::SocketDoesntExist)) => {
                 let mut states = vec![];
                 let service_names = if self.names.is_empty() {
-                    env.manifest
-                        .services()
+                    manifest_services
                         .inner()
                         .keys()
                         .cloned()
@@ -75,7 +75,7 @@ impl Status {
             Ok(processes) => {
                 let named_processes = super::processes_by_name_or_default_to_all(
                     &processes,
-                    env.manifest.services(),
+                    manifest_services,
                     &flox.system,
                     &self.names,
                 )?;

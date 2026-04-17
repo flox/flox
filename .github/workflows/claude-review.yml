@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write # Required to post reviews
       issues: read
       id-token: write # Required in order for the Claude GitHub app to function
       actions: read # Required for Claude to read CI results on PRs
@@ -31,5 +31,7 @@ jobs:
           # This is an optional setting that allows Claude to read CI results on PRs
           additional_permissions: |
             actions: read
+          plugin_marketplaces: https://github.com/anthropics/claude-plugins-official.git
           claude_args: '--dangerously-skip-permissions'
-          prompt: '/code-review:code-review --comment'
+          plugins: 'code-review@claude-plugins-official'
+          prompt: '/code-review:code-review'

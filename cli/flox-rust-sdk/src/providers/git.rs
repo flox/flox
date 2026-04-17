@@ -91,6 +91,8 @@ pub trait GitProvider: Sized + std::fmt::Debug {
     fn status(&self) -> Result<StatusInfo, Self::StatusError>;
     fn checkout(&self, name: &str, orphan: bool) -> Result<(), Self::CheckoutError>;
     fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError>;
+    /// List untracked and non-ignored files under the given path.
+    fn list_files_untracked(&self, path: &Path) -> Result<Vec<String>, GitCommandError>;
     fn rename_branch(&self, new_name: &str) -> Result<(), Self::RenameError>;
     fn remote_branches_containing_revision(
         &self,
@@ -147,6 +149,19 @@ pub enum GitCommandError {
     InvalidOutput(String),
     #[error("Remote URL was invalid")]
     InvalidUrl(#[source] url::ParseError),
+}
+
+impl GitCommandError {
+    /// Whether this error indicates an authentication or permissions failure.
+    pub fn is_access_denied(&self) -> bool {
+        matches!(
+            self,
+            GitCommandError::BadExit(_, _, stderr)
+                if stderr.contains("DENIED")
+                    || stderr.contains("Authentication failed")
+                    || stderr.contains("Permission denied")
+        )
+    }
 }
 
 /// Representation of the git push status.
@@ -702,9 +717,22 @@ pub enum GitCommandOpenError {
 #[derive(Error, Debug)]
 pub enum GitCommandGetOriginError {
     #[error(transparent)]
-    Command(#[from] GitCommandError),
+    Command(GitCommandError),
     #[error("Couldn't determine upstream remote name for the current HEAD")]
     NoUpstream,
+    #[error("access denied: {0}")]
+    AccessDenied(GitCommandError),
+}
+
+impl From<GitCommandError> for GitCommandGetOriginError {
+    fn from(err: GitCommandError) -> Self {
+        if err.is_access_denied() {
+            debug!("Access denied: {err}");
+            GitCommandGetOriginError::AccessDenied(err)
+        } else {
+            GitCommandGetOriginError::Command(err)
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -748,9 +776,7 @@ const REMOTE_BRANCH_NOT_FOUND_IN_UPSTREAM_ERR_PREFIX: &str = "fatal: Remote bran
 impl From<GitCommandError> for GitRemoteCommandError {
     fn from(err: GitCommandError) -> Self {
         match err {
-            GitCommandError::BadExit(_, _, ref stderr)
-                if stderr.contains("DENIED") || stderr.contains("Authentication failed") =>
-            {
+            ref e if e.is_access_denied() => {
                 debug!("Access denied: {err}");
                 GitRemoteCommandError::AccessDenied
             },
@@ -1152,6 +1178,20 @@ impl GitProvider for GitCommandProvider {
             .collect();
 
         Ok(info)
+    }
+
+    fn list_files_untracked(&self, path: &Path) -> Result<Vec<String>, GitCommandError> {
+        let mut command = self.new_command();
+        command.args(["ls-files", "--others", "--exclude-standard", "-z", "--"]);
+        command.arg(path);
+        let output = GitCommandProvider::run_command(&mut command)?;
+        let stdout = output.to_string_lossy();
+        let files = stdout
+            .split('\0')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect();
+        Ok(files)
     }
 
     fn fetch(&self) -> Result<(), Self::FetchError> {
@@ -1869,6 +1909,42 @@ pub mod tests {
     }
 
     #[test]
+    fn list_files_untracked_returns_untracked_and_excludes_gitignored() {
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
+
+        let subdir = repo.path.join("subdir");
+        fs::create_dir(&subdir).unwrap();
+        commit_file(&repo, "subdir/tracked");
+        fs::write(subdir.join("untracked"), "u").unwrap();
+        fs::write(subdir.join("ignored"), "i").unwrap();
+        fs::write(subdir.join(".gitignore"), "ignored\n").unwrap();
+
+        let mut result = repo.list_files_untracked(&subdir).unwrap();
+        result.sort();
+        assert_eq!(result, vec![
+            "subdir/.gitignore".to_string(),
+            "subdir/untracked".to_string(),
+        ]);
+    }
+
+    #[test]
+    fn list_files_untracked_empty_when_all_tracked() {
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
+
+        let subdir = repo.path.join("subdir");
+        fs::create_dir(&subdir).unwrap();
+        let tracked = subdir.join("tracked");
+        fs::write(&tracked, "t").unwrap();
+        repo.add(&[&tracked]).unwrap();
+        repo.commit("add tracked").unwrap();
+
+        let result = repo.list_files_untracked(&subdir).unwrap();
+        assert_eq!(result, Vec::<String>::new());
+    }
+
+    #[test]
     fn identifies_local_commit_on_remote() {
         let branch_name = "some_branch";
         let (build_repo, _tempdir) = init_temp_repo(false);
@@ -1904,5 +1980,33 @@ pub mod tests {
                 .rev_exists_on_remote(&status.rev, "some_remote")
                 .unwrap()
         );
+    }
+
+    #[test]
+    fn is_access_denied() {
+        let denied = GitCommandError::BadExit(
+            128,
+            String::new(),
+            "ERROR: Repository not found. DENIED".to_string(),
+        );
+        assert!(denied.is_access_denied());
+
+        let auth_failed = GitCommandError::BadExit(
+            128,
+            String::new(),
+            "Authentication failed for 'https://github.com/foo/bar'".to_string(),
+        );
+        assert!(auth_failed.is_access_denied());
+
+        let permission = GitCommandError::BadExit(
+            128,
+            String::new(),
+            "Permission denied (publickey)".to_string(),
+        );
+        assert!(permission.is_access_denied());
+
+        let other =
+            GitCommandError::BadExit(1, String::new(), "fatal: not a git repository".to_string());
+        assert!(!other.is_access_denied());
     }
 }

@@ -1,6 +1,6 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
-use flox_manifest::interfaces::CommonFields;
+use flox_manifest::interfaces::AsLatestSchema;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::services::process_compose::{
     DEFAULT_TAIL,
@@ -42,11 +42,12 @@ impl Logs {
 
         let socket = env.socket();
         let processes = ProcessStates::read(socket)?;
+        let manifest_services = &env.manifest.as_latest_schema().services;
 
         if self.follow {
             let named_processes = super::processes_by_name_or_default_to_all(
                 &processes,
-                env.manifest.services(),
+                manifest_services,
                 &flox.system,
                 &self.names,
             )?;

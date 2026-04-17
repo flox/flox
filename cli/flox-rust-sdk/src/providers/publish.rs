@@ -12,7 +12,6 @@ use flox_catalog::{
     CatalogStoreConfig,
     CatalogStoreConfigNixCopy,
     ClientTrait,
-    NarInfo,
     NarInfos,
     PackageOutput,
     PackageOutputs,
@@ -25,6 +24,7 @@ use flox_manifest::lockfile::Lockfile;
 use git_url_parse::GitUrl;
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
+use itertools::Itertools;
 use nef_lock_catalog::LockOptions;
 use nef_lock_catalog::lock::{NixFlakeref, lock_url_with_options};
 use serde_json::json;
@@ -43,7 +43,7 @@ use super::build::{
     PackageTargetKind,
     find_toplevel_group_nixpkgs,
 };
-use super::git::{GitCommandError, GitCommandProvider, StatusInfo};
+use super::git::{GitCommandError, GitCommandGetOriginError, GitCommandProvider, StatusInfo};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError, copy_dir_recursive, open_path};
@@ -314,10 +314,13 @@ impl ClientSideCatalogStoreConfig {
 
     /// Depending on whether the catalog store is configured to accept uploaded artifacts,
     /// upload the build outputs and their NAR infos or skip the upload entirely.
+    ///
+    /// Returns the narinfos and the URL string identifying where the narinfos
+    /// were collected from, or `None` when no narinfos are available.
     pub fn maybe_upload_artifacts(
         &self,
         build_outputs: &[PackageOutput],
-    ) -> Result<Option<NarInfos>, PublishError> {
+    ) -> Result<Option<(NarInfos, String)>, PublishError> {
         if build_outputs.is_empty() {
             debug!(reason = "no build outputs", "skipping artifact upload");
             return Ok(None);
@@ -341,16 +344,29 @@ impl ClientSideCatalogStoreConfig {
                     &Some(NixCopyAuth::Netrc(auth_netrc_path.clone())),
                     build_outputs,
                 )?;
-                let nar_infos =
-                    Self::get_build_output_nar_infos(egress_uri, auth_netrc_path, build_outputs)?;
-                Ok(Some(nar_infos))
+                let nar_infos = Self::get_build_output_nar_infos(
+                    egress_uri.as_str(),
+                    Some(auth_netrc_path.as_path()),
+                    build_outputs,
+                )?;
+                Ok(Some((nar_infos, egress_uri.to_string())))
             },
             ClientSideCatalogStoreConfig::MetadataOnly => {
                 debug!(
                     reason = "metadata-only catalog store",
-                    "skipping artifact upload"
+                    "collecting narinfo from local store (no artifact upload)"
                 );
-                Ok(None)
+                match Self::get_build_output_nar_infos("daemon", None, build_outputs) {
+                    Ok(nar_infos) => Ok(Some((nar_infos, "daemon://".to_string()))),
+                    Err(e) => {
+                        debug!(
+                            error = %e,
+                            "failed to collect narinfo from local store, \
+                             continuing without narinfo"
+                        );
+                        Ok(None)
+                    },
+                }
             },
             ClientSideCatalogStoreConfig::Null => {
                 debug!(reason = "null catalog store", "skipping artifact upload");
@@ -465,13 +481,20 @@ impl ClientSideCatalogStoreConfig {
     /// Constructs a `nix path-info` command that will get the NAR info for a
     /// store path from the specified store, including the optional information
     /// about the closure size of the store path.
-    fn nar_info_cmd(store_url: &str, store_path: &str, auth_netrc_path: &Path) -> Command {
+    ///
+    /// Uses `--recursive` to collect narinfo for the full closure (the store
+    /// path and all its transitive dependencies), matching the behavior of
+    /// the catalog-publisher.
+    fn nar_info_cmd(store_url: &str, store_path: &str, auth_netrc_path: Option<&Path>) -> Command {
         let mut cmd = nix_base_command();
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
-        cmd.arg("--netrc-file").arg(auth_netrc_path);
+        if let Some(netrc) = auth_netrc_path {
+            cmd.arg("--netrc-file").arg(netrc);
+        }
         cmd.args([
             "path-info",
+            "--recursive",
             "--closure-size",
             "--json",
             "--store",
@@ -481,15 +504,13 @@ impl ClientSideCatalogStoreConfig {
         cmd
     }
 
-    /// Gets the NAR info for a single store path and returns it in the format that the
-    /// catalog server expects e.g. one that is tolerant of the different NAR info formats
-    /// that the `nix` CLI can return.
+    /// Gets the NAR info for **the closure** of a store path from the given store.
     #[instrument(skip_all, fields(progress = format!("Collecting extra build metadata for '{store_path}'")))]
     fn get_nar_info(
         source_url: &str,
         store_path: &str,
-        auth_netrc_path: &Path,
-    ) -> Result<NarInfo, PublishError> {
+        auth_netrc_path: Option<&Path>,
+    ) -> Result<NarInfos, PublishError> {
         let mut cmd = Self::nar_info_cmd(source_url, store_path, auth_netrc_path);
         debug!(cmd = %cmd.display(), "running nix path-info command");
         let output = cmd.output().map_err(|e| {
@@ -502,21 +523,19 @@ impl ClientSideCatalogStoreConfig {
         }
         let narinfos = serde_json::from_slice::<NarInfos>(&output.stdout)
             .map_err(PublishError::ParseNarInfo)?;
-        if narinfos.contains_key(store_path) {
-            Ok(narinfos[store_path].clone())
-        } else {
-            Err(PublishError::GetNarInfo(formatdoc! {
+        if !narinfos.contains_key(store_path) {
+            return Err(PublishError::GetNarInfo(formatdoc! {
                 "NAR info for store path '{store_path}' not found in response: {narinfos:?}"
-            }))
+            }));
         }
+        Ok(narinfos)
     }
 
-    /// Gets the NAR info for each build output and returns it in the format
-    /// that the catalog server expects e.g. one that is tolerant of the different
-    /// NAR info formats that the `nix` CLI can return.
+    /// Retrieves and merges the [NarInfos] closures of the provided
+    /// build outputs from the given store.
     fn get_build_output_nar_infos(
-        source_url: &Url,
-        auth_netrc_path: &Path,
+        source_url: &str,
+        auth_netrc_path: Option<&Path>,
         build_outputs: &[PackageOutput],
     ) -> Result<NarInfos, PublishError> {
         let mut nar_infos = HashMap::new();
@@ -524,12 +543,12 @@ impl ClientSideCatalogStoreConfig {
             debug!(
                 output = output.name,
                 store_path = output.store_path,
-                store = source_url.as_str(),
+                store = source_url,
                 "querying NAR info for build output"
             );
-            let nar_info =
-                Self::get_nar_info(source_url.as_str(), &output.store_path, auth_netrc_path)?;
-            nar_infos.insert(output.store_path.clone(), nar_info);
+            let output_nar_infos =
+                Self::get_nar_info(source_url, &output.store_path, auth_netrc_path)?;
+            nar_infos.extend(output_nar_infos.0.into_iter());
         }
         Ok(nar_infos.into())
     }
@@ -616,14 +635,17 @@ where
             .await
             .map_err(PublishError::CatalogError)?;
 
-        let netrc_path = self.auth.create_netrc().map_err(PublishError::Auth)?;
         let catalog_store_config = get_client_side_catalog_store_config(
             metadata_only,
             key_file,
-            &netrc_path,
+            &self.auth,
             publish_response,
         )?;
-        let narinfos = catalog_store_config.maybe_upload_artifacts(&build_metadata.outputs)?;
+        let upload_result = catalog_store_config.maybe_upload_artifacts(&build_metadata.outputs)?;
+        let (narinfos, narinfos_source_url) = match upload_result {
+            Some((nar_infos, source_url)) => (Some(nar_infos), Some(source_url)),
+            None => (None, None),
+        };
 
         let build_info = UserBuildPublish {
             derivation: UserDerivationInfo {
@@ -651,10 +673,7 @@ where
             ref_: Some(self.env_metadata.build_repo_meta.ref_.clone()),
             cache_uri: catalog_store_config.upload_url().map(|url| url.to_string()),
             narinfos,
-            // The URL where the narinfos were downloaded from.
-            narinfos_source_url: catalog_store_config
-                .download_url()
-                .map(|url| url.to_string()),
+            narinfos_source_url,
             // This is the version of the narinfo being submitted.  Until we
             // define changes, we'll use the service defaults.
             narinfos_source_version: None,
@@ -736,7 +755,7 @@ where
 fn get_client_side_catalog_store_config(
     metadata_only: bool,
     key_file: Option<PathBuf>,
-    auth_netrc_path: impl AsRef<Path>,
+    auth: &dyn AuthProvider,
     publish_response: PublishResponse,
 ) -> Result<ClientSideCatalogStoreConfig, PublishError> {
     if metadata_only {
@@ -752,6 +771,7 @@ fn get_client_side_catalog_store_config(
                 ..
             } = nix_copy_config;
             if let Some(path) = key_file {
+                let netrc = auth.create_netrc().map_err(PublishError::Auth)?;
                 ClientSideCatalogStoreConfig::NixCopy {
                     ingress_uri: Url::parse(&ingress_uri).map_err(|e| {
                         PublishError::Catchall(format!("failed to parse ingress URI: {e}"))
@@ -760,7 +780,7 @@ fn get_client_side_catalog_store_config(
                         PublishError::Catchall(format!("failed to parse egress URI: {e}"))
                     })?,
                     signing_private_key_path: path,
-                    auth_netrc_path: auth_netrc_path.as_ref().to_path_buf(),
+                    auth_netrc_path: netrc.to_path_buf(),
                 }
             } else {
                 return Err(PublishError::Catchall(
@@ -916,22 +936,36 @@ pub fn check_build_metadata(
     Ok(metadata)
 }
 
-/// Creates the error message for a build repo that's in an invalid state
-/// by filling out a template with a provided specific error message.
-fn build_repo_err_msg(msg: &str) -> String {
-    formatdoc! {"
-        \n{msg}
-
-        The build repository must satisfy a few requirements in order to use the 'flox publish' command:
-        - It must be a git repository.
-        - All of the tracked files must be in a clean state.
-        - A remote must be configured.
-        - The current revision must be pushed to a remote.
-    "}
+/// Creates an error for a build repo that's in an invalid state.
+pub fn build_repo_err(msg: &str) -> PublishError {
+    PublishError::UnsupportedEnvironmentState(msg.to_string())
 }
 
-pub fn build_repo_err(msg: &str) -> PublishError {
-    PublishError::UnsupportedEnvironmentState(build_repo_err_msg(msg))
+/// Verify that the critical environment files are tracked by git.
+/// Publishing creates a clean checkout, so untracked files won't be available.
+fn check_env_files_tracked(
+    git: &impl GitProvider,
+    dot_flox_path: &impl AsRef<Path>,
+) -> Result<(), PublishError> {
+    // Find files in `.flox/` that are untracked and not ignored according to
+    // the rules generated in `.flox/.gitignore`.
+    let untracked_files = git
+        .list_files_untracked(dot_flox_path.as_ref())
+        .map_err(|e| {
+            PublishError::UnsupportedEnvironmentState(format!("Failed to check git tracking: {e}"))
+        })?;
+
+    if !untracked_files.is_empty() {
+        let listing = untracked_files
+            .iter()
+            .map(|path| format!("- {path}"))
+            .join("\n");
+        return Err(build_repo_err(&formatdoc! {"
+            The following environment files are not tracked by git:
+            {listing}",
+        }));
+    }
+    Ok(())
 }
 
 /// Check the local repo that the build source is in to make sure that it's in
@@ -940,9 +974,11 @@ pub fn build_repo_err(msg: &str) -> PublishError {
 /// This entails checking that:
 /// - The repo has a remote configured.
 /// - The tracked source files are clean.
-/// - The current revision is the latest one on the remote.
+/// - The current revision exists on the tracked remote branch.
 #[instrument(skip_all, fields(progress = "Checking repository state"))]
-fn gather_build_repo_meta(git: &impl GitProvider) -> Result<RemoteBuildRepoMetadata, PublishError> {
+fn gather_build_repo_meta(
+    git: &GitCommandProvider,
+) -> Result<RemoteBuildRepoMetadata, PublishError> {
     let status = git
         .status()
         .map_err(|_e| build_repo_err("Unable to get repository status."))?;
@@ -953,14 +989,65 @@ fn gather_build_repo_meta(git: &impl GitProvider) -> Result<RemoteBuildRepoMetad
         ));
     }
 
-    let remote_info = git
-        .get_current_branch_remote_info()
-        .map_err(|e| build_repo_err(&e.to_string()))?;
+    let remote_info = git.get_current_branch_remote_info().map_err(|e| match e {
+        GitCommandGetOriginError::NoUpstream => {
+            let remote_hint = git
+                .remotes()
+                .ok()
+                .and_then(|r| match r.as_slice() {
+                    [single] if !single.is_empty() => Some(single.clone()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| "<remote>".to_string());
 
-    if remote_info.revision.as_ref() != Some(&status.rev) {
-        return Err(build_repo_err(
-            "Revisions of local branch and tracked remote branch differ.",
-        ));
+            if let Some(branch) = status
+                .ref_
+                .as_deref()
+                .and_then(|r| r.strip_prefix("refs/heads/"))
+            {
+                build_repo_err(&formatdoc! {"
+                    Current branch '{branch}' has no upstream remote configured.
+                    Set one with 'git branch --set-upstream-to={remote_hint}/{branch}'"
+                })
+            } else {
+                build_repo_err(&formatdoc! {"
+                    Repository is in detached HEAD state and has no upstream remote configured.
+                    Check out a branch before publishing: \
+                        git checkout -b <branch-name>"
+                })
+            }
+        },
+        GitCommandGetOriginError::AccessDenied(ref cmd_err) => build_repo_err(&formatdoc! {"
+            Could not access the remote repository: {cmd_err}
+            Check your SSH agent (`ssh-add -l`) or credential configuration."
+        }),
+        GitCommandGetOriginError::Command(ref cmd_err) => build_repo_err(&cmd_err.to_string()),
+    })?;
+
+    let rev_on_remote = match git.rev_exists_on_remote(&status.rev, &remote_info.name) {
+        Ok(exists) => exists,
+        Err(ref cmd_err) if cmd_err.is_access_denied() => {
+            return Err(build_repo_err(&formatdoc! {"
+                Could not access remote '{remote_name}' while verifying the local revision: {cmd_err}
+                Check your SSH agent (`ssh-add -l`) or credential configuration.",
+                remote_name = remote_info.name,
+            }));
+        },
+        Err(cmd_err) => {
+            return Err(build_repo_err(&formatdoc! {"
+                Failed to check whether local revision exists on remote '{remote_name}/{remote_branch}': {cmd_err}",
+                remote_name = remote_info.name,
+                remote_branch = remote_info.reference,
+            }));
+        },
+    };
+    if !rev_on_remote {
+        return Err(build_repo_err(&formatdoc! {"
+            Local revision is not present on remote '{remote_name}/{remote_branch}'.
+            Push your commits with 'git push'",
+            remote_name = remote_info.name,
+            remote_branch = remote_info.reference,
+        }));
     }
 
     let url =
@@ -1060,8 +1147,9 @@ pub fn check_environment_metadata(
         PublishError::UnsupportedEnvironmentState(format!(".flox/ dir not in git repo: {e}"))
     })?;
 
-    let build_repo_meta = gather_build_repo_meta(&git)?;
+    check_env_files_tracked(&git, &dot_flox_path)?;
 
+    let build_repo_meta = gather_build_repo_meta(&git)?;
     let toplevel_catalog_ref = find_toplevel_group_nixpkgs(&lockfile);
 
     Ok(CheckedEnvironmentMetadata {
@@ -1136,6 +1224,7 @@ pub mod tests {
         flox_instance,
         set_test_auth,
     };
+    use crate::models::environment::ENVIRONMENT_POINTER_FILENAME;
     use crate::models::environment::path_environment::PathEnvironment;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
     use crate::providers::auth::{Auth, write_floxhub_netrc};
@@ -1313,6 +1402,41 @@ pub mod tests {
     }
 
     #[test]
+    fn test_check_env_files_tracked_success() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
+        let (env, git) = example_path_environment(&flox, Some(&remote_uri));
+
+        check_env_files_tracked(&git, &env.dot_flox_path())
+            .expect("all env files should be tracked");
+    }
+
+    #[test]
+    fn test_check_env_files_tracked_untracked_file() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
+        let (env, git) = example_path_environment(&flox, Some(&remote_uri));
+
+        let env_json_path = env.dot_flox_path().join(ENVIRONMENT_POINTER_FILENAME);
+        git.rm(&[env_json_path.as_path()], false, false, true)
+            .expect("cached remove of env.json");
+
+        let result = check_env_files_tracked(&git, &env.dot_flox_path());
+        match result {
+            Err(PublishError::UnsupportedEnvironmentState(msg)) => {
+                assert_eq!(
+                    msg,
+                    indoc! {"
+                    The following environment files are not tracked by git:
+                    - subdir_for_flox_stuff/.flox/env.json"}
+                    .to_string()
+                );
+            },
+            _ => panic!("Expected UnsupportedEnvironmentState error"),
+        }
+    }
+
+    #[test]
     fn test_check_package_meta_nominal() {
         let (flox, _temp_dir_handle) = flox_instance();
         let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
@@ -1471,6 +1595,94 @@ pub mod tests {
             .await;
 
         assert!(res.is_ok(), "Expected publish to succeed, got: {:?}", res);
+    }
+
+    #[test]
+    fn metadata_only_collects_narinfos_from_local_store() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
+        let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
+
+        let env_metadata = check_environment_metadata(&flox, &env).unwrap();
+        let package_metadata = check_package_metadata(
+            &mock_base_catalog_url(),
+            env_metadata.toplevel_catalog_ref.as_ref(),
+            EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
+        )
+        .unwrap();
+
+        let build_metadata = check_build_metadata(
+            &flox,
+            env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            None,
+            &env_metadata,
+            &package_metadata.package,
+        )
+        .unwrap();
+
+        let config = ClientSideCatalogStoreConfig::MetadataOnly;
+
+        let result = config
+            .maybe_upload_artifacts(&build_metadata.outputs)
+            .expect("metadata-only narinfo collection should succeed");
+
+        // MetadataOnly should return Some((narinfos, source_url))
+        let (narinfos, source_url) = result.expect("narinfos should be Some for metadata-only");
+
+        // The source URL should be "daemon://" for metadata-only
+        assert_eq!(
+            source_url, "daemon://",
+            "MetadataOnly should report 'daemon://' as narinfos source"
+        );
+
+        // Should contain at least the build output store path
+        assert!(
+            !narinfos.is_empty(),
+            "Expected narinfos to be non-empty for metadata-only"
+        );
+
+        // The build output's store path should be in the narinfos
+        for output in build_metadata.outputs.iter() {
+            assert!(
+                narinfos.contains_key(&output.store_path),
+                "Expected narinfos to contain build output store path: {}",
+                output.store_path
+            );
+        }
+
+        // With --recursive, there should be more entries than just the
+        // build outputs (transitive dependencies)
+        assert!(
+            narinfos.len() > build_metadata.outputs.len(),
+            "Expected recursive narinfos to include transitive dependencies, \
+             got {} entries for {} outputs",
+            narinfos.len(),
+            build_metadata.outputs.len()
+        );
+    }
+
+    #[test]
+    fn metadata_only_returns_daemon_source_url() {
+        let config = ClientSideCatalogStoreConfig::MetadataOnly;
+        // MetadataOnly with no build outputs returns None (no narinfos to collect)
+        let result = config.maybe_upload_artifacts(&[]).unwrap();
+        assert!(result.is_none(), "empty outputs should return None");
+
+        // With actual outputs we cannot test in a unit test (requires nix store),
+        // but the source URL is verified in
+        // metadata_only_collects_narinfos_from_local_store below.
+    }
+
+    #[test]
+    fn null_store_returns_no_narinfos() {
+        let config = ClientSideCatalogStoreConfig::Null;
+        let result = config
+            .maybe_upload_artifacts(&[PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/fake-path".to_string(),
+            }])
+            .unwrap();
+        assert!(result.is_none(), "Null store should return None");
     }
 
     /// Generate dummy CheckedBuildMetadata and CheckedEnvironmentMetadata that
@@ -1917,12 +2129,17 @@ pub mod tests {
             full_path.pop(); // drop `bin/`
             full_path
         };
-        let narinfo = ClientSideCatalogStoreConfig::get_nar_info(
-            "daemon",
-            store_path.to_str().unwrap(),
-            &auth_file,
-        )
-        .unwrap();
+        let store_path_str = store_path.to_str().unwrap();
+        let narinfos =
+            ClientSideCatalogStoreConfig::get_nar_info("daemon", store_path_str, Some(&auth_file))
+                .unwrap();
+        // With --recursive, narinfos contains the queried path and its
+        // transitive dependencies.
+        assert!(
+            narinfos.contains_key(store_path_str),
+            "Expected narinfos to contain the queried store path"
+        );
+        let narinfo = &narinfos[store_path_str];
         assert!(
             narinfo.closure_size.is_some(),
             "Expected narinfo to have a closure size"
@@ -1938,6 +2155,12 @@ pub mod tests {
         assert!(
             narinfo.references.is_some(),
             "Expected narinfo to have a references field"
+        );
+        // --recursive should return more entries than just the queried path
+        assert!(
+            narinfos.len() > 1,
+            "Expected --recursive narinfo to include transitive dependencies, got {} entries",
+            narinfos.len()
         );
     }
 
@@ -2144,5 +2367,89 @@ pub mod tests {
             )
             .await;
         assert!(res.is_err());
+    }
+
+    // ---- gather_build_repo_meta error differentiation tests ----
+
+    #[test]
+    fn gather_repo_meta_no_upstream_suggests_set_upstream() {
+        // A repo with a commit and a remote but no upstream tracking
+        // branch should produce an error using the actual remote name.
+        let (_remote_tempdir, _remote_repo, remote_uri) = example_git_remote_repo();
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "init.txt");
+        git.add_remote("upstream", &remote_uri).unwrap();
+
+        let err = gather_build_repo_meta(&git).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("--set-upstream-to=upstream/main"),
+            "Expected suggestion with actual remote name, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn gather_repo_meta_no_upstream_no_remote_uses_placeholder() {
+        // A repo with no remotes at all should use a placeholder in
+        // the set-upstream-to suggestion.
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "init.txt");
+
+        let err = gather_build_repo_meta(&git).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("--set-upstream-to=<remote>/main"),
+            "Expected placeholder <remote> in suggestion, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn gather_repo_meta_revision_not_on_remote_suggests_push() {
+        // When the local revision is not present on the remote, the
+        // error should mention the remote/branch and suggest `git push`.
+        let (_remote_tempdir, _remote_repo, remote_uri) = example_git_remote_repo();
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "first.txt");
+        git.add_remote("origin", &remote_uri).unwrap();
+        git.push("origin", true).unwrap();
+
+        // Create a local commit that hasn't been pushed
+        commit_file(&git, "local_only.txt");
+
+        let err = gather_build_repo_meta(&git).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("origin/main"),
+            "Expected 'origin/main' in message, got: {msg}"
+        );
+        assert!(
+            msg.contains("git push"),
+            "Expected 'git push' suggestion, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn gather_repo_meta_dirty_repo_mentions_dirty_files() {
+        // A repo with uncommitted changes should produce an error
+        // about dirty tracked files.
+        let (_remote_tempdir, _remote_repo, remote_uri) = example_git_remote_repo();
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "init.txt");
+        git.add_remote("origin", &remote_uri).unwrap();
+        git.push("origin", true).unwrap();
+
+        // Dirty the repo by modifying a tracked file without committing
+        std::fs::write(git.path().join("init.txt"), "modified").unwrap();
+
+        let err = gather_build_repo_meta(&git).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("dirty"),
+            "Expected 'dirty' in message, got: {msg}"
+        );
     }
 }

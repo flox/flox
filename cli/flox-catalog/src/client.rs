@@ -3,7 +3,7 @@
 use std::cmp::min;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::future::{ready, Future};
+use std::future::{Future, ready};
 use std::num::NonZeroU32;
 use std::str::FromStr;
 use std::time::Duration;
@@ -13,16 +13,16 @@ use catalog_api_v1::types::{self as api_types};
 use catalog_api_v1::{Client as APIClient, Error as APIError, RequestHooks};
 use futures::stream::Stream;
 use futures::{StreamExt, TryStreamExt};
-use reqwest::header::{self, HeaderMap};
 use reqwest::StatusCode;
+use reqwest::header::{self, HeaderMap};
 use tracing::{debug, instrument};
 
+use crate::MapApiErrorExt;
 use crate::auth::AuthStrategy;
 use crate::config::CatalogClientConfig;
 use crate::error::{CatalogClientError, ResolveError, SearchError, VersionsError};
 use crate::mock::MockGuard;
 use crate::types::*;
-use crate::MapApiErrorExt;
 
 #[cfg(any(test, feature = "tests"))]
 pub const EMPTY_SEARCH_RESPONSE: &api_types::PackageSearchResult =
@@ -180,6 +180,12 @@ pub trait ClientTrait {
         package_name: impl AsRef<str> + Send + Sync,
     ) -> Result<PublishResponse, CatalogClientError>;
 
+    /// Get all locked sources for a catalog.
+    async fn get_catalog_locked_sources(
+        &self,
+        catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<ResultsPage<LockedSourceItem>, CatalogClientError>;
+
     /// Create a package within a user catalog.
     async fn create_package(
         &self,
@@ -205,7 +211,7 @@ pub trait ClientTrait {
     /// Checks whether the provided store paths have been successfully
     /// published.
     async fn is_publish_complete(&self, store_paths: &[String])
-        -> Result<bool, CatalogClientError>;
+    -> Result<bool, CatalogClientError>;
 
     /// Get information about the base catalog and available stabilities.
     async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, CatalogClientError>;
@@ -352,6 +358,41 @@ impl ClientTrait for CatalogClient {
         let search_results = PackageDetails { results, count };
 
         Ok(search_results)
+    }
+
+    async fn get_catalog_locked_sources(
+        &self,
+        catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<ResultsPage<LockedSourceItem>, CatalogClientError> {
+        let catalog_name = catalog_name.as_ref();
+        tracing::debug!(catalog_name, "fetching locked sources");
+
+        let stream = make_depaging_stream(
+            |page_number, page_size| async move {
+                let catalog_name_api = str_to_catalog_name(catalog_name)?;
+                let response = self
+                    .client
+                    .get_catalog_locked_sources_api_v1_catalog_catalogs_catalog_name_locked_sources_get(
+                        &catalog_name_api,
+                        Some(page_number),
+                        Some(page_size),
+                    )
+                    .await
+                    .map_api_error()
+                    .await?
+                    .into_inner();
+
+                Ok::<_, CatalogClientError>((response.total_count, response.items))
+            },
+            RESPONSE_PAGE_SIZE,
+        );
+
+        let (count, results) = collect_all_results(stream).await?;
+
+        Ok(ResultsPage {
+            results,
+            count: Some(count),
+        })
     }
 
     async fn publish_info(
@@ -515,6 +556,32 @@ async fn collect_search_results<T, E>(
         .take(actual_limit)
         .try_collect::<Vec<_>>()
         .await?;
+    Ok((count, results))
+}
+
+/// Collects all results from a stream, returning the total count and all items.
+async fn collect_all_results<T, E: std::convert::From<CatalogClientError>>(
+    stream: impl Stream<Item = Result<StreamItem<T>, E>>,
+) -> Result<(u64, Vec<T>), E> {
+    let mut count = None;
+    let results = stream
+        .try_filter_map(|item| {
+            let new_item = match item {
+                StreamItem::TotalCount(total) => {
+                    count = Some(total);
+                    None
+                },
+                StreamItem::Result(res) => Some(res),
+            };
+            ready(Ok(new_item))
+        })
+        .try_collect::<Vec<T>>()
+        .await?;
+
+    let count = count
+        .ok_or_else(|| CatalogClientError::Other("Missing total count in response".to_string()))
+        .map_err(|e| E::from(e))?;
+
     Ok((count, results))
 }
 

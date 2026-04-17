@@ -8,7 +8,7 @@ use std::{fs, io};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
-use flox_manifest::interfaces::CommonFields;
+use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::common::ContainerizeConfig;
 use flox_rust_sdk::flox::Flox;
@@ -89,11 +89,13 @@ impl Containerize {
         let built_environment = env.build(&flox)?;
         let env_name = env.name();
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
-        let manifest = lockfile.manifest;
-        let mode = manifest.options().clone().activate.mode.unwrap_or_default();
+        let manifest = lockfile.migrated_manifest()?;
+        let manifest = manifest.as_latest_schema();
+        let mode = manifest.options.activate.mode.clone().unwrap_or_default();
         let source = if std::env::consts::OS == "linux" {
             let container_config = manifest
-                .containerize()
+                .containerize
+                .as_ref()
                 .and_then(|c| c.config.clone())
                 .or_else(|| should_extend_config(&self.labels).then(Default::default))
                 .map(|mut c| {

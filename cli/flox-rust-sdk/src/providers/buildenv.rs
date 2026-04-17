@@ -13,7 +13,7 @@ use flox_catalog::{CatalogClientError, ClientTrait, StoreInfo};
 use flox_core::activate::mode::ActivateMode;
 use flox_core::canonical_path::CanonicalPath;
 use flox_manifest::ManifestError;
-use flox_manifest::interfaces::{AsLatestSchema, CommonFields, PackageLookup};
+use flox_manifest::interfaces::{AsLatestSchema, PackageLookup};
 use flox_manifest::lockfile::{
     LockedPackage,
     LockedPackageCatalog,
@@ -364,7 +364,7 @@ where
         let mut flake_pkgs = vec![];
         let mut store_path_pkgs = vec![];
 
-        let complete_migrated_manifest = lockfile.manifest.migrate_typed_only(Some(lockfile))?;
+        let complete_migrated_manifest = lockfile.migrated_manifest()?;
         let manifest = complete_migrated_manifest.as_latest_schema();
 
         for package in lockfile.packages.iter() {
@@ -1068,7 +1068,9 @@ where
         // Without this check the lockfile would succeed to build on any system,
         // but (in the general case) contain no packages,
         // because the lockfile won't contain locks of packages for the current system.
-        if let Some(ref systems) = lockfile.manifest.options().systems
+        let manifest = lockfile.migrated_manifest()?;
+        let systems = &manifest.as_latest_schema().options.systems;
+        if let Some(systems) = systems
             && !systems.contains(&env!("NIX_TARGET_SYSTEM").to_string())
         {
             return Err(BuildEnvError::LockfileIncompatible {

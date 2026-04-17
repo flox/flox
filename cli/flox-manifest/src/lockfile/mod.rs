@@ -26,7 +26,7 @@ use flox_core::Version;
 use crate::interfaces::{AsLatestSchema, PackageLookup, SchemaVersion};
 use crate::parsed::common::KnownSchemaVersion;
 use crate::parsed::latest::{PackageDescriptorCatalog, PackageDescriptorFlake};
-use crate::{Manifest, ManifestError, TypedOnly};
+use crate::{Manifest, ManifestError, MigratedTypedOnly, TypedOnly};
 
 pub static LOCKFILE_FILENAME: &str = "manifest.lock";
 
@@ -94,12 +94,26 @@ impl Lockfile {
         self.manifest.get_schema_version()
     }
 
+    /// Returns the locked merged manifest migrated to the latest schema.
+    ///
+    /// It seems like we should have handled migration with a single state
+    /// machine for manifest + lockfile so this was better cached
+    pub fn migrated_manifest(&self) -> Result<Manifest<MigratedTypedOnly>, ManifestError> {
+        self.manifest.migrate_typed_only(Some(self))
+    }
+
+    /// Returns the user-authored manifest migrated to the latest schema.
+    /// The user manifest is the manifest the user edits (i.e. not merged)
+    ///
+    /// It seems like we should have handled migration with a single state
+    /// machine for manifest + lockfile so this was better cached
+    pub fn migrated_user_manifest(&self) -> Result<Manifest<MigratedTypedOnly>, ManifestError> {
+        self.user_manifest().migrate_typed_only(Some(self))
+    }
+
     /// Convert a locked manifest to a list of installed packages for a given system.
     pub fn list_packages(&self, system: &System) -> Result<Vec<PackageToList>, LockfileError> {
-        let manifest = self
-            .manifest
-            .migrate_typed_only(Some(self))
-            .map_err(LockfileError::Manifest)?;
+        let manifest = self.migrated_manifest().map_err(LockfileError::Manifest)?;
         let manifest = manifest.as_latest_schema();
         self.packages
             .iter()
@@ -408,10 +422,7 @@ pub mod test_helpers {
             })
             .expect("no locked package found");
 
-        let migrated = lockfile
-            .manifest
-            .migrate_typed_only(Some(&lockfile))
-            .unwrap();
+        let migrated = lockfile.migrated_manifest().unwrap();
         let manifest = migrated.as_latest_schema();
         let manifest_package = manifest
             .pkg_descriptor_with_id(&locked_package.install_id)

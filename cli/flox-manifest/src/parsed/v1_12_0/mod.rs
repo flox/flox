@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
-#[cfg(any(test, feature = "tests"))]
-use flox_test_utils::proptest::btree_map_strategy;
+use flox_core::data::System;
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use schemars::JsonSchema;
@@ -17,14 +16,13 @@ use crate::parsed::common::{
     KnownSchemaVersion,
     Options,
     Profile,
-    Services,
+    ServiceDescriptor,
     Vars,
 };
-use crate::parsed::{Inner, SkipSerializing, impl_into_inner};
+use crate::parsed::v1_10_0::{Install, ManifestPackageDescriptor};
+pub use crate::parsed::v1_11_0::MinimumCliVersion;
+use crate::parsed::{Inner, SkipSerializing};
 use crate::{Manifest, ManifestError, Parsed, TypedOnly};
-
-pub(crate) mod package_descriptor;
-pub use package_descriptor::*;
 
 /// Not meant for writing manifest files, only for reading them.
 /// Modifications should be made using `manifest::raw`.
@@ -40,7 +38,7 @@ pub use package_descriptor::*;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
-pub struct ManifestV1_10_0 {
+pub struct ManifestV1_12_0 {
     /// Which schema version this manifest adheres to.
     ///
     /// Must be a valid Flox CLI version listed in [`KnownSchemaVersion`].
@@ -48,7 +46,7 @@ pub struct ManifestV1_10_0 {
     pub schema_version: String,
     /// The minimum CLI version that can activate this environment.
     #[serde(rename = "minimum-cli-version")]
-    pub minimum_cli_version: Option<String>,
+    pub minimum_cli_version: Option<MinimumCliVersion>,
     /// The packages to install in the form of a map from install_id
     /// to package descriptor.
     #[serde(default)]
@@ -82,14 +80,14 @@ pub struct ManifestV1_10_0 {
     #[serde(skip_serializing_if = "Include::skip_serializing")]
     pub include: Include,
 }
-impl_pkg_lookup!(crate::parsed::v1_10_0, ManifestV1_10_0);
+impl_pkg_lookup!(crate::parsed::v1_10_0, ManifestV1_12_0);
 
 // You can't derive `Default` because `schema-version` is a `String`,
 // which just defaults to an empty string.
-impl Default for ManifestV1_10_0 {
+impl Default for ManifestV1_12_0 {
     fn default() -> Self {
         Self {
-            schema_version: "1.10.0".into(),
+            schema_version: "1.12.0".into(),
             minimum_cli_version: Default::default(),
             install: Default::default(),
             vars: Default::default(),
@@ -104,74 +102,98 @@ impl Default for ManifestV1_10_0 {
     }
 }
 
-impl AsTypedOnlyManifest for ManifestV1_10_0 {
+impl AsTypedOnlyManifest for ManifestV1_12_0 {
     fn as_typed_only(&self) -> crate::Manifest<TypedOnly> {
         Manifest {
             inner: TypedOnly {
-                parsed: Parsed::V1_10_0(self.clone()),
+                parsed: Parsed::V1_12_0(self.clone()),
             },
         }
     }
 }
 
-impl SchemaVersion for ManifestV1_10_0 {
+impl SchemaVersion for ManifestV1_12_0 {
     fn get_schema_version(&self) -> KnownSchemaVersion {
-        KnownSchemaVersion::V1_10_0
+        KnownSchemaVersion::V1_12_0
     }
 }
 
+/// Service configuration for V1_12_0: adds optional auto-start behavior
+/// alongside the map of service names to service definitions.
+///
+/// The `service_map` field is a `parsed::common::Services` (BTreeMap tuple
+/// struct) to allow the internal `CommonFields::services()` accessor on
+/// `Parsed` to return a uniform `&common::Services` across all versions.
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
-pub struct Install(
-    #[cfg_attr(
-        any(test, feature = "tests"),
-        proptest(strategy = "btree_map_strategy::<ManifestPackageDescriptor>(10, 3)")
-    )]
-    pub(crate) BTreeMap<String, ManifestPackageDescriptor>,
-);
+pub struct Services {
+    /// Whether to start all services automatically on `flox activate`.
+    /// Can be suppressed with `--no-start-services`.
+    #[serde(rename = "auto-start")]
+    pub auto_start: Option<bool>,
 
-impl From<BTreeMap<String, ManifestPackageDescriptor>> for Install {
-    fn from(value: BTreeMap<String, ManifestPackageDescriptor>) -> Self {
-        Self(value)
-    }
+    /// Map of service names to service definitions.
+    ///
+    /// Note: `deny_unknown_fields` is NOT on `Services` itself because that
+    /// would conflict with `#[serde(flatten)]` here — serde cannot validate
+    /// unknown fields when the map is inlined into the parent. Unknown field
+    /// rejection is instead enforced per entry on `ServiceDescriptor`.
+    #[serde(flatten)]
+    pub(crate) service_map: crate::parsed::common::Services,
 }
 
-impl SkipSerializing for Install {
+impl SkipSerializing for Services {
     fn skip_serializing(&self) -> bool {
-        self.0.is_empty()
+        // Destructuring here prevents us from missing new fields if they're
+        // added in the future.
+        let Services {
+            auto_start,
+            service_map,
+        } = self;
+        auto_start.is_none() && service_map.skip_serializing()
     }
 }
 
-impl_into_inner!(Install, BTreeMap<String, ManifestPackageDescriptor>);
+impl Services {
+    pub fn validate(&self) -> Result<(), ManifestError> {
+        self.service_map.validate()
+    }
 
-#[cfg(test)]
-pub mod test {
-    use indoc::indoc;
+    /// Create a new [Services] instance with services for systems other than
+    /// `system` filtered out.
+    ///
+    /// Clone the services rather than filter in place to avoid accidental
+    /// mutation of the original in memory manifest/lockfile. Preserves the
+    /// `auto_start` setting.
+    pub fn copy_for_system(&self, system: &System) -> Self {
+        Services {
+            auto_start: self.auto_start,
+            service_map: self.service_map.copy_for_system(system),
+        }
+    }
+}
 
-    use super::*;
-    use crate::test_helpers::with_latest_schema;
+impl std::ops::Deref for Services {
+    type Target = crate::parsed::common::Services;
 
-    #[test]
-    fn deserializes_manifest_with_outputs() {
-        let contents_default = with_latest_schema(indoc! {r#"
-            [install]
-            hello.pkg-path = "hello"
-        "#});
+    fn deref(&self) -> &Self::Target {
+        &self.service_map
+    }
+}
 
-        let contents_all = with_latest_schema(indoc! {r#"
-            [install]
-            hello.pkg-path = "hello"
-            hello.outputs = "all"
-        "#});
+impl Inner for Services {
+    type Inner = BTreeMap<String, ServiceDescriptor>;
 
-        let contents_specific = with_latest_schema(indoc! {r#"
-            [install]
-            hello.pkg-path = "hello"
-            hello.outputs = ["foo", "bar"]
-        "#});
+    fn inner(&self) -> &Self::Inner {
+        self.service_map.inner()
+    }
 
-        let _: ManifestV1_10_0 = toml_edit::de::from_str(&contents_default).unwrap();
-        let _: ManifestV1_10_0 = toml_edit::de::from_str(&contents_all).unwrap();
-        let _: ManifestV1_10_0 = toml_edit::de::from_str(&contents_specific).unwrap();
+    fn inner_mut(&mut self) -> &mut Self::Inner {
+        self.service_map.inner_mut()
+    }
+
+    fn into_inner(self) -> Self::Inner {
+        self.service_map.into_inner()
     }
 }

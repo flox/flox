@@ -22,6 +22,7 @@ let
   buildenvLib = ../../buildenv/buildenvLib;
   buildenv_nix = ../../buildenv/buildenv.nix;
   builder_pl = ../../buildenv/builder.pl;
+  BuilderLibs_pm = ../../buildenv/BuilderLibs.pm;
   activationScripts_fallback = builtins.getEnv "FLOX_INTERPRETER";
   interpreter_out =
     if flox-interpreter != null then flox-interpreter.out else "${activationScripts_fallback}";
@@ -50,7 +51,7 @@ let
   );
   perl = callPackage ./flox-perl.nix {
     # Script which determines the modules to keep.
-    perlScript = ../../buildenv/builder.pl;
+    perlScript = BuilderLibs_pm;
   };
 in
 runCommand "${pname}-${version}"
@@ -75,6 +76,8 @@ runCommand "${pname}-${version}"
     cp ${builder_pl} "$out/lib/builder.pl"
     chmod +x "$out/lib/builder.pl"
     substituteAllInPlace "$out/lib/builder.pl"
+
+    cp ${BuilderLibs_pm} "$out/lib/BuilderLibs.pm"
 
     cp ${buildenv_nix} "$out/lib/buildenv.nix"
     substituteAllInPlace "$out/lib/buildenv.nix"

@@ -63,7 +63,10 @@ there are none), and the version in the links.
 * [RPM (x86_64-linux)](https://downloads.flox.dev/by-env/stable/rpm/flox-1.0.0.x86_64-linux.rpm)
 * [RPM (aarch64-linux)](https://downloads.flox.dev/by-env/stable/rpm/flox-1.0.0.aarch64-linux.rpm)
 * [OSX (x86_64-darwin)](https://downloads.flox.dev/by-env/stable/osx/flox-1.0.0.x86_64-darwin.pkg)
-* [OSX (aarch64-darwin)](https://downloads.flox.dev/by-env/stable/osx/flox-1.0.0.aarch64-darwin.pkg
+* [OSX (aarch64-darwin)](https://downloads.flox.dev/by-env/stable/osx/flox-1.0.0.aarch64-darwin.pkg)
+
+> [!NOTE]
+> You can find the [SHA256 checksums for Flox 1.0.0](https://downloads.flox.dev/by-env/stable/flox-1.0.0.SHA256SUMS) and [SHA512 checksums for Flox 1.0.0](https://downloads.flox.dev/by-env/stable/flox-1.0.0.SHA512SUMS) online.
 ```
 
 Upon completion and acceptence, offer to write the contents to a file so the

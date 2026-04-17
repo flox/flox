@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
-use flox_manifest::interfaces::{AsWritableManifest, CommonFields, WriteManifest};
+use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::raw::SyncTypedToRaw;
 use flox_manifest::{Manifest, Migrated};
 use flox_rust_sdk::flox::Flox;
@@ -565,7 +565,7 @@ impl Pull {
         let mut manifest = env
             .manifest_without_migrating(flox)?
             .migrate(lockfile.as_ref())?;
-        let maybe_systems = manifest.options_mut().systems.as_mut();
+        let maybe_systems = manifest.as_latest_schema_mut().options.systems.as_mut();
         if let Some(systems) = maybe_systems {
             if systems.contains(&flox.system) {
                 return Ok(manifest);

@@ -53,8 +53,8 @@ just build-release             # Build optimized release version
 just build-cli                 # Build only CLI (faster for Rust-only changes)
 
 # Running
-./cli/target/debug/flox --help # Run built binary
-pushd cli; cargo run -- <args>; popd # Run via cargo
+./target/debug/flox --help     # Run built binary
+cargo run -p flox -- <args>    # Run via cargo
 
 # Testing
 just test-all                  # Full test suite (nix-plugins, unit, integration)
@@ -70,8 +70,8 @@ just integ-tests activate.bats -- --filter regex  # Run integration tests, filte
 
 # Formatting and Linting
 just format                    # Format all code
-pushd cli; cargo fmt; popd           # Format Rust
-pushd cli; cargo clippy --all; popd  # Lint Rust
+cargo fmt                      # Format Rust
+cargo clippy --all             # Lint Rust
 treefmt -f nix .               # Format Nix
 pre-commit run -a              # Run all linters
 ```
@@ -153,6 +153,58 @@ FLOX_ACTIVATE_TRACE=1 result/bin/flox activate [args]
   - Use `assert_eq!` on entire structs in tests so that it's easier to debug failures and catch new fields; don't `assert!` or `assert_eq!` on individual fields
   - Add `use` statements to modules; don't inline absolute paths and don't add to nearest function
   - Always update `use` statements when moving code between modules; don't re-export existing names
+  - **Error handling architecture:**
+    - When improving error messages, first understand the existing
+      error type hierarchy before adding string-matching at call
+      sites. Extend error enums with new variants rather than
+      parsing `.to_string()` output.
+    - The git provider layer has a classification pattern:
+      `GitCommandError` → `GitRemoteCommandError` (with typed
+      variants like `AccessDenied`, `Diverged`, `RefNotFound`).
+      New failure modes should be added as variants here, not
+      detected by string matching downstream.
+    - Credential sanitization, access-denied detection, and similar
+      cross-cutting concerns belong in `Display` impls or `From`
+      conversions on the error types, not sprinkled at individual
+      call sites.
+  - **Provider traits and associated types:**
+    - Before defining a provider trait, ask whether alternative
+      implementations (including mocks) are realistic. If not, a
+      concrete type is simpler and more honest.
+    - Avoid associated types on provider traits unless
+      alternative implementations are realistic. They make
+      bounds harder to write and in practice often constrain
+      consumers to exactly one implementation.
+    - If a provider trait already has associated types, don't
+      constrain them in consumers (e.g.,
+      `impl GitProvider<GetOriginError = …>`). If something only
+      works with one implementation, take the concrete type
+      directly rather than hiding that fact behind a pinned trait
+      constraint.
+    - For non-provider traits where associated types are
+      semantically meaningful (e.g.,
+      `impl IntoIterator<Item = X>`), constraining them is
+      correct and expected.
+  - **Understand semantics before rewriting messages:** Before
+    changing an error message, verify what condition actually
+    triggers it. The message must describe what is actually wrong,
+    not an approximation inferred from a surface reading of the
+    code.
+  - Use `formatdoc!` (from `indoc`) for multiline formatted
+    strings rather than `\n\` line continuations in function
+    bodies. Proc-macro attributes (`#[error(...)]`,
+    `#[bpaf(...)]`) require string literals and cannot use
+    macros.
+  - **User-facing string literals:** Prefer stretching past the
+    line-width limit rather than breaking messages with `\`
+    continuations. The output the user sees matters more than
+    source line length. Quote suggested commands with single
+    quotes (e.g., `'git push'`).
+  - **Test naming:** Do not prefix test functions with `test_`.
+    The `#[cfg(test)]` module and `#[test]` attribute already
+    identify them as tests. Name tests descriptively for what
+    they verify (e.g.,
+    `gather_repo_meta_no_upstream_suggests_set_upstream`).
 - **Commits:** Conventional commits format (`feat:`, `fix:`, `chore:`, etc.). Use `cz commit` for interactive commits
 - **Rust 2024 edition** for main crates
 
@@ -186,11 +238,19 @@ correct manifest lifecycle at compile time. Follow these rules strictly.
   `manifest.as_writable().write_to_file(path)`, which handle schema version
   selection and format preservation.
 
-- **Use trait methods, not inner type access** - prefer trait methods
-  (`CommonFields`, `PackageLookup`, `SchemaVersion`, `AsLatestSchema`) over
-  extracting and mutating inner types directly. Only use
-  `as_latest_schema()` / `as_latest_schema_mut()` when you genuinely need
-  latest-schema-specific fields.
+- **Outside `flox-manifest`, operate on `ManifestLatest`** - do not introduce
+  or expand adapter traits like `CommonFields` so callers can pretend all
+  schema versions are interchangeable. The intended model is: migrate to the
+  latest schema, then operate on `ManifestLatest`.
+
+- The pattern for `PackageLookup` and `SchemaVersion` doesn't quite match the
+  pattern we want to use for operating on `ManifestLatest`, but for now we'll
+  keep using the `PackageLookup` trait.
+
+- **Use lockfile migration helpers** - when reading manifest data from a
+  `Lockfile`, prefer `lockfile.migrated_manifest()` for the merged manifest and
+  `lockfile.migrated_user_manifest()` for the user-authored manifest instead of
+  calling `lockfile.manifest.migrate_typed_only(...)` directly at call sites.
 
 - **Tests: use test helpers** (behind `feature = "tests"`):
   - `flox_manifest::raw::test_helpers`: `mk_test_manifest_from_contents()`,

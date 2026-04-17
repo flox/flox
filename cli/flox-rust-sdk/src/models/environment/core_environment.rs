@@ -8,7 +8,6 @@ use flox_manifest::interfaces::{
     AsLatestSchema,
     AsTypedOnlyManifest,
     AsWritableManifest,
-    CommonFields,
     ContentsMatch,
     OriginalSchemaVersion,
     PackageLookup,
@@ -960,34 +959,32 @@ pub enum EditResult {
 impl EditResult {
     /// The user needs to re-activate to have changes made to the environment
     /// take effect
-    pub fn reactivate_required(&self) -> bool {
+    pub fn reactivate_required(&self) -> Result<bool, ManifestError> {
         match self {
-            Self::Unchanged => false,
+            Self::Unchanged => Ok(false),
             Self::Changed {
                 old_lockfile,
                 new_lockfile,
                 ..
             } => {
-                let hook_changed = old_lockfile
-                    .as_ref()
-                    .as_ref()
-                    .and_then(|lockfile| lockfile.manifest.hook())
-                    != new_lockfile.manifest.hook();
+                let new_migrated = new_lockfile.migrated_manifest()?;
+                let new_manifest = new_migrated.as_latest_schema();
 
-                let vars_changed = &old_lockfile
+                let old_migrated = old_lockfile
                     .as_ref()
                     .as_ref()
-                    .map(|lockfile| lockfile.manifest.vars().clone())
-                    .unwrap_or_default()
-                    != new_lockfile.manifest.vars();
+                    .map(|lockfile| lockfile.migrated_manifest())
+                    .transpose()?;
+                let old_manifest = old_migrated.as_ref().map(|m| m.as_latest_schema());
 
-                let profile_changed = old_lockfile
-                    .as_ref()
-                    .as_ref()
-                    .and_then(|lockfile| lockfile.manifest.profile())
-                    != new_lockfile.manifest.profile();
+                let hook_changed =
+                    old_manifest.and_then(|m| m.hook.as_ref()) != new_manifest.hook.as_ref();
+                let vars_changed =
+                    old_manifest.map(|m| m.vars.clone()).unwrap_or_default() != new_manifest.vars;
+                let profile_changed =
+                    old_manifest.and_then(|m| m.profile.as_ref()) != new_manifest.profile.as_ref();
 
-                hook_changed || vars_changed || profile_changed
+                Ok(hook_changed || vars_changed || profile_changed)
             },
         }
     }
@@ -1308,6 +1305,7 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     use flox_core::activate::mode::ActivateMode;
+    use flox_manifest::interfaces::AsLatestSchema;
     use flox_manifest::parsed::Inner;
     use flox_manifest::raw::CatalogPackage;
     use flox_manifest::test_helpers::{with_latest_schema, with_schema};
@@ -1469,7 +1467,7 @@ mod tests {
         let result = env_view.edit(&flox, new_env_str.to_string()).unwrap();
 
         assert!(matches!(result, EditResult::Changed { .. }));
-        assert!(!result.reactivate_required());
+        assert!(!result.reactivate_required().unwrap());
     }
 
     /// After adding a hook with edit, reactivate_required returns true
@@ -1486,7 +1484,7 @@ mod tests {
 
         let result = env_view.edit(&flox, new_env_str.to_string()).unwrap();
 
-        assert!(result.reactivate_required());
+        assert!(result.reactivate_required().unwrap());
     }
 
     /// Check that with an empty list of packages to upgrade, all packages are upgraded
@@ -1710,14 +1708,16 @@ mod tests {
         // Make a non-formatting change to the lock
         {
             let mut lockfile = environment.existing_lockfile().unwrap().unwrap();
-            lockfile.manifest.options_mut().activate.mode = Some(ActivateMode::Dev);
+            let mut manifest = lockfile.migrated_manifest().unwrap();
+            manifest.as_latest_schema_mut().options.activate.mode = Some(ActivateMode::Dev);
+            lockfile.manifest = manifest.into();
             let lockfile_contents = serialize_json_with_newline(&lockfile).unwrap();
             let lockfile_path = environment.lockfile_path();
-            let mut lockfile = OpenOptions::new().write(true).open(lockfile_path).unwrap();
-            lockfile.write_all(lockfile_contents.as_bytes()).unwrap();
+            let mut file = OpenOptions::new().write(true).open(lockfile_path).unwrap();
+            file.write_all(lockfile_contents.as_bytes()).unwrap();
 
             // fsync metadata to ensure the mtime is updated
-            lockfile.sync_all().unwrap();
+            file.sync_all().unwrap();
         }
 
         let mtime_original = environment
@@ -1752,7 +1752,8 @@ mod tests {
         "#});
         let mut manifest = Manifest::parse_and_migrate(bad_manifest, None).unwrap();
         manifest
-            .services_mut()
+            .as_latest_schema_mut()
+            .services
             .inner_mut()
             .get_mut("bad")
             .unwrap()

@@ -3,7 +3,7 @@ use std::str::FromStr;
 use std::{fs, io};
 
 use flox_core::data::environment_ref::{EnvironmentName, EnvironmentOwner, RemoteEnvironmentRef};
-use flox_manifest::interfaces::{AsWritableManifest, CommonFields, ContentsMatch, WriteManifest};
+use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, ContentsMatch, WriteManifest};
 use flox_manifest::lockfile::{LOCKFILE_FILENAME, Lockfile};
 use flox_manifest::parsed::common::IncludeDescriptor;
 use flox_manifest::raw::{CatalogPackage, FlakePackage, PackageToInstall, StorePath};
@@ -1217,9 +1217,10 @@ pub enum PushResult {
 
 /// Ensure that the environment does not include local includes before pushing it to FloxHub
 fn check_for_local_includes(lockfile: &Lockfile) -> Result<(), ManagedEnvironmentError> {
-    let manifest = lockfile.user_manifest();
+    let manifest = lockfile.migrated_user_manifest()?;
+    let manifest = manifest.as_latest_schema();
     let has_local_include = manifest
-        .include()
+        .include
         .environments
         .iter()
         .any(|include| matches!(include, IncludeDescriptor::Local { .. }));

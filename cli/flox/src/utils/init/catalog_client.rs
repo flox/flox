@@ -1,21 +1,16 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 use std::str::FromStr;
 
 use flox_catalog::{
     CatalogClient,
     CatalogClientConfig,
     CatalogMockMode,
+    DEFAULT_CATALOG_URL,
     FloxhubToken,
     auth_strategy_from_method,
 };
 use flox_rust_sdk::flox::FLOX_VERSION;
-use flox_rust_sdk::providers::catalog::{
-    Client,
-    DEFAULT_CATALOG_URL,
-    FLOX_CATALOG_DUMP_DATA_VAR,
-    FLOX_CATALOG_MOCK_DATA_VAR,
-};
+use flox_rust_sdk::providers::catalog::Client;
 use flox_rust_sdk::utils::{HEADER_DEVICE_UUID, INVOCATION_SOURCES};
 use tracing::debug;
 use uuid::Uuid;
@@ -43,15 +38,7 @@ pub fn init_catalog_client(
         extra_headers.insert("flox-invocation-source".to_string(), sources_str);
     };
 
-    let mock_mode = if let Ok(path_str) = std::env::var(FLOX_CATALOG_MOCK_DATA_VAR) {
-        let path = PathBuf::from(path_str);
-        CatalogMockMode::Replay(path)
-    } else if let Ok(path_str) = std::env::var(FLOX_CATALOG_DUMP_DATA_VAR) {
-        let path = PathBuf::from(path_str);
-        CatalogMockMode::Record(path)
-    } else {
-        CatalogMockMode::None
-    };
+    let mock_mode = CatalogMockMode::default_from_env();
 
     let client_config = CatalogClientConfig {
         catalog_url: config

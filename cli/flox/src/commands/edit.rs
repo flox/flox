@@ -233,7 +233,7 @@ impl Edit {
                 ref new_lockfile,
                 ..
             } => {
-                if result.reactivate_required()
+                if result.reactivate_required()?
                     && activated_environments().is_active(&active_environment)
                 {
                     message::warning(reactivate_required_note);
@@ -338,7 +338,7 @@ impl Edit {
             )
             | Err(
                 e @ EnvironmentError::Core(CoreEnvironmentError::Services(
-                    ServiceError::InvalidConfig(_),
+                    ServiceError::Passthrough(_),
                 )),
             )
             | Err(e @ EnvironmentError::Recoverable(_))

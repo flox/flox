@@ -23,41 +23,54 @@ use crate::parsed::{Inner, latest, v1};
 /// between needing a lockfile to migrate, but needing a manifest in order to
 /// create a lockfile.
 pub(crate) fn migrate_manifest_v1_to_v1_10_0(
-    manifest: &ManifestV1,
+    manifest: ManifestV1,
     lockfile: Option<&Lockfile>,
 ) -> Result<ManifestV1_10_0, MigrationError> {
+    let ManifestV1 {
+        version: _,
+        install,
+        vars,
+        hook,
+        profile,
+        options,
+        services,
+        build,
+        containerize,
+        include,
+    } = manifest;
+
     let mut migrated = ManifestV1_10_0 {
         schema_version: "1.10.0".to_string(),
         minimum_cli_version: Default::default(),
         install: latest::Install::default(),
-        vars: manifest.vars.clone(),
-        hook: manifest.hook.clone(),
-        profile: manifest.profile.clone(),
-        options: manifest.options.clone(),
-        services: manifest.services.clone(),
-        build: manifest.build.clone(),
-        containerize: manifest.containerize.clone(),
-        include: manifest.include.clone(),
+        vars,
+        hook,
+        profile,
+        options,
+        services,
+        build,
+        containerize,
+        include,
     };
 
-    let collected = collect_locked_packages_by_kind(manifest, lockfile)?;
-    let install = migrated.install.inner_mut();
+    let collected = collect_locked_packages_by_kind(&install, lockfile)?;
+    let new_install = migrated.install.inner_mut();
     for locked_descriptor in collected.catalog.iter() {
-        install
+        new_install
             .entry(locked_descriptor.install_id.clone())
             .insert_entry(locked_descriptor.migrated());
     }
     for locked_descriptor in collected.flake.iter() {
-        install
+        new_install
             .entry(locked_descriptor.install_id.clone())
             .insert_entry(locked_descriptor.migrated());
     }
     // Note: We don't need to migrate store path packages, they just get passed through
-    for (id, pd) in manifest.install.inner().iter().filter_map(|(id, mpd)| {
+    for (id, pd) in install.inner().iter().filter_map(|(id, mpd)| {
         mpd.as_store_path_descriptor_ref()
             .map(|store_path_pd| (id.clone(), store_path_pd))
     }) {
-        install.insert(id, latest::ManifestPackageDescriptor::StorePath(pd.clone()));
+        new_install.insert(id, latest::ManifestPackageDescriptor::StorePath(pd.clone()));
     }
 
     Ok(migrated)
@@ -209,13 +222,13 @@ fn get_locked_packages_by_install_id(
 /// Partitions the locked packages based on whether they come from
 /// the catalog, a flake, or a store path.
 fn collect_locked_packages_by_kind(
-    manifest: &ManifestV1,
+    install: &v1::Install,
     lockfile: Option<&Lockfile>,
 ) -> Result<CollectedPackages, MigrationError> {
     let mut catalog_pkgs = vec![];
     let mut flake_pkgs = vec![];
     if let Some(lockfile) = lockfile {
-        for (install_id, descriptor) in manifest.install.inner().iter() {
+        for (install_id, descriptor) in install.inner().iter() {
             use v1::ManifestPackageDescriptor::*;
             match descriptor {
                 Catalog(pd) => {
@@ -272,7 +285,7 @@ fn collect_locked_packages_by_kind(
             }
         }
     } else {
-        for (install_id, descriptor) in manifest.install.inner().iter() {
+        for (install_id, descriptor) in install.inner().iter() {
             use v1::ManifestPackageDescriptor::*;
             match descriptor {
                 Catalog(pd) => {
@@ -433,7 +446,8 @@ mod tests {
             CanonicalPath::new_unchecked(GENERATED_DATA.join("envs/krb5_prereqs/manifest.lock"));
         let lockfile = Lockfile::read_from_file(&lockfile_path).unwrap();
 
-        let collected = collect_locked_packages_by_kind(&manifest, Some(&lockfile)).unwrap();
+        let collected =
+            collect_locked_packages_by_kind(&manifest.install, Some(&lockfile)).unwrap();
 
         assert_eq!(collected.catalog.len(), 7);
         assert_eq!(collected.flake.len(), 0);
@@ -545,7 +559,7 @@ mod tests {
             CanonicalPath::new_unchecked(GENERATED_DATA.join("envs/krb5_prereqs/manifest.lock"));
         let lockfile = Lockfile::read_from_file(&lockfile_path).unwrap();
 
-        let migrated = migrate_manifest_v1_to_v1_10_0(&manifest, Some(&lockfile)).unwrap();
+        let migrated = migrate_manifest_v1_to_v1_10_0(manifest, Some(&lockfile)).unwrap();
         assert_eq!(migrated.get_schema_version(), KnownSchemaVersion::V1_10_0);
     }
 }
