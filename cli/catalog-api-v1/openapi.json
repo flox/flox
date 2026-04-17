@@ -1221,6 +1221,92 @@
         }
       }
     },
+    "/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/check-build": {
+      "post": {
+        "tags": [
+          "catalogs"
+        ],
+        "summary": "Check if a build already exists",
+        "description": "Check whether a build already exists for the given source tuple.\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nRequest Body:\n- **source_url**: Source repository URL\n- **source_rev**: Source revision\n- **nixpkgs_rev**: Nixpkgs revision used for the build\n- **system**: Target system (e.g. x86_64-linux)\n\nReturns:\n- **CheckBuildResponse** with already_published=true and provenance\n  if a matching build exists, or already_published=false otherwise.",
+        "operationId": "check_build_api_v1_catalog_catalogs__catalog_name__packages__package_name__check_build_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "catalog_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
+            }
+          },
+          {
+            "name": "package_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9.\\-_]{1,128}",
+              "title": "Package Name",
+              "name": "package_name",
+              "example": "curl"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckBuildRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build existence check result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckBuildResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Catalog or package not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request parameters are invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalog/catalogs/{catalog_name}/locked-sources": {
       "get": {
         "tags": [
@@ -2297,6 +2383,65 @@
         },
         "type": "object",
         "title": "CatalogStoreConfigPublisher"
+      },
+      "CheckBuildRequest": {
+        "properties": {
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "source_rev": {
+            "type": "string",
+            "title": "Source Rev"
+          },
+          "nixpkgs_rev": {
+            "type": "string",
+            "title": "Nixpkgs Rev"
+          },
+          "system": {
+            "$ref": "#/components/schemas/PackageSystem"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_url",
+          "source_rev",
+          "nixpkgs_rev",
+          "system"
+        ],
+        "title": "CheckBuildRequest",
+        "description": "Request body for the check-build endpoint."
+      },
+      "CheckBuildResponse": {
+        "properties": {
+          "already_published": {
+            "type": "boolean",
+            "title": "Already Published"
+          },
+          "source_rev": {
+            "title": "Source Rev",
+            "nullable": true,
+            "type": "string"
+          },
+          "source_rev_date": {
+            "title": "Source Rev Date",
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          },
+          "published_at": {
+            "title": "Published At",
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "already_published"
+        ],
+        "title": "CheckBuildResponse",
+        "description": "Response from the check-build endpoint."
       },
       "DeprecationInfo": {
         "properties": {
