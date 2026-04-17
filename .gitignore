@@ -4,7 +4,9 @@
 .ccls
 .ccls-cache
 .env.*
+.mcp.json
 .pre-commit-config.yaml
+.worktrees/
 /.direnv/
 /.flox
 /autom4te.cache/
