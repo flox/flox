@@ -245,11 +245,7 @@ fn non_interactive_ambiguity_error(binary: &str, candidates: &[PackageCandidate]
 
 /// Build a helpful error message for binary not found.
 fn not_found_error(binary: &str) -> String {
-    format!(
-        "No packages found that provide the binary '{binary}'.\n\
-         Try 'flox search {binary}' to find related packages, then use\n\
-         'flox run --package <pkg> {binary}' to run it explicitly.",
-    )
+    format!("No packages found that provide the binary '{binary}'.")
 }
 
 // ---------------------------------------------------------------------------
