@@ -4,6 +4,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use flox_catalog::ClientTrait;
+use flox_core::Version;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
@@ -67,6 +68,9 @@ struct NixSourceTypeSpec {
 /// and provided to builds using the NEF.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BuildConfig {
+    #[serde(rename = "version")]
+    _version: Version<1>,
+
     // Using an IndexMap to lock in user defined order.
     // This is no hard requirement, the lockfile will be sorted.
     catalogs: IndexMap<CatalogId, CatalogSpec>,
@@ -76,7 +80,23 @@ pub struct BuildConfig {
 pub fn read_config(path: impl AsRef<Path>) -> Result<BuildConfig> {
     let config = fs::read(&path)
         .with_context(|| format!("failed to read {path:?}", path = path.as_ref()))?;
-    let config = toml::from_slice(&config).context("failed to parse config")?;
+
+    #[derive(Debug, Clone, Deserialize, Serialize)]
+    #[serde(untagged)]
+    enum ConfigVersionCompat {
+        V1(BuildConfig),
+        VX { version: toml::Value },
+    }
+
+    let config: ConfigVersionCompat =
+        toml::from_slice(&config).context("failed to parse config")?;
+    let config = match config {
+        ConfigVersionCompat::V1(config) => config,
+        ConfigVersionCompat::VX { version } => {
+            anyhow::bail!("unsupported config version: {version}")
+        },
+    };
+
     Ok(config)
 }
 
@@ -109,6 +129,7 @@ pub async fn lock_config_with_options(
     options: &LockOptions,
 ) -> Result<BuildLock> {
     let BuildConfig {
+        _version: Version,
         catalogs: catalog_spec,
     } = config;
 
@@ -140,6 +161,7 @@ pub async fn lock_config_with_options(
     }
 
     Ok(BuildLock {
+        _version: Version,
         catalogs: locked_catalogs,
     })
 }
