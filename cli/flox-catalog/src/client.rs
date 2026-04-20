@@ -671,7 +671,10 @@ where
                 }
                 metadata_yielded = true;
             } else if first_page_metadata.is_some() {
-                tracing::debug!("ignoring metadata on page {page_number} (already yielded from first page)");
+                tracing::debug!(
+                    page_number,
+                    "ignoring metadata on page (already yielded from first page)"
+                );
             }
 
             for result in results {
