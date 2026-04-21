@@ -19,9 +19,28 @@ const INFERENCE_HEURISTICS: &[(&str, Option<&str>, &str)] = &[
         "agentic.claude-code.cli",
     ),
     ("CLAUDE_CODE_SSE_PORT", None, "agentic.claude-code.plugin"),
+    ("CLAUDE_CODE_IS_COWORK", None, "agentic.claude-code.cowork"),
+    // Cursor
+    ("CURSOR_TRACE_ID", None, "agentic.cursor"),
+    ("CURSOR_AGENT", None, "agentic.cursor.cli"),
+    // OpenAI Codex
+    ("CODEX_SANDBOX", None, "agentic.codex"),
+    ("CODEX_CI", None, "agentic.codex"),
+    ("CODEX_THREAD_ID", None, "agentic.codex"),
     // Other agentic tools
-    ("ANTIGRAVITY_AGENT", Some("1"), "agentic.antigravity"),
+    ("ANTIGRAVITY_AGENT", None, "agentic.antigravity"),
+    ("AUGMENT_AGENT", None, "agentic.augment"),
     ("GEMINI_CLI", None, "agentic.gemini"),
+    ("GOOSE_PROVIDER", None, "agentic.goose"),
+    ("REPL_ID", None, "agentic.replit"),
+    // OpenCode
+    ("OPENCODE", None, "agentic.opencode"),
+    ("OPENCODE_CALLER", None, "agentic.opencode"),
+    ("OPENCODE_CLIENT", None, "agentic.opencode"),
+    // GitHub Copilot
+    ("COPILOT_MODEL", None, "agentic.github-copilot"),
+    ("COPILOT_ALLOW_ALL", None, "agentic.github-copilot"),
+    ("COPILOT_GITHUB_TOKEN", None, "agentic.github-copilot"),
 ];
 
 /// Detect invocation sources from environment heuristics
@@ -264,5 +283,51 @@ mod tests {
                 assert!(sources.contains(&"agentic.claude-code.plugin".to_string()));
             },
         );
+    }
+
+    #[test]
+    fn test_detect_invocation_sources_cursor() {
+        temp_env::with_var("CURSOR_TRACE_ID", Some("abc-123"), || {
+            let sources = detect_invocation_sources();
+            assert!(sources.contains(&"agentic.cursor".to_string()));
+        });
+    }
+
+    #[test]
+    fn test_detect_invocation_sources_cursor_cli() {
+        temp_env::with_var("CURSOR_AGENT", Some("1"), || {
+            let sources = detect_invocation_sources();
+            assert!(sources.contains(&"agentic.cursor.cli".to_string()));
+        });
+    }
+
+    #[test]
+    fn test_detect_invocation_sources_codex_via_sandbox() {
+        temp_env::with_var("CODEX_SANDBOX", Some("1"), || {
+            let sources = detect_invocation_sources();
+            assert!(sources.contains(&"agentic.codex".to_string()));
+        });
+    }
+
+    #[test]
+    fn test_detect_invocation_sources_github_copilot_via_model() {
+        temp_env::with_var("COPILOT_MODEL", Some("gpt-4o"), || {
+            let sources = detect_invocation_sources();
+            assert!(sources.contains(&"agentic.github-copilot".to_string()));
+        });
+    }
+
+    #[test]
+    fn test_detect_invocation_sources_antigravity_presence_check() {
+        // ANTIGRAVITY_AGENT is now a presence check (None), not a value check.
+        // Any non-empty value — not just "1" — should trigger detection.
+        temp_env::with_var("ANTIGRAVITY_AGENT", Some("something-else"), || {
+            let sources = detect_invocation_sources();
+            assert!(
+                sources.contains(&"agentic.antigravity".to_string()),
+                "antigravity should be detected when ANTIGRAVITY_AGENT is set \
+                 to any value, not only '1'"
+            );
+        });
     }
 }
