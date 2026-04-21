@@ -1,7 +1,7 @@
-
-version = 1
+schema-version = "1.12.0"
 [install]
 hello.pkg-path = "hello"
+hello.outputs = "all"
 
 [build]
 mypkg.description = "Some sample package description from our tests"

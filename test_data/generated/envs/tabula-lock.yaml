@@ -1,10 +1,11 @@
 {
   "lockfile-version": 1,
   "manifest": {
-    "version": 1,
+    "schema-version": "1.12.0",
     "install": {
       "tabula": {
-        "pkg-path": "tabula"
+        "pkg-path": "tabula",
+        "outputs": "all"
       }
     },
     "options": {

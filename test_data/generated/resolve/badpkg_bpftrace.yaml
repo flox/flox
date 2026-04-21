@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Thu, 05 Mar 2026 12:24:23 GMT
+    value: Tue, 21 Apr 2026 21:57:30 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,7 +14,7 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: Zv9eqgxYIAMEYIA=
+    value: cMLfrhz7oAMEYZA=
   body: '{"items":[{"name":"toplevel","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"attr_path_not_found.not_in_catalog","message":"The package ''badpkg'' is not found in the catalog.","context":{"attr_path":"badpkg","install_id":"badpkg"}},{"level":"error","type":"attr_path_not_found.not_found_for_all_systems","message":"The package ''bpftrace'' is not found for all the requested systems, suggest limiting systems to (aarch64-linux,x86_64-linux).","context":{"attr_path":"bpftrace","install_id":"bpftrace","valid_systems":"aarch64-linux,x86_64-linux"}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'
 ---
 when:
@@ -24,7 +24,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Thu, 05 Mar 2026 12:24:25 GMT
+    value: Tue, 21 Apr 2026 21:57:31 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -32,5 +32,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: Zv9etig8oAMEMDw=
+    value: cMLfugbxoAMEMgg=
   body: '{"items":[],"total_count":0}'
