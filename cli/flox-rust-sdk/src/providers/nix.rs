@@ -6,6 +6,9 @@ use std::sync::LazyLock;
 use serde::Deserialize;
 use tracing::debug;
 
+/// Minimum Nix version that supports S3 multipart upload query parameters.
+pub const NIX_MULTIPART_MIN_VERSION: semver::Version = semver::Version::new(2, 33, 0);
+
 static NIX_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::var("NIX_BIN")
         .unwrap_or_else(|_| env!("NIX_BIN").to_string())
@@ -115,6 +118,55 @@ pub enum NixSubstituterConfigError {
     Parse(#[source] serde_json::Error),
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum NixVersionError {
+    #[error("failed to execute nix --version")]
+    Exec(#[source] std::io::Error),
+    #[error("nix --version failed: {0}")]
+    Failed(String),
+    #[error("failed to parse nix version from output: {0}")]
+    Parse(String),
+}
+
+/// Parse the version from `nix --version` output.
+///
+/// Expected format: `"nix (Nix) 2.31.2+1\n"`.
+/// Development builds use: `"nix (Nix) 2.33.0pre20251224_e23983d"`.
+///
+/// The `+N` build metadata suffix is stripped because build metadata does
+/// not affect semver precedence and simplifies parsing. The `preYYYYMMDD_hash`
+/// dev suffix is not valid semver, so we strip it to extract the base version.
+fn parse_nix_version_output(output: &str) -> Result<semver::Version, NixVersionError> {
+    let version_str = output
+        .trim()
+        .strip_prefix("nix (Nix) ")
+        .ok_or_else(|| NixVersionError::Parse(output.trim().to_string()))?;
+    // Strip +N build suffix (e.g., "2.31.2+1" → "2.31.2")
+    let clean = version_str.split('+').next().unwrap_or(version_str);
+    // Strip preYYYYMMDD_hash dev suffix (e.g., "2.33.0pre20251224_e23983d" → "2.33.0")
+    let clean = clean.split("pre").next().unwrap_or(clean);
+    semver::Version::parse(clean).map_err(|_| NixVersionError::Parse(version_str.to_string()))
+}
+
+/// Detect the runtime Nix version by running `nix --version`.
+///
+/// This respects the `NIX_BIN` environment variable override, so it returns
+/// the version of whichever Nix binary will actually be used for operations.
+pub fn nix_runtime_version() -> Result<semver::Version, NixVersionError> {
+    let output = Command::new(&*NIX_BIN)
+        .arg("--version")
+        .output()
+        .map_err(NixVersionError::Exec)?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        return Err(NixVersionError::Failed(stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_nix_version_output(&stdout)
+}
+
 pub mod test_helpers {
     use std::path::PathBuf;
 
@@ -123,5 +175,63 @@ pub mod test_helpers {
     /// Returns a Nix store path that's known to exist.
     pub fn known_store_path() -> PathBuf {
         NIX_BIN.to_path_buf().canonicalize().unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_clean_version() {
+        let version = parse_nix_version_output("nix (Nix) 2.33.0").unwrap();
+        assert_eq!(version, semver::Version::new(2, 33, 0));
+    }
+
+    #[test]
+    fn parse_version_with_build_suffix() {
+        let version = parse_nix_version_output("nix (Nix) 2.31.2+1").unwrap();
+        assert_eq!(version, semver::Version::new(2, 31, 2));
+    }
+
+    #[test]
+    fn parse_version_with_trailing_newline() {
+        let version = parse_nix_version_output("nix (Nix) 2.33.1\n").unwrap();
+        assert_eq!(version, semver::Version::new(2, 33, 1));
+        assert!(version >= NIX_MULTIPART_MIN_VERSION);
+    }
+
+    #[test]
+    fn parse_old_version_below_multipart_minimum() {
+        let version = parse_nix_version_output("nix (Nix) 2.31.4").unwrap();
+        assert!(version < NIX_MULTIPART_MIN_VERSION);
+    }
+
+    #[test]
+    fn parse_prerelease_dev_build() {
+        let version = parse_nix_version_output("nix (Nix) 2.33.0pre20251224_e23983d").unwrap();
+        assert_eq!(version, semver::Version::new(2, 33, 0));
+        assert!(version >= NIX_MULTIPART_MIN_VERSION);
+    }
+
+    #[test]
+    fn parse_prerelease_with_build_metadata() {
+        let version = parse_nix_version_output("nix (Nix) 2.33.0-rc.1+1").unwrap();
+        assert_eq!(version, semver::Version::parse("2.33.0-rc.1").unwrap());
+        // Pre-release versions compare below the release, so multipart
+        // is not enabled for release candidates. This is intentional.
+        assert!(version < NIX_MULTIPART_MIN_VERSION);
+    }
+
+    #[test]
+    fn parse_garbage_input() {
+        let result = parse_nix_version_output("garbage");
+        assert!(matches!(result, Err(NixVersionError::Parse(_))));
+    }
+
+    #[test]
+    fn parse_empty_version_string() {
+        let result = parse_nix_version_output("nix (Nix) ");
+        assert!(matches!(result, Err(NixVersionError::Parse(_))));
     }
 }
