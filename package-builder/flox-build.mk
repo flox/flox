@@ -494,14 +494,14 @@ define BUILD_nix_sandbox_template =
   # us.
   $(eval $(_pvarname)_src_list = $($(_pvarname)_tmpBasename)/src-list)
   $($(_pvarname)_src_list): $(PROJECT_TMPDIR)/check-build-prerequisites
-	$(_comm) -23 <($(_git) ls-files -c | $(_sort)) <($(_git) ls-files -d | $(_sort)) > $$@
+	$(_comm) -23z <($(_git) ls-files -cz | $(_sort) -z) <($(_git) ls-files -dz | $(_sort) -z) > $$@
 
   # The sourceTarball value needs to be stable when nothing changes across
   # builds, so we create a tarball at a stable temporary path and pass that
   # to the derivation instead.
   $(eval $(_pvarname)_src_tar = $($(_pvarname)_tmpBasename)/src.tar)
   $($(_pvarname)_src_tar): $($(_pvarname)_src_list)
-	$(_V_) $(_tar) -cf $$@ --no-recursion --files-from $$<
+	$(_V_) $(_tar) -cf $$@ --no-recursion --null --files-from $$<
 
   # The buildCache value needs to be similarly stable when nothing changes across
   $(eval $(_pvarname)_buildCache = $($(_pvarname)_tmpBasename)/buildCache.tar)

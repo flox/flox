@@ -3569,6 +3569,61 @@ mod tests {
     async fn manifest_builds_handle_unwritable_subdirs_sandbox_off() {
         manifest_builds_handle_unwritable_subdirs("off").await;
     }
+
+    /// Test that files containing spaces and escape sequences work with
+    /// manifest builds.
+    fn manifest_builds_of_filenames_with_special_characters(sandbox: &str) {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+        let file_name_with_spaces = String::from("Hello World.sh");
+        // real world example from systemd source
+        let file_name_with_escape_chars = String::from("dm-back\\x2dslash.swap");
+        let file_content = format!(
+            "{}\n{}\n",
+            file_name_with_spaces, file_name_with_escape_chars
+        );
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            sandbox = "{sandbox}"
+            command = """
+                # It is enough to spot the files in the output of the following command
+                # because that proves that the source has been successfully extracted
+                # into the build sandbox.
+                mkdir $out
+                ls > $out/{file_name}
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        let file_name_with_spaces_path = env_path.join(file_name_with_spaces);
+        File::create(&file_name_with_spaces_path).unwrap();
+        let file_name_with_escape_chars_path = env_path.join(file_name_with_escape_chars);
+        File::create(&file_name_with_escape_chars_path).unwrap();
+
+        let git = GitCommandProvider::init(&env_path, false).unwrap();
+
+        git.add(&[&file_name_with_spaces_path]).unwrap();
+        git.add(&[&file_name_with_escape_chars_path]).unwrap();
+
+        assert_build_status(&flox, &mut env, &package_name, None, true);
+        assert_build_file(&env_path, &package_name, &file_name, &file_content);
+    }
+
+    #[test]
+    fn manifest_builds_of_filenames_with_special_characters_sandbox_pure() {
+        manifest_builds_of_filenames_with_special_characters("pure");
+    }
+
+    #[test]
+    fn manifest_builds_of_filenames_with_special_characters_sandbox_off() {
+        manifest_builds_of_filenames_with_special_characters("off");
+    }
 }
 
 #[cfg(test)]
