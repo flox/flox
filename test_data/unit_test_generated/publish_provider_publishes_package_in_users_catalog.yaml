@@ -27,10 +27,10 @@ then:
   - name: server
     value: uvicorn
   - name: content-length
-    value: '394'
+    value: '85'
   - name: content-type
     value: application/json
-  body: '{"ingress_uri":"s3://ingress-cache/cache/test_user_no_catalogs?endpoint=http://0.0.0.0:53617&scheme=http","ingress_auth":{"aws-s3":{"envs":{"AWS_ACCESS_KEY_ID":"TESTFAKEKEY000000000","AWS_SECRET_ACCESS_KEY":"testfakesecret0000000000000000000000000000","AWS_SESSION_TOKEN":"testfakesessiontoken","AWS_REGION":"us-east-1"}}},"catalog_store_config":{"store_type":"publisher","publisher_url":null}}'
+  body: '{"ingress_uri":null,"ingress_auth":null,"catalog_store_config":{"store_type":"null"}}'
 ---
 when:
   path: /api/v1/catalog/catalogs/test_user_no_catalogs/packages/mypkg3/builds
