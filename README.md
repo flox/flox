@@ -47,7 +47,7 @@
 Flox provides native packages for each supported platform:
 
 - **macOS** — `pkg` installer or Homebrew
-- **Linux** — `.deb`, `.rpm`, or standalone tarball
+- **Linux** — `.deb` or `.rpm`
 
 See the [installation guide](https://flox.dev/docs/install-flox/install/) for step-by-step instructions.
 
