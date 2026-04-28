@@ -19,9 +19,28 @@ const INFERENCE_HEURISTICS: &[(&str, Option<&str>, &str)] = &[
         "agentic.claude-code.cli",
     ),
     ("CLAUDE_CODE_SSE_PORT", None, "agentic.claude-code.plugin"),
+    ("CLAUDE_CODE_IS_COWORK", None, "agentic.claude-code.cowork"),
+    // Cursor
+    ("CURSOR_TRACE_ID", None, "agentic.cursor"),
+    ("CURSOR_AGENT", None, "agentic.cursor.cli"),
+    // OpenAI Codex
+    ("CODEX_SANDBOX", None, "agentic.codex"),
+    ("CODEX_CI", None, "agentic.codex"),
+    ("CODEX_THREAD_ID", None, "agentic.codex"),
     // Other agentic tools
-    ("ANTIGRAVITY_AGENT", Some("1"), "agentic.antigravity"),
+    ("ANTIGRAVITY_AGENT", None, "agentic.antigravity"),
+    ("AUGMENT_AGENT", None, "agentic.augment"),
     ("GEMINI_CLI", None, "agentic.gemini"),
+    ("GOOSE_PROVIDER", None, "agentic.goose"),
+    ("REPL_ID", None, "agentic.replit"),
+    // OpenCode
+    ("OPENCODE", None, "agentic.opencode"),
+    ("OPENCODE_CALLER", None, "agentic.opencode"),
+    ("OPENCODE_CLIENT", None, "agentic.opencode"),
+    // GitHub Copilot
+    ("COPILOT_MODEL", None, "agentic.github-copilot"),
+    ("COPILOT_ALLOW_ALL", None, "agentic.github-copilot"),
+    ("COPILOT_GITHUB_TOKEN", None, "agentic.github-copilot"),
 ];
 
 /// Detect invocation sources from environment heuristics
