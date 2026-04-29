@@ -591,6 +591,41 @@ impl GitCommandProvider {
         Self::clone_branch_with(GitCommandOptions::default(), origin, path, branch, bare)
     }
 
+    /// Clone a local repository into `dest` using `--shared` so that object
+    /// storage is backed by `source` rather than copied, then check out the
+    /// specified `rev`.  `dest` must not exist yet; it is created by the clone.
+    ///
+    /// The resulting clone has full access to the source's commit history and
+    /// tags, enabling `git describe` and `git ls-files` to work correctly in
+    /// build scripts.
+    pub fn clone_shared(
+        source: impl AsRef<Path>,
+        dest: impl AsRef<Path>,
+        rev: &str,
+    ) -> Result<Self, GitCommandError> {
+        let options = GitCommandOptions::default();
+
+        let mut clone_cmd = options.new_command();
+        clone_cmd
+            .arg("clone")
+            .arg("--shared")
+            .arg(source.as_ref())
+            .arg(dest.as_ref());
+        GitCommandProvider::run_command(&mut clone_cmd)?;
+
+        let clone = GitCommandProvider {
+            options,
+            workdir: Some(dest.as_ref().to_path_buf()),
+            path: dest.as_ref().to_path_buf(),
+        };
+
+        let mut checkout_cmd = clone.new_command();
+        checkout_cmd.arg("checkout").arg(rev);
+        GitCommandProvider::run_command(&mut checkout_cmd)?;
+
+        Ok(clone)
+    }
+
     /// Fetch branch and update the corresponding local ref
     pub fn fetch_branch(
         &self,

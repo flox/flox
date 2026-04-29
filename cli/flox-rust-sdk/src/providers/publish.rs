@@ -25,9 +25,8 @@ use git_url_parse::GitUrl;
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use nef_lock_catalog::LockOptions;
-use nef_lock_catalog::lock::{NixFlakeref, lock_url_with_options};
-use serde_json::json;
+use nef_lock_catalog::lock::NixFlakeref;
+use serde_json;
 use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
@@ -46,7 +45,7 @@ use super::build::{
 use super::git::{GitCommandError, GitCommandGetOriginError, GitCommandProvider, StatusInfo};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
-use crate::models::environment::{Environment, EnvironmentError, copy_dir_recursive, open_path};
+use crate::models::environment::{Environment, EnvironmentError, open_path};
 use crate::providers::auth::catalog_auth_to_envs;
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
@@ -173,23 +172,6 @@ pub struct CheckedEnvironmentMetadata {
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
     _private: (),
-}
-
-impl CheckedEnvironmentMetadata {
-    /// Create a canonical flakeref for NEF builds from the metadata collected for the git remote.
-    fn remote_flakeref(&self) -> Result<NixFlakeref, PublishError> {
-        let value = json! ({
-          "type": "git",
-          "url": self.build_repo_meta.url,
-          "rev": self.build_repo_meta.rev,
-          "dir": self.rel_expression_build_base_dir.to_string_lossy()
-        });
-        NixFlakeref::try_from(value.clone()).map_err(|e| {
-            PublishError::Catchall(format!(
-                "internal constructed flakeref should be valid.\nvalue: {value}\nerror: {e}"
-            ))
-        })
-    }
 }
 
 /// Ensures that the required metadata for publishing is consistent from the build process
@@ -876,43 +858,54 @@ pub fn check_build_metadata(
     env_metadata: &CheckedEnvironmentMetadata,
     pkg: &PackageTarget,
 ) -> Result<CheckedBuildMetadata, PublishError> {
-    // Fetch remote sources based on the source info collected in `CheckedEnvironmentMetadata`.
-    // This serves several purposes:
-    // 1. It ensures that the source info we have is indeed valid and accessible
-    // 2. It provides a guaranteed clean checkout that is consistent
-    //    with reproduction/catalog import.
-    // 3. It reduces coupling of publish to _the_ local repo
-    let expression_ref = env_metadata.remote_flakeref()?;
-    let expression_ref_fetched = lock_url_with_options(&expression_ref, &LockOptions::default())
-        .map_err(|e| PublishError::Catchall(e.to_string()))?;
-    let expression_ref_locked = expression_ref_fetched.locked_flakeref();
+    // Derive a stable clone directory name from the repository name so that
+    // the Nix source path (which factors into the build sandbox checksum) is
+    // consistent across publish attempts.
+    let repo_name = env_metadata.repo_root_path.file_name().ok_or_else(|| {
+        PublishError::Catchall("repo root path has no directory name".to_string())
+    })?;
 
-    // git clone into a temp directory
+    // Parent temp dir — the clone lives inside as `<parent>/<repo_name>`.
     let clean_repo_path = tempfile::tempdir_in(&flox.temp_dir)
         .map_err(|err| PublishError::Catchall(format!("could not create tempdir: {err}")))?
         .keep();
+    let clone_dir = clean_repo_path.join(repo_name);
+
+    // Produce a clean git clone of the committed revision using `--shared`
+    // so that git object storage is backed by the local repo rather than
+    // copied.  This gives build scripts full access to history, tags, and
+    // `git ls-files` / `git describe`.
+    GitCommandProvider::clone_shared(
+        &env_metadata.repo_root_path,
+        &clone_dir,
+        &env_metadata.build_repo_meta.rev,
+    )?;
+
+    // Point the expression ref at the `.flox` directory inside the clone.
+    let expression_ref =
+        NixFlakeref::from_path(clone_dir.join(&env_metadata.rel_expression_build_base_dir))
+            .map_err(|e| PublishError::Catchall(e.to_string()))?;
 
     // base dir and buildtime environments **for manifest builds**
-    // both are inferred from the fetched source,
+    // both are inferred from the cloned source,
     // based on relative directories of the local environment.
-    // Similar assumptions are made by the NEF at  eval time.
+    // Similar assumptions are made by the NEF at eval time.
     let (base_dir, built_environments) = {
-        copy_dir_recursive(expression_ref_fetched.store_path(), &clean_repo_path, false)
-            .map_err(|e| PublishError::Catchall(e.to_string()))?;
-        let project_path =
-            CanonicalPath::new(clean_repo_path.join(env_metadata.rel_project_path.as_path()))
-                .map_err(|_err| {
-                    PublishError::UnsupportedEnvironmentState(
-                    "Flox project not found in clean checkout, is it tracked in the repository?"
-                        .to_string(),
-                )
-                })?;
+        let project_path = CanonicalPath::new(
+            clone_dir.join(env_metadata.rel_project_path.as_path()),
+        )
+        .map_err(|_err| {
+            PublishError::UnsupportedEnvironmentState(
+                "Flox project not found in clean checkout, is it tracked in the repository?"
+                    .to_string(),
+            )
+        })?;
         let mut clean_build_env = open_path(flox, &project_path, None)
             .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
         (clean_build_env.parent_path()?, clean_build_env.build(flox)?)
     };
 
-    let builder = FloxBuildMk::new(flox, &base_dir, &expression_ref_locked, &built_environments);
+    let builder = FloxBuildMk::new(flox, &base_dir, &expression_ref, &built_environments);
 
     // Build the package and collect the outputs
     let build_results = builder.build(
