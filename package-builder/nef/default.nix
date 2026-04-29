@@ -13,7 +13,7 @@ let
     };
   };
   libOverlay = (import ./lib).overlay;
-  lib = nixpkgs.lib.extend libOverlay;
+  lib = nixpkgs-flake.lib.extend libOverlay;
 
   parsedRef =
     if builtins.isAttrs source-ref then
