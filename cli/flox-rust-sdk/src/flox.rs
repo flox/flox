@@ -130,6 +130,8 @@ pub struct Features {
     pub upload: bool,
     #[serde(default)]
     pub qa: bool,
+    #[serde(default)]
+    pub auto_activate: bool,
 }
 
 pub static DEFAULT_FLOXHUB_URL: LazyLock<Url> =
