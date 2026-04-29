@@ -134,6 +134,12 @@ flox config --set 'trusted_environments."owner/name"' trust
 
     (default: true)
 
+`keep_tempdir`
+:   Flox creates a single tempdir for each process in   
+    `$FLOX_CACHE_HOME/process`.   
+    Flox will delete this tempdir upon conclusion of the process
+    unless `keep_tempdir == true` AND verbose logs are enabled.
+
 # ENVIRONMENT VARIABLES
 
 `$FLOX_DISABLE_METRICS`

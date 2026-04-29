@@ -115,7 +115,7 @@ pub struct FloxConfig {
 
     /// Flox creates a single tempdir for each process in
     /// `$FLOX_CACHE_HOME/process`.
-    /// Flox will delete this empdir upon conclusion of the process
+    /// Flox will delete this tempdir upon conclusion of the process
     /// unless `keep_tempdir == true` AND verbose logs are enabled.
     pub keep_tempdir: Option<bool>,
 }

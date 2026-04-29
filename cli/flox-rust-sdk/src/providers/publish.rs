@@ -888,8 +888,9 @@ pub fn check_build_metadata(
     let expression_ref_locked = expression_ref_fetched.locked_flakeref();
 
     // git clone into a temp directory
-    let clean_repo_path = tempfile::tempdir_in(flox.temp_dir.clone())
-        .map_err(|err| PublishError::Catchall(format!("could not create tempdir: {err}")))?;
+    let clean_repo_path = tempfile::tempdir_in(&flox.temp_dir)
+        .map_err(|err| PublishError::Catchall(format!("could not create tempdir: {err}")))?
+        .keep();
 
     // base dir and buildtime environments **for manifest builds**
     // both are inferred from the fetched source,
@@ -898,17 +899,14 @@ pub fn check_build_metadata(
     let (base_dir, built_environments) = {
         copy_dir_recursive(expression_ref_fetched.store_path(), &clean_repo_path, false)
             .map_err(|e| PublishError::Catchall(e.to_string()))?;
-        let project_path = CanonicalPath::new(
-            clean_repo_path
-                .path()
-                .join(env_metadata.rel_project_path.as_path()),
-        )
-        .map_err(|_err| {
-            PublishError::UnsupportedEnvironmentState(
-                "Flox project not found in clean checkout, is it tracked in the repository?"
-                    .to_string(),
-            )
-        })?;
+        let project_path =
+            CanonicalPath::new(clean_repo_path.join(env_metadata.rel_project_path.as_path()))
+                .map_err(|_err| {
+                    PublishError::UnsupportedEnvironmentState(
+                    "Flox project not found in clean checkout, is it tracked in the repository?"
+                        .to_string(),
+                )
+                })?;
         let mut clean_build_env = open_path(flox, &project_path, None)
             .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
         (clean_build_env.parent_path()?, clean_build_env.build(flox)?)
@@ -922,7 +920,7 @@ pub fn check_build_metadata(
         &built_environments.develop,
         &[pkg.name()],
         Some(false),
-        system_override,
+        system_override.clone(),
     )?;
 
     if build_results.len() != 1 {
@@ -931,9 +929,7 @@ pub fn check_build_metadata(
         ));
     }
     let build_result = &build_results[0];
-
-    let metadata = convert_build_result_to_build_metadata(build_result)?;
-    Ok(metadata)
+    convert_build_result_to_build_metadata(build_result)
 }
 
 /// Creates an error for a build repo that's in an invalid state.
