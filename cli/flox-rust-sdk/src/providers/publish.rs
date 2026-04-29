@@ -24,7 +24,6 @@ use flox_manifest::lockfile::Lockfile;
 use git_url_parse::GitUrl;
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
-use itertools::Itertools;
 use nef_lock_catalog::lock::NixFlakeref;
 use serde_json;
 use thiserror::Error;
@@ -42,7 +41,13 @@ use super::build::{
     PackageTargetKind,
     find_toplevel_group_nixpkgs,
 };
-use super::git::{GitCommandError, GitCommandGetOriginError, GitCommandProvider, StatusInfo};
+use super::git::{
+    GitCommandError,
+    GitCommandGetOriginError,
+    GitCommandProvider,
+    GitRemoteCommandError,
+    StatusInfo,
+};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError, open_path};
@@ -930,40 +935,15 @@ pub fn build_repo_err(msg: &str) -> PublishError {
     PublishError::UnsupportedEnvironmentState(msg.to_string())
 }
 
-/// Verify that the critical environment files are tracked by git.
-/// Publishing creates a clean checkout, so untracked files won't be available.
-fn check_env_files_tracked(
-    git: &impl GitProvider,
-    dot_flox_path: &impl AsRef<Path>,
-) -> Result<(), PublishError> {
-    // Find files in `.flox/` that are untracked and not ignored according to
-    // the rules generated in `.flox/.gitignore`.
-    let untracked_files = git
-        .list_files_untracked(dot_flox_path.as_ref())
-        .map_err(|e| {
-            PublishError::UnsupportedEnvironmentState(format!("Failed to check git tracking: {e}"))
-        })?;
-
-    if !untracked_files.is_empty() {
-        let listing = untracked_files
-            .iter()
-            .map(|path| format!("- {path}"))
-            .join("\n");
-        return Err(build_repo_err(&formatdoc! {"
-            The following environment files are not tracked by git:
-            {listing}",
-        }));
-    }
-    Ok(())
-}
-
 /// Check the local repo that the build source is in to make sure that it's in
 /// a state amenable to publishing an artifact built from it.
 ///
 /// This entails checking that:
 /// - The repo has a remote configured.
-/// - The tracked source files are clean.
-/// - The current revision exists on the tracked remote branch.
+/// - The tracked source files are clean (no uncommitted modifications).
+/// - The local HEAD commit is reachable from the tracked remote branch
+///   (i.e. has been pushed), though the remote branch may have additional
+///   commits on top.
 #[instrument(skip_all, fields(progress = "Checking repository state"))]
 fn gather_build_repo_meta(
     git: &GitCommandProvider,
@@ -1013,23 +993,37 @@ fn gather_build_repo_meta(
         GitCommandGetOriginError::Command(ref cmd_err) => build_repo_err(&cmd_err.to_string()),
     })?;
 
-    let rev_on_remote = match git.rev_exists_on_remote(&status.rev, &remote_info.name) {
-        Ok(exists) => exists,
-        Err(ref cmd_err) if cmd_err.is_access_denied() => {
+    // Fetch the tracked branch to bring the remote's objects into the local
+    // repo so that we can perform the ancestry check below.
+    match git.fetch_ref(&remote_info.name, &remote_info.reference) {
+        Ok(()) => {},
+        Err(GitRemoteCommandError::AccessDenied) => {
             return Err(build_repo_err(&formatdoc! {"
-                Could not access remote '{remote_name}' while verifying the local revision: {cmd_err}
+                Could not access remote '{remote_name}' while verifying the local revision.
                 Check your SSH agent (`ssh-add -l`) or credential configuration.",
                 remote_name = remote_info.name,
             }));
         },
-        Err(cmd_err) => {
+        Err(e) => {
             return Err(build_repo_err(&formatdoc! {"
-                Failed to check whether local revision exists on remote '{remote_name}/{remote_branch}': {cmd_err}",
+                Failed to fetch remote '{remote_name}/{remote_branch}' while verifying \
+                the local revision: {e}",
                 remote_name = remote_info.name,
                 remote_branch = remote_info.reference,
             }));
         },
-    };
+    }
+
+    // The local HEAD commit only needs to be reachable from the remote branch
+    // tip — the remote may have additional commits on top.
+    let rev_on_remote = git.is_ancestor_of(&status.rev, "FETCH_HEAD").map_err(|e| {
+        build_repo_err(&formatdoc! {"
+            Failed to verify whether local revision is present on \
+            '{remote_name}/{remote_branch}': {e}",
+            remote_name = remote_info.name,
+            remote_branch = remote_info.reference,
+        })
+    })?;
     if !rev_on_remote {
         return Err(build_repo_err(&formatdoc! {"
             Local revision is not present on remote '{remote_name}/{remote_branch}'.
@@ -1136,8 +1130,6 @@ pub fn check_environment_metadata(
         PublishError::UnsupportedEnvironmentState(format!(".flox/ dir not in git repo: {e}"))
     })?;
 
-    check_env_files_tracked(&git, &dot_flox_path)?;
-
     let build_repo_meta = gather_build_repo_meta(&git)?;
     let toplevel_catalog_ref = find_toplevel_group_nixpkgs(&lockfile);
 
@@ -1213,7 +1205,6 @@ pub mod tests {
         flox_instance,
         set_test_auth,
     };
-    use crate::models::environment::ENVIRONMENT_POINTER_FILENAME;
     use crate::models::environment::path_environment::PathEnvironment;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
     use crate::providers::auth::{Auth, write_floxhub_netrc};
@@ -1388,41 +1379,6 @@ pub mod tests {
                 .is_ok()
         );
         assert_eq!(build_repo_meta.rev_count, 1);
-    }
-
-    #[test]
-    fn test_check_env_files_tracked_success() {
-        let (flox, _temp_dir_handle) = flox_instance();
-        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
-        let (env, git) = example_path_environment(&flox, Some(&remote_uri));
-
-        check_env_files_tracked(&git, &env.dot_flox_path())
-            .expect("all env files should be tracked");
-    }
-
-    #[test]
-    fn test_check_env_files_tracked_untracked_file() {
-        let (flox, _temp_dir_handle) = flox_instance();
-        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
-        let (env, git) = example_path_environment(&flox, Some(&remote_uri));
-
-        let env_json_path = env.dot_flox_path().join(ENVIRONMENT_POINTER_FILENAME);
-        git.rm(&[env_json_path.as_path()], false, false, true)
-            .expect("cached remove of env.json");
-
-        let result = check_env_files_tracked(&git, &env.dot_flox_path());
-        match result {
-            Err(PublishError::UnsupportedEnvironmentState(msg)) => {
-                assert_eq!(
-                    msg,
-                    indoc! {"
-                    The following environment files are not tracked by git:
-                    - subdir_for_flox_stuff/.flox/env.json"}
-                    .to_string()
-                );
-            },
-            _ => panic!("Expected UnsupportedEnvironmentState error"),
-        }
     }
 
     #[test]
