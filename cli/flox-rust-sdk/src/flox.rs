@@ -78,10 +78,6 @@ pub struct Flox {
 
     pub verbosity: i32,
 
-    /// Whether to retain temporary directories created during a failed invocation,
-    /// controlled by `flox config --set keep_tempdir true`.
-    pub keep_tempdir: bool,
-
     /// Device UUID for telemetry correlation.
     /// None when metrics are disabled.
     pub metrics_device_uuid: Option<Uuid>,
@@ -351,7 +347,6 @@ pub mod test_helpers {
             installable_locker: InstallableLockerImpl::Mock(InstallableLockerMock::new()),
             features: Default::default(),
             verbosity: 0,
-            keep_tempdir: false,
             metrics_device_uuid: None,
         };
 

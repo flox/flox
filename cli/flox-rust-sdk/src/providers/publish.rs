@@ -888,63 +888,48 @@ pub fn check_build_metadata(
     let expression_ref_locked = expression_ref_fetched.locked_flakeref();
 
     // git clone into a temp directory
-    let clean_repo_path = tempfile::tempdir_in(flox.temp_dir.clone())
-        .map_err(|err| PublishError::Catchall(format!("could not create tempdir: {err}")))?;
+    let clean_repo_path = tempfile::tempdir_in(&flox.temp_dir)
+        .map_err(|err| PublishError::Catchall(format!("could not create tempdir: {err}")))?
+        .keep();
 
-    // Wrap the fallible build work in a closure so we can inspect the result
-    // before `clean_repo_path` is dropped, allowing us to retain it on failure
-    // when `keep_tempdir` is configured.
-    let result = (|| -> Result<CheckedBuildMetadata, PublishError> {
-        // base dir and buildtime environments **for manifest builds**
-        // both are inferred from the fetched source,
-        // based on relative directories of the local environment.
-        // Similar assumptions are made by the NEF at  eval time.
-        let (base_dir, built_environments) = {
-            copy_dir_recursive(expression_ref_fetched.store_path(), &clean_repo_path, false)
-                .map_err(|e| PublishError::Catchall(e.to_string()))?;
-            let project_path = CanonicalPath::new(
-                clean_repo_path
-                    .path()
-                    .join(env_metadata.rel_project_path.as_path()),
-            )
-            .map_err(|_err| {
-                PublishError::UnsupportedEnvironmentState(
+    // base dir and buildtime environments **for manifest builds**
+    // both are inferred from the fetched source,
+    // based on relative directories of the local environment.
+    // Similar assumptions are made by the NEF at  eval time.
+    let (base_dir, built_environments) = {
+        copy_dir_recursive(expression_ref_fetched.store_path(), &clean_repo_path, false)
+            .map_err(|e| PublishError::Catchall(e.to_string()))?;
+        let project_path =
+            CanonicalPath::new(clean_repo_path.join(env_metadata.rel_project_path.as_path()))
+                .map_err(|_err| {
+                    PublishError::UnsupportedEnvironmentState(
                     "Flox project not found in clean checkout, is it tracked in the repository?"
                         .to_string(),
                 )
-            })?;
-            let mut clean_build_env = open_path(flox, &project_path, None)
-                .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
-            (clean_build_env.parent_path()?, clean_build_env.build(flox)?)
-        };
+                })?;
+        let mut clean_build_env = open_path(flox, &project_path, None)
+            .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
+        (clean_build_env.parent_path()?, clean_build_env.build(flox)?)
+    };
 
-        let builder =
-            FloxBuildMk::new(flox, &base_dir, &expression_ref_locked, &built_environments);
+    let builder = FloxBuildMk::new(flox, &base_dir, &expression_ref_locked, &built_environments);
 
-        // Build the package and collect the outputs
-        let build_results = builder.build(
-            &base_nixpkgs_url.as_flake_ref()?,
-            &built_environments.develop,
-            &[pkg.name()],
-            Some(false),
-            system_override.clone(),
-        )?;
+    // Build the package and collect the outputs
+    let build_results = builder.build(
+        &base_nixpkgs_url.as_flake_ref()?,
+        &built_environments.develop,
+        &[pkg.name()],
+        Some(false),
+        system_override.clone(),
+    )?;
 
-        if build_results.len() != 1 {
-            return Err(PublishError::NonexistentOutputs(
-                "No results returned from build command.".to_string(),
-            ));
-        }
-        let build_result = &build_results[0];
-        convert_build_result_to_build_metadata(build_result)
-    })();
-
-    if result.is_err() && flox.keep_tempdir {
-        let path = clean_repo_path.keep();
-        debug!(?path, "keeping ephemeral build directory for inspection");
+    if build_results.len() != 1 {
+        return Err(PublishError::NonexistentOutputs(
+            "No results returned from build command.".to_string(),
+        ));
     }
-
-    result
+    let build_result = &build_results[0];
+    convert_build_result_to_build_metadata(build_result)
 }
 
 /// Creates an error for a build repo that's in an invalid state.
