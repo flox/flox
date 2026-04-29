@@ -1328,7 +1328,7 @@ impl ManagedEnvironment {
         let options = floxmeta_git_options(
             git_url,
             &pointer.owner,
-            &flox.credential,
+            &flox.auth_context,
             flox.metrics_device_uuid.as_ref(),
         );
 

@@ -8,11 +8,10 @@
 
 use serde::{Deserialize, Serialize};
 
-mod credential;
-mod credential_factory;
+mod auth_context;
+mod auth_context_factory;
 
-pub use credential::Credential;
-pub use credential_factory::credential_from_method;
+pub use auth_context::{AuthContext, AuthFailure};
 
 /// Errors from authentication validation
 #[derive(Debug, Clone, thiserror::Error)]
@@ -26,7 +25,7 @@ pub enum AuthError {
 /// Available authentication methods
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum AuthMethod {
+pub enum AuthnMode {
     /// Auth0 authentication
     Auth0,
     /// Kerberos authentication
@@ -36,16 +35,16 @@ pub enum AuthMethod {
 
 #[cfg(not(feature = "floxhub-authn-kerberos"))]
 #[allow(clippy::derivable_impls)]
-impl Default for AuthMethod {
+impl Default for AuthnMode {
     fn default() -> Self {
-        AuthMethod::Auth0
+        AuthnMode::Auth0
     }
 }
 
 #[cfg(feature = "floxhub-authn-kerberos")]
 #[allow(clippy::derivable_impls)]
-impl Default for AuthMethod {
+impl Default for AuthnMode {
     fn default() -> Self {
-        AuthMethod::Kerberos
+        AuthnMode::Kerberos
     }
 }

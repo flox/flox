@@ -5,7 +5,7 @@ use std::{env, fs};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
-use flox_catalog::{AuthMethod, SearchLimit};
+use flox_catalog::{AuthnMode, SearchLimit};
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_core::{WriteError, write_atomically};
 use flox_rust_sdk::flox::Features;
@@ -85,7 +85,7 @@ pub struct FloxConfig {
 
     /// Authentication mode for FloxHub
     #[serde(default)]
-    pub floxhub_authn_mode: AuthMethod,
+    pub floxhub_authn_mode: AuthnMode,
 
     /// Rule whether to change the shell prompt in activated environments.
     /// Deprecated in favor of set_prompt and hide_default_prompt.

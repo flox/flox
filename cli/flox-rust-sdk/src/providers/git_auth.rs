@@ -1,4 +1,4 @@
-use flox_catalog::Credential;
+use flox_catalog::AuthContext;
 use url::Url;
 
 use super::git::GitCommandOptions;
@@ -11,9 +11,9 @@ use crate::models::floxmeta::FLOXHUB_TOKEN_ENV_VAR;
 /// - Bearer: inline credential helper with the token
 /// - Kerberos: no-op (kerberized git uses the ccache directly)
 /// - None: empty credential helper to prevent pinentry fallback
-pub fn apply_git_auth(credential: &Credential, git_url: &Url, options: &mut GitCommandOptions) {
+pub fn apply_git_auth(credential: &AuthContext, git_url: &Url, options: &mut GitCommandOptions) {
     let token = match credential {
-        Credential::Bearer(token) => {
+        AuthContext::Auth0(Some(token)) => {
             if token.is_expired() {
                 tracing::debug!("FloxHub token is expired, sending for identification");
             } else {
@@ -21,11 +21,11 @@ pub fn apply_git_auth(credential: &Credential, git_url: &Url, options: &mut GitC
             }
             token.secret()
         },
-        Credential::Kerberos { .. } => {
+        AuthContext::Kerberos(_) => {
             // Kerberized git handles SPNEGO auth natively via ccache — no-op
             return;
         },
-        Credential::None => {
+        AuthContext::Auth0(None) => {
             tracing::debug!("no credential available for git auth");
             ""
         },

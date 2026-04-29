@@ -18,7 +18,7 @@ use reqwest::header::{self, HeaderMap};
 use tracing::{debug, instrument};
 
 use crate::MapApiErrorExt;
-use crate::auth::Credential;
+use crate::auth::AuthContext;
 use crate::config::CatalogClientConfig;
 use crate::error::{CatalogClientError, ResolveError, SearchError, VersionsError};
 use crate::mock::MockGuard;
@@ -62,7 +62,7 @@ impl CatalogClient {
             None => config.catalog_url.clone(),
         };
 
-        let hooks = Self::build_request_hooks(config.credential.clone());
+        let hooks = Self::build_request_hooks(config.auth_context.clone());
 
         let http_client = build_http_client(&config)?;
         let client = APIClient::new_with_client(&effective_url, http_client, hooks);
@@ -108,7 +108,7 @@ impl CatalogClient {
     ///
     /// The `Credential` is captured once at construction time. For Kerberos,
     /// `authorization_header()` generates a fresh SPNEGO token on each call.
-    fn build_request_hooks(credential: Credential) -> RequestHooks {
+    fn build_request_hooks(credential: AuthContext) -> RequestHooks {
         RequestHooks {
             pre_request: std::sync::Arc::new(move |request: &mut reqwest::Request| {
                 // Propagate the Sentry trace ID to catalog-server.
@@ -673,7 +673,7 @@ fn build_http_client(config: &CatalogClientConfig) -> Result<reqwest::Client, Ca
 
     debug!(
         catalog_url = %config.catalog_url,
-        handle = ?config.credential.handle(),
+        handle = ?config.auth_context.handle(),
         extra_headers = config.extra_headers.len(),
         "building catalog HTTP client"
     );
@@ -727,8 +727,6 @@ pub mod tests {
     use tracing_subscriber::layer::SubscriberExt;
 
     use super::*;
-    use crate::credential_from_method;
-
     const SENTRY_TRACE_HEADER: &str = "sentry-trace";
 
     fn client_config(url: &str) -> CatalogClientConfig {
@@ -736,14 +734,9 @@ pub mod tests {
             catalog_url: url.to_string(),
             extra_headers: Default::default(),
             mock_mode: Default::default(),
-            credential: default_credential(),
+            auth_context: AuthContext::from_mode(&Default::default(), None),
             user_agent: None,
         }
-    }
-
-    fn default_credential() -> Credential {
-        let method: crate::auth::AuthMethod = Default::default();
-        credential_from_method(&method, None, String::new())
     }
 
     #[tokio::test]

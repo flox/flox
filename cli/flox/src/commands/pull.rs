@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use flox_catalog::AuthContext;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::raw::SyncTypedToRaw;
@@ -648,7 +649,8 @@ impl Pull {
             .unwrap_or_default();
 
         // Check if the token is expired - this might be why authentication failed
-        let token_expired = flox.floxhub_token.as_ref().is_some_and(|t| t.is_expired());
+        let token_expired =
+            matches!(&flox.auth_context, AuthContext::Auth0(Some(token)) if token.is_expired());
 
         let message = format!("The environment {env_ref} does not exist.");
 

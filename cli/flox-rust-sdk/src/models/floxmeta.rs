@@ -7,7 +7,7 @@ use url::Url;
 use uuid::Uuid;
 
 use super::environment::ManagedPointer;
-use crate::flox::{Credential, Flox, Floxhub, FloxhubError};
+use crate::flox::{AuthContext, Flox, Floxhub, FloxhubError};
 use crate::models::environment::floxmeta_branch::remote_branch_name;
 use crate::providers::git::{
     GitCommandBranchHashError,
@@ -77,7 +77,7 @@ impl FloxMeta {
         let git_options = floxmeta_git_options(
             git_url,
             &pointer.owner,
-            &flox.credential,
+            &flox.auth_context,
             flox.metrics_device_uuid.as_ref(),
         );
         let branch = remote_branch_name(pointer);
@@ -135,7 +135,7 @@ impl FloxMeta {
         let git_options = floxmeta_git_options(
             git_url,
             &pointer.owner,
-            &flox.credential,
+            &flox.auth_context,
             flox.metrics_device_uuid.as_ref(),
         );
 
@@ -182,7 +182,7 @@ impl FloxMeta {
         let git_options = floxmeta_git_options(
             git_url,
             &pointer.owner,
-            &flox.credential,
+            &flox.auth_context,
             flox.metrics_device_uuid.as_ref(),
         );
 
@@ -206,7 +206,7 @@ impl FloxMeta {
 pub fn floxmeta_git_options(
     floxhub_git_url: &Url,
     floxhub_owner: &str,
-    credential: &Credential,
+    credential: &AuthContext,
     metrics_device_uuid: Option<&Uuid>,
 ) -> GitCommandOptions {
     let mut options = GitCommandOptions::default();
@@ -295,7 +295,8 @@ mod header_tests {
 
             let owner = "testowner";
             let server_url = Url::parse(&server.base_url()).unwrap();
-            let options = floxmeta_git_options(&server_url, owner, &Credential::None, Some(&uuid));
+            let options =
+                floxmeta_git_options(&server_url, owner, &AuthContext::Auth0(None), Some(&uuid));
             clone_against_mock(&server, owner, options);
             mock.assert();
         });
@@ -317,7 +318,7 @@ mod header_tests {
 
             let owner = "testowner";
             let server_url = Url::parse(&server.base_url()).unwrap();
-            let options = floxmeta_git_options(&server_url, owner, &Credential::None, uuid);
+            let options = floxmeta_git_options(&server_url, owner, &AuthContext::Auth0(None), uuid);
             clone_against_mock(&server, owner, options);
             mock.assert();
         });

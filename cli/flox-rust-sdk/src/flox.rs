@@ -3,13 +3,7 @@ use std::str::FromStr;
 use std::sync::LazyLock;
 
 use flox_catalog::CatalogClientError;
-pub use flox_catalog::{
-    AuthMethod,
-    Credential,
-    FloxhubToken,
-    FloxhubTokenError,
-    credential_from_method,
-};
+pub use flox_catalog::{AuthContext, AuthnMode, FloxhubToken, FloxhubTokenError};
 use flox_core::vars::FLOX_VERSION_STRING;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -60,13 +54,8 @@ pub struct Flox {
 
     pub floxhub: Floxhub,
 
-    /// Token to authenticate with FloxHub.
-    /// It's usually populated from the config during [Flox] initialization.
-    /// Checking for [None] can be used to check if the use is logged in.
-    pub floxhub_token: Option<FloxhubToken>,
-
     /// The current authentication credential.
-    pub credential: Credential,
+    pub auth_context: AuthContext,
 
     pub catalog_client: catalog::Client,
     pub installable_locker: flake_installable_locker::InstallableLockerImpl,
@@ -84,33 +73,21 @@ pub struct Flox {
 impl Flox {
     /// Return the user's handle if a credential is available.
     pub fn get_handle(&self) -> Option<String> {
-        self.credential.handle()
+        self.auth_context.handle().map(str::to_string)
     }
 
     /// Set a new token and rebuild the credential to reflect it.
     ///
     /// Note: when using Kerberos authentication, the token is stored but has
     /// no effect on the credential — Kerberos does not use FloxHub tokens.
-    pub fn set_floxhub_token(&mut self, token: FloxhubToken) -> Result<(), CatalogClientError> {
-        if matches!(self.credential, Credential::Kerberos { .. }) {
-            tracing::debug!(
-                "set_floxhub_token called but current auth is Kerberos; token will be stored but not used"
-            );
-        }
-        let t: &mut FloxhubToken = self.floxhub_token.insert(token);
-        let credential = credential_from_method(
-            &self.credential.auth_method(),
-            Some(t.clone()),
-            if let catalog::Client::Catalog(client) = &self.catalog_client {
-                client.catalog_url().to_string()
-            } else {
-                String::new()
-            },
-        );
-        self.credential = credential.clone();
+    pub fn set_auth_context(
+        &mut self,
+        auth_context: AuthContext,
+    ) -> Result<(), CatalogClientError> {
+        self.auth_context = auth_context.clone();
         if let catalog::Client::Catalog(client) = &mut self.catalog_client {
             client.update_config(|config| {
-                config.credential = credential;
+                config.auth_context = auth_context;
             })?;
         }
         Ok(())
@@ -231,7 +208,9 @@ pub mod test_helpers {
     /// Set a pre-existing token on a [Flox] instance and rebuild the auth
     /// strategy so that `get_handle()` and friends see it immediately.
     pub fn set_test_token(flox: &mut Flox, token: FloxhubToken) {
-        let _ = flox.set_floxhub_token(token);
+        let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, Some(token));
+
+        let _ = flox.set_auth_context(auth_context);
     }
 
     /// Set up test authentication on a [Flox] instance.
@@ -314,8 +293,7 @@ pub mod test_helpers {
             Url::from_directory_path(mock_floxhub_git_dir).unwrap()
         });
 
-        let catalog_url = "https://api.flox.dev".to_string();
-        let credential = credential_from_method(&AuthMethod::default(), None, catalog_url.clone());
+        let credential = AuthContext::from_mode(&AuthnMode::default(), None);
 
         let flox = Flox {
             system: env!("NIX_TARGET_SYSTEM").to_string(),
@@ -333,8 +311,7 @@ pub mod test_helpers {
                 git_url_override,
             )
             .unwrap(),
-            floxhub_token: None,
-            credential,
+            auth_context: credential,
             catalog_client: MockClient::default().into(),
             installable_locker: InstallableLockerImpl::Mock(InstallableLockerMock::new()),
             features: Default::default(),

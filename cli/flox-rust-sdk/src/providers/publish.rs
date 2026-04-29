@@ -1212,6 +1212,7 @@ pub mod tests {
     use std::sync::LazyLock;
 
     use chrono::Utc;
+    use flox_catalog::AuthContext;
     use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
     use flox_test_utils::GENERATED_DATA;
     use pretty_assertions::assert_eq;
@@ -1902,7 +1903,13 @@ pub mod tests {
         )
         .unwrap();
 
-        let (_key_file, cache) = local_nix_cache(flox.floxhub_token.as_ref().unwrap());
+        let (_key_file, cache) = local_nix_cache(
+            match &flox.auth_context {
+                AuthContext::Auth0(t) => t.as_ref(),
+                _ => None,
+            }
+            .unwrap(),
+        );
         let auth = Auth::from_flox(&flox).unwrap();
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
@@ -2183,7 +2190,7 @@ pub mod tests {
 
     // This test ensures that a user's default catalog gets created inline
     // if it doesn't already exist so that individual users can publish
-    // without first needing to pay and create an organization.
+    // without first needing to pay and create an orgIanization.
     #[tokio::test(flavor = "multi_thread")]
     async fn publishes_new_package_for_users_default_catalog_and_creates_catalog() {
         let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata("mypkg3");
@@ -2193,20 +2200,16 @@ pub mod tests {
             PublishTestUser::NoCatalogs,
             "publish_provider_publishes_package_in_users_catalog",
         );
-        let user_handle = flox
-            .floxhub_token
-            .expect("expected token to be present")
-            .handle()
-            .to_string();
+        let user_handle = flox.auth_context.handle().unwrap();
         let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
         let packaged_created_guard = publish_provider
-            .create_package_and_possibly_user_catalog(&flox.catalog_client, &user_handle)
+            .create_package_and_possibly_user_catalog(&flox.catalog_client, user_handle)
             .await
             .unwrap();
         publish_provider
             .publish(
                 &flox.catalog_client,
-                &user_handle,
+                user_handle,
                 packaged_created_guard,
                 &build_meta,
                 None,
@@ -2357,9 +2360,7 @@ pub mod tests {
         let res = publish_provider
             .publish(
                 &flox.catalog_client,
-                flox.floxhub_token
-                    .expect("expected token to exist")
-                    .handle(),
+                flox.auth_context.handle().unwrap(),
                 PackageCreatedGuard { _private: () },
                 &build_meta,
                 None,

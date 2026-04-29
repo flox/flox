@@ -2,6 +2,7 @@ use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
+use flox_catalog::{AuthContext, AuthnMode};
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
 use indoc::formatdoc;
 use oauth2::basic::{
@@ -274,7 +275,7 @@ impl Auth {
             Auth::Status => {
                 let span = tracing::info_span!("status");
                 let _guard = span.enter();
-                let Some(token) = flox.floxhub_token else {
+                let AuthContext::Auth0(Some(token)) = flox.auth_context else {
                     message::warning("You are not currently logged in to FloxHub.");
                     return Err(Exit(1.into()).into());
                 };
@@ -292,7 +293,7 @@ impl Auth {
                 let span = tracing::info_span!("token");
                 let _guard = span.enter();
 
-                let Some(token) = flox.floxhub_token else {
+                let AuthContext::Auth0(Some(token)) = flox.auth_context else {
                     message::warning("You are not currently logged in to FloxHub.");
                     return Err(Exit(1.into()).into());
                 };
@@ -312,7 +313,7 @@ impl Auth {
 // to handle different auth methods — for Kerberos, it should print a warning
 // that login is not needed (Kerberos authentication is handled externally via
 // `kinit`).
-pub async fn login_flox(flox: &mut Flox) -> Result<&FloxhubToken> {
+pub async fn login_flox(flox: &mut Flox) -> Result<String> {
     let client = create_oauth_client()?;
     let cred = authorize(client, flox.floxhub.base_url())
         .await
@@ -329,10 +330,11 @@ pub async fn login_flox(flox: &mut Flox) -> Result<&FloxhubToken> {
     update_config(&flox.config_dir, "floxhub_token", Some(token.clone()))
         .context("Could not write token to config")?;
 
-    flox.set_floxhub_token(token.clone())?;
+    let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, Some(token.clone()));
+    let _ = flox.set_auth_context(auth_context);
 
     message::updated("Authentication complete");
     message::updated(format!("Logged in as {handle}"));
 
-    Ok(flox.floxhub_token.as_ref().unwrap())
+    Ok(flox.auth_context.handle().unwrap_or_default().to_string())
 }

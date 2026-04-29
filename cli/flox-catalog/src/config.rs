@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use crate::Credential;
+use crate::AuthContext;
 
 /// Configuration for catalog client construction.
 #[derive(Debug, Clone)]
@@ -14,7 +14,7 @@ pub struct CatalogClientConfig {
     pub extra_headers: BTreeMap<String, String>,
     /// Mock mode for testing.
     pub mock_mode: CatalogMockMode,
-    pub credential: Credential,
+    pub auth_context: AuthContext,
     pub user_agent: Option<String>,
 }
 

@@ -10,19 +10,23 @@ use libgssapi::oid::{GSS_MECH_KRB5, GSS_NT_HOSTBASED_SERVICE, OidSet};
 use tracing::debug;
 use url::Url;
 
-use crate::auth::{AuthError, Credential};
+use crate::auth::auth_context::KerberosMaterial;
+use crate::auth::{AuthContext, AuthError};
 
 /// Create a Kerberos credential by resolving the principal from the ccache.
 ///
-/// Returns `Credential::Kerberos` with a SPNEGO token generator on success,
-/// or `Credential::None` if the principal cannot be resolved.
-pub fn kerberos_credential() -> Credential {
+/// Returns `AuthContext::Kerberos(Some)` with a SPNEGO token generator on success,
+/// or `AuthContext::Kerberos(None)` if the principal cannot be resolved.
+pub fn kerberos_credential() -> AuthContext {
     match resolve_principal() {
-        Ok(principal) => Credential::Kerberos {
-            principal: principal.clone(),
-            generate_token: Arc::new(move |url: &Url| generate_kerberos_token(url.as_str())),
+        Ok(principal) => AuthContext::Kerberos(Some(KerberosMaterial {
+            principal,
+            generate_token: Arc::new(move |url: &Url| generate_kerberos_token(url)),
+        })),
+        Err(e) => {
+            tracing::warn!(error = %e, "Kerberos principal resolution failed");
+            AuthContext::Kerberos(None)
         },
-        Err(_) => Credential::None,
     }
 }
 
@@ -46,9 +50,7 @@ fn resolve_principal() -> Result<String, AuthError> {
 ///
 /// This uses Kerberos authentication via GSSAPI to generate a SPNEGO token
 /// for HTTP Negotiate authentication.
-fn generate_kerberos_token(catalog_url: &str) -> Result<String, String> {
-    // Parse the URL to extract the hostname
-    let url = Url::parse(catalog_url).map_err(|e| format!("Invalid URL: {}", e))?;
+fn generate_kerberos_token(url: &Url) -> Result<String, String> {
     let hostname = url
         .host_str()
         .ok_or_else(|| "No hostname in catalog URL".to_string())?;

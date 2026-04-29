@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use flox_catalog::AuthContext;
 use indoc::formatdoc;
 use tempfile::{NamedTempFile, TempDir, TempPath, tempdir_in};
 
@@ -86,10 +87,18 @@ pub struct Auth {
 impl Auth {
     /// Construct a new auth provider from a Flox instance
     pub fn from_flox(flox: &Flox) -> Result<Self, AuthError> {
-        Ok(Self {
-            floxhub_token: flox.floxhub_token.clone(),
-            netrc_tempdir: tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?,
-        })
+        match &flox.auth_context {
+            AuthContext::Auth0(token) => Ok(Self {
+                floxhub_token: token.clone(),
+                netrc_tempdir: tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?,
+            }),
+            AuthContext::Kerberos(_) => {
+                // Do nothing, Kerberos authentication is handled differently
+                Err(AuthError::CatchAll(
+                    "Kerberos Auth not supported in this flow".to_string(),
+                ))
+            },
+        }
     }
 
     /// Construct a new auth provider from a tempdir and a token.

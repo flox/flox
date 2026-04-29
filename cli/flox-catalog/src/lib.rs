@@ -14,14 +14,14 @@
 //! ```ignore
 //! use flox_catalog::{
 //!     CatalogClient, CatalogClientConfig,
-//!     CatalogMockMode, ClientTrait, credential_from_method,
+//!     CatalogMockMode, ClientTrait, AuthContext,
 //! };
 //!
 //! let config = CatalogClientConfig {
 //!     catalog_url: "https://api.flox.dev".to_string(),
 //!     extra_headers: BTreeMap::new(),
 //!     mock_mode: CatalogMockMode::None,
-//!     credential: credential_from_method(&Default::default(), floxhub_token, catalog_url),
+//!     auth_context: AuthContext::from_mode(&Default::default(), floxhub_token),
 //!     user_agent: Some("flox-cli/1.0".to_string()),
 //! };
 //!
@@ -44,7 +44,7 @@ pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
 
 // Re-export catalog-api-v1 types for consumers.
 // This allows consumers to depend only on catalog-client, not directly on catalog-api-v1.
-pub use auth::{AuthError, AuthMethod, Credential, credential_from_method};
+pub use auth::{AuthContext, AuthError, AuthFailure, AuthnMode};
 pub use catalog_api_v1::{
     Client as ApiClient,
     Error as ApiError,
