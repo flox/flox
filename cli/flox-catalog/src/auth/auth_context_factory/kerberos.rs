@@ -6,7 +6,7 @@ use base64::Engine as _;
 use libgssapi::context::{ClientCtx, CtxFlags};
 use libgssapi::credential::{Cred, CredUsage};
 use libgssapi::name::Name;
-use libgssapi::oid::{GSS_MECH_KRB5, GSS_NT_HOSTBASED_SERVICE, OidSet};
+use libgssapi::oid::{GSS_MECH_KRB5, GSS_NT_HOSTBASED_SERVICE};
 use tracing::debug;
 use url::Url;
 
@@ -15,13 +15,18 @@ use crate::auth::{AuthContext, AuthError};
 
 /// Create a Kerberos credential by resolving the principal from the ccache.
 ///
-/// Returns `AuthContext::Kerberos(Some)` with a SPNEGO token generator on success,
-/// or `AuthContext::Kerberos(None)` if the principal cannot be resolved.
+/// The GSSAPI `Cred` is acquired once and cached in the token generator
+/// closure — it is `Clone` (Arc-wrapped) so each SPNEGO context gets a
+/// cheap handle to the same underlying credential.
+///
+/// Returns `AuthContext::Kerberos(Some)` with a SPNEGO token generator on
+/// success, or `AuthContext::Kerberos(None)` if the principal cannot be
+/// resolved.
 pub fn kerberos_credential() -> AuthContext {
-    match resolve_principal() {
-        Ok(principal) => AuthContext::Kerberos(Some(KerberosMaterial {
+    match acquire_credential() {
+        Ok((principal, cred)) => AuthContext::Kerberos(Some(KerberosMaterial {
             principal,
-            generate_token: Arc::new(move |url: &Url| generate_kerberos_token(url)),
+            generate_token: Arc::new(move |url: &Url| generate_spnego_token(&cred, url)),
         })),
         Err(e) => {
             tracing::warn!(error = %e, "Kerberos principal resolution failed");
@@ -30,8 +35,9 @@ pub fn kerberos_credential() -> AuthContext {
     }
 }
 
-/// Resolve the Kerberos principal name from the credential cache.
-fn resolve_principal() -> Result<String, AuthError> {
+/// Acquire GSSAPI credentials from the ccache and return the principal
+/// name together with the `Cred` handle.
+fn acquire_credential() -> Result<(String, Cred), AuthError> {
     let cred = Cred::acquire(None, None, CredUsage::Initiate, None).map_err(|e| {
         AuthError::NotAuthenticated(format!(
             "Kerberos ticket not available. Run `kinit` to authenticate. Error: {e:?}"
@@ -43,59 +49,42 @@ fn resolve_principal() -> Result<String, AuthError> {
     let display = name.display_name().map_err(|e| {
         AuthError::NotAuthenticated(format!("Failed to display Kerberos principal name: {e:?}"))
     })?;
-    Ok(String::from_utf8_lossy(&display[..]).to_string())
+    let principal = String::from_utf8_lossy(&display[..]).to_string();
+    Ok((principal, cred))
 }
 
-/// Generate a Kerberos token for the given catalog URL
+/// Generate a SPNEGO token for the given URL using a cached `Cred`.
 ///
-/// This uses Kerberos authentication via GSSAPI to generate a SPNEGO token
-/// for HTTP Negotiate authentication.
-fn generate_kerberos_token(url: &Url) -> Result<String, String> {
+/// Each call creates a fresh `ClientCtx` (GSSAPI contexts are single-use)
+/// but reuses the same credential handle.
+fn generate_spnego_token(cred: &Cred, url: &Url) -> Result<String, String> {
     let hostname = url
         .host_str()
         .ok_or_else(|| "No hostname in catalog URL".to_string())?;
 
-    // Create the service principal name (SPN) for HTTP service
-    // Format: HTTP@hostname
     let service_name = format!("HTTP@{}", hostname);
-    debug!("Using Kerberos service principal: {}", service_name);
+    debug!(service_principal = %service_name, "generating SPNEGO token");
 
-    // Import the service name as a GSSAPI name
     let target_name = Name::new(service_name.as_bytes(), Some(&GSS_NT_HOSTBASED_SERVICE))
         .map_err(|e| format!("Failed to create GSSAPI name: {:?}", e))?;
 
-    // Acquire default credentials (from Kerberos ticket cache)
-    let cred = Cred::acquire(None, None, CredUsage::Initiate, None)
-        .map_err(|e| format!("Failed to acquire GSSAPI credentials: {:?}", e))?;
+    let ctx_flags = CtxFlags::GSS_C_MUTUAL_FLAG | CtxFlags::GSS_C_REPLAY_FLAG;
 
-    // Create GSSAPI context flags
-    let mut ctx_flags = CtxFlags::empty();
-    ctx_flags.insert(CtxFlags::GSS_C_MUTUAL_FLAG);
-    ctx_flags.insert(CtxFlags::GSS_C_REPLAY_FLAG);
+    let mut client_ctx = ClientCtx::new(
+        Some(cred.clone()),
+        target_name,
+        ctx_flags,
+        Some(&GSS_MECH_KRB5),
+    );
 
-    // Create a Kerberos-only OID set
-    let mut desired_mechs =
-        OidSet::new().map_err(|e| format!("Failed to create OID set: {:?}", e))?;
-    desired_mechs
-        .add(&GSS_MECH_KRB5)
-        .map_err(|e| format!("Failed to add Kerberos OID: {:?}", e))?;
-
-    // Initialize the client context
-    let mut client_ctx = ClientCtx::new(Some(cred), target_name, ctx_flags, Some(&GSS_MECH_KRB5));
-
-    // Perform the initial GSSAPI handshake step
-    // First parameter: input token (None for initial step)
-    // Second parameter: channel bindings (None for no channel bindings)
     let token = client_ctx
         .step(None, None)
         .map_err(|e| format!("Kerberos context initialization failed: {:?}", e))?;
 
-    // Check if token was generated
     let token_bytes = token.ok_or_else(|| "No token generated by Kerberos".to_string())?;
 
-    // Encode the token as base64 (convert Buf to byte slice)
     let encoded_token = base64::engine::general_purpose::STANDARD.encode(&token_bytes[..]);
-    debug!("Generated Kerberos token ({} bytes)", token_bytes.len());
+    debug!(token_bytes = token_bytes.len(), "generated SPNEGO token");
 
     Ok(encoded_token)
 }
