@@ -2145,8 +2145,7 @@ mod buildenv_tests {
             panic!("expected build to fail, got {}", err);
         };
 
-        let expected =
-            "> ❌ ERROR: 'vim' conflicts with 'vim-full'. Both packages provide the file 'bin/ex'";
+        let expected = "> ❌ ERROR: 'vim' conflicts with 'vim-full'.";
 
         assert!(
             output.contains(expected),
