@@ -5340,3 +5340,72 @@ success"
 @test "zsh: activate succeeds with exported functions in hook" {
   activate_succeeds_with_exported_functions_in_hook zsh
 }
+
+# bats test_tags=activate,activate:default-flag
+@test "activate -D requires authentication" {
+  # Ensure we're not logged in by unsetting auth token
+  unset FLOX_FLOXHUB_TOKEN
+
+  run "$FLOX_BIN" activate -D
+  assert_failure
+  assert_output --partial "You must be logged in to use '-D' or '--default'"
+  assert_output --partial "flox auth login"
+}
+
+# bats test_tags=activate,activate:default-flag
+@test "activate -D activates default environment when logged in" {
+  project_setup
+  floxhub_setup "test"
+
+  # Create a temporary directory for the default environment
+  DEFAULT_ENV_DIR="$BATS_TEST_TMPDIR/default-env"
+  rm -rf "$DEFAULT_ENV_DIR"
+  mkdir -p "$DEFAULT_ENV_DIR"
+
+  # Create and push test/default environment
+  run "$FLOX_BIN" init -d "$DEFAULT_ENV_DIR" --name default
+  assert_success
+  run "$FLOX_BIN" push -d "$DEFAULT_ENV_DIR" --owner test
+  assert_success
+
+  # Activate using -D should work
+  run "$FLOX_BIN" activate -D -- echo "activated"
+  assert_success
+  assert_output --partial "activated"
+}
+
+# bats test_tags=activate,activate:default-flag
+@test "activate -D and -r are mutually exclusive" {
+  run "$FLOX_BIN" activate -D -r owner/name
+  assert_failure
+  assert_output --partial "not expected in this context"
+}
+
+# bats test_tags=activate,activate:default-flag
+@test "activate -D and -d are mutually exclusive" {
+  run "$FLOX_BIN" activate -D -d /some/path
+  assert_failure
+  assert_output --partial "not expected in this context"
+}
+
+# bats test_tags=activate,activate:default-flag
+@test "activate --default works same as -D" {
+  project_setup
+  floxhub_setup "test"
+
+  # Create a temporary directory for the default environment
+  DEFAULT_ENV_DIR="$BATS_TEST_TMPDIR/default-env"
+  rm -rf "$DEFAULT_ENV_DIR"
+  mkdir -p "$DEFAULT_ENV_DIR"
+
+  # Create and push test/default environment
+  run "$FLOX_BIN" init -d "$DEFAULT_ENV_DIR" --name default
+  assert_success
+  run "$FLOX_BIN" push -d "$DEFAULT_ENV_DIR" --owner test
+  assert_success
+
+  # Activate using --default should work
+  run "$FLOX_BIN" activate --default -- echo "activated"
+  assert_success
+  assert_output --partial "activated"
+}
