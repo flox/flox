@@ -232,12 +232,12 @@ gen-unit-data-for-publish floxhub_repo_path force="":
 
 # Run the CLI integration test suite using locally built binaries
 # This is equivalent to the "local" jobs in CI.
-@integ-tests +bats_args="": build
+@integ-tests *bats_args: build
     flox-cli-tests "$@"
 
 # Run the CLI integration test suite using Nix-built binaries
 # This is equivalent to the "remote" jobs in CI.
-@nix-integ-tests +bats_args="":
+@nix-integ-tests *bats_args:
     nix run \
         --accept-flake-config \
         --extra-experimental-features 'nix-command flakes' \
