@@ -25,10 +25,10 @@ pub struct Delete {
 
 impl Delete {
     #[instrument(name = "delete", skip_all)]
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
         let environment = self
             .environment
-            .detect_concrete_environment(&flox, "Delete")?;
+            .detect_concrete_environment(&mut flox, "Delete")?;
 
         environment_subcommand_metric!("delete", environment);
 

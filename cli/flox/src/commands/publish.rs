@@ -103,10 +103,10 @@ struct PublishConfig {
 }
 
 impl Publish {
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, mut flox: Flox) -> Result<()> {
         let env = self
             .environment
-            .detect_concrete_environment(&flox, "Publish")?;
+            .detect_concrete_environment(&mut flox, "Publish")?;
         environment_subcommand_metric!("publish", env);
 
         let publish_config = PublishConfig {

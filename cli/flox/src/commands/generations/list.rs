@@ -51,10 +51,10 @@ enum OutputMode {
 
 impl List {
     #[instrument(name = "list", skip_all)]
-    pub fn handle(self, flox: Flox) -> Result<()> {
+    pub fn handle(self, mut flox: Flox) -> Result<()> {
         let env = self
             .environment
-            .detect_concrete_environment(&flox, "List using")?;
+            .detect_concrete_environment(&mut flox, "List using")?;
         environment_subcommand_metric!(
             "generations::list",
             env,

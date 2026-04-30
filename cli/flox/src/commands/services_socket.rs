@@ -11,10 +11,10 @@ pub struct ServicesSocket {
 }
 
 impl ServicesSocket {
-    pub fn handle(&self, flox: Flox) -> Result<(), anyhow::Error> {
+    pub fn handle(&self, mut flox: Flox) -> Result<(), anyhow::Error> {
         let concrete_env = self
             .environment
-            .detect_concrete_environment(&flox, "Environment path to get services socket")?;
+            .detect_concrete_environment(&mut flox, "Environment path to get services socket")?;
 
         let socket_path = concrete_env.services_socket_path(&flox)?;
         println!("{}", socket_path.display());

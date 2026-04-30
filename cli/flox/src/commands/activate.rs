@@ -137,12 +137,12 @@ impl Activate {
         Ok(())
     }
 
-    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut config: Config, mut flox: Flox) -> Result<()> {
         self.validate_service_flags()?;
 
         let mut concrete_environment = match self
             .environment
-            .to_concrete_environment(&flox, self.generation)
+            .to_concrete_environment(&mut flox, self.generation)
         {
             Ok(concrete_environment) => concrete_environment,
             Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {

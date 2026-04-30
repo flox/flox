@@ -64,6 +64,7 @@ use flox_rust_sdk::models::environment::{
     open_path,
 };
 use indoc::{formatdoc, indoc};
+use pollster::FutureExt;
 use tempfile::TempDir;
 use thiserror::Error;
 use toml_edit::visit_mut::VisitMut;
@@ -967,7 +968,7 @@ impl EnvironmentSelect {
     /// it should default to an environment in the current directory.
     pub fn to_concrete_environment(
         &self,
-        flox: &Flox,
+        flox: &mut Flox,
         generation: Option<GenerationId>,
     ) -> Result<ConcreteEnvironment, EnvironmentSelectError> {
         let env = match self {
@@ -1004,14 +1005,28 @@ impl EnvironmentSelect {
                 ConcreteEnvironment::Remote(env)
             },
             EnvironmentSelect::Default(()) => {
-                let user_handle = flox.auth_strategy.get_handle().context(formatdoc! {"
-                    You must be logged in to use '-D' or '--default'
+                let user_handle = match flox.auth_strategy.get_handle() {
+                    Ok(handle) => handle,
+                    Err(_) if Dialog::can_prompt() && matches!(flox.auth_strategy.auth_method(), AuthMethod::Auth0) => {
+                        if flox.floxhub_token.is_some() {
+                            message::plain("Your FloxHub token has expired. Re-authenticating...");
+                        } else {
+                            message::plain("You are not logged in to FloxHub. Logging in...");
+                        }
+                        let token = auth::login_flox(flox).block_on()?;
+                        token.handle().to_string()
+                    },
+                    Err(_) => {
+                        return Err(EnvironmentSelectError::Anyhow(anyhow!(formatdoc! {"
+                            You must be logged in to use '-D' or '--default'
 
-                    To log in to FloxHub, run:
-                        flox auth login
+                            To log in to FloxHub, run:
+                                flox auth login
 
-                    Or use '-r owner/name' to specify an environment directly.
-                "})?;
+                            Or use '-r owner/name' to specify an environment directly.
+                        "})))
+                    }
+                };
 
                 debug!(
                     user = %user_handle,
@@ -1044,7 +1059,7 @@ impl EnvironmentSelect {
     /// in the current directory.
     pub fn detect_concrete_environment(
         &self,
-        flox: &Flox,
+        flox: &mut Flox,
         message: &str,
     ) -> Result<ConcreteEnvironment, EnvironmentSelectError> {
         let env = match self {
@@ -1073,14 +1088,28 @@ impl EnvironmentSelect {
                 ConcreteEnvironment::Remote(env)
             },
             EnvironmentSelect::Default(()) => {
-                let user_handle = flox.auth_strategy.get_handle().context(formatdoc! {"
-                    You must be logged in to use '-D' or '--default'
+                let user_handle = match flox.auth_strategy.get_handle() {
+                    Ok(handle) => handle,
+                    Err(_) if Dialog::can_prompt() && matches!(flox.auth_strategy.auth_method(), AuthMethod::Auth0) => {
+                        if flox.floxhub_token.is_some() {
+                            message::plain("Your FloxHub token has expired. Re-authenticating...");
+                        } else {
+                            message::plain("You are not logged in to FloxHub. Logging in...");
+                        }
+                        let token = auth::login_flox(flox).block_on()?;
+                        token.handle().to_string()
+                    },
+                    Err(_) => {
+                        return Err(EnvironmentSelectError::Anyhow(anyhow!(formatdoc! {"
+                            You must be logged in to use '-D' or '--default'
 
-                    To log in to FloxHub, run:
-                        flox auth login
+                            To log in to FloxHub, run:
+                                flox auth login
 
-                    Or use '-r owner/name' to specify an environment directly.
-                "})?;
+                            Or use '-r owner/name' to specify an environment directly.
+                        "})))
+                    }
+                };
 
                 debug!(
                     user = %user_handle,
@@ -1124,7 +1153,7 @@ impl EnvironmentSelect {
 impl DirEnvironmentSelect {
     pub fn detect_concrete_environment(
         &self,
-        flox: &Flox,
+        flox: &mut Flox,
         message: &str,
     ) -> Result<ConcreteEnvironment, EnvironmentSelectError> {
         match self {

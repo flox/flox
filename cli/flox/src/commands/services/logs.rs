@@ -35,8 +35,8 @@ pub struct Logs {
 
 impl Logs {
     #[instrument(name = "logs", skip_all)]
-    pub async fn handle(self, flox: Flox) -> Result<()> {
-        let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
+        let env = ServicesEnvironment::from_environment_selection(&mut flox, &self.environment)?;
         environment_subcommand_metric!("services::logs", env.environment);
         guard_service_commands_available(&env, &flox.system)?;
 

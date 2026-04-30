@@ -35,8 +35,8 @@ pub struct Start {
 
 impl Start {
     #[instrument(name = "start", skip_all)]
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
-        let mut env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
+    pub async fn handle(self, config: Config, mut flox: Flox) -> Result<()> {
+        let mut env = ServicesEnvironment::from_environment_selection(&mut flox, &self.environment)?;
         environment_subcommand_metric!("services::start", env.environment);
         let (current_mode, generation) = guard_is_within_activation(&env, "start")?;
         guard_service_commands_available(&env, &flox.system)?;

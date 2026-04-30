@@ -90,7 +90,7 @@ impl Edit {
         };
 
         let mut detected_environment =
-            match self.environment.detect_concrete_environment(&flox, "Edit") {
+            match self.environment.detect_concrete_environment(&mut flox, "Edit") {
                 Ok(concrete_env) => concrete_env,
                 Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
                 Err(e) => Err(e)?,

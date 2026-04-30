@@ -48,7 +48,7 @@ impl Uninstall {
 
         let mut concrete_environment = match self
             .environment
-            .detect_concrete_environment(&flox, "Uninstall from")
+            .detect_concrete_environment(&mut flox, "Uninstall from")
         {
             Ok(concrete_environment) => concrete_environment,
             Err(EnvironmentSelectError::EnvironmentError(

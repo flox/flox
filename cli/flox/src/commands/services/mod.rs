@@ -169,7 +169,7 @@ impl ServicesEnvironment {
     ///
     /// Returns an error if the environment is remote or doesn't support services.
     pub fn from_environment_selection(
-        flox: &Flox,
+        flox: &mut Flox,
         environment: &EnvironmentSelect,
     ) -> Result<Self> {
         let concrete_environment = environment.detect_concrete_environment(flox, "Services in")?;

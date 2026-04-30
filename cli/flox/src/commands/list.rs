@@ -58,12 +58,12 @@ pub enum ListMode {
 
 impl List {
     #[instrument(name = "list", skip_all)]
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
         sentry_set_tag("list_mode", format!("{:?}", &self.list_mode));
 
         let mut env = self
             .environment
-            .detect_concrete_environment(&flox, "List using")?;
+            .detect_concrete_environment(&mut flox, "List using")?;
         environment_subcommand_metric!("list", env);
 
         let (manifest_contents, lockfile) = match (&mut env, self.upstream) {

@@ -36,8 +36,8 @@ pub struct Status {
 
 impl Status {
     #[instrument(name = "status", skip_all)]
-    pub async fn handle(self, flox: Flox) -> Result<()> {
-        let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
+        let env = ServicesEnvironment::from_environment_selection(&mut flox, &self.environment)?;
         environment_subcommand_metric!("services::status", env.environment);
         guard_service_commands_available(&env, &flox.system)?;
 
