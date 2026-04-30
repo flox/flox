@@ -118,6 +118,10 @@ pub struct FloxConfig {
     /// Flox will delete this tempdir upon conclusion of the process
     /// unless `keep_tempdir == true` AND verbose logs are enabled.
     pub keep_tempdir: Option<bool>,
+
+    /// Whether to automatically activate environments.
+    /// Possible values: `allowed` (default), `prompt`.
+    pub auto_activate: Option<AutoActivate>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -154,6 +158,15 @@ pub enum InstallerChannel {
     Stable,
     Nightly,
     Qa,
+}
+
+/// Whether to automatically activate environments
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum AutoActivate {
+    #[default]
+    Allowed,
+    Prompt,
 }
 
 impl Display for InstallerChannel {
