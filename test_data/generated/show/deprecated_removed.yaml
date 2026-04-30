@@ -1,0 +1,9 @@
+when:
+  path: /api/v1/catalog/packages/old-foo
+  method: GET
+then:
+  status: 200
+  header:
+  - name: content-type
+    value: application/json
+  body: '{"deprecation":{"kind":"removed"},"items":[],"total_count":0}'
