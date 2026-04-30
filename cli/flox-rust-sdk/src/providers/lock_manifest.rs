@@ -374,25 +374,31 @@ impl LockManifest {
             packages: packages.clone(),
             compose: compose.clone(),
         };
-        // Decide which schema we can write the manifest as.
-        let merged = merged
+
+        let merged_maybe_backwards_compatible = merged
             .as_maybe_backwards_compatible(manifest.original_schema(), Some(&proposed_lockfile))?;
 
-        let merged_manfiest_is_latest_schema =
-            merged.get_schema_version() == KnownSchemaVersion::latest();
-        if let Some(compose) = compose.as_mut()
-            && merged_manfiest_is_latest_schema
+        // merge_manifest returns both a merged manifest and compose.composer as latest schema
+        // If the original manifest was latest or the merged manifest must be latest, we can leave compose.composer as latest
+        // If compose is None, we can't change it
+        // Otherwise, we know that merged is backwards compatible as
+        // original_schema(), and we want to set compose.composer to original schema version for consistency
+        if manifest.original_schema() != KnownSchemaVersion::latest()
+            && merged_maybe_backwards_compatible.get_schema_version()
+                != KnownSchemaVersion::latest()
+            && let Some(compose) = compose.as_mut()
         {
-            // Record the original schema of the user's manifest.
-            compose.composer = manifest.as_typed_only();
+            compose.composer = manifest.pre_migration_manifest();
         }
+
+        // Decide which schema we can write the manifest as.
         // The caller (CoreEnvironment::lock / include_upgrade) is responsible
         // for rewriting the user's on-disk manifest when the merged manifest
-        // ends up at a newer schema than the original.
+        // and compose.composer end up at a newer schema than the original.
 
         let lockfile = Lockfile {
             version: Version::<1>,
-            manifest: merged,
+            manifest: merged_maybe_backwards_compatible,
             packages,
             compose,
         };
@@ -1368,7 +1374,7 @@ mod tests {
         fake_flake_installable_lock,
         fake_store_path_lock,
     };
-    use flox_manifest::parsed::common::{DEFAULT_GROUP_NAME, Include, Vars};
+    use flox_manifest::parsed::common::{DEFAULT_GROUP_NAME, Include, KnownSchemaVersion, Vars};
     use flox_manifest::parsed::latest::PackageDescriptorFlake;
     use flox_manifest::raw::test_helpers::{
         empty_test_migrated_manifest,

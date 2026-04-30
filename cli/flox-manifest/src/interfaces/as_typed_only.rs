@@ -20,6 +20,7 @@ impl AsTypedOnlyManifest for Manifest<Validated> {
 }
 
 impl AsTypedOnlyManifest for Manifest<MigratedTypedOnly> {
+    /// This is always in the latest schema version
     fn as_typed_only(&self) -> Manifest<TypedOnly> {
         Manifest {
             inner: TypedOnly {
