@@ -89,12 +89,14 @@ impl Edit {
             ensure_auth(&mut flox).await?;
         };
 
-        let mut detected_environment =
-            match self.environment.detect_concrete_environment(&mut flox, "Edit") {
-                Ok(concrete_env) => concrete_env,
-                Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
-                Err(e) => Err(e)?,
-            };
+        let mut detected_environment = match self
+            .environment
+            .detect_concrete_environment(&mut flox, "Edit")
+        {
+            Ok(concrete_env) => concrete_env,
+            Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
+            Err(e) => Err(e)?,
+        };
         environment_subcommand_metric!("edit", detected_environment);
 
         match self.action {

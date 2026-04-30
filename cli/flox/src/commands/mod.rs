@@ -1007,7 +1007,10 @@ impl EnvironmentSelect {
             EnvironmentSelect::Default(()) => {
                 let user_handle = match flox.auth_strategy.get_handle() {
                     Ok(handle) => handle,
-                    Err(_) if Dialog::can_prompt() && matches!(flox.auth_strategy.auth_method(), AuthMethod::Auth0) => {
+                    Err(_)
+                        if Dialog::can_prompt()
+                            && matches!(flox.auth_strategy.auth_method(), AuthMethod::Auth0) =>
+                    {
                         if flox.floxhub_token.is_some() {
                             message::plain("Your FloxHub token has expired. Re-authenticating...");
                         } else {
@@ -1024,8 +1027,8 @@ impl EnvironmentSelect {
                                 flox auth login
 
                             Or use '-r owner/name' to specify an environment directly.
-                        "})))
-                    }
+                        "})));
+                    },
                 };
 
                 debug!(
@@ -1090,7 +1093,10 @@ impl EnvironmentSelect {
             EnvironmentSelect::Default(()) => {
                 let user_handle = match flox.auth_strategy.get_handle() {
                     Ok(handle) => handle,
-                    Err(_) if Dialog::can_prompt() && matches!(flox.auth_strategy.auth_method(), AuthMethod::Auth0) => {
+                    Err(_)
+                        if Dialog::can_prompt()
+                            && matches!(flox.auth_strategy.auth_method(), AuthMethod::Auth0) =>
+                    {
                         if flox.floxhub_token.is_some() {
                             message::plain("Your FloxHub token has expired. Re-authenticating...");
                         } else {
@@ -1107,8 +1113,8 @@ impl EnvironmentSelect {
                                 flox auth login
 
                             Or use '-r owner/name' to specify an environment directly.
-                        "})))
-                    }
+                        "})));
+                    },
                 };
 
                 debug!(
