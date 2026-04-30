@@ -1466,3 +1466,46 @@ fn render_composition_manifest(manifest: &Manifest<TypedOnly>) -> Result<String>
 
     Ok(document.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use bpaf::Parser;
+
+    use super::*;
+
+    #[test]
+    fn default_to_flags_returns_short_form() {
+        let env_select = EnvironmentSelect::Default(());
+        assert_eq!(env_select.to_flags(), Some(vec!["-D".to_string()]));
+    }
+
+    #[test]
+    fn default_and_remote_mutually_exclusive() {
+        let parser = environment_select().to_options();
+        let result = parser.run_inner(&["-D", "-r", "owner/name"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn default_and_dir_mutually_exclusive() {
+        let parser = environment_select().to_options();
+        let result = parser.run_inner(&["-D", "-d", "/some/path"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn default_long_form_parses() {
+        let parser = environment_select().to_options();
+        let result = parser.run_inner(&["--default"]);
+        assert!(matches!(result, Ok(EnvironmentSelect::Default(()))));
+    }
+
+    #[test]
+    fn short_and_long_form_equivalent() {
+        let parser = environment_select().to_options();
+        let short = parser.run_inner(&["-D"]);
+        let long = parser.run_inner(&["--default"]);
+        assert!(matches!(short, Ok(EnvironmentSelect::Default(()))));
+        assert!(matches!(long, Ok(EnvironmentSelect::Default(()))));
+    }
+}
