@@ -32,7 +32,7 @@ pub struct Persist {
 impl Persist {
     #[instrument(name = "persist", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
+        let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment).await?;
         environment_subcommand_metric!("services::persist", env.environment);
         guard_service_commands_available(&env, &flox.system)?;
 

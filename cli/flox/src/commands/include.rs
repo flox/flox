@@ -60,7 +60,8 @@ impl Upgrade {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         let mut environment = self
             .environment
-            .detect_concrete_environment(&flox, "Get latest changes to included environments in")?;
+            .detect_concrete_environment(&flox, "Get latest changes to included environments in")
+            .await?;
 
         environment_subcommand_metric!("include::upgrade", environment);
 

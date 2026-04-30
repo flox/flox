@@ -59,7 +59,8 @@ impl Containerize {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         let mut env = self
             .environment
-            .detect_concrete_environment(&flox, "Containerize")?;
+            .detect_concrete_environment(&flox, "Containerize")
+            .await?;
         environment_subcommand_metric!("containerize", env);
 
         // Check that a specified runtime exists.
