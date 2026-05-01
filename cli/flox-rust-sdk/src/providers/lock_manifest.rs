@@ -2950,7 +2950,7 @@ mod tests {
     /// If catalog packages are already locked, no locking should occur.
     /// Installables are still being resolved if not locked.
     #[tokio::test]
-    async fn skip_catatalog_package_if_fully_locked() {
+    async fn skip_catalog_package_if_fully_locked() {
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
         let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
 
