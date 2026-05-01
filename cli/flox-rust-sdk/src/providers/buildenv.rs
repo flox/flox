@@ -106,7 +106,7 @@ pub enum BuildEnvError {
     /// The error message is the stderr of the `nix build` command.
     // TODO: this requires to capture the stderr of the `nix build` command
     // or essentially "tee" it if we also want to forward the logs to the user.
-    // At the moment the "interesting" logs
+    // At the moment, the "interesting" logs
     // are emitted by the `realise` portion of the build.
     // So in the interest of initial simplicity
     // we can defer forwarding the nix build logs and capture output with [Command::output].
