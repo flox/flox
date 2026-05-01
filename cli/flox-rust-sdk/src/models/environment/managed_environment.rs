@@ -2145,7 +2145,7 @@ mod test {
     }
 
     /// Validate that two environments with equivalent manifests fail validation
-    /// if the binary representationnof the manifest differs.
+    /// if the binary representation of the manifest differs.
     #[test]
     fn test_validate_local_different_binary_content() {
         let (flox, _temp_dir_handle) = flox_instance();
