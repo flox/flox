@@ -621,7 +621,7 @@ where
                 // If we failed, log the error and try the next location.
                 debug!(%attr_path, %drv, %location_url, %stderr, "Failed to copy custom package from store");
             } else {
-                debug!(%attr_path, %drv, %location_url, "Succesfully copied custom package from store");
+                debug!(%attr_path, %drv, %location_url, "Successfully copied custom package from store");
 
                 // TODO: there is a real but very short period between the successful copy
                 // and setting the gc root in which the path _could_ be collected as garbage,
@@ -2179,7 +2179,7 @@ mod buildenv_tests {
         let result = buildenv.build(&client, &lockfile_path, None);
         assert!(
             result.is_ok(),
-            "environment should render succesfully: {}",
+            "environment should render successfully: {}",
             result.unwrap_err()
         );
     }
