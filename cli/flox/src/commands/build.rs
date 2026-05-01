@@ -106,10 +106,12 @@ enum SubcommandOrBuildTargets {
         #[bpaf(positional("installable"))]
         installable: String,
     },
+    /// Update catalog lockfile
+    ///
+    /// Resolves catalog inputs and writes the lockfile.
     #[bpaf(
         command,
-        footer("Run 'man flox-build-update-catalogs' for more details."),
-        hide, // todo: add man-pages when alongside un-hiding this
+        footer("Run 'man flox-build-update-catalogs' for more details.")
     )]
     UpdateCatalogs {},
     BuildTargets {

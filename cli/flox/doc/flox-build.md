@@ -194,5 +194,8 @@ $ npx serve result-app
 # SEE ALSO
 
 [`flox-build-clean(1)`](./flox-build-clean.md)
+[`flox-build-import-nixpkgs(1)`](./flox-build-import-nixpkgs.md)
+[`flox-build-update-catalogs(1)`](./flox-build-update-catalogs.md)
 [`flox-activate(1)`](./flox-activate.md)
 [`manifest.toml(5)`](./manifest.toml.md)
+[`nix-builds.toml(5)`](./nix-builds.toml.md)
