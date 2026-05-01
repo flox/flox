@@ -104,7 +104,7 @@ mod tests {
         assert_eq!(previous_generation, expected_prev_id)
     }
 
-    /// Use mock generations that were rolled back once from generation 3 -> genration 2.
+    /// Use mock generations that were rolled back once from generation 3 -> generation 2.
     /// By our current definition of "previous generation" we expect another rollback
     /// to "roll forward" to generation 3, as thats the one previously live.
     #[test]
