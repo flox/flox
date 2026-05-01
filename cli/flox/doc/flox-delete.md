@@ -36,7 +36,7 @@ use.
 :   Delete the environment without confirmation.
 
 <!-- Copied from ./include/environment-options.md
-     `flox delete` deos not currently handle remote environments
+     `flox delete` does not currently handle remote environments
      Replace with an include once support is added.
  -->
 ## Environment Options
