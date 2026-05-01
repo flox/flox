@@ -1286,7 +1286,7 @@ impl ManagedEnvironment {
             .build(flox)
             .map_err(ManagedEnvironmentError::Build)?;
 
-        // Ensure that the environment does not include other local ennvironments
+        // Ensure that the environment does not include other local environments
         check_for_local_includes(&lockfile)?;
 
         Self::push_new_without_building(

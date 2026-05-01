@@ -353,7 +353,7 @@ mod tests {
         .with_subscriber(subscriber)
         .await;
 
-        // - environmemnts are listed by the order they were included
+        // - environments are listed by the order they were included
         // - composer environment is listed last
         // - environment `dep_one` doesn't appear because its fields are overridden later
         assert_eq!(writer.to_string(), indoc! {"
