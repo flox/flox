@@ -402,7 +402,7 @@ common_suite_setup() {
   unset_flox_env_setup
   # Backup real env vars.
   reals_setup
-  # Setup a phony home directory shared by the test suite.
+  # Set up a phony home directory shared by the test suite.
   # Individual files and tests may create their own private homedirs, but this
   # default one is required before we try to invoke any `flox' CLI commands.
   home_setup suite
