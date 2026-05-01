@@ -203,7 +203,7 @@ EOF
 }
 
 # bats test_tags=managed,diverged,managed:diverged
-@test "m7: remote can not be pulled into diverged environment" {
+@test "m7: remote cannot be pulled into diverged environment" {
   mkdir a a_data
   mkdir b b_data
 

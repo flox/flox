@@ -38,7 +38,7 @@ impl Delete {
             let message = formatdoc! {"
                 Environment {description} was not deleted.
 
-                Remote environments on FloxHub can not yet be deleted.
+                Remote environments on FloxHub cannot yet be deleted.
             "};
             bail!("{message}")
         }
@@ -52,7 +52,7 @@ impl Delete {
             let message = formatdoc! {"
                 Environment {description} is linked with a FloxHub environment.
 
-                FloxHub environments can not yet be deleted.
+                FloxHub environments cannot yet be deleted.
                 This command will only delete the local link in '{dot_flox}'.
             "};
             message::warning(message);

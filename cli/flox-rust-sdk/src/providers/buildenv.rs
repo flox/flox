@@ -1129,7 +1129,7 @@ where
 struct CheckedStorePaths {
     /// The store paths that have been checked.
     /// The validity of `CheckedStorePaths` is limited to the store paths actually checked.
-    /// I.e. if a store path was not checked, it can not be considered valid nor invalid.
+    /// I.e. if a store path was not checked, it cannot be considered valid nor invalid.
     checked: HashSet<String>,
     /// The store paths that have been checked and are valid.
     /// The construction of [CheckedStorePaths], i.e. [check_store_paths]

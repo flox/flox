@@ -46,7 +46,7 @@ pub enum BaseCatalogUrlSelect {
             help(
                 "Perform a nix expression build using a base package set of the given stability\n\
                 as tracked by the catalog server.\n\
-                Can not be used with manifest base builds."
+                Cannot be used with manifest base builds."
             )
         )]
         String,
