@@ -1150,7 +1150,7 @@ impl GitProvider for GitCommandProvider {
                 // [*] <name> <whitespace> <rev hash> <whitespace> <subject>
                 //  L present iff branch is currently checked out
 
-                // the active branch is denoted by a leadinf '*', which cannot be disabled?
+                // the active branch is denoted by a leading '*', which cannot be disabled?
                 let (full_name, rest) =
                     line.trim_start_matches('*').trim().split_once(' ').unwrap();
                 // hash part
