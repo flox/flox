@@ -457,7 +457,7 @@ Outside the container, snapshot the store so that you don't have to download the
 
     docker commit flox-dev flox:dev
 
-Within the container, remove any existing MacOS binaries and rebuild for Linux:
+Within the container, remove any existing macOS binaries and rebuild for Linux:
 
     just clean
     just build
