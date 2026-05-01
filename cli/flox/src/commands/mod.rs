@@ -320,7 +320,7 @@ impl FloxArgs {
 
         let catalog_client = init_catalog_client(&config, metrics_device_uuid)?;
 
-        // we already make sure $USER corresponds to **euid** earlier on oin the process.
+        // we already make sure $USER corresponds to **euid** earlier on in the process.
         let system_user_name =
             std::env::var("USER").context("could not determine username from $USER")?;
         let system_hostname = sys_info::hostname().context("could not determine hostname")?;
