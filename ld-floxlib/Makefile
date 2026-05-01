@@ -54,7 +54,7 @@ define unit_test_TEMPLATE =
   $(eval _value = $(word 2,$(_args)))
   # value with "/lib" appended to each element in ordered PATH.
   $(eval _value_with_lib = $(if $(_value),$(subst :/lib:,::,$(subst :,/lib:,$(_value)))/lib))
-  # "name" arg to pass to la_obsearch()
+  # "name" arg to pass to la_objsearch()
   $(eval _name = $(word 3,$(_args)))
   # value with $(_name) appended to each element in ordered PATH.
   $(eval _value_with_lib_and_name = $(if $(_value),$(subst :/lib/$(_name):,::,$(subst :,/lib/$(_name):,$(_value)))/lib/$(_name)))
