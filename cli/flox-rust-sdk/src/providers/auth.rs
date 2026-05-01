@@ -132,7 +132,7 @@ pub fn write_floxhub_netrc(
     token: &FloxhubToken,
 ) -> std::io::Result<TempPath> {
     let token_secret = token.secret();
-    // Restrict to known hostnamess so that we don't accidentally leak FloxHub
+    // Restrict to known hostnames so that we don't accidentally leak FloxHub
     // credentials to third-party ingress URIs.
     let netrc_contents = FLOXHUB_AUTHENTICATED_HOSTNAMES
         .iter()
