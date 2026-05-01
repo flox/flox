@@ -235,7 +235,7 @@ impl FloxBuildMk<'_> {
 
     /// Create a new instance with std{out,err} piped into buffers
     /// instead of inherited from the current process.
-    /// Useful for testing or when one wants to delibrately call the subsystem
+    /// Useful for testing or when one wants to deliberately call the subsystem
     /// without its output forwarded.
     pub fn new_with_buffers<'args>(
         flox: &'args Flox,
