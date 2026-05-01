@@ -660,7 +660,7 @@ impl PackageTargetKind {
 ///
 /// Outside of tests [PackageTargetName]s
 /// should only be produced via [PackageTarget::name],
-/// to maintain the guarantee that the package suppiosedly exists.
+/// to maintain the guarantee that the package supposedly exists.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display, derive_more::AsRef)]
 pub struct PackageTargetName<'t>(&'t str);
 
