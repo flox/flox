@@ -845,7 +845,7 @@ impl ProcessComposeLogReader {
             // kill the child because in both cases we want it to stop.
             child.kill().map_err(ServiceError::ProcessComposeCmd)?;
 
-            // Return an error when the the thread handle is joined.
+            // Return an error when the thread handle is joined.
             // Note that if the receiver was dropped, this error won't ever be handled.
             // But we still want to wait so we don't leave a zombie.
             // The most likely error is that the socket doesn't exist,

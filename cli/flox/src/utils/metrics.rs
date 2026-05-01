@@ -138,7 +138,7 @@ where
 }
 
 /// A single metric entry
-/// This is the a metric event with additional static metadata
+/// This is the metric event with additional static metadata
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MetricEntry {
     subcommand: Option<String>,
