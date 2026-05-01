@@ -642,7 +642,7 @@ pub trait GenerationsExt {
     /// Pulling an environment for example may result in an invalid environment
     /// e.g. because the manifest does not specify the current system,
     /// resetting in that context should not fail either.
-    /// Like [ManagedEnvironment::pull], downtream commands should check that the environment builds
+    /// Like [ManagedEnvironment::pull], downstream commands should check that the environment builds
     /// if applicable.
     ///
     /// TODO: Specific behavior for other files than the manifest should is undefined.
