@@ -648,7 +648,7 @@ pub struct PackageToModify {
 
 /// Infers an install ID from the last component of a slash or dot separated
 /// attribute path, so that we get a user-friendly name without any catalog or
-/// package hierachy.
+/// package hierarchy.
 /// Components within quotes are treated as a single component.
 fn install_id_from_attr_path(
     attr_path: &str,
