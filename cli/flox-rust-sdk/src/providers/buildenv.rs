@@ -43,7 +43,7 @@ static BUILDENV_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
         .into()
 });
 
-/// Profix of locked_url of catalog packages that are from the nixpkgs base-catalog.
+/// Prefix of locked_url of catalog packages that are from the nixpkgs base-catalog.
 /// This url was meant to serve as a flake reference to the Flox hosted mirror of nixpkgs,
 /// but is both ill formatted and does not provide the necessary overrides
 /// to allow evaluating packages without common evaluation checks, such as unfree and broken.
