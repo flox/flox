@@ -1259,7 +1259,7 @@ fn check_store_paths(
 /// Create GC roots for the given store paths.
 /// All provided paths must exist and be valid.
 /// It's recommended to run [check_store_paths] to verify the validity of the paths.
-/// If a gc process may be runnin in the background there is a short time
+/// If a gc process may be running in the background there is a short time
 /// in which paths returned as valid by [check_store_paths] are deleted
 /// before a temproot can be set.
 /// In that case checking and setting gc-roots can be retried safely
