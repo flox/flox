@@ -1241,7 +1241,7 @@ mod tests {
     }
 
     /// Test that [ProcessComposeLogReader] reads at less than `tail` lines from the process,
-    /// even if the process loggs more lines eventually,
+    /// even if the process logs more lines eventually,
     /// but has yet only logged less than `tail` lines.
     ///
     /// We rely on the `--tail` behavior of `process-compose process logs`,
