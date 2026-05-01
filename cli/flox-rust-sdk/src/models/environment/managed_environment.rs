@@ -122,7 +122,7 @@ pub enum ManagedEnvironmentError {
         user: Option<String>,
     },
     /// [ManagedEnvironment::push_new] may return this
-    /// if the pushed environmentname already exists
+    /// if the pushed environment name already exists
     #[error("environment '{env_ref}' already exists at upstream '{upstream}'")]
     UpstreamAlreadyExists {
         env_ref: RemoteEnvironmentRef,
