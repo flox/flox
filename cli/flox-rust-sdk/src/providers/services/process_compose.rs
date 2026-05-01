@@ -461,7 +461,7 @@ pub fn start_service(socket: impl AsRef<Path>, name: impl AsRef<str>) -> Result<
     let mut cmd = base_process_compose_command(socket);
     cmd.arg("start").arg(name);
 
-    debug!(cmd = %cmd.display(), service = name, "startig service");
+    debug!(cmd = %cmd.display(), service = name, "starting service");
 
     let output = cmd.output().map_err(ServiceError::ProcessComposeCmd)?;
 
