@@ -16,7 +16,7 @@ in
     expected = "nestedPkgs.nestedPkg nestedPkgs.otherNestedPkg toplevelPkg";
   };
 
-  # while correct, these kind of quoting tends to casuse issues
+  # while correct, these kind of quoting tends to cause issues
   # on the fringe between make and the cli.
   # Especially <space>s may be tricky to pass as make arguments,
   # but even mere quoting sets off the cli.
