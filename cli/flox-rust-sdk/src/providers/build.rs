@@ -758,7 +758,7 @@ impl PackageTargets {
     }
 
     /// Validates a list of target names (e.g. CLI arguments),
-    /// against the knwon targets, returning a [Vec<PackageTarget>] of valid targets.
+    /// against the known targets, returning a [Vec<PackageTarget>] of valid targets.
     /// If invalid target names are detected this function will return an error instead.
     pub fn select(
         &self,
