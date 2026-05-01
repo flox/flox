@@ -62,7 +62,7 @@ function skip_if_not_local_dev() {
 
 # We can't easily or safely predict the buildtime version so assert that the two
 # different formats never appear at the same time. When running in CI remote
-# builders it will fallback to "0.0.0-dirty".
+# builders it will fall back to "0.0.0-dirty".
 MOCK_RUNTIME_VERSION="1.2.3"
 REGEX_BUILDTIME_VERSION='^([0-9]+\.[0-9]+\.[0-9]+-g.+|0.0.0-dirty)$'
 
