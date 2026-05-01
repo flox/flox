@@ -51,7 +51,7 @@ flowchart TB
         CreateStateDir["Create per-start state directory:<br>{store_basename}.{timestamp}/"]
         CheckExecStart{"executive_started()?"}
         SpawnExec["Spawn flox-activations executive<br>as detached process"]
-        ExecSetSupreaper["Executive: Set as subreaper (Linux)"]
+        ExecSetSubreaper["Executive: Set as subreaper (Linux)"]
         ExecSignal["Executive: Send SIGUSR1 to parent"]
         WaitSignal["Parent: Wait for SIGUSR1"]
         UpdateExecPID["Update state.executive_pid = child_pid"]
@@ -176,8 +176,8 @@ flowchart TB
     CheckRetryLimit -- Yes --> Sleep
     Sleep --> LockState
     CheckRetryLimit -- No --> ErrorMaxRetries
-    SpawnExec --> ExecSetSupreaper & WaitSignal
-    ExecSetSupreaper --> ExecSignal
+    SpawnExec --> ExecSetSubreaper & WaitSignal
+    ExecSetSubreaper --> ExecSignal
     ExecSignal -. SIGUSR1 .-> WaitSignal
     WaitSignal --> UpdateExecPID
     UpdateExecPID --> WriteStateBeforeHooks
