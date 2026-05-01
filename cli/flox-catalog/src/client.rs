@@ -894,7 +894,7 @@ pub mod tests {
     // For example the package version API is expected
     // to return 404 and 422 error responses with a json body
     // of the form `{ "detail": <String> }`.
-    // Erroneous responses (!= 200) _not_ mathcing these two cases,
+    // Erroneous responses (!= 200) _not_ matching these two cases,
     // are represented as `APIError::UnexpectedResponse`s.
     // Responses with expected status but not matching the expected body schema,
     // will turn into `APIError::InvalidResponsePayload`.
