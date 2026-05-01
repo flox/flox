@@ -1920,7 +1920,7 @@ mod test {
                 .exists()
         );
 
-        // dlete env dir to see whether it is recreated
+        // delete env dir to see whether it is recreated
         fs::remove_dir_all(managed_env.path.join(ENV_DIR_NAME)).unwrap();
 
         let _ = managed_env
