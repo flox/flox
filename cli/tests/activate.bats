@@ -4080,7 +4080,7 @@ Setting PATH from ${rc_file}"
   wait_for_background_activation "$background_pid" 15s
   run cat output
   # This the only place we use `--partial` because we only want to know that the
-  # intial activation started.
+  # initial activation started.
   assert_output --partial - << EOF
 sourcing hook.on-activate for first time
 ${output_from_rc_files}
