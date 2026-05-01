@@ -86,7 +86,7 @@ ifeq (,$(wildcard $(_libexec_dir)))
   $(error cannot identify flox-package-builder libexec directory)
 endif
 
-# Path to Nix expession (NEF) library.
+# Path to Nix expression (NEF) library.
 _nef := $(_libexec_dir)/nef
 
 # Set makefile verbosity based on the value of _FLOX_SUBSYSTEM_VERBOSITY [sic]
