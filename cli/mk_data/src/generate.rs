@@ -236,7 +236,7 @@ pub fn generate_category_jobs<'a>(
             },
             (false, None) => {
                 if response_filename.exists() {
-                    trace!(name, explicit = false, path = %response_filename.display(), "skiping job because output exists");
+                    trace!(name, explicit = false, path = %response_filename.display(), "skipping job because output exists");
                     continue;
                 }
             },
