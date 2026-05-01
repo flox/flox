@@ -1146,7 +1146,7 @@ impl GitProvider for GitCommandProvider {
                 // If using the git cli that would probably be the better way
                 // of providing parseable data.
                 //
-                // the git putput is formatted as
+                // the git output is formatted as
                 // [*] <name> <whitespace> <rev hash> <whitespace> <subject>
                 //  L present iff branch is currently checked out
 
