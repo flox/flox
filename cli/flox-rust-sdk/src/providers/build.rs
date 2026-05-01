@@ -2998,7 +2998,7 @@ mod tests {
     }
 
     /// Test that patchShebangs is able to substitute the path for `cat`
-    /// as provided by Nix runCommmand by way of the `coreutils` package.
+    /// as provided by Nix runCommand by way of the `coreutils` package.
     /// If it uses a version of `coreutils` from a different nixpkgs
     /// revision then the build will fail the closure check, and
     /// `assert_build_status()` will flag the error accordingly.
@@ -3058,7 +3058,7 @@ mod tests {
     }
 
     /// Test that patchShebangs is able to substitute the path for `cat`
-    /// as provided by Nix runCommmand by way of the `coreutils` package.
+    /// as provided by Nix runCommand by way of the `coreutils` package.
     /// If it uses a version of `coreutils` from a different nixpkgs
     /// revision then the build will fail the closure check, and
     /// `assert_build_status()` will flag the error accordingly.
