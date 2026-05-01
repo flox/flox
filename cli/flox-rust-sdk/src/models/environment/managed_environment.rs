@@ -1386,7 +1386,7 @@ impl ManagedEnvironment {
             // git may produce two identical commits despite different repos.
             // Therefore the push to "FloxHub" will succeed with [PushFlag::UpToDate].
             // Since we want to signal that the upstream repo already exists
-            // we need to also catch this success.
+            // we also need to catch this success.
             Err(GitRemoteCommandError::Diverged) | Ok(PushFlag::UptoDate) => {
                 Err(ManagedEnvironmentError::UpstreamAlreadyExists {
                     env_ref: RemoteEnvironmentRef::new_from_parts(owner, name),
