@@ -1781,7 +1781,7 @@ mod tests {
                     &["and-not-targets"],
                 ),
                 //
-                // wrong fields, doesn't parse as install becauise the fields don't match,
+                // wrong fields, doesn't parse as install because the fields don't match,
                 // but won't fail parsing
                 (
                     json! {{ "kind": "install", "targets": "not a list" }},
