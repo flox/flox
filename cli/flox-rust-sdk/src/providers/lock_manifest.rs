@@ -1123,7 +1123,7 @@ impl LockManifest {
 
     /// Collect store paths from the manifest and create a list of [LockedPackageStorePath].
     /// Since store paths are locked by definition,
-    /// collection can directly map the discriptor to a locked package.
+    /// collection can directly map the descriptor to a locked package.
     fn collect_store_paths(manifest: &ManifestLatest) -> Vec<LockedPackageStorePath> {
         manifest
             .install
