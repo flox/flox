@@ -303,7 +303,7 @@ impl Build {
         let success_prefix = "Builds completed successfully.";
 
         match links_to_print.as_slice() {
-            // This case shouldnt occur with the current FloxBuildMk backend,
+            // This case shouldn't occur with the current FloxBuildMk backend,
             // which either errors earlier if nothing will be built,
             // or produces at least one link.
             // Handle anyway for completeness and to avoid errors in case the above changes.
