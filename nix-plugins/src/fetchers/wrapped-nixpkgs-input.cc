@@ -569,10 +569,10 @@ WrappedNixpkgsInputScheme::getAccessor(
    */
   if ( ! _input.getRev().has_value() )
     {
-      nix::fetchers::Cache::Key storeKeyOriginaInput( "flox-nixpkgs",
+      nix::fetchers::Cache::Key storeKeyOriginalInput( "flox-nixpkgs",
                                                       _input.attrs );
 
-      fetchSettings.getCache()->upsert( storeKeyOriginaInput,
+      fetchSettings.getCache()->upsert( storeKeyOriginalInput,
                                         *store,
                                         { { "rev", rev->gitRev() } },
                                         storePath );
