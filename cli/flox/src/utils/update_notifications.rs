@@ -28,7 +28,7 @@ const UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH: &str =
 const UPDATE_NOTIFICATION_FILE_NAME: &str = "update-check-timestamp.json";
 const UPDATE_NOTIFICATION_EXPIRY: Duration = Duration::days(1);
 
-/// Timestamp we serialize to a file to trackwhen we last checked
+/// Timestamp we serialize to a file to track when we last checked
 /// whether an update is available
 #[derive(Deserialize, Serialize)]
 struct LastUpdateCheck {
