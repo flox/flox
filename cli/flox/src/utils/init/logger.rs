@@ -106,7 +106,7 @@ pub fn create_registry_and_filter_reload_handle() -> (
     // What is possible however is to filter out the _"progress" fields_,
     // so that spans are still printed but we don't repeat the messages.
     // That is using the `FilteredFormatFields` utility from `tracing_indicative`,
-    // which is a visitor implementation that just dropts fields based on a filter function,
+    // which is a visitor implementation that just drops fields based on a filter function,
     // here: a test for the field name "progress".
     let log_layer = tracing_subscriber::fmt::layer()
         .with_writer(writer.clone())
