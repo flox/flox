@@ -442,7 +442,7 @@ pub enum GenerationsError {
     #[error("could not write generations metadata file")]
     WriteMetadata(#[source] std::io::Error),
 
-    #[error("failed to migrate v1 metatada: {0}")]
+    #[error("failed to migrate v1 metadata: {0}")]
     MigrateV1ToV2(String),
 
     #[error("could not show generations metadata file")]
