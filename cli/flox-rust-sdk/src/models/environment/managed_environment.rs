@@ -775,7 +775,7 @@ impl GenerationsExt for ManagedEnvironment {
 /// Constructors and related functions
 impl ManagedEnvironment {
     /// Guard against modifying an environment that is activated at a specific
-    /// generation so that we don't create unecessary branches in the generation
+    /// generation so that we don't create unnecessary branches in the generation
     /// history.
     fn guard_generation_immutable(&self) -> Result<(), EnvironmentError> {
         if let Some(generation) = self.generation {
