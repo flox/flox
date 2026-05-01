@@ -264,7 +264,7 @@ fn locate_user_config_dir(flox_dirs: &BaseDirectories) -> Result<PathBuf> {
 
             // Allow subshells to find the same config dir.
             // TODO: decide if its worth modifying the env for this.
-            // SAFTEY: config initially read when there is no concurrent access to env variables.
+            // SAFETY: config initially read when there is no concurrent access to env variables.
             unsafe {
                 env::set_var(FLOX_CONFIG_DIR_VAR, &config_dir);
             }

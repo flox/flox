@@ -1201,7 +1201,7 @@ pub fn get_installed_outputs(package: &PackageToList) -> Result<Vec<String>, Man
 /// will be used to inform the various `realise_*` functions,
 /// whether a package needs to be built or substituted.
 ///
-/// SAFTETY: [CheckedStorePaths] poses the risk of TOCTOU issues,
+/// SAFETY: [CheckedStorePaths] poses the risk of TOCTOU issues,
 /// especially when held for a long time.
 /// We acknowledge, that store paths might be _created_,
 /// after [CheckedStorePaths] is created;
