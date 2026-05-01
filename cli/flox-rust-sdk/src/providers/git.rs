@@ -698,7 +698,7 @@ pub enum GitCommandDiscoverError {
     Command(#[from] GitCommandError),
     #[error("Git directory is not valid unicode")]
     GitDirEncoding,
-    #[error("Git returned an uexpected output: {0}")]
+    #[error("Git returned an unexpected output: {0}")]
     UnexpectedOutput(String),
 }
 
