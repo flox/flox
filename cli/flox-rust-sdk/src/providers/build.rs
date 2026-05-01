@@ -2202,7 +2202,7 @@ mod tests {
         // guarantees about the portability or reproducibility of impure builds
         // which may link against system libraries.
         //
-        // This also serves as a regression test against `autoPathelfHook`
+        // This also serves as a regression test against `autoPatchelfHook`
         // conflicting with `gcc` or `libc` from the Flox environment which will
         // cause either binaries that hang or fail with:
         //
