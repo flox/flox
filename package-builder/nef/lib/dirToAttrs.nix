@@ -40,7 +40,7 @@
       Directory :: {
         path = String
         type = "directory"
-        entries = { name -> Nix | Directopry }
+        entries = { name -> Nix | Directory }
       }
       Nix :: {
         path = String
