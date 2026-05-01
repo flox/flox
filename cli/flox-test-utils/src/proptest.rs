@@ -136,7 +136,7 @@ pub struct OverlappingMaps<T> {
 ///
 /// The return values are the two maps whose keys overlap and the overlapping keys.
 /// Note that this returns a `BoxedStrategy` purely for the sake of not killing
-/// `rust-analyzer` with the horendous type that would otherwise be generated as
+/// `rust-analyzer` with the horrendous type that would otherwise be generated as
 /// the return type for this function.
 pub fn btree_maps_overlapping_keys<T: Arbitrary>(
     key_max_size: usize,
