@@ -1118,7 +1118,10 @@ impl InitHook for Node {
 mod tests {
 
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::providers::catalog::test_helpers::auto_recording_catalog_client;
+    use flox_rust_sdk::providers::catalog::test_helpers::{
+        auto_recording_catalog_client,
+        get_prod_package_version,
+    };
     use pretty_assertions::assert_eq;
     use serde::Serialize;
     use serde_with::skip_serializing_none;
@@ -1177,7 +1180,7 @@ mod tests {
         };
         let node_20 = Package {
             name: "nodejs_20".to_string(),
-            version: "20.20.0".to_string(),
+            version: get_prod_package_version("nodejs_20"),
         };
 
         let test_cases = vec![

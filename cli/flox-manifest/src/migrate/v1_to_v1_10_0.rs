@@ -319,7 +319,7 @@ fn collect_locked_packages_by_kind(
 #[cfg(test)]
 mod tests {
     use flox_core::canonical_path::CanonicalPath;
-    use flox_test_utils::GENERATED_DATA;
+    use flox_test_utils::{GENERATED_DATA, MANUALLY_GENERATED};
 
     use super::*;
     use crate::Manifest;
@@ -335,9 +335,12 @@ mod tests {
     fn locked_catalog_descriptor_from_mock(
         install_id: &str,
     ) -> LockedDescriptor<v1::PackageDescriptorCatalog, LockedPackageCatalog> {
-        let subpath = format!("envs/{install_id}/manifest.lock");
+        let path = MANUALLY_GENERATED
+            .join("migration_baselines/v1")
+            .join(install_id)
+            .join("manifest.lock");
         let (descriptor, locked_packages) =
-            locked_package_catalog_from_mock_all_systems(install_id, GENERATED_DATA.join(subpath));
+            locked_package_catalog_from_mock_all_systems(install_id, path);
         let locked_descriptors_by_system = locked_packages
             .into_iter()
             .map(|p| (p.system.clone(), p))
