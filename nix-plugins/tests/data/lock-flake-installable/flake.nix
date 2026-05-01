@@ -98,7 +98,7 @@
               '';
 
           withDescription =
-            pkgs.runCommand "withDescrioption" { meta.description = "A package with a description"; }
+            pkgs.runCommand "withDescription" { meta.description = "A package with a description"; }
               ''
                 touch $out
               '';
