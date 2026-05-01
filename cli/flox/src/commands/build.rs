@@ -306,7 +306,7 @@ impl Build {
             // This case shouldnt occur with the current FloxBuildMk backend,
             // which either errors earlier if nothing will be built,
             // or produces at least one link.
-            // Handle anyway for completeness and to avoid erros in case the above changes.
+            // Handle anyway for completeness and to avoid errors in case the above changes.
             [] => message::info(format!("{success_prefix} No outputs created")),
             [link] => message::created(format!("{success_prefix} Output created: {link}",)),
             links => message::created(formatdoc! {"

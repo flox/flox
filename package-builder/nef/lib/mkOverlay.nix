@@ -65,7 +65,7 @@
                 An expression can only access its own attribute path to override its existing value.
               '';
 
-              # Find or build a `callPackage` function that replaces infinite recursion erros with an error
+              # Find or build a `callPackage` function that replaces infinite recursion errors with an error
               callPackage =
 
                 # Examples of such sets are:
