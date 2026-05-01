@@ -238,19 +238,18 @@ impl Publish {
         // Pre-check: ask the catalog server if this exact build already exists
         // before spending time on the build. If the check fails, warn the
         // user and continue — the dedup feature must never block publishes.
-        let base_url_str = publish_provider
+        let nixpkgs_rev = publish_provider
             .package_metadata
             .base_catalog_ref
-            .to_string();
-        // Format is "https://...?rev=<40-char-hex>"
-        let nixpkgs_rev = base_url_str.split("?rev=").nth(1).unwrap_or_else(|| {
-            warn!(
-                url = %base_url_str,
-                "could not extract nixpkgs rev from base catalog URL; \
-                 dedup check will likely miss"
-            );
-            ""
-        });
+            .rev()
+            .unwrap_or_else(|| {
+                warn!(
+                    url = %publish_provider.package_metadata.base_catalog_ref,
+                    "could not extract nixpkgs rev from base catalog URL; \
+                     dedup check will likely miss"
+                );
+                ""
+            });
         let system = publish_config
             .system_override
             .system
