@@ -197,7 +197,7 @@ fn fixed_vars_to_export(
 
 /// The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.
 /// If that env var is empty then activate_tracer is set to the full path of the `true` command in the PATH.
-/// If that env var is not empty and refers to an executable then then activate_tracer is set to that value.
+/// If that env var is not empty and refers to an executable then activate_tracer is set to that value.
 /// Else activate_tracer is set to refer to {interpreter_path}/activate.d/trace.
 // TODO: we should probably pass this around rather than recomputing it
 pub fn activate_tracer(interpreter_path: impl AsRef<Path>) -> String {
