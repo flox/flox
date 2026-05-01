@@ -721,7 +721,7 @@ VersionCommand ::= {
 
 `version`
 :   The version to attach to this build artifact.
-    This may be specifed in one of the following ways:
+    This may be specified in one of the following ways:
 
     1. **as a string**: `version = "0.0.1"`
     1. **as read from a file**: `version.file = "<path>"`
