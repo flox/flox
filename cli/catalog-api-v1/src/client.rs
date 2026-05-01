@@ -5391,7 +5391,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
     }
     /**Request access and info to publish a package
 
-Request access and informatin to publish a package to this catalog.
+Request access and information to publish a package to this catalog.
 Path Parameters:
 - **catalog_name**: The name of the catalog
 - **package_name**: The name of the package

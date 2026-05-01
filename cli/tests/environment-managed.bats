@@ -235,7 +235,7 @@ EOF
   # assert that pulling fails
   run "$FLOX_BIN" pull
   assert_failure
-  # assert that the error message includes infomration about the generations/history
+  # assert that the error message includes information about the generations/history
   assert_output --regexp "
 ✘ ERROR: The environment has diverged from the remote:
 
