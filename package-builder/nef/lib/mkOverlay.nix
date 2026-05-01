@@ -74,7 +74,7 @@
                   final.newScope {
                     ${name} = prev.${name} or recursionGuardError;
                   }
-                # probably equivalent to the above but struturally more similar to the `extend` case below
+                # probably equivalent to the above but structurally more similar to the `extend` case below
                 # else if final ? overrideScope then
                 #   (final.overrideScope (
                 #     _: _: { ${name} = prev.${name} or recursionGuardError; }
