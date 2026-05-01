@@ -1182,7 +1182,7 @@ pub fn check_package_metadata(
     pkg: PackageTarget,
 ) -> Result<PackageMetadata, PublishError> {
     // When publishing a manifest build the toplevel nixpkgs is required as the base url.
-    // for expression builds we want to use the extenally determined base url, i.e. stability.
+    // for expression builds we want to use the externally determined base url, i.e. stability.
     //
     // We should not need this, and allow for no base catalog page dependency.
     // But for now, requiring it simplifies resolution and model updates
