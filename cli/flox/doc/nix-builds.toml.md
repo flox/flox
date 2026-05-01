@@ -45,18 +45,6 @@ expressions: a package `foo` in catalog `mycatalog` is accessed as
 
 A catalog can be specified in one of three forms.
 
-### URL string
-
-Provide a single `url` field containing a Nix flake reference:
-
-```toml
-[catalogs.mycatalog]
-url = "git+https://github.com/org/repo"
-```
-
-The URL follows Nix flake reference syntax and may include query
-parameters such as `?ref=<branch>` or `?rev=<commit>`.
-
 ### Structured Nix source type
 
 Provide a `type` field naming a Nix source type together with
@@ -71,6 +59,19 @@ ref = "main"
 
 The supported types and their fields are documented in the
 [Nix manual under *Source types*](https://nix.dev/manual/nix/latest/language/builtins.html#source-types).
+
+### URL string
+
+As a shorthand for the structured form, provide a single `url`
+field containing a Nix source reference:
+
+```toml
+[catalogs.mycatalog]
+url = "git+https://github.com/org/repo"
+```
+
+The URL follows Nix source reference syntax and may include query
+parameters such as `?ref=<branch>` or `?rev=<commit>`.
 
 ### FloxHub catalog
 
@@ -130,7 +131,7 @@ ref = "release-2.0"
 ```toml
 version = 1
 
-[catalogs.published]
+[catalogs.myorg]
 type = "floxhub"
 ```
 
@@ -139,7 +140,7 @@ type = "floxhub"
 ```nix
 # .flox/pkgs/app.nix
 { catalogs }:
-catalogs.mylib.build-tool
+catalogs.myorg.build-tool
 ```
 
 # SEE ALSO

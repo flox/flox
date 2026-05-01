@@ -20,7 +20,7 @@ flox [<general-options>] build update-catalogs
 Read the catalog configuration from `.flox/nix-builds.toml` and generate
 (or regenerate) the lockfile at `.flox/nix-builds.lock`.
 
-Each catalog entry in `nix-builds.toml` is resolved and pinned:
+Each catalog entry in [`nix-builds.toml`](./nix-builds.toml.md) is resolved and pinned:
 Nix source-type catalogs are locked with `nix flake prefetch`,
 and FloxHub catalogs are locked against the FloxHub API.
 The resulting lockfile pins every catalog to a specific revision,
