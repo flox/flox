@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
 use flox_manifest::interfaces::PackageLookup;
-use flox_manifest::lockfile::{LockedPackage, Lockfile, PackageOutputs};
+use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::v1_10_0::SelectedOutputs;
 use flox_manifest::raw::{
     CatalogPackage,
@@ -158,17 +158,11 @@ fn compute_uninstall_modifications(
 
         // Get all available outputs and outputs_to_install from lockfile
         let locked_pkg = lockfile
-            .packages
-            .iter()
-            .find(|pkg| pkg.install_id() == install_id)
+            .locked_package_with_id(&install_id)
             .ok_or_else(|| UninstallError::PackageNotInLockfile(install_id.clone()))?;
 
-        let (locked_outputs_to_install, all_outputs) = match locked_pkg {
-            LockedPackage::Catalog(p) => (p.outputs_to_install(), p.all_outputs()),
-            LockedPackage::Flake(p) => (p.outputs_to_install(), p.all_outputs()),
-            // We assume store paths have no multiple outputs
-            LockedPackage::StorePath(_) => (None, Vec::new()),
-        };
+        let locked_outputs_to_install = locked_pkg.outputs_to_install();
+        let all_outputs = locked_pkg.all_outputs();
 
         // Validate that requested outputs exist for this package
         if let RawSelectedOutputs::Specific(outputs) = &outputs_to_uninstall {
