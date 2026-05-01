@@ -64,7 +64,7 @@ teardown() {
   assert_success
 }
 
-@test "cuda disabled when nvidia0 device present but libcuba absent" {
+@test "cuda disabled when nvidia0 device present but libcuda absent" {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
 
   run "$FLOX_BIN" activate -- bash \
@@ -74,7 +74,7 @@ teardown() {
   assert_success
 }
 
-@test "cuda disabled when nvidia0 device present but libcuba absent on NixOS" {
+@test "cuda disabled when nvidia0 device present but libcuda absent on NixOS" {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
   mkdir -p "${FAKE_FHS_ROOT}/run/opengl-driver"
 
