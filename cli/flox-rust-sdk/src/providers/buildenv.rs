@@ -1013,7 +1013,7 @@ where
         // In that case the above `nix build` only documents the _new_ outputs.
         // A second build with the same arguments will be fully substituted and contain all outputs.
         //
-        // We only try this once because the weindow for paths to disappear between the last build
+        // We only try this once because the window for paths to disappear between the last build
         // and this one is particularly short, incorrect output is now reliably wrong
         // and should be propagated up.
         debug!(err=%build_env_result.unwrap_err(), "failed to deserialize output, retrying once");
