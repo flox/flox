@@ -1511,7 +1511,7 @@ pub mod tests {
         // result of the processing through the build process into build
         // results, and processing from there as a NixyLicense.  The formatting
         // of the license between nix and the catalog is very inconsistent and
-        // lossy unfortanately.  We'll need to address that, but for now, we
+        // lossy unfortunately.  We'll need to address that, but for now, we
         // choose to be consistent in the processing between them.  The
         // processing is to join the licenses, without quotes and spaces around
         // the brackets.   i.e. - "[ {<licenses joined with commas>} ]"
