@@ -364,7 +364,7 @@ impl Config {
 
     /// get a value from the config
     ///
-    /// **intended for human consumption/intospection of config only**
+    /// **intended for human consumption/introspection of config only**
     ///
     /// Values in the context should be read from the [Config] type instead!
     pub fn get(&self, path: &[Key]) -> Result<String, ReadWriteError> {
