@@ -345,7 +345,7 @@ Upstream:
   run dot_flox_exists
   assert_failure
 
-  # We should only see the path environnment
+  # We should only see the path environment
   run jq '.entries[0].envs | length' "$FLOX_DATA_DIR/env-registry.json"
   assert_output "1"
 

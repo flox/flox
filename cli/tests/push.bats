@@ -124,7 +124,7 @@ teardown() {
   popd >/dev/null || return
 
   # Create an environment owner/test on machine_b and try to push it to floxhub
-  # this should fail as an envrioment with the same name but different provenance already exists on floxhub
+  # this should fail as an environment with the same name but different provenance already exists on floxhub
   pushd "machine_b" >/dev/null || return
   echo "trying to push to the same upstream env" >&3
 

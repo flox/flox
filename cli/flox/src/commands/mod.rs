@@ -779,7 +779,7 @@ enum InternalCommands {
     #[bpaf(command, hide)]
     LockManifest(#[bpaf(external(lock_manifest::lock_manifest))] lock_manifest::LockManifest),
 
-    /// Check for environmet upgrades
+    /// Check for environment upgrades
     #[bpaf(command, hide)]
     CheckForUpgrades(
         #[bpaf(external(check_for_upgrades::check_for_upgrades))]
