@@ -22,7 +22,7 @@ in
     expected = "overridden top-level";
   };
 
-  "test: lazy pacakge throws on eval" = {
+  "test: lazy package throws on eval" = {
     expr = pkgs.lazyEval;
     expectedError = {
       type = "ThrownError";

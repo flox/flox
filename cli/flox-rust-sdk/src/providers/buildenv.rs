@@ -1463,7 +1463,7 @@ mod realise_nixpkgs_tests {
     /// Realising a nixpkgs package should fail if the output is not valid
     /// and cannot be built.
     /// Here we are testing the case where the attribute fails to evaluate.
-    /// Generally we expect pacakges from the catalog to be able to evaluate,
+    /// Generally we expect packages from the catalog to be able to evaluate,
     /// iff the catalog server was able to evaluate them before.
     /// This test is a catch-all for all kinds of eval failures.
     /// Eval failures for **unfree** and **broken** packages should be prevented,

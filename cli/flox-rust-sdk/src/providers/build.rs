@@ -626,10 +626,10 @@ pub struct ExpressionBuildMetadata {
 }
 
 /// The kind of a package target,
-/// i.e. whether a pacakge is sourced from the manifest or a nix expression.
+/// i.e. whether a package is sourced from the manifest or a nix expression.
 ///
 /// While not relevant to the build itself,
-/// publishing pacakges may differ depending on the kind.
+/// publishing packages may differ depending on the kind.
 /// For example [super::publish::check_package_metadata]
 /// needs to infer the base catalog url
 /// from the installed packages in the  top-level group
@@ -658,7 +658,7 @@ impl PackageTargetKind {
 /// while avoiding the builder to require [PackageTargetKinds],
 /// which would otherwise be unused.
 ///
-/// Outside of tests [PacakgeTargetName]s
+/// Outside of tests [PackageTargetName]s
 /// should only be produced via [PackageTarget::name],
 /// to maintain the guarantee that the package suppiosedly exists.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display, derive_more::AsRef)]

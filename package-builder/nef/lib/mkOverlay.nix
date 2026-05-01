@@ -89,7 +89,7 @@
                 # - beamPackages
                 #
                 # Todo: If a set can be extended but does not provide a `callPackage`,
-                # we should still try to use the `extend` it and build our own `callPackge` as below.
+                # we should still try to use the `extend` it and build our own `callPackage` as below.
                 else if final ? callPackage && final ? extend then
                   (final.extend (_: _: { ${name} = prev.${name} or recursionGuardError; })).callPackage
                 else
