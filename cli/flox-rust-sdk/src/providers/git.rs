@@ -1047,7 +1047,7 @@ impl GitProvider for GitCommandProvider {
             )?;
 
             if remote_revision.len() < 40 {
-                warn!("No commit found found upstream for ref {remote_branch}");
+                warn!("No commit found upstream for ref {remote_branch}");
                 None
             } else {
                 Some(remote_revision.to_string_lossy()[..40].to_string())
