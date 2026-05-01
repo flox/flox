@@ -130,7 +130,7 @@ pub fn create_registry_and_filter_reload_handle() -> (
     let sentry_layer = sentry::integrations::tracing::layer().enable_span_attributes();
     // Filtered layer must come first.
     // This appears to be the only way to avoid logs of the `flox_command` trace
-    // which is processed by the `log_layer` irrepective of the filter applied to it.
+    // which is processed by the `log_layer` irrespective of the filter applied to it.
     // My current understanding is, that it because the `metrics_layer` (at least) is
     // registering `Interest` for the event and that somehow bypasses the filter?!
     let registry = tracing_subscriber::registry()
