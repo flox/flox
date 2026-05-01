@@ -330,7 +330,7 @@ pub fn deregister(
     Ok(())
 }
 
-/// Garbage collect non-existent environments from the registry. Writes to the
+/// Garbage collect nonexistent environments from the registry. Writes to the
 /// registry file, in addition to returning the updated registry to avoid a
 /// second read by any consumers.
 #[instrument(skip_all, fields(progress = "Garbage collecting stale environments"))]

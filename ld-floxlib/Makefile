@@ -96,7 +96,7 @@ endef
 
 # Regression test value for long env var handling (PR #4089).
 # Generates a colon-separated path value totalling ~9000 bytes: 200 fake
-# non-existent directories followed by tests/test1 as the final entry.
+# nonexistent directories followed by tests/test1 as the final entry.
 # This exercises the strdup() dynamic allocation path and verifies that
 # the last entry is not truncated, which would have silently failed with
 # the original fixed 4096-byte buffers on multi-CUDA hosts (7000+ bytes).

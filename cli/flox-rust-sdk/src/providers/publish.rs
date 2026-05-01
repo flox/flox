@@ -1945,7 +1945,7 @@ pub mod tests {
         let auth = Auth::from_flox(&flox).unwrap();
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
-        // the 'cache' should be non existent before the publish
+        // the 'cache' should be nonexistent before the publish
         let cache_url = cache.upload_url().unwrap();
         let cache_path = cache_url.to_file_path().unwrap();
         assert!(std::fs::read_dir(&cache_path).is_err());

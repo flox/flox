@@ -849,7 +849,7 @@ impl ProcessComposeLogReader {
             // Note that if the receiver was dropped, this error won't ever be handled.
             // But we still want to wait so we don't leave a zombie.
             // The most likely error is that the socket doesn't exist,
-            // trying to read logs for a non existent process
+            // trying to read logs for a nonexistent process
             // unfortunately just blocks indefinitely without any error message.
             let exit_status = child.wait().map_err(ServiceError::ProcessComposeCmd)?;
             if !exit_status.success() {

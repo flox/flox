@@ -303,7 +303,7 @@ impl UpdateNotification {
             .timeout(TRAILING_NETWORK_CALL_TIMEOUT);
 
         let response = request.send().await.map_err(|e| {
-            // We'll want to ignore errors if network is non-existent or slow
+            // We'll want to ignore errors if network is nonexistent or slow
             if e.is_connect() || e.is_timeout() {
                 UpdateNotificationError::Network(e)
             } else {
