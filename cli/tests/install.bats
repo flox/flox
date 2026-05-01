@@ -389,7 +389,7 @@ EOF
   assert_output "$(
     cat << EOF
 ✘ ERROR: resolution failed:$SPACE
-The package 'python311Packages.torchvision-bin' is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-linux), (x86_64-darwin), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin).
+The package 'python311Packages.torchvision-bin' is not found for all requested systems on the same page, consider package groups with the following system groupings: (x86_64-darwin), (aarch64-linux), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin).
 EOF
   )"
 }
