@@ -1085,7 +1085,7 @@ impl LockManifest {
     /// Lock a set of flake installables and return the locked packages.
     /// Errors are collected into [ResolutionFailures] and returned as a single error.
     ///
-    /// This is the eequivalent to
+    /// This is the equivalent to
     /// [catalog::ClientTrait::resolve] and passing the result to [Self::locked_packages_from_resolution]
     /// in the context of flake installables.
     /// At this point flake installables are resolved sequentially.
