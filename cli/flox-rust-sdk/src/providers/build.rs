@@ -3532,7 +3532,7 @@ mod tests {
 
         let git = GitCommandProvider::init(&env_path, false).unwrap();
 
-        // simulate deleting a tracked file (explicically, without 'git rm')
+        // simulate deleting a tracked file (explicitly, without 'git rm')
         git.add(&[&deleted_file_path]).unwrap();
         fs::remove_file(&deleted_file_path).unwrap();
 
