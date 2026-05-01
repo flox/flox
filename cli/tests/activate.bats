@@ -345,7 +345,7 @@ EOF
 # the expected hook and profile scripts for the bash and zsh shells, and
 # in each of the following four scenarios:
 #
-# 1. in the interactive case, simulated using using `activate.exp`
+# 1. in the interactive case, simulated using `activate.exp`
 # 2. in the default command case, invoking the shell primitive `:` (a no-op)
 # 3. in the `--noprofile` command case, again invoking the shell primitive `:`
 #
