@@ -1,7 +1,7 @@
 { lib }:
 # collection tests
 {
-  "test: non existing pkgs dir results in empty entries (no error)" = {
+  "test: nonexistent pkgs dir results in empty entries (no error)" = {
     expr = lib.nef.dirToAttrs "/does/not/exist";
     expected = {
       path = "/does/not/exist";

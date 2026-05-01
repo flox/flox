@@ -32,7 +32,7 @@ impl LockedPackageFlake {
     }
 }
 
-/// Rust representation of the output of `buitins.lockFlakeInstallable`
+/// Rust representation of the output of `builtins.lockFlakeInstallable`
 /// This is a direct translation of the definition in
 /// `<flox>/nix-plugins/include/flox/lock-flake-installable.hh`
 #[skip_serializing_none]
@@ -69,7 +69,7 @@ pub struct LockedInstallable {
     pub broken: Option<bool>,
     pub unfree: Option<bool>,
     // In the lockfile, the priority should always be known.
-    // Usage of the output type of `buitins.lockFlakeInstallable`,
+    // Usage of the output type of `builtins.lockFlakeInstallable`,
     // however requires guarding against a missing priority.
     // Since the default priority is not known statically,
     // we assign it as a default value during deserialization.
@@ -81,7 +81,7 @@ pub struct LockedInstallable {
 }
 
 /// Deserialize the priority field of a locked installable.
-/// `buitins.lockFlakeInstallable` will yield a `null` priority
+/// `builtins.lockFlakeInstallable` will yield a `null` priority
 /// if the priority is not set, which requires a custom deserializer
 /// to set the default priority.
 fn locked_installable_default_priority_on_null<'de, D>(d: D) -> Result<u64, D::Error>

@@ -93,7 +93,7 @@ pub enum MkContainerNixError {
     BuildContainerError(String),
 
     #[error("failed to parse nix build output")]
-    ParseBuildOutout(#[source] serde_json::Error),
+    ParseBuildOutput(#[source] serde_json::Error),
 
     #[error("couldn't serialize container config")]
     SerializeContainerConfig(#[source] serde_json::Error),
@@ -196,7 +196,7 @@ impl ContainerBuilder for MkContainerNix {
         }
 
         let [raw @ MkContainerResultRaw { .. }] = serde_json::from_slice(&output.stdout)
-            .map_err(MkContainerNixError::ParseBuildOutout)?;
+            .map_err(MkContainerNixError::ParseBuildOutput)?;
         let container_builder_script_path = raw.outputs.out;
         let container_source = ContainerSource::new(Command::new(container_builder_script_path));
 
