@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - name: Invoke the "Test Manifest Builds" workfow in flox/flox-manifest-build-examples
+      - name: Invoke the "Test Manifest Builds" workflow in flox/flox-manifest-build-examples
         env:
           GITHUB_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
           WORKFLOW: Test Manifest Builds

@@ -35,7 +35,7 @@ pub struct ShallowMerger;
 impl ShallowMerger {
     #[instrument(skip_all)]
     fn merge_version(_low_priority: &str, high_priority: &str) -> Result<String, MergeError> {
-        // To be consistent with other "composing manfiest wins" behaviors,
+        // To be consistent with other "composing manifest wins" behaviors,
         // the higher priority manifest determines the manifest version
         // and therefore 'outputs' behavior.
         Ok(high_priority.to_string())
@@ -632,7 +632,7 @@ mod tests {
             }
         }
 
-        // Ensures that a merged config retains a single working directory, preferrably
+        // Ensures that a merged config retains a single working directory, preferably
         // the one from the higher priority config.
         #[test]
         fn containerize_cfg_shallow_merges_working_dir(

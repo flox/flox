@@ -364,7 +364,7 @@ impl Manifest<TomlParsed> {
 impl Manifest<Validated> {
     /// Migrate a manifest with an optional lockfile.
     ///
-    /// In some cases the lockfile simply isn't present and you stil must migrate.
+    /// In some cases the lockfile simply isn't present and you still must migrate.
     /// In those cases and in cases where a lockfile is present but stale (i.e. incomplete),
     /// the migration process will proceed in full for packages for which we have package data,
     /// but for packages that are missing package data we can only set `outputs = "all"` and

@@ -203,7 +203,7 @@ impl NodeCtx {
         Ok(ctx)
     }
 
-    /// Look for nodejs and yarn versions in a (possibly non-existent)
+    /// Look for nodejs and yarn versions in a (possibly nonexistent)
     /// `package.json` file
     fn get_package_json_versions(
         package_json: &Path,

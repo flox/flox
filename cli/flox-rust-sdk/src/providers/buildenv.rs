@@ -112,7 +112,7 @@ pub enum BuildEnvError {
     /// The error message is the stderr of the `nix build` command.
     // TODO: this requires to capture the stderr of the `nix build` command
     // or essentially "tee" it if we also want to forward the logs to the user.
-    // At the moment the "interesting" logs
+    // At the moment, the "interesting" logs
     // are emitted by the `realise` portion of the build.
     // So in the interest of initial simplicity
     // we can defer forwarding the nix build logs and capture output with [Command::output].
@@ -502,7 +502,7 @@ where
                 // If we failed, log the error and try the next location.
                 debug!(%attr_path, %drv, %location_url, %stderr, "Failed to copy custom package from store");
             } else {
-                debug!(%attr_path, %drv, %location_url, "Succesfully copied custom package from store");
+                debug!(%attr_path, %drv, %location_url, "Successfully copied custom package from store");
 
                 any_location_succeeded = true;
 
@@ -1536,7 +1536,7 @@ mod realise_nixpkgs_tests {
     /// Realising a nixpkgs package should fail if the output is not valid
     /// and cannot be built.
     /// Here we are testing the case where the attribute fails to evaluate.
-    /// Generally we expect pacakges from the catalog to be able to evaluate,
+    /// Generally we expect packages from the catalog to be able to evaluate,
     /// iff the catalog server was able to evaluate them before.
     /// This test is a catch-all for all kinds of eval failures.
     /// Eval failures for **unfree** and **broken** packages should be prevented,
@@ -2340,7 +2340,7 @@ mod buildenv_tests {
         let result = buildenv.build(&client, &lockfile_path, None, None);
         assert!(
             result.is_ok(),
-            "environment should render succesfully: {}",
+            "environment should render successfully: {}",
             result.unwrap_err()
         );
     }

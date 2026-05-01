@@ -150,7 +150,7 @@ common_file_setup() {
   setup_file_envname
   # Remove any vestiges of previous test runs.
   deleteEnvForce "$TEST_ENVIRONMENT"
-  # Setup a homedir associated with this file.
+  # Set up a homedir associated with this file.
   if [[ "${1:-suite}" != test ]]; then home_setup "${1:-suite}"; fi
 }
 

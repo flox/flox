@@ -16,11 +16,11 @@ in
     expected = "nestedPkgs.nestedPkg nestedPkgs.otherNestedPkg toplevelPkg";
   };
 
-  # while correct, these kind of quoting tends to casuse issues
+  # while correct, these kind of quoting tends to cause issues
   # on the fringe between make and the cli.
   # Especially <space>s may be tricky to pass as make arguments,
   # but even mere quoting sets off the cli.
-  # We will likely address those isseus in a future issue
+  # We will likely address those issues in a future issue
   # that asks for sanitation of make target names.
   # For now we will just document the behavior:
 

@@ -235,7 +235,7 @@ impl FloxBuildMk<'_> {
 
     /// Create a new instance with std{out,err} piped into buffers
     /// instead of inherited from the current process.
-    /// Useful for testing or when one wants to delibrately call the subsystem
+    /// Useful for testing or when one wants to deliberately call the subsystem
     /// without its output forwarded.
     pub fn new_with_buffers<'args>(
         flox: &'args Flox,
@@ -658,9 +658,9 @@ impl PackageTargetKind {
 /// while avoiding the builder to require [PackageTargetKinds],
 /// which would otherwise be unused.
 ///
-/// Outside of tests [PacakgeTargetName]s
+/// Outside of tests [PackageTargetName]s
 /// should only be produced via [PackageTarget::name],
-/// to maintain the guarantee that the package suppiosedly exists.
+/// to maintain the guarantee that the package supposedly exists.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display, derive_more::AsRef)]
 pub struct PackageTargetName<'t>(&'t str);
 
@@ -762,7 +762,7 @@ impl PackageTargets {
     }
 
     /// Validates a list of target names (e.g. CLI arguments),
-    /// against the knwon targets, returning a [Vec<PackageTarget>] of valid targets.
+    /// against the known targets, returning a [Vec<PackageTarget>] of valid targets.
     /// If invalid target names are detected this function will return an error instead.
     pub fn select(
         &self,
@@ -2206,7 +2206,7 @@ mod tests {
         // guarantees about the portability or reproducibility of impure builds
         // which may link against system libraries.
         //
-        // This also serves as a regression test against `autoPathelfHook`
+        // This also serves as a regression test against `autoPatchelfHook`
         // conflicting with `gcc` or `libc` from the Flox environment which will
         // cause either binaries that hang or fail with:
         //
@@ -3002,7 +3002,7 @@ mod tests {
     }
 
     /// Test that patchShebangs is able to substitute the path for `cat`
-    /// as provided by Nix runCommmand by way of the `coreutils` package.
+    /// as provided by Nix runCommand by way of the `coreutils` package.
     /// If it uses a version of `coreutils` from a different nixpkgs
     /// revision then the build will fail the closure check, and
     /// `assert_build_status()` will flag the error accordingly.
@@ -3062,7 +3062,7 @@ mod tests {
     }
 
     /// Test that patchShebangs is able to substitute the path for `cat`
-    /// as provided by Nix runCommmand by way of the `coreutils` package.
+    /// as provided by Nix runCommand by way of the `coreutils` package.
     /// If it uses a version of `coreutils` from a different nixpkgs
     /// revision then the build will fail the closure check, and
     /// `assert_build_status()` will flag the error accordingly.
@@ -3533,7 +3533,7 @@ mod tests {
 
         let git = GitCommandProvider::init(&env_path, false).unwrap();
 
-        // simulate deleting a tracked file (explicically, without 'git rm')
+        // simulate deleting a tracked file (explicitly, without 'git rm')
         git.add(&[&deleted_file_path]).unwrap();
         fs::remove_file(&deleted_file_path).unwrap();
 
