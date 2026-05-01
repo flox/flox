@@ -3013,15 +3013,15 @@ mod tests {
         let mut foo_locked_priority_after = foo_locked.clone();
         foo_locked_priority_after.priority = 1;
 
-        let mut manifest_pririty_after = manifest.clone();
-        manifest_pririty_after.install.inner_mut().insert(
+        let mut manifest_priority_after = manifest.clone();
+        manifest_priority_after.install.inner_mut().insert(
             foo_iid.clone(),
             foo_descriptor_priority_after.clone().into(),
         );
 
         let locker_mock = InstallableLockerMock::new();
         let resolved_packages = LockManifest::resolve_manifest(
-            &manifest_pririty_after,
+            &manifest_priority_after,
             Some(&locked),
             &MockClient::default(),
             &locker_mock,
