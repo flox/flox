@@ -4711,7 +4711,7 @@ Setting PATH from .bashrc"
 # Nested activation PATH/MANPATH tests and helpers
 # =============================================================================
 
-# Prepares a default environment that will will later be activated in a shell's
+# Prepares a default environment that will later be activated in a shell's
 # rc file. This also undoes changes to PATH caused by user_dotfiles_setup.
 nested_activation_setup() {
   export original_path="$PATH"
