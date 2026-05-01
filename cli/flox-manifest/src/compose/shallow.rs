@@ -632,7 +632,7 @@ mod tests {
             }
         }
 
-        // Ensures that a merged config retains a single working directory, preferrably
+        // Ensures that a merged config retains a single working directory, preferably
         // the one from the higher priority config.
         #[test]
         fn containerize_cfg_shallow_merges_working_dir(
