@@ -43,7 +43,7 @@ pub fn format_error(err: &EnvironmentError) -> String {
 
             Try deleting the '.flox' directory and reinitializing the environment.
             If you cloned this environment from a remote repository, verify that
-            `.flox/env/maifest.toml` is committed to the version control system.
+            `.flox/env/manifest.toml` is committed to the version control system.
         "},
         // todo: enrich with a path?
         EnvironmentError::EnvPointerNotFound => formatdoc! {"
@@ -64,7 +64,7 @@ pub fn format_error(err: &EnvironmentError) -> String {
 
             Try deleting the '.flox' directory and reinitializing the environment.
             If you cloned this environment from a remote repository, verify that
-            `.flox/env/maifest.toml` is committed to the version control system.
+            `.flox/env/manifest.toml` is committed to the version control system.
         "},
 
         // todo: enrich with a path?
