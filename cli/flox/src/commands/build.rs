@@ -68,6 +68,15 @@ pub struct SystemOverride {
     pub system: Option<String>,
 }
 
+impl SystemOverride {
+    /// Returns the user-supplied system, falling back to the compile-time host
+    /// system. The `None` case means "use the current host system" —
+    /// centralised here so callers don't reinvent the fallback.
+    pub fn resolved(&self) -> &str {
+        self.system.as_deref().unwrap_or(env!("system"))
+    }
+}
+
 #[derive(Bpaf, Clone)]
 pub struct Build {
     #[bpaf(external(dir_environment_select), fallback(Default::default()))]
@@ -171,7 +180,7 @@ impl Build {
                     env,
                     targets,
                     base_catalog_url_select,
-                    system_override.system,
+                    system_override.resolved().to_string(),
                 )
                 .await
             },
@@ -216,7 +225,7 @@ impl Build {
         mut env: ConcreteEnvironment,
         packages: Vec<String>,
         nixpkgs_url_select: Option<BaseCatalogUrlSelect>,
-        system_override: Option<String>,
+        system: String,
     ) -> Result<()> {
         match &env {
             ConcreteEnvironment::Path(_) => (),
@@ -288,7 +297,7 @@ impl Build {
             &FLOX_INTERPRETER,
             &target_names,
             None,
-            system_override,
+            &system,
         )?;
 
         let current_dir = env::current_dir()
@@ -1159,5 +1168,24 @@ mod test {
                 package_name
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod system_override_tests {
+    use super::*;
+
+    #[test]
+    fn resolved_returns_override_when_set() {
+        let so = SystemOverride {
+            system: Some("aarch64-darwin".into()),
+        };
+        assert_eq!(so.resolved(), "aarch64-darwin");
+    }
+
+    #[test]
+    fn resolved_falls_back_to_compile_time_host_system() {
+        let so = SystemOverride { system: None };
+        assert_eq!(so.resolved(), env!("system"));
     }
 }
