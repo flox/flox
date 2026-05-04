@@ -18,7 +18,7 @@ use crate::providers::git::{
     GitProvider,
     GitRemoteCommandError,
 };
-use crate::providers::git_auth;
+use crate::providers::git_auth::GitCommandOptionsExt;
 use crate::utils::{HEADER_DEVICE_UUID, HEADER_INVOCATION_SOURCE, INVOCATION_SOURCES};
 
 pub const FLOXMETA_DIR_NAME: &str = "meta";
@@ -206,7 +206,7 @@ impl FloxMeta {
 pub fn floxmeta_git_options(
     floxhub_git_url: &Url,
     floxhub_owner: &str,
-    credential: &AuthContext,
+    auth_context: &AuthContext,
     metrics_device_uuid: Option<&Uuid>,
 ) -> GitCommandOptions {
     let mut options = GitCommandOptions::default();
@@ -233,8 +233,8 @@ pub fn floxmeta_git_options(
         format!("{floxhub_git_url}/{floxhub_owner}/floxmeta"),
     );
 
-    // Delegate authentication to the credential
-    git_auth::apply_git_auth(credential, floxhub_git_url, &mut options);
+    // Delegate authentication to the auth context
+    options.authenticate(auth_context, floxhub_git_url);
 
     if let Some(uuid) = metrics_device_uuid {
         options.add_http_header(HEADER_DEVICE_UUID, &uuid.to_string());
