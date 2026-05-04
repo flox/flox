@@ -32,7 +32,7 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
 
-use super::auth::{AuthError, AuthProvider, CatalogAuth, NixCopyAuth};
+use super::nix_auth::{AuthError, AuthProvider, CatalogAuth, NixCopyAuth};
 use super::build::{
     BuildResult,
     FloxBuildMk,

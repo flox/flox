@@ -30,7 +30,7 @@ use tempfile::TempPath;
 use thiserror::Error;
 use tracing::{Span, debug, info_span, instrument, trace};
 
-use super::auth::{AuthError, AuthProvider};
+use super::nix_auth::{AuthError, AuthProvider};
 use super::nix::{self, nix_base_command};
 use crate::data::System;
 use crate::models::nix_plugins::NIX_PLUGINS;
