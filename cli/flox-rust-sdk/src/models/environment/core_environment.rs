@@ -37,7 +37,6 @@ use super::{
 };
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
-use crate::providers::nix_auth::{NixAuth, AuthError};
 use crate::providers::buildenv::{
     self,
     BuildEnv,
@@ -47,6 +46,7 @@ use crate::providers::buildenv::{
     BuiltStorePath,
 };
 use crate::providers::lock_manifest::{LockManifest, LockResult, ResolutionFailure, ResolveError};
+use crate::providers::nix_auth::{AuthError, NixAuth};
 use crate::providers::services::process_compose::{ServiceError, maybe_make_service_config_file};
 
 const TEMPROOTS_DIR_NAME: &str = "temp-roots";

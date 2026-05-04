@@ -1312,14 +1312,11 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
         Err(ref failure @ (AuthFailure::TokenExpired | AuthFailure::NotLoggedIn))
             if Dialog::can_prompt() =>
         {
-            message::plain(format!(
-                "{} Re-authenticating...",
-                match failure {
-                    AuthFailure::TokenExpired => "Your FloxHub token has expired.",
-                    AuthFailure::NotLoggedIn => "You are not logged in to FloxHub.",
-                    _ => unreachable!(),
-                }
-            ));
+            message::plain(format!("{} Re-authenticating...", match failure {
+                AuthFailure::TokenExpired => "Your FloxHub token has expired.",
+                AuthFailure::NotLoggedIn => "You are not logged in to FloxHub.",
+                _ => unreachable!(),
+            }));
             auth::login_flox(flox).await
         },
         Err(failure) => {

@@ -30,8 +30,8 @@ use tempfile::TempPath;
 use thiserror::Error;
 use tracing::{Span, debug, info_span, instrument, trace};
 
-use super::nix_auth::{AuthError, AuthProvider};
 use super::nix::{self, nix_base_command};
+use super::nix_auth::{AuthError, AuthProvider};
 use crate::data::System;
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::providers::nix_auth::{catalog_auth_to_envs, store_needs_auth};
@@ -1394,8 +1394,8 @@ mod realise_nixpkgs_tests {
     use test_helpers::buildenv_instance;
 
     use super::*;
-    use crate::providers::nix_auth::NixAuth;
     use crate::providers::nix::test_helpers::known_store_path;
+    use crate::providers::nix_auth::NixAuth;
 
     /// When a package is not available in the store, it should be built from its derivation.
     /// This test sets a known invalid store path to trigger a rebuild of the 'hello' package.

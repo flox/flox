@@ -645,7 +645,7 @@ pub mod test_helpers {
         set_test_token,
         test_token_from_floxhub_test_users_file,
     };
-    use crate::providers::nix_auth::{NixAuth, AuthProvider};
+    use crate::providers::nix_auth::{AuthProvider, NixAuth};
 
     pub static UNIT_TEST_GENERATED: LazyLock<PathBuf> =
         LazyLock::new(|| PathBuf::from(std::env::var("UNIT_TEST_GENERATED").unwrap()));
@@ -743,7 +743,7 @@ pub mod test_helpers {
         mut flox: Flox,
         user: PublishTestUser,
         filename: &str,
-    ) -> (Flox,NixAuth) {
+    ) -> (Flox, NixAuth) {
         let record = get_record_directive();
 
         // FloxHub can load test users from a file, so we read the

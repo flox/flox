@@ -86,9 +86,7 @@ impl AuthContext {
     /// describing why authentication failed.
     pub fn authenticated_handle(&self) -> Result<String, AuthFailure> {
         match self {
-            AuthContext::Auth0(Some(token)) if token.is_expired() => {
-                Err(AuthFailure::TokenExpired)
-            },
+            AuthContext::Auth0(Some(token)) if token.is_expired() => Err(AuthFailure::TokenExpired),
             AuthContext::Auth0(Some(token)) => Ok(token.handle().to_string()),
             AuthContext::Auth0(None) => Err(AuthFailure::NotLoggedIn),
             AuthContext::Kerberos(Some(material)) => Ok(material.principal.clone()),

@@ -5,8 +5,8 @@ use bpaf::Bpaf;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
-use flox_rust_sdk::providers::nix_auth::NixAuth;
 use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget};
+use flox_rust_sdk::providers::nix_auth::NixAuth;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
     Publisher,
