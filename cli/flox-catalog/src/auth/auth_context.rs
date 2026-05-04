@@ -10,26 +10,27 @@
 //! explicit state rather than a separate variant so that the configured auth
 //! mode is always preserved.
 
-use std::fmt;
 use std::sync::Arc;
 
 use url::Url;
 
 use crate::token::FloxhubToken;
 
-/// Describes why authentication failed and whether interactive recovery is possible.
-#[derive(Debug, Clone)]
-pub struct AuthFailure {
-    /// User-facing description of why authentication failed.
-    pub message: String,
-    /// Whether the CLI's interactive login flow can recover from this failure.
-    pub recoverable: bool,
-}
-
-impl fmt::Display for AuthFailure {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.message)
-    }
+/// Describes why authentication failed.
+///
+/// The CLI layer decides how to present these failures to the user and whether
+/// interactive recovery is possible.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum AuthFailure {
+    /// Auth0 token exists but has expired.
+    #[error("token expired")]
+    TokenExpired,
+    /// Auth0 mode but no token is available.
+    #[error("not logged in")]
+    NotLoggedIn,
+    /// Kerberos mode but no ticket is available.
+    #[error("no kerberos ticket")]
+    NoKerberosTicket,
 }
 
 /// A function that generates a SPNEGO token for a given URL.
@@ -85,20 +86,13 @@ impl AuthContext {
     /// describing why authentication failed.
     pub fn authenticated_handle(&self) -> Result<String, AuthFailure> {
         match self {
-            AuthContext::Auth0(Some(token)) if token.is_expired() => Err(AuthFailure {
-                message: "Your FloxHub token has expired.".to_string(),
-                recoverable: true,
-            }),
+            AuthContext::Auth0(Some(token)) if token.is_expired() => {
+                Err(AuthFailure::TokenExpired)
+            },
             AuthContext::Auth0(Some(token)) => Ok(token.handle().to_string()),
-            AuthContext::Auth0(None) => Err(AuthFailure {
-                message: "You are not logged in to FloxHub.".to_string(),
-                recoverable: true,
-            }),
+            AuthContext::Auth0(None) => Err(AuthFailure::NotLoggedIn),
             AuthContext::Kerberos(Some(material)) => Ok(material.principal.clone()),
-            AuthContext::Kerberos(None) => Err(AuthFailure {
-                message: "Kerberos ticket not found. Run 'kinit' to authenticate.".to_string(),
-                recoverable: false,
-            }),
+            AuthContext::Kerberos(None) => Err(AuthFailure::NoKerberosTicket),
         }
     }
 

@@ -1193,7 +1193,7 @@ pub(super) async fn ensure_environment_trust(
     }
 
     let handle = flox.get_handle();
-    if handle.as_deref() == Some(env_ref.owner().as_str()) {
+    if handle == Some(env_ref.owner().as_str()) {
         debug!("{env_prefixed_name} is trusted by auth handle");
         return Ok(());
     }
@@ -1305,25 +1305,48 @@ pub(super) async fn ensure_environment_trust(
 /// If the credential is expired/missing and we can prompt interactively,
 /// triggers the login flow as a fallback.
 pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
+    use flox_catalog::AuthFailure;
+
     match flox.auth_context.authenticated_handle() {
         Ok(handle) => Ok(handle),
-        Err(failure) if failure.recoverable && Dialog::can_prompt() => {
-            message::plain(format!("{failure} Re-authenticating..."));
+        Err(ref failure @ (AuthFailure::TokenExpired | AuthFailure::NotLoggedIn))
+            if Dialog::can_prompt() =>
+        {
+            message::plain(format!(
+                "{} Re-authenticating...",
+                match failure {
+                    AuthFailure::TokenExpired => "Your FloxHub token has expired.",
+                    AuthFailure::NotLoggedIn => "You are not logged in to FloxHub.",
+                    _ => unreachable!(),
+                }
+            ));
             auth::login_flox(flox).await
         },
         Err(failure) => {
-            let action = if failure.recoverable {
-                "re-authenticate"
-            } else {
-                "login"
+            let message = match failure {
+                AuthFailure::TokenExpired => formatdoc! {"
+                    Your FloxHub token has expired.
+
+                    To re-authenticate you can either
+                    * login to FloxHub with 'flox auth login',
+                    * set the 'floxhub_token' field to '<your token>' in your config
+                    * set the '$FLOX_FLOXHUB_TOKEN=<your_token>' environment variable.
+                "},
+                AuthFailure::NotLoggedIn => formatdoc! {"
+                    You are not logged in to FloxHub.
+
+                    To login you can either
+                    * login to FloxHub with 'flox auth login',
+                    * set the 'floxhub_token' field to '<your token>' in your config
+                    * set the '$FLOX_FLOXHUB_TOKEN=<your_token>' environment variable.
+                "},
+                AuthFailure::NoKerberosTicket => formatdoc! {"
+                    Kerberos ticket not found.
+
+                    Run 'kinit' to authenticate.
+                "},
             };
-            bail!(
-                "{failure}\n\n\
-                 To {action} you can either\n\
-                 * login to FloxHub with 'flox auth login',\n\
-                 * set the 'floxhub_token' field to '<your token>' in your config\n\
-                 * set the '$FLOX_FLOXHUB_TOKEN=<your_token>' environment variable."
-            );
+            bail!("{message}");
         },
     }
 }
