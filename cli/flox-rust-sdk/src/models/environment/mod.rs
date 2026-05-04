@@ -33,7 +33,7 @@ use super::env_registry::EnvRegistryError;
 use crate::data::{CanonicalPath, CanonicalizeError, System};
 use crate::flox::{Flox, Floxhub};
 use crate::models::environment::generations::GenerationsEnvironment;
-use crate::providers::auth::AuthError;
+use crate::providers::nix_auth::AuthError;
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{
     GitCommandDiscoverError,

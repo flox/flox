@@ -77,14 +77,14 @@ pub fn catalog_auth_to_envs(auth: &CatalogAuth) -> Result<HashMap<String, String
 
 /// Handles authentication with catalog stores during build and publish.
 #[derive(Debug)]
-pub struct Auth {
+pub struct NixAuth {
     /// The directory in which we'll create an ad-hoc netrc file if needed.
     netrc_tempdir: TempDir,
     /// The user's FloxHub authentication token.
     floxhub_token: Option<FloxhubToken>,
 }
 
-impl Auth {
+impl NixAuth {
     /// Construct a new auth provider from a Flox instance
     pub fn from_flox(flox: &Flox) -> Result<Self, AuthError> {
         match &flox.auth_context {
@@ -110,7 +110,7 @@ impl Auth {
     }
 }
 
-impl AuthProvider for Auth {
+impl AuthProvider for NixAuth {
     /// Get a reference to the user's token (which may be expired).
     fn token(&self) -> Option<&FloxhubToken> {
         self.floxhub_token.as_ref()

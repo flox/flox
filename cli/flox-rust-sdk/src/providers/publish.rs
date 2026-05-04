@@ -47,7 +47,7 @@ use super::git::{GitCommandError, GitCommandGetOriginError, GitCommandProvider, 
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError, copy_dir_recursive, open_path};
-use crate::providers::auth::catalog_auth_to_envs;
+use crate::providers::nix_auth::catalog_auth_to_envs;
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
 use crate::utils::CommandExt;
@@ -1228,7 +1228,7 @@ pub mod tests {
     use crate::models::environment::ENVIRONMENT_POINTER_FILENAME;
     use crate::models::environment::path_environment::PathEnvironment;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
-    use crate::providers::auth::{Auth, write_floxhub_netrc};
+    use crate::providers::nix_auth::{NixAuth, write_floxhub_netrc};
     use crate::providers::catalog::test_helpers::{
         TEST_READ_ONLY_CATALOG_NAME,
         TEST_READ_WRITE_CATALOG_NAME,
@@ -1567,7 +1567,7 @@ pub mod tests {
         )
         .unwrap();
 
-        let auth = Auth::from_flox(&flox).unwrap();
+        let auth = NixAuth::from_flox(&flox).unwrap();
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
         reset_mocks(&mut flox.catalog_client, vec![
@@ -1763,7 +1763,7 @@ pub mod tests {
         // Don't do a build because it's slow
         let (build_metadata, env_metadata, package_metadata) = dummy_publish_metadata("mypkg1");
 
-        let auth = Auth::from_flox(&flox).unwrap();
+        let auth = NixAuth::from_flox(&flox).unwrap();
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
         reset_mocks(&mut flox.catalog_client, vec![
@@ -1852,7 +1852,7 @@ pub mod tests {
     //         extra_headers: Default::default(),
     //     }));
 
-    //     let auth = Auth::from_flox(&flox).unwrap();
+    //     let auth = NixAuth::from_flox(&flox).unwrap();
     //     let publish_provider = PublishProvider::new(env_metadata, build_metadata, auth);
 
     //     // We should error even if metadata_only is true
@@ -1910,7 +1910,7 @@ pub mod tests {
             }
             .unwrap(),
         );
-        let auth = Auth::from_flox(&flox).unwrap();
+        let auth = NixAuth::from_flox(&flox).unwrap();
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
         // the 'cache' should be non existent before the publish

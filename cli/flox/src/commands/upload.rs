@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_catalog::AuthContext;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::auth::{NixCopyAuth, write_floxhub_netrc};
+use flox_rust_sdk::providers::nix_auth::{NixCopyAuth, write_floxhub_netrc};
 use flox_rust_sdk::providers::publish::ClientSideCatalogStoreConfig;
 use tracing::instrument;
 use url::Url;

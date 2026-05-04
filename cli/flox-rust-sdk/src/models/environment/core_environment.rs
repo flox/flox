@@ -37,7 +37,7 @@ use super::{
 };
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
-use crate::providers::auth::{Auth, AuthError};
+use crate::providers::nix_auth::{NixAuth, AuthError};
 use crate::providers::buildenv::{
     self,
     BuildEnv,
@@ -304,7 +304,7 @@ impl<State> CoreEnvironment<State> {
         let service_config_path = maybe_make_service_config_file(flox, &lockfile)?;
 
         let tempdir = TempDir::new().map_err(CoreEnvironmentError::CreateTempdir)?;
-        let auth = Auth::from_flox(flox).map_err(CoreEnvironmentError::Auth)?;
+        let auth = NixAuth::from_flox(flox).map_err(CoreEnvironmentError::Auth)?;
         let outputs = BuildEnvNix::new(tempdir, auth).build(
             &flox.catalog_client,
             &lockfile_path,
@@ -571,7 +571,7 @@ impl CoreEnvironment<ReadOnly> {
 
             // We are not interested in the store path here, so we ignore the result
             // Neither do we depend on services, so we pass `None`
-            let auth = Auth::from_flox(flox).map_err(EnvironmentError::Auth)?;
+            let auth = NixAuth::from_flox(flox).map_err(EnvironmentError::Auth)?;
             let _ = BuildEnvNix::new(flox.temp_dir.join(TEMPROOTS_DIR_NAME), auth)
                 .build(&flox.catalog_client, tmp_lockfile.path(), None)
                 .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::BuildEnv(e)))?;

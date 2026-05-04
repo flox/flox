@@ -1,4 +1,4 @@
-pub mod auth;
+pub mod nix_auth;
 pub mod build;
 pub mod buildenv;
 pub mod catalog;
