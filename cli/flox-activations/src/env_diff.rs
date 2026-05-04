@@ -39,7 +39,7 @@ impl EnvDiff {
         Ok(from_parsed_files(&start_env, &end_env))
     }
 
-    // Primarily for testing
+    #[cfg(test)]
     pub fn from_parts(additions: HashMap<String, String>, deletions: Vec<String>) -> Self {
         Self {
             additions,
