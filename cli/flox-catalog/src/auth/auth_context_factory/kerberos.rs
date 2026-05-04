@@ -22,7 +22,7 @@ use crate::auth::{AuthContext, AuthError};
 /// Returns `AuthContext::Kerberos(Some)` with a SPNEGO token generator on
 /// success, or `AuthContext::Kerberos(None)` if the principal cannot be
 /// resolved.
-pub fn kerberos_credential() -> AuthContext {
+pub(super) fn kerberos_credential() -> AuthContext {
     match acquire_credential() {
         Ok((principal, cred)) => AuthContext::Kerberos(Some(KerberosMaterial {
             principal,

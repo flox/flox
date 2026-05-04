@@ -72,8 +72,8 @@ pub struct Flox {
 
 impl Flox {
     /// Return the user's handle if a credential is available.
-    pub fn get_handle(&self) -> Option<String> {
-        self.auth_context.handle().map(str::to_string)
+    pub fn get_handle(&self) -> Option<&str> {
+        self.auth_context.handle()
     }
 
     /// Set a new token and rebuild the credential to reflect it.
@@ -293,7 +293,7 @@ pub mod test_helpers {
             Url::from_directory_path(mock_floxhub_git_dir).unwrap()
         });
 
-        let credential = AuthContext::from_mode(&AuthnMode::default(), None);
+        let auth_context = AuthContext::from_mode(&AuthnMode::default(), None);
 
         let flox = Flox {
             system: env!("NIX_TARGET_SYSTEM").to_string(),
@@ -311,7 +311,7 @@ pub mod test_helpers {
                 git_url_override,
             )
             .unwrap(),
-            auth_context: credential,
+            auth_context,
             catalog_client: MockClient::default().into(),
             installable_locker: InstallableLockerImpl::Mock(InstallableLockerMock::new()),
             features: Default::default(),

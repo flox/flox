@@ -272,6 +272,8 @@ impl Auth {
 
                 Ok(())
             },
+            // TODO(ENT-105): handle Kerberos — show principal instead of
+            // "not logged in", and explain that bearer tokens don't apply.
             Auth::Status => {
                 let span = tracing::info_span!("status");
                 let _guard = span.enter();
