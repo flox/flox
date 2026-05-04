@@ -296,9 +296,14 @@ impl FloxArgs {
                 None
             },
             Ok(Some(token)) if token.is_expired() => {
-                message::warning(
-                    "Your FloxHub token has expired. Run 'flox auth login' to re-authenticate.",
-                );
+                if !matches!(
+                    self.command,
+                    Some(Commands::Admin(AdminCommands::Auth(auth::Auth::Login)))
+                ) {
+                    message::warning(
+                        "Your FloxHub token has expired. Run 'flox auth login' to re-authenticate.",
+                    );
+                }
                 Some(token)
             },
             Ok(token) => token,
