@@ -68,6 +68,15 @@ pub struct SystemOverride {
     pub system: Option<String>,
 }
 
+impl SystemOverride {
+    /// Returns the explicitly-overridden system, or the
+    /// host system at compile time when no override was
+    /// provided.
+    pub fn resolved(&self) -> &str {
+        self.system.as_deref().unwrap_or(env!("system"))
+    }
+}
+
 #[derive(Bpaf, Clone)]
 pub struct Build {
     #[bpaf(external(dir_environment_select), fallback(Default::default()))]
@@ -283,12 +292,13 @@ impl Build {
         );
 
         let builder = FloxBuildMk::new(&flox, &base_dir, &expression_ref, &built_environments);
+        let system = system_override.as_deref().unwrap_or(env!("system"));
         let results = builder.build(
             &base_nixpkgs_url,
             &FLOX_INTERPRETER,
             &target_names,
             None,
-            system_override,
+            system,
         )?;
 
         let current_dir = env::current_dir()
@@ -1159,5 +1169,19 @@ mod test {
                 package_name
             );
         }
+    }
+
+    #[test]
+    fn system_override_resolved_returns_override_when_set() {
+        let o = SystemOverride {
+            system: Some("aarch64-darwin".into()),
+        };
+        assert_eq!(o.resolved(), "aarch64-darwin");
+    }
+
+    #[test]
+    fn system_override_resolved_falls_back_to_compile_time_system() {
+        let o = SystemOverride::default();
+        assert_eq!(o.resolved(), env!("system"));
     }
 }
