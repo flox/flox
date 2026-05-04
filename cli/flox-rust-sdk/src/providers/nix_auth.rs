@@ -92,12 +92,10 @@ impl NixAuth {
                 floxhub_token: token.clone(),
                 netrc_tempdir: tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?,
             }),
-            AuthContext::Kerberos(_) => {
-                // Do nothing, Kerberos authentication is handled differently
-                Err(AuthError::CatchAll(
-                    "Kerberos Auth not supported in this flow".to_string(),
-                ))
-            },
+            AuthContext::Kerberos(_) => Ok(Self {
+                floxhub_token: None,
+                netrc_tempdir: tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?,
+            }),
         }
     }
 
