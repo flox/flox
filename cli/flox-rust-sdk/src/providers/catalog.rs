@@ -38,6 +38,7 @@ use reqwest::header::HeaderMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::info;
+use url::Url;
 
 use super::publish::CheckedEnvironmentMetadata;
 use crate::flox::Flox;
@@ -263,10 +264,10 @@ impl ClientTrait for Client {
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
-        source_url: &url::Url,
+        source_url: &Url,
         source_rev: &str,
         nixpkgs_rev: &str,
-        system: &str,
+        system: PackageSystem,
     ) -> Result<CheckBuildResponse, CatalogClientError> {
         match self {
             Client::Catalog(c) => {
@@ -569,10 +570,10 @@ impl ClientTrait for MockClient {
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
         _package_name: impl AsRef<str> + Send + Sync,
-        _source_url: &url::Url,
+        _source_url: &Url,
         _source_rev: &str,
         _nixpkgs_rev: &str,
-        _system: &str,
+        _system: PackageSystem,
     ) -> Result<CheckBuildResponse, CatalogClientError> {
         unimplemented!("check_build_already_recorded is not supported in MockClient")
     }

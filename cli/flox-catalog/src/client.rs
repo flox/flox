@@ -231,7 +231,7 @@ pub trait ClientTrait {
         source_url: &Url,
         source_rev: &str,
         nixpkgs_rev: &str,
-        system: &str,
+        system: api_types::PackageSystem,
     ) -> Result<CheckBuildResponse, CatalogClientError>;
 }
 
@@ -527,11 +527,10 @@ impl ClientTrait for CatalogClient {
         source_url: &Url,
         source_rev: &str,
         nixpkgs_rev: &str,
-        system: &str,
+        system: api_types::PackageSystem,
     ) -> Result<CheckBuildResponse, CatalogClientError> {
         let catalog = str_to_catalog_name(catalog_name)?;
         let package = str_to_package_name(package_name)?;
-        let system = str_to_system(system)?;
         let body = api_types::CheckBuildRequest {
             source_url: source_url.to_string(),
             source_rev: source_rev.to_string(),
@@ -575,18 +574,6 @@ pub fn str_to_package_name(
         CatalogClientError::APIError(APIError::InvalidRequest(format!(
             "package name {} does not meet API requirements.",
             name.as_ref()
-        )))
-    })
-}
-
-/// Converts a system string to a semantic type with API format validation.
-pub fn str_to_system(
-    system: impl AsRef<str>,
-) -> Result<api_types::PackageSystem, CatalogClientError> {
-    api_types::PackageSystem::from_str(system.as_ref()).map_err(|_| {
-        CatalogClientError::APIError(APIError::InvalidRequest(format!(
-            "system {} is not a valid PackageSystem value",
-            system.as_ref()
         )))
     })
 }

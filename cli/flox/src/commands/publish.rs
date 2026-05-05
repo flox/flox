@@ -8,6 +8,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::providers::auth::Auth;
 use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget};
+use flox_rust_sdk::providers::catalog::SystemEnum;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
     Publisher,
@@ -250,11 +251,14 @@ impl Publish {
                 );
                 ""
             });
-        let system = publish_config
+        let system_str = publish_config
             .system_override
             .system
             .as_deref()
-            .unwrap_or(env!("system"));
+            .unwrap_or(flox.system.as_str());
+        let system = system_str
+            .parse::<SystemEnum>()
+            .context("invalid system value for dedup pre-check")?;
         let source_url = Url::parse(&publish_provider.env_metadata.build_repo_meta.url)
             .context("failed to parse build repo URL for dedup pre-check")?;
         let check_result = flox
@@ -280,7 +284,7 @@ impl Publish {
                     date = resp
                         .published_at
                         .map_or_else(|| "unknown".to_string(), |d| d.to_string()),
-                    rev = resp.source_rev.unwrap_or_default(),
+                    rev = resp.source_rev.unwrap_or_else(|| "unknown".to_string()),
                 });
                 return Ok(());
             },
