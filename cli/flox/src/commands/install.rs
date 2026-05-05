@@ -152,6 +152,7 @@ impl Install {
         let mut concrete_environment = match self
             .environment
             .detect_concrete_environment(&flox, "Install to")
+            .await
         {
             Ok(concrete_environment) => concrete_environment,
             Err(EnvironmentSelectError::EnvironmentError(

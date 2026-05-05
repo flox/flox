@@ -63,7 +63,8 @@ impl List {
 
         let mut env = self
             .environment
-            .detect_concrete_environment(&flox, "List using")?;
+            .detect_concrete_environment(&flox, "List using")
+            .await?;
         environment_subcommand_metric!("list", env);
 
         let (manifest_contents, lockfile) = match (&mut env, self.upstream) {

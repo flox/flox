@@ -168,11 +168,13 @@ impl ServicesEnvironment {
     /// Create a [ServicesEnvironment] from an [EnvironmentSelect],
     ///
     /// Returns an error if the environment is remote or doesn't support services.
-    pub fn from_environment_selection(
+    pub async fn from_environment_selection(
         flox: &Flox,
         environment: &EnvironmentSelect,
     ) -> Result<Self> {
-        let concrete_environment = environment.detect_concrete_environment(flox, "Services in")?;
+        let concrete_environment = environment
+            .detect_concrete_environment(flox, "Services in")
+            .await?;
         Self::from_concrete_environment(flox, concrete_environment)
     }
 

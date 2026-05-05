@@ -24,14 +24,15 @@ pub struct Rollback {
 
 impl Rollback {
     #[instrument(name = "rollback", skip_all)]
-    pub fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
         // TODO(zmitchell, 2025-20-12): `detect_concrete_environment` will prompt
         // which environment to use even when one of the choices is a path
         // environment (which fails when selected). We could be smarter about
         // this in the future.
         let env = self
             .environment
-            .detect_concrete_environment(&flox, "Rollback using")?;
+            .detect_concrete_environment(&flox, "Rollback using")
+            .await?;
 
         environment_subcommand_metric!("generations::rollback", env);
         let mut env: GenerationsEnvironment = env.try_into()?;

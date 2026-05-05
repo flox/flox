@@ -675,7 +675,7 @@ impl ModifyCommands {
             ModifyCommands::Include(args) => args.handle(flox).await?,
             ModifyCommands::Upgrade(args) => args.handle(flox).await?,
             ModifyCommands::Uninstall(args) => args.handle(flox).await?,
-            ModifyCommands::Generations(args) => args.handle(config, flox)?,
+            ModifyCommands::Generations(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
@@ -812,8 +812,8 @@ impl InternalCommands {
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
             InternalCommands::Exit(args) => args.handle(flox)?,
-            InternalCommands::ActivationState(args) => args.handle(flox)?,
-            InternalCommands::ServicesSocket(args) => args.handle(flox)?,
+            InternalCommands::ActivationState(args) => args.handle(flox).await?,
+            InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
         }
         Ok(())
     }
@@ -963,7 +963,7 @@ impl EnvironmentSelect {
     /// behavior based on whether an environment is already active. For example,
     /// `flox activate` should never re-activate the last activated environment;
     /// it should default to an environment in the current directory.
-    pub fn to_concrete_environment(
+    pub async fn to_concrete_environment(
         &self,
         flox: &Flox,
         generation: Option<GenerationId>,
@@ -1035,7 +1035,7 @@ impl EnvironmentSelect {
     /// currently activated environment. For example, `flox install` should
     /// install to the last activated environment if there isn't an environment
     /// in the current directory.
-    pub fn detect_concrete_environment(
+    pub async fn detect_concrete_environment(
         &self,
         flox: &Flox,
         message: &str,

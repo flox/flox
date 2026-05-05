@@ -45,7 +45,8 @@ impl Upgrade {
 
         let mut concrete_environment = self
             .environment
-            .detect_concrete_environment(&flox, "Upgrade")?;
+            .detect_concrete_environment(&flox, "Upgrade")
+            .await?;
         environment_subcommand_metric!("upgrade", concrete_environment);
 
         let description = environment_description(&concrete_environment)?;
