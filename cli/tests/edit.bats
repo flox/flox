@@ -337,6 +337,73 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+# Regression test for #4217: propagated-build-inputs must drain transitively.
+# Three builds form a chain — 'top' propagates 'middle', 'middle' propagates
+# 'bottom'. When 'top' is installed in a consumer env, the merged closure
+# must contain executables from all three. A single-pass `foreach (keys
+# %postponed)` over the propagation worklist would link 'top' and 'middle'
+# (one hop) but silently drop 'bottom' (two hops, queued by addPkg() during
+# iteration).
+# bats test_tags=edit:priority-propagated-deps-transitive
+@test "'flox edit' propagated dependencies drain transitively" {
+  "$FLOX_BIN" init
+
+  MANIFEST=$(cat << "EOF"
+version = 1
+
+[install]
+hello.pkg-path = "hello"
+
+[build]
+bottom.command = """
+  mkdir -p $out/bin
+  printf '#!/bin/sh\necho BOTTOM\n' > $out/bin/bottom-bin
+  chmod +x $out/bin/bottom-bin
+"""
+
+middle.command = """
+  mkdir -p $out/bin $out/nix-support
+  printf '#!/bin/sh\necho MIDDLE\n' > $out/bin/middle-bin
+  chmod +x $out/bin/middle-bin
+  echo ${bottom} > $out/nix-support/propagated-build-inputs
+"""
+
+top.command = """
+  mkdir -p $out/bin $out/nix-support
+  printf '#!/bin/sh\necho TOP\n' > $out/bin/top-bin
+  chmod +x $out/bin/top-bin
+  echo ${middle} > $out/nix-support/propagated-build-inputs
+"""
+EOF
+  )
+
+  echo "$MANIFEST" | \
+    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    "$FLOX_BIN" edit -f -
+  "$FLOX_BIN" build top
+
+  consumer_dir="${BATS_TEST_TMPDIR}/consumer-multihop"
+  "$FLOX_BIN" init -d "$consumer_dir"
+  "$FLOX_BIN" install -d "$consumer_dir" "$(readlink result-top)"
+
+  # All three binaries must be reachable in the activated env. The
+  # bottom-bin assertion is the actual regression check — it is only
+  # present if propagation drained beyond the first hop.
+  run "$FLOX_BIN" activate -d "$consumer_dir" -- top-bin
+  assert_success
+  assert_output "TOP"
+
+  run "$FLOX_BIN" activate -d "$consumer_dir" -- middle-bin
+  assert_success
+  assert_output "MIDDLE"
+
+  run "$FLOX_BIN" activate -d "$consumer_dir" -- bottom-bin
+  assert_success
+  assert_output "BOTTOM"
+}
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=edit:install-store-path
 @test "'flox edit' install-store-path" {
   "$FLOX_BIN" init
