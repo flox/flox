@@ -25,20 +25,23 @@ in
 # TODO: revert to nixpkgs' nix with next nixpkgs bump in May '26.
 #
 # All versions of nix on the current flox/nixpkgs/stable (2026-03-24)
-# are susceptible to GHSA-g3g9-5vj6-r3gj <https://discourse.nixos.org/t/nix-security-advisory-privilege-escalation-via-symlink-following-during-fod-output-registration/76900>.inherit
-# We bump the "stable" nix (which refers to `2.31.3`), to 2.31.4
+# are susceptible to
+# * GHSA-g3g9-5vj6-r3gj <https://discourse.nixos.org/t/nix-security-advisory-privilege-escalation-via-symlink-following-during-fod-output-registration/76900>
+# * GHSA-vh5x-56v6-4368 <https://github.com/NixOS/nix/security/advisories/GHSA-vh5x-56v6-4368>
+# * GHSA-gr92-w2r5-qw5p <https://github.com/NixOS/nix/security/advisories/GHSA-gr92-w2r5-qw5p>
+# We bump the "stable" nix (which refers to `2.31.3`), to 2.31.5
 # which includes fixes against the above vuln.
 # FWIW, using `.appendPatches` apparently runs into build issues in CI,
 # likely on account of <https://github.com/NixOS/nix/issues/14751>.
 (nixVersions.extend (
   final: prev: {
     nixComponents_2_31 = prev.nixComponents_2_31.override {
-      version = "2.31.4";
+      version = "2.31.5";
       src = fetchFromGitHub {
         owner = "NixOS";
         repo = "nix";
-        tag = "2.31.4";
-        hash = "sha256-f/haYfcI+9IiYVH+g6cjhF8cK7QWHAFfcPtF+57ujZ0=";
+        tag = "2.31.5";
+        hash = "sha256-b7fhCXxl9qKTNPQvG8T/+nOxB95kalt9/aSY+ZSRctk=";
       };
     };
 
