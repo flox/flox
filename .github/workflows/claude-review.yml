@@ -21,11 +21,11 @@ jobs:
           fetch-depth: 1
 
       - name: Install Nix
-        uses: cachix/install-nix-action@96951a368ba55167b55f1c916f7d416bac6505fe # v31
+        uses: cachix/install-nix-action@616559265b40713947b9c190a8ff4b507b5df49b # v31
 
       - name: Run Claude Code Review
         id: claude-review
-        uses: anthropics/claude-code-action@bee87b3258c251f9279e5371b0cc3660f37f3f77 # v1
+        uses: anthropics/claude-code-action@1c8b699d43e9bfed42b48ef15da85d89bab70960 # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # This is an optional setting that allows Claude to read CI results on PRs
