@@ -15,7 +15,7 @@ use flox_manifest::{Manifest, ManifestError, Migrated};
 use reqwest::Url;
 use tracing::debug;
 
-use super::UninstallError;
+use super::InstallOrUninstallError;
 
 /// A specification for what to uninstall.
 ///
@@ -79,7 +79,7 @@ pub fn resolve_specs_to_modifications(
     specs: &[UninstallSpec],
     manifest: &Manifest<Migrated>,
     lockfile: &Lockfile,
-) -> Result<Vec<PackageToModify>, UninstallError> {
+) -> Result<Vec<PackageToModify>, InstallOrUninstallError> {
     let mut removals = HashMap::new();
 
     for spec in specs {
@@ -95,7 +95,7 @@ pub fn resolve_specs_to_modifications(
                     .transpose()?
                     .flatten()
                 {
-                    return Err(UninstallError::PackageOnlyIncluded(
+                    return Err(InstallOrUninstallError::PackageOnlyIncluded(
                         pkg.clone(),
                         include.name,
                     ));
@@ -148,7 +148,7 @@ fn compute_uninstall_modifications(
     removals: impl IntoIterator<Item = (String, RawSelectedOutputs)>,
     manifest: &Manifest<Migrated>,
     lockfile: &Lockfile,
-) -> Result<Vec<PackageToModify>, UninstallError> {
+) -> Result<Vec<PackageToModify>, InstallOrUninstallError> {
     let mut modifications = Vec::new();
 
     for (install_id, outputs_to_uninstall) in removals {
@@ -159,7 +159,7 @@ fn compute_uninstall_modifications(
         // Get all available outputs and outputs_to_install from lockfile
         let locked_pkg = lockfile
             .locked_package_with_id(&install_id)
-            .ok_or_else(|| UninstallError::PackageNotInLockfile(install_id.clone()))?;
+            .ok_or_else(|| InstallOrUninstallError::PackageNotInLockfile(install_id.clone()))?;
 
         let locked_outputs_to_install = locked_pkg.outputs_to_install();
         let all_outputs = locked_pkg.all_outputs();
@@ -168,7 +168,7 @@ fn compute_uninstall_modifications(
         if let RawSelectedOutputs::Specific(outputs) = &outputs_to_uninstall {
             for output in outputs {
                 if !all_outputs.contains(output) {
-                    return Err(UninstallError::InvalidOutputForPackage(
+                    return Err(InstallOrUninstallError::InvalidOutputForPackage(
                         output.clone(),
                         install_id.clone(),
                     ));
@@ -559,7 +559,7 @@ mod tests {
         assert!(
             matches!(
                 err,
-                UninstallError::ManifestError(ManifestError::PackageNotFound(ref p))
+                InstallOrUninstallError::ManifestError(ManifestError::PackageNotFound(ref p))
                     if p == "nonexistent"
             ),
             "expected PackageNotFound, got: {err:?}"
@@ -581,7 +581,7 @@ mod tests {
         assert!(
             matches!(
                 err,
-                UninstallError::InvalidOutputForPackage(ref output, ref id)
+                InstallOrUninstallError::InvalidOutputForPackage(ref output, ref id)
                     if output == "nonexistent" && id == "hello"
             ),
             "expected InvalidOutputForPackage, got: {err:?}"
@@ -605,7 +605,7 @@ mod tests {
         assert!(
             matches!(
                 err,
-                UninstallError::PackageNotInLockfile(ref id) if id == "hello"
+                InstallOrUninstallError::PackageNotInLockfile(ref id) if id == "hello"
             ),
             "expected PackageNotInLockfile, got: {err:?}"
         );

@@ -697,7 +697,7 @@ pub enum EnvironmentError {
     #[error(transparent)]
     ManifestError(#[from] ManifestError),
     #[error(transparent)]
-    Uninstall(#[from] UninstallError),
+    Uninstall(#[from] InstallOrUninstallError),
     #[error(transparent)]
     Lockfile(#[from] LockfileError),
     #[error(transparent)]
@@ -832,7 +832,7 @@ pub enum UpgradeError {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum UninstallError {
+pub enum InstallOrUninstallError {
     #[error(transparent)]
     ManifestError(#[from] ManifestError),
     #[error(
