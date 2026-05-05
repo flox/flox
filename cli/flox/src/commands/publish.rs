@@ -235,7 +235,7 @@ impl Publish {
         let build_metadata = check_build_metadata(
             &flox,
             &selected_base_nixpkgs_url,
-            publish_config.system_override.system,
+            publish_config.system_override.into_inner(),
             &publish_provider.env_metadata,
             &publish_provider.package_metadata.package,
         )?;

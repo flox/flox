@@ -937,7 +937,7 @@ pub fn check_build_metadata(
         &built_environments.develop,
         &[pkg.name()],
         Some(false),
-        system_override.clone(),
+        system_override,
     )?;
 
     if build_results.len() != 1 {

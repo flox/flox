@@ -65,7 +65,13 @@ pub struct SystemOverride {
             If not specified, the current system as reported by nix is used.\n"
         )
     )]
-    pub system: Option<String>,
+    system: Option<String>,
+}
+
+impl SystemOverride {
+    pub fn into_inner(self) -> Option<String> {
+        self.system
+    }
 }
 
 #[derive(Bpaf, Clone)]
@@ -171,7 +177,7 @@ impl Build {
                     env,
                     targets,
                     base_catalog_url_select,
-                    system_override.system,
+                    system_override.into_inner(),
                 )
                 .await
             },
