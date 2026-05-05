@@ -5342,13 +5342,13 @@ success"
 }
 
 # bats test_tags=activate,activate:default-flag
-@test "activate -D requires authentication" {
+@test "activate -D fails without auth in non-interactive context" {
   # Ensure we're not logged in by unsetting auth token
   unset FLOX_FLOXHUB_TOKEN
 
   run "$FLOX_BIN" activate -D
   assert_failure
-  assert_output --partial "The '-D' and '--default' flags require authentication"
+  assert_output --partial "You are not logged in to FloxHub."
 }
 
 # bats test_tags=activate,activate:default-flag

@@ -12,10 +12,10 @@ pub struct ActivationState {
 }
 
 impl ActivationState {
-    pub async fn handle(&self, flox: Flox) -> Result<(), anyhow::Error> {
+    pub async fn handle(&self, mut flox: Flox) -> Result<(), anyhow::Error> {
         let concrete_env = self
             .environment
-            .detect_concrete_environment(&flox, "Environment path to get activation state")
+            .detect_concrete_environment(&mut flox, "Environment path to get activation state")
             .await?;
 
         let activation_state_dir =

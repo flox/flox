@@ -46,10 +46,10 @@ enum OutputMode {
 
 impl History {
     #[instrument(name = "history", skip_all)]
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
         let env = self
             .environment
-            .detect_concrete_environment(&flox, "Show history for")
+            .detect_concrete_environment(&mut flox, "Show history for")
             .await?;
         environment_subcommand_metric!("generations::history", env);
 

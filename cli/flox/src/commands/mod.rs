@@ -957,7 +957,7 @@ impl EnvironmentSelect {
     /// it should default to an environment in the current directory.
     pub async fn to_concrete_environment(
         &self,
-        flox: &Flox,
+        flox: &mut Flox,
         generation: Option<GenerationId>,
     ) -> Result<ConcreteEnvironment, EnvironmentSelectError> {
         let env = match self {
@@ -994,9 +994,7 @@ impl EnvironmentSelect {
                 ConcreteEnvironment::Remote(env)
             },
             EnvironmentSelect::Default => {
-                let user_handle = flox.auth_context.handle().context(formatdoc! {"
-                    The '-D' and '--default' flags require authentication
-                "})?;
+                let user_handle = ensure_auth(flox).await?;
 
                 debug!(
                     user = %user_handle,
@@ -1029,7 +1027,7 @@ impl EnvironmentSelect {
     /// in the current directory.
     pub async fn detect_concrete_environment(
         &self,
-        flox: &Flox,
+        flox: &mut Flox,
         message: &str,
     ) -> Result<ConcreteEnvironment, EnvironmentSelectError> {
         let env = match self {
@@ -1059,9 +1057,7 @@ impl EnvironmentSelect {
             },
 
             EnvironmentSelect::Default => {
-                let user_handle = flox.auth_context.handle().context(formatdoc! {"
-                    The '-D' and '--default' flags require authentication
-                "})?;
+                let user_handle = ensure_auth(flox).await?;
 
                 debug!(
                     user = %user_handle,
@@ -1105,7 +1101,7 @@ impl EnvironmentSelect {
 impl DirEnvironmentSelect {
     pub fn detect_concrete_environment(
         &self,
-        flox: &Flox,
+        flox: &mut Flox,
         message: &str,
     ) -> Result<ConcreteEnvironment, EnvironmentSelectError> {
         match self {
