@@ -16,6 +16,7 @@ use futures::{StreamExt, TryStreamExt};
 use reqwest::StatusCode;
 use reqwest::header::{self, HeaderMap};
 use tracing::{debug, instrument};
+use url::Url;
 
 use crate::MapApiErrorExt;
 use crate::auth::AuthStrategy;
@@ -215,6 +216,23 @@ pub trait ClientTrait {
 
     /// Get information about the base catalog and available stabilities.
     async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, CatalogClientError>;
+
+    /// Query the catalog to check whether a build matching the given source
+    /// tuple (source URL, source rev, nixpkgs rev, system, package name) has
+    /// already been recorded/published.
+    ///
+    /// Returns provenance data (source rev date, rev) in `CheckBuildResponse`
+    /// when `already_published` is true. Used for dedup pre-check before
+    /// running the build.
+    async fn check_build_already_recorded(
+        &self,
+        catalog_name: impl AsRef<str> + Send + Sync,
+        package_name: impl AsRef<str> + Send + Sync,
+        source_url: &Url,
+        source_rev: &str,
+        nixpkgs_rev: &str,
+        system: api_types::PackageSystem,
+    ) -> Result<CheckBuildResponse, CatalogClientError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -500,6 +518,35 @@ impl ClientTrait for CatalogClient {
             .map_api_error()
             .await
             .map(|res| res.into_inner().into())
+    }
+
+    async fn check_build_already_recorded(
+        &self,
+        catalog_name: impl AsRef<str> + Send + Sync,
+        package_name: impl AsRef<str> + Send + Sync,
+        source_url: &Url,
+        source_rev: &str,
+        nixpkgs_rev: &str,
+        system: api_types::PackageSystem,
+    ) -> Result<CheckBuildResponse, CatalogClientError> {
+        let catalog = str_to_catalog_name(catalog_name)?;
+        let package = str_to_package_name(package_name)?;
+        let body = api_types::CheckBuildRequest {
+            source_url: source_url.to_string(),
+            source_rev: source_rev.to_string(),
+            nixpkgs_rev: nixpkgs_rev.to_string(),
+            system,
+        };
+        self.client
+            .check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_post(
+                &catalog,
+                &package,
+                &body,
+            )
+            .await
+            .map_api_error()
+            .await
+            .map(|resp| resp.into_inner())
     }
 }
 

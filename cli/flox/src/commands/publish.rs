@@ -2,11 +2,13 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
+use flox_catalog::ClientTrait;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::providers::auth::Auth;
 use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget};
+use flox_rust_sdk::providers::catalog::SystemEnum;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
     Publisher,
@@ -17,7 +19,8 @@ use flox_rust_sdk::providers::publish::{
 };
 use indoc::formatdoc;
 use nef_lock_catalog::lock::NixFlakeref;
-use tracing::{debug, info_span, instrument};
+use tracing::{debug, info_span, instrument, warn};
+use url::Url;
 
 use super::{DirEnvironmentSelect, dir_environment_select};
 use crate::commands::build::{
@@ -232,6 +235,75 @@ impl Publish {
                 .kind()
                 .is_manifest_build()
         );
+
+        // Pre-check: ask the catalog server if this exact build already exists
+        // before spending time on the build. If the check fails, warn the
+        // user and continue — the dedup feature must never block publishes.
+        let nixpkgs_rev = publish_provider
+            .package_metadata
+            .base_catalog_ref
+            .rev()
+            .unwrap_or_else(|| {
+                warn!(
+                    url = %publish_provider.package_metadata.base_catalog_ref,
+                    "could not extract nixpkgs rev from base catalog URL; \
+                     dedup check will likely miss"
+                );
+                ""
+            });
+        let system_str = publish_config
+            .system_override
+            .system
+            .as_deref()
+            .unwrap_or(flox.system.as_str());
+        let system = system_str
+            .parse::<SystemEnum>()
+            .context("invalid system value for dedup pre-check")?;
+        let source_url = Url::parse(&publish_provider.env_metadata.build_repo_meta.url)
+            .context("failed to parse build repo URL for dedup pre-check")?;
+        let check_result = flox
+            .catalog_client
+            .check_build_already_recorded(
+                &catalog_name,
+                publish_provider.package_metadata.package.name().as_ref(),
+                &source_url,
+                &publish_provider.env_metadata.build_repo_meta.rev,
+                nixpkgs_rev,
+                system,
+            )
+            .await;
+
+        match check_result {
+            Ok(resp) if resp.already_published => {
+                message::updated(formatdoc! {"
+                    Package already published.
+
+                    Originally published: {date}
+                    Source revision: {rev}
+                    ",
+                    date = resp
+                        .published_at
+                        .map_or_else(|| "unknown".to_string(), |d| d.to_string()),
+                    rev = resp.source_rev.unwrap_or_else(|| "unknown".to_string()),
+                });
+                return Ok(());
+            },
+            Ok(_) => {
+                // Not a duplicate, proceed with build.
+            },
+            Err(e) => {
+                // Pre-check failed; show user-visible warning and proceed
+                // with build (graceful degradation per D3).
+                message::warning(
+                    "Unable to check if already published — continuing with build and publish.",
+                );
+                warn!(
+                    error = %e,
+                    "Dedup pre-check failed, proceeding with build"
+                );
+            },
+        }
+
         let build_metadata = check_build_metadata(
             &flox,
             &selected_base_nixpkgs_url,

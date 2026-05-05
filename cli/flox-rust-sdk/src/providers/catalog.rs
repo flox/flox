@@ -12,6 +12,7 @@ use flox_catalog::{
     CatalogClientError,
     CatalogMockMode,
     CatalogStoreConfig,
+    CheckBuildResponse,
     ClientTrait,
     LockedSourceItem,
     PackageDetails,
@@ -37,6 +38,7 @@ use reqwest::header::HeaderMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::info;
+use url::Url;
 
 use super::publish::CheckedEnvironmentMetadata;
 use crate::flox::Flox;
@@ -255,6 +257,41 @@ impl ClientTrait for Client {
         match self {
             Client::Catalog(c) => c.get_catalog_locked_sources(catalog_name).await,
             Client::Mock(c) => c.get_catalog_locked_sources(catalog_name).await,
+        }
+    }
+
+    async fn check_build_already_recorded(
+        &self,
+        catalog_name: impl AsRef<str> + Send + Sync,
+        package_name: impl AsRef<str> + Send + Sync,
+        source_url: &Url,
+        source_rev: &str,
+        nixpkgs_rev: &str,
+        system: PackageSystem,
+    ) -> Result<CheckBuildResponse, CatalogClientError> {
+        match self {
+            Client::Catalog(c) => {
+                c.check_build_already_recorded(
+                    catalog_name,
+                    package_name,
+                    source_url,
+                    source_rev,
+                    nixpkgs_rev,
+                    system,
+                )
+                .await
+            },
+            Client::Mock(c) => {
+                c.check_build_already_recorded(
+                    catalog_name,
+                    package_name,
+                    source_url,
+                    source_rev,
+                    nixpkgs_rev,
+                    system,
+                )
+                .await
+            },
         }
     }
 }
@@ -527,6 +564,18 @@ impl ClientTrait for MockClient {
         _catalog_name: impl AsRef<str> + Send + Sync,
     ) -> Result<ResultsPage<LockedSourceItem>, CatalogClientError> {
         unimplemented!("get_catalog_locked_sources not implemented for MockClient")
+    }
+
+    async fn check_build_already_recorded(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+        _package_name: impl AsRef<str> + Send + Sync,
+        _source_url: &Url,
+        _source_rev: &str,
+        _nixpkgs_rev: &str,
+        _system: PackageSystem,
+    ) -> Result<CheckBuildResponse, CatalogClientError> {
+        unimplemented!("check_build_already_recorded is not supported in MockClient")
     }
 }
 
