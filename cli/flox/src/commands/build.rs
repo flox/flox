@@ -75,7 +75,7 @@ impl SystemOverride {
     /// without cloning the underlying `String`.
     /// When `None`, the build backend falls back to `nix config show system`
     /// at runtime (see `flox-build.mk`).
-    pub fn resolved(&self) -> Option<&str> {
+    pub fn as_str(&self) -> Option<&str> {
         self.system.as_deref()
     }
 }
@@ -183,7 +183,7 @@ impl Build {
                     env,
                     targets,
                     base_catalog_url_select,
-                    system_override.resolved(),
+                    system_override.as_str(),
                 )
                 .await
             },
@@ -1172,23 +1172,18 @@ mod test {
             );
         }
     }
-}
-
-#[cfg(test)]
-mod system_override_tests {
-    use super::*;
 
     #[test]
-    fn system_override_resolved_none() {
+    fn system_override_as_str_none() {
         let s = SystemOverride { system: None };
-        assert_eq!(s.resolved(), None);
+        assert_eq!(s.as_str(), None);
     }
 
     #[test]
-    fn system_override_resolved_some() {
+    fn system_override_as_str_some() {
         let s = SystemOverride {
             system: Some("aarch64-linux".to_string()),
         };
-        assert_eq!(s.resolved(), Some("aarch64-linux"));
+        assert_eq!(s.as_str(), Some("aarch64-linux"));
     }
 }
