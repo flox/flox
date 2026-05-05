@@ -49,7 +49,7 @@ use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError, copy_dir_recursive, open_path};
 use crate::providers::auth::catalog_auth_to_envs;
 use crate::providers::git::GitProvider;
-use crate::providers::nix::nix_base_command;
+use crate::providers::nix::{NIX_MULTIPART_MIN_VERSION, nix_base_command, nix_runtime_version};
 use crate::utils::CommandExt;
 
 #[derive(Debug, Error)]
@@ -84,6 +84,11 @@ pub enum PublishError {
 
     #[error("Failed to upload to cache: {0}")]
     CacheUploadError(String),
+
+    #[error(
+        "Package exceeds the S3 single-upload limit (5 GB). Your Nix version ({nix_version}) does not support multipart uploads. Upgrade to Nix 2.33 or later to publish packages larger than 5 GB."
+    )]
+    MultipartUnsupported { nix_version: String },
 
     #[error("Failed to get additional artifact metadata: {0}")]
     GetNarInfo(String),
@@ -445,6 +450,24 @@ impl ClientSideCatalogStoreConfig {
         if destination_url.scheme() == "s3" {
             // https://nix.dev/manual/nix/2.24/command-ref/new-cli/nix3-help-stores#store-s3-binary-cache-store-ls-compression
             query.append_pair("ls-compression", "zstd");
+
+            // Enable S3 multipart upload support (Nix 2.33+).
+            // Without this, uploads are limited to the S3 single-PUT maximum of 5 GB.
+            match nix_runtime_version() {
+                Ok(version) if version >= NIX_MULTIPART_MIN_VERSION => {
+                    debug!(%version, "Nix supports multipart uploads, enabling");
+                    query.append_pair("multipart-upload", "true");
+                },
+                Ok(version) => {
+                    debug!(%version, "Nix < 2.33, multipart uploads not available");
+                },
+                Err(err) => {
+                    debug!(
+                        ?err,
+                        "Could not detect Nix version, skipping multipart param"
+                    );
+                },
+            }
         }
         drop(query);
 
@@ -476,11 +499,29 @@ impl ClientSideCatalogStoreConfig {
             .output()
             .map_err(|e| PublishError::CacheUploadError(e.to_string()))?;
         if output.status.success() {
-            Ok(())
-        } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            Err(PublishError::CacheUploadError(stderr.to_string()))
+            return Ok(());
         }
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        Err(Self::classify_upload_error(
+            &stderr,
+            nix_runtime_version().ok(),
+        ))
+    }
+
+    /// Classify a `nix copy` upload failure, providing an actionable error
+    /// when the S3 size limit is hit on old Nix.
+    fn classify_upload_error(stderr: &str, nix_version: Option<semver::Version>) -> PublishError {
+        if stderr.contains("EntityTooLarge")
+            && let Some(version) = nix_version
+            && version < NIX_MULTIPART_MIN_VERSION
+        {
+            return PublishError::MultipartUnsupported {
+                nix_version: version.to_string(),
+            };
+        }
+        PublishError::CacheUploadError(stderr.to_string())
     }
 
     /// Constructs a `nix path-info` command that will get the NAR info for a
@@ -2495,6 +2536,49 @@ pub mod tests {
         assert!(
             msg.contains("dirty"),
             "Expected 'dirty' in message, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn classify_entity_too_large_old_nix() {
+        let stderr = "error: AWS error uploading 'nar/abc.nar.zst': Unable to parse ExceptionName: EntityTooLarge Message: Your proposed upload exceeds the maximum allowed size";
+        let version = Some(semver::Version::new(2, 31, 4));
+        let err = ClientSideCatalogStoreConfig::classify_upload_error(stderr, version);
+        assert!(
+            matches!(err, PublishError::MultipartUnsupported { ref nix_version } if nix_version == "2.31.4"),
+            "Expected MultipartUnsupported, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn classify_entity_too_large_new_nix() {
+        let stderr = "error: EntityTooLarge";
+        let version = Some(semver::Version::new(2, 33, 0));
+        let err = ClientSideCatalogStoreConfig::classify_upload_error(stderr, version);
+        assert!(
+            matches!(err, PublishError::CacheUploadError(_)),
+            "Expected CacheUploadError, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn classify_entity_too_large_unknown_nix() {
+        let stderr = "error: EntityTooLarge";
+        let err = ClientSideCatalogStoreConfig::classify_upload_error(stderr, None);
+        assert!(
+            matches!(err, PublishError::CacheUploadError(_)),
+            "Expected CacheUploadError, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn classify_generic_upload_error() {
+        let stderr = "error: some other nix copy failure";
+        let version = Some(semver::Version::new(2, 31, 4));
+        let err = ClientSideCatalogStoreConfig::classify_upload_error(stderr, version);
+        assert!(
+            matches!(err, PublishError::CacheUploadError(ref msg) if msg.contains("some other nix copy failure")),
+            "Expected CacheUploadError with original message, got: {err:?}"
         );
     }
 }
