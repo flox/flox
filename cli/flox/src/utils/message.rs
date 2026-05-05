@@ -8,6 +8,7 @@ use flox_core::util::message::{format_error, format_updated};
 pub use flox_core::util::message::{stderr_supports_color, stdout_supports_color};
 use flox_manifest::compose::{COMPOSER_MANIFEST_ID, Warning};
 use flox_manifest::lockfile::{LockedPackage, Lockfile, PackageOutputs};
+use flox_manifest::parsed::latest::SelectedOutputs;
 use flox_manifest::raw::PackageToInstall;
 use indoc::formatdoc;
 use minus::{ExitStrategy, Pager, page_all};
@@ -133,6 +134,19 @@ pub(crate) fn packages_installed_with_system_subsets(pkgs: &[PackageToInstall]) 
             // path anyway.
             pkg.systems().unwrap_or_default().join(", ")
         ))
+    }
+}
+
+/// Display a message for packages whose outputs were updated.
+pub(crate) fn packages_outputs_updated(
+    pkgs: &[(PackageToInstall, SelectedOutputs)],
+    environment_description: &str,
+) {
+    for (pkg, outputs) in pkgs {
+        updated(format!(
+            "'{}' outputs updated to '{outputs}' in environment {environment_description}",
+            pkg.id(),
+        ));
     }
 }
 

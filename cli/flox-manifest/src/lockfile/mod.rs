@@ -167,6 +167,12 @@ impl Lockfile {
     pub fn is_up_to_date_with_serialized_manifest(&self, manifest: &Manifest<TypedOnly>) -> bool {
         manifest == self.user_manifest()
     }
+
+    pub fn locked_package_with_id(&self, id: impl AsRef<str>) -> Option<&LockedPackage> {
+        self.packages
+            .iter()
+            .find(|pkg| pkg.install_id() == id.as_ref())
+    }
 }
 
 impl FromStr for Lockfile {
@@ -247,6 +253,24 @@ impl LockedPackage {
             LockedPackage::Catalog(pkg) => Some(&pkg.version),
             LockedPackage::Flake(pkg) => pkg.locked_installable.version.as_deref(),
             LockedPackage::StorePath(_) => None,
+        }
+    }
+
+    /// Returns None for store paths
+    pub fn outputs_to_install(&self) -> Option<Vec<String>> {
+        match self {
+            LockedPackage::Catalog(pkg) => pkg.outputs_to_install(),
+            LockedPackage::Flake(pkg) => pkg.outputs_to_install(),
+            LockedPackage::StorePath(_) => None,
+        }
+    }
+
+    /// Returns an empty vec for store paths since store paths don't have outputs
+    pub fn all_outputs(&self) -> Vec<String> {
+        match self {
+            LockedPackage::Catalog(pkg) => pkg.all_outputs(),
+            LockedPackage::Flake(pkg) => pkg.all_outputs(),
+            LockedPackage::StorePath(_) => Vec::new(),
         }
     }
 }

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
 use flox_manifest::interfaces::PackageLookup;
-use flox_manifest::lockfile::{LockedPackage, Lockfile, PackageOutputs};
+use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::v1_10_0::SelectedOutputs;
 use flox_manifest::raw::{
     CatalogPackage,
@@ -15,7 +15,7 @@ use flox_manifest::{Manifest, ManifestError, Migrated};
 use reqwest::Url;
 use tracing::debug;
 
-use super::UninstallError;
+use super::InstallOrUninstallError;
 
 /// A specification for what to uninstall.
 ///
@@ -79,7 +79,7 @@ pub fn resolve_specs_to_modifications(
     specs: &[UninstallSpec],
     manifest: &Manifest<Migrated>,
     lockfile: &Lockfile,
-) -> Result<Vec<PackageToModify>, UninstallError> {
+) -> Result<Vec<PackageToModify>, InstallOrUninstallError> {
     let mut removals = HashMap::new();
 
     for spec in specs {
@@ -95,7 +95,7 @@ pub fn resolve_specs_to_modifications(
                     .transpose()?
                     .flatten()
                 {
-                    return Err(UninstallError::PackageOnlyIncluded(
+                    return Err(InstallOrUninstallError::PackageOnlyIncluded(
                         pkg.clone(),
                         include.name,
                     ));
@@ -148,7 +148,7 @@ fn compute_uninstall_modifications(
     removals: impl IntoIterator<Item = (String, RawSelectedOutputs)>,
     manifest: &Manifest<Migrated>,
     lockfile: &Lockfile,
-) -> Result<Vec<PackageToModify>, UninstallError> {
+) -> Result<Vec<PackageToModify>, InstallOrUninstallError> {
     let mut modifications = Vec::new();
 
     for (install_id, outputs_to_uninstall) in removals {
@@ -157,24 +157,22 @@ fn compute_uninstall_modifications(
         let current_outputs = manifest_descriptor.as_ref().and_then(|d| d.get_outputs());
 
         // Get all available outputs and outputs_to_install from lockfile
+        // We resolved an install_id in the caller, so we know the install_id is
+        // already in the manifest
         let locked_pkg = lockfile
-            .packages
-            .iter()
-            .find(|pkg| pkg.install_id() == install_id)
-            .ok_or_else(|| UninstallError::PackageNotInLockfile(install_id.clone()))?;
+            .locked_package_with_id(&install_id)
+            .ok_or_else(|| {
+                InstallOrUninstallError::PackageInManifestNotInLockfile(install_id.clone())
+            })?;
 
-        let (locked_outputs_to_install, all_outputs) = match locked_pkg {
-            LockedPackage::Catalog(p) => (p.outputs_to_install(), p.all_outputs()),
-            LockedPackage::Flake(p) => (p.outputs_to_install(), p.all_outputs()),
-            // We assume store paths have no multiple outputs
-            LockedPackage::StorePath(_) => (None, Vec::new()),
-        };
+        let locked_outputs_to_install = locked_pkg.outputs_to_install();
+        let all_outputs = locked_pkg.all_outputs();
 
         // Validate that requested outputs exist for this package
         if let RawSelectedOutputs::Specific(outputs) = &outputs_to_uninstall {
             for output in outputs {
                 if !all_outputs.contains(output) {
-                    return Err(UninstallError::InvalidOutputForPackage(
+                    return Err(InstallOrUninstallError::InvalidOutputForPackage(
                         output.clone(),
                         install_id.clone(),
                     ));
@@ -238,7 +236,7 @@ fn modification_for_outputs(
         return PackageModification::Remove;
     }
 
-    PackageModification::UpdateOutputs(remaining_outputs)
+    PackageModification::UpdateOutputs(SelectedOutputs::Specific(remaining_outputs))
 }
 
 #[cfg(test)]
@@ -267,7 +265,10 @@ mod tests {
         );
         assert_eq!(
             result,
-            PackageModification::UpdateOutputs(vec!["out".to_string(), "dev".to_string()])
+            PackageModification::UpdateOutputs(SelectedOutputs::Specific(vec![
+                "out".to_string(),
+                "dev".to_string()
+            ]))
         );
     }
 
@@ -281,7 +282,10 @@ mod tests {
         );
         assert_eq!(
             result,
-            PackageModification::UpdateOutputs(vec!["out".to_string(), "dev".to_string()])
+            PackageModification::UpdateOutputs(SelectedOutputs::Specific(vec![
+                "out".to_string(),
+                "dev".to_string()
+            ]))
         );
     }
 
@@ -296,7 +300,7 @@ mod tests {
         );
         assert_eq!(
             result,
-            PackageModification::UpdateOutputs(vec!["out".to_string()])
+            PackageModification::UpdateOutputs(SelectedOutputs::Specific(vec!["out".to_string()]))
         );
     }
 
@@ -414,7 +418,10 @@ mod tests {
 
         assert_eq!(result, vec![PackageToModify {
             install_id: "hello".into(),
-            modification: PackageModification::UpdateOutputs(vec!["dev".into(), "out".into()]),
+            modification: PackageModification::UpdateOutputs(SelectedOutputs::Specific(vec![
+                "dev".into(),
+                "out".into()
+            ])),
         }]);
     }
 
@@ -521,7 +528,10 @@ mod tests {
 
         assert_eq!(result, vec![PackageToModify {
             install_id: "hello".into(),
-            modification: PackageModification::UpdateOutputs(vec!["dev".into(), "out".into()]),
+            modification: PackageModification::UpdateOutputs(SelectedOutputs::Specific(vec![
+                "dev".into(),
+                "out".into()
+            ])),
         }]);
     }
 
@@ -565,7 +575,7 @@ mod tests {
         assert!(
             matches!(
                 err,
-                UninstallError::ManifestError(ManifestError::PackageNotFound(ref p))
+                InstallOrUninstallError::ManifestError(ManifestError::PackageNotFound(ref p))
                     if p == "nonexistent"
             ),
             "expected PackageNotFound, got: {err:?}"
@@ -587,7 +597,7 @@ mod tests {
         assert!(
             matches!(
                 err,
-                UninstallError::InvalidOutputForPackage(ref output, ref id)
+                InstallOrUninstallError::InvalidOutputForPackage(ref output, ref id)
                     if output == "nonexistent" && id == "hello"
             ),
             "expected InvalidOutputForPackage, got: {err:?}"
@@ -611,7 +621,7 @@ mod tests {
         assert!(
             matches!(
                 err,
-                UninstallError::PackageNotInLockfile(ref id) if id == "hello"
+                InstallOrUninstallError::PackageInManifestNotInLockfile(ref id) if id == "hello"
             ),
             "expected PackageNotInLockfile, got: {err:?}"
         );
