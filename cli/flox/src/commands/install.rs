@@ -363,7 +363,7 @@ impl Install {
                     };
 
                     let Some(pkg_retry) = packages.get_mut(install_id) else {
-                        warn!(install_id, "resolution failure for non-existent package");
+                        warn!(install_id, "resolution failure for nonexistent package");
                         continue;
                     };
 

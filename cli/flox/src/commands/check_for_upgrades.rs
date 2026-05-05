@@ -57,7 +57,7 @@ impl CheckForUpgrades {
         //
         // @billlevine brought up that if we start mutating the catalog client
         // or `Flox` object in multiple places, it would be preferable
-        // to do som in a more scoped way and have the changes be reverted at some point [1].
+        // to do some in a more scoped way and have the changes be reverted at some point [1].
         // For now, in this command we're modifying the `Flox` object only once
         // and for the rest of the command's (short) lifetime.
         // A possible future improvement was sketched out in the comment above [1].

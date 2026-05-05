@@ -971,7 +971,7 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
 ///
 /// On Linux use XDG_RUNTIME_DIR per
 /// https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
-/// If unset, fallback to cache_dir like for macOS.
+/// If unset, fall back to cache_dir like for macOS.
 fn services_socket_path(id: &str, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
     if let Ok(path) = std::env::var(FLOX_SERVICES_SOCKET_OVERRIDE_VAR) {
         return Ok(PathBuf::from(path));

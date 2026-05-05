@@ -461,7 +461,7 @@ pub fn start_service(socket: impl AsRef<Path>, name: impl AsRef<str>) -> Result<
     let mut cmd = base_process_compose_command(socket);
     cmd.arg("start").arg(name);
 
-    debug!(cmd = %cmd.display(), service = name, "startig service");
+    debug!(cmd = %cmd.display(), service = name, "starting service");
 
     let output = cmd.output().map_err(ServiceError::ProcessComposeCmd)?;
 
@@ -845,11 +845,11 @@ impl ProcessComposeLogReader {
             // kill the child because in both cases we want it to stop.
             child.kill().map_err(ServiceError::ProcessComposeCmd)?;
 
-            // Return an error when the the thread handle is joined.
+            // Return an error when the thread handle is joined.
             // Note that if the receiver was dropped, this error won't ever be handled.
             // But we still want to wait so we don't leave a zombie.
             // The most likely error is that the socket doesn't exist,
-            // trying to read logs for a non existent process
+            // trying to read logs for a nonexistent process
             // unfortunately just blocks indefinitely without any error message.
             let exit_status = child.wait().map_err(ServiceError::ProcessComposeCmd)?;
             if !exit_status.success() {
@@ -1241,7 +1241,7 @@ mod tests {
     }
 
     /// Test that [ProcessComposeLogReader] reads at less than `tail` lines from the process,
-    /// even if the process loggs more lines eventually,
+    /// even if the process logs more lines eventually,
     /// but has yet only logged less than `tail` lines.
     ///
     /// We rely on the `--tail` behavior of `process-compose process logs`,

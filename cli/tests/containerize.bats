@@ -2,7 +2,7 @@
 # -*- mode: bats; -*-
 # ============================================================================ #
 #
-# Test flox conteinerize
+# Test flox containerize
 #
 # bats file_tags=containerize
 #

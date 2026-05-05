@@ -122,7 +122,7 @@ pub enum ManagedEnvironmentError {
         user: Option<String>,
     },
     /// [ManagedEnvironment::push_new] may return this
-    /// if the pushed environmentname already exists
+    /// if the pushed environment name already exists
     #[error("environment '{env_ref}' already exists at upstream '{upstream}'")]
     UpstreamAlreadyExists {
         env_ref: RemoteEnvironmentRef,
@@ -775,7 +775,7 @@ impl GenerationsExt for ManagedEnvironment {
 /// Constructors and related functions
 impl ManagedEnvironment {
     /// Guard against modifying an environment that is activated at a specific
-    /// generation so that we don't create unecessary branches in the generation
+    /// generation so that we don't create unnecessary branches in the generation
     /// history.
     fn guard_generation_immutable(&self) -> Result<(), EnvironmentError> {
         if let Some(generation) = self.generation {
@@ -1053,7 +1053,7 @@ impl ManagedEnvironment {
     /// Pulling an environment for example may result in an invalid environment
     /// e.g. because the manifest does not specify the current system,
     /// resetting in that context should not fail either.
-    /// Like [ManagedEnvironment::pull], downtream commands should check that the environment builds
+    /// Like [ManagedEnvironment::pull], downstream commands should check that the environment builds
     /// if applicable.
     ///
     /// TODO: Specific behavior for other files than the manifest should is undefined.
@@ -1286,7 +1286,7 @@ impl ManagedEnvironment {
             .build(flox)
             .map_err(ManagedEnvironmentError::Build)?;
 
-        // Ensure that the environment does not include other local ennvironments
+        // Ensure that the environment does not include other local environments
         check_for_local_includes(&lockfile)?;
 
         Self::push_new_without_building(
@@ -1386,7 +1386,7 @@ impl ManagedEnvironment {
             // git may produce two identical commits despite different repos.
             // Therefore the push to "FloxHub" will succeed with [PushFlag::UpToDate].
             // Since we want to signal that the upstream repo already exists
-            // we need to also catch this success.
+            // we also need to catch this success.
             Err(GitRemoteCommandError::Diverged) | Ok(PushFlag::UptoDate) => {
                 Err(ManagedEnvironmentError::UpstreamAlreadyExists {
                     env_ref: RemoteEnvironmentRef::new_from_parts(owner, name),
@@ -1920,7 +1920,7 @@ mod test {
                 .exists()
         );
 
-        // dlete env dir to see whether it is recreated
+        // delete env dir to see whether it is recreated
         fs::remove_dir_all(managed_env.path.join(ENV_DIR_NAME)).unwrap();
 
         let _ = managed_env
@@ -2145,7 +2145,7 @@ mod test {
     }
 
     /// Validate that two environments with equivalent manifests fail validation
-    /// if the binary representationnof the manifest differs.
+    /// if the binary representation of the manifest differs.
     #[test]
     fn test_validate_local_different_binary_content() {
         let (flox, _temp_dir_handle) = flox_instance();

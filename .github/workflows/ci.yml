@@ -472,10 +472,10 @@ jobs:
           - system: "x86_64-darwin"
         include:
           # Disable containerize and activation tests on x86_64-darwin
-          # Containerize tests are run through rosetta, and thius are slow and dont necessarily represent real usage.
+          # Containerize tests are run through rosetta, and thus are slow and dont necessarily represent real usage.
           # Activation tests are taking the largest part of test runtime (up to ~10 minutes)
           # we disable these in an effort to speed up CI.
-          # We assume that activation is sufficiently testsd on macos through aarch64-darwin
+          # We assume that activation is sufficiently tested on macos through aarch64-darwin
           # and on x86_64-darwin through the remaining integration tests
           - system: "x86_64-darwin"
             test-tags: "!containerize,!activate"

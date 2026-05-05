@@ -694,7 +694,7 @@ mod tests {
                     # Print something
                     echo "hello world"
 
-                    # Set a environment variable
+                    # Set an environment variable
                     $FOO="bar"
                 "#}
                 .to_string(),
@@ -740,7 +740,7 @@ mod tests {
               # Print something
               echo "hello world"
 
-              # Set a environment variable
+              # Set an environment variable
               $FOO="bar"
             """
 

@@ -66,7 +66,7 @@ type ConfiguredClient<
 ///
 /// Environment variables can be used to override the compile time constants during testing.
 /// For use in production, the compile time constants should be used.
-/// For multitenency, we will integrate with the config subsystem later.
+/// For multitenancy, we will integrate with the config subsystem later.
 fn create_oauth_client() -> Result<ConfiguredClient> {
     let auth_url = AuthUrl::new(
         std::env::var("_FLOX_OAUTH_AUTH_URL").unwrap_or(env!("OAUTH_AUTH_URL").to_string()),

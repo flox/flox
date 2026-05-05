@@ -79,5 +79,5 @@ wrapped_nixpkgs_input = library(
 # let's just define the tests in the same project.
 # 'tests/meson.build' will have access to the variables defined here,
 # particularly `wrapped_nixpkgs_input` and `lock_flake_installable`,
-# which are dependencies for the respecive tests.
+# which are dependencies for the respective tests.
 subdir('tests')

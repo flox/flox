@@ -1205,13 +1205,13 @@ pub enum CoreEnvironmentError {
 
 impl CoreEnvironmentError {
     pub fn is_incompatible_system_error(&self) -> bool {
-        // incomaptible system errors during resolution
+        // incompatible system errors during resolution
         let is_lock_incompatible_system_error = matches!(
             self,
             CoreEnvironmentError::Resolve(ResolveError::ResolutionFailed(failures))
              if failures.0.iter().any(|f| matches!(f, ResolutionFailure::PackageUnavailableOnSomeSystems { .. })));
 
-        // Incomaptible system errors during build
+        // Incompatible system errors during build
         // i.e. trying to build a lockfile that specifies systems,
         // but the current system is not in the list
         let is_build_incompatible_system_error = matches!(

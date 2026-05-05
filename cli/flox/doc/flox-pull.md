@@ -36,7 +36,7 @@ or, if an environment has already been pulled, retrieve any updates.
 ## Pulling a new environment (`<owner>/<name> [--dir <dir>]`)
 
 Create an environment in the current directory or the directory specified by
-the `--dir` flag, that is linked to the centrally managed environemnt
+the `--dir` flag, that is linked to the centrally managed environment
 `<owner>/<name>` on FloxHub.
 You can make changes locally and push them back with
 [`flox-push(1)`](./flox-push.md).

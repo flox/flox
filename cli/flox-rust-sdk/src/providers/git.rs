@@ -698,7 +698,7 @@ pub enum GitCommandDiscoverError {
     Command(#[from] GitCommandError),
     #[error("Git directory is not valid unicode")]
     GitDirEncoding,
-    #[error("Git returned an uexpected output: {0}")]
+    #[error("Git returned an unexpected output: {0}")]
     UnexpectedOutput(String),
 }
 
@@ -1047,7 +1047,7 @@ impl GitProvider for GitCommandProvider {
             )?;
 
             if remote_revision.len() < 40 {
-                warn!("No commit found found upstream for ref {remote_branch}");
+                warn!("No commit found upstream for ref {remote_branch}");
                 None
             } else {
                 Some(remote_revision.to_string_lossy()[..40].to_string())
@@ -1146,11 +1146,11 @@ impl GitProvider for GitCommandProvider {
                 // If using the git cli that would probably be the better way
                 // of providing parseable data.
                 //
-                // the git putput is formatted as
+                // the git output is formatted as
                 // [*] <name> <whitespace> <rev hash> <whitespace> <subject>
                 //  L present iff branch is currently checked out
 
-                // the active branch is denoted by a leadinf '*', which cannot be disabled?
+                // the active branch is denoted by a leading '*', which cannot be disabled?
                 let (full_name, rest) =
                     line.trim_start_matches('*').trim().split_once(' ').unwrap();
                 // hash part
@@ -1530,7 +1530,7 @@ pub mod tests {
     fn test_open_subdirectory_bare() {
         let (_, tempdir_handle) = init_temp_repo(true);
 
-        // Consider the existance of the "hooks" subdirectory as confirmation
+        // Consider the existence of the "hooks" subdirectory as confirmation
         // of having successfully created a bare repository. We previously
         // tested for the existence of "branches", but that directory stopped
         // being created in a recent update of the GitCommandProvider.

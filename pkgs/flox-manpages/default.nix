@@ -20,7 +20,7 @@ let
 
     # Compile manpage
     #
-    # Produe a standalone manpage with header and footer
+    # Produce a standalone manpage with header and footer
     # Apply custom filters:
     # * `include-files.lua` to include other markdown files
     # * `filter-links.lua` to mitigate against <https://github.com/jgm/pandoc/issues/9458>

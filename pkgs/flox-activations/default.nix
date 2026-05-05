@@ -38,7 +38,7 @@ craneLib.buildPackage (
     # Unlike the `flox` package,
     # we cannot reuse the `flox-*-deps` packages for incremental compilation
     # because this crate is built with the "small" profile,
-    # which among othet things applies different compiler optimizations.
+    # which among other things applies different compiler optimizations.
     #
     # Crane will still cache the dependencies of this package,
     # through its own automation, but will experience cache misses

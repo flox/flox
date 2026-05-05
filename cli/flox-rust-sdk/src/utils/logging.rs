@@ -36,7 +36,7 @@ pub mod test_helpers {
     }
 
     // For now this is a POC of using tracing for output tests,
-    // evenatually we should probably move that to the tracing utils or `message` module.
+    // eventually we should probably move that to the tracing utils or `message` module.
     #[cfg(any(test, feature = "tests"))]
     pub fn test_subscriber() -> (impl tracing::Subscriber, CollectingWriter) {
         let writer = CollectingWriter::default();

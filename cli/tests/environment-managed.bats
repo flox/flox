@@ -203,7 +203,7 @@ EOF
 }
 
 # bats test_tags=managed,diverged,managed:diverged
-@test "m7: remote can not be pulled into diverged environment" {
+@test "m7: remote cannot be pulled into diverged environment" {
   mkdir a a_data
   mkdir b b_data
 
@@ -235,7 +235,7 @@ EOF
   # assert that pulling fails
   run "$FLOX_BIN" pull
   assert_failure
-  # assert that the error message includes infomration about the generations/history
+  # assert that the error message includes information about the generations/history
   assert_output --regexp "
 ✘ ERROR: The environment has diverged from the remote:
 
@@ -345,7 +345,7 @@ Upstream:
   run dot_flox_exists
   assert_failure
 
-  # We should only see the path environnment
+  # We should only see the path environment
   run jq '.entries[0].envs | length' "$FLOX_DATA_DIR/env-registry.json"
   assert_output "1"
 

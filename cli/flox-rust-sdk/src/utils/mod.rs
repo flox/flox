@@ -308,7 +308,7 @@ mod tests {
         // so we need to use the `WireTap::tap_lines_into_with_context` helper to pass the dispatcher to the reader thread as context.
         // Unfortunately, that means that we basically only have a complex way of testing
         // that the tap function is called with the correct lines.
-        // The behavior of a global dispatcher can not be tested with unit tests here.
+        // The behavior of a global dispatcher cannot be tested with unit tests here.
         WireTap::tap_lines_with_context(content.as_bytes(), dispatcher, |dispatcher, line| {
             tracing::dispatcher::with_default(dispatcher, || error!("{line}"))
         })

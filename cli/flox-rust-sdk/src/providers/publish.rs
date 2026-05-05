@@ -1182,7 +1182,7 @@ pub fn check_package_metadata(
     pkg: PackageTarget,
 ) -> Result<PackageMetadata, PublishError> {
     // When publishing a manifest build the toplevel nixpkgs is required as the base url.
-    // for expression builds we want to use the extenally determined base url, i.e. stability.
+    // for expression builds we want to use the externally determined base url, i.e. stability.
     //
     // We should not need this, and allow for no base catalog page dependency.
     // But for now, requiring it simplifies resolution and model updates
@@ -1511,7 +1511,7 @@ pub mod tests {
         // result of the processing through the build process into build
         // results, and processing from there as a NixyLicense.  The formatting
         // of the license between nix and the catalog is very inconsistent and
-        // lossy unfortanately.  We'll need to address that, but for now, we
+        // lossy unfortunately.  We'll need to address that, but for now, we
         // choose to be consistent in the processing between them.  The
         // processing is to join the licenses, without quotes and spaces around
         // the brackets.   i.e. - "[ {<licenses joined with commas>} ]"
@@ -1945,7 +1945,7 @@ pub mod tests {
         let auth = Auth::from_flox(&flox).unwrap();
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
-        // the 'cache' should be non existent before the publish
+        // the 'cache' should be nonexistent before the publish
         let cache_url = cache.upload_url().unwrap();
         let cache_path = cache_url.to_file_path().unwrap();
         assert!(std::fs::read_dir(&cache_path).is_err());

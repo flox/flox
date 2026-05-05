@@ -24,7 +24,7 @@ pub static FLOX_VERSION: LazyLock<FloxVersion> = LazyLock::new(|| {
     let Ok(version) = (*FLOX_VERSION_STRING).parse() else {
         // Production builds won't panic since we run `flox --version` in pkgs/flox/default.nix.
         panic!(
-            "Version '{version}' can not be parsed",
+            "Version '{version}' cannot be parsed",
             version = *FLOX_VERSION_STRING
         )
     };

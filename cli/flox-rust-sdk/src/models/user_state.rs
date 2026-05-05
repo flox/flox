@@ -40,7 +40,7 @@ pub fn user_state_path(flox: &Flox) -> PathBuf {
     flox.state_dir.join(USER_STATE_FILENAME)
 }
 
-/// Returns the path to the user state lock file. The presensce
+/// Returns the path to the user state lock file. The presence
 /// of the lock file does not indicate an active lock because the file isn't
 /// removed after use. This is a separate file because we replace the state file
 /// on write.

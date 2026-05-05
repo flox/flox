@@ -36,7 +36,7 @@ function main() {
     "$(render_remote_cmd)" \
     | tee output.txt
 
-  # Retrive report.xml
+  # Retrieve report.xml
   retrieve_report_from_remote
 }
 main "$@"

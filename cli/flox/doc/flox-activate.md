@@ -102,7 +102,7 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
 `-s`, `--start-services`
 :  Start the services listed in the manifest when activating the environment.
    If no services are running, the services from the manifest will be started,
-   otherwise a warning will displayed and activation will continue.
+   otherwise a warning will be displayed and activation will continue.
 
    This flag is currently incompatible with "in-place" activations,
    but this feature will be added in the future.

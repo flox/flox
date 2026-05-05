@@ -43,7 +43,7 @@ static BUILDENV_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
         .into()
 });
 
-/// Profix of locked_url of catalog packages that are from the nixpkgs base-catalog.
+/// Prefix of locked_url of catalog packages that are from the nixpkgs base-catalog.
 /// This url was meant to serve as a flake reference to the Flox hosted mirror of nixpkgs,
 /// but is both ill formatted and does not provide the necessary overrides
 /// to allow evaluating packages without common evaluation checks, such as unfree and broken.
@@ -106,7 +106,7 @@ pub enum BuildEnvError {
     /// The error message is the stderr of the `nix build` command.
     // TODO: this requires to capture the stderr of the `nix build` command
     // or essentially "tee" it if we also want to forward the logs to the user.
-    // At the moment the "interesting" logs
+    // At the moment, the "interesting" logs
     // are emitted by the `realise` portion of the build.
     // So in the interest of initial simplicity
     // we can defer forwarding the nix build logs and capture output with [Command::output].
@@ -621,7 +621,7 @@ where
                 // If we failed, log the error and try the next location.
                 debug!(%attr_path, %drv, %location_url, %stderr, "Failed to copy custom package from store");
             } else {
-                debug!(%attr_path, %drv, %location_url, "Succesfully copied custom package from store");
+                debug!(%attr_path, %drv, %location_url, "Successfully copied custom package from store");
 
                 // TODO: there is a real but very short period between the successful copy
                 // and setting the gc root in which the path _could_ be collected as garbage,
@@ -1013,7 +1013,7 @@ where
         // In that case the above `nix build` only documents the _new_ outputs.
         // A second build with the same arguments will be fully substituted and contain all outputs.
         //
-        // We only try this once because the weindow for paths to disappear between the last build
+        // We only try this once because the window for paths to disappear between the last build
         // and this one is particularly short, incorrect output is now reliably wrong
         // and should be propagated up.
         debug!(err=%build_env_result.unwrap_err(), "failed to deserialize output, retrying once");
@@ -1129,7 +1129,7 @@ where
 struct CheckedStorePaths {
     /// The store paths that have been checked.
     /// The validity of `CheckedStorePaths` is limited to the store paths actually checked.
-    /// I.e. if a store path was not checked, it can not be considered valid nor invalid.
+    /// I.e. if a store path was not checked, it cannot be considered valid nor invalid.
     checked: HashSet<String>,
     /// The store paths that have been checked and are valid.
     /// The construction of [CheckedStorePaths], i.e. [check_store_paths]
@@ -1201,7 +1201,7 @@ pub fn get_installed_outputs(package: &PackageToList) -> Result<Vec<String>, Man
 /// will be used to inform the various `realise_*` functions,
 /// whether a package needs to be built or substituted.
 ///
-/// SAFTETY: [CheckedStorePaths] poses the risk of TOCTOU issues,
+/// SAFETY: [CheckedStorePaths] poses the risk of TOCTOU issues,
 /// especially when held for a long time.
 /// We acknowledge, that store paths might be _created_,
 /// after [CheckedStorePaths] is created;
@@ -1259,7 +1259,7 @@ fn check_store_paths(
 /// Create GC roots for the given store paths.
 /// All provided paths must exist and be valid.
 /// It's recommended to run [check_store_paths] to verify the validity of the paths.
-/// If a gc process may be runnin in the background there is a short time
+/// If a gc process may be running in the background there is a short time
 /// in which paths returned as valid by [check_store_paths] are deleted
 /// before a temproot can be set.
 /// In that case checking and setting gc-roots can be retried safely
@@ -1463,7 +1463,7 @@ mod realise_nixpkgs_tests {
     /// Realising a nixpkgs package should fail if the output is not valid
     /// and cannot be built.
     /// Here we are testing the case where the attribute fails to evaluate.
-    /// Generally we expect pacakges from the catalog to be able to evaluate,
+    /// Generally we expect packages from the catalog to be able to evaluate,
     /// iff the catalog server was able to evaluate them before.
     /// This test is a catch-all for all kinds of eval failures.
     /// Eval failures for **unfree** and **broken** packages should be prevented,
@@ -2178,7 +2178,7 @@ mod buildenv_tests {
         let result = buildenv.build(&client, &lockfile_path, None);
         assert!(
             result.is_ok(),
-            "environment should render succesfully: {}",
+            "environment should render successfully: {}",
             result.unwrap_err()
         );
     }

@@ -113,7 +113,7 @@ Note that this is a paid feature available with Flox for Teams.
 `--stability <stability>`
 :   Perform a nix expression build using a base package set of the given stability
     as tracked by the catalog server.
-    Can not be used with manifest base builds.
+    Cannot be used with manifest base builds.
 
 ```{.include}
 ./include/dir-environment-options.md

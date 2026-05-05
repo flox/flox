@@ -1085,7 +1085,7 @@ impl LockManifest {
     /// Lock a set of flake installables and return the locked packages.
     /// Errors are collected into [ResolutionFailures] and returned as a single error.
     ///
-    /// This is the eequivalent to
+    /// This is the equivalent to
     /// [catalog::ClientTrait::resolve] and passing the result to [Self::locked_packages_from_resolution]
     /// in the context of flake installables.
     /// At this point flake installables are resolved sequentially.
@@ -1123,7 +1123,7 @@ impl LockManifest {
 
     /// Collect store paths from the manifest and create a list of [LockedPackageStorePath].
     /// Since store paths are locked by definition,
-    /// collection can directly map the discriptor to a locked package.
+    /// collection can directly map the descriptor to a locked package.
     fn collect_store_paths(manifest: &ManifestLatest) -> Vec<LockedPackageStorePath> {
         manifest
             .install
@@ -2950,7 +2950,7 @@ mod tests {
     /// If catalog packages are already locked, no locking should occur.
     /// Installables are still being resolved if not locked.
     #[tokio::test]
-    async fn skip_catatalog_package_if_fully_locked() {
+    async fn skip_catalog_package_if_fully_locked() {
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
         let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
 
@@ -3013,15 +3013,15 @@ mod tests {
         let mut foo_locked_priority_after = foo_locked.clone();
         foo_locked_priority_after.priority = 1;
 
-        let mut manifest_pririty_after = manifest.clone();
-        manifest_pririty_after.install.inner_mut().insert(
+        let mut manifest_priority_after = manifest.clone();
+        manifest_priority_after.install.inner_mut().insert(
             foo_iid.clone(),
             foo_descriptor_priority_after.clone().into(),
         );
 
         let locker_mock = InstallableLockerMock::new();
         let resolved_packages = LockManifest::resolve_manifest(
-            &manifest_pririty_after,
+            &manifest_priority_after,
             Some(&locked),
             &MockClient::default(),
             &locker_mock,

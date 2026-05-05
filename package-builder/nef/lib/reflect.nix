@@ -88,7 +88,7 @@ let
     This function produces `make` targets from a list of attrPaths.
     The result is a single string with _space separated_ targets,
     where each target contains the string formatted attrPath
-    that are defiend by the derivation, i.e.: `<attrPath> <attrPath> ...`.
+    that are defined by the derivation, i.e.: `<attrPath> <attrPath> ...`.
 
     :::Note
     Todo: tricky attrs, e.g. containing spaces, although renaming is not possible at this point

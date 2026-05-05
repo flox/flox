@@ -345,7 +345,7 @@ EOF
 # the expected hook and profile scripts for the bash and zsh shells, and
 # in each of the following four scenarios:
 #
-# 1. in the interactive case, simulated using using `activate.exp`
+# 1. in the interactive case, simulated using `activate.exp`
 # 2. in the default command case, invoking the shell primitive `:` (a no-op)
 # 3. in the `--noprofile` command case, again invoking the shell primitive `:`
 #
@@ -4080,7 +4080,7 @@ Setting PATH from ${rc_file}"
   wait_for_background_activation "$background_pid" 15s
   run cat output
   # This the only place we use `--partial` because we only want to know that the
-  # intial activation started.
+  # initial activation started.
   assert_output --partial - << EOF
 sourcing hook.on-activate for first time
 ${output_from_rc_files}
@@ -4711,7 +4711,7 @@ Setting PATH from .bashrc"
 # Nested activation PATH/MANPATH tests and helpers
 # =============================================================================
 
-# Prepares a default environment that will will later be activated in a shell's
+# Prepares a default environment that will later be activated in a shell's
 # rc file. This also undoes changes to PATH caused by user_dotfiles_setup.
 nested_activation_setup() {
   export original_path="$PATH"

@@ -243,7 +243,7 @@
       "type": "object"
     },
     "LockedPackageFlake": {
-      "description": "Rust representation of the output of `buitins.lockFlakeInstallable`\nThis is a direct translation of the definition in\n`<flox>/nix-plugins/include/flox/lock-flake-installable.hh`",
+      "description": "Rust representation of the output of `builtins.lockFlakeInstallable`\nThis is a direct translation of the definition in\n`<flox>/nix-plugins/include/flox/lock-flake-installable.hh`",
       "properties": {
         "broken": {
           "type": [

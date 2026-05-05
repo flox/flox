@@ -357,21 +357,21 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=remote,remote:not-found
-@test "activate --reference fails on a non existent environment" {
+@test "activate --reference fails on a nonexistent environment" {
   run "$FLOX_BIN" activate -r "$OWNER/i-dont-exist"
   assert_failure
   assert_output --partial "Environment not found in FloxHub."
 }
 
 # bats test_tags=remote,remote:not-found
-@test "edit --reference fails on a non existent environment" {
+@test "edit --reference fails on a nonexistent environment" {
   run "$FLOX_BIN" edit -r "$OWNER/i-dont-exist"
   assert_failure
   assert_output --partial "Environment not found in FloxHub."
 }
 
 # bats test_tags=remote,remote:not-found
-@test "install --reference fails on a non existent environment" {
+@test "install --reference fails on a nonexistent environment" {
   run "$FLOX_BIN" install hello -r "$OWNER/i-dont-exist"
   assert_failure
   assert_output --partial "Environment not found in FloxHub."

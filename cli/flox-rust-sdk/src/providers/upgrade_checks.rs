@@ -232,7 +232,7 @@ mod tests {
                 let lock = try_acquire_lock(path).unwrap();
                 assert!(lock.is_some());
 
-                // syncronize second attempt to acquire the lock,
+                // synchronize second attempt to acquire the lock,
                 // to run after the first lock.
                 wait_for_first_lock_sender.send(()).unwrap();
 

@@ -648,7 +648,7 @@ pub struct PackageToModify {
 
 /// Infers an install ID from the last component of a slash or dot separated
 /// attribute path, so that we get a user-friendly name without any catalog or
-/// package hierachy.
+/// package hierarchy.
 /// Components within quotes are treated as a single component.
 fn install_id_from_attr_path(
     attr_path: &str,
@@ -1726,7 +1726,7 @@ mod test {
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
-        // Attributes starting with `@` are allowed, the @ is not delimting the version if following a '.'
+        // Attributes starting with `@` are allowed, the @ is not delimiting the version if following a '.'
         let parsed: CatalogPackage = "nodePackages.@angular@1.2.3".parse().unwrap();
         assert_eq!(parsed, CatalogPackage {
             id: "@angular".to_string(),
@@ -1737,7 +1737,7 @@ mod test {
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
-        // Attributes starting with `@` are allowed, the @ is not delimting the version
+        // Attributes starting with `@` are allowed, the @ is not delimiting the version
         // if its the first character
         let parsed: CatalogPackage = "@1.2.3".parse().unwrap();
         assert_eq!(parsed, CatalogPackage {
@@ -1749,7 +1749,7 @@ mod test {
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
-        // Attributes starting with `@` are allowed, the @ is not delimting the version
+        // Attributes starting with `@` are allowed, the @ is not delimiting the version
         // if its the first character.
         // Following `@` may delimit a version
         let parsed: CatalogPackage = "@pkg@version".parse().unwrap();

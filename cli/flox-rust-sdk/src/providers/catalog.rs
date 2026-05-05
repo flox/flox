@@ -262,7 +262,7 @@ impl ClientTrait for Client {
 #[derive(Clone, Copy, Debug, Default, derive_more::Display, PartialEq)]
 /// The QoS class of a catalog request.
 ///
-/// Referencing macos perfomance classes, described [1].
+/// Referencing macos performance classes, described [1].
 ///
 /// [1]: <https://blog.xoria.org/macos-tips-threading/>
 pub enum CatalogQoS {

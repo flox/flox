@@ -65,7 +65,7 @@ impl Logs {
             };
 
             // Ensure the service exists
-            // Avoids attaching to a log of a non-existent service, in which case `process-compose`
+            // Avoids attaching to a log of a nonexistent service, in which case `process-compose`
             // will block indefinitely.
             if processes.process(name).is_none() {
                 return Err(super::service_does_not_exist_error(name))?;

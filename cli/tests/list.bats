@@ -113,7 +113,7 @@ EOF
   init_env
 
   # `influxdb2 does not have a version attribute set in nixpkgs (2024-02-19)
-  # todo: replace with a more predicatable/smaller example
+  # todo: replace with a more predictable/smaller example
   cp "$GENERATED_DATA"/envs/influxdb2/* "$PROJECT_DIR/.flox/env"
 
   run "$FLOX_BIN" list

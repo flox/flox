@@ -65,7 +65,7 @@
                 An expression can only access its own attribute path to override its existing value.
               '';
 
-              # Find or build a `callPackage` function that replaces infinite recursion erros with an error
+              # Find or build a `callPackage` function that replaces infinite recursion errors with an error
               callPackage =
 
                 # Examples of such sets are:
@@ -74,7 +74,7 @@
                   final.newScope {
                     ${name} = prev.${name} or recursionGuardError;
                   }
-                # probably equivalent to the above but struturally more similar to the `extend` case below
+                # probably equivalent to the above but structurally more similar to the `extend` case below
                 # else if final ? overrideScope then
                 #   (final.overrideScope (
                 #     _: _: { ${name} = prev.${name} or recursionGuardError; }
@@ -89,7 +89,7 @@
                 # - beamPackages
                 #
                 # Todo: If a set can be extended but does not provide a `callPackage`,
-                # we should still try to use the `extend` it and build our own `callPackge` as below.
+                # we should still try to use the `extend` it and build our own `callPackage` as below.
                 else if final ? callPackage && final ? extend then
                   (final.extend (_: _: { ${name} = prev.${name} or recursionGuardError; })).callPackage
                 else
