@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fs::OpenOptions;
 use std::io::{ErrorKind, IsTerminal};
 use std::os::unix::process::CommandExt;
@@ -10,12 +9,13 @@ use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use flox_core::activations::StartIdentifier;
 use indoc::formatdoc;
-use itertools::Itertools;
 use nix::unistd::{close, dup2_stdin, pipe, write};
 use shell_gen::{Shell, ShellWithPath};
 use tracing::debug;
 
-use crate::activate_script_builder::{activate_tracer, apply_activation_env, old_cli_envs};
+use crate::activate_script_builder::{
+    activate_tracer, apply_activation_env, render_common_activation_envs,
+};
 use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
 use crate::cli::attach::{AttachArgs, AttachExclusiveArgs};
 use crate::env_diff::EnvDiff;
@@ -511,7 +511,11 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
     // Put a 5 second timeout on the activation
     attach_command.handle()?;
 
-    let legacy_exports = render_legacy_exports(&startup_ctx.act_ctx);
+    let legacy_exports = render_common_activation_envs(
+        &startup_ctx.act_ctx.shell,
+        &startup_ctx.act_ctx.attach_ctx,
+        startup_ctx.act_ctx.project_ctx.as_ref(),
+    );
 
     let exports_for_zsh = if matches!(startup_ctx.act_ctx.shell, ShellWithPath::Zsh(_)) {
         let zdotdir_path = startup_ctx
@@ -564,25 +568,6 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
     write_to_stdout(&startup_ctx)?;
 
     Ok(())
-}
-
-/// The CLI used to print export statements for in-place activations for
-/// every environment variable set prior to invoking the activate script
-fn render_legacy_exports(context: &ActivateCtx) -> String {
-    // Render the exports in the correct shell dialect.
-    old_cli_envs(&context.attach_ctx, context.project_ctx.as_ref())
-        .iter()
-        .map(|(key, value)| (key, shell_escape::escape(Cow::Borrowed(value))))
-        // TODO: we should use a method on Shell here, possibly using
-        // shell_escape in the Shell method?
-        // But not quoting here is intentional because we already use shell_escape
-        .map(|(key, value)| match context.shell {
-            ShellWithPath::Bash(_) => format!("export {key}={value};",),
-            ShellWithPath::Fish(_) => format!("set -gx {key} {value};",),
-            ShellWithPath::Tcsh(_) => format!("setenv {key} {value};",),
-            ShellWithPath::Zsh(_) => format!("export {key}={value};",),
-        })
-        .join("\n")
 }
 
 /// Quote run args so that words don't get split,

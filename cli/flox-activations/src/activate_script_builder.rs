@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
@@ -6,6 +7,8 @@ use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
 use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
+use itertools::Itertools;
+use shell_gen::ShellWithPath;
 
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
@@ -23,7 +26,7 @@ pub(super) fn assemble_activate_command(
     start_state_dir: &Path,
 ) -> Command {
     let mut command = Command::new(context.attach_ctx.interpreter_path.join("activate"));
-    command.envs(old_cli_envs(
+    command.envs(common_activation_envs(
         &context.attach_ctx,
         context.project_ctx.as_ref(),
     ));
@@ -47,7 +50,7 @@ pub fn apply_activation_env(
     vars_from_env: VarsFromEnvironment,
     env_diff: &EnvDiff,
 ) {
-    command.envs(old_cli_envs(context, project));
+    command.envs(common_activation_envs(context, project));
     add_old_activate_script_exports(
         command,
         context,
@@ -61,8 +64,8 @@ pub fn apply_activation_env(
     }
 }
 
-/// Build environment variables from activation context.
-pub fn old_cli_envs(
+/// Build environment variables exported before invoking activate script.
+fn common_activation_envs(
     context: &AttachCtx,
     project: Option<&AttachProjectCtx>,
 ) -> HashMap<&'static str, String> {
@@ -98,6 +101,24 @@ pub fn old_cli_envs(
     exports.extend(default_nix_env_vars());
 
     exports
+}
+
+/// Render shell exports for variables that are set before invoking attach.
+pub fn render_common_activation_envs(
+    shell: &ShellWithPath,
+    context: &AttachCtx,
+    project: Option<&AttachProjectCtx>,
+) -> String {
+    common_activation_envs(context, project)
+        .iter()
+        .map(|(key, value)| (key, shell_escape::escape(Cow::Borrowed(value))))
+        .map(|(key, value)| match shell {
+            ShellWithPath::Bash(_) => format!("export {key}={value};"),
+            ShellWithPath::Fish(_) => format!("set -gx {key} {value};"),
+            ShellWithPath::Tcsh(_) => format!("setenv {key} {value};"),
+            ShellWithPath::Zsh(_) => format!("export {key}={value};"),
+        })
+        .join("\n")
 }
 
 /// Options parsed by getopt in the activate script
