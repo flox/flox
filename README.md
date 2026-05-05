@@ -13,9 +13,6 @@
 </h3>
 
 <p align="center">
-  <a href="https://github.com/flox/flox/actions/workflows/ci.yml">
-    <img alt="CI" src="https://github.com/flox/flox/actions/workflows/ci.yml/badge.svg" />
-  </a>
   <a href="https://github.com/flox/flox/releases">
     <img alt="Latest Release" src="https://img.shields.io/github/v/release/flox/flox?style=flat-square" />
   </a>
