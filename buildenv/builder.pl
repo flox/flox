@@ -780,16 +780,26 @@ if ($manifest) {
         # 1000, but we also assign values based on the priority of the
         # package that is propagating them, so that they can similarly have
         # precedence (or not) over collisions.
-        foreach my $pkgDir (keys %postponed) {
-            my $priority = $postponed{$pkgDir};
-            # Propagated dependencies can include other propagated dependencies
-            # so only bump the priority for pkgs with priority less than 1000.
-            $priority *= 1000 if $priority < 1000;
-            # Add the package using a priority based on that of the package that
-            # originally triggered the propagation, and add to that an ever-
-            # increasing counter to prevent collisions for propagated packages.
-            addPkg($pkgDir, 2, $ENV{"checkCollisionContents"} eq "1", $priority + $ignoreCollisionCounter++);
-            delete $postponed{$pkgDir};
+        # Drain %postponed transitively. addPkg() may push new entries
+        # into %postponed (the propagated deps of the package just
+        # processed), so we snapshot+clear before iterating and re-loop
+        # via the outer `while` until no propagated deps remain. This
+        # avoids the `each()`-on-mutated-hash warning while still
+        # processing dependencies-of-dependencies, which a single-pass
+        # `foreach (keys %postponed)` would silently drop.
+        while (scalar(keys %postponed) > 0) {
+            my %currentBatch = %postponed;
+            %postponed = ();
+            foreach my $pkgDir (sort byPackageName keys %currentBatch) {
+                my $priority = $currentBatch{$pkgDir};
+                # Propagated dependencies can include other propagated dependencies
+                # so only bump the priority for pkgs with priority less than 1000.
+                $priority *= 1000 if $priority < 1000;
+                # Add the package using a priority based on that of the package that
+                # originally triggered the propagation, and add to that an ever-
+                # increasing counter to prevent collisions for propagated packages.
+                addPkg($pkgDir, 2, $ENV{"checkCollisionContents"} eq "1", $priority + $ignoreCollisionCounter++);
+            }
         }
         # </flox>
 
