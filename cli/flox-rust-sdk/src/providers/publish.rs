@@ -889,7 +889,7 @@ fn convert_build_result_to_build_metadata(
 pub fn check_build_metadata(
     flox: &Flox,
     base_nixpkgs_url: &BaseCatalogUrl,
-    system_override: Option<String>,
+    system: Option<&str>,
     env_metadata: &CheckedEnvironmentMetadata,
     pkg: &PackageTarget,
 ) -> Result<CheckedBuildMetadata, PublishError> {
@@ -937,7 +937,7 @@ pub fn check_build_metadata(
         &built_environments.develop,
         &[pkg.name()],
         Some(false),
-        system_override.clone(),
+        system,
     )?;
 
     if build_results.len() != 1 {
