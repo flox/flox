@@ -11,15 +11,14 @@ use serde::{Deserialize, Serialize};
 mod auth_context;
 mod auth_context_factory;
 
-pub use auth_context::{AuthContext, AuthFailure};
+pub use auth_context::{AuthContext, AuthFailure, AuthHeaderError, KerberosMaterial};
 
-/// Errors from authentication validation
+/// Errors from authentication validation (internal, used by Kerberos credential acquisition).
+#[cfg(feature = "floxhub-authn-kerberos")]
 #[derive(Debug, Clone, thiserror::Error)]
-pub enum AuthError {
+pub(crate) enum AuthError {
     #[error("{0}")]
     NotAuthenticated(String),
-    #[error("{message}")]
-    Expired { handle: String, message: String },
 }
 
 /// Available authentication methods

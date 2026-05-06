@@ -1308,7 +1308,7 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
     use flox_catalog::AuthFailure;
 
     match flox.auth_context.authenticated_handle() {
-        Ok(handle) => Ok(handle),
+        Ok(handle) => Ok(handle.to_string()),
         Err(ref failure @ (AuthFailure::TokenExpired | AuthFailure::NotLoggedIn))
             if Dialog::can_prompt() =>
         {

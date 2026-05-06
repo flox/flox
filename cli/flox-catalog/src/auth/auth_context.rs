@@ -33,8 +33,13 @@ pub enum AuthFailure {
     NoKerberosTicket,
 }
 
+/// Error from producing an authorization header (e.g. SPNEGO token generation).
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("{0}")]
+pub struct AuthHeaderError(pub String);
+
 /// A function that generates a SPNEGO token for a given URL.
-pub type TokenGenerator = Arc<dyn Fn(&Url) -> Result<String, String> + Send + Sync>;
+pub type TokenGenerator = Arc<dyn Fn(&Url) -> Result<String, AuthHeaderError> + Send + Sync>;
 
 /// Material for Kerberos authentication.
 #[derive(Clone)]
@@ -84,18 +89,18 @@ impl AuthContext {
 
     /// Return the user's handle if authenticated, or an [`AuthFailure`]
     /// describing why authentication failed.
-    pub fn authenticated_handle(&self) -> Result<String, AuthFailure> {
+    pub fn authenticated_handle(&self) -> Result<&str, AuthFailure> {
         match self {
             AuthContext::Auth0(Some(token)) if token.is_expired() => Err(AuthFailure::TokenExpired),
-            AuthContext::Auth0(Some(token)) => Ok(token.handle().to_string()),
+            AuthContext::Auth0(Some(token)) => Ok(token.handle()),
             AuthContext::Auth0(None) => Err(AuthFailure::NotLoggedIn),
-            AuthContext::Kerberos(Some(material)) => Ok(material.principal.clone()),
+            AuthContext::Kerberos(Some(material)) => Ok(&material.principal),
             AuthContext::Kerberos(None) => Err(AuthFailure::NoKerberosTicket),
         }
     }
 
     /// Produce the value for an HTTP Authorization header targeting the given URL.
-    pub fn authorization_header(&self, url: &Url) -> Option<Result<String, String>> {
+    pub fn authorization_header(&self, url: &Url) -> Option<Result<String, AuthHeaderError>> {
         match self {
             AuthContext::Auth0(Some(token)) => Some(Ok(format!("bearer {}", token.secret()))),
             AuthContext::Auth0(None) => None,

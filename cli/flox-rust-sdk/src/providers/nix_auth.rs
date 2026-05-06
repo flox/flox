@@ -79,7 +79,8 @@ pub fn catalog_auth_to_envs(auth: &CatalogAuth) -> Result<HashMap<String, String
 #[derive(Debug)]
 pub struct NixAuth {
     /// The directory in which we'll create an ad-hoc netrc file if needed.
-    netrc_tempdir: TempDir,
+    /// `None` for auth modes that don't use netrc (e.g. Kerberos).
+    netrc_tempdir: Option<TempDir>,
     /// The user's FloxHub authentication token.
     floxhub_token: Option<FloxhubToken>,
 }
@@ -90,11 +91,13 @@ impl NixAuth {
         match &flox.auth_context {
             AuthContext::Auth0(token) => Ok(Self {
                 floxhub_token: token.clone(),
-                netrc_tempdir: tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?,
+                netrc_tempdir: Some(
+                    tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?,
+                ),
             }),
             AuthContext::Kerberos(_) => Ok(Self {
                 floxhub_token: None,
-                netrc_tempdir: tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?,
+                netrc_tempdir: None,
             }),
         }
     }
@@ -102,7 +105,7 @@ impl NixAuth {
     /// Construct a new auth provider from a tempdir and a token.
     pub fn from_tempdir_and_token(tempdir: TempDir, token: Option<FloxhubToken>) -> Self {
         Self {
-            netrc_tempdir: tempdir,
+            netrc_tempdir: Some(tempdir),
             floxhub_token: token,
         }
     }
@@ -117,18 +120,16 @@ impl AuthProvider for NixAuth {
     /// Creates a temporary netrc file with authentication credentials
     /// and returns the path.
     fn create_netrc(&self) -> Result<TempPath, AuthError> {
-        match self.floxhub_token.as_ref() {
-            Some(token) => {
-                write_floxhub_netrc(&self.netrc_tempdir, token).map_err(AuthError::CreateNetrc)
-            },
-            None => Err(AuthError::NoToken),
-        }
+        let token = self.floxhub_token.as_ref().ok_or(AuthError::NoToken)?;
+        let tempdir = self.netrc_tempdir.as_ref().ok_or(AuthError::NoToken)?;
+        write_floxhub_netrc(tempdir, token).map_err(AuthError::CreateNetrc)
     }
 
     fn try_create_netrc(&self) -> Option<PathBuf> {
-        self.floxhub_token
-            .as_ref()
-            .and_then(|token| write_floxhub_netrc(&self.netrc_tempdir, token).ok())
+        let token = self.floxhub_token.as_ref()?;
+        let tempdir = self.netrc_tempdir.as_ref()?;
+        write_floxhub_netrc(tempdir, token)
+            .ok()
             .map(|temp_path| temp_path.to_path_buf())
     }
 }
