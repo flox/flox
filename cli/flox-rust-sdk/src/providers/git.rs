@@ -501,6 +501,33 @@ impl GitCommandProvider {
         }
     }
 
+    /// Check whether `ancestor` is reachable from `descendant` in the commit
+    /// graph (i.e. `ancestor` is an ancestor of `descendant`, or they are equal).
+    ///
+    /// Returns `Ok(true)` if reachable, `Ok(false)` if not.  Both are valid
+    /// outcomes; only unexpected failures produce `Err`.
+    pub fn is_ancestor_of(
+        &self,
+        ancestor: &str,
+        descendant: &str,
+    ) -> Result<bool, GitCommandError> {
+        let mut command = self.new_command();
+        command.args(["merge-base", "--is-ancestor", ancestor, descendant]);
+        debug!(cmd = %command.display(), "checking commit ancestry");
+        // `merge-base --is-ancestor` exits 0 (is ancestor) or 1 (not ancestor);
+        // both are valid so we read .output() directly rather than run_command.
+        let output = command.output().map_err(GitCommandError::Command)?;
+        match output.status.code() {
+            Some(0) => Ok(true),
+            Some(1) => Ok(false),
+            _ => Err(GitCommandError::BadExit(
+                output.status.code().unwrap_or(-1),
+                String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                String::from_utf8_lossy(&output.stderr).trim().to_string(),
+            )),
+        }
+    }
+
     /// Create branch at a specified revision
     pub fn create_branch(&self, name: &str, rev: &str) -> Result<(), GitCommandError> {
         GitCommandProvider::run_command(self.new_command().arg("branch").arg(name).arg(rev))?;
@@ -589,6 +616,41 @@ impl GitCommandProvider {
         bare: bool,
     ) -> Result<GitCommandProvider, GitRemoteCommandError> {
         Self::clone_branch_with(GitCommandOptions::default(), origin, path, branch, bare)
+    }
+
+    /// Clone a local repository into `dest` using `--shared` so that object
+    /// storage is backed by `source` rather than copied, then check out the
+    /// specified `rev`.  `dest` must not exist yet; it is created by the clone.
+    ///
+    /// The resulting clone has full access to the source's commit history and
+    /// tags, enabling `git describe` and `git ls-files` to work correctly in
+    /// build scripts.
+    pub fn clone_shared(
+        source: impl AsRef<Path>,
+        dest: impl AsRef<Path>,
+        rev: &str,
+    ) -> Result<Self, GitCommandError> {
+        let options = GitCommandOptions::default();
+
+        let mut clone_cmd = options.new_command();
+        clone_cmd
+            .arg("clone")
+            .arg("--shared")
+            .arg(source.as_ref())
+            .arg(dest.as_ref());
+        GitCommandProvider::run_command(&mut clone_cmd)?;
+
+        let clone = GitCommandProvider {
+            options,
+            workdir: Some(dest.as_ref().to_path_buf()),
+            path: dest.as_ref().to_path_buf(),
+        };
+
+        let mut checkout_cmd = clone.new_command();
+        checkout_cmd.arg("checkout").arg(rev);
+        GitCommandProvider::run_command(&mut checkout_cmd)?;
+
+        Ok(clone)
     }
 
     /// Fetch branch and update the corresponding local ref
