@@ -1567,6 +1567,44 @@ mod migration_tests {
         assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::latest());
     }
 
+    /// After locking a composed environment, compose.composer must match the
+    /// on-disk manifest so that lockfile_if_up_to_date() considers the
+    /// lockfile current. If compose.composer has a different schema version,
+    /// every flox activate will unnecessarily re-lock the environment.
+    #[test]
+    fn locking_composed_environment_preserves_old_schema() {
+        let (flox, tempdir) = flox_instance();
+
+        // Set up an included environment with only vars (backwards
+        // compatible).
+        let included_manifest = with_latest_schema(indoc! {r#"
+            [vars]
+            included_var = "value"
+        "#});
+        setup_locked_included_env(&flox, tempdir.path(), &included_manifest);
+
+        // Create and lock a v1 composer.
+        let mut composer = setup_v1_composer_with_include(&flox, tempdir.path());
+
+        let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
+
+        // Both schemas of manifest in lockfile must be v1
+        assert_eq!(
+            lockfile.compose.unwrap().composer.get_schema_version(),
+            KnownSchemaVersion::V1
+        );
+        assert_eq!(
+            lockfile.manifest.get_schema_version(),
+            KnownSchemaVersion::V1
+        );
+        // On disk manifest schema must be v1
+        let on_disk_schema = composer
+            .manifest_without_migrating(&flox)
+            .unwrap()
+            .get_schema_version();
+        assert_eq!(on_disk_schema, KnownSchemaVersion::V1);
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn v1_manifest_doesnt_migrate_when_hello_is_installed() {
         let (mut flox, _tempdir) = flox_instance();

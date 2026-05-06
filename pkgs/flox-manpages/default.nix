@@ -55,6 +55,7 @@ runCommand "flox-manpages"
 
     find . -name "*.md" -exec ${compileManPageBin} {} $buildDir 1 \;
     mv $buildDir/manifest.toml.1 $buildDir/manifest.toml.5
+    mv $buildDir/nix-builds.toml.1 $buildDir/nix-builds.toml.5
 
     ls $buildDir
 

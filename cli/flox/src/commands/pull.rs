@@ -132,7 +132,9 @@ impl Pull {
                 Self::pull_new_environment(&flox, dir, remote, copy, self.force, generation)?;
             },
             PullSelect::RemoteUpdate { environment, copy } => {
-                let environment = environment.detect_concrete_environment(&flox, "Pull")?;
+                let environment = environment
+                    .detect_concrete_environment(&flox, "Pull")
+                    .await?;
                 environment_subcommand_metric!("pull", environment);
 
                 if let ConcreteEnvironment::Path(environment) = environment {

@@ -1,10 +1,11 @@
 {
   "lockfile-version": 1,
   "manifest": {
-    "version": 1,
+    "schema-version": "1.12.0",
     "install": {
       "bash": {
-        "pkg-path": "bashNonInteractive"
+        "pkg-path": "bashNonInteractive",
+        "outputs": "all"
       }
     },
     "options": {}
@@ -13,17 +14,17 @@
     {
       "attr_path": "bashNonInteractive",
       "broken": false,
-      "derivation": "/nix/store/ja5y8jxlkhkvgp7pb273w21l4nq207kh-bash-5.3p9.drv",
+      "derivation": "/nix/store/pxhyz3i25p5yc36lni0ay36j4z49551k-bash-5.3p9.drv",
       "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux",
       "install_id": "bash",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=8c809a146a140c5c8806f13399592dbcb1bb5dc4",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc",
       "name": "bash-5.3p9",
       "pname": "bashNonInteractive",
-      "rev": "8c809a146a140c5c8806f13399592dbcb1bb5dc4",
-      "rev_count": 957538,
-      "rev_date": "2026-03-03T12:59:14Z",
-      "scrape_date": "2026-03-04T04:39:37.002116Z",
+      "rev": "b12141ef619e0a9c1c84dc8c684040326f27cdcc",
+      "rev_count": 982522,
+      "rev_date": "2026-04-18T21:33:21Z",
+      "scrape_date": "2026-04-21T06:03:19.800819Z",
       "stabilities": [
         "unstable"
       ],
@@ -31,14 +32,20 @@
       "version": "5.3p9",
       "outputs_to_install": [
         "man",
+        "out",
+        "out",
+        "out",
+        "out",
+        "out",
+        "out",
         "out"
       ],
       "outputs": {
-        "dev": "/nix/store/s8qh57kbxwkjywhn7jyzjcxjapkyi682-bash-5.3p9-dev",
-        "doc": "/nix/store/hx4qi3rw9a01vlk8bf2bzfnpfhq96zhd-bash-5.3p9-doc",
-        "info": "/nix/store/lgxs5sd8154fdy1gxdqqx4ys3j25ddyp-bash-5.3p9-info",
-        "man": "/nix/store/zcgj8i7bgvh2hzr60ppjbjkcxszr4gfm-bash-5.3p9-man",
-        "out": "/nix/store/3zrx6av2d1141igkcn8477cvbfqpcmcf-bash-5.3p9"
+        "dev": "/nix/store/ldqlpynprmavm7x0j7qdpvndx5y0hpz0-bash-5.3p9-dev",
+        "doc": "/nix/store/5927bpzzjl4nqypqja2wkph01h2x9ixv-bash-5.3p9-doc",
+        "info": "/nix/store/zcjjij5bfw0n36v7wq5k3797154h8wnb-bash-5.3p9-info",
+        "man": "/nix/store/7a16n5vn7s4rs2rzjh4azh9z456w9hhi-bash-5.3p9-man",
+        "out": "/nix/store/s0psayl7zvkvwdcqc8fy1sbv8rlf1yq8-bash-5.3p9"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -47,17 +54,17 @@
     {
       "attr_path": "bashNonInteractive",
       "broken": false,
-      "derivation": "/nix/store/rrv0kzp6jpi50p4m0rkf0rns7r5ss5ny-bash-5.3p9.drv",
+      "derivation": "/nix/store/rv8iav851vsa1dfxy1g8xm2z84i04gf3-bash-5.3p9.drv",
       "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux",
       "install_id": "bash",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=8c809a146a140c5c8806f13399592dbcb1bb5dc4",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc",
       "name": "bash-5.3p9",
       "pname": "bashNonInteractive",
-      "rev": "8c809a146a140c5c8806f13399592dbcb1bb5dc4",
-      "rev_count": 957538,
-      "rev_date": "2026-03-03T12:59:14Z",
-      "scrape_date": "2026-03-04T05:09:48.422717Z",
+      "rev": "b12141ef619e0a9c1c84dc8c684040326f27cdcc",
+      "rev_count": 982522,
+      "rev_date": "2026-04-18T21:33:21Z",
+      "scrape_date": "2026-04-21T06:36:37.091408Z",
       "stabilities": [
         "unstable"
       ],
@@ -66,15 +73,18 @@
       "outputs_to_install": [
         "man",
         "out",
+        "out",
+        "out",
+        "out",
         "out"
       ],
       "outputs": {
-        "debug": "/nix/store/cj53i31cygg5nh3bncczds6l5jcx233x-bash-5.3p9-debug",
-        "dev": "/nix/store/ankwnfgjsvv89pl2h1663ycz18hqpdlz-bash-5.3p9-dev",
-        "doc": "/nix/store/qd1a76hhhy1rvgm89d9hfz4wln5fg50b-bash-5.3p9-doc",
-        "info": "/nix/store/64bx6bgwsilf68a96rhvf1549lvxxkdw-bash-5.3p9-info",
-        "man": "/nix/store/s6vif635l129971njng7n0y2vgf1qzbd-bash-5.3p9-man",
-        "out": "/nix/store/kysqfpylfpl8yrmgahj1sk6yrih918gl-bash-5.3p9"
+        "debug": "/nix/store/skcldkyjfanykzskjjm2677098z6s3g8-bash-5.3p9-debug",
+        "dev": "/nix/store/kff7j4rjs2wsxjzbfswq75k42l4hkh6b-bash-5.3p9-dev",
+        "doc": "/nix/store/29kxm7swgyci25c5dikkyaihly2sx10z-bash-5.3p9-doc",
+        "info": "/nix/store/im4f99xmbr0c2jrhb1dg0ay8mzzgccjk-bash-5.3p9-info",
+        "man": "/nix/store/dfia5k6jw1np00cl6bqyb1pijwwhq0ss-bash-5.3p9-man",
+        "out": "/nix/store/j927vicadxxmqjhkfkc2zcx7bhdyc7iw-bash-5.3p9"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -83,51 +93,17 @@
     {
       "attr_path": "bashNonInteractive",
       "broken": false,
-      "derivation": "/nix/store/87npf0m55xl9ygfs01bd5gccjijxqm5h-bash-5.3p9.drv",
+      "derivation": "/nix/store/hhwd44hnyf8qjxc3lap1xc41x8f91mqn-bash-5.3p9.drv",
       "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux",
       "install_id": "bash",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=8c809a146a140c5c8806f13399592dbcb1bb5dc4",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc",
       "name": "bash-5.3p9",
       "pname": "bashNonInteractive",
-      "rev": "8c809a146a140c5c8806f13399592dbcb1bb5dc4",
-      "rev_count": 957538,
-      "rev_date": "2026-03-03T12:59:14Z",
-      "scrape_date": "2026-03-04T05:38:32.018013Z",
-      "stabilities": [
-        "unstable"
-      ],
-      "unfree": false,
-      "version": "5.3p9",
-      "outputs_to_install": [
-        "man",
-        "out"
-      ],
-      "outputs": {
-        "dev": "/nix/store/466abw927byf6hdyrab11s8s5rxqzwmr-bash-5.3p9-dev",
-        "doc": "/nix/store/n2kkf17949jf28ljmnn7qnlapp1751ky-bash-5.3p9-doc",
-        "info": "/nix/store/9asq50dww91csni2jcfn839jg24nx5xy-bash-5.3p9-info",
-        "man": "/nix/store/g464f41vmnj77bf96r7sij90s0mhbwly-bash-5.3p9-man",
-        "out": "/nix/store/ymlpj1ajg53a2rblavf8zbaiwwaliv84-bash-5.3p9"
-      },
-      "system": "x86_64-darwin",
-      "group": "toplevel",
-      "priority": 5
-    },
-    {
-      "attr_path": "bashNonInteractive",
-      "broken": false,
-      "derivation": "/nix/store/71g65hf0w0jba5r7fc9786njjx1v5rr9-bash-5.3p9.drv",
-      "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux",
-      "install_id": "bash",
-      "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=8c809a146a140c5c8806f13399592dbcb1bb5dc4",
-      "name": "bash-5.3p9",
-      "pname": "bashNonInteractive",
-      "rev": "8c809a146a140c5c8806f13399592dbcb1bb5dc4",
-      "rev_count": 957538,
-      "rev_date": "2026-03-03T12:59:14Z",
-      "scrape_date": "2026-03-04T06:12:08.902740Z",
+      "rev": "b12141ef619e0a9c1c84dc8c684040326f27cdcc",
+      "rev_count": 982522,
+      "rev_date": "2026-04-18T21:33:21Z",
+      "scrape_date": "2026-04-21T07:08:11.587975Z",
       "stabilities": [
         "unstable"
       ],
@@ -136,15 +112,58 @@
       "outputs_to_install": [
         "man",
         "out",
+        "out",
         "out"
       ],
       "outputs": {
-        "debug": "/nix/store/0skprwsmbdv49ndj307s3a2a239giaby-bash-5.3p9-debug",
-        "dev": "/nix/store/7sqgkx198ahzjy270dr39v2l9zp0sqam-bash-5.3p9-dev",
-        "doc": "/nix/store/hrrwnmwx8kzi00mhhqpwki9bd5nbwxpg-bash-5.3p9-doc",
-        "info": "/nix/store/2xr3bgl1hwp5jfz17dqymd8lvrv30k2k-bash-5.3p9-info",
-        "man": "/nix/store/yq2xy5qg9xlkf3cwpnyp7mm4rmiyc22b-bash-5.3p9-man",
-        "out": "/nix/store/2hjsch59amjs3nbgh7ahcfzm2bfwl8zi-bash-5.3p9"
+        "dev": "/nix/store/yxf6r5y96rj458w45klin3vmcldgakb1-bash-5.3p9-dev",
+        "doc": "/nix/store/p9vlnsaylpc27z8dhffan6niwqxqfb88-bash-5.3p9-doc",
+        "info": "/nix/store/lgf5v0912wz3k7y42d9i3r6jr53y2lrr-bash-5.3p9-info",
+        "man": "/nix/store/hn9f2vayh9w8z6mmx14diiam145z9sdz-bash-5.3p9-man",
+        "out": "/nix/store/66x1d7x3x043rkcrrrd5602aay0g6xsn-bash-5.3p9"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "bashNonInteractive",
+      "broken": false,
+      "derivation": "/nix/store/ggkdrv677lc6g8d7wf4hrkf4z9flwavz-bash-5.3p9.drv",
+      "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux",
+      "install_id": "bash",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc",
+      "name": "bash-5.3p9",
+      "pname": "bashNonInteractive",
+      "rev": "b12141ef619e0a9c1c84dc8c684040326f27cdcc",
+      "rev_count": 982522,
+      "rev_date": "2026-04-18T21:33:21Z",
+      "scrape_date": "2026-04-21T07:44:39.296159Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "5.3p9",
+      "outputs_to_install": [
+        "man",
+        "out",
+        "out",
+        "out",
+        "out",
+        "out",
+        "out",
+        "out",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/bwwgpawr3br1fglx6l2qnvjyjbydanpf-bash-5.3p9-debug",
+        "dev": "/nix/store/2s1xhjv9qh4hvkiyk707kvpp27jfjd9m-bash-5.3p9-dev",
+        "doc": "/nix/store/8bbvpx61kqryf5g68j2ccx469b3vmdb2-bash-5.3p9-doc",
+        "info": "/nix/store/b389ypnf81d096z95x8ql2w9pyhm8ibk-bash-5.3p9-info",
+        "man": "/nix/store/fmhr2swzzrshfkqfqyg2g7rcr1qxlva1-bash-5.3p9-man",
+        "out": "/nix/store/v8sa6r6q037ihghxfbwzjj4p59v2x0pv-bash-5.3p9"
       },
       "system": "x86_64-linux",
       "group": "toplevel",

@@ -37,15 +37,15 @@ pub enum GenerationsCommands {
 
 impl GenerationsCommands {
     #[instrument(name = "generations", skip_all)]
-    pub fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
         match self {
             GenerationsCommands::Help => {
                 display_help(Some("generations".to_string()));
             },
-            GenerationsCommands::List(args) => args.handle(flox)?,
-            GenerationsCommands::History(args) => args.handle(flox)?,
-            GenerationsCommands::Rollback(args) => args.handle(flox)?,
-            GenerationsCommands::Switch(args) => args.handle(flox)?,
+            GenerationsCommands::List(args) => args.handle(flox).await?,
+            GenerationsCommands::History(args) => args.handle(flox).await?,
+            GenerationsCommands::Rollback(args) => args.handle(flox).await?,
+            GenerationsCommands::Switch(args) => args.handle(flox).await?,
         }
 
         Ok(())

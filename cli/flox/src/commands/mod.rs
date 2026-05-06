@@ -667,7 +667,7 @@ impl ModifyCommands {
             ModifyCommands::Include(args) => args.handle(flox).await?,
             ModifyCommands::Upgrade(args) => args.handle(flox).await?,
             ModifyCommands::Uninstall(args) => args.handle(flox).await?,
-            ModifyCommands::Generations(args) => args.handle(config, flox)?,
+            ModifyCommands::Generations(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
@@ -804,8 +804,8 @@ impl InternalCommands {
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
             InternalCommands::Exit(args) => args.handle(flox)?,
-            InternalCommands::ActivationState(args) => args.handle(flox)?,
-            InternalCommands::ServicesSocket(args) => args.handle(flox)?,
+            InternalCommands::ActivationState(args) => args.handle(flox).await?,
+            InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
         }
         Ok(())
     }
@@ -872,6 +872,9 @@ pub enum EnvironmentSelect {
         #[bpaf(long("reference"), long("ref"), short('r'), argument("owner>/<name"))]
         environment_ref::RemoteEnvironmentRef,
     ),
+    /// Shorthand for "-r <current_user>/default"
+    #[bpaf(long("default"), short('D'))]
+    Default,
     #[default]
     #[bpaf(hide)]
     Unspecified,
@@ -952,7 +955,7 @@ impl EnvironmentSelect {
     /// behavior based on whether an environment is already active. For example,
     /// `flox activate` should never re-activate the last activated environment;
     /// it should default to an environment in the current directory.
-    pub fn to_concrete_environment(
+    pub async fn to_concrete_environment(
         &self,
         flox: &Flox,
         generation: Option<GenerationId>,
@@ -990,6 +993,29 @@ impl EnvironmentSelect {
                     .map_err(anyhow::Error::new)?;
                 ConcreteEnvironment::Remote(env)
             },
+            EnvironmentSelect::Default => {
+                let user_handle = flox.auth_strategy.get_handle().context(formatdoc! {"
+                    The '-D' and '--default' flags require authentication
+                "})?;
+
+                debug!(
+                    user = %user_handle,
+                    "getting default environment for logged-in user"
+                );
+
+                let env_ref = RemoteEnvironmentRef::new(&user_handle, DEFAULT_NAME)
+                    .context("Failed to construct default environment reference")?;
+
+                let pointer = ManagedPointer::new(
+                    env_ref.owner().clone(),
+                    env_ref.name().clone(),
+                    &flox.floxhub,
+                );
+
+                let env = RemoteEnvironment::new(flox, pointer, generation)
+                    .map_err(anyhow::Error::new)?;
+                ConcreteEnvironment::Remote(env)
+            },
         };
         warn_minimum_cli_version(&env, flox);
         Ok(env)
@@ -1001,7 +1027,7 @@ impl EnvironmentSelect {
     /// currently activated environment. For example, `flox install` should
     /// install to the last activated environment if there isn't an environment
     /// in the current directory.
-    pub fn detect_concrete_environment(
+    pub async fn detect_concrete_environment(
         &self,
         flox: &Flox,
         message: &str,
@@ -1031,6 +1057,34 @@ impl EnvironmentSelect {
 
                 ConcreteEnvironment::Remote(env)
             },
+
+            EnvironmentSelect::Default => {
+                let user_handle = flox.auth_strategy.get_handle().context(formatdoc! {"
+                    The '-D' and '--default' flags require authentication
+                "})?;
+
+                debug!(
+                    user = %user_handle,
+                    "getting default environment for logged-in user"
+                );
+
+                let env_ref = RemoteEnvironmentRef::new(&user_handle, DEFAULT_NAME)
+                    .context("Failed to construct default environment reference")?;
+
+                let pointer = ManagedPointer::new(
+                    env_ref.owner().clone(),
+                    env_ref.name().clone(),
+                    &flox.floxhub,
+                );
+
+                let generation = activated_environments()
+                    .is_active_with_generation(&UninitializedEnvironment::Remote(pointer.clone()));
+
+                let env = RemoteEnvironment::new(flox, pointer, generation)
+                    .map_err(anyhow::Error::new)?;
+
+                ConcreteEnvironment::Remote(env)
+            },
         };
         warn_minimum_cli_version(&env, flox);
         Ok(env)
@@ -1042,6 +1096,7 @@ impl EnvironmentSelect {
                 Some(vec!["-d".to_string(), path.display().to_string()])
             },
             EnvironmentSelect::Remote(env_ref) => Some(vec!["-r".to_string(), env_ref.to_string()]),
+            EnvironmentSelect::Default => Some(vec!["-D".to_string()]),
             EnvironmentSelect::Unspecified => None,
         }
     }

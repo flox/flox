@@ -1,8 +1,11 @@
-version = 1
+schema-version = "1.12.0"
 
 [install]
 go.pkg-path = "go"
+go.outputs = "all"
 gcc.pkg-path = "gcc"
 gcc.systems = ["aarch64-linux", "x86_64-linux"]
+gcc.outputs = "all"
 clang.pkg-path = "clang"
 clang.systems = ["aarch64-darwin", "x86_64-darwin"]
+clang.outputs = "all"

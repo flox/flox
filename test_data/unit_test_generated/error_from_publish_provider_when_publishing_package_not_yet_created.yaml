@@ -10,10 +10,10 @@ then:
   - name: server
     value: uvicorn
   - name: content-length
-    value: '90'
+    value: '85'
   - name: content-type
     value: application/json
-  body: '{"ingress_uri":null,"ingress_auth":null,"catalog_store_config":{"store_type":"meta-only"}}'
+  body: '{"ingress_uri":null,"ingress_auth":null,"catalog_store_config":{"store_type":"null"}}'
 ---
 when:
   path: /api/v1/catalog/catalogs/test1/packages/mypkg7/builds

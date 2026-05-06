@@ -691,6 +691,116 @@ manifest packages were built via the traditional flox manifest workflow.*/
             }
         }
     }
+    ///Request body for the check-build endpoint.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "CheckBuildRequest",
+    ///  "description": "Request body for the check-build endpoint.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "nixpkgs_rev",
+    ///    "source_rev",
+    ///    "source_url",
+    ///    "system"
+    ///  ],
+    ///  "properties": {
+    ///    "nixpkgs_rev": {
+    ///      "title": "Nixpkgs Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "source_rev": {
+    ///      "title": "Source Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "source_url": {
+    ///      "title": "Source Url",
+    ///      "type": "string"
+    ///    },
+    ///    "system": {
+    ///      "$ref": "#/components/schemas/PackageSystem"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct CheckBuildRequest {
+        pub nixpkgs_rev: ::std::string::String,
+        pub source_rev: ::std::string::String,
+        pub source_url: ::std::string::String,
+        pub system: PackageSystem,
+    }
+    impl ::std::convert::From<&CheckBuildRequest> for CheckBuildRequest {
+        fn from(value: &CheckBuildRequest) -> Self {
+            value.clone()
+        }
+    }
+    ///Response from the check-build endpoint.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "CheckBuildResponse",
+    ///  "description": "Response from the check-build endpoint.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "already_published"
+    ///  ],
+    ///  "properties": {
+    ///    "already_published": {
+    ///      "title": "Already Published",
+    ///      "type": "boolean"
+    ///    },
+    ///    "published_at": {
+    ///      "title": "Published At",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ],
+    ///      "format": "date-time"
+    ///    },
+    ///    "source_rev": {
+    ///      "title": "Source Rev",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "source_rev_date": {
+    ///      "title": "Source Rev Date",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ],
+    ///      "format": "date-time"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct CheckBuildResponse {
+        pub already_published: bool,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub published_at: ::std::option::Option<
+            ::chrono::DateTime<::chrono::offset::Utc>,
+        >,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub source_rev: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub source_rev_date: ::std::option::Option<
+            ::chrono::DateTime<::chrono::offset::Utc>,
+        >,
+    }
+    impl ::std::convert::From<&CheckBuildResponse> for CheckBuildResponse {
+        fn from(value: &CheckBuildResponse) -> Self {
+            value.clone()
+        }
+    }
     ///Deprecation metadata for a package from nixpkgs aliases.nix
     ///
     /// <details><summary>JSON schema</summary>
@@ -5380,6 +5490,75 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
             400u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Check if a build already exists
+
+Check whether a build already exists for the given source tuple.
+
+Path Parameters:
+- **catalog_name**: The name of the catalog
+- **package_name**: The name of the package
+
+Request Body:
+- **source_url**: Source repository URL
+- **source_rev**: Source revision
+- **nixpkgs_rev**: Nixpkgs revision used for the build
+- **system**: Target system (e.g. x86_64-linux)
+
+Returns:
+- **CheckBuildResponse** with already_published=true and provenance
+  if a matching build exists, or already_published=false otherwise.
+
+Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/check-build`
+
+*/
+    pub async fn check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_post<
+        'a,
+    >(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+        package_name: &'a types::PackageName,
+        body: &'a types::CheckBuildRequest,
+    ) -> Result<ResponseValue<types::CheckBuildResponse>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/packages/{}/check-build", self.baseurl,
+            encode_path(& catalog_name.to_string()), encode_path(& package_name
+            .to_string()),
+        );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .json(&body)
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_post",
+        };
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
             404u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }

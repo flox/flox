@@ -389,7 +389,7 @@ EOF
   assert_output "$(
     cat << EOF
 ✘ ERROR: resolution failed:$SPACE
-The package 'python311Packages.torchvision-bin' is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-linux), (x86_64-darwin), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin).
+The package 'python311Packages.torchvision-bin' is not found for all requested systems on the same page, consider package groups with the following system groupings: (x86_64-darwin), (aarch64-linux), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin).
 EOF
   )"
 }
@@ -507,4 +507,31 @@ EOF
     run "$FLOX_BIN" install hello
   assert_failure
   diff "$PWD/.flox/env/manifest.lock.before" "$PWD/.flox/env/manifest.lock"
+}
+
+# bats test_tags=install,install:default-flag
+@test "install -D installs to default environment" {
+  project_setup
+  floxhub_setup "test"
+
+  # Create a directory for the default environment
+  DEFAULT_ENV_DIR="$PROJECT_DIR/default-env"
+  mkdir "$DEFAULT_ENV_DIR"
+
+  # Create and push test/default environment
+  run "$FLOX_BIN" init -d "$DEFAULT_ENV_DIR" --name default
+  assert_success
+  run "$FLOX_BIN" push -d "$DEFAULT_ENV_DIR" --owner test
+  assert_success
+
+  # Install using -D should work
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  run "$FLOX_BIN" install -D hello
+  assert_success
+  assert_output --partial "'hello' installed to environment"
+
+  # Verify package was installed by checking the remote environment
+  run "$FLOX_BIN" list -D
+  assert_success
+  assert_output --partial "hello"
 }

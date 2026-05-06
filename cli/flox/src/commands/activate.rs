@@ -143,6 +143,7 @@ impl Activate {
         let mut concrete_environment = match self
             .environment
             .to_concrete_environment(&flox, self.generation)
+            .await
         {
             Ok(concrete_environment) => concrete_environment,
             Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {

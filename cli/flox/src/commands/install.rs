@@ -152,6 +152,7 @@ impl Install {
         let mut concrete_environment = match self
             .environment
             .detect_concrete_environment(&flox, "Install to")
+            .await
         {
             Ok(concrete_environment) => concrete_environment,
             Err(EnvironmentSelectError::EnvironmentError(
@@ -954,7 +955,7 @@ mod tests {
         let pkg_path = if is_linux { "darwin.ps" } else { "bpftrace" };
         let install_id = if is_linux { "ps" } else { "bpftrace" };
         let installed_systems = if is_linux {
-            "aarch64-darwin, x86_64-darwin"
+            "x86_64-darwin, aarch64-darwin"
         } else {
             "aarch64-linux, x86_64-linux"
         };

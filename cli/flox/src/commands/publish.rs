@@ -251,7 +251,7 @@ impl Publish {
             "publishing package: {}",
             &publish_provider.package_metadata.package
         );
-        match publish_provider
+        let needs_publisher_wait = match publish_provider
             .publish(
                 &flox.catalog_client,
                 &catalog_name,
@@ -262,27 +262,32 @@ impl Publish {
             )
             .await
         {
-            Ok(_) => {
-                let span = info_span!(
-                    "publish",
-                    progress = "Waiting for confirmation of successful publish..."
-                );
-                {
-                    // Using a block here instead of `span.in_scope()` because
-                    // that's not an async context.
-                    let _ = span.enter();
-                    publish_provider
-                        .wait_for_publish_completion(
-                            &flox.catalog_client,
-                            &build_metadata,
-                            PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS,
-                            PUBLISH_COMPLETION_TIMEOUT_MILLIS,
-                        )
-                        .await
-                        .context("Failed while waiting for publish confirmation")?;
-                }
-            },
+            Ok(needs_wait) => needs_wait,
             Err(e) => bail!("Failed to publish package: {}", display_chain(&e)),
+        };
+
+        // Only poll when the external publisher service is responsible for
+        // ingesting artifacts (Publisher mode). NixCopy and MetadataOnly
+        // submit NAR info directly, so there is nothing to wait for.
+        if needs_publisher_wait {
+            let span = info_span!(
+                "publish",
+                progress = "Waiting for confirmation of successful publish..."
+            );
+            {
+                // Using a block here instead of `span.in_scope()` because
+                // that's not an async context.
+                let _ = span.enter();
+                publish_provider
+                    .wait_for_publish_completion(
+                        &flox.catalog_client,
+                        &build_metadata,
+                        PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS,
+                        PUBLISH_COMPLETION_TIMEOUT_MILLIS,
+                    )
+                    .await
+                    .context("Failed while waiting for publish confirmation")?;
+            }
         }
         message::updated(formatdoc! {"
             Package published successfully.

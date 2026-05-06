@@ -1,11 +1,12 @@
 {
   "lockfile-version": 1,
   "manifest": {
-    "version": 1,
+    "schema-version": "1.12.0",
     "install": {
       "hello": {
         "pkg-path": "hello",
-        "version": "2.10"
+        "version": "2.10",
+        "outputs": "all"
       }
     },
     "options": {}

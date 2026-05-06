@@ -614,6 +614,13 @@ impl Serialize for Manifest<TypedOnly> {
     }
 }
 
+impl Manifest<MigratedTypedOnly> {
+    /// Returns the pre-migration typed manifest.
+    pub fn pre_migration_manifest(&self) -> Manifest<TypedOnly> {
+        self.inner.original_parsed.as_typed_only()
+    }
+}
+
 impl Serialize for Manifest<MigratedTypedOnly> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

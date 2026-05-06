@@ -117,6 +117,12 @@ pub trait Publisher {
         client: &impl ClientTrait,
         catalog_name: &str,
     ) -> Result<PackageCreatedGuard, PublishError>;
+    /// Publish a built package.
+    ///
+    /// Returns `true` when the caller should wait for an external publisher
+    /// to confirm completion (Publisher mode), or `false` when the CLI has
+    /// already populated the catalog directly and no wait is needed
+    /// (NixCopy and MetadataOnly modes).
     async fn publish(
         &self,
         client: &impl ClientTrait,
@@ -125,7 +131,7 @@ pub trait Publisher {
         build_metadata: &CheckedBuildMetadata,
         key_file: Option<PathBuf>,
         metadata_only: bool,
-    ) -> Result<(), PublishError>;
+    ) -> Result<bool, PublishError>;
     async fn wait_for_publish_completion(
         &self,
         client: &impl ClientTrait,
@@ -345,7 +351,7 @@ impl ClientSideCatalogStoreConfig {
                     build_outputs,
                 )?;
                 let nar_infos = Self::get_build_output_nar_infos(
-                    egress_uri.as_str(),
+                    Some(egress_uri.as_str()),
                     Some(auth_netrc_path.as_path()),
                     build_outputs,
                 )?;
@@ -356,17 +362,16 @@ impl ClientSideCatalogStoreConfig {
                     reason = "metadata-only catalog store",
                     "collecting narinfo from local store (no artifact upload)"
                 );
-                match Self::get_build_output_nar_infos("daemon", None, build_outputs) {
-                    Ok(nar_infos) => Ok(Some((nar_infos, "daemon://".to_string()))),
-                    Err(e) => {
-                        debug!(
-                            error = %e,
-                            "failed to collect narinfo from local store, \
-                             continuing without narinfo"
-                        );
-                        Ok(None)
-                    },
-                }
+                // MetadataOnly populates the catalog directly from the local
+                // daemon store. If narinfo collection fails, the publish would
+                // silently submit without NAR info, leaving the catalog entry
+                // incomplete. Propagate the error so the user sees a clear
+                // failure instead of a silent no-op.
+                // Pass None so nix honors NIX_REMOTE / its own store config
+                // rather than being forced to use a local daemon socket that
+                // may not exist (e.g. environments using a remote SSH-NG store).
+                let nar_infos = Self::get_build_output_nar_infos(None, None, build_outputs)?;
+                Ok(Some((nar_infos, "daemon://".to_string())))
             },
             ClientSideCatalogStoreConfig::Null => {
                 debug!(reason = "null catalog store", "skipping artifact upload");
@@ -485,29 +490,32 @@ impl ClientSideCatalogStoreConfig {
     /// Uses `--recursive` to collect narinfo for the full closure (the store
     /// path and all its transitive dependencies), matching the behavior of
     /// the catalog-publisher.
-    fn nar_info_cmd(store_url: &str, store_path: &str, auth_netrc_path: Option<&Path>) -> Command {
+    fn nar_info_cmd(
+        store_url: Option<&str>,
+        store_path: &str,
+        auth_netrc_path: Option<&Path>,
+    ) -> Command {
         let mut cmd = nix_base_command();
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
         if let Some(netrc) = auth_netrc_path {
             cmd.arg("--netrc-file").arg(netrc);
         }
-        cmd.args([
-            "path-info",
-            "--recursive",
-            "--closure-size",
-            "--json",
-            "--store",
-            store_url,
-            store_path,
-        ]);
+        cmd.args(["path-info", "--recursive", "--closure-size", "--json"]);
+        // Only pass --store when an explicit store URL is provided. Omitting it
+        // lets nix honor NIX_REMOTE (or its own config), which is required for
+        // environments that use a remote store rather than a local daemon.
+        if let Some(url) = store_url {
+            cmd.args(["--store", url]);
+        }
+        cmd.arg(store_path);
         cmd
     }
 
     /// Gets the NAR info for **the closure** of a store path from the given store.
     #[instrument(skip_all, fields(progress = format!("Collecting extra build metadata for '{store_path}'")))]
     fn get_nar_info(
-        source_url: &str,
+        source_url: Option<&str>,
         store_path: &str,
         auth_netrc_path: Option<&Path>,
     ) -> Result<NarInfos, PublishError> {
@@ -534,7 +542,7 @@ impl ClientSideCatalogStoreConfig {
     /// Retrieves and merges the [NarInfos] closures of the provided
     /// build outputs from the given store.
     fn get_build_output_nar_infos(
-        source_url: &str,
+        source_url: Option<&str>,
         auth_netrc_path: Option<&Path>,
         build_outputs: &[PackageOutput],
     ) -> Result<NarInfos, PublishError> {
@@ -543,7 +551,7 @@ impl ClientSideCatalogStoreConfig {
             debug!(
                 output = output.name,
                 store_path = output.store_path,
-                store = source_url,
+                store = source_url.unwrap_or("local"),
                 "querying NAR info for build output"
             );
             let output_nar_infos =
@@ -613,6 +621,9 @@ where
     /// Publish a built package.
     ///
     /// [PackageCreatedGuard] must be obtained from [Self::create_package].
+    ///
+    /// Returns `true` when the caller should poll for publisher confirmation,
+    /// `false` when the CLI already populated the catalog (NixCopy/MetadataOnly).
     async fn publish(
         &self,
         client: &impl ClientTrait,
@@ -621,7 +632,7 @@ where
         build_metadata: &CheckedBuildMetadata,
         key_file: Option<PathBuf>,
         metadata_only: bool,
-    ) -> Result<(), PublishError> {
+    ) -> Result<bool, PublishError> {
         // Step 2 hit /publish
         // Catalogs are configured with their "store".
         // We must request upload information for _this_ catalog to know where
@@ -641,6 +652,12 @@ where
             &self.auth,
             publish_response,
         )?;
+        // Only the Publisher mode requires the caller to poll for confirmation.
+        // NixCopy and MetadataOnly populate the catalog directly, so no wait needed.
+        let needs_publisher_wait = matches!(
+            catalog_store_config,
+            ClientSideCatalogStoreConfig::Publisher { .. }
+        );
         let upload_result = catalog_store_config.maybe_upload_artifacts(&build_metadata.outputs)?;
         let (narinfos, narinfos_source_url) = match upload_result {
             Some((nar_infos, source_url)) => (Some(nar_infos), Some(source_url)),
@@ -699,7 +716,7 @@ where
             .await
             .map_err(PublishError::CatalogError)?;
 
-        Ok(())
+        Ok(needs_publisher_wait)
     }
 
     /// Waits until the narinfos for all store paths are present in the catalog,
@@ -888,8 +905,9 @@ pub fn check_build_metadata(
     let expression_ref_locked = expression_ref_fetched.locked_flakeref();
 
     // git clone into a temp directory
-    let clean_repo_path = tempfile::tempdir_in(flox.temp_dir.clone())
-        .map_err(|err| PublishError::Catchall(format!("could not create tempdir: {err}")))?;
+    let clean_repo_path = tempfile::tempdir_in(&flox.temp_dir)
+        .map_err(|err| PublishError::Catchall(format!("could not create tempdir: {err}")))?
+        .keep();
 
     // base dir and buildtime environments **for manifest builds**
     // both are inferred from the fetched source,
@@ -898,17 +916,14 @@ pub fn check_build_metadata(
     let (base_dir, built_environments) = {
         copy_dir_recursive(expression_ref_fetched.store_path(), &clean_repo_path, false)
             .map_err(|e| PublishError::Catchall(e.to_string()))?;
-        let project_path = CanonicalPath::new(
-            clean_repo_path
-                .path()
-                .join(env_metadata.rel_project_path.as_path()),
-        )
-        .map_err(|_err| {
-            PublishError::UnsupportedEnvironmentState(
-                "Flox project not found in clean checkout, is it tracked in the repository?"
-                    .to_string(),
-            )
-        })?;
+        let project_path =
+            CanonicalPath::new(clean_repo_path.join(env_metadata.rel_project_path.as_path()))
+                .map_err(|_err| {
+                    PublishError::UnsupportedEnvironmentState(
+                    "Flox project not found in clean checkout, is it tracked in the repository?"
+                        .to_string(),
+                )
+                })?;
         let mut clean_build_env = open_path(flox, &project_path, None)
             .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
         (clean_build_env.parent_path()?, clean_build_env.build(flox)?)
@@ -922,7 +937,7 @@ pub fn check_build_metadata(
         &built_environments.develop,
         &[pkg.name()],
         Some(false),
-        system_override,
+        system_override.clone(),
     )?;
 
     if build_results.len() != 1 {
@@ -931,9 +946,7 @@ pub fn check_build_metadata(
         ));
     }
     let build_result = &build_results[0];
-
-    let metadata = convert_build_result_to_build_metadata(build_result)?;
-    Ok(metadata)
+    convert_build_result_to_build_metadata(build_result)
 }
 
 /// Creates an error for a build repo that's in an invalid state.
@@ -1596,6 +1609,12 @@ pub mod tests {
             .await;
 
         assert!(res.is_ok(), "Expected publish to succeed, got: {:?}", res);
+        // MetadataOnly submits narinfos directly — no external publisher to wait for.
+        assert_eq!(
+            res.unwrap(),
+            false,
+            "MetadataOnly should not require publisher wait"
+        );
     }
 
     #[test]
@@ -1684,6 +1703,26 @@ pub mod tests {
             }])
             .unwrap();
         assert!(result.is_none(), "Null store should return None");
+    }
+
+    /// MetadataOnly must propagate narinfo collection failures rather than
+    /// silently submitting without NAR info and leaving the catalog entry
+    /// incomplete.
+    #[test]
+    fn metadata_only_propagates_narinfo_error() {
+        let config = ClientSideCatalogStoreConfig::MetadataOnly;
+        // A store path that does not exist in the local daemon store will cause
+        // get_build_output_nar_infos to fail. The error must surface to the
+        // caller instead of being swallowed.
+        let result = config.maybe_upload_artifacts(&[PackageOutput {
+            name: "out".to_string(),
+            store_path: "/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-nonexistent".to_string(),
+        }]);
+        assert!(
+            result.is_err(),
+            "MetadataOnly should return Err when narinfo collection fails, got: {:?}",
+            result
+        );
     }
 
     /// Generate dummy CheckedBuildMetadata and CheckedEnvironmentMetadata that
@@ -2138,7 +2177,7 @@ pub mod tests {
         };
         let store_path_str = store_path.to_str().unwrap();
         let narinfos =
-            ClientSideCatalogStoreConfig::get_nar_info("daemon", store_path_str, Some(&auth_file))
+            ClientSideCatalogStoreConfig::get_nar_info(None, store_path_str, Some(&auth_file))
                 .unwrap();
         // With --recursive, narinfos contains the queried path and its
         // transitive dependencies.
@@ -2213,7 +2252,8 @@ pub mod tests {
                 packaged_created_guard,
                 &build_meta,
                 None,
-                true,
+                // Server returns Null store config so no narinfo collection
+                false,
             )
             .await
             .expect("failed to do publish");
@@ -2248,7 +2288,8 @@ pub mod tests {
                 packaged_created_guard,
                 &build_meta,
                 None,
-                true,
+                // Server returns Null store config so no narinfo collection
+                false,
             )
             .await
             .expect("failed to do publish");
@@ -2291,7 +2332,8 @@ pub mod tests {
                 guard,
                 &build_meta,
                 None,
-                true,
+                // Server returns Null store config so no narinfo collection
+                false,
             )
             .await;
         assert!(res.is_err());
@@ -2324,7 +2366,8 @@ pub mod tests {
                 packaged_created_guard,
                 &build_meta,
                 None,
-                true,
+                // Server returns Null store config so no narinfo collection
+                false,
             )
             .await
             .expect("failed to do publish");
@@ -2337,7 +2380,8 @@ pub mod tests {
                 PackageCreatedGuard { _private: () },
                 &build_meta,
                 None,
-                true,
+                // Server returns Null store config so no narinfo collection
+                false,
             )
             .await
             .expect("failed to do publish");
@@ -2364,7 +2408,8 @@ pub mod tests {
                 PackageCreatedGuard { _private: () },
                 &build_meta,
                 None,
-                true,
+                // Server returns Null store config so no narinfo collection
+                false,
             )
             .await;
         assert!(res.is_err());

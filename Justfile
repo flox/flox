@@ -166,13 +166,15 @@ gen-unit-data-no-publish force="":
     python_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/python3' | jq -r '.items[0].version')
     go_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/go' | jq -r '.items[0].version')
     poetry_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/poetry' | jq -r '.items[0].version')
+    nodejs_20_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/nodejs_20' | jq -r '.items[0].version')
     jq -n \
         --arg python3 "$python_version" \
         --arg go "$go_version" \
         --arg poetry "$poetry_version" \
-        '{python3: $python3, go: $go, poetry: $poetry}' \
+        --arg nodejs_20 "$nodejs_20_version" \
+        '{python3: $python3, go: $go, poetry: $poetry, nodejs_20: $nodejs_20}' \
         > "{{TEST_DATA}}/unit_test_generated/latest_prod_versions.json"
-    echo "Wrote latest_prod_versions.json with python3=$python_version, go=$go_version, poetry=$poetry_version"
+    echo "Wrote latest_prod_versions.json with python3=$python_version, go=$go_version, poetry=$poetry_version, nodejs_20=$nodejs_20_version"
 
 gen-unit-data-for-publish floxhub_repo_path force="":
     #!/usr/bin/env bash
@@ -232,12 +234,12 @@ gen-unit-data-for-publish floxhub_repo_path force="":
 
 # Run the CLI integration test suite using locally built binaries
 # This is equivalent to the "local" jobs in CI.
-@integ-tests +bats_args="": build
+@integ-tests *bats_args: build
     flox-cli-tests "$@"
 
 # Run the CLI integration test suite using Nix-built binaries
 # This is equivalent to the "remote" jobs in CI.
-@nix-integ-tests +bats_args="":
+@nix-integ-tests *bats_args:
     nix run \
         --accept-flake-config \
         --extra-experimental-features 'nix-command flakes' \
