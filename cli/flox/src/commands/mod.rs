@@ -34,19 +34,18 @@ use std::{env, fmt, mem};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
-use flox_catalog::{AuthMethod, DEFAULT_CATALOG_URL};
 use flox_core::data::environment_ref::{self, DEFAULT_NAME, RemoteEnvironmentRef};
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::{Manifest, TypedOnly};
 use flox_rust_sdk::flox::{
+    AuthContext,
     DEFAULT_FLOXHUB_URL,
     FLOX_VERSION,
     Flox,
     Floxhub,
     FloxhubToken,
     FloxhubTokenError,
-    auth_strategy_from_method,
 };
 use flox_rust_sdk::models::env_registry;
 use flox_rust_sdk::models::env_registry::{ENV_REGISTRY_FILENAME, EnvRegistry};
@@ -308,15 +307,9 @@ impl FloxArgs {
         let metrics_device_uuid = (!config.flox.disable_metrics)
             .then(|| read_metrics_uuid(&config).ok())
             .flatten();
-        let auth_method = config.flox.floxhub_authn_mode.clone();
-        let catalog_url = config
-            .flox
-            .catalog_url
-            .clone()
-            .unwrap_or_else(|| DEFAULT_CATALOG_URL.to_string());
 
-        let auth_strategy =
-            auth_strategy_from_method(&auth_method, floxhub_token.clone(), catalog_url.clone());
+        let credential =
+            AuthContext::from_mode(&config.flox.floxhub_authn_mode, floxhub_token.clone());
 
         let catalog_client = init_catalog_client(&config, metrics_device_uuid)?;
 
@@ -337,8 +330,7 @@ impl FloxArgs {
             system_user_name,
             system_hostname,
             argv,
-            floxhub_token,
-            auth_strategy,
+            auth_context: credential,
             floxhub,
             catalog_client,
             installable_locker: Default::default(),
@@ -1002,7 +994,7 @@ impl EnvironmentSelect {
                 ConcreteEnvironment::Remote(env)
             },
             EnvironmentSelect::Default => {
-                let user_handle = flox.auth_strategy.get_handle().context(formatdoc! {"
+                let user_handle = flox.auth_context.handle().context(formatdoc! {"
                     The '-D' and '--default' flags require authentication
                 "})?;
 
@@ -1011,7 +1003,7 @@ impl EnvironmentSelect {
                     "getting default environment for logged-in user"
                 );
 
-                let env_ref = RemoteEnvironmentRef::new(&user_handle, DEFAULT_NAME)
+                let env_ref = RemoteEnvironmentRef::new(user_handle, DEFAULT_NAME)
                     .context("Failed to construct default environment reference")?;
 
                 let pointer = ManagedPointer::new(
@@ -1067,7 +1059,7 @@ impl EnvironmentSelect {
             },
 
             EnvironmentSelect::Default => {
-                let user_handle = flox.auth_strategy.get_handle().context(formatdoc! {"
+                let user_handle = flox.auth_context.handle().context(formatdoc! {"
                     The '-D' and '--default' flags require authentication
                 "})?;
 
@@ -1076,7 +1068,7 @@ impl EnvironmentSelect {
                     "getting default environment for logged-in user"
                 );
 
-                let env_ref = RemoteEnvironmentRef::new(&user_handle, DEFAULT_NAME)
+                let env_ref = RemoteEnvironmentRef::new(user_handle, DEFAULT_NAME)
                     .context("Failed to construct default environment reference")?;
 
                 let pointer = ManagedPointer::new(
@@ -1255,8 +1247,8 @@ pub(super) async fn ensure_environment_trust(
         return Ok(());
     }
 
-    let handle = flox.get_handle();
-    if handle.as_deref() == Some(env_ref.owner().as_str()) {
+    let handle = flox.auth_context.handle();
+    if handle == Some(env_ref.owner().as_str()) {
         debug!("{env_prefixed_name} is trusted by auth handle");
         return Ok(());
     }
@@ -1365,25 +1357,49 @@ pub(super) async fn ensure_environment_trust(
 
 /// Validate authentication and return the user's handle.
 ///
-/// If auth fails for Auth0 and we can prompt interactively, triggers the
-/// login flow as a fallback and rebuilds the auth strategy with the fresh token.
+/// If the credential is expired/missing and we can prompt interactively,
+/// triggers the login flow as a fallback.
 pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
-    match flox.auth_strategy.get_handle() {
-        Ok(handle) => Ok(handle),
-        Err(_)
-            if Dialog::can_prompt()
-                && matches!(flox.auth_strategy.auth_method(), AuthMethod::Auth0) =>
+    use flox_catalog::AuthFailure;
+
+    match flox.auth_context.authenticated_handle() {
+        Ok(handle) => Ok(handle.to_string()),
+        Err(ref failure @ (AuthFailure::TokenExpired | AuthFailure::NotLoggedIn))
+            if Dialog::can_prompt() =>
         {
-            if flox.floxhub_token.is_some() {
-                message::plain("Your FloxHub token has expired. Re-authenticating...");
-            } else {
-                message::plain("You are not logged in to FloxHub. Logging in...");
-            }
-            let token = auth::login_flox(flox).await?;
-            let handle = token.handle().to_string();
-            Ok(handle)
+            message::plain(format!("{} Re-authenticating...", match failure {
+                AuthFailure::TokenExpired => "Your FloxHub token has expired.",
+                AuthFailure::NotLoggedIn => "You are not logged in to FloxHub.",
+                _ => unreachable!(),
+            }));
+            auth::login_flox(flox).await
         },
-        Err(e) => Err(e.into()),
+        Err(failure) => {
+            let message = match failure {
+                AuthFailure::TokenExpired => formatdoc! {"
+                    Your FloxHub token has expired.
+
+                    To re-authenticate you can either
+                    * login to FloxHub with 'flox auth login',
+                    * set the 'floxhub_token' field to '<your token>' in your config
+                    * set the '$FLOX_FLOXHUB_TOKEN=<your_token>' environment variable.
+                "},
+                AuthFailure::NotLoggedIn => formatdoc! {"
+                    You are not logged in to FloxHub.
+
+                    To login you can either
+                    * login to FloxHub with 'flox auth login',
+                    * set the 'floxhub_token' field to '<your token>' in your config
+                    * set the '$FLOX_FLOXHUB_TOKEN=<your_token>' environment variable.
+                "},
+                AuthFailure::NoKerberosTicket => formatdoc! {"
+                    Kerberos ticket not found.
+
+                    Run 'kinit' to authenticate.
+                "},
+            };
+            bail!("{message}");
+        },
     }
 }
 

@@ -32,7 +32,6 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
 
-use super::auth::{AuthError, AuthProvider, CatalogAuth, NixCopyAuth};
 use super::build::{
     BuildResult,
     FloxBuildMk,
@@ -44,12 +43,13 @@ use super::build::{
     find_toplevel_group_nixpkgs,
 };
 use super::git::{GitCommandError, GitCommandGetOriginError, GitCommandProvider, StatusInfo};
+use super::nix_auth::{AuthError, AuthProvider, CatalogAuth, NixCopyAuth};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError, copy_dir_recursive, open_path};
-use crate::providers::auth::catalog_auth_to_envs;
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
+use crate::providers::nix_auth::catalog_auth_to_envs;
 use crate::utils::CommandExt;
 
 #[derive(Debug, Error)]
@@ -1225,6 +1225,7 @@ pub mod tests {
     use std::sync::LazyLock;
 
     use chrono::Utc;
+    use flox_catalog::AuthContext;
     use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
     use flox_test_utils::GENERATED_DATA;
     use pretty_assertions::assert_eq;
@@ -1240,7 +1241,6 @@ pub mod tests {
     use crate::models::environment::ENVIRONMENT_POINTER_FILENAME;
     use crate::models::environment::path_environment::PathEnvironment;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
-    use crate::providers::auth::{Auth, write_floxhub_netrc};
     use crate::providers::catalog::test_helpers::{
         TEST_READ_ONLY_CATALOG_NAME,
         TEST_READ_WRITE_CATALOG_NAME,
@@ -1257,6 +1257,7 @@ pub mod tests {
         test_git_options,
     };
     use crate::providers::nix::test_helpers::known_store_path;
+    use crate::providers::nix_auth::{NixAuth, write_floxhub_netrc};
 
     fn example_git_remote_repo() -> (tempfile::TempDir, GitCommandProvider, String) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
@@ -1579,7 +1580,7 @@ pub mod tests {
         )
         .unwrap();
 
-        let auth = Auth::from_flox(&flox).unwrap();
+        let auth = NixAuth::from_flox(&flox).unwrap();
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
         reset_mocks(&mut flox.catalog_client, vec![
@@ -1801,7 +1802,7 @@ pub mod tests {
         // Don't do a build because it's slow
         let (build_metadata, env_metadata, package_metadata) = dummy_publish_metadata("mypkg1");
 
-        let auth = Auth::from_flox(&flox).unwrap();
+        let auth = NixAuth::from_flox(&flox).unwrap();
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
         reset_mocks(&mut flox.catalog_client, vec![
@@ -1890,7 +1891,7 @@ pub mod tests {
     //         extra_headers: Default::default(),
     //     }));
 
-    //     let auth = Auth::from_flox(&flox).unwrap();
+    //     let auth = NixAuth::from_flox(&flox).unwrap();
     //     let publish_provider = PublishProvider::new(env_metadata, build_metadata, auth);
 
     //     // We should error even if metadata_only is true
@@ -1941,8 +1942,14 @@ pub mod tests {
         )
         .unwrap();
 
-        let (_key_file, cache) = local_nix_cache(flox.floxhub_token.as_ref().unwrap());
-        let auth = Auth::from_flox(&flox).unwrap();
+        let (_key_file, cache) = local_nix_cache(
+            match &flox.auth_context {
+                AuthContext::Auth0(t) => t.as_ref(),
+                _ => None,
+            }
+            .unwrap(),
+        );
+        let auth = NixAuth::from_flox(&flox).unwrap();
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
         // the 'cache' should be non existent before the publish
@@ -2232,20 +2239,16 @@ pub mod tests {
             PublishTestUser::NoCatalogs,
             "publish_provider_publishes_package_in_users_catalog",
         );
-        let user_handle = flox
-            .floxhub_token
-            .expect("expected token to be present")
-            .handle()
-            .to_string();
+        let user_handle = flox.auth_context.handle().unwrap();
         let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
         let packaged_created_guard = publish_provider
-            .create_package_and_possibly_user_catalog(&flox.catalog_client, &user_handle)
+            .create_package_and_possibly_user_catalog(&flox.catalog_client, user_handle)
             .await
             .unwrap();
         publish_provider
             .publish(
                 &flox.catalog_client,
-                &user_handle,
+                user_handle,
                 packaged_created_guard,
                 &build_meta,
                 None,
@@ -2401,9 +2404,7 @@ pub mod tests {
         let res = publish_provider
             .publish(
                 &flox.catalog_client,
-                flox.floxhub_token
-                    .expect("expected token to exist")
-                    .handle(),
+                flox.auth_context.handle().unwrap(),
                 PackageCreatedGuard { _private: () },
                 &build_meta,
                 None,

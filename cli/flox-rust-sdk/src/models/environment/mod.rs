@@ -33,7 +33,6 @@ use super::env_registry::EnvRegistryError;
 use crate::data::{CanonicalPath, CanonicalizeError, System};
 use crate::flox::{Flox, Floxhub};
 use crate::models::environment::generations::GenerationsEnvironment;
-use crate::providers::auth::AuthError;
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{
     GitCommandDiscoverError,
@@ -43,6 +42,7 @@ use crate::providers::git::{
 };
 use crate::providers::lock_manifest::{LockResult, RecoverableMergeError};
 use crate::providers::manifest_init::ManifestInitError;
+use crate::providers::nix_auth::AuthError;
 use crate::utils::copy_file_without_permissions;
 
 mod core_environment;

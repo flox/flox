@@ -5,8 +5,8 @@ use bpaf::Bpaf;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
-use flox_rust_sdk::providers::auth::Auth;
 use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget};
+use flox_rust_sdk::providers::nix_auth::NixAuth;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
     Publisher,
@@ -211,7 +211,7 @@ impl Publish {
             package,
         )?;
 
-        let auth = Auth::from_flox(&flox)?;
+        let auth = NixAuth::from_flox(&flox)?;
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
         // Check that we can publish before building.

@@ -30,11 +30,11 @@ use tempfile::TempPath;
 use thiserror::Error;
 use tracing::{Span, debug, info_span, instrument, trace};
 
-use super::auth::{AuthError, AuthProvider};
 use super::nix::{self, nix_base_command};
+use super::nix_auth::{AuthError, AuthProvider};
 use crate::data::System;
 use crate::models::nix_plugins::NIX_PLUGINS;
-use crate::providers::auth::{catalog_auth_to_envs, store_needs_auth};
+use crate::providers::nix_auth::{catalog_auth_to_envs, store_needs_auth};
 use crate::utils::CommandExt;
 
 static BUILDENV_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -1372,11 +1372,11 @@ mod test_helpers {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::providers::auth::Auth;
+    use crate::providers::nix_auth::NixAuth;
 
-    pub(super) fn buildenv_instance() -> BuildEnvNix<TempDir, Auth> {
+    pub(super) fn buildenv_instance() -> BuildEnvNix<TempDir, NixAuth> {
         let tempdir = TempDir::new().unwrap();
-        let auth = Auth::from_tempdir_and_token(TempDir::new().unwrap(), None);
+        let auth = NixAuth::from_tempdir_and_token(TempDir::new().unwrap(), None);
         BuildEnvNix::new(tempdir, auth)
     }
 }
@@ -1394,8 +1394,8 @@ mod realise_nixpkgs_tests {
     use test_helpers::buildenv_instance;
 
     use super::*;
-    use crate::providers::auth::Auth;
     use crate::providers::nix::test_helpers::known_store_path;
+    use crate::providers::nix_auth::NixAuth;
 
     /// When a package is not available in the store, it should be built from its derivation.
     /// This test sets a known invalid store path to trigger a rebuild of the 'hello' package.
@@ -1419,7 +1419,7 @@ mod realise_nixpkgs_tests {
 
         let buildenv = buildenv_instance();
 
-        let result = BuildEnvNix::<PathBuf, Auth>::realise_single_base_catalog_pkg(
+        let result = BuildEnvNix::<PathBuf, NixAuth>::realise_single_base_catalog_pkg(
             &locked_package,
             buildenv.gc_root_base_path.path(),
             Span::current(),
@@ -1441,7 +1441,7 @@ mod realise_nixpkgs_tests {
 
         // build the package to ensure it is in the store
         let buildenv = buildenv_instance();
-        BuildEnvNix::<PathBuf, Auth>::realise_single_base_catalog_pkg(
+        BuildEnvNix::<PathBuf, NixAuth>::realise_single_base_catalog_pkg(
             &locked_package,
             buildenv.gc_root_base_path.path(),
             Span::current(),
@@ -1451,7 +1451,7 @@ mod realise_nixpkgs_tests {
 
         // replace the attr_path with one that is known to fail to evaluate
         locked_package.attr_path = "AAAAAASomeThingsFailToEvaluate".to_string();
-        BuildEnvNix::<PathBuf, Auth>::realise_single_base_catalog_pkg(
+        BuildEnvNix::<PathBuf, NixAuth>::realise_single_base_catalog_pkg(
             &locked_package,
             buildenv.gc_root_base_path.path(),
             Span::current(),
@@ -1484,7 +1484,7 @@ mod realise_nixpkgs_tests {
         locked_package.attr_path = "AAAAAASomeThingsFailToEvaluate".to_string();
 
         let buildenv = buildenv_instance();
-        let result = BuildEnvNix::<PathBuf, Auth>::realise_single_base_catalog_pkg(
+        let result = BuildEnvNix::<PathBuf, NixAuth>::realise_single_base_catalog_pkg(
             &locked_package,
             buildenv.gc_root_base_path.path(),
             Span::current(),
@@ -1516,7 +1516,7 @@ mod realise_nixpkgs_tests {
         );
 
         let buildenv = buildenv_instance();
-        let result = BuildEnvNix::<PathBuf, Auth>::realise_single_base_catalog_pkg(
+        let result = BuildEnvNix::<PathBuf, NixAuth>::realise_single_base_catalog_pkg(
             &locked_package,
             buildenv.gc_root_base_path.path(),
             Span::current(),
@@ -1548,7 +1548,7 @@ mod realise_nixpkgs_tests {
         );
 
         let buildenv = buildenv_instance();
-        let result = BuildEnvNix::<PathBuf, Auth>::realise_single_base_catalog_pkg(
+        let result = BuildEnvNix::<PathBuf, NixAuth>::realise_single_base_catalog_pkg(
             &locked_package,
             buildenv.gc_root_base_path.path(),
             Span::current(),
@@ -1593,7 +1593,7 @@ mod realise_nixpkgs_tests {
         };
 
         let buildenv = buildenv_instance();
-        let subst_resp = BuildEnvNix::<PathBuf, Auth>::realise_single_custom_catalog_pkg(
+        let subst_resp = BuildEnvNix::<PathBuf, NixAuth>::realise_single_custom_catalog_pkg(
             &locked_package,
             buildenv.gc_root_base_path.path(),
             &store_locations,
@@ -1639,7 +1639,7 @@ mod realise_nixpkgs_tests {
 
         let buildenv = buildenv_instance();
         let dummy_netrc = Some(&PathBuf::from("/netrc"));
-        let subst_resp = BuildEnvNix::<PathBuf, Auth>::realise_single_custom_catalog_pkg(
+        let subst_resp = BuildEnvNix::<PathBuf, NixAuth>::realise_single_custom_catalog_pkg(
             &locked_package,
             buildenv.gc_root_base_path.path(),
             &store_locations,
@@ -1677,7 +1677,7 @@ mod realise_nixpkgs_tests {
         };
 
         let buildenv = buildenv_instance();
-        let result = BuildEnvNix::<PathBuf, Auth>::realise_single_custom_catalog_pkg(
+        let result = BuildEnvNix::<PathBuf, NixAuth>::realise_single_custom_catalog_pkg(
             &locked_package,
             buildenv.gc_root_base_path.path(),
             &store_locations,
@@ -1933,7 +1933,7 @@ mod realise_store_path_tests {
     use test_helpers::buildenv_instance;
 
     use super::*;
-    use crate::providers::auth::Auth;
+    use crate::providers::nix_auth::NixAuth;
 
     fn mock_store_path(valid: bool) -> LockedPackageStorePath {
         LockedPackageStorePath {
@@ -1957,7 +1957,7 @@ mod realise_store_path_tests {
         assert!(buildenv.check_store_path([&locked.store_path]).unwrap());
         let span = info_span!("dummy");
 
-        BuildEnvNix::<PathBuf, Auth>::realise_single_store_path(
+        BuildEnvNix::<PathBuf, NixAuth>::realise_single_store_path(
             &locked,
             buildenv.gc_root_base_path.path(),
             &Default::default(),
@@ -1976,7 +1976,7 @@ mod realise_store_path_tests {
         assert!(!buildenv.check_store_path([&locked.store_path]).unwrap());
         let span = info_span!("dummy");
 
-        let result = BuildEnvNix::<PathBuf, Auth>::realise_single_store_path(
+        let result = BuildEnvNix::<PathBuf, NixAuth>::realise_single_store_path(
             &locked,
             buildenv.gc_root_base_path.path(),
             &Default::default(),

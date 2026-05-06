@@ -2,12 +2,12 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use flox_catalog::{
+    AuthContext,
     CatalogClient,
     CatalogClientConfig,
     CatalogMockMode,
     DEFAULT_CATALOG_URL,
     FloxhubToken,
-    auth_strategy_from_method,
 };
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::providers::catalog::Client;
@@ -48,7 +48,7 @@ pub fn init_catalog_client(
             .unwrap_or_else(|| DEFAULT_CATALOG_URL.to_string()),
         extra_headers,
         mock_mode,
-        auth_strategy: auth_strategy_from_method(
+        auth_context: AuthContext::from_mode(
             &config.flox.floxhub_authn_mode,
             config.flox.floxhub_token.as_deref().and_then(|s| {
                 if s.is_empty() {
@@ -57,11 +57,6 @@ pub fn init_catalog_client(
                     FloxhubToken::from_str(s).ok()
                 }
             }),
-            config
-                .flox
-                .catalog_url
-                .clone()
-                .unwrap_or_else(|| DEFAULT_CATALOG_URL.to_string()),
         ),
         user_agent: Some(format!("flox-cli/{}", &*FLOX_VERSION)),
     };

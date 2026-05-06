@@ -18,7 +18,7 @@ use reqwest::header::{self, HeaderMap};
 use tracing::{debug, instrument};
 
 use crate::MapApiErrorExt;
-use crate::auth::AuthStrategy;
+use crate::auth::AuthContext;
 use crate::config::CatalogClientConfig;
 use crate::error::{CatalogClientError, ResolveError, SearchError, VersionsError};
 use crate::mock::MockGuard;
@@ -62,7 +62,7 @@ impl CatalogClient {
             None => config.catalog_url.clone(),
         };
 
-        let hooks = Self::build_request_hooks(config.auth_strategy.clone());
+        let hooks = Self::build_request_hooks(config.auth_context.clone());
 
         let http_client = build_http_client(&config)?;
         let client = APIClient::new_with_client(&effective_url, http_client, hooks);
@@ -106,10 +106,9 @@ impl CatalogClient {
 
     /// Build per-instance request hooks that inject authentication headers.
     ///
-    /// Each `Client` carries its own `RequestHooks`, so auth strategies
-    /// producing single-use tokens (e.g. Kerberos SPNEGO) generate a fresh
-    /// token for every outgoing request without relying on global state.
-    fn build_request_hooks(auth_strategy: std::sync::Arc<dyn AuthStrategy>) -> RequestHooks {
+    /// The `Credential` is captured once at construction time. For Kerberos,
+    /// `authorization_header()` generates a fresh SPNEGO token on each call.
+    fn build_request_hooks(credential: AuthContext) -> RequestHooks {
         RequestHooks {
             pre_request: std::sync::Arc::new(move |request: &mut reqwest::Request| {
                 // Propagate the Sentry trace ID to catalog-server.
@@ -123,7 +122,21 @@ impl CatalogClient {
                     }
                 }
 
-                auth_strategy.add_auth_headers(request.headers_mut());
+                if let Some(result) = credential.authorization_header(request.url()) {
+                    match result {
+                        Ok(value) => {
+                            if let Ok(header_value) = reqwest::header::HeaderValue::from_str(&value)
+                            {
+                                request
+                                    .headers_mut()
+                                    .insert(reqwest::header::AUTHORIZATION, header_value);
+                            }
+                        },
+                        Err(e) => {
+                            tracing::warn!(error = %e, "Failed to produce authorization header")
+                        },
+                    }
+                }
             }),
         }
     }
@@ -660,7 +673,7 @@ fn build_http_client(config: &CatalogClientConfig) -> Result<reqwest::Client, Ca
 
     debug!(
         catalog_url = %config.catalog_url,
-        handle = ?config.auth_strategy.get_handle(),
+        handle = ?config.auth_context.handle(),
         extra_headers = config.extra_headers.len(),
         "building catalog HTTP client"
     );
@@ -714,8 +727,6 @@ pub mod tests {
     use tracing_subscriber::layer::SubscriberExt;
 
     use super::*;
-    use crate::auth_strategy_from_method;
-
     const SENTRY_TRACE_HEADER: &str = "sentry-trace";
 
     fn client_config(url: &str) -> CatalogClientConfig {
@@ -723,14 +734,9 @@ pub mod tests {
             catalog_url: url.to_string(),
             extra_headers: Default::default(),
             mock_mode: Default::default(),
-            auth_strategy: default_strategy(),
+            auth_context: AuthContext::from_mode(&Default::default(), None),
             user_agent: None,
         }
-    }
-
-    fn default_strategy() -> std::sync::Arc<dyn AuthStrategy> {
-        let method: crate::auth::AuthMethod = Default::default();
-        auth_strategy_from_method(&method, None, String::new())
     }
 
     #[tokio::test]

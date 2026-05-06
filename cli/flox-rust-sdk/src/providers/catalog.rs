@@ -634,7 +634,7 @@ pub async fn get_base_nixpkgs_url(
 }
 
 pub mod test_helpers {
-    use flox_catalog::{AuthMethod, DEFAULT_CATALOG_URL};
+    use flox_catalog::{AuthContext, AuthnMode, DEFAULT_CATALOG_URL};
     use pollster::FutureExt;
     use tempfile::TempDir;
 
@@ -645,7 +645,7 @@ pub mod test_helpers {
         set_test_token,
         test_token_from_floxhub_test_users_file,
     };
-    use crate::providers::auth::{Auth, AuthProvider};
+    use crate::providers::nix_auth::{AuthProvider, NixAuth};
 
     pub static UNIT_TEST_GENERATED: LazyLock<PathBuf> =
         LazyLock::new(|| PathBuf::from(std::env::var("UNIT_TEST_GENERATED").unwrap()));
@@ -712,11 +712,7 @@ pub mod test_helpers {
             catalog_url: "https://not_used".to_string(),
             extra_headers: Default::default(),
             mock_mode: CatalogMockMode::Replay(path.as_ref().to_path_buf()),
-            auth_strategy: flox_catalog::auth_strategy_from_method(
-                &AuthMethod::Auth0,
-                None,
-                "https://not_used".to_string(),
-            ),
+            auth_context: AuthContext::from_mode(&AuthnMode::Auth0, None),
             user_agent: None,
         };
         Client::Catalog(
@@ -730,7 +726,7 @@ pub mod test_helpers {
     /// Tests must be run with `#[tokio::test(flavor = "multi_thread")]` to
     /// allow the `MockServer` to run in another thread.
     pub fn auto_recording_catalog_client(filename: &str) -> Client {
-        let auth = Auth::from_tempdir_and_token(TempDir::new().unwrap(), None);
+        let auth = NixAuth::from_tempdir_and_token(TempDir::new().unwrap(), None);
         let record = get_record_directive();
         auto_recording_client_inner(
             filename,
@@ -747,7 +743,7 @@ pub mod test_helpers {
         mut flox: Flox,
         user: PublishTestUser,
         filename: &str,
-    ) -> (Flox, Auth) {
+    ) -> (Flox, NixAuth) {
         let record = get_record_directive();
 
         // FloxHub can load test users from a file, so we read the
@@ -756,7 +752,7 @@ pub mod test_helpers {
         let token = test_token_from_floxhub_test_users_file(user);
 
         set_test_token(&mut flox, token);
-        let auth = Auth::from_flox(&flox).unwrap();
+        let auth = NixAuth::from_flox(&flox).unwrap();
         let base_url = "http://localhost:8010";
         let client = auto_recording_client_inner(filename, base_url, user, &auth, record);
         flox.catalog_client = client;
@@ -769,7 +765,7 @@ pub mod test_helpers {
         filename: &str,
         base_url: &str,
         user: PublishTestUser,
-        auth: &Auth,
+        auth: &NixAuth,
         record: RecordMockData,
     ) -> Client {
         let mut path = UNIT_TEST_GENERATED.join(filename);
@@ -809,11 +805,7 @@ pub mod test_helpers {
             catalog_url: catalog_url.clone(),
             extra_headers: Default::default(),
             mock_mode: mock_mode.clone(),
-            auth_strategy: flox_catalog::auth_strategy_from_method(
-                &AuthMethod::Auth0,
-                auth.token().cloned(),
-                catalog_url.clone(),
-            ),
+            auth_context: AuthContext::from_mode(&AuthnMode::Auth0, auth.token().cloned()),
             user_agent: None,
         };
         let client_inner =

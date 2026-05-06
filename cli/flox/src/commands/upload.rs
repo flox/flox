@@ -2,8 +2,9 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
+use flox_catalog::AuthContext;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::auth::{NixCopyAuth, write_floxhub_netrc};
+use flox_rust_sdk::providers::nix_auth::{NixCopyAuth, write_floxhub_netrc};
 use flox_rust_sdk::providers::publish::ClientSideCatalogStoreConfig;
 use tracing::instrument;
 use url::Url;
@@ -44,10 +45,11 @@ impl Upload {
 
         let store_path = validate_store_path(self.store_path.clone())?;
         let _handle = ensure_auth(&mut flox).await?;
-        let token = flox
-            .floxhub_token
-            .as_ref()
-            .context("FloxHub token required for upload")?;
+        let token = match &flox.auth_context {
+            AuthContext::Auth0(t) => t.as_ref(),
+            _ => None,
+        }
+        .context("FloxHub token required for upload")?; // safe to unwrap because ensure_auth checks for authentication
         let auth_file = write_floxhub_netrc(&flox.temp_dir, token)?;
 
         ClientSideCatalogStoreConfig::upload_store_path(

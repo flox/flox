@@ -38,17 +38,14 @@ async fn main() -> Result<()> {
             .ok()
             .map(|token| token.parse())
             .transpose()?;
-        let auth = flox_catalog::auth_strategy_from_method(
-            &flox_catalog::AuthMethod::Auth0,
-            floxhub_token,
-            catalog_url.clone(),
-        );
+        let auth_context =
+            flox_catalog::AuthContext::from_mode(&flox_catalog::AuthnMode::Auth0, floxhub_token);
 
         let config = CatalogClientConfig {
             catalog_url,
             extra_headers: Default::default(),
             mock_mode: CatalogMockMode::default_from_env(),
-            auth_strategy: auth,
+            auth_context,
             user_agent: None,
         };
 
