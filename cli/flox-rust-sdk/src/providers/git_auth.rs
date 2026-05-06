@@ -1,8 +1,8 @@
 use flox_catalog::AuthContext;
 use url::Url;
 
-use super::git::GitCommandOptions;
 use crate::models::floxmeta::FLOXHUB_TOKEN_ENV_VAR;
+use crate::providers::git::GitCommandOptions;
 
 /// Extension trait for applying authentication to git command options.
 pub trait GitCommandOptionsExt {
@@ -27,8 +27,12 @@ impl GitCommandOptionsExt for GitCommandOptions {
                 }
                 token.secret()
             },
-            AuthContext::Kerberos(_) => {
+            AuthContext::Kerberos(Some(_)) => {
                 tracing::debug!("Kerberos mode — git auth handled natively via ccache");
+                return;
+            },
+            AuthContext::Kerberos(None) => {
+                tracing::warn!("Kerberos mode but no ticket available — git operations will likely fail; run 'kinit'");
                 return;
             },
             AuthContext::Auth0(None) => {
@@ -44,5 +48,75 @@ impl GitCommandOptionsExt for GitCommandOptions {
                 r#"!f(){{ echo "username=oauth"; echo "password=${FLOXHUB_TOKEN_ENV_VAR}"; }}; f"#
             ),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::flox::test_helpers::create_test_token;
+
+    fn test_url() -> Url {
+        Url::parse("https://git.floxhub.com").unwrap()
+    }
+
+    #[test]
+    fn auth0_with_token_sets_credential_helper() {
+        let token = create_test_token("testuser");
+        let auth = AuthContext::Auth0(Some(token.clone()));
+        let mut options = GitCommandOptions::default();
+
+        let mut expected = GitCommandOptions::default();
+        expected.add_env_var(FLOXHUB_TOKEN_ENV_VAR, token.secret());
+        expected.add_config_flag(
+            &format!("credential.{}.helper", test_url()),
+            format!(
+                r#"!f(){{ echo "username=oauth"; echo "password=${FLOXHUB_TOKEN_ENV_VAR}"; }}; f"#
+            ),
+        );
+
+        options.authenticate(&auth, &test_url());
+        assert_eq!(options, expected);
+    }
+
+    #[test]
+    fn auth0_without_token_sets_empty_credential_helper() {
+        let auth = AuthContext::Auth0(None);
+        let mut options = GitCommandOptions::default();
+
+        let mut expected = GitCommandOptions::default();
+        expected.add_env_var(FLOXHUB_TOKEN_ENV_VAR, "");
+        expected.add_config_flag(
+            &format!("credential.{}.helper", test_url()),
+            format!(
+                r#"!f(){{ echo "username=oauth"; echo "password=${FLOXHUB_TOKEN_ENV_VAR}"; }}; f"#
+            ),
+        );
+
+        options.authenticate(&auth, &test_url());
+        assert_eq!(options, expected);
+    }
+
+    #[test]
+    fn kerberos_with_material_is_noop() {
+        let auth = AuthContext::Kerberos(Some(flox_catalog::KerberosMaterial {
+            principal: "user@REALM".to_string(),
+            generate_token: std::sync::Arc::new(|_| Ok("token".to_string())),
+        }));
+        let mut options = GitCommandOptions::default();
+        let expected = GitCommandOptions::default();
+
+        options.authenticate(&auth, &test_url());
+        assert_eq!(options, expected);
+    }
+
+    #[test]
+    fn kerberos_without_material_is_noop() {
+        let auth = AuthContext::Kerberos(None);
+        let mut options = GitCommandOptions::default();
+        let expected = GitCommandOptions::default();
+
+        options.authenticate(&auth, &test_url());
+        assert_eq!(options, expected);
     }
 }
