@@ -9,3 +9,10 @@ or the active environment that was last activated is used.
 
 `-r`, `--reference`
 :   A FloxHub environment, specified in the form `<owner>/<name>`.
+
+`-D`, `--default`
+:   Use your default environment (`<your-user>/default`).
+    When unauthenticated in an interactive context, you will be prompted to
+    log in.
+    In non-interactive contexts (e.g., scripts or CI), this flag will fail
+    with an error when authentication is missing.
