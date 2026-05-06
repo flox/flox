@@ -2190,7 +2190,7 @@ pub mod tests {
 
     // This test ensures that a user's default catalog gets created inline
     // if it doesn't already exist so that individual users can publish
-    // without first needing to pay and create an orgIanization.
+    // without first needing to pay and create an organization.
     #[tokio::test(flavor = "multi_thread")]
     async fn publishes_new_package_for_users_default_catalog_and_creates_catalog() {
         let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata("mypkg3");

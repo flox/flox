@@ -1192,7 +1192,7 @@ pub(super) async fn ensure_environment_trust(
         return Ok(());
     }
 
-    let handle = flox.get_handle();
+    let handle = flox.auth_context.handle();
     if handle == Some(env_ref.owner().as_str()) {
         debug!("{env_prefixed_name} is trusted by auth handle");
         return Ok(());

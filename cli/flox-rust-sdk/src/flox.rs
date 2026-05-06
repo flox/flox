@@ -71,11 +71,6 @@ pub struct Flox {
 }
 
 impl Flox {
-    /// Return the user's handle if a credential is available.
-    pub fn get_handle(&self) -> Option<&str> {
-        self.auth_context.handle()
-    }
-
     /// Set a new token and rebuild the credential to reflect it.
     ///
     /// Note: when using Kerberos authentication, the token is stored but has
@@ -206,7 +201,7 @@ pub mod test_helpers {
     }
 
     /// Set a pre-existing token on a [Flox] instance and rebuild the auth
-    /// strategy so that `get_handle()` and friends see it immediately.
+    /// strategy so that `auth_context.handle()` and friends see it immediately.
     pub fn set_test_token(flox: &mut Flox, token: FloxhubToken) {
         let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, Some(token));
 
@@ -216,7 +211,7 @@ pub mod test_helpers {
     /// Set up test authentication on a [Flox] instance.
     ///
     /// Creates a test token for the given handle, sets it on the instance,
-    /// and rebuilds the auth strategy so that `get_handle()` and friends
+    /// and rebuilds the auth strategy so that `auth_context.handle()` and friends
     /// see the token immediately.
     pub fn set_test_auth(flox: &mut Flox, handle: &str) {
         set_test_token(flox, create_test_token(handle));

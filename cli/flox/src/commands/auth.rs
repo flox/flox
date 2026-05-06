@@ -338,5 +338,5 @@ pub async fn login_flox(flox: &mut Flox) -> Result<String> {
     message::updated("Authentication complete");
     message::updated(format!("Logged in as {handle}"));
 
-    Ok(flox.auth_context.handle().unwrap_or_default().to_string())
+    Ok(handle)
 }

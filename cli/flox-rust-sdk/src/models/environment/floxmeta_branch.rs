@@ -269,7 +269,7 @@ impl FloxmetaBranch {
                 GitRemoteCommandError::RefNotFound(_) => FloxmetaBranchError::UpstreamNotFound {
                     env_ref: pointer.clone().into(),
                     upstream: pointer.floxhub_base_url.to_string(),
-                    user: flox.get_handle().map(str::to_string),
+                    user: flox.auth_context.handle().map(str::to_string),
                 },
                 e => FloxmetaBranchError::Fetch(e),
             })
@@ -329,7 +329,7 @@ fn open_or_clone_floxmeta(
             return Err(FloxmetaBranchError::UpstreamNotFound {
                 env_ref: pointer.clone().into(),
                 upstream: flox.floxhub.base_url().to_string(),
-                user: flox.get_handle().map(str::to_string),
+                user: flox.auth_context.handle().map(str::to_string),
             });
         },
         Err(e) => return Err(FloxmetaBranchError::OpenFloxmeta(e)),
@@ -349,7 +349,7 @@ fn open_or_clone_floxmeta(
                     return Err(FloxmetaBranchError::UpstreamNotFound {
                         env_ref: pointer.clone().into(),
                         upstream: flox.floxhub.base_url().to_string(),
-                        user: flox.get_handle().map(str::to_string),
+                        user: flox.auth_context.handle().map(str::to_string),
                     });
                 },
                 Err(e) => return Err(FloxmetaBranchError::OpenFloxmeta(e)),
