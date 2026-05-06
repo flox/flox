@@ -91,9 +91,7 @@ impl NixAuth {
         match &flox.auth_context {
             AuthContext::Auth0(token) => Ok(Self {
                 floxhub_token: token.clone(),
-                netrc_tempdir: Some(
-                    tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?,
-                ),
+                netrc_tempdir: Some(tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?),
             }),
             AuthContext::Kerberos(_) => Ok(Self {
                 floxhub_token: None,

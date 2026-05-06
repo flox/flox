@@ -32,7 +32,9 @@ impl GitCommandOptionsExt for GitCommandOptions {
                 return;
             },
             AuthContext::Kerberos(None) => {
-                tracing::warn!("Kerberos mode but no ticket available — git operations will likely fail; run 'kinit'");
+                tracing::warn!(
+                    "Kerberos mode but no ticket available — git operations will likely fail; run 'kinit'"
+                );
                 return;
             },
             AuthContext::Auth0(None) => {
