@@ -1003,7 +1003,7 @@ impl EnvironmentSelect {
                     "getting default environment for logged-in user"
                 );
 
-                let env_ref = RemoteEnvironmentRef::new(&user_handle, DEFAULT_NAME)
+                let env_ref = RemoteEnvironmentRef::new(user_handle, DEFAULT_NAME)
                     .context("Failed to construct default environment reference")?;
 
                 let pointer = ManagedPointer::new(
@@ -1068,7 +1068,7 @@ impl EnvironmentSelect {
                     "getting default environment for logged-in user"
                 );
 
-                let env_ref = RemoteEnvironmentRef::new(&user_handle, DEFAULT_NAME)
+                let env_ref = RemoteEnvironmentRef::new(user_handle, DEFAULT_NAME)
                     .context("Failed to construct default environment reference")?;
 
                 let pointer = ManagedPointer::new(
