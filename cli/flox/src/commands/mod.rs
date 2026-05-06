@@ -994,7 +994,7 @@ impl EnvironmentSelect {
                 ConcreteEnvironment::Remote(env)
             },
             EnvironmentSelect::Default => {
-                let user_handle = flox.auth_strategy.get_handle().context(formatdoc! {"
+                let user_handle = flox.auth_context.handle().context(formatdoc! {"
                     The '-D' and '--default' flags require authentication
                 "})?;
 
@@ -1059,7 +1059,7 @@ impl EnvironmentSelect {
             },
 
             EnvironmentSelect::Default => {
-                let user_handle = flox.auth_strategy.get_handle().context(formatdoc! {"
+                let user_handle = flox.auth_context.handle().context(formatdoc! {"
                     The '-D' and '--default' flags require authentication
                 "})?;
 
