@@ -197,10 +197,6 @@ pub fn old_cli_envs(
             context.flox_prompt_environments.clone(),
         ),
         ("_FLOX_SET_PROMPT", context.set_prompt.to_string()),
-        (
-            "_FLOX_ENV_CUDA_DETECTION",
-            context.flox_env_cuda_detection.clone(),
-        ),
         // This is user-facing and documented
         (
             FLOX_ACTIVATE_START_SERVICES_VAR,
@@ -227,6 +223,10 @@ fn add_activate_script_options(
     command.arg("--mode").arg(context.mode.to_string());
 
     command.args(["--start-state-dir", &start_state_dir.to_string_lossy()]);
+
+    if context.attach_ctx.flox_env_cuda_detection == "1" {
+        command.arg("--cuda-detection");
+    }
 }
 
 /// Prior to the refactor, these variables were exported in the activate script

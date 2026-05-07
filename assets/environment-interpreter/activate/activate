@@ -49,7 +49,8 @@ env:,\
 env-project:,\
 mode:,\
 start-state-dir:,\
-skip-hook-on-activate"
+skip-hook-on-activate,\
+cuda-detection"
 USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
 [(-e|--env) <env>] \
 [--env-project <path>] \
@@ -124,6 +125,10 @@ while true; do
       ;;
     --skip-hook-on-activate)
       _skip_hook_on_activate="true"
+      shift
+      ;;
+    --cuda-detection)
+      _FLOX_ENV_CUDA_DETECTION="1"
       shift
       ;;
     --)
