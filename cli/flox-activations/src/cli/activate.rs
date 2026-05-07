@@ -85,10 +85,17 @@ impl ActivateArgs {
         if let Ok(shell_force) = std::env::var("_FLOX_SHELL_FORCE") {
             context.shell = PathBuf::from(shell_force).as_path().try_into()?;
         }
+
+        // Capture env snapshot *before* modifying the process environment so
+        // the diff reflects the true pre-activation state.
+        let vars_from_env = if context.capture_env_diff {
+            VarsFromEnvironment::get_with_snapshot()?
+        } else {
+            VarsFromEnvironment::get()?
+        };
+
         // Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
         unsafe { std::env::remove_var("FLOX_SHELL") };
-
-        let vars_from_env = VarsFromEnvironment::get()?;
 
         let start_id = self.start_or_attach(
             &context,

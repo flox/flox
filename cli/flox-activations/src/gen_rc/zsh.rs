@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use anyhow::Result;
 use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file, unset};
 
-use crate::env_diff::EnvDiff;
 use crate::gen_rc::RM;
+use crate::start_diff::StartDiff;
 
 /// Arguments for generating zsh startup commands
 #[derive(Debug, Clone)]
@@ -22,7 +22,7 @@ pub struct ZshStartupArgs {
 
 pub fn generate_zsh_startup_commands(
     args: &ZshStartupArgs,
-    env_diff: &EnvDiff,
+    start_diff: &StartDiff,
     writer: &mut impl Write,
 ) -> Result<()> {
     let mut stmts = vec![];
@@ -36,7 +36,7 @@ pub fn generate_zsh_startup_commands(
     ));
 
     // Restore environment variables set in the previous initialization.
-    env_diff.generate_statements(&mut stmts);
+    start_diff.generate_statements(&mut stmts);
     // Propagate required variables that are documented as exposed.
     stmts.push(set_unexported_unexpanded(
         "_FLOX_ENV",
@@ -105,7 +105,7 @@ mod tests {
             map
         };
         let deletions = vec!["DELETED_VAR".to_string()];
-        let env_diff = EnvDiff::from_parts(additions, deletions);
+        let start_diff = StartDiff::from_parts(additions, deletions);
         let args = ZshStartupArgs {
             flox_activate_tracelevel: 3,
             activate_d: PathBuf::from("/activate_d"),
@@ -116,7 +116,7 @@ mod tests {
             clean_up: Some("/path/to/rc/file".into()),
         };
         let mut buf = Vec::new();
-        generate_zsh_startup_commands(&args, &env_diff, &mut buf).unwrap();
+        generate_zsh_startup_commands(&args, &start_diff, &mut buf).unwrap();
         let output = String::from_utf8_lossy(&buf);
         let (main_output, last_line) = output
             .strip_suffix('\n')

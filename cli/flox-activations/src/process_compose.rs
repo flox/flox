@@ -11,8 +11,8 @@ use time::OffsetDateTime;
 use time::macros::format_description;
 use tracing::{debug, info};
 
-use crate::activate_script_builder::apply_activation_env;
-use crate::env_diff::EnvDiff;
+use crate::attach_diff::AttachDiff;
+use crate::start_diff::StartDiff;
 use crate::vars_from_env::VarsFromEnvironment;
 
 const BASH_BIN: &str = env!("X_BASH_BIN");
@@ -96,15 +96,15 @@ pub fn start_process_compose_no_services(
     // so these values are the same as what the initial activation captured.
     let vars_from_env = VarsFromEnvironment::get()?;
     // Load the environment diff for the activation that we're attaching to.
-    let env_diff = EnvDiff::from_files(&start_state_dir)?;
-    apply_activation_env(
-        &mut command,
+    let start_diff = StartDiff::from_files(&start_state_dir)?;
+    let attach_diff = AttachDiff::new(
         attach_ctx,
         Some(project),
         subsystem_verbosity,
         vars_from_env,
-        &env_diff,
-    );
+        &start_diff,
+    )?;
+    attach_diff.apply_to_command(&mut command);
 
     command
         .env("NO_COLOR", "1")

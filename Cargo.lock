@@ -1427,9 +1427,11 @@ name = "flox-activations"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "base64",
  "clap",
  "dirs",
  "expect-test",
+ "flate2",
  "flox-core",
  "fslock",
  "glob",
