@@ -341,7 +341,8 @@ impl Activate {
         let mut flox_active_environments = activated_environments();
 
         // Detect if the current environment is already active
-        if flox_active_environments.is_active(&now_active) {
+        let already_active = flox_active_environments.is_active(&now_active);
+        if already_active {
             debug!(
                 "Environment is already active: environment={}. Not adding to active environments",
                 now_active.bare_description()
@@ -460,6 +461,7 @@ impl Activate {
             invocation_type: Some(invocation_type),
             remove_after_reading: true,
             metrics_uuid: flox.metrics_device_uuid,
+            capture_env_diff: flox.features.auto_activate && !already_active,
         };
 
         let tempfile = tempfile::NamedTempFile::new_in(flox.temp_dir)?;

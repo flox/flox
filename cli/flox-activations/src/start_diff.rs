@@ -13,12 +13,12 @@ pub const ENV_DIFF_START_JSON: &str = "start.env.json";
 pub const ENV_DIFF_END_JSON: &str = "end.env.json";
 
 #[derive(Debug, Clone)]
-pub struct EnvDiff {
+pub struct StartDiff {
     pub additions: HashMap<String, String>,
     pub deletions: Vec<String>,
 }
 
-impl EnvDiff {
+impl StartDiff {
     pub fn new() -> Self {
         Self {
             additions: HashMap::new(),
@@ -26,8 +26,8 @@ impl EnvDiff {
         }
     }
 
-    /// Load an EnvDiff from start.env.json and end.env.json files in activation_state_dir
-    pub fn from_files(activation_state_dir: impl AsRef<Path>) -> Result<EnvDiff> {
+    /// Load an StartDiff from start.env.json and end.env.json files in activation_state_dir
+    pub fn from_files(activation_state_dir: impl AsRef<Path>) -> Result<StartDiff> {
         let start_json = activation_state_dir.as_ref().join(ENV_DIFF_START_JSON);
         let end_json = activation_state_dir.as_ref().join(ENV_DIFF_END_JSON);
 
@@ -59,7 +59,7 @@ impl EnvDiff {
     }
 }
 
-impl Default for EnvDiff {
+impl Default for StartDiff {
     fn default() -> Self {
         Self::new()
     }
@@ -77,15 +77,15 @@ fn parse_env_json(path: impl AsRef<Path>) -> Result<HashMap<String, String>> {
 fn from_parsed_files(
     start_env: &HashMap<String, String>,
     end_env: &HashMap<String, String>,
-) -> EnvDiff {
-    let mut env_diff = EnvDiff::new();
+) -> StartDiff {
+    let mut start_diff = StartDiff::new();
 
     for key in start_env.keys() {
         if key.starts_with(BASH_EXPORTED_FUNC_PREFIX) {
             continue;
         }
         if !end_env.contains_key(key) {
-            env_diff.deletions.push(key.clone());
+            start_diff.deletions.push(key.clone());
         }
     }
     for (key, value) in end_env {
@@ -93,10 +93,10 @@ fn from_parsed_files(
             continue;
         }
         if start_env.get(key) != Some(value) {
-            env_diff.additions.insert(key.clone(), value.clone());
+            start_diff.additions.insert(key.clone(), value.clone());
         }
     }
-    env_diff
+    start_diff
 }
 
 #[cfg(test)]

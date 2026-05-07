@@ -99,6 +99,11 @@ pub struct ActivateCtx {
     /// When None, metrics are disabled and Sentry is not initialized.
     #[serde(default)]
     pub metrics_uuid: Option<Uuid>,
+
+    /// Whether to capture the full env diff when attaching.
+    /// Gated behind the auto_activate feature flag.
+    #[serde(default)]
+    pub capture_env_diff: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, derive_more::Display, PartialEq, Serialize)]
