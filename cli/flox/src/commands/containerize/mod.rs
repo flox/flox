@@ -56,10 +56,10 @@ pub struct Containerize {
 }
 impl Containerize {
     #[instrument(name = "containerize", skip_all)]
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
         let mut env = self
             .environment
-            .detect_concrete_environment(&flox, "Containerize")
+            .detect_concrete_environment(&mut flox, "Containerize")
             .await?;
         environment_subcommand_metric!("containerize", env);
 

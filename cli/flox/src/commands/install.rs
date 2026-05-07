@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_catalog::{MsgAttrPathNotFoundNotFoundForAllSystems, MsgAttrPathNotFoundNotInCatalog};
-use flox_core::data::environment_ref::{DEFAULT_NAME, RemoteEnvironmentRef};
+use flox_core::data::environment_ref::DEFAULT_NAME;
 use flox_manifest::compose::{
     COMPOSER_MANIFEST_ID,
     new_package_overrides,
@@ -151,7 +151,7 @@ impl Install {
 
         let mut concrete_environment = match self
             .environment
-            .detect_concrete_environment(&flox, "Install to")
+            .detect_concrete_environment(&mut flox, "Install to")
             .await
         {
             Ok(concrete_environment) => concrete_environment,
@@ -626,7 +626,7 @@ async fn try_create_default_environment_interactive(
     write_user_state_file(&user_state, &user_state_path, lock)
         .context("failed to save default environment choice")?;
 
-    prompt_to_modify_rc_file(&env.env_ref())?;
+    prompt_to_modify_rc_file()?;
 
     Ok(ConcreteEnvironment::Remote(env))
 }
@@ -641,18 +641,18 @@ fn package_list_for_prompt(packages: &[PackageToInstall]) -> Option<String> {
     }
 }
 
-fn prompt_to_modify_rc_file(env_ref: &RemoteEnvironmentRef) -> Result<bool, anyhow::Error> {
+fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
     let shell = Activate::detect_shell_for_in_place()?;
     let shell_cmd = match shell {
-        // TODO: should we use source <(flox activate -r <env_ref>) for bash?
+        // TODO: should we use source <(flox activate --default) for bash?
         // There are unicode quoting issues with the current form
         // We can't use <() for zsh because it blocks input which can make it
         // impossible to Ctrl-C
         ShellWithPath::Bash(_) | ShellWithPath::Zsh(_) => {
-            format!(r#"eval "$(flox activate -r {env_ref} -m run)""#)
+            r#"eval "$(flox activate --default -m run)""#.to_string()
         },
-        ShellWithPath::Tcsh(_) => format!(r#"eval "`flox activate -r {env_ref} -m run`""#),
-        ShellWithPath::Fish(_) => format!("flox activate -r {env_ref} -m run | source"),
+        ShellWithPath::Tcsh(_) => r#"eval "`flox activate --default -m run`""#.to_string(),
+        ShellWithPath::Fish(_) => "flox activate --default -m run | source".to_string(),
     };
     let rc_file_names = match shell {
         ShellWithPath::Bash(_) => vec![".bashrc", ".profile"],

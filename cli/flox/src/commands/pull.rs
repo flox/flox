@@ -90,7 +90,7 @@ struct QueryFunctions {
 
 impl Pull {
     #[instrument(name = "pull", skip_all)]
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
         match self.pull_select {
             PullSelect::NewAbbreviated {
                 remote,
@@ -133,7 +133,7 @@ impl Pull {
             },
             PullSelect::RemoteUpdate { environment, copy } => {
                 let environment = environment
-                    .detect_concrete_environment(&flox, "Pull")
+                    .detect_concrete_environment(&mut flox, "Pull")
                     .await?;
                 environment_subcommand_metric!("pull", environment);
 

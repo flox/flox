@@ -130,12 +130,12 @@ enum SubcommandOrBuildTargets {
 }
 
 impl Build {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
         match self.subcommand_or_targets {
             SubcommandOrBuildTargets::Clean { targets } => {
                 let env = self
                     .environment
-                    .detect_concrete_environment(&flox, "Clean build files of")?;
+                    .detect_concrete_environment(&mut flox, "Clean build files of")?;
                 environment_subcommand_metric!("build::clean", env);
 
                 Self::clean(flox, env, targets).await
@@ -143,7 +143,7 @@ impl Build {
             SubcommandOrBuildTargets::ImportNixpkgs { installable, force } => {
                 let env = self
                     .environment
-                    .detect_concrete_environment(&flox, "Import package definition in")?;
+                    .detect_concrete_environment(&mut flox, "Import package definition in")?;
                 environment_subcommand_metric!("build::import-nixpkgs", env);
 
                 Self::import_nixpkgs(flox, env, installable, force).await
@@ -151,7 +151,7 @@ impl Build {
             SubcommandOrBuildTargets::UpdateCatalogs {} => {
                 let env = self
                     .environment
-                    .detect_concrete_environment(&flox, "Update catalogs in")?;
+                    .detect_concrete_environment(&mut flox, "Update catalogs in")?;
                 environment_subcommand_metric!("build::update-catalogs", env);
 
                 Self::update_catalogs(&flox, env).await
@@ -163,7 +163,7 @@ impl Build {
             } => {
                 let env = self
                     .environment
-                    .detect_concrete_environment(&flox, "Build packages of")?;
+                    .detect_concrete_environment(&mut flox, "Build packages of")?;
                 environment_subcommand_metric!("build", env);
 
                 Self::build(

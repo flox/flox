@@ -78,7 +78,7 @@ impl Push {
 
         let env = self
             .environment
-            .detect_concrete_environment(&flox, "Push")
+            .detect_concrete_environment(&mut flox, "Push")
             .await?;
 
         environment_subcommand_metric!("push", env);

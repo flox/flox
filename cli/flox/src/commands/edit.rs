@@ -91,7 +91,7 @@ impl Edit {
 
         let mut detected_environment = match self
             .environment
-            .detect_concrete_environment(&flox, "Edit")
+            .detect_concrete_environment(&mut flox, "Edit")
             .await
         {
             Ok(concrete_env) => concrete_env,
