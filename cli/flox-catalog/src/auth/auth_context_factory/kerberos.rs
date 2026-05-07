@@ -45,10 +45,13 @@ fn acquire_credential() -> Result<(String, Cred), AuthError> {
     let name = cred.name().map_err(|e| {
         AuthError::NotAuthenticated(format!("Failed to get Kerberos principal name: {e:?}"))
     })?;
-    let display = name.display_name().map_err(|e| {
-        AuthError::NotAuthenticated(format!("Failed to display Kerberos principal name: {e:?}"))
-    })?;
-    let principal = String::from_utf8_lossy(&display[..]).to_string();
+    let local = name
+        .local_name(Some(&GSS_MECH_KRB5))
+        .or_else(|_| name.display_name())
+        .map_err(|e| {
+            AuthError::NotAuthenticated(format!("Failed to resolve Kerberos local name: {e:?}"))
+        })?;
+    let principal = String::from_utf8_lossy(&local[..]).to_string();
     Ok((principal, cred))
 }
 
