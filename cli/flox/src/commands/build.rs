@@ -68,6 +68,18 @@ pub struct SystemOverride {
     pub system: Option<String>,
 }
 
+impl SystemOverride {
+    /// Returns the system override as a borrowed string slice, if set.
+    ///
+    /// Use this at the CLI boundary to pass a `Option<&str>` to SDK functions
+    /// without cloning the underlying `String`.
+    /// When `None`, the build backend falls back to `nix config show system`
+    /// at runtime (see `flox-build.mk`).
+    pub fn as_str(&self) -> Option<&str> {
+        self.system.as_deref()
+    }
+}
+
 #[derive(Bpaf, Clone)]
 pub struct Build {
     #[bpaf(external(dir_environment_select), fallback(Default::default()))]
@@ -171,7 +183,7 @@ impl Build {
                     env,
                     targets,
                     base_catalog_url_select,
-                    system_override.system,
+                    system_override.as_str(),
                 )
                 .await
             },
@@ -216,7 +228,7 @@ impl Build {
         mut env: ConcreteEnvironment,
         packages: Vec<String>,
         nixpkgs_url_select: Option<BaseCatalogUrlSelect>,
-        system_override: Option<String>,
+        system: Option<&str>,
     ) -> Result<()> {
         match &env {
             ConcreteEnvironment::Path(_) => (),
@@ -288,7 +300,7 @@ impl Build {
             &FLOX_INTERPRETER,
             &target_names,
             None,
-            system_override,
+            system,
         )?;
 
         let current_dir = env::current_dir()
@@ -1159,5 +1171,19 @@ mod test {
                 package_name
             );
         }
+    }
+
+    #[test]
+    fn system_override_as_str_none() {
+        let s = SystemOverride { system: None };
+        assert_eq!(s.as_str(), None);
+    }
+
+    #[test]
+    fn system_override_as_str_some() {
+        let s = SystemOverride {
+            system: Some("aarch64-linux".to_string()),
+        };
+        assert_eq!(s.as_str(), Some("aarch64-linux"));
     }
 }

@@ -62,7 +62,7 @@ pub trait ManifestBuilder {
         flox_interpreter: &Path,
         package: &[PackageTargetName],
         build_cache: Option<bool>,
-        system_override: Option<String>,
+        system_override: Option<&str>,
     ) -> Result<BuildResults, ManifestBuilderError>;
 
     fn clean(self, package: &[PackageTargetName]) -> Result<(), ManifestBuilderError>;
@@ -301,7 +301,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         flox_interpreter: &Path,
         packages: &[PackageTargetName],
         build_cache: Option<bool>,
-        system_override: Option<String>,
+        system_override: Option<&str>,
     ) -> Result<BuildResults, ManifestBuilderError> {
         let mut command = self.base_command(self.base_dir);
         command.arg("build");
@@ -310,8 +310,8 @@ impl ManifestBuilder for FloxBuildMk<'_> {
             "EXPRESSION_BUILD_NIXPKGS_URL={expression_build_nixpkgs_url}"
         ));
 
-        if let Some(system_override) = system_override {
-            command.arg(format!("NIX_SYSTEM={system_override}"));
+        if let Some(system) = system_override {
+            command.arg(format!("NIX_SYSTEM={system}"));
         }
 
         command.arg(format!(
