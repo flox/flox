@@ -24,6 +24,7 @@ pub struct FishStartupArgs {
     pub flox_sourcing_rc: bool,
     pub flox_activate_tracer: String,
     pub flox_activations: PathBuf,
+    pub set_prompt: bool,
 }
 
 // N.B. the output of these scripts may be eval'd with backticks which have
@@ -95,8 +96,10 @@ pub fn generate_fish_startup_commands(
     ));
 
     // Set the prompt if we're in an interactive shell.
-    let set_prompt_path = args.activate_d.join("set-prompt.fish");
-    stmts.push(format!("if isatty 1; source '{}'; end;", set_prompt_path.display()).to_stmt());
+    if args.set_prompt {
+        let set_prompt_path = args.activate_d.join("set-prompt.fish");
+        stmts.push(format!("if isatty 1; source '{}'; end;", set_prompt_path.display()).to_stmt());
+    }
 
     // We already customized the PATH and MANPATH, but the user and system
     // dotfiles may have changed them, so finish by doing this again.
@@ -189,6 +192,7 @@ mod tests {
             flox_activate_tracer: "TRACER".into(),
             flox_activations: PathBuf::from("/flox_activations"),
             clean_up: Some("/path/to/rc/file".into()),
+            set_prompt: true,
         };
         let mut buf = Vec::new();
         generate_fish_startup_commands(&args, &start_diff, &mut buf).unwrap();

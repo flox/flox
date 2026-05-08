@@ -196,7 +196,6 @@ pub fn old_cli_envs(
             FLOX_PROMPT_ENVIRONMENTS_VAR,
             context.flox_prompt_environments.clone(),
         ),
-        ("_FLOX_SET_PROMPT", context.set_prompt.to_string()),
         // This is user-facing and documented
         (
             FLOX_ACTIVATE_START_SERVICES_VAR,

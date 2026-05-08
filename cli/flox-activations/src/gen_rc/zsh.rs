@@ -18,6 +18,7 @@ pub struct ZshStartupArgs {
     pub flox_env_project: Option<PathBuf>,
     pub flox_env_description: Option<String>,
     pub clean_up: Option<PathBuf>,
+    pub set_prompt: bool,
 }
 
 pub fn generate_zsh_startup_commands(
@@ -61,6 +62,18 @@ pub fn generate_zsh_startup_commands(
         ));
     }
     stmts.push(source_file(args.activate_d.join("zsh")));
+
+    // Set the prompt if we're in an interactive shell.
+    if args.set_prompt {
+        let set_prompt_path = args.activate_d.join("set-prompt.zsh");
+        stmts.push(
+            format!(
+                "if [[ -o interactive ]]; then source '{}'; fi;",
+                set_prompt_path.display()
+            )
+            .to_stmt(),
+        );
+    }
 
     // The zsh script depends on these variables
     // unset immediately after sourcing to avoid leaking variables
@@ -114,6 +127,7 @@ mod tests {
             flox_env_project: Some("/flox_env_project".into()),
             flox_env_description: Some("env_description".to_string()),
             clean_up: Some("/path/to/rc/file".into()),
+            set_prompt: true,
         };
         let mut buf = Vec::new();
         generate_zsh_startup_commands(&args, &start_diff, &mut buf).unwrap();
@@ -135,6 +149,7 @@ mod tests {
             typeset -g _FLOX_ENV_PROJECT=/flox_env_project;
             typeset -g _FLOX_ENV_DESCRIPTION=env_description;
             source /activate_d/zsh;
+            if [[ -o interactive ]]; then source '/activate_d/set-prompt.zsh'; fi;
             unset _FLOX_ENV;
             unset _FLOX_ENV_CACHE;
             unset _FLOX_ENV_PROJECT;

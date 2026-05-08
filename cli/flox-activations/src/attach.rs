@@ -123,6 +123,8 @@ fn startup_ctx(
     // Get env_project from project context if present (None for containers)
     let env_project = ctx.project_ctx.as_ref().map(|e| e.env_project.clone());
 
+    let set_prompt = ctx.attach_ctx.set_prompt;
+
     let args = match ctx.shell {
         ShellWithPath::Bash(_) => {
             let bashrc_path = if let Some(home_dir) = dirs::home_dir() {
@@ -148,6 +150,7 @@ fn startup_ctx(
                 flox_activate_tracer: activate_tracer.to_string(),
                 flox_activations,
                 clean_up,
+                set_prompt,
             })
         },
         ShellWithPath::Fish(_) => StartupArgs::Fish(FishStartupArgs {
@@ -162,6 +165,7 @@ fn startup_ctx(
             flox_activate_tracer: activate_tracer.to_string(),
             flox_activations,
             clean_up,
+            set_prompt,
         }),
         ShellWithPath::Tcsh(_) => StartupArgs::Tcsh(TcshStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
@@ -175,6 +179,7 @@ fn startup_ctx(
             flox_activate_tracer: activate_tracer.to_string(),
             flox_activations,
             clean_up,
+            set_prompt,
         }),
         ShellWithPath::Zsh(_) => StartupArgs::Zsh(ZshStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
@@ -184,6 +189,7 @@ fn startup_ctx(
             flox_env_project: env_project.clone(),
             flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
             clean_up,
+            set_prompt,
         }),
     };
 
