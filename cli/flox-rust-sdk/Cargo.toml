@@ -13,6 +13,7 @@ derive_more.workspace = true
 enum_dispatch.workspace = true
 fslock.workspace = true
 futures.workspace = true
+glob.workspace = true
 flox-core.workspace = true
 git-url-parse.workspace = true
 indent.workspace = true

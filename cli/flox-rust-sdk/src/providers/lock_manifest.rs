@@ -440,6 +440,19 @@ impl LockManifest {
             return Ok((manifest.clone(), None));
         }
 
+        // Expand glob patterns in include descriptors into concrete paths.
+        let expanded_environments =
+            include_fetcher.expand_descriptors(&manifest.include.environments)?;
+
+        if expanded_environments.is_empty() {
+            if to_upgrade.is_some() {
+                return Err(RecoverableMergeError::Catchall(
+                    "environment has no included environments".to_string(),
+                ));
+            }
+            return Ok((manifest.clone(), None));
+        }
+
         debug!("composing included environments");
 
         // Fetch included manifests we don't already have in seed_lockfile.
@@ -450,7 +463,7 @@ impl LockManifest {
             .as_ref()
             .map(|to_upgrade| to_upgrade.is_empty())
             .unwrap_or(false);
-        for include_environment in &manifest.include.environments {
+        for include_environment in &expanded_environments {
             debug!(
                 name = include_environment.to_string(),
                 "inspecting included environment"
@@ -3837,5 +3850,347 @@ mod tests {
             .as_typed_only(),
             "composer should include fields from both indirect child includes"
         )
+    }
+
+    /// [LockManifest::merge_manifest] expands glob patterns in include
+    /// descriptors and merges the discovered environments
+    #[test]
+    fn merge_manifest_expands_glob_includes() {
+        let (flox, tempdir) = flox_instance();
+        let manifest_contents = with_latest_schema(indoc! {r#"
+        [include]
+        environments = [
+          { dir = "plugins/*" }
+        ]
+        "#});
+        let manifest = toml_edit::de::from_str::<ManifestLatest>(&manifest_contents).unwrap();
+
+        // Create plugins/a environment
+        let plugin_a_path = tempdir.path().join("plugins/a");
+        let plugin_a_manifest = with_latest_schema(indoc! {r#"
+        [vars]
+        from_a = "hello"
+        "#});
+        std::fs::create_dir_all(&plugin_a_path).unwrap();
+        let mut plugin_a = new_path_environment_in(&flox, &plugin_a_manifest, &plugin_a_path);
+        plugin_a.lockfile(&flox).unwrap();
+
+        // Create plugins/b environment
+        let plugin_b_path = tempdir.path().join("plugins/b");
+        let plugin_b_manifest = with_latest_schema(indoc! {r#"
+        [vars]
+        from_b = "world"
+        "#});
+        std::fs::create_dir_all(&plugin_b_path).unwrap();
+        let mut plugin_b = new_path_environment_in(&flox, &plugin_b_manifest, &plugin_b_path);
+        plugin_b.lockfile(&flox).unwrap();
+
+        // Merge
+        let (merged, compose) = LockManifest::merge_manifest(
+            &flox,
+            &manifest,
+            None,
+            &IncludeFetcher {
+                base_directory: Some(tempdir.path().to_path_buf()),
+            },
+            ManifestMerger::Shallow(ShallowMerger),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(merged, ManifestLatest {
+            vars: Vars::from_map(BTreeMap::from([
+                ("from_a".to_string(), "hello".to_string()),
+                ("from_b".to_string(), "world".to_string()),
+            ])),
+            ..Default::default()
+        });
+
+        let compose = compose.unwrap();
+        assert_eq!(compose.include.len(), 2);
+        assert_eq!(compose.include[0].descriptor, IncludeDescriptor::Local {
+            dir: "plugins/a".into(),
+            name: None,
+        });
+        assert_eq!(compose.include[1].descriptor, IncludeDescriptor::Local {
+            dir: "plugins/b".into(),
+            name: None,
+        });
+    }
+
+    /// [LockManifest::merge_manifest] reuses cached locked includes when
+    /// re-locking with a seed lockfile containing previously expanded glob
+    /// results
+    #[test]
+    fn merge_manifest_glob_caching_works() {
+        let (flox, tempdir) = flox_instance();
+        let manifest_contents = with_latest_schema(indoc! {r#"
+        [include]
+        environments = [
+          { dir = "plugins/*" }
+        ]
+        "#});
+        let manifest = toml_edit::de::from_str::<ManifestLatest>(&manifest_contents).unwrap();
+
+        // Create plugins/a environment
+        let plugin_a_path = tempdir.path().join("plugins/a");
+        let plugin_a_manifest = with_latest_schema(indoc! {r#"
+        [vars]
+        from_a = "hello"
+        "#});
+        std::fs::create_dir_all(&plugin_a_path).unwrap();
+        let mut plugin_a = new_path_environment_in(&flox, &plugin_a_manifest, &plugin_a_path);
+        plugin_a.lockfile(&flox).unwrap();
+
+        let include_fetcher = IncludeFetcher {
+            base_directory: Some(tempdir.path().to_path_buf()),
+        };
+
+        // First merge (no seed lockfile)
+        let (merged1, compose1) = LockManifest::merge_manifest(
+            &flox,
+            &manifest,
+            None,
+            &include_fetcher,
+            ManifestMerger::Shallow(ShallowMerger),
+            None,
+        )
+        .unwrap();
+
+        // Build a seed lockfile from the first merge
+        let seed_lockfile = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.as_typed_only(),
+            packages: vec![],
+            compose: compose1,
+        };
+
+        // Second merge with seed lockfile (should reuse cached includes)
+        let (merged2, compose2) = LockManifest::merge_manifest(
+            &flox,
+            &manifest,
+            Some(&seed_lockfile),
+            &include_fetcher,
+            ManifestMerger::Shallow(ShallowMerger),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(merged1, merged2);
+        assert_eq!(
+            seed_lockfile.compose.unwrap().include,
+            compose2.unwrap().include,
+        );
+    }
+
+    /// When glob expansion produces multiple environments that define the same
+    /// variable, later environments (lexicographically) override earlier ones,
+    /// consistent with normal include precedence.
+    #[test]
+    fn merge_manifest_glob_variable_override_follows_lex_order() {
+        let (flox, tempdir) = flox_instance();
+        let manifest_contents = with_latest_schema(indoc! {r#"
+        [include]
+        environments = [
+          { dir = "plugins/*" }
+        ]
+        "#});
+        let manifest = toml_edit::de::from_str::<ManifestLatest>(&manifest_contents).unwrap();
+
+        // plugins/a sets shared = "from_a" (lower precedence, sorted first)
+        let plugin_a_path = tempdir.path().join("plugins/a");
+        let plugin_a_manifest = with_latest_schema(indoc! {r#"
+        [vars]
+        shared = "from_a"
+        only_a = "a"
+        "#});
+        std::fs::create_dir_all(&plugin_a_path).unwrap();
+        let mut plugin_a = new_path_environment_in(&flox, &plugin_a_manifest, &plugin_a_path);
+        plugin_a.lockfile(&flox).unwrap();
+
+        // plugins/b sets shared = "from_b" (higher precedence, sorted second)
+        let plugin_b_path = tempdir.path().join("plugins/b");
+        let plugin_b_manifest = with_latest_schema(indoc! {r#"
+        [vars]
+        shared = "from_b"
+        only_b = "b"
+        "#});
+        std::fs::create_dir_all(&plugin_b_path).unwrap();
+        let mut plugin_b = new_path_environment_in(&flox, &plugin_b_manifest, &plugin_b_path);
+        plugin_b.lockfile(&flox).unwrap();
+
+        let (merged, _) = LockManifest::merge_manifest(
+            &flox,
+            &manifest,
+            None,
+            &IncludeFetcher {
+                base_directory: Some(tempdir.path().to_path_buf()),
+            },
+            ManifestMerger::Shallow(ShallowMerger),
+            None,
+        )
+        .unwrap();
+
+        // "shared" should have the value from plugins/b (later in sort order =
+        // higher precedence)
+        assert_eq!(merged, ManifestLatest {
+            vars: Vars::from_map(BTreeMap::from([
+                ("shared".to_string(), "from_b".to_string()),
+                ("only_a".to_string(), "a".to_string()),
+                ("only_b".to_string(), "b".to_string()),
+            ])),
+            ..Default::default()
+        });
+    }
+
+    /// Glob-expanded includes interleave correctly with non-glob includes,
+    /// preserving the manifest's descriptor ordering for merge precedence.
+    #[test]
+    fn merge_manifest_glob_preserves_position_among_non_glob() {
+        let (flox, tempdir) = flox_instance();
+        let manifest_contents = with_latest_schema(indoc! {r#"
+        [include]
+        environments = [
+          { dir = "first" },
+          { dir = "plugins/*" },
+          { dir = "last" }
+        ]
+        "#});
+        let manifest = toml_edit::de::from_str::<ManifestLatest>(&manifest_contents).unwrap();
+
+        // "first" — lowest precedence
+        let first_path = tempdir.path().join("first");
+        let first_manifest = with_latest_schema(indoc! {r#"
+        [vars]
+        val = "first"
+        "#});
+        std::fs::create_dir_all(&first_path).unwrap();
+        let mut first = new_path_environment_in(&flox, &first_manifest, &first_path);
+        first.lockfile(&flox).unwrap();
+
+        // plugins/z — glob match, higher precedence than "first"
+        let plugin_z_path = tempdir.path().join("plugins/z");
+        let plugin_z_manifest = with_latest_schema(indoc! {r#"
+        [vars]
+        val = "plugin_z"
+        "#});
+        std::fs::create_dir_all(&plugin_z_path).unwrap();
+        let mut plugin_z = new_path_environment_in(&flox, &plugin_z_manifest, &plugin_z_path);
+        plugin_z.lockfile(&flox).unwrap();
+
+        // "last" — highest precedence among includes
+        let last_path = tempdir.path().join("last");
+        let last_manifest = with_latest_schema(indoc! {r#"
+        [vars]
+        val = "last"
+        "#});
+        std::fs::create_dir_all(&last_path).unwrap();
+        let mut last = new_path_environment_in(&flox, &last_manifest, &last_path);
+        last.lockfile(&flox).unwrap();
+
+        let (merged, _) = LockManifest::merge_manifest(
+            &flox,
+            &manifest,
+            None,
+            &IncludeFetcher {
+                base_directory: Some(tempdir.path().to_path_buf()),
+            },
+            ManifestMerger::Shallow(ShallowMerger),
+            None,
+        )
+        .unwrap();
+
+        // "last" is the final include descriptor, so its value should win
+        assert_eq!(merged, ManifestLatest {
+            vars: Vars::from_map(BTreeMap::from([("val".to_string(), "last".to_string())])),
+            ..Default::default()
+        });
+    }
+
+    /// [LockManifest::merge_manifest] correctly re-fetches specific
+    /// glob-expanded includes when `to_upgrade` names them by environment name
+    #[test]
+    fn merge_manifest_glob_include_upgrade_by_name() {
+        let (flox, tempdir) = flox_instance();
+        let manifest_contents = with_latest_schema(indoc! {r#"
+        [include]
+        environments = [
+          { dir = "plugins/*" }
+        ]
+        "#});
+        let manifest = toml_edit::de::from_str::<ManifestLatest>(&manifest_contents).unwrap();
+
+        // Create plugins/a environment
+        let plugin_a_path = tempdir.path().join("plugins/a");
+        let plugin_a_manifest_v1 = with_latest_schema(indoc! {r#"
+        [vars]
+        from_a = "v1"
+        "#});
+        std::fs::create_dir_all(&plugin_a_path).unwrap();
+        let mut plugin_a = new_path_environment_in(&flox, &plugin_a_manifest_v1, &plugin_a_path);
+        plugin_a.lockfile(&flox).unwrap();
+
+        // Create plugins/b environment
+        let plugin_b_path = tempdir.path().join("plugins/b");
+        let plugin_b_manifest = with_latest_schema(indoc! {r#"
+        [vars]
+        from_b = "original"
+        "#});
+        std::fs::create_dir_all(&plugin_b_path).unwrap();
+        let mut plugin_b = new_path_environment_in(&flox, &plugin_b_manifest, &plugin_b_path);
+        plugin_b.lockfile(&flox).unwrap();
+
+        let include_fetcher = IncludeFetcher {
+            base_directory: Some(tempdir.path().to_path_buf()),
+        };
+
+        // Initial merge
+        let (_, compose1) = LockManifest::merge_manifest(
+            &flox,
+            &manifest,
+            None,
+            &include_fetcher,
+            ManifestMerger::Shallow(ShallowMerger),
+            None,
+        )
+        .unwrap();
+
+        let seed_lockfile = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.as_typed_only(),
+            packages: vec![],
+            compose: compose1,
+        };
+
+        // Update plugins/a to v2
+        let plugin_a_manifest_v2 = with_latest_schema(indoc! {r#"
+        [vars]
+        from_a = "v2"
+        "#});
+        std::fs::write(
+            plugin_a.manifest_path(&flox).unwrap(),
+            &plugin_a_manifest_v2,
+        )
+        .unwrap();
+        plugin_a.lockfile(&flox).unwrap();
+
+        // Upgrade only "a" by name
+        let (merged, _) = LockManifest::merge_manifest(
+            &flox,
+            &manifest,
+            Some(&seed_lockfile),
+            &include_fetcher,
+            ManifestMerger::Shallow(ShallowMerger),
+            Some(vec!["a".to_string()]),
+        )
+        .unwrap();
+
+        assert_eq!(merged, ManifestLatest {
+            vars: Vars::from_map(BTreeMap::from([
+                ("from_a".to_string(), "v2".to_string()),
+                ("from_b".to_string(), "original".to_string()),
+            ])),
+            ..Default::default()
+        });
     }
 }

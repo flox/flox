@@ -6,7 +6,7 @@ use flox_manifest::lockfile::{LockedInclude, Lockfile};
 use flox_manifest::parsed::common::IncludeDescriptor;
 use flox_manifest::{Manifest, TypedOnly};
 
-use super::{ConcreteEnvironment, EnvironmentError, open_path};
+use super::{ConcreteEnvironment, DOT_FLOX, EnvironmentError, open_path};
 use crate::flox::Flox;
 use crate::models::environment::generations::GenerationsExt;
 use crate::models::environment::managed_environment::ManagedEnvironmentError;
@@ -153,6 +153,88 @@ impl IncludeFetcher {
             base_directory.join(dir)
         })
     }
+
+    /// Expand glob patterns in include descriptors into concrete descriptors.
+    ///
+    /// For each `IncludeDescriptor::Local` whose `dir` contains glob
+    /// metacharacters (`*`, `?`, `[`):
+    /// 1. Validates that `name` is None (glob + name is an error)
+    /// 2. Resolves the pattern against `base_directory`
+    /// 3. Finds all directories matching the pattern that contain a `.flox`
+    ///    subdirectory
+    /// 4. Creates concrete `IncludeDescriptor::Local` entries with the
+    ///    discovered paths, sorted lexicographically for deterministic merge
+    ///    ordering
+    ///
+    /// Non-glob local descriptors and remote descriptors pass through unchanged.
+    /// A glob matching nothing produces zero entries (not an error).
+    pub fn expand_descriptors(
+        &self,
+        descriptors: &[IncludeDescriptor],
+    ) -> Result<Vec<IncludeDescriptor>, RecoverableMergeError> {
+        let mut expanded = Vec::new();
+        for descriptor in descriptors {
+            match descriptor {
+                IncludeDescriptor::Local { dir, name } if contains_glob_chars(dir) => {
+                    if name.is_some() {
+                        return Err(RecoverableMergeError::Catchall(format!(
+                            "'name' cannot be used with glob patterns in include descriptor '{}'.",
+                            dir.display()
+                        )));
+                    }
+
+                    let base = self
+                        .base_directory
+                        .as_ref()
+                        .ok_or(RecoverableMergeError::RemoteCannotIncludeLocal)?;
+
+                    let pattern_path = if dir.is_absolute() {
+                        dir.clone()
+                    } else {
+                        base.join(dir)
+                    };
+
+                    let pattern_str = pattern_path.join(DOT_FLOX).to_string_lossy().to_string();
+
+                    let mut matched_dirs: Vec<PathBuf> = glob::glob(&pattern_str)
+                        .map_err(|e| {
+                            RecoverableMergeError::Catchall(format!(
+                                "Invalid glob pattern '{}': {e}.",
+                                dir.display()
+                            ))
+                        })?
+                        .filter_map(|entry| entry.ok())
+                        .filter_map(|dot_flox_path| dot_flox_path.parent().map(|p| p.to_path_buf()))
+                        .collect();
+
+                    matched_dirs.sort();
+
+                    for matched_dir in matched_dirs {
+                        let result_dir = if dir.is_absolute() {
+                            matched_dir
+                        } else {
+                            matched_dir
+                                .strip_prefix(base)
+                                .unwrap_or(&matched_dir)
+                                .to_path_buf()
+                        };
+                        expanded.push(IncludeDescriptor::Local {
+                            dir: result_dir,
+                            name: None,
+                        });
+                    }
+                },
+                other => expanded.push(other.clone()),
+            }
+        }
+        Ok(expanded)
+    }
+}
+
+/// Returns true if the path string contains glob metacharacters.
+fn contains_glob_chars(path: &Path) -> bool {
+    let s = path.to_string_lossy();
+    s.contains('*') || s.contains('?') || s.contains('[')
 }
 
 pub mod test_helpers {
@@ -468,6 +550,191 @@ mod test {
         assert_eq!(
             fetched_after_upstream_changes, fetched,
             "fetch should get the locked generation"
+        );
+    }
+
+    #[test]
+    fn expand_descriptors_simple_glob() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let base = tempdir.path();
+
+        // Create plugins/a/.flox and plugins/b/.flox
+        fs::create_dir_all(base.join("plugins/a/.flox")).unwrap();
+        fs::create_dir_all(base.join("plugins/b/.flox")).unwrap();
+
+        let fetcher = IncludeFetcher {
+            base_directory: Some(base.to_path_buf()),
+        };
+
+        let descriptors = vec![IncludeDescriptor::Local {
+            dir: PathBuf::from("plugins/*"),
+            name: None,
+        }];
+
+        let expanded = fetcher.expand_descriptors(&descriptors).unwrap();
+
+        assert_eq!(expanded, vec![
+            IncludeDescriptor::Local {
+                dir: PathBuf::from("plugins/a"),
+                name: None,
+            },
+            IncludeDescriptor::Local {
+                dir: PathBuf::from("plugins/b"),
+                name: None,
+            },
+        ]);
+    }
+
+    #[test]
+    fn expand_descriptors_double_star() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let base = tempdir.path();
+
+        // Create nested structure
+        fs::create_dir_all(base.join("plugins/category/deep/.flox")).unwrap();
+        fs::create_dir_all(base.join("plugins/top/.flox")).unwrap();
+
+        let fetcher = IncludeFetcher {
+            base_directory: Some(base.to_path_buf()),
+        };
+
+        let descriptors = vec![IncludeDescriptor::Local {
+            dir: PathBuf::from("plugins/**"),
+            name: None,
+        }];
+
+        let expanded = fetcher.expand_descriptors(&descriptors).unwrap();
+
+        assert_eq!(expanded, vec![
+            IncludeDescriptor::Local {
+                dir: PathBuf::from("plugins/category/deep"),
+                name: None,
+            },
+            IncludeDescriptor::Local {
+                dir: PathBuf::from("plugins/top"),
+                name: None,
+            },
+        ]);
+    }
+
+    #[test]
+    fn expand_descriptors_no_match() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let base = tempdir.path();
+
+        let fetcher = IncludeFetcher {
+            base_directory: Some(base.to_path_buf()),
+        };
+
+        let descriptors = vec![IncludeDescriptor::Local {
+            dir: PathBuf::from("nonexistent/*"),
+            name: None,
+        }];
+
+        let expanded = fetcher.expand_descriptors(&descriptors).unwrap();
+        assert!(expanded.is_empty());
+    }
+
+    #[test]
+    fn expand_descriptors_glob_with_name_errors() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let base = tempdir.path();
+
+        let fetcher = IncludeFetcher {
+            base_directory: Some(base.to_path_buf()),
+        };
+
+        let descriptors = vec![IncludeDescriptor::Local {
+            dir: PathBuf::from("plugins/*"),
+            name: Some("my-name".to_string()),
+        }];
+
+        let err = fetcher.expand_descriptors(&descriptors).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("'name' cannot be used with glob patterns"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn expand_descriptors_non_glob_passthrough() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let base = tempdir.path();
+
+        // Create a .flox dir for a glob match
+        fs::create_dir_all(base.join("plugins/a/.flox")).unwrap();
+
+        let fetcher = IncludeFetcher {
+            base_directory: Some(base.to_path_buf()),
+        };
+
+        let local = IncludeDescriptor::Local {
+            dir: PathBuf::from("some/path"),
+            name: Some("explicit".to_string()),
+        };
+        let remote = IncludeDescriptor::Remote {
+            remote: "owner/name".parse().unwrap(),
+            name: None,
+            generation: None,
+        };
+        let glob_desc = IncludeDescriptor::Local {
+            dir: PathBuf::from("plugins/*"),
+            name: None,
+        };
+
+        let descriptors = vec![local.clone(), remote.clone(), glob_desc];
+
+        let expanded = fetcher.expand_descriptors(&descriptors).unwrap();
+
+        assert_eq!(expanded, vec![local, remote, IncludeDescriptor::Local {
+            dir: PathBuf::from("plugins/a"),
+            name: None,
+        },]);
+    }
+
+    #[test]
+    fn expand_descriptors_skips_dirs_without_dotflox() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let base = tempdir.path();
+
+        // plugins/a has .flox, plugins/b does not
+        fs::create_dir_all(base.join("plugins/a/.flox")).unwrap();
+        fs::create_dir_all(base.join("plugins/b")).unwrap();
+
+        let fetcher = IncludeFetcher {
+            base_directory: Some(base.to_path_buf()),
+        };
+
+        let descriptors = vec![IncludeDescriptor::Local {
+            dir: PathBuf::from("plugins/*"),
+            name: None,
+        }];
+
+        let expanded = fetcher.expand_descriptors(&descriptors).unwrap();
+
+        assert_eq!(expanded, vec![IncludeDescriptor::Local {
+            dir: PathBuf::from("plugins/a"),
+            name: None,
+        }]);
+    }
+
+    #[test]
+    fn expand_descriptors_remote_base_dir_none_errors() {
+        let fetcher = IncludeFetcher {
+            base_directory: None,
+        };
+
+        let descriptors = vec![IncludeDescriptor::Local {
+            dir: PathBuf::from("plugins/*"),
+            name: None,
+        }];
+
+        let err = fetcher.expand_descriptors(&descriptors).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("remote environments cannot include local environments"),
+            "unexpected error: {err}"
         );
     }
 }

@@ -550,7 +550,8 @@ An example `[include]` section is shown below:
 [include]
 environments = [
     { dir = "../path/to/env" },
-    { dir = "../path/to/other/env", name = "myenv" }
+    { dir = "../path/to/other/env", name = "myenv" },
+    { dir = "plugins/*" }
 ]
 ```
 
@@ -585,7 +586,13 @@ The fields in these include descriptors are as follows:
 
 `dir`
 : The local path to the environment to include. This has the same semantics as
-  the `--dir` flag passed to many Flox commands.
+  the `--dir` flag passed to many Flox commands. Glob patterns (`*`, `?`, `[`)
+  are supported for auto-discovering environments. For example,
+  `{ dir = "plugins/*" }` includes all directories one level under `plugins/`
+  that contain a `.flox` subdirectory, and `{ dir = "modules/**" }` matches at
+  any depth. When a glob pattern is used, `name` cannot be specified. Glob
+  matches are sorted lexicographically to produce deterministic merge ordering.
+  A glob matching no directories is not an error.
 
 `reference`
 : The FloxHub reference of an environment to include. This has the same

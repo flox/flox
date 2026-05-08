@@ -1564,6 +1564,7 @@ dependencies = [
  "fslock",
  "futures",
  "git-url-parse",
+ "glob",
  "http 1.4.0",
  "httpmock",
  "indent",
