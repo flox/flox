@@ -26,10 +26,8 @@ pub(super) fn assemble_activate_command(
     start_state_dir: &Path,
 ) -> Command {
     let mut command = Command::new(context.attach_ctx.interpreter_path.join("activate"));
-    command.envs(old_cli_envs(
-        &context.attach_ctx,
-        context.project_ctx.as_ref(),
-    ));
+    command.envs(single_set_envs(&context.attach_ctx));
+    command.envs(double_set_envs(context.project_ctx.as_ref()));
     add_old_activate_script_exports(
         &mut command,
         &context.attach_ctx,
@@ -49,8 +47,23 @@ pub(super) fn assemble_activate_command(
 /// computation) draw from the same data.
 #[derive(Debug, Clone)]
 pub struct AttachDiff {
-    /// Variables to set on the command/shell.
+    /// Variables that we only export once while activating
+    /// - For in-place activations, these are printed as exports
+    /// - For other activations, these are applied as environment variables before we exec
+    ///
+    /// It probably wouldn't hurt to double set them, but for variables we
+    /// control, we currently skip that.
+    pub single_sets: HashMap<String, String>,
+    /// Variables that haven't yet been folded into either single or double sets
+    /// These are handled on a case by case basis in startup scripts
     pub sets: HashMap<String, String>,
+    /// Variables that we set twice for non-in-place activations.
+    /// We set these:
+    /// 1. As environment variables before we exec
+    /// 2. Via our generated startup scripts, after user RC files have run.
+    ///    This ensures we re-apply these variables after they could have been
+    ///    changed, particularly if user RC files contain flox activations
+    pub double_sets: HashMap<String, String>,
     /// Variables to unset from the command/shell.
     pub removals: HashSet<String>,
     /// Pre-encoded diff string for _FLOX_HOOK_DIFF. None if snapshot unavailable.
@@ -63,7 +76,8 @@ impl AttachDiff {
     /// snapshot is available.
     ///
     /// Sources are applied in precedence order (later overrides earlier):
-    /// 1. `old_cli_envs()` — FLOX_* context vars + default nix vars
+    /// 1. `single_set_envs()` / `double_set_envs()` — FLOX_* context vars +
+    ///    default nix vars
     /// 2. `collect_activate_exports()` — activation context vars
     /// 3. `start_diff.additions` / `start_diff.deletions` — from activation scripts
     pub fn new(
@@ -76,12 +90,17 @@ impl AttachDiff {
         // Extract the pre-activation snapshot before consuming vars_from_env.
         let full_env = vars_from_env.full_env.take();
 
+        let single_sets: HashMap<String, String> = single_set_envs(context)
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
+        let double_sets: HashMap<String, String> = double_set_envs(project)
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
+
         // Assemble sets and removals.
         let mut sets: HashMap<String, String> = HashMap::new();
-
-        for (k, v) in old_cli_envs(context, project) {
-            sets.insert(k.to_string(), v);
-        }
 
         let (export_map, removal_list) =
             collect_activate_exports(context, project, subsystem_verbosity, vars_from_env);
@@ -102,8 +121,13 @@ impl AttachDiff {
         }
 
         // Compute the activation diff if we have a pre-activation snapshot.
+        // Fold all three maps into the intended-sets union so the diff sees
+        // the same variables that will end up on the activated environment.
         let encoded_diff = if let Some(ref current_env) = full_env {
-            let diff = diff_env(current_env, &sets, &removals);
+            let mut intended_sets = sets.clone();
+            intended_sets.extend(single_sets.clone());
+            intended_sets.extend(double_sets.clone());
+            let diff = diff_env(current_env, &intended_sets, &removals);
             let encoded = diff.encode()?;
             debug!(
                 "captured activation diff: {} added, {} modified, {} removed ({} bytes encoded)",
@@ -118,7 +142,9 @@ impl AttachDiff {
         };
 
         Ok(Self {
+            single_sets,
             sets,
+            double_sets,
             removals,
             encoded_diff,
         })
@@ -130,6 +156,8 @@ impl AttachDiff {
     /// and sets the _FLOX_HOOK_DIFF env var if a diff was computed.
     pub fn apply_to_command(&self, command: &mut Command) {
         command.envs(&self.sets);
+        command.envs(&self.single_sets);
+        command.envs(&self.double_sets);
         for var in &self.removals {
             command.env_remove(var);
         }
@@ -176,11 +204,7 @@ fn diff_env(
     }
 }
 
-/// Build environment variables from activation context.
-pub fn old_cli_envs(
-    context: &AttachCtx,
-    project: Option<&AttachProjectCtx>,
-) -> HashMap<&'static str, String> {
+pub fn single_set_envs(context: &AttachCtx) -> HashMap<&'static str, String> {
     let mut exports = HashMap::from([
         (
             FLOX_ACTIVE_ENVIRONMENTS_VAR,
@@ -196,18 +220,20 @@ pub fn old_cli_envs(
             FLOX_PROMPT_ENVIRONMENTS_VAR,
             context.flox_prompt_environments.clone(),
         ),
-        // This is user-facing and documented
-        (
-            FLOX_ACTIVATE_START_SERVICES_VAR,
-            project
-                .is_some_and(|p| !p.services_to_start.is_empty())
-                .to_string(),
-        ),
     ]);
 
     exports.extend(default_nix_env_vars());
 
     exports
+}
+
+pub fn double_set_envs(project: Option<&AttachProjectCtx>) -> HashMap<&'static str, String> {
+    HashMap::from([(
+        FLOX_ACTIVATE_START_SERVICES_VAR,
+        project
+            .is_some_and(|p| !p.services_to_start.is_empty())
+            .to_string(),
+    )])
 }
 
 /// Options parsed by getopt in the activate script

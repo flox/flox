@@ -1,9 +1,18 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file, unset};
+use itertools::Itertools;
+use shell_gen::{
+    GenerateShell,
+    Shell,
+    set_exported_unexpanded,
+    set_unexported_unexpanded,
+    source_file,
+    unset,
+};
 
 use crate::gen_rc::RM;
 use crate::start_diff::StartDiff;
@@ -17,6 +26,7 @@ pub struct ZshStartupArgs {
     pub flox_env_cache: Option<PathBuf>,
     pub flox_env_project: Option<PathBuf>,
     pub flox_env_description: Option<String>,
+    pub is_in_place: bool,
     pub clean_up: Option<PathBuf>,
     pub set_prompt: bool,
 }
@@ -24,6 +34,8 @@ pub struct ZshStartupArgs {
 pub fn generate_zsh_startup_commands(
     args: &ZshStartupArgs,
     start_diff: &StartDiff,
+    single_sets: &HashMap<String, String>,
+    double_sets: &HashMap<String, String>,
     writer: &mut impl Write,
 ) -> Result<()> {
     let mut stmts = vec![];
@@ -35,6 +47,17 @@ pub fn generate_zsh_startup_commands(
         "_activate_d",
         args.activate_d.display().to_string(),
     ));
+
+    // For non-in-place activations, these were set as environment variables
+    // prior to exec'ing
+    if args.is_in_place {
+        for (k, v) in single_sets.iter().sorted_by_key(|(k, _)| *k) {
+            stmts.push(set_exported_unexpanded(k, v));
+        }
+    }
+    for (k, v) in double_sets.iter().sorted_by_key(|(k, _)| *k) {
+        stmts.push(set_exported_unexpanded(k, v));
+    }
 
     // Restore environment variables set in the previous initialization.
     start_diff.generate_statements(&mut stmts);
@@ -99,8 +122,6 @@ pub fn generate_zsh_startup_commands(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use expect_test::expect;
 
     use super::*;
@@ -109,16 +130,13 @@ mod tests {
     //  to have it automatically update the expected value when the implementation
     //  changes.
 
-    #[test]
-    fn test_generate_zsh_startup_commands_basic() {
-        let additions = {
-            let mut map = HashMap::new();
-            map.insert("QUOTED_VAR".to_string(), "QUOTED'VALUE".to_string());
-            map.insert("ADDED_VAR".to_string(), "ADDED_VALUE".to_string());
-            map
-        };
-        let deletions = vec!["DELETED_VAR".to_string()];
-        let start_diff = StartDiff::from_parts(additions, deletions);
+    fn basic_args(
+        is_in_place: bool,
+    ) -> (
+        ZshStartupArgs,
+        HashMap<String, String>,
+        HashMap<String, String>,
+    ) {
         let args = ZshStartupArgs {
             flox_activate_tracelevel: 3,
             activate_d: PathBuf::from("/activate_d"),
@@ -126,12 +144,39 @@ mod tests {
             flox_env_cache: Some("/flox_env_cache".into()),
             flox_env_project: Some("/flox_env_project".into()),
             flox_env_description: Some("env_description".to_string()),
+            is_in_place,
             clean_up: Some("/path/to/rc/file".into()),
             set_prompt: true,
         };
+        let single_sets = HashMap::from([
+            ("SINGLE_B".to_string(), "single_b".to_string()),
+            ("SINGLE_A".to_string(), "single_a".to_string()),
+        ]);
+        let double_sets = HashMap::from([("DOUBLE_X".to_string(), "double_x".to_string())]);
+        (args, single_sets, double_sets)
+    }
+
+    fn render(
+        args: &ZshStartupArgs,
+        single_sets: &HashMap<String, String>,
+        double_sets: &HashMap<String, String>,
+    ) -> String {
+        let additions = HashMap::from([
+            ("QUOTED_VAR".to_string(), "QUOTED'VALUE".to_string()),
+            ("ADDED_VAR".to_string(), "ADDED_VALUE".to_string()),
+        ]);
+        let deletions = vec!["DELETED_VAR".to_string()];
+        let start_diff = StartDiff::from_parts(additions, deletions);
         let mut buf = Vec::new();
-        generate_zsh_startup_commands(&args, &start_diff, &mut buf).unwrap();
-        let output = String::from_utf8_lossy(&buf);
+        generate_zsh_startup_commands(args, &start_diff, single_sets, double_sets, &mut buf)
+            .unwrap();
+        String::from_utf8_lossy(&buf).into_owned()
+    }
+
+    #[test]
+    fn test_generate_zsh_startup_commands_subprocess() {
+        let (args, single_sets, double_sets) = basic_args(false);
+        let output = render(&args, &single_sets, &double_sets);
         let (main_output, last_line) = output
             .strip_suffix('\n')
             .unwrap()
@@ -141,6 +186,39 @@ mod tests {
         expect![[r#"
             typeset -g _flox_activate_tracelevel=3;
             typeset -g _activate_d=/activate_d;
+            export DOUBLE_X=double_x;
+            export ADDED_VAR=ADDED_VALUE;
+            export QUOTED_VAR='QUOTED'\''VALUE';
+            unset DELETED_VAR;
+            typeset -g _FLOX_ENV=/flox_env;
+            typeset -g _FLOX_ENV_CACHE=/flox_env_cache;
+            typeset -g _FLOX_ENV_PROJECT=/flox_env_project;
+            typeset -g _FLOX_ENV_DESCRIPTION=env_description;
+            source /activate_d/zsh;
+            if [[ -o interactive ]]; then source '/activate_d/set-prompt.zsh'; fi;
+            unset _FLOX_ENV;
+            unset _FLOX_ENV_CACHE;
+            unset _FLOX_ENV_PROJECT;
+            unset _FLOX_ENV_DESCRIPTION;"#]]
+        .assert_eq(main_output);
+    }
+
+    #[test]
+    fn test_generate_zsh_startup_commands_in_place() {
+        let (args, single_sets, double_sets) = basic_args(true);
+        let output = render(&args, &single_sets, &double_sets);
+        let (main_output, last_line) = output
+            .strip_suffix('\n')
+            .unwrap()
+            .rsplit_once('\n')
+            .unwrap();
+        assert_eq!(last_line, format!("{RM} /path/to/rc/file;"));
+        expect![[r#"
+            typeset -g _flox_activate_tracelevel=3;
+            typeset -g _activate_d=/activate_d;
+            export SINGLE_A=single_a;
+            export SINGLE_B=single_b;
+            export DOUBLE_X=double_x;
             export ADDED_VAR=ADDED_VALUE;
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
