@@ -104,6 +104,11 @@ pub struct ActivateCtx {
     /// Gated behind the auto_activate feature flag.
     #[serde(default)]
     pub capture_env_diff: bool,
+
+    /// Whether to include auto-activation hook code in the activation output.
+    /// Gated behind the auto_activate feature flag.
+    #[serde(default)]
+    pub auto_activate: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, derive_more::Display, PartialEq, Serialize)]

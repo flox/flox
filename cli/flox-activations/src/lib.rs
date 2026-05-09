@@ -3,6 +3,7 @@ pub mod attach;
 pub mod attach_diff;
 pub mod cli;
 pub mod gen_rc;
+pub mod hook;
 pub mod logger;
 pub mod message;
 mod process_compose;

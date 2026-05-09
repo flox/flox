@@ -11,6 +11,7 @@ mod exit;
 mod gc;
 mod general;
 mod generations;
+mod hook_env;
 mod include;
 mod init;
 mod install;
@@ -799,6 +800,10 @@ enum InternalCommands {
     ServicesSocket(
         #[bpaf(external(services_socket::services_socket))] services_socket::ServicesSocket,
     ),
+
+    /// Compute env changes for auto-activation (called on every prompt)
+    #[bpaf(command("hook-env"), hide)]
+    HookEnv(#[bpaf(external(hook_env::hook_env))] hook_env::HookEnv),
 }
 
 impl InternalCommands {
@@ -811,6 +816,7 @@ impl InternalCommands {
             InternalCommands::Exit(args) => args.handle(flox)?,
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
+            InternalCommands::HookEnv(args) => args.handle(flox)?,
         }
         Ok(())
     }
