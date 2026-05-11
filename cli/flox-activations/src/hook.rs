@@ -26,7 +26,7 @@ fn bash_hook(flox_bin: &str) -> String {
   trap - SIGINT;
   return $_prev_exit;
 }};
-if [[ -z "${{PROMPT_COMMAND[*]}}" ]] || [[ ! " ${{PROMPT_COMMAND[*]}} " =~ " _flox_hook " ]]; then
+if [[ ! " ${{PROMPT_COMMAND[*]:-}} " =~ " _flox_hook " ]]; then
   PROMPT_COMMAND=(_flox_hook "${{PROMPT_COMMAND[@]}}");
 fi;
 "#
