@@ -109,6 +109,10 @@ pub struct ActivateCtx {
     /// Gated behind the auto_activate feature flag.
     #[serde(default)]
     pub auto_activate: bool,
+
+    /// Path to the flox binary, used for generating hook code.
+    #[serde(default)]
+    pub flox_bin: String,
 }
 
 #[derive(Clone, Debug, Deserialize, derive_more::Display, PartialEq, Serialize)]
