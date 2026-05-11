@@ -544,11 +544,12 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
     if startup_ctx.act_ctx.auto_activate {
         // Derive the flox binary path from the flox-activations binary path.
         // Both binaries are installed in the same directory.
+        const FLOX_BIN_NAME: &str = "flox";
         let flox_bin = FLOX_ACTIVATIONS_BIN
             .parent()
-            .map(|dir| dir.join("flox"))
+            .map(|dir| dir.join(FLOX_BIN_NAME))
             .and_then(|p| p.to_str().map(String::from))
-            .unwrap_or_else(|| "flox".to_string());
+            .unwrap_or_else(|| FLOX_BIN_NAME.to_string());
         let hook_code = hook_code_for_shell(&startup_ctx.act_ctx.shell, &flox_bin);
         print!("{hook_code}");
     }

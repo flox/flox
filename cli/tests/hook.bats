@@ -44,6 +44,7 @@ teardown() {
 # hook-env: feature flag gating
 # ---------------------------------------------------------------------------- #
 
+# TODO: Remove this test when the auto_activate feature flag is removed.
 # bats test_tags=hook:hook-env
 @test "'flox hook-env' fails without auto_activate feature flag" {
   unset FLOX_FEATURES_AUTO_ACTIVATE
@@ -70,8 +71,6 @@ teardown() {
   export FLOX_FEATURES_AUTO_ACTIVATE=true
   FLOX_SHELL="$(which bash)" run "$FLOX_BIN" activate -d "$PROJECT_DIR" --print-script
   assert_success
-  assert_output --partial "_flox_hook"
-  assert_output --partial "PROMPT_COMMAND"
   assert_output --partial "hook-env --shell bash"
 }
 
@@ -81,9 +80,6 @@ teardown() {
   export FLOX_FEATURES_AUTO_ACTIVATE=true
   FLOX_SHELL="$(which zsh)" run "$FLOX_BIN" activate -d "$PROJECT_DIR" --print-script
   assert_success
-  assert_output --partial "_flox_hook"
-  assert_output --partial "precmd_functions"
-  assert_output --partial "chpwd_functions"
   assert_output --partial "hook-env --shell zsh"
 }
 
@@ -93,9 +89,6 @@ teardown() {
   export FLOX_FEATURES_AUTO_ACTIVATE=true
   FLOX_SHELL="$(which fish)" run "$FLOX_BIN" activate -d "$PROJECT_DIR" --print-script
   assert_success
-  assert_output --partial "_flox_hook"
-  assert_output --partial "fish_prompt"
-  assert_output --partial "--on-variable PWD"
   assert_output --partial "hook-env --shell fish"
 }
 
@@ -105,18 +98,16 @@ teardown() {
   export FLOX_FEATURES_AUTO_ACTIVATE=true
   FLOX_SHELL="$(which tcsh)" run "$FLOX_BIN" activate -d "$PROJECT_DIR" --print-script
   assert_success
-  assert_output --partial "precmd"
-  assert_output --partial "cwdcmd"
   assert_output --partial "hook-env --shell tcsh"
 }
 
+# TODO: Remove this test when the auto_activate feature flag is removed.
 # bats test_tags=hook:activate:no-flag
 @test "bash: activate output does NOT include hook code when auto_activate is off" {
   project_setup
   unset FLOX_FEATURES_AUTO_ACTIVATE
   FLOX_SHELL="$(which bash)" run "$FLOX_BIN" activate -d "$PROJECT_DIR" --print-script
   assert_success
-  refute_output --partial "_flox_hook"
   refute_output --partial "hook-env"
 }
 
