@@ -19,9 +19,11 @@ fn bash_hook(flox_bin: &str) -> String {
     format!(
         r#"_flox_hook() {{
   local _prev_exit=$?;
-  trap '' INT;
-  eval "$("{flox_bin}" hook-env --shell bash)";
-  trap - INT;
+  local _flox_vars;
+  _flox_vars="$("{flox_bin}" hook-env --shell bash)";
+  trap -- '' SIGINT;
+  eval "$_flox_vars";
+  trap - SIGINT;
   return $_prev_exit;
 }};
 if [[ -z "${{PROMPT_COMMAND[*]}}" ]] || [[ ! " ${{PROMPT_COMMAND[*]}} " =~ " _flox_hook " ]]; then
@@ -35,9 +37,11 @@ fn zsh_hook(flox_bin: &str) -> String {
     format!(
         r#"_flox_hook() {{
   local _prev_exit=$?;
-  trap '' INT;
-  eval "$("{flox_bin}" hook-env --shell zsh)";
-  trap - INT;
+  local _flox_vars;
+  _flox_vars="$("{flox_bin}" hook-env --shell zsh)";
+  trap -- '' SIGINT;
+  eval "$_flox_vars";
+  trap - SIGINT;
   return $_prev_exit;
 }};
 if (( ! ${{+functions[_flox_hook]}} )) || [[ ! "${{precmd_functions[(r)_flox_hook]}}" == "_flox_hook" ]]; then
