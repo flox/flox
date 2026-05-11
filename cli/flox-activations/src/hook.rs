@@ -65,20 +65,12 @@ flox() {{
 }
 
 fn fish_hook(flox_bin: &str) -> String {
+    // Fish's command substitution (flox activate) collapses newlines to spaces,
+    // so function definitions must use semicolons as delimiters to survive.
     format!(
-        r#"function _flox_hook --on-event fish_prompt
-  eval ("{flox_bin}" hook-env --shell fish)
-end;
-function _flox_hook_pwd --on-variable PWD
-  eval ("{flox_bin}" hook-env --shell fish)
-end;
-function flox --wraps={flox_bin}
-  if test (count $argv) -ge 1; and test "$argv[1]" = "deactivate"
-    eval (command "{flox_bin}" deactivate --shell fish $argv[2..])
-  else
-    command "{flox_bin}" $argv
-  end
-end;
+        r#"function _flox_hook --on-event fish_prompt; eval ("{flox_bin}" hook-env --shell fish); end;
+function _flox_hook_pwd --on-variable PWD; eval ("{flox_bin}" hook-env --shell fish); end;
+function flox --wraps={flox_bin}; if test (count $argv) -ge 1; and test "$argv[1]" = "deactivate"; eval (command "{flox_bin}" deactivate --shell fish $argv[2..]); else; command "{flox_bin}" $argv; end; end;
 "#
     )
 }
