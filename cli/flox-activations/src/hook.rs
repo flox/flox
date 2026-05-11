@@ -3,9 +3,9 @@ use shell_gen::ShellWithPath;
 /// Generate shell-specific hook registration code for auto-activation.
 ///
 /// The generated code registers a prompt hook that calls `flox hook-env`
-/// on every prompt, matching the behavior of direnv/mise. The hook only
+/// on every prompt, matching the behavior of direnv. The hook only
 /// fires in interactive shells (via PROMPT_COMMAND, precmd, fish_prompt),
-/// so it naturally does not trigger in non-interactive `bash -c` contexts.
+/// so it naturally does not trigger in non-interactive (e.g. `bash -c`) contexts.
 pub fn hook_code_for_shell(shell: &ShellWithPath, flox_bin: &str) -> String {
     match shell {
         ShellWithPath::Bash(_) => bash_hook(flox_bin),

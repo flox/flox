@@ -53,11 +53,11 @@ teardown() {
 }
 
 # bats test_tags=hook:hook-env
-@test "'flox hook-env --shell bash' exits 0 with no output when flag is enabled" {
+@test "'flox hook-env --shell bash' outputs _FLOX_HOOK_FIRED when flag is enabled" {
   export FLOX_FEATURES_AUTO_ACTIVATE=true
   run "$FLOX_BIN" hook-env --shell bash
   assert_success
-  assert_output ""
+  assert_output --partial "_FLOX_HOOK_FIRED"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -141,7 +141,7 @@ teardown() {
   assert_success
 }
 
-# Validates Matthew's comment: hook fires with pushd/popd (interactive prompt)
+# Validate that the hook fires with pushd/popd (interactive prompt)
 # but NOT with 'bash -c "cd ... && foo"' (non-interactive). This is naturally
 # satisfied because PROMPT_COMMAND only runs in interactive bash shells.
 # bats test_tags=hook:behavior:non-interactive
@@ -156,4 +156,73 @@ teardown() {
   run bash -c "eval '$hook_code'; echo done"
   assert_success
   assert_output --partial "done"
+}
+
+# ---------------------------------------------------------------------------- #
+# Hook fires: verify _FLOX_HOOK_FIRED is set per shell
+# ---------------------------------------------------------------------------- #
+
+# Each test has the shell call `flox activate` directly (not pre-captured in
+# a bats variable) to avoid quoting issues across shells.
+
+# bats test_tags=hook:fires:bash
+@test "bash: hook fires and sets _FLOX_HOOK_FIRED to cwd" {
+  project_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  run bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    _flox_hook
+    echo \$_FLOX_HOOK_FIRED
+  "
+  assert_success
+  assert_output --partial "$PWD"
+}
+
+# bats test_tags=hook:fires:zsh
+@test "zsh: hook fires and sets _FLOX_HOOK_FIRED to cwd" {
+  project_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  run zsh -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which zsh)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    _flox_hook
+    echo \$_FLOX_HOOK_FIRED
+  "
+  assert_success
+  assert_output --partial "$PWD"
+}
+
+# bats test_tags=hook:fires:fish
+@test "fish: hook fires and sets _FLOX_HOOK_FIRED to cwd" {
+  project_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  run fish -c "
+    set -gx FLOX_FEATURES_AUTO_ACTIVATE true
+    eval ($FLOX_BIN activate -d $PROJECT_DIR)
+    _flox_hook
+    echo \$_FLOX_HOOK_FIRED
+  "
+  assert_success
+  assert_output --partial "$PWD"
+}
+
+# bats test_tags=hook:fires:tcsh
+@test "tcsh: hook fires and sets _FLOX_HOOK_FIRED to cwd" {
+  project_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  run tcsh -c "
+    setenv FLOX_FEATURES_AUTO_ACTIVATE true
+    eval \`$FLOX_BIN activate -d $PROJECT_DIR\`
+    precmd
+    echo \$_FLOX_HOOK_FIRED
+  "
+  assert_success
+  assert_output --partial "$PWD"
 }

@@ -540,7 +540,7 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
     write_to_stdout(&startup_ctx)?;
 
     // When auto_activate is enabled, append shell hook registration code
-    // so that `flox hook-env` runs on every prompt (like mise/direnv).
+    // so that `flox hook-env` runs on every prompt (like direnv).
     if startup_ctx.act_ctx.auto_activate {
         // Derive the flox binary path from the flox-activations binary path.
         // Both binaries are installed in the same directory.
