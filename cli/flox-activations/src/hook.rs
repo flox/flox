@@ -48,9 +48,11 @@ fn zsh_hook(flox_bin: &str) -> String {
   trap - SIGINT;
   return $_prev_exit;
 }};
+typeset -ag precmd_functions;
 if (( ! ${{+functions[_flox_hook]}} )) || [[ ! "${{precmd_functions[(r)_flox_hook]}}" == "_flox_hook" ]]; then
   precmd_functions=(_flox_hook $precmd_functions);
 fi;
+typeset -ag chpwd_functions;
 if [[ ! "${{chpwd_functions[(r)_flox_hook]}}" == "_flox_hook" ]]; then
   chpwd_functions=(_flox_hook $chpwd_functions);
 fi;
