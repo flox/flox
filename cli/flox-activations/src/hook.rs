@@ -27,13 +27,6 @@ fn bash_hook(flox_bin: &str) -> String {
 if [[ -z "${{PROMPT_COMMAND[*]}}" ]] || [[ ! " ${{PROMPT_COMMAND[*]}} " =~ " _flox_hook " ]]; then
   PROMPT_COMMAND=(_flox_hook "${{PROMPT_COMMAND[@]}}");
 fi;
-flox() {{
-  if [ "$1" = "deactivate" ]; then
-    eval "$(command "{flox_bin}" deactivate --shell bash "${{@:2}}")";
-  else
-    command "{flox_bin}" "$@";
-  fi;
-}};
 "#
     )
 }
@@ -53,13 +46,6 @@ fi;
 if [[ ! "${{chpwd_functions[(r)_flox_hook]}}" == "_flox_hook" ]]; then
   chpwd_functions=(_flox_hook $chpwd_functions);
 fi;
-flox() {{
-  if [ "$1" = "deactivate" ]; then
-    eval "$(command "{flox_bin}" deactivate --shell zsh "${{@:2}}")";
-  else
-    command "{flox_bin}" "$@";
-  fi;
-}};
 "#
     )
 }
@@ -70,7 +56,6 @@ fn fish_hook(flox_bin: &str) -> String {
     format!(
         r#"function _flox_hook --on-event fish_prompt; eval ("{flox_bin}" hook-env --shell fish); end;
 function _flox_hook_pwd --on-variable PWD; eval ("{flox_bin}" hook-env --shell fish); end;
-function flox --wraps={flox_bin}; if test (count $argv) -ge 1; and test "$argv[1]" = "deactivate"; eval (command "{flox_bin}" deactivate --shell fish $argv[2..]); else; command "{flox_bin}" $argv; end; end;
 "#
     )
 }
