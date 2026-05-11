@@ -58,7 +58,7 @@ activate_cuda() {
   export LD_FLOXLIB_FILES_PATH="${LD_FLOXLIB_FILES_PATH:+${LD_FLOXLIB_FILES_PATH}:}$SYSTEM_LIBS"
 }
 
-activate_cuda "/" "$_ldconfig"
+activate_cuda "${_FLOX_TESTING_CUDA_FHS_ROOT:-/}" "${_FLOX_TESTING_CUDA_LDCONFIG:-$_ldconfig}"
 
 # ---------------------------------------------------------------------------- #
 #
