@@ -70,7 +70,7 @@ teardown() {
     export FLOX_SHELL=\$(which bash)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     _flox_hook
-    echo \$_FLOX_HOOK_FIRED
+    printenv _FLOX_HOOK_FIRED
   "
   assert_success
   assert_output --partial "$PWD"
@@ -86,7 +86,7 @@ teardown() {
     export FLOX_SHELL=\$(which zsh)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     _flox_hook
-    echo \$_FLOX_HOOK_FIRED
+    printenv _FLOX_HOOK_FIRED
   "
   assert_success
   assert_output --partial "$PWD"
@@ -101,7 +101,7 @@ teardown() {
     set -gx FLOX_FEATURES_AUTO_ACTIVATE true
     eval ($FLOX_BIN activate -d $PROJECT_DIR)
     _flox_hook
-    echo \$_FLOX_HOOK_FIRED
+    printenv _FLOX_HOOK_FIRED
   "
   assert_success
   assert_output --partial "$PWD"
@@ -116,7 +116,7 @@ teardown() {
     setenv FLOX_FEATURES_AUTO_ACTIVATE true
     eval \`$FLOX_BIN activate -d $PROJECT_DIR\`
     precmd
-    echo \$_FLOX_HOOK_FIRED
+    printenv _FLOX_HOOK_FIRED
   "
   assert_success
   assert_output --partial "$PWD"
