@@ -79,7 +79,7 @@ fn tcsh_hook(flox_bin: &str) -> String {
     format!(
         r#"alias precmd 'eval `{flox_bin} hook-env --shell tcsh`';
 alias cwdcmd 'eval `{flox_bin} hook-env --shell tcsh`';
-alias flox 'if (\!:1 == deactivate) then; eval `{flox_bin} deactivate --shell tcsh \!:2*`; else; command {flox_bin} \!*; endif';
+alias flox 'if ("\!*" =~ deactivate*) then; eval `command {flox_bin} \!* --shell tcsh`; else; command {flox_bin} \!*; endif';
 "#
     )
 }
