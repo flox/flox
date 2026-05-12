@@ -121,3 +121,24 @@ teardown() {
   assert_success
   assert_output --partial "$PWD"
 }
+
+# ---------------------------------------------------------------------------- #
+# Hook auto-fires: verify the prompt hook triggers without manual invocation
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=hook:auto-fires
+@test "bash: hook auto-fires via PROMPT_COMMAND in interactive shell" {
+  project_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  # Set up a .bashrc so the interactive shell has a known prompt
+  export KNOWN_PROMPT="hooktest> "
+  cat >"$HOME/.bashrc" <<EOF
+export PS1="$KNOWN_PROMPT"
+EOF
+  cat >"$HOME/.inputrc" <<EOF
+set enable-bracketed-paste off
+EOF
+
+  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/hook/hook-auto-fires.exp" "$PROJECT_DIR"
+}
