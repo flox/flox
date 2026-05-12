@@ -1,12 +1,13 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
+use shell_gen::Shell;
 
 #[derive(Debug, Clone, Bpaf)]
 pub struct HookEnv {
     /// Shell to emit hook-env code for (bash, zsh, fish, tcsh)
     #[bpaf(long("shell"), argument("SHELL"))]
-    shell: String,
+    shell: Shell,
 }
 
 impl HookEnv {
@@ -19,11 +20,10 @@ impl HookEnv {
         // Temporary: set _FLOX_HOOK_FIRED so we can verify the hook fires.
         // This will be replaced by real environment activation logic.
         let cwd = std::env::current_dir()?.to_string_lossy().to_string();
-        match self.shell.as_str() {
-            "bash" | "zsh" => println!(r#"export _FLOX_HOOK_FIRED="{cwd}";"#),
-            "fish" => println!(r#"set -gx _FLOX_HOOK_FIRED "{cwd}";"#),
-            "tcsh" => println!("setenv _FLOX_HOOK_FIRED {cwd};"),
-            _ => {},
+        match self.shell {
+            Shell::Bash | Shell::Zsh => println!(r#"export _FLOX_HOOK_FIRED="{cwd}";"#),
+            Shell::Fish => println!(r#"set -gx _FLOX_HOOK_FIRED "{cwd}";"#),
+            Shell::Tcsh => println!("setenv _FLOX_HOOK_FIRED {cwd};"),
         }
         Ok(())
     }
