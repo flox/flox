@@ -23,7 +23,7 @@ impl HookEnv {
         match self.shell {
             Shell::Bash | Shell::Zsh => println!(r#"export _FLOX_HOOK_FIRED="{cwd}";"#),
             Shell::Fish => println!(r#"set -gx _FLOX_HOOK_FIRED "{cwd}";"#),
-            Shell::Tcsh => println!("setenv _FLOX_HOOK_FIRED {cwd};"),
+            Shell::Tcsh => println!(r#"setenv _FLOX_HOOK_FIRED "{cwd}";"#),
         }
         Ok(())
     }
