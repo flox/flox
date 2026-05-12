@@ -88,7 +88,7 @@ impl ActivateArgs {
 
         // Capture env snapshot *before* modifying the process environment so
         // the diff reflects the true pre-activation state.
-        let vars_from_env = if context.capture_env_diff {
+        let vars_from_env = if context.auto_activate {
             VarsFromEnvironment::get_with_snapshot()?
         } else {
             VarsFromEnvironment::get()?
