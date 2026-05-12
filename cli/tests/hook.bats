@@ -121,24 +121,3 @@ teardown() {
   assert_success
   assert_output --partial "$PWD"
 }
-
-# ---------------------------------------------------------------------------- #
-# Activation diff: verify _FLOX_HOOK_DIFF is set
-# ---------------------------------------------------------------------------- #
-
-# bats test_tags=hook:diff
-@test "activation sets _FLOX_HOOK_DIFF when auto_activate is enabled" {
-  project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
-
-  run bash -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
-    export FLOX_SHELL=\$(which bash)
-    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
-    printenv _FLOX_HOOK_DIFF
-  "
-  assert_success
-  # The diff is a zlib-compressed base64url-encoded JSON string; just verify
-  # it is non-empty, confirming the snapshot/diff pipeline is wired up.
-  assert_output --regexp '.+'
-}

@@ -24,6 +24,8 @@ pub struct FishStartupArgs {
     pub flox_sourcing_rc: bool,
     pub flox_activate_tracer: String,
     pub flox_activations: PathBuf,
+    pub auto_activate: bool,
+    pub flox_bin: String,
 }
 
 // N.B. the output of these scripts may be eval'd with backticks which have
@@ -152,6 +154,11 @@ pub fn generate_fish_startup_commands(
     for stmt in stmts {
         stmt.generate_with_newline(Shell::Fish, writer)?;
     }
+
+    if args.auto_activate {
+        write!(writer, "{}", crate::hook::fish_hook(&args.flox_bin))?;
+    }
+
     Ok(())
 }
 
@@ -189,6 +196,8 @@ mod tests {
             flox_activate_tracer: "TRACER".into(),
             flox_activations: PathBuf::from("/flox_activations"),
             clean_up: Some("/path/to/rc/file".into()),
+            auto_activate: false,
+            flox_bin: "flox".to_string(),
         };
         let mut buf = Vec::new();
         generate_fish_startup_commands(&args, &start_diff, &mut buf).unwrap();

@@ -18,6 +18,8 @@ pub struct ZshStartupArgs {
     pub flox_env_project: Option<PathBuf>,
     pub flox_env_description: Option<String>,
     pub clean_up: Option<PathBuf>,
+    pub auto_activate: bool,
+    pub flox_bin: String,
 }
 
 pub fn generate_zsh_startup_commands(
@@ -81,6 +83,11 @@ pub fn generate_zsh_startup_commands(
     for stmt in stmts {
         stmt.generate_with_newline(Shell::Zsh, writer)?;
     }
+
+    if args.auto_activate {
+        write!(writer, "{}", crate::hook::zsh_hook(&args.flox_bin))?;
+    }
+
     Ok(())
 }
 
@@ -114,6 +121,8 @@ mod tests {
             flox_env_project: Some("/flox_env_project".into()),
             flox_env_description: Some("env_description".to_string()),
             clean_up: Some("/path/to/rc/file".into()),
+            auto_activate: false,
+            flox_bin: "flox".to_string(),
         };
         let mut buf = Vec::new();
         generate_zsh_startup_commands(&args, &start_diff, &mut buf).unwrap();

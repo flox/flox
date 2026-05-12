@@ -1,21 +1,11 @@
-use shell_gen::ShellWithPath;
+//! Shell-specific hook registration code for auto-activation.
+//!
+//! The generated code registers a prompt hook that calls `flox hook-env`
+//! on every prompt, matching the behavior of direnv. The hook only
+//! fires in interactive shells (via PROMPT_COMMAND, precmd, fish_prompt),
+//! so it naturally does not trigger in non-interactive (e.g. `bash -c`) contexts.
 
-/// Generate shell-specific hook registration code for auto-activation.
-///
-/// The generated code registers a prompt hook that calls `flox hook-env`
-/// on every prompt, matching the behavior of direnv. The hook only
-/// fires in interactive shells (via PROMPT_COMMAND, precmd, fish_prompt),
-/// so it naturally does not trigger in non-interactive (e.g. `bash -c`) contexts.
-pub fn hook_code_for_shell(shell: &ShellWithPath, flox_bin: &str) -> String {
-    match shell {
-        ShellWithPath::Bash(_) => bash_hook(flox_bin),
-        ShellWithPath::Zsh(_) => zsh_hook(flox_bin),
-        ShellWithPath::Fish(_) => fish_hook(flox_bin),
-        ShellWithPath::Tcsh(_) => tcsh_hook(flox_bin),
-    }
-}
-
-fn bash_hook(flox_bin: &str) -> String {
+pub fn bash_hook(flox_bin: &str) -> String {
     format!(
         r#"_flox_hook() {{
   local _prev_exit=$?;
@@ -37,7 +27,7 @@ fi;
     )
 }
 
-fn zsh_hook(flox_bin: &str) -> String {
+pub fn zsh_hook(flox_bin: &str) -> String {
     format!(
         r#"_flox_hook() {{
   local _prev_exit=$?;
@@ -60,7 +50,7 @@ fi;
     )
 }
 
-fn fish_hook(flox_bin: &str) -> String {
+pub fn fish_hook(flox_bin: &str) -> String {
     // Fish's command substitution (flox activate) collapses newlines to spaces,
     // so function definitions must use semicolons as delimiters to survive.
     format!(
@@ -70,7 +60,7 @@ function _flox_hook_pwd --on-variable PWD; "{flox_bin}" hook-env --shell fish | 
     )
 }
 
-fn tcsh_hook(flox_bin: &str) -> String {
+pub fn tcsh_hook(flox_bin: &str) -> String {
     format!(
         r#"alias precmd 'eval `{flox_bin} hook-env --shell tcsh`';
 alias cwdcmd 'eval `{flox_bin} hook-env --shell tcsh`';

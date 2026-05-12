@@ -23,7 +23,6 @@ use crate::gen_rc::fish::{FishStartupArgs, generate_fish_startup_commands};
 use crate::gen_rc::tcsh::{TcshStartupArgs, generate_tcsh_startup_commands};
 use crate::gen_rc::zsh::{ZshStartupArgs, generate_zsh_startup_commands};
 use crate::gen_rc::{StartupArgs, StartupCtx};
-use crate::hook::hook_code_for_shell;
 use crate::start_diff::StartDiff;
 use crate::vars_from_env::VarsFromEnvironment;
 
@@ -149,6 +148,8 @@ fn startup_ctx(
                 flox_activate_tracer: activate_tracer.to_string(),
                 flox_activations,
                 clean_up,
+                auto_activate: ctx.auto_activate,
+                flox_bin: ctx.flox_bin.clone(),
             })
         },
         ShellWithPath::Fish(_) => StartupArgs::Fish(FishStartupArgs {
@@ -163,6 +164,8 @@ fn startup_ctx(
             flox_activate_tracer: activate_tracer.to_string(),
             flox_activations,
             clean_up,
+            auto_activate: ctx.auto_activate,
+            flox_bin: ctx.flox_bin.clone(),
         }),
         ShellWithPath::Tcsh(_) => StartupArgs::Tcsh(TcshStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
@@ -176,6 +179,8 @@ fn startup_ctx(
             flox_activate_tracer: activate_tracer.to_string(),
             flox_activations,
             clean_up,
+            auto_activate: ctx.auto_activate,
+            flox_bin: ctx.flox_bin.clone(),
         }),
         ShellWithPath::Zsh(_) => StartupArgs::Zsh(ZshStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
@@ -185,6 +190,8 @@ fn startup_ctx(
             flox_env_project: env_project.clone(),
             flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
             clean_up,
+            auto_activate: ctx.auto_activate,
+            flox_bin: ctx.flox_bin.clone(),
         }),
     };
 
@@ -538,14 +545,6 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
         script
     );
     write_to_stdout(&startup_ctx)?;
-
-    // When auto_activate is enabled, append shell hook registration code
-    // so that `flox hook-env` runs on every prompt (like direnv).
-    if startup_ctx.act_ctx.auto_activate {
-        let hook_code =
-            hook_code_for_shell(&startup_ctx.act_ctx.shell, &startup_ctx.act_ctx.flox_bin);
-        print!("{hook_code}");
-    }
 
     Ok(())
 }
