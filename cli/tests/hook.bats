@@ -140,5 +140,6 @@ EOF
 set enable-bracketed-paste off
 EOF
 
-  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/hook/hook-auto-fires.exp" "$PROJECT_DIR"
+  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" 'echo _FLOX_HOOK_FIRED="$_FLOX_HOOK_FIRED"'
+  assert_output --partial "_FLOX_HOOK_FIRED=$(realpath "$PROJECT_DIR")"
 }
