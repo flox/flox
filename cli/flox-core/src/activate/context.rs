@@ -100,8 +100,8 @@ pub struct ActivateCtx {
     #[serde(default)]
     pub metrics_uuid: Option<Uuid>,
 
-    /// Whether to include auto-activation hook code and env diff capture
-    /// in the activation output. Gated behind the auto_activate feature flag.
+    /// Whether to include auto-activation hook code in the activation
+    /// output. Gated behind the auto_activate feature flag.
     #[serde(default)]
     pub auto_activate: bool,
 
