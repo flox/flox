@@ -211,7 +211,10 @@ impl Build {
         let builder = FloxBuildMk::new(&flox, &base_dir, &expression_ref, &flox_env_build_outputs);
         builder.clean(&target_names)?;
 
-        message::created("Clean completed successfully");
+        message::updated(format!(
+            "Cleaned build targets: {}",
+            target_names.iter().join(", ")
+        ));
 
         Ok(())
     }
@@ -308,18 +311,16 @@ impl Build {
             .flatten_ok()
             .collect::<Result<Vec<_>, _>>()?;
 
-        let success_prefix = "Builds completed successfully.";
-
         match links_to_print.as_slice() {
             // This case shouldnt occur with the current FloxBuildMk backend,
             // which either errors earlier if nothing will be built,
             // or produces at least one link.
             // Handle anyway for completeness and to avoid erros in case the above changes.
-            [] => message::info(format!("{success_prefix} No outputs created")),
-            [link] => message::created(format!("{success_prefix} Output created: {link}",)),
+            [] => message::info("Completed build with no outputs"),
+            [link] => message::created(format!("Built output: {link}")),
             links => message::created(formatdoc! {"
-                {success_prefix}
-                Outputs created: {}",
+                Built outputs:
+                {}",
                 links.join(", ")
             }),
         }
@@ -413,7 +414,7 @@ impl Build {
         std::fs::write(&package_file, package_content).context("Failed to write package file")?;
 
         message::created(format!(
-            "Package '{}' imported to {}",
+            "Imported package '{}' to {}",
             installable,
             package_file.display()
         ));
@@ -448,7 +449,13 @@ impl Build {
         let config = read_config(&config_path)?;
         let lockfile = lock_config(&config, &flox.catalog_client).await?;
 
-        write_lock(&lockfile, config_path.with_extension("lock"))?;
+        let lockfile_path = config_path.with_extension("lock");
+        write_lock(&lockfile, &lockfile_path)?;
+
+        message::updated(format!(
+            "Updated catalog lockfile at {}",
+            lockfile_path.display()
+        ));
 
         Ok(())
     }
