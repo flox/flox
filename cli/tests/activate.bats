@@ -3504,14 +3504,13 @@ PIDs of the running activations: ${ACTIVATION_PID}"
   case "$NIX_SYSTEM" in
     *-linux)
       VIM_MAN="$(realpath "$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man/man1/vim.1.gz")"
-      run $_man --path vim
-      assert_failure
-      refute_output "$VIM_MAN"
-
       EMACS_MAN="$(realpath "$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man/man1/emacs.1.gz")"
-      run $_man --path emacs
-      assert_failure
-      refute_output "$EMACS_MAN"
+
+      # Neither environment starts out in MANPATH
+      run $_man --path
+      assert_success
+      refute_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
+      refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
 
       # vim gets added to MANPATH
       _man=$_man FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -c "$_man --path vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
