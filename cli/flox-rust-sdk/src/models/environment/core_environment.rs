@@ -25,6 +25,7 @@ use thiserror::Error;
 use tracing::debug;
 
 use super::fetcher::IncludeFetcher;
+use super::install::validate_outputs_against_lockfile;
 use super::uninstall::{UninstallSpec, resolve_specs_to_modifications};
 use super::{
     CanonicalizeError,
@@ -349,6 +350,14 @@ impl CoreEnvironment<ReadOnly> {
             None
         } else {
             let new_manifest = manifest.modify_packages(&modifications)?;
+            // Pre-lock the modified manifest so we can validate requested outputs
+            // for packages on the add path (not yet in the old lockfile).
+            // TODO: this causes double-locking; see the existing TODO above.
+            let existing_lockfile = self.existing_lockfile()?;
+            let new_lockfile: Lockfile = self
+                .lock_without_writing(flox, &new_manifest, existing_lockfile.as_ref())?
+                .into();
+            validate_outputs_against_lockfile(packages, &new_lockfile)?;
             let (built_environments, _) =
                 self.transact_with_manifest(&new_manifest, flox, out_link_prefix)?;
             Some(built_environments)
