@@ -9,7 +9,7 @@ pub use flox_core::util::message::{stderr_supports_color, stdout_supports_color}
 use flox_manifest::compose::{COMPOSER_MANIFEST_ID, Warning};
 use flox_manifest::lockfile::{LockedPackage, Lockfile, PackageOutputs};
 use flox_manifest::parsed::latest::SelectedOutputs;
-use flox_manifest::raw::PackageToInstall;
+use flox_manifest::raw::{PackageToInstall, RawSelectedOutputs};
 use indoc::formatdoc;
 use minus::{ExitStrategy, Pager, page_all};
 use tracing::{debug, info};
@@ -182,17 +182,23 @@ pub(crate) fn packages_already_installed(pkgs: &[PackageToInstall], environment_
 }
 
 pub(crate) fn packages_with_additional_outputs(
-    install_ids_of_new_pkgs: &[String],
+    new_pkgs: &[&PackageToInstall],
     lockfile: &Lockfile,
     current_system: &System,
 ) {
     let mut pkgs_with_additional_outputs = vec![];
-    let pkgs = lockfile.packages.as_slice();
+    let locked_pkgs = lockfile.packages.as_slice();
     // Yes this is n^2, but n is small
-    for install_id in install_ids_of_new_pkgs.iter() {
-        for pkg in pkgs.iter() {
-            if (pkg.install_id() == install_id) && (pkg.system() == current_system) {
-                match pkg {
+    for pkg in new_pkgs.iter() {
+        // When the user explicitly asked for all outputs (^..) the hint is
+        // redundant — they already opted in to everything.
+        if pkg.outputs() == Some(&RawSelectedOutputs::All) {
+            continue;
+        }
+        let install_id = pkg.id();
+        for locked in locked_pkgs.iter() {
+            if (locked.install_id() == install_id) && (locked.system() == current_system) {
+                match locked {
                     LockedPackage::Catalog(locked) => {
                         let maybe_matched = locked.outputs_match_outputs_to_install();
                         if maybe_matched.is_some_and(|matched| !matched) {
