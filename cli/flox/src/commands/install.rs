@@ -270,13 +270,9 @@ impl Install {
         let partitioned = Self::partition_installed_packages(&installed, &installation);
 
         // Print status messages for the installation attempt
-        let install_ids = partitioned
-            .successes
-            .iter()
-            .map(|pkg| pkg.id().to_string())
-            .collect::<Vec<_>>();
+        let successes_ref: Vec<&PackageToInstall> = partitioned.successes.iter().collect();
         message::packages_successfully_installed(&partitioned.successes, &description);
-        message::packages_with_additional_outputs(&install_ids, &lockfile, &flox.system);
+        message::packages_with_additional_outputs(&successes_ref, &lockfile, &flox.system);
         message::packages_installed_with_system_subsets(&partitioned.system_subsets);
         message::packages_already_installed(&partitioned.already_installed, &description);
         message::packages_outputs_updated(&partitioned.outputs_updated, &description);
@@ -783,7 +779,7 @@ fn add_activation_to_rc_file(
 mod tests {
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_manifest::lockfile::{LockedPackage, LockedPackageCatalog, Lockfile};
-    use flox_manifest::raw::{CatalogPackage, PackageToInstall};
+    use flox_manifest::raw::{CatalogPackage, PackageToInstall, RawSelectedOutputs};
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
     use flox_rust_sdk::providers::catalog::SystemEnum;
@@ -1017,10 +1013,17 @@ mod tests {
         // Pick the first system present in the lockfile for the check.
         let system = lockfile.packages[0].system().to_string();
 
-        let install_ids = vec!["bash".to_string()];
+        let pkgs = vec![PackageToInstall::Catalog(CatalogPackage {
+            id: "bash".to_string(),
+            pkg_path: "bashNonInteractive".to_string(),
+            version: None,
+            systems: None,
+            outputs: None,
+        })];
+        let pkgs_ref: Vec<&PackageToInstall> = pkgs.iter().collect();
         let (subscriber, writer) = test_subscriber_message_only();
         async {
-            message::packages_with_additional_outputs(&install_ids, &lockfile, &system);
+            message::packages_with_additional_outputs(&pkgs_ref, &lockfile, &system);
         }
         .with_subscriber(subscriber)
         .await;
@@ -1041,10 +1044,17 @@ mod tests {
         let lockfile: flox_manifest::lockfile::Lockfile = lockfile_contents.parse().unwrap();
         let system = lockfile.packages[0].system().to_string();
 
-        let install_ids = vec!["hello".to_string()];
+        let pkgs = vec![PackageToInstall::Catalog(CatalogPackage {
+            id: "hello".to_string(),
+            pkg_path: "hello".to_string(),
+            version: None,
+            systems: None,
+            outputs: None,
+        })];
+        let pkgs_ref: Vec<&PackageToInstall> = pkgs.iter().collect();
         let (subscriber, writer) = test_subscriber_message_only();
         async {
-            message::packages_with_additional_outputs(&install_ids, &lockfile, &system);
+            message::packages_with_additional_outputs(&pkgs_ref, &lockfile, &system);
         }
         .with_subscriber(subscriber)
         .await;
@@ -1073,10 +1083,17 @@ mod tests {
                 LockedPackage::StorePath(_) => {},
             });
 
-        let install_ids = vec!["hello".to_string()];
+        let pkgs = vec![PackageToInstall::Catalog(CatalogPackage {
+            id: "hello".to_string(),
+            pkg_path: "hello".to_string(),
+            version: None,
+            systems: None,
+            outputs: None,
+        })];
+        let pkgs_ref: Vec<&PackageToInstall> = pkgs.iter().collect();
         let (subscriber, writer) = test_subscriber_message_only();
         async {
-            message::packages_with_additional_outputs(&install_ids, &lockfile, &system);
+            message::packages_with_additional_outputs(&pkgs_ref, &lockfile, &system);
         }
         .with_subscriber(subscriber)
         .await;
@@ -1085,6 +1102,40 @@ mod tests {
         assert!(
             output.is_empty(),
             "expected no message for hello, got: {output:?}"
+        );
+    }
+
+    /// When a package was installed with `^..` (all outputs), no additional-outputs
+    /// hint should be shown — the user already opted in to everything.
+    #[tokio::test]
+    async fn no_additional_outputs_message_when_user_requested_all() {
+        // bash has additional outputs (default is a subset of all), so it normally
+        // triggers the hint. Use it to verify the All-outputs suppression path.
+        let lockfile_contents =
+            std::fs::read_to_string(GENERATED_DATA.join("envs/bash/manifest.lock")).unwrap();
+        let lockfile: flox_manifest::lockfile::Lockfile = lockfile_contents.parse().unwrap();
+        let system = lockfile.packages[0].system().to_string();
+
+        // Package requested with outputs = All (^..)
+        let pkgs = vec![PackageToInstall::Catalog(CatalogPackage {
+            id: "bash".to_string(),
+            pkg_path: "bashNonInteractive".to_string(),
+            version: None,
+            systems: None,
+            outputs: Some(RawSelectedOutputs::All),
+        })];
+        let pkgs_ref: Vec<&PackageToInstall> = pkgs.iter().collect();
+        let (subscriber, writer) = test_subscriber_message_only();
+        async {
+            message::packages_with_additional_outputs(&pkgs_ref, &lockfile, &system);
+        }
+        .with_subscriber(subscriber)
+        .await;
+
+        let output = writer.to_string();
+        assert!(
+            output.is_empty(),
+            "expected no additional-outputs message when user requested all outputs, got: {output:?}"
         );
     }
 }
