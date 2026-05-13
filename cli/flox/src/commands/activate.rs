@@ -92,8 +92,22 @@ pub enum CommandSelect {
     },
 }
 
+#[derive(Bpaf, Clone, Copy)]
+pub enum AutoActivationSubcommand {
+    /// Allow auto-activation for an environment
+    #[bpaf(command, hide)]
+    Allow,
+
+    /// Deny auto-activation for an environment
+    #[bpaf(command, hide)]
+    Deny,
+}
+
 #[derive(Bpaf, Clone)]
 pub struct Activate {
+    #[bpaf(external(auto_activation_subcommand), optional)]
+    pub auto_activation_subcommand: Option<AutoActivationSubcommand>,
+
     #[bpaf(external(environment_select), fallback(Default::default()))]
     pub environment: EnvironmentSelect,
 
@@ -138,6 +152,13 @@ impl Activate {
     }
 
     pub async fn handle(self, mut config: Config, mut flox: Flox) -> Result<()> {
+        // Handle auto-activation subcommands first
+        if let Some(subcommand) = self.auto_activation_subcommand {
+            return self
+                .handle_auto_activation_subcommand(subcommand, config, flox)
+                .await;
+        }
+
         self.validate_service_flags()?;
 
         let mut concrete_environment = match self
@@ -648,6 +669,48 @@ impl Activate {
 
         prompt_envs.join(" ")
     }
+
+    async fn handle_auto_activation_subcommand(
+        self,
+        subcommand: AutoActivationSubcommand,
+        config: Config,
+        mut flox: Flox,
+    ) -> Result<()> {
+        if !flox.features.auto_activate {
+            let cmd_name = match subcommand {
+                AutoActivationSubcommand::Allow => "allow",
+                AutoActivationSubcommand::Deny => "deny",
+            };
+            bail!("Unknown command '{}'.", cmd_name);
+        }
+
+        use crate::commands::general::update_config;
+        use crate::config::AutoActivationPreference;
+
+        let concrete_environment = self
+            .environment
+            .to_concrete_environment(&mut flox, None)
+            .await
+            .context("Failed to find environment")?;
+
+        let env_path = concrete_environment.parent_path()?;
+
+        let (preference, verb) = match subcommand {
+            AutoActivationSubcommand::Allow => (AutoActivationPreference::Allow, "allowed"),
+            AutoActivationSubcommand::Deny => (AutoActivationPreference::Deny, "denied"),
+        };
+
+        let path_str = env_path.display().to_string();
+        let key = format!("auto_activation_preferences.{}", path_str);
+        update_config(&config.flox.config_dir, key, Some(preference))?;
+
+        let description = environment_description(&concrete_environment)?;
+        message::updated(formatdoc! {"
+            Auto-activation {verb} for {description}.
+        "});
+
+        Ok(())
+    }
 }
 
 /// Notify the user of available upgrades
@@ -957,6 +1020,7 @@ mod tests {
     /// Build a minimal Activate with only the service-related flags set.
     fn activate_with_flags(start_services: bool, no_start_services: bool) -> Activate {
         Activate {
+            auto_activation_subcommand: None,
             environment: EnvironmentSelect::default(),
             trust: false,
             print_script: false,

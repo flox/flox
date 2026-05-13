@@ -127,6 +127,11 @@ pub struct FloxConfig {
     /// Controls how the fish shell hook responds to directory changes.
     /// Possible values: `eval_on_arrow` (default), `eval_after_arrow`, `disable_arrow`.
     pub auto_activate_fish_mode: Option<AutoActivateFishMode>,
+
+    /// Per-directory auto-activation preferences.
+    /// Maps absolute paths to explicit allow/deny decisions.
+    #[serde(default)]
+    pub auto_activation_preferences: HashMap<PathBuf, AutoActivationPreference>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -172,6 +177,14 @@ pub enum AutoActivate {
     #[default]
     Allowed,
     Prompt,
+}
+
+/// Auto-activation preference for a specific directory
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum AutoActivationPreference {
+    Allow,
+    Deny,
 }
 
 impl Display for InstallerChannel {

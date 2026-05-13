@@ -397,6 +397,7 @@ pub async fn start_services_with_new_process_compose(
     };
 
     Activate {
+        auto_activation_subcommand: None,
         environment: environment_select,
         // We currently only check for trust for remote environments,
         // but set this to false in case that changes.
