@@ -4054,7 +4054,9 @@ Setting PATH from ${rc_file}"
 
   # Pre-fetch without a timeout.
   # Skip the test if we're running a release
-  if ! OUTPUT=$(nix build "github:flox/flox/v${FLOX_LATEST_VERSION}" 2>&1); then
+  if ! OUTPUT=$(nix build \
+    --extra-experimental-features 'nix-command flakes' \
+    "github:flox/flox/v${FLOX_LATEST_VERSION}" 2>&1); then
     if [[ "$OUTPUT" == *"No commit found for SHA: v${FLOX_LATEST_VERSION}"* ]]; then
       skip "skipping compatibility check for what is likely a release commit"
     else
