@@ -1,17 +1,19 @@
 use anyhow::Result;
-use bpaf::Parser;
+use beta::beta_enabled;
+use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 
 #[derive(Bpaf, Clone)]
 #[bpaf(hide)]
-pub enum BetaCommands {}
-
-pub fn beta_commands() -> impl Parser<BetaCommands> {
-    bpaf::fail::<BetaCommands>("no beta subcommands available")
+pub enum BetaCommands {
+    #[bpaf(command("beta-enabled"), hide)]
+    BetaEnabled(#[bpaf(external(beta_enabled::beta_enabled))] beta_enabled::BetaEnabled),
 }
 
 impl BetaCommands {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
-        match self {}
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        match self {
+            BetaCommands::BetaEnabled(args) => args.handle(flox).await,
+        }
     }
 }
