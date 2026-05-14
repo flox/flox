@@ -24,6 +24,54 @@ use crate::vars_from_env::VarsFromEnvironment;
 
 pub const NO_REMOVE_ACTIVATION_FILES: &str = "_FLOX_NO_REMOVE_ACTIVATION_FILES";
 
+const INITIAL_ACTIVATION_RETRY_DELAY: Duration = Duration::from_millis(25);
+const MAX_ACTIVATION_RETRY_DELAY: Duration = Duration::from_secs(2);
+const ACTIVATION_WARNING_INITIAL_DELAY: Duration = Duration::from_secs(3);
+const ACTIVATION_WARNING_INTERVAL: Duration = Duration::from_secs(15);
+
+#[derive(Debug)]
+struct ActivationRetryBackoff {
+    next_retry_delay: Duration,
+    blocked_since: Instant,
+    next_warning_at: Instant,
+}
+
+impl ActivationRetryBackoff {
+    fn new(now: Instant) -> Self {
+        Self {
+            next_retry_delay: INITIAL_ACTIVATION_RETRY_DELAY,
+            blocked_since: now,
+            next_warning_at: now + ACTIVATION_WARNING_INITIAL_DELAY,
+        }
+    }
+
+    fn next_wait(&mut self, now: Instant) -> ActivationRetryWait {
+        let retry_delay = self.next_retry_delay;
+        self.next_retry_delay = self
+            .next_retry_delay
+            .saturating_mul(2)
+            .min(MAX_ACTIVATION_RETRY_DELAY);
+
+        let blocked_for = if now >= self.next_warning_at {
+            self.next_warning_at = now + ACTIVATION_WARNING_INTERVAL;
+            Some(now.duration_since(self.blocked_since))
+        } else {
+            None
+        };
+
+        ActivationRetryWait {
+            retry_delay,
+            blocked_for,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ActivationRetryWait {
+    retry_delay: Duration,
+    blocked_for: Option<Duration>,
+}
+
 #[derive(Debug, Args)]
 pub struct ActivateArgs {
     /// Path to JSON file containing activation data
@@ -132,9 +180,7 @@ impl ActivateArgs {
         subsystem_verbosity: u32,
         vars_from_env: &VarsFromEnvironment,
     ) -> Result<StartIdentifier, anyhow::Error> {
-        let retry_delay = Duration::from_millis(200);
-        let warning_interval = Duration::from_secs(5);
-        let mut last_warning: Option<Instant> = None;
+        let mut retry_backoff: Option<ActivationRetryBackoff> = None;
 
         loop {
             match self.try_start_or_attach(context, subsystem_verbosity, vars_from_env)? {
@@ -166,18 +212,18 @@ impl ActivateArgs {
                     pid: blocking_pid, ..
                 } => {
                     let now = Instant::now();
-                    let should_warn =
-                        last_warning.is_none_or(|t| now.duration_since(t) >= warning_interval);
+                    let wait = retry_backoff
+                        .get_or_insert_with(|| ActivationRetryBackoff::new(now))
+                        .next_wait(now);
 
-                    if should_warn {
+                    if let Some(blocked_for) = wait.blocked_for {
                         eprintln!(
-                            "⚠️  Waiting for another activation to complete (blocked by PID {})...",
-                            blocking_pid
+                            "⚠️  Activation is blocked by another startup (PID {blocking_pid}).\nRetrying automatically after waiting {} seconds.",
+                            blocked_for.as_secs()
                         );
-                        last_warning = Some(now);
                     }
 
-                    std::thread::sleep(retry_delay);
+                    std::thread::sleep(wait.retry_delay);
                 },
             }
         }
@@ -251,5 +297,65 @@ impl ActivateArgs {
                 Ok(StartOrAttachResult::AlreadyStarting { pid, start_id })
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn activation_retry_backoff_grows_to_cap() {
+        let start = Instant::now();
+        let mut backoff = ActivationRetryBackoff::new(start);
+
+        let waits = (0..9)
+            .map(|_| backoff.next_wait(start).retry_delay)
+            .collect::<Vec<_>>();
+
+        assert_eq!(waits, vec![
+            Duration::from_millis(25),
+            Duration::from_millis(50),
+            Duration::from_millis(100),
+            Duration::from_millis(200),
+            Duration::from_millis(400),
+            Duration::from_millis(800),
+            Duration::from_millis(1600),
+            Duration::from_secs(2),
+            Duration::from_secs(2),
+        ]);
+    }
+
+    #[test]
+    fn activation_retry_warning_is_delayed_and_repeated_less_often() {
+        let start = Instant::now();
+        let mut backoff = ActivationRetryBackoff::new(start);
+
+        assert_eq!(backoff.next_wait(start), ActivationRetryWait {
+            retry_delay: Duration::from_millis(25),
+            blocked_for: None,
+        });
+        assert_eq!(
+            backoff.next_wait(start + ACTIVATION_WARNING_INITIAL_DELAY),
+            ActivationRetryWait {
+                retry_delay: Duration::from_millis(50),
+                blocked_for: Some(ACTIVATION_WARNING_INITIAL_DELAY),
+            }
+        );
+        assert_eq!(
+            backoff.next_wait(start + ACTIVATION_WARNING_INITIAL_DELAY + Duration::from_secs(14)),
+            ActivationRetryWait {
+                retry_delay: Duration::from_millis(100),
+                blocked_for: None,
+            }
+        );
+        assert_eq!(
+            backoff
+                .next_wait(start + ACTIVATION_WARNING_INITIAL_DELAY + ACTIVATION_WARNING_INTERVAL),
+            ActivationRetryWait {
+                retry_delay: Duration::from_millis(200),
+                blocked_for: Some(ACTIVATION_WARNING_INITIAL_DELAY + ACTIVATION_WARNING_INTERVAL),
+            }
+        );
     }
 }
