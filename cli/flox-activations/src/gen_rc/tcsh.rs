@@ -17,9 +17,6 @@ pub struct TcshStartupArgs {
     pub flox_activate_tracelevel: u32,
     pub activate_d: PathBuf,
     pub flox_env: PathBuf,
-    pub flox_env_cache: Option<PathBuf>,
-    pub flox_env_project: Option<PathBuf>,
-    pub flox_env_description: Option<String>,
     pub is_in_place: bool,
     pub clean_up: Option<PathBuf>,
 
@@ -65,37 +62,6 @@ pub fn generate_tcsh_startup_commands(
     // Restore environment variables set in the previous tcsh initialization.
     start_diff.generate_statements(&mut stmts);
 
-    // Propagate required variables that are documented as exposed.
-    stmts.push(set_exported_unexpanded(
-        "FLOX_ENV",
-        args.flox_env.display().to_string(),
-    ));
-
-    // Propagate optional variables that are documented as exposed.
-    if let Some(flox_env_cache) = &args.flox_env_cache {
-        stmts.push(set_exported_unexpanded(
-            "FLOX_ENV_CACHE",
-            flox_env_cache.display().to_string(),
-        ));
-    } else {
-        stmts.push(unset("FLOX_ENV_CACHE"));
-    }
-
-    if let Some(flox_env_project) = &args.flox_env_project {
-        stmts.push(set_exported_unexpanded(
-            "FLOX_ENV_PROJECT",
-            flox_env_project.display().to_string(),
-        ));
-    } else {
-        stmts.push(unset("FLOX_ENV_PROJECT"));
-    }
-
-    if let Some(description) = &args.flox_env_description {
-        stmts.push(set_exported_unexpanded("FLOX_ENV_DESCRIPTION", description));
-    } else {
-        stmts.push(unset("FLOX_ENV_DESCRIPTION"));
-    }
-
     stmts.push(set_exported_unexpanded(
         "_activate_d",
         args.activate_d.display().to_string(),
@@ -104,7 +70,6 @@ pub fn generate_tcsh_startup_commands(
         "_flox_activations",
         args.flox_activations.display().to_string(),
     ));
-
     stmts.push(set_exported_unexpanded(
         "_flox_activate_tracer",
         &args.flox_activate_tracer,
@@ -210,13 +175,13 @@ mod tests {
         expect![[r#"
             set verbose
             setenv FLOX_ACTIVATE_START_SERVICES false;
+            setenv FLOX_ENV /flox_env;
+            setenv FLOX_ENV_CACHE /flox_env_cache;
+            setenv FLOX_ENV_DESCRIPTION env_description;
+            setenv FLOX_ENV_PROJECT /flox_env_project;
             setenv ADDED_VAR ADDED_VALUE;
             setenv QUOTED_VAR 'QUOTED'\''VALUE';
             unsetenv DELETED_VAR;
-            setenv FLOX_ENV /flox_env;
-            setenv FLOX_ENV_CACHE /flox_env_cache;
-            setenv FLOX_ENV_PROJECT /flox_env_project;
-            setenv FLOX_ENV_DESCRIPTION env_description;
             setenv _activate_d /interpreter/activate.d;
             setenv _flox_activations /flox_activations;
             setenv _flox_activate_tracer TRACER;
@@ -244,13 +209,13 @@ mod tests {
             setenv FLOX_PROMPT_ENVIRONMENTS prompt_envs;
             setenv _FLOX_ACTIVE_ENVIRONMENTS active_envs;
             setenv FLOX_ACTIVATE_START_SERVICES false;
+            setenv FLOX_ENV /flox_env;
+            setenv FLOX_ENV_CACHE /flox_env_cache;
+            setenv FLOX_ENV_DESCRIPTION env_description;
+            setenv FLOX_ENV_PROJECT /flox_env_project;
             setenv ADDED_VAR ADDED_VALUE;
             setenv QUOTED_VAR 'QUOTED'\''VALUE';
             unsetenv DELETED_VAR;
-            setenv FLOX_ENV /flox_env;
-            setenv FLOX_ENV_CACHE /flox_env_cache;
-            setenv FLOX_ENV_PROJECT /flox_env_project;
-            setenv FLOX_ENV_DESCRIPTION env_description;
             setenv _activate_d /interpreter/activate.d;
             setenv _flox_activations /flox_activations;
             setenv _flox_activate_tracer TRACER;

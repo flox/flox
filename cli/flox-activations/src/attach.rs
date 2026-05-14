@@ -135,9 +135,6 @@ pub(crate) fn startup_ctx(
         &start_diff,
     )?;
 
-    // Get env_project from project context if present (None for containers)
-    let env_project = ctx.project_ctx.as_ref().map(|e| e.env_project.clone());
-
     let set_prompt = ctx.attach_ctx.set_prompt;
 
     let args = match ctx.shell {
@@ -145,9 +142,6 @@ pub(crate) fn startup_ctx(
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-            flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-            flox_env_project: env_project.clone(),
-            flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
             is_in_place: invocation_type == InvocationType::InPlace,
             bashrc_path,
             flox_sourcing_rc: is_sourcing_rc,
@@ -162,9 +156,6 @@ pub(crate) fn startup_ctx(
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-            flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-            flox_env_project: env_project.clone(),
-            flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
             is_in_place: invocation_type == InvocationType::InPlace,
             flox_sourcing_rc: is_sourcing_rc,
             flox_activate_tracer: activate_tracer.to_string(),
@@ -179,9 +170,6 @@ pub(crate) fn startup_ctx(
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-            flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-            flox_env_project: env_project.clone(),
-            flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
             is_in_place: invocation_type == InvocationType::InPlace,
             flox_sourcing_rc: is_sourcing_rc,
             flox_activate_tracer: activate_tracer.to_string(),
@@ -194,10 +182,6 @@ pub(crate) fn startup_ctx(
         ShellWithPath::Zsh(_) => StartupArgs::Zsh(ZshStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
-            flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-            flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-            flox_env_project: env_project.clone(),
-            flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
             is_in_place: invocation_type == InvocationType::InPlace,
             clean_up,
             auto_activate: ctx.auto_activate,

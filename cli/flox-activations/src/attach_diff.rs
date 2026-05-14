@@ -28,14 +28,16 @@ pub(super) fn assemble_activate_command(
 ) -> Command {
     let mut command = Command::new(context.attach_ctx.interpreter_path.join("activate"));
     command.envs(single_set_envs(&context.attach_ctx));
-    command.envs(double_set_envs(context.project_ctx.as_ref()));
-    add_old_activate_script_exports(
-        &mut command,
+    let double_sets = double_set_envs(&context.attach_ctx, context.project_ctx.as_ref());
+    command.envs(&double_sets.additions);
+    for var in &double_sets.deletions {
+        command.env_remove(var);
+    }
+    command.envs(collect_activate_exports(
         &context.attach_ctx,
-        context.project_ctx.as_ref(),
         subsystem_verbosity,
         vars_from_env,
-    );
+    ));
     add_activate_script_options(&mut command, context, start_state_dir);
     command
 }
@@ -76,12 +78,6 @@ impl AttachDiff {
     /// Assemble all environment variable sets and removals needed for
     /// activation, and compute the activation diff if a pre-activation
     /// snapshot is available.
-    ///
-    /// Sources are applied in precedence order (later overrides earlier):
-    /// 1. `single_set_envs()` / `double_set_envs()` — FLOX_* context vars +
-    ///    default nix vars
-    /// 2. `collect_activate_exports()` — activation context vars
-    /// 3. `start_diff.additions` / `start_diff.deletions` — from activation scripts
     pub fn new(
         context: &AttachCtx,
         project: Option<&AttachProjectCtx>,
@@ -96,20 +92,12 @@ impl AttachDiff {
             .into_iter()
             .map(|(k, v)| (k.to_string(), v))
             .collect();
-        let double_sets = EnvDiff::from_parts(
-            double_set_envs(project)
-                .into_iter()
-                .map(|(k, v)| (k.to_string(), v))
-                .collect(),
-            Vec::new(),
-        );
+        let double_sets = double_set_envs(context, project);
 
         // Assemble sets and removals.
         let mut sets: HashMap<String, String> = HashMap::new();
 
-        let (export_map, removal_list) =
-            collect_activate_exports(context, project, subsystem_verbosity, vars_from_env);
-        for (k, v) in export_map {
+        for (k, v) in collect_activate_exports(context, subsystem_verbosity, vars_from_env) {
             sets.insert(k.to_string(), v);
         }
 
@@ -118,9 +106,6 @@ impl AttachDiff {
         }
 
         let mut removals: HashSet<String> = HashSet::new();
-        for k in &removal_list {
-            removals.insert(k.to_string());
-        }
         for k in start_diff.deletions() {
             removals.insert(k.clone());
         }
@@ -239,13 +224,38 @@ pub fn single_set_envs(context: &AttachCtx) -> HashMap<&'static str, String> {
     exports
 }
 
-pub fn double_set_envs(project: Option<&AttachProjectCtx>) -> HashMap<&'static str, String> {
-    HashMap::from([(
-        FLOX_ACTIVATE_START_SERVICES_VAR,
-        project
-            .is_some_and(|p| !p.services_to_start.is_empty())
-            .to_string(),
-    )])
+pub fn double_set_envs(context: &AttachCtx, project: Option<&AttachProjectCtx>) -> EnvDiff {
+    let mut deletions = Vec::new();
+    let mut exports = HashMap::from([
+        (
+            FLOX_ACTIVATE_START_SERVICES_VAR,
+            project
+                .is_some_and(|p| !p.services_to_start.is_empty())
+                .to_string(),
+        ),
+        // Propagate required variables that are documented as exposed.
+        ("FLOX_ENV", context.env.clone()),
+        (
+            "FLOX_ENV_CACHE",
+            context.env_cache.to_string_lossy().to_string(),
+        ),
+        ("FLOX_ENV_DESCRIPTION", context.env_description.clone()),
+    ]);
+    // Propagate optional variables that are documented as exposed.
+    if let Some(project) = project {
+        exports.insert(
+            "FLOX_ENV_PROJECT",
+            project.env_project.to_string_lossy().to_string(),
+        );
+    } else {
+        deletions.push("FLOX_ENV_PROJECT".to_string());
+    }
+
+    let additions = exports
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+    EnvDiff::from_parts(additions, deletions)
 }
 
 /// Options parsed by getopt in the activate script
@@ -266,50 +276,16 @@ fn add_activate_script_options(
     }
 }
 
-/// Prior to the refactor, these variables were exported in the activate script
-// TODO: we still use std::env::var in this function,
-// so we should either drop those uses and get those vars in VarsFromEnvironment,
-// or we should completely drop VarsFromEnvironment .
-fn add_old_activate_script_exports(
-    command: &mut Command,
-    context: &AttachCtx,
-    project: Option<&AttachProjectCtx>,
-    subsystem_verbosity: u32,
-    vars_from_environment: VarsFromEnvironment,
-) {
-    let (exports, removals) =
-        collect_activate_exports(context, project, subsystem_verbosity, vars_from_environment);
-    command.envs(&exports);
-    for var in &removals {
-        command.env_remove(var);
-    }
-}
-
-/// Collect the environment variables that should be set and unset for activation.
-///
-/// Returns a tuple of (exports, removals) where exports maps variable names to
-/// values and removals is a list of variable names to unset.
-///
-/// This is split out from `add_old_activate_script_exports` so that the data
-/// can be inspected independently — for example when computing the activation diff.
+/// _flox_activate_tracelevel, _flox_activate_tracer, and _activate_d still need some cleanup
+/// fixed_vars_to_export are used for interactive activations but are handled
+/// differently for in-place activations
 pub fn collect_activate_exports(
     context: &AttachCtx,
-    project: Option<&AttachProjectCtx>,
     subsystem_verbosity: u32,
     vars_from_environment: VarsFromEnvironment,
-) -> (HashMap<&'static str, String>, Vec<&'static str>) {
-    let mut removals = Vec::new();
+) -> HashMap<&'static str, String> {
     let mut exports = HashMap::from([
         ("_flox_activate_tracelevel", subsystem_verbosity.to_string()),
-        // Propagate required variables that are documented as exposed.
-        ("FLOX_ENV", context.env.clone()),
-        (
-            "FLOX_ENV_CACHE",
-            context.env_cache.to_string_lossy().to_string(),
-        ),
-        ("FLOX_ENV_DESCRIPTION", context.env_description.clone()),
-        // These are used by various scripts...custom ZDOTDIR files, set-prompt,
-        // .tcshrc
         (
             "_flox_activate_tracer",
             activate_tracer(&context.interpreter_path),
@@ -323,20 +299,8 @@ pub fn collect_activate_exports(
                 .to_string(),
         ),
     ]);
-    // Propagate optional variables that are documented as exposed.
-    // NB: `generate_*_start_commands()` performs the same logic
-    if let Some(project) = project {
-        exports.insert(
-            "FLOX_ENV_PROJECT",
-            project.env_project.to_string_lossy().to_string(),
-        );
-    } else {
-        removals.push("FLOX_ENV_PROJECT");
-    }
-
     exports.extend(fixed_vars_to_export(&context.env, vars_from_environment));
-
-    (exports, removals)
+    exports
 }
 
 /// Calculate values for FLOX_ENV_DIRS, PATH, and MANPATH
