@@ -706,6 +706,74 @@ EOF
   flox_prompt_environments_shows_layered_correctly tcsh
 }
 
+# bats test_tags=activate,activate:prompt,activate:prompt:p10k
+@test "zsh: PS1 not modified when powerlevel10k detected" {
+  project_setup
+
+  # Simulate p10k by defining its precmd function before activation.
+  # Use zsh -i so set-prompt.zsh is sourced (requires interactive shell).
+  # The .zshrc.extra hook runs after user dotfiles.
+  cat > "$HOME/.zshrc.extra" <<EXTRA
+    _p9k_precmd() { :; }
+    eval "\$($FLOX_BIN activate)"
+    echo "\$PS1" > "$PROJECT_DIR/ps1_result"
+    exit
+EXTRA
+  zsh -i 2>/dev/null || true
+
+  run cat "$PROJECT_DIR/ps1_result"
+  assert_output "$KNOWN_PROMPT"
+}
+
+# bats test_tags=activate,activate:prompt,activate:prompt:starship
+@test "zsh: PS1 not modified when starship detected" {
+  project_setup
+
+  cat > "$HOME/.zshrc.extra" <<EXTRA
+    export STARSHIP_SHELL=zsh
+    eval "\$($FLOX_BIN activate)"
+    echo "\$PS1" > "$PROJECT_DIR/ps1_result"
+    exit
+EXTRA
+  zsh -i 2>/dev/null || true
+
+  run cat "$PROJECT_DIR/ps1_result"
+  assert_output "$KNOWN_PROMPT"
+}
+
+# bats test_tags=activate,activate:prompt,activate:prompt:p10k
+@test "zsh: FLOX_PROMPT_ENVIRONMENTS available when p10k detected" {
+  project_setup
+
+  cat > "$HOME/.zshrc.extra" <<EXTRA
+    _p9k_precmd() { :; }
+    eval "\$($FLOX_BIN activate)"
+    echo "\$FLOX_PROMPT_ENVIRONMENTS" > "$PROJECT_DIR/prompt_env_result"
+    exit
+EXTRA
+  zsh -i 2>/dev/null || true
+
+  run cat "$PROJECT_DIR/prompt_env_result"
+  # The environment name is derived from the project directory name
+  assert_output "$PROJECT_NAME"
+}
+
+# bats test_tags=activate,activate:prompt
+@test "zsh: PS1 modified normally when no prompt framework detected" {
+  project_setup
+
+  cat > "$HOME/.zshrc.extra" <<EXTRA
+    eval "\$($FLOX_BIN activate)"
+    echo "\$PS1" > "$PROJECT_DIR/ps1_result"
+    exit
+EXTRA
+  zsh -i 2>/dev/null || true
+
+  run cat "$PROJECT_DIR/ps1_result"
+  # PS1 should contain the flox indicator, not just the original prompt.
+  refute_output "$KNOWN_PROMPT"
+}
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:hook,activate:hook:bash
