@@ -211,6 +211,44 @@ fn startup_ctx(
     })
 }
 
+fn write_to_writer(
+    ctx: &StartupCtx,
+    attach_diff: &AttachDiff,
+    writer: &mut impl std::io::Write,
+) -> Result<()> {
+    match ctx.args {
+        StartupArgs::Bash(ref args) => generate_bash_startup_commands(
+            args,
+            &ctx.start_diff,
+            &attach_diff.single_sets,
+            &attach_diff.double_sets,
+            writer,
+        )?,
+        StartupArgs::Fish(ref args) => generate_fish_startup_commands(
+            args,
+            &ctx.start_diff,
+            &attach_diff.single_sets,
+            &attach_diff.double_sets,
+            writer,
+        )?,
+        StartupArgs::Tcsh(ref args) => generate_tcsh_startup_commands(
+            args,
+            &ctx.start_diff,
+            &attach_diff.single_sets,
+            &attach_diff.double_sets,
+            writer,
+        )?,
+        StartupArgs::Zsh(ref args) => generate_zsh_startup_commands(
+            args,
+            &ctx.start_diff,
+            &attach_diff.single_sets,
+            &attach_diff.double_sets,
+            writer,
+        )?,
+    }
+    Ok(())
+}
+
 fn write_to_path(ctx: &StartupCtx, attach_diff: &AttachDiff, path: &Path) -> Result<()> {
     let mut writer = OpenOptions::new()
         .create(true)
@@ -218,72 +256,12 @@ fn write_to_path(ctx: &StartupCtx, attach_diff: &AttachDiff, path: &Path) -> Res
         .write(true)
         .truncate(true)
         .open(path)?;
-    match ctx.args {
-        StartupArgs::Bash(ref args) => generate_bash_startup_commands(
-            args,
-            &ctx.start_diff,
-            &attach_diff.single_sets,
-            &attach_diff.double_sets,
-            &mut writer,
-        )?,
-        StartupArgs::Fish(ref args) => generate_fish_startup_commands(
-            args,
-            &ctx.start_diff,
-            &attach_diff.single_sets,
-            &attach_diff.double_sets,
-            &mut writer,
-        )?,
-        StartupArgs::Tcsh(ref args) => generate_tcsh_startup_commands(
-            args,
-            &ctx.start_diff,
-            &attach_diff.single_sets,
-            &attach_diff.double_sets,
-            &mut writer,
-        )?,
-        StartupArgs::Zsh(ref args) => generate_zsh_startup_commands(
-            args,
-            &ctx.start_diff,
-            &attach_diff.single_sets,
-            &attach_diff.double_sets,
-            &mut writer,
-        )?,
-    }
-    Ok(())
+    write_to_writer(ctx, attach_diff, &mut writer)
 }
 
 fn write_to_stdout(ctx: &StartupCtx, attach_diff: &AttachDiff) -> Result<()> {
     let mut writer = std::io::stdout();
-    match ctx.args {
-        StartupArgs::Bash(ref args) => generate_bash_startup_commands(
-            args,
-            &ctx.start_diff,
-            &attach_diff.single_sets,
-            &attach_diff.double_sets,
-            &mut writer,
-        )?,
-        StartupArgs::Fish(ref args) => generate_fish_startup_commands(
-            args,
-            &ctx.start_diff,
-            &attach_diff.single_sets,
-            &attach_diff.double_sets,
-            &mut writer,
-        )?,
-        StartupArgs::Tcsh(ref args) => generate_tcsh_startup_commands(
-            args,
-            &ctx.start_diff,
-            &attach_diff.single_sets,
-            &attach_diff.double_sets,
-            &mut writer,
-        )?,
-        StartupArgs::Zsh(ref args) => generate_zsh_startup_commands(
-            args,
-            &ctx.start_diff,
-            &attach_diff.single_sets,
-            &attach_diff.double_sets,
-            &mut writer,
-        )?,
-    }
-    Ok(())
+    write_to_writer(ctx, attach_diff, &mut writer)
 }
 
 /// Used for `flox activate -- exec_command ...`
