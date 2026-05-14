@@ -5,6 +5,7 @@ use flox_core::activate::context::ActivateCtx;
 /// Absolute path to coreutils `rm`, avoiding user alias expansion (e.g. `alias rm='rm -i'`).
 const RM: &str = concat!(env!("COREUTILS"), "/bin/rm");
 
+use crate::attach_diff::AttachDiff;
 use crate::gen_rc::bash::BashStartupArgs;
 use crate::gen_rc::fish::FishStartupArgs;
 use crate::gen_rc::tcsh::TcshStartupArgs;
@@ -32,4 +33,5 @@ pub struct StartupCtx {
     pub start_diff: StartDiff,
     pub start_state_dir: PathBuf,
     pub act_ctx: ActivateCtx,
+    pub attach_diff: AttachDiff,
 }
