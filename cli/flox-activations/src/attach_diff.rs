@@ -67,15 +67,12 @@ pub struct AttachDiff {
     ///    This ensures we re-apply these variables after they could have been
     ///    changed, particularly if user RC files contain flox activations
     pub double_sets: EnvDiff,
-    /// Variables to unset that haven't yet been folded into either single or
-    /// double sets
-    pub removals: HashSet<String>,
     /// Pre-encoded diff string for _FLOX_HOOK_DIFF. None if snapshot unavailable.
     pub encoded_diff: Option<String>,
 }
 
 impl AttachDiff {
-    /// Assemble all environment variable sets and removals needed for
+    /// Assemble all environment variable sets and unsets needed for
     /// activation, and compute the activation diff if a pre-activation
     /// snapshot is available.
     pub fn new(
@@ -92,35 +89,34 @@ impl AttachDiff {
             .into_iter()
             .map(|(k, v)| (k.to_string(), v))
             .collect();
-        let double_sets = double_set_envs(context, project);
+        let mut double_sets = double_set_envs(context, project);
 
-        // Assemble sets and removals.
         let mut sets: HashMap<String, String> = HashMap::new();
 
         for (k, v) in collect_activate_exports(context, subsystem_verbosity, vars_from_env) {
             sets.insert(k.to_string(), v);
         }
 
-        for (k, v) in start_diff.additions() {
-            sets.insert(k.clone(), v.clone());
-        }
-
-        let mut removals: HashSet<String> = HashSet::new();
-        for k in start_diff.deletions() {
-            removals.insert(k.clone());
-        }
+        // For now don't prevent users overriding our variables
+        double_sets.additions.extend(
+            start_diff
+                .additions()
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone())),
+        );
+        double_sets
+            .deletions
+            .extend(start_diff.deletions().iter().cloned());
 
         // Compute the activation diff if we have a pre-activation snapshot.
         // Fold all three maps into the intended-sets union so the diff sees
         // the same variables that will end up on the activated environment.
-        // Likewise fold double_sets deletions into the removals union so the
-        // diff sees them as cleared.
         let encoded_diff = if let Some(ref current_env) = full_env {
             let mut intended_sets = sets.clone();
             intended_sets.extend(single_sets.clone());
             intended_sets.extend(double_sets.additions.clone());
-            let mut intended_removals = removals.clone();
-            intended_removals.extend(double_sets.deletions.iter().cloned());
+            let intended_removals: HashSet<String> =
+                double_sets.deletions.iter().cloned().collect();
             let diff = diff_env(current_env, &intended_sets, &intended_removals);
             let encoded = diff.encode()?;
             debug!(
@@ -139,22 +135,18 @@ impl AttachDiff {
             single_sets,
             sets,
             double_sets,
-            removals,
             encoded_diff,
         })
     }
 
     /// Apply the activation environment to a Command.
     ///
-    /// Sets all accumulated variables, removes all accumulated removals,
+    /// Sets all accumulated variables, removes all accumulated unsets,
     /// and sets the _FLOX_HOOK_DIFF env var if a diff was computed.
     pub fn apply_to_command(&self, command: &mut Command) {
         command.envs(&self.sets);
         command.envs(&self.single_sets);
         command.envs(&self.double_sets.additions);
-        for var in &self.removals {
-            command.env_remove(var);
-        }
         for var in &self.double_sets.deletions {
             command.env_remove(var);
         }

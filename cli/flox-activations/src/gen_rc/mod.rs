@@ -10,7 +10,6 @@ use crate::gen_rc::bash::BashStartupArgs;
 use crate::gen_rc::fish::FishStartupArgs;
 use crate::gen_rc::tcsh::TcshStartupArgs;
 use crate::gen_rc::zsh::ZshStartupArgs;
-use crate::start_diff::StartDiff;
 
 pub mod bash;
 pub mod fish;
@@ -30,7 +29,6 @@ pub enum StartupArgs {
 pub struct StartupCtx {
     pub args: StartupArgs,
     pub rc_path: Option<PathBuf>,
-    pub start_diff: StartDiff,
     pub start_state_dir: PathBuf,
     pub act_ctx: ActivateCtx,
     pub attach_diff: AttachDiff,

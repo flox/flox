@@ -2,8 +2,6 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use itertools::Itertools;
-use shell_gen::{GenerateShell, SetVar, Statement, UnsetVar};
 
 use crate::env_diff::EnvDiff;
 
@@ -45,17 +43,6 @@ impl StartDiff {
     #[cfg(test)]
     pub fn from_parts(additions: HashMap<String, String>, deletions: Vec<String>) -> Self {
         StartDiff(EnvDiff::from_parts(additions, deletions))
-    }
-
-    pub fn generate_statements(&self, stmts: &mut Vec<Statement>) {
-        for (name, value) in self.additions().iter().sorted_by_key(|(name, _)| *name) {
-            let var = SetVar::exported_no_expansion(name, value);
-            stmts.push(var.to_stmt());
-        }
-        for name in self.deletions().iter().sorted() {
-            let var = UnsetVar::new(name);
-            stmts.push(var.to_stmt());
-        }
     }
 }
 

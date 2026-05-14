@@ -16,7 +16,6 @@ use shell_gen::{
 
 use crate::env_diff::EnvDiff;
 use crate::gen_rc::RM;
-use crate::start_diff::StartDiff;
 
 /// Arguments for generating zsh startup commands
 #[derive(Debug, Clone)]
@@ -32,7 +31,6 @@ pub struct ZshStartupArgs {
 
 pub fn generate_zsh_startup_commands(
     args: &ZshStartupArgs,
-    start_diff: &StartDiff,
     single_sets: &HashMap<String, String>,
     double_sets: &EnvDiff,
     writer: &mut impl Write,
@@ -54,15 +52,14 @@ pub fn generate_zsh_startup_commands(
             stmts.push(set_exported_unexpanded(k, v));
         }
     }
+    // Includes variables observed in the previous initialization —
+    // start_diff is folded into double_sets.
     for (k, v) in double_sets.additions.iter().sorted_by_key(|(k, _)| *k) {
         stmts.push(set_exported_unexpanded(k, v));
     }
     for name in double_sets.deletions.iter().sorted() {
         stmts.push(unset(name));
     }
-
-    // Restore environment variables set in the previous initialization.
-    start_diff.generate_statements(&mut stmts);
 
     stmts.push(source_file(args.activate_d.join("zsh")));
 
@@ -122,12 +119,12 @@ mod tests {
         expect![[r#"
             typeset -g _flox_activate_tracelevel=3;
             typeset -g _activate_d=/interpreter/activate.d;
+            export ADDED_VAR=ADDED_VALUE;
             export FLOX_ACTIVATE_START_SERVICES=false;
             export FLOX_ENV=/flox_env;
             export FLOX_ENV_CACHE=/flox_env_cache;
             export FLOX_ENV_DESCRIPTION=env_description;
             export FLOX_ENV_PROJECT=/flox_env_project;
-            export ADDED_VAR=ADDED_VALUE;
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
             source /interpreter/activate.d/zsh;
@@ -147,12 +144,12 @@ mod tests {
             export FLOX_PROMPT_COLOR_2=2;
             export FLOX_PROMPT_ENVIRONMENTS=prompt_envs;
             export _FLOX_ACTIVE_ENVIRONMENTS=active_envs;
+            export ADDED_VAR=ADDED_VALUE;
             export FLOX_ACTIVATE_START_SERVICES=false;
             export FLOX_ENV=/flox_env;
             export FLOX_ENV_CACHE=/flox_env_cache;
             export FLOX_ENV_DESCRIPTION=env_description;
             export FLOX_ENV_PROJECT=/flox_env_project;
-            export ADDED_VAR=ADDED_VALUE;
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
             source /interpreter/activate.d/zsh;

@@ -9,7 +9,6 @@ use shell_gen::{GenerateShell, Shell, set_exported_unexpanded, unset};
 
 use crate::env_diff::EnvDiff;
 use crate::gen_rc::RM;
-use crate::start_diff::StartDiff;
 
 /// Arguments for generating tcsh startup commands
 #[derive(Debug, Clone)]
@@ -33,7 +32,6 @@ pub struct TcshStartupArgs {
 // the output is a valid shell script fragment when represented on a single line.
 pub fn generate_tcsh_startup_commands(
     args: &TcshStartupArgs,
-    start_diff: &StartDiff,
     single_sets: &HashMap<String, String>,
     double_sets: &EnvDiff,
     writer: &mut impl Write,
@@ -58,9 +56,6 @@ pub fn generate_tcsh_startup_commands(
     for name in double_sets.deletions.iter().sorted() {
         stmts.push(unset(name));
     }
-
-    // Restore environment variables set in the previous tcsh initialization.
-    start_diff.generate_statements(&mut stmts);
 
     stmts.push(set_exported_unexpanded(
         "_activate_d",
@@ -174,12 +169,12 @@ mod tests {
         let output = render(false);
         expect![[r#"
             set verbose
+            setenv ADDED_VAR ADDED_VALUE;
             setenv FLOX_ACTIVATE_START_SERVICES false;
             setenv FLOX_ENV /flox_env;
             setenv FLOX_ENV_CACHE /flox_env_cache;
             setenv FLOX_ENV_DESCRIPTION env_description;
             setenv FLOX_ENV_PROJECT /flox_env_project;
-            setenv ADDED_VAR ADDED_VALUE;
             setenv QUOTED_VAR 'QUOTED'\''VALUE';
             unsetenv DELETED_VAR;
             setenv _activate_d /interpreter/activate.d;
@@ -208,12 +203,12 @@ mod tests {
             setenv FLOX_PROMPT_COLOR_2 2;
             setenv FLOX_PROMPT_ENVIRONMENTS prompt_envs;
             setenv _FLOX_ACTIVE_ENVIRONMENTS active_envs;
+            setenv ADDED_VAR ADDED_VALUE;
             setenv FLOX_ACTIVATE_START_SERVICES false;
             setenv FLOX_ENV /flox_env;
             setenv FLOX_ENV_CACHE /flox_env_cache;
             setenv FLOX_ENV_DESCRIPTION env_description;
             setenv FLOX_ENV_PROJECT /flox_env_project;
-            setenv ADDED_VAR ADDED_VALUE;
             setenv QUOTED_VAR 'QUOTED'\''VALUE';
             unsetenv DELETED_VAR;
             setenv _activate_d /interpreter/activate.d;

@@ -9,7 +9,6 @@ use shell_gen::{GenerateShell, Shell, set_exported_unexpanded, source_file, unse
 
 use crate::env_diff::EnvDiff;
 use crate::gen_rc::RM;
-use crate::start_diff::StartDiff;
 
 /// Arguments for generating bash startup commands
 #[derive(Debug, Clone)]
@@ -35,7 +34,6 @@ pub struct BashStartupArgs {
 // the output is a valid shell script fragment when represented on a single line.
 pub fn generate_bash_startup_commands(
     args: &BashStartupArgs,
-    start_diff: &StartDiff,
     single_sets: &HashMap<String, String>,
     double_sets: &EnvDiff,
     writer: &mut impl Write,
@@ -72,9 +70,6 @@ pub fn generate_bash_startup_commands(
     for name in double_sets.deletions.iter().sorted() {
         stmts.push(unset(name));
     }
-
-    // Restore environment variables set in the previous bash initialization.
-    start_diff.generate_statements(&mut stmts);
 
     stmts.push(set_exported_unexpanded(
         "_activate_d",
@@ -176,12 +171,12 @@ mod tests {
             export _flox_sourcing_rc=true;
             source /home/user/.bashrc;
             unset _flox_sourcing_rc;
+            export ADDED_VAR=ADDED_VALUE;
             export FLOX_ACTIVATE_START_SERVICES=false;
             export FLOX_ENV=/flox_env;
             export FLOX_ENV_CACHE=/flox_env_cache;
             export FLOX_ENV_DESCRIPTION=env_description;
             export FLOX_ENV_PROJECT=/flox_env_project;
-            export ADDED_VAR=ADDED_VALUE;
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
             export _activate_d=/interpreter/activate.d;
@@ -206,12 +201,12 @@ mod tests {
             export FLOX_PROMPT_COLOR_2=2;
             export FLOX_PROMPT_ENVIRONMENTS=prompt_envs;
             export _FLOX_ACTIVE_ENVIRONMENTS=active_envs;
+            export ADDED_VAR=ADDED_VALUE;
             export FLOX_ACTIVATE_START_SERVICES=false;
             export FLOX_ENV=/flox_env;
             export FLOX_ENV_CACHE=/flox_env_cache;
             export FLOX_ENV_DESCRIPTION=env_description;
             export FLOX_ENV_PROJECT=/flox_env_project;
-            export ADDED_VAR=ADDED_VALUE;
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
             export _activate_d=/interpreter/activate.d;

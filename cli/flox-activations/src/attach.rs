@@ -70,7 +70,7 @@ pub fn attach(
         context,
         invocation_type.clone(),
         rc_path,
-        diff.clone(),
+        diff,
         &start_state_dir,
         &tracer,
         subsystem_verbosity,
@@ -193,7 +193,6 @@ pub(crate) fn startup_ctx(
     Ok(StartupCtx {
         args,
         start_state_dir: start_state_dir.to_path_buf(),
-        start_diff,
         rc_path,
         act_ctx: ctx,
         attach_diff,
@@ -204,28 +203,24 @@ pub(crate) fn write_to_writer(ctx: &StartupCtx, writer: &mut impl std::io::Write
     match ctx.args {
         StartupArgs::Bash(ref args) => generate_bash_startup_commands(
             args,
-            &ctx.start_diff,
             &ctx.attach_diff.single_sets,
             &ctx.attach_diff.double_sets,
             writer,
         )?,
         StartupArgs::Fish(ref args) => generate_fish_startup_commands(
             args,
-            &ctx.start_diff,
             &ctx.attach_diff.single_sets,
             &ctx.attach_diff.double_sets,
             writer,
         )?,
         StartupArgs::Tcsh(ref args) => generate_tcsh_startup_commands(
             args,
-            &ctx.start_diff,
             &ctx.attach_diff.single_sets,
             &ctx.attach_diff.double_sets,
             writer,
         )?,
         StartupArgs::Zsh(ref args) => generate_zsh_startup_commands(
             args,
-            &ctx.start_diff,
             &ctx.attach_diff.single_sets,
             &ctx.attach_diff.double_sets,
             writer,
