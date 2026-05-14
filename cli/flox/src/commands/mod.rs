@@ -1527,26 +1527,6 @@ fn is_current_dir(environment: &UninitializedEnvironment) -> Result<bool> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn cli_update_checks_enabled_by_default() {
-        let config = Config::default();
-
-        assert!(should_check_for_cli_updates(&config));
-    }
-
-    #[test]
-    fn disabled_update_checks_suppress_cli_update_checks() {
-        let mut config = Config::default();
-        config.flox.disable_update_checks = Some(true);
-
-        assert!(!should_check_for_cli_updates(&config));
-    }
-}
-
 /// Render a merged or included `Manifest` to a string for displaying to the user.
 ///
 /// `Environment::manifest_contents` should be used for non-composition
@@ -1580,4 +1560,24 @@ fn render_composition_manifest(manifest: &Manifest<TypedOnly>) -> Result<String>
     toml_edit::visit_mut::visit_document_mut(&mut Visitor::new_for_document(), &mut document);
 
     Ok(document.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cli_update_checks_enabled_by_default() {
+        let config = Config::default();
+
+        assert!(should_check_for_cli_updates(&config));
+    }
+
+    #[test]
+    fn disabled_update_checks_suppress_cli_update_checks() {
+        let mut config = Config::default();
+        config.flox.disable_update_checks = Some(true);
+
+        assert!(!should_check_for_cli_updates(&config));
+    }
 }
