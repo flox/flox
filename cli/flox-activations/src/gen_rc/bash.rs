@@ -7,6 +7,7 @@ use anyhow::Result;
 use itertools::Itertools;
 use shell_gen::{GenerateShell, Shell, set_exported_unexpanded, source_file, unset};
 
+use crate::env_diff::EnvDiff;
 use crate::gen_rc::RM;
 use crate::start_diff::StartDiff;
 
@@ -39,7 +40,7 @@ pub fn generate_bash_startup_commands(
     args: &BashStartupArgs,
     start_diff: &StartDiff,
     single_sets: &HashMap<String, String>,
-    double_sets: &HashMap<String, String>,
+    double_sets: &EnvDiff,
     writer: &mut impl Write,
 ) -> Result<()> {
     let mut stmts = vec![];
@@ -68,8 +69,11 @@ pub fn generate_bash_startup_commands(
 
     // double_sets must come after sourcing the user's RC file, otherwise a
     // `flox activate` in .bashrc could override these values
-    for (k, v) in double_sets.iter().sorted_by_key(|(k, _)| *k) {
+    for (k, v) in double_sets.additions.iter().sorted_by_key(|(k, _)| *k) {
         stmts.push(set_exported_unexpanded(k, v));
+    }
+    for name in double_sets.deletions.iter().sorted() {
+        stmts.push(unset(name));
     }
 
     // Restore environment variables set in the previous bash initialization.

@@ -12,6 +12,7 @@ use tracing::debug;
 use crate::activation_diff::{self, DiffSerializer};
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
+use crate::env_diff::EnvDiff;
 use crate::start_diff::StartDiff;
 use crate::vars_from_env::VarsFromEnvironment;
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
@@ -57,14 +58,15 @@ pub struct AttachDiff {
     /// Variables that haven't yet been folded into either single or double sets
     /// These are handled on a case by case basis in startup scripts
     pub sets: HashMap<String, String>,
-    /// Variables that we set twice for non-in-place activations.
-    /// We set these:
+    /// Variables that we set (or unset) twice for non-in-place activations.
+    /// We set (or unset) these:
     /// 1. As environment variables before we exec
     /// 2. Via our generated startup scripts, after user RC files have run.
     ///    This ensures we re-apply these variables after they could have been
     ///    changed, particularly if user RC files contain flox activations
-    pub double_sets: HashMap<String, String>,
-    /// Variables to unset from the command/shell.
+    pub double_sets: EnvDiff,
+    /// Variables to unset that haven't yet been folded into either single or
+    /// double sets
     pub removals: HashSet<String>,
     /// Pre-encoded diff string for _FLOX_HOOK_DIFF. None if snapshot unavailable.
     pub encoded_diff: Option<String>,
@@ -94,10 +96,13 @@ impl AttachDiff {
             .into_iter()
             .map(|(k, v)| (k.to_string(), v))
             .collect();
-        let double_sets: HashMap<String, String> = double_set_envs(project)
-            .into_iter()
-            .map(|(k, v)| (k.to_string(), v))
-            .collect();
+        let double_sets = EnvDiff::from_parts(
+            double_set_envs(project)
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v))
+                .collect(),
+            Vec::new(),
+        );
 
         // Assemble sets and removals.
         let mut sets: HashMap<String, String> = HashMap::new();
@@ -108,7 +113,7 @@ impl AttachDiff {
             sets.insert(k.to_string(), v);
         }
 
-        for (k, v) in &start_diff.additions {
+        for (k, v) in start_diff.additions() {
             sets.insert(k.clone(), v.clone());
         }
 
@@ -116,18 +121,22 @@ impl AttachDiff {
         for k in &removal_list {
             removals.insert(k.to_string());
         }
-        for k in &start_diff.deletions {
+        for k in start_diff.deletions() {
             removals.insert(k.clone());
         }
 
         // Compute the activation diff if we have a pre-activation snapshot.
         // Fold all three maps into the intended-sets union so the diff sees
         // the same variables that will end up on the activated environment.
+        // Likewise fold double_sets deletions into the removals union so the
+        // diff sees them as cleared.
         let encoded_diff = if let Some(ref current_env) = full_env {
             let mut intended_sets = sets.clone();
             intended_sets.extend(single_sets.clone());
-            intended_sets.extend(double_sets.clone());
-            let diff = diff_env(current_env, &intended_sets, &removals);
+            intended_sets.extend(double_sets.additions.clone());
+            let mut intended_removals = removals.clone();
+            intended_removals.extend(double_sets.deletions.iter().cloned());
+            let diff = diff_env(current_env, &intended_sets, &intended_removals);
             let encoded = diff.encode()?;
             debug!(
                 "captured activation diff: {} added, {} modified, {} removed ({} bytes encoded)",
@@ -157,8 +166,11 @@ impl AttachDiff {
     pub fn apply_to_command(&self, command: &mut Command) {
         command.envs(&self.sets);
         command.envs(&self.single_sets);
-        command.envs(&self.double_sets);
+        command.envs(&self.double_sets.additions);
         for var in &self.removals {
+            command.env_remove(var);
+        }
+        for var in &self.double_sets.deletions {
             command.env_remove(var);
         }
         if let Some(ref encoded) = self.encoded_diff {

@@ -7,6 +7,7 @@ use anyhow::Result;
 use itertools::Itertools;
 use shell_gen::{GenerateShell, Shell, set_exported_unexpanded, unset};
 
+use crate::env_diff::EnvDiff;
 use crate::gen_rc::RM;
 use crate::start_diff::StartDiff;
 
@@ -37,7 +38,7 @@ pub fn generate_tcsh_startup_commands(
     args: &TcshStartupArgs,
     start_diff: &StartDiff,
     single_sets: &HashMap<String, String>,
-    double_sets: &HashMap<String, String>,
+    double_sets: &EnvDiff,
     writer: &mut impl Write,
 ) -> Result<()> {
     let mut stmts = vec![];
@@ -54,8 +55,11 @@ pub fn generate_tcsh_startup_commands(
             stmts.push(set_exported_unexpanded(k, v));
         }
     }
-    for (k, v) in double_sets.iter().sorted_by_key(|(k, _)| *k) {
+    for (k, v) in double_sets.additions.iter().sorted_by_key(|(k, _)| *k) {
         stmts.push(set_exported_unexpanded(k, v));
+    }
+    for name in double_sets.deletions.iter().sorted() {
+        stmts.push(unset(name));
     }
 
     // Restore environment variables set in the previous tcsh initialization.
