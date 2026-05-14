@@ -106,7 +106,7 @@ pub fn attach(
 /// Build startup context for shell configuration.
 /// Used by both normal activations (with project context) and containers (without).
 #[allow(clippy::too_many_arguments)]
-fn startup_ctx(
+pub(crate) fn startup_ctx(
     ctx: ActivateCtx,
     invocation_type: InvocationType,
     rc_path: Option<PathBuf>,
@@ -141,25 +141,23 @@ fn startup_ctx(
     let set_prompt = ctx.attach_ctx.set_prompt;
 
     let args = match ctx.shell {
-        ShellWithPath::Bash(_) => {
-            StartupArgs::Bash(BashStartupArgs {
-                flox_activate_tracelevel: subsystem_verbosity,
-                activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
-                flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-                flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-                flox_env_project: env_project.clone(),
-                flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
-                is_in_place: invocation_type == InvocationType::InPlace,
-                bashrc_path,
-                flox_sourcing_rc: is_sourcing_rc,
-                flox_activate_tracer: activate_tracer.to_string(),
-                flox_activations,
-                clean_up,
-                auto_activate: ctx.auto_activate,
-                flox_bin: ctx.flox_bin.clone(),
-                set_prompt,
-            })
-        },
+        ShellWithPath::Bash(_) => StartupArgs::Bash(BashStartupArgs {
+            flox_activate_tracelevel: subsystem_verbosity,
+            activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
+            flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
+            flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
+            flox_env_project: env_project.clone(),
+            flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
+            is_in_place: invocation_type == InvocationType::InPlace,
+            bashrc_path,
+            flox_sourcing_rc: is_sourcing_rc,
+            flox_activate_tracer: activate_tracer.to_string(),
+            flox_activations,
+            clean_up,
+            auto_activate: ctx.auto_activate,
+            flox_bin: ctx.flox_bin.clone(),
+            set_prompt,
+        }),
         ShellWithPath::Fish(_) => StartupArgs::Fish(FishStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
@@ -218,7 +216,7 @@ fn startup_ctx(
     })
 }
 
-fn write_to_writer(ctx: &StartupCtx, writer: &mut impl std::io::Write) -> Result<()> {
+pub(crate) fn write_to_writer(ctx: &StartupCtx, writer: &mut impl std::io::Write) -> Result<()> {
     match ctx.args {
         StartupArgs::Bash(ref args) => generate_bash_startup_commands(
             args,

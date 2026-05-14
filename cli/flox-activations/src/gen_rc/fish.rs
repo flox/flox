@@ -188,75 +188,27 @@ pub fn generate_fish_startup_commands(
 #[cfg(test)]
 mod tests {
     use expect_test::expect;
+    use shell_gen::ShellWithPath;
 
     use super::*;
+    use crate::gen_rc::test_helpers::{render_normalized, test_startup_ctx};
 
     // NOTE: For these `expect!` tests, run unit tests with `UPDATE_EXPECT=1`
     //  to have it automatically update the expected value when the implementation
     //  changes.
 
-    fn basic_args(
-        is_in_place: bool,
-    ) -> (
-        FishStartupArgs,
-        HashMap<String, String>,
-        HashMap<String, String>,
-    ) {
-        let args = FishStartupArgs {
-            flox_activate_tracelevel: 3,
-            activate_d: PathBuf::from("/activate_d"),
-            flox_env: "/flox_env".into(),
-            flox_env_cache: Some("/flox_env_cache".into()),
-            flox_env_project: Some("/flox_env_project".into()),
-            flox_env_description: Some("env_description".to_string()),
-            is_in_place,
-            flox_sourcing_rc: false,
-            flox_activate_tracer: "TRACER".into(),
-            flox_activations: PathBuf::from("/flox_activations"),
-            clean_up: Some("/path/to/rc/file".into()),
-            auto_activate: false,
-            flox_bin: "flox".to_string(),
-            auto_activate_fish_mode: None,
-            set_prompt: true,
-        };
-        let single_sets = HashMap::from([
-            ("SINGLE_B".to_string(), "single_b".to_string()),
-            ("SINGLE_A".to_string(), "single_a".to_string()),
-        ]);
-        let double_sets = HashMap::from([("DOUBLE_X".to_string(), "double_x".to_string())]);
-        (args, single_sets, double_sets)
-    }
-
-    fn render(
-        args: &FishStartupArgs,
-        single_sets: &HashMap<String, String>,
-        double_sets: &HashMap<String, String>,
-    ) -> String {
-        let additions = HashMap::from([
-            ("QUOTED_VAR".to_string(), "QUOTED'VALUE".to_string()),
-            ("ADDED_VAR".to_string(), "ADDED_VALUE".to_string()),
-        ]);
-        let deletions = vec!["DELETED_VAR".to_string()];
-        let start_diff = StartDiff::from_parts(additions, deletions);
-        let mut buf = Vec::new();
-        generate_fish_startup_commands(args, &start_diff, single_sets, double_sets, &mut buf)
-            .unwrap();
-        String::from_utf8_lossy(&buf).into_owned()
+    fn render(is_in_place: bool) -> String {
+        let shell = ShellWithPath::Fish(PathBuf::from("/fish"));
+        let ctx = test_startup_ctx(shell, is_in_place);
+        render_normalized(&ctx)
     }
 
     #[test]
     fn test_generate_fish_startup_commands_subprocess() {
-        let (args, single_sets, double_sets) = basic_args(false);
-        let output = render(&args, &single_sets, &double_sets);
-        let (main_output, last_line) = output
-            .strip_suffix('\n')
-            .unwrap()
-            .rsplit_once('\n')
-            .unwrap();
-        assert_eq!(last_line, format!("{RM} /path/to/rc/file;"));
+        let output = render(false);
         expect![[r#"
             set -gx fish_trace 1;
-            set -gx DOUBLE_X double_x;
+            set -gx FLOX_ACTIVATE_START_SERVICES false;
             set -gx ADDED_VAR ADDED_VALUE;
             set -gx QUOTED_VAR 'QUOTED'\''VALUE';
             set -e DELETED_VAR;
@@ -264,34 +216,31 @@ mod tests {
             set -gx FLOX_ENV_CACHE /flox_env_cache;
             set -gx FLOX_ENV_PROJECT /flox_env_project;
             set -gx FLOX_ENV_DESCRIPTION env_description;
-            set -gx _activate_d /activate_d;
+            set -gx _activate_d /interpreter/activate.d;
             set -gx _flox_activations /flox_activations;
             set -gx _flox_activate_tracer TRACER;
-            if isatty 1; source '/activate_d/set-prompt.fish'; end;
+            if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
             set -gx FLOX_ENV_DIRS (if set -q FLOX_ENV_DIRS; echo "$FLOX_ENV_DIRS"; else; echo empty; end);
             /flox_activations set-env-dirs --shell fish --flox-env "/flox_env" --env-dirs "$FLOX_ENV_DIRS" | source;
             set -gx MANPATH (if set -q MANPATH; echo "$MANPATH"; else; echo empty; end);
             /flox_activations fix-paths --shell fish --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "$MANPATH" | source;
             set -g  _FLOX_SOURCED_PROFILE_SCRIPTS (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end);
             /flox_activations profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source;
-            set -gx fish_trace 0;"#]].assert_eq(main_output);
+            set -gx fish_trace 0;
+            /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+        "#]].assert_eq(&output);
     }
 
     #[test]
     fn test_generate_fish_startup_commands_in_place() {
-        let (args, single_sets, double_sets) = basic_args(true);
-        let output = render(&args, &single_sets, &double_sets);
-        let (main_output, last_line) = output
-            .strip_suffix('\n')
-            .unwrap()
-            .rsplit_once('\n')
-            .unwrap();
-        assert_eq!(last_line, format!("{RM} /path/to/rc/file;"));
+        let output = render(true);
         expect![[r#"
             set -gx fish_trace 1;
-            set -gx SINGLE_A single_a;
-            set -gx SINGLE_B single_b;
-            set -gx DOUBLE_X double_x;
+            set -gx FLOX_PROMPT_COLOR_1 1;
+            set -gx FLOX_PROMPT_COLOR_2 2;
+            set -gx FLOX_PROMPT_ENVIRONMENTS prompt_envs;
+            set -gx _FLOX_ACTIVE_ENVIRONMENTS active_envs;
+            set -gx FLOX_ACTIVATE_START_SERVICES false;
             set -gx ADDED_VAR ADDED_VALUE;
             set -gx QUOTED_VAR 'QUOTED'\''VALUE';
             set -e DELETED_VAR;
@@ -299,16 +248,18 @@ mod tests {
             set -gx FLOX_ENV_CACHE /flox_env_cache;
             set -gx FLOX_ENV_PROJECT /flox_env_project;
             set -gx FLOX_ENV_DESCRIPTION env_description;
-            set -gx _activate_d /activate_d;
+            set -gx _activate_d /interpreter/activate.d;
             set -gx _flox_activations /flox_activations;
             set -gx _flox_activate_tracer TRACER;
-            if isatty 1; source '/activate_d/set-prompt.fish'; end;
+            if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
             set -gx FLOX_ENV_DIRS (if set -q FLOX_ENV_DIRS; echo "$FLOX_ENV_DIRS"; else; echo empty; end);
             /flox_activations set-env-dirs --shell fish --flox-env "/flox_env" --env-dirs "$FLOX_ENV_DIRS" | source;
             set -gx MANPATH (if set -q MANPATH; echo "$MANPATH"; else; echo empty; end);
             /flox_activations fix-paths --shell fish --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "$MANPATH" | source;
             set -g  _FLOX_SOURCED_PROFILE_SCRIPTS (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end);
             /flox_activations profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source;
-            set -gx fish_trace 0;"#]].assert_eq(main_output);
+            set -gx fish_trace 0;
+            /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+        "#]].assert_eq(&output);
     }
 }

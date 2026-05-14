@@ -184,78 +184,30 @@ pub fn generate_bash_startup_commands(
 #[cfg(test)]
 mod tests {
     use expect_test::expect;
+    use shell_gen::ShellWithPath;
 
     use super::*;
+    use crate::gen_rc::test_helpers::{render_normalized, test_startup_ctx};
 
     // NOTE: For these `expect!` tests, run unit tests with `UPDATE_EXPECT=1`
     //  to have it automatically update the expected value when the implementation
     //  changes.
 
-    fn basic_args(
-        is_in_place: bool,
-    ) -> (
-        BashStartupArgs,
-        HashMap<String, String>,
-        HashMap<String, String>,
-    ) {
-        let args = BashStartupArgs {
-            flox_activate_tracelevel: 3,
-            activate_d: PathBuf::from("/activate_d"),
-            flox_env: "/flox_env".into(),
-            flox_env_cache: Some("/flox_env_cache".into()),
-            flox_env_project: Some("/flox_env_project".into()),
-            flox_env_description: Some("env_description".to_string()),
-            is_in_place,
-            bashrc_path: Some(PathBuf::from("/home/user/.bashrc")),
-            flox_sourcing_rc: false,
-            flox_activate_tracer: "TRACER".into(),
-            flox_activations: PathBuf::from("/flox_activations"),
-            clean_up: Some("/path/to/rc/file".into()),
-            auto_activate: false,
-            flox_bin: "flox".to_string(),
-            set_prompt: true,
-        };
-        let single_sets = HashMap::from([
-            ("SINGLE_B".to_string(), "single_b".to_string()),
-            ("SINGLE_A".to_string(), "single_a".to_string()),
-        ]);
-        let double_sets = HashMap::from([("DOUBLE_X".to_string(), "double_x".to_string())]);
-        (args, single_sets, double_sets)
-    }
-
-    fn render(
-        args: &BashStartupArgs,
-        single_sets: &HashMap<String, String>,
-        double_sets: &HashMap<String, String>,
-    ) -> String {
-        let additions = HashMap::from([
-            ("QUOTED_VAR".to_string(), "QUOTED'VALUE".to_string()),
-            ("ADDED_VAR".to_string(), "ADDED_VALUE".to_string()),
-        ]);
-        let deletions = vec!["DELETED_VAR".to_string()];
-        let start_diff = StartDiff::from_parts(additions, deletions);
-        let mut buf = Vec::new();
-        generate_bash_startup_commands(args, &start_diff, single_sets, double_sets, &mut buf)
-            .unwrap();
-        String::from_utf8_lossy(&buf).into_owned()
+    fn render(is_in_place: bool) -> String {
+        let shell = ShellWithPath::Bash(PathBuf::from("/bin/bash"));
+        let ctx = test_startup_ctx(shell, is_in_place);
+        render_normalized(&ctx)
     }
 
     #[test]
     fn test_generate_bash_startup_commands_subprocess() {
-        let (args, single_sets, double_sets) = basic_args(false);
-        let output = render(&args, &single_sets, &double_sets);
-        let (main_output, last_line) = output
-            .strip_suffix('\n')
-            .unwrap()
-            .rsplit_once('\n')
-            .unwrap();
-        assert_eq!(last_line, format!("{RM} /path/to/rc/file;"));
+        let output = render(false);
         expect![[r#"
             set -x
             export _flox_sourcing_rc=true;
             source /home/user/.bashrc;
             unset _flox_sourcing_rc;
-            export DOUBLE_X=double_x;
+            export FLOX_ACTIVATE_START_SERVICES=false;
             export ADDED_VAR=ADDED_VALUE;
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
@@ -263,32 +215,29 @@ mod tests {
             export FLOX_ENV_CACHE=/flox_env_cache;
             export FLOX_ENV_PROJECT=/flox_env_project;
             export FLOX_ENV_DESCRIPTION=env_description;
-            export _activate_d=/activate_d;
+            export _activate_d=/interpreter/activate.d;
             export _flox_activations=/flox_activations;
             export _flox_activate_tracer=TRACER;
-            if [ -t 1 ]; then source '/activate_d/set-prompt.bash'; fi;
+            if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
             eval "$('/flox_activations' set-env-dirs --shell bash --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}")";
             eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")";
             eval "$('/flox_activations' profile-scripts --shell bash --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "${FLOX_ENV_DIRS:-}")";
             set +h
-            set +x"#]].assert_eq(main_output);
+            set +x
+            /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+        "#]].assert_eq(&output);
     }
 
     #[test]
     fn test_generate_bash_startup_commands_in_place() {
-        let (args, single_sets, double_sets) = basic_args(true);
-        let output = render(&args, &single_sets, &double_sets);
-        let (main_output, last_line) = output
-            .strip_suffix('\n')
-            .unwrap()
-            .rsplit_once('\n')
-            .unwrap();
-        assert_eq!(last_line, format!("{RM} /path/to/rc/file;"));
+        let output = render(true);
         expect![[r#"
             set -x
-            export SINGLE_A=single_a;
-            export SINGLE_B=single_b;
-            export DOUBLE_X=double_x;
+            export FLOX_PROMPT_COLOR_1=1;
+            export FLOX_PROMPT_COLOR_2=2;
+            export FLOX_PROMPT_ENVIRONMENTS=prompt_envs;
+            export _FLOX_ACTIVE_ENVIRONMENTS=active_envs;
+            export FLOX_ACTIVATE_START_SERVICES=false;
             export ADDED_VAR=ADDED_VALUE;
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
@@ -296,14 +245,16 @@ mod tests {
             export FLOX_ENV_CACHE=/flox_env_cache;
             export FLOX_ENV_PROJECT=/flox_env_project;
             export FLOX_ENV_DESCRIPTION=env_description;
-            export _activate_d=/activate_d;
+            export _activate_d=/interpreter/activate.d;
             export _flox_activations=/flox_activations;
             export _flox_activate_tracer=TRACER;
-            if [ -t 1 ]; then source '/activate_d/set-prompt.bash'; fi;
+            if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
             eval "$('/flox_activations' set-env-dirs --shell bash --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}")";
             eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")";
             eval "$('/flox_activations' profile-scripts --shell bash --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "${FLOX_ENV_DIRS:-}")";
             set +h
-            set +x"#]].assert_eq(main_output);
+            set +x
+            /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+        "#]].assert_eq(&output);
     }
 }
