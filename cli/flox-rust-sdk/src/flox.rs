@@ -96,6 +96,8 @@ pub struct Features {
     #[serde(default)]
     pub qa: bool,
     #[serde(default)]
+    pub beta: bool,
+    #[serde(default)]
     pub auto_activate: bool,
 }
 

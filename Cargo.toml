@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "cli/beta",
     "cli/catalog-api-v1",
     "cli/flox",
     "cli/flox-rust-sdk",
@@ -26,6 +27,7 @@ version = "0.0.0"
 anyhow = "1"
 async-stream = "0.3.6"
 blake3 = "1.8.2"
+beta = { path = "cli/beta" }
 bpaf = { version = "0.9.24", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "cli/catalog-api-v1" }
 flox-catalog = { path = "cli/flox-catalog" }
