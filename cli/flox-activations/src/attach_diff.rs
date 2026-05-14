@@ -312,7 +312,7 @@ pub fn collect_activate_exports(
         ),
     ]);
     // Propagate optional variables that are documented as exposed.
-    // NB: `generate_*_start_commands()` performs the same logic except for zsh.
+    // NB: `generate_*_start_commands()` performs the same logic
     if let Some(project) = project {
         exports.insert(
             "FLOX_ENV_PROJECT",

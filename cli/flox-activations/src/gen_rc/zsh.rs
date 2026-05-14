@@ -63,29 +63,38 @@ pub fn generate_zsh_startup_commands(
 
     // Restore environment variables set in the previous initialization.
     start_diff.generate_statements(&mut stmts);
+
     // Propagate required variables that are documented as exposed.
-    stmts.push(set_unexported_unexpanded(
-        "_FLOX_ENV",
+    stmts.push(set_exported_unexpanded(
+        "FLOX_ENV",
         args.flox_env.display().to_string(),
     ));
+
+    // Propagate optional variables that are documented as exposed.
     if let Some(flox_env_cache) = &args.flox_env_cache {
-        stmts.push(set_unexported_unexpanded(
-            "_FLOX_ENV_CACHE",
+        stmts.push(set_exported_unexpanded(
+            "FLOX_ENV_CACHE",
             flox_env_cache.display().to_string(),
         ));
+    } else {
+        stmts.push(unset("FLOX_ENV_CACHE"));
     }
+
     if let Some(flox_env_project) = &args.flox_env_project {
-        stmts.push(set_unexported_unexpanded(
-            "_FLOX_ENV_PROJECT",
+        stmts.push(set_exported_unexpanded(
+            "FLOX_ENV_PROJECT",
             flox_env_project.display().to_string(),
         ));
+    } else {
+        stmts.push(unset("FLOX_ENV_PROJECT"));
     }
+
     if let Some(description) = &args.flox_env_description {
-        stmts.push(set_unexported_unexpanded(
-            "_FLOX_ENV_DESCRIPTION",
-            description,
-        ));
+        stmts.push(set_exported_unexpanded("FLOX_ENV_DESCRIPTION", description));
+    } else {
+        stmts.push(unset("FLOX_ENV_DESCRIPTION"));
     }
+
     stmts.push(source_file(args.activate_d.join("zsh")));
 
     // Set the prompt if we're in an interactive shell.
@@ -99,13 +108,6 @@ pub fn generate_zsh_startup_commands(
             .to_stmt(),
         );
     }
-
-    // The zsh script depends on these variables
-    // unset immediately after sourcing to avoid leaking variables
-    stmts.push(unset("_FLOX_ENV"));
-    stmts.push(unset("_FLOX_ENV_CACHE"));
-    stmts.push(unset("_FLOX_ENV_PROJECT"));
-    stmts.push(unset("_FLOX_ENV_DESCRIPTION"));
 
     if let Some(path) = args.clean_up.as_ref() {
         let path_str = path.to_string_lossy();
@@ -199,16 +201,12 @@ mod tests {
             export ADDED_VAR=ADDED_VALUE;
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
-            typeset -g _FLOX_ENV=/flox_env;
-            typeset -g _FLOX_ENV_CACHE=/flox_env_cache;
-            typeset -g _FLOX_ENV_PROJECT=/flox_env_project;
-            typeset -g _FLOX_ENV_DESCRIPTION=env_description;
+            export FLOX_ENV=/flox_env;
+            export FLOX_ENV_CACHE=/flox_env_cache;
+            export FLOX_ENV_PROJECT=/flox_env_project;
+            export FLOX_ENV_DESCRIPTION=env_description;
             source /activate_d/zsh;
-            if [[ -o interactive ]]; then source '/activate_d/set-prompt.zsh'; fi;
-            unset _FLOX_ENV;
-            unset _FLOX_ENV_CACHE;
-            unset _FLOX_ENV_PROJECT;
-            unset _FLOX_ENV_DESCRIPTION;"#]]
+            if [[ -o interactive ]]; then source '/activate_d/set-prompt.zsh'; fi;"#]]
         .assert_eq(main_output);
     }
 
@@ -231,16 +229,12 @@ mod tests {
             export ADDED_VAR=ADDED_VALUE;
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
-            typeset -g _FLOX_ENV=/flox_env;
-            typeset -g _FLOX_ENV_CACHE=/flox_env_cache;
-            typeset -g _FLOX_ENV_PROJECT=/flox_env_project;
-            typeset -g _FLOX_ENV_DESCRIPTION=env_description;
+            export FLOX_ENV=/flox_env;
+            export FLOX_ENV_CACHE=/flox_env_cache;
+            export FLOX_ENV_PROJECT=/flox_env_project;
+            export FLOX_ENV_DESCRIPTION=env_description;
             source /activate_d/zsh;
-            if [[ -o interactive ]]; then source '/activate_d/set-prompt.zsh'; fi;
-            unset _FLOX_ENV;
-            unset _FLOX_ENV_CACHE;
-            unset _FLOX_ENV_PROJECT;
-            unset _FLOX_ENV_DESCRIPTION;"#]]
+            if [[ -o interactive ]]; then source '/activate_d/set-prompt.zsh'; fi;"#]]
         .assert_eq(main_output);
     }
 }
