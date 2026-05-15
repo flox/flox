@@ -1,20 +1,11 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use itertools::Itertools;
-use shell_gen::{
-    GenerateShell,
-    Shell,
-    set_exported_unexpanded,
-    set_unexported_unexpanded,
-    source_file,
-    unset,
-};
+use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file};
 
-use crate::env_diff::EnvDiff;
+use crate::attach_diff::AttachDiff;
 use crate::gen_rc::RM;
 
 /// Arguments for generating zsh startup commands
@@ -31,8 +22,7 @@ pub struct ZshStartupArgs {
 
 pub fn generate_zsh_startup_commands(
     args: &ZshStartupArgs,
-    single_sets: &HashMap<String, String>,
-    double_sets: &EnvDiff,
+    attach_diff: &AttachDiff,
     writer: &mut impl Write,
 ) -> Result<()> {
     let mut stmts = vec![];
@@ -45,21 +35,7 @@ pub fn generate_zsh_startup_commands(
         args.activate_d.display().to_string(),
     ));
 
-    // For non-in-place activations, these were set as environment variables
-    // prior to exec'ing
-    if args.is_in_place {
-        for (k, v) in single_sets.iter().sorted_by_key(|(k, _)| *k) {
-            stmts.push(set_exported_unexpanded(k, v));
-        }
-    }
-    // Includes variables observed in the previous initialization —
-    // start_diff is folded into double_sets.
-    for (k, v) in double_sets.additions.iter().sorted_by_key(|(k, _)| *k) {
-        stmts.push(set_exported_unexpanded(k, v));
-    }
-    for name in double_sets.deletions.iter().sorted() {
-        stmts.push(unset(name));
-    }
+    stmts.extend(attach_diff.generate_statements(args.is_in_place));
 
     stmts.push(source_file(args.activate_d.join("zsh")));
 

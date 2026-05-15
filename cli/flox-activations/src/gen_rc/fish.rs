@@ -1,14 +1,12 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
 use flox_core::activate::context::AutoActivateFishMode;
-use itertools::Itertools;
-use shell_gen::{GenerateShell, Shell, set_exported_unexpanded, unset};
+use shell_gen::{GenerateShell, Shell};
 
-use crate::env_diff::EnvDiff;
+use crate::attach_diff::{AttachDiff, todo_drop_set_exported_unexpanded};
 use crate::gen_rc::RM;
 
 /// Arguments for generating fish startup commands
@@ -35,15 +33,14 @@ pub struct FishStartupArgs {
 // the output is a valid shell script fragment when represented on a single line.
 pub fn generate_fish_startup_commands(
     args: &FishStartupArgs,
-    single_sets: &HashMap<String, String>,
-    double_sets: &EnvDiff,
+    attach_diff: &AttachDiff,
     writer: &mut impl Write,
 ) -> Result<()> {
     let mut stmts = vec![];
 
     // Enable trace mode if requested
     if args.flox_activate_tracelevel >= 2 {
-        stmts.push(set_exported_unexpanded("fish_trace", "1").to_stmt());
+        stmts.push(todo_drop_set_exported_unexpanded("fish_trace", "1").to_stmt());
     }
 
     // The fish --init-command option allows us to source our startup
@@ -51,29 +48,17 @@ pub fn generate_fish_startup_commands(
     // is no requirement to go back and source the user's own config
     // as we do in bash.
 
-    // For non-in-place activations, these were set as environment variables
-    // prior to exec'ing
-    if args.is_in_place {
-        for (k, v) in single_sets.iter().sorted_by_key(|(k, _)| *k) {
-            stmts.push(set_exported_unexpanded(k, v));
-        }
-    }
-    for (k, v) in double_sets.additions.iter().sorted_by_key(|(k, _)| *k) {
-        stmts.push(set_exported_unexpanded(k, v));
-    }
-    for name in double_sets.deletions.iter().sorted() {
-        stmts.push(unset(name));
-    }
+    stmts.extend(attach_diff.generate_statements(args.is_in_place));
 
-    stmts.push(set_exported_unexpanded(
+    stmts.push(todo_drop_set_exported_unexpanded(
         "_activate_d",
         args.activate_d.display().to_string(),
     ));
-    stmts.push(set_exported_unexpanded(
+    stmts.push(todo_drop_set_exported_unexpanded(
         "_flox_activations",
         args.flox_activations.display().to_string(),
     ));
-    stmts.push(set_exported_unexpanded(
+    stmts.push(todo_drop_set_exported_unexpanded(
         "_flox_activate_tracer",
         &args.flox_activate_tracer,
     ));

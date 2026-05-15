@@ -1,13 +1,11 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use itertools::Itertools;
-use shell_gen::{GenerateShell, Shell, set_exported_unexpanded, source_file, unset};
+use shell_gen::{GenerateShell, Shell, source_file};
 
-use crate::env_diff::EnvDiff;
+use crate::attach_diff::{AttachDiff, todo_drop_set_exported_unexpanded, todo_drop_unset};
 use crate::gen_rc::RM;
 
 /// Arguments for generating bash startup commands
@@ -34,8 +32,7 @@ pub struct BashStartupArgs {
 // the output is a valid shell script fragment when represented on a single line.
 pub fn generate_bash_startup_commands(
     args: &BashStartupArgs,
-    single_sets: &HashMap<String, String>,
-    double_sets: &EnvDiff,
+    attach_diff: &AttachDiff,
     writer: &mut impl Write,
 ) -> Result<()> {
     let mut stmts = vec![];
@@ -45,41 +42,29 @@ pub fn generate_bash_startup_commands(
         stmts.push("set -x".to_stmt());
     }
 
-    // For non-in-place activations, these were set as environment
-    // variables prior to exec'ing.
-    if args.is_in_place {
-        for (k, v) in single_sets.iter().sorted_by_key(|(k, _)| *k) {
-            stmts.push(set_exported_unexpanded(k, v));
-        }
-    }
-
-    // Only `Some` if it was determined to exist by the caller
+    // The bashrc-sourcing dance must come before `attach_diff.generate_statements`
+    // so a `flox activate` inside .bashrc can't override values
     let should_source = args.bashrc_path.is_some() && !args.is_in_place && !args.flox_sourcing_rc;
-
     if should_source {
-        stmts.push(set_exported_unexpanded("_flox_sourcing_rc", "true"));
+        stmts.push(todo_drop_set_exported_unexpanded(
+            "_flox_sourcing_rc",
+            "true",
+        ));
         stmts.push(source_file(args.bashrc_path.as_ref().unwrap()));
-        stmts.push(unset("_flox_sourcing_rc"));
+        stmts.push(todo_drop_unset("_flox_sourcing_rc"));
     }
 
-    // double_sets must come after sourcing the user's RC file, otherwise a
-    // `flox activate` in .bashrc could override these values
-    for (k, v) in double_sets.additions.iter().sorted_by_key(|(k, _)| *k) {
-        stmts.push(set_exported_unexpanded(k, v));
-    }
-    for name in double_sets.deletions.iter().sorted() {
-        stmts.push(unset(name));
-    }
+    stmts.extend(attach_diff.generate_statements(args.is_in_place));
 
-    stmts.push(set_exported_unexpanded(
+    stmts.push(todo_drop_set_exported_unexpanded(
         "_activate_d",
         args.activate_d.display().to_string(),
     ));
-    stmts.push(set_exported_unexpanded(
+    stmts.push(todo_drop_set_exported_unexpanded(
         "_flox_activations",
         args.flox_activations.display().to_string(),
     ));
-    stmts.push(set_exported_unexpanded(
+    stmts.push(todo_drop_set_exported_unexpanded(
         "_flox_activate_tracer",
         &args.flox_activate_tracer,
     ));

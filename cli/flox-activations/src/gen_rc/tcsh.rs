@@ -1,13 +1,11 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use itertools::Itertools;
-use shell_gen::{GenerateShell, Shell, set_exported_unexpanded, unset};
+use shell_gen::{GenerateShell, Shell};
 
-use crate::env_diff::EnvDiff;
+use crate::attach_diff::{AttachDiff, todo_drop_set_exported_unexpanded};
 use crate::gen_rc::RM;
 
 /// Arguments for generating tcsh startup commands
@@ -32,8 +30,7 @@ pub struct TcshStartupArgs {
 // the output is a valid shell script fragment when represented on a single line.
 pub fn generate_tcsh_startup_commands(
     args: &TcshStartupArgs,
-    single_sets: &HashMap<String, String>,
-    double_sets: &EnvDiff,
+    attach_diff: &AttachDiff,
     writer: &mut impl Write,
 ) -> Result<()> {
     let mut stmts = vec![];
@@ -43,29 +40,17 @@ pub fn generate_tcsh_startup_commands(
         stmts.push("set verbose".to_stmt());
     }
 
-    // For non-in-place activations, these were set as environment variables
-    // prior to exec'ing
-    if args.is_in_place {
-        for (k, v) in single_sets.iter().sorted_by_key(|(k, _)| *k) {
-            stmts.push(set_exported_unexpanded(k, v));
-        }
-    }
-    for (k, v) in double_sets.additions.iter().sorted_by_key(|(k, _)| *k) {
-        stmts.push(set_exported_unexpanded(k, v));
-    }
-    for name in double_sets.deletions.iter().sorted() {
-        stmts.push(unset(name));
-    }
+    stmts.extend(attach_diff.generate_statements(args.is_in_place));
 
-    stmts.push(set_exported_unexpanded(
+    stmts.push(todo_drop_set_exported_unexpanded(
         "_activate_d",
         args.activate_d.display().to_string(),
     ));
-    stmts.push(set_exported_unexpanded(
+    stmts.push(todo_drop_set_exported_unexpanded(
         "_flox_activations",
         args.flox_activations.display().to_string(),
     ));
-    stmts.push(set_exported_unexpanded(
+    stmts.push(todo_drop_set_exported_unexpanded(
         "_flox_activate_tracer",
         &args.flox_activate_tracer,
     ));

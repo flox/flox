@@ -7,6 +7,8 @@ use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
 use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
+use itertools::Itertools;
+use shell_gen::{GenerateShell, SetVar, Statement, UnsetVar};
 use tracing::debug;
 
 use crate::activation_diff::{self, DiffSerializer};
@@ -56,19 +58,18 @@ pub struct AttachDiff {
     ///
     /// It probably wouldn't hurt to double set them, but for variables we
     /// control, we currently skip that.
-    pub single_sets: HashMap<String, String>,
-    /// Variables that haven't yet been folded into either single or double sets
-    /// These are handled on a case by case basis in startup scripts
-    pub sets: HashMap<String, String>,
+    single_sets: HashMap<String, String>,
+    /// Variables that haven't yet been folded into either single or double sets.
+    sets: HashMap<String, String>,
     /// Variables that we set (or unset) twice for non-in-place activations.
     /// We set (or unset) these:
     /// 1. As environment variables before we exec
     /// 2. Via our generated startup scripts, after user RC files have run.
     ///    This ensures we re-apply these variables after they could have been
     ///    changed, particularly if user RC files contain flox activations
-    pub double_sets: EnvDiff,
+    double_sets: EnvDiff,
     /// Pre-encoded diff string for _FLOX_HOOK_DIFF. None if snapshot unavailable.
-    pub encoded_diff: Option<String>,
+    encoded_diff: Option<String>,
 }
 
 impl AttachDiff {
@@ -154,6 +155,77 @@ impl AttachDiff {
             command.env(activation_diff::FLOX_HOOK_DIFF_VAR, encoded);
         }
     }
+
+    /// Generate statements that apply the environment in a gen_rc script
+    ///
+    /// This is the same as `apply_to_command` except:
+    /// - single_sets are skipped when not in in-place mode (since those have
+    ///   already been applied by apply_to_command)
+    /// - `sets`, which haven't yet been folded together
+    /// - FLOX_HOOK_DIFF_VAR
+    pub(crate) fn generate_statements(&self, is_in_place: bool) -> Vec<Statement> {
+        let mut stmts = Vec::new();
+        if is_in_place {
+            for (k, v) in self.single_sets.iter().sorted_by_key(|(k, _)| *k) {
+                stmts.push(set_exported_unexpanded(k, v));
+            }
+        }
+        for (k, v) in self.double_sets.additions.iter().sorted_by_key(|(k, _)| *k) {
+            stmts.push(set_exported_unexpanded(k, v));
+        }
+        for name in self.double_sets.deletions.iter().sorted() {
+            stmts.push(unset(name));
+        }
+        stmts
+    }
+}
+
+// We define this here without `pub` so we don't accidentally export variables
+// in gen_rc that we don't capture for `flox deactivate`
+fn set_exported_unexpanded(name: impl AsRef<str>, value: impl AsRef<str>) -> Statement {
+    SetVar::exported_no_expansion(name, value).to_stmt()
+}
+
+// We define this here without `pub` so we don't accidentally export variables
+// in gen_rc that we don't capture for `flox deactivate`
+#[allow(dead_code)]
+fn set_exported_expanded(name: impl AsRef<str>, value: impl AsRef<str>) -> Statement {
+    SetVar::exported_with_expansion(name, value).to_stmt()
+}
+
+// We define this here without `pub` so we don't accidentally change variables
+// in gen_rc that we don't capture for `flox deactivate`
+fn unset(name: impl AsRef<str>) -> Statement {
+    UnsetVar::new(name).to_stmt()
+}
+
+// ─── Inline set/unset NOT yet folded into AttachDiff ────────────────────────
+// Each call to a `todo_drop_*` helper below is a marker for an emission this
+// refactor deferred. Move each caller into `AttachDiff::generate_statements`
+// (or its inputs) and delete the corresponding shim when the last caller is
+// gone.
+//
+// Helper-routed inline leaks:
+//   • `_activate_d`           — gen_rc/{bash,fish,tcsh}.rs (export)
+//   • `_flox_activations`     — gen_rc/{bash,fish,tcsh}.rs (export)
+//   • `_flox_activate_tracer` — gen_rc/{bash,fish,tcsh}.rs (export, via args.flox_activate_tracer)
+//   • `_flox_sourcing_rc`     — gen_rc/bash.rs            (export + unset, bashrc-sourcing dance)
+//   • `fish_trace` (opener)   — gen_rc/fish.rs            (export, when tracelevel ≥ 2)
+//
+// Zsh emits no exports inline — its `_flox_activate_tracelevel` and
+// `_activate_d` go through the non-export `set_unexported_unexpanded` helper,
+// which is NOT moving out of `shell_gen`.
+// ────────────────────────────────────────────────────────────────────────────
+
+pub(crate) fn todo_drop_set_exported_unexpanded(
+    name: impl AsRef<str>,
+    value: impl AsRef<str>,
+) -> Statement {
+    SetVar::exported_no_expansion(name, value).to_stmt()
+}
+
+pub(crate) fn todo_drop_unset(name: impl AsRef<str>) -> Statement {
+    UnsetVar::new(name).to_stmt()
 }
 
 /// Compute the diff between the current environment and the intended
