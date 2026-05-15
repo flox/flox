@@ -31,9 +31,11 @@ jobs:
     steps:
       - name: "Checkout"
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        if: github.event.pull_request.base.repo.full_name == github.event.pull_request.head.repo.full_name
 
       - name: "Setup Nix"
         uses: "./.github/actions/common-setup"
+        if: github.event.pull_request.base.repo.full_name == github.event.pull_request.head.repo.full_name
         with:
           GITHUB_ACCESS_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
           SUBSTITUTER: "${{    vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
@@ -43,7 +45,7 @@ jobs:
           SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
 
       - name: "Determine target branch ( PR )"
-        if: ${{ github.event_name == 'pull_request' }}
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.repo.full_name == github.event.pull_request.head.repo.full_name }}
         # Unlike `github.event.merge_group.base_ref`, `github.base_ref`
         # only includes the final ref name
         # prepend `refs/heads/` to match the format of
@@ -53,13 +55,13 @@ jobs:
           echo 'HEAD_REF=refs/heads/${{ github.head_ref }}' >> "$GITHUB_ENV";
 
       - name: "Fetch target branch ( Merge Queue )"
-        if: ${{ github.event_name == 'merge_group' }}
+        if: ${{ github.event_name == 'merge_group' && github.event.pull_request.base.repo.full_name == github.event.pull_request.head.repo.full_name }}
         run: |
           echo 'TARGET_REF=${{ github.event.merge_group.base_ref }}' >> "$GITHUB_ENV";
           echo 'HEAD_REF=${{ github.event.merge_group.head_ref }}' >> "$GITHUB_ENV";
 
       - name: "Set merge queue flag"
-        if: ${{ github.event_name == 'merge_group' }}
+        if: ${{ github.event_name == 'merge_group' && github.event.pull_request.base.repo.full_name == github.event.pull_request.head.repo.full_name }}
         run: |
           echo 'IS_MERGE_QUEUE=1' >> "$GITHUB_ENV";
 
@@ -67,6 +69,7 @@ jobs:
       # Apparently git does not like fetching into the current branch,
       # so we fetch into temporary branches `target` and `head`.
       - name: "Fetch branches"
+        if: github.event.pull_request.base.repo.full_name == github.event.pull_request.head.repo.full_name
         run: |
           git fetch --atomic origin \
             "$TARGET_REF:target" \
@@ -75,6 +78,7 @@ jobs:
       # avoid the next step being filled with nix substitution logs
       # and ensure that `pre-commit` can run cargo with the `--offline` flag
       - name: "Fetch rust dependencies"
+        if: github.event.pull_request.base.repo.full_name == github.event.pull_request.head.repo.full_name
         run: |
           nix develop -L --no-update-lock-file --command \
             cargo fetch \
@@ -85,6 +89,7 @@ jobs:
       # The target branch and HEAD are resolved to a revision using
       # `git rev-parse`.
       - name: "Run Nix Git Hooks"
+        if: github.event.pull_request.base.repo.full_name == github.event.pull_request.head.repo.full_name
         run: |
           echo "IS_MERGE_QUEUE: $IS_MERGE_QUEUE"
           echo "TARGET_REF: $TARGET_REF ($( git rev-parse "target" ))"
