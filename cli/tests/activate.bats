@@ -4026,12 +4026,7 @@ attach_previous_release() {
   shell="${1?}"
   mode="${2?}"
 
-  # Set to "true" in the PR that bumps `activations.json` schema version, so
-  # the previous-release tests assert the incompatible-version error. Flip
-  # back to "false" once `FLOX_LATEST_VERSION` is a release that writes the
-  # bumped version (both prev and current then share a schema, so attach
-  # should succeed again).
-  incrementing_version_this_release="true"
+  incrementing_version_this_release="false"
 
   echo "$HOOK_ONLY_ONCE" | "$FLOX_BIN" edit -f -
 

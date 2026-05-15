@@ -332,7 +332,11 @@ impl StartIdentifier {
 pub struct Attachment {
     start_id: StartIdentifier,
     expiration: Option<OffsetDateTime>,
-    invocation_type: InvocationType,
+    // Optional until the V4 schema bump ships alongside the consumer
+    // (DEV-82); a missing field deserializes to `None` so old state.json
+    // files written before this field existed round-trip cleanly.
+    #[serde(default)]
+    invocation_type: Option<InvocationType>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -358,7 +362,7 @@ struct EnvironmentInfo {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ActivationState {
-    version: Version<4>,
+    version: Version<3>,
     info: EnvironmentInfo,
     mode: ActivateMode,
     ready: Ready,
@@ -462,7 +466,7 @@ impl ActivationState {
                 self.attach(pid, Attachment {
                     start_id: start_id.clone(),
                     expiration: None,
-                    invocation_type,
+                    invocation_type: Some(invocation_type),
                 });
                 StartOrAttachResult::Attach { start_id }
             },
@@ -583,7 +587,7 @@ impl ActivationState {
         let attachment = Attachment {
             start_id: start_id.clone(),
             expiration: None,
-            invocation_type,
+            invocation_type: Some(invocation_type),
         };
 
         debug!(pid, ?start_id, "starting new activation");
@@ -731,14 +735,12 @@ fn parse_versioned_activation_state(content: &str) -> Result<Option<ActivationSt
 
     match version_check.version.as_u64() {
         // Current version.
-        Some(4) => {
+        Some(3) => {
             let state: ActivationState =
                 serde_json::from_str(content).context("Failed to parse state.json")?;
             Ok(Some(state))
         },
         // Versions 1 and 2 were stored in a different path so we don't need to handle migrations.
-        // Version 3 shares the current path but is no longer supported; mismatched files are
-        // either errored (running PIDs/executive) or discarded.
         // This also handles the case where someone upgrades and then downgrades Flox.
         _ => {
             let running = extract_running_pids_from_json(content)?;
@@ -892,7 +894,7 @@ mod tests {
         Attachment {
             start_id,
             expiration: None,
-            invocation_type: InvocationType::Interactive,
+            invocation_type: Some(InvocationType::Interactive),
         }
     }
 
@@ -1257,7 +1259,7 @@ mod tests {
         let attachment = Attachment {
             start_id: start_id.clone(),
             expiration: Some(expiration),
-            invocation_type: InvocationType::Interactive,
+            invocation_type: Some(InvocationType::Interactive),
         };
         activations.attach(pid, attachment);
 
@@ -1280,7 +1282,7 @@ mod tests {
         let attachment = Attachment {
             start_id: start_id.clone(),
             expiration: Some(expiration),
-            invocation_type: InvocationType::Interactive,
+            invocation_type: Some(InvocationType::Interactive),
         };
         activations.attach(pid, attachment);
 
@@ -1336,10 +1338,10 @@ mod tests {
     mod version_handling {
         use super::*;
 
-        // V3 is the previous schema and shares the current state.json
-        // path. Earlier versions used a different path so aren't
-        // reachable through `parse_versioned_activation_state`.
-        const OLD_VERSION: Version<3> = Version;
+        // Technically we'd never encounter this exact Version because we
+        // changed the path of the state file during the 2025-12/2026-01
+        // activation rewrite.
+        const OLD_VERSION: Version<2> = Version;
 
         #[test]
         fn parse_versioned_activation_state_roundtrip() {
@@ -1478,7 +1480,7 @@ mod tests {
             let expected = Attachment {
                 start_id,
                 expiration: None,
-                invocation_type: InvocationType::ShellCommand("echo hi".to_string()),
+                invocation_type: Some(InvocationType::ShellCommand("echo hi".to_string())),
             };
             assert_eq!(activations.attached_pids, BTreeMap::from([(pid, expected)]));
         }
@@ -1499,7 +1501,7 @@ mod tests {
             let expected = Attachment {
                 start_id,
                 expiration: None,
-                invocation_type: InvocationType::InPlace,
+                invocation_type: Some(InvocationType::InPlace),
             };
             assert_eq!(activations.attached_pids, BTreeMap::from([(pid, expected)]));
         }
@@ -1512,7 +1514,7 @@ mod tests {
             activations.attach(pid, Attachment {
                 start_id: start_id.clone(),
                 expiration: None,
-                invocation_type: InvocationType::ExecCommand(vec!["ls".to_string()]),
+                invocation_type: Some(InvocationType::ExecCommand(vec!["ls".to_string()])),
             });
 
             let now = OffsetDateTime::now_utc();
@@ -1524,7 +1526,7 @@ mod tests {
             let expected = Attachment {
                 start_id,
                 expiration: Some(expiration),
-                invocation_type: InvocationType::ExecCommand(vec!["ls".to_string()]),
+                invocation_type: Some(InvocationType::ExecCommand(vec!["ls".to_string()])),
             };
             assert_eq!(activations.attached_pids, BTreeMap::from([(pid, expected)]));
         }
@@ -1538,7 +1540,7 @@ mod tests {
             activations.attach(old_pid, Attachment {
                 start_id: start_id.clone(),
                 expiration: None,
-                invocation_type: InvocationType::InPlace,
+                invocation_type: Some(InvocationType::InPlace),
             });
 
             activations
@@ -1548,12 +1550,31 @@ mod tests {
             let expected = Attachment {
                 start_id,
                 expiration: None,
-                invocation_type: InvocationType::InPlace,
+                invocation_type: Some(InvocationType::InPlace),
             };
             assert_eq!(
                 activations.attached_pids,
                 BTreeMap::from([(new_pid, expected)])
             );
+        }
+
+        /// Forward-compat with V3 state.json written by older flox binaries
+        /// (pre-DEV-78) that did not include `invocation_type` on attachments.
+        /// Delete this test when the V4 schema bump lands and the field becomes
+        /// required.
+        #[test]
+        fn deserialize_attachment_without_invocation_type_yields_none() {
+            let json = json!({
+                "start_id": {
+                    "store_path": "/nix/store/path1",
+                    "timestamp": 0,
+                },
+                "expiration": null,
+            })
+            .to_string();
+
+            let attachment: Attachment = serde_json::from_str(&json).unwrap();
+            assert_eq!(attachment.invocation_type, None);
         }
     }
 }
