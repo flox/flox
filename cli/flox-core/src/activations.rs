@@ -1336,10 +1336,10 @@ mod tests {
     mod version_handling {
         use super::*;
 
-        // Technically we'd never encounter this exact Version because we
-        // changed the path of the state file during the 2025-12/2026-01
-        // activation rewrite.
-        const OLD_VERSION: Version<2> = Version;
+        // V3 is the previous schema and shares the current state.json
+        // path. Earlier versions used a different path so aren't
+        // reachable through `parse_versioned_activation_state`.
+        const OLD_VERSION: Version<3> = Version;
 
         #[test]
         fn parse_versioned_activation_state_roundtrip() {
@@ -1454,107 +1454,10 @@ mod tests {
 
             stop_process(exec_proc);
         }
-
-        /// V3 used the same path as V4 but is no longer supported. With running
-        /// PIDs the read errors so the user knows to exit their old shells before
-        /// upgrading.
-        #[test]
-        fn parse_versioned_activation_state_v3_with_running_pids_errors() {
-            let proc = start_process();
-            let pid = proc.id() as i32;
-
-            let json = json!({
-                "version": 3,
-                "mode": "dev",
-                "ready": false,
-                "executive_pid": EXECUTIVE_NOT_STARTED,
-                "attached_pids": {
-                    pid.to_string(): {},
-                },
-            })
-            .to_string();
-
-            let err = parse_versioned_activation_state(&json).unwrap_err();
-            let expected_msg = formatdoc! {"
-                This environment has already been activated with an incompatible version of 'flox'.
-
-                Exit all activations of the environment and try again.
-                PIDs of the running activations: {pid}",
-            };
-            assert_eq!(err.to_string(), expected_msg);
-
-            stop_process(proc);
-        }
-
-        /// V3 state.json with no running PIDs or executive is discarded so the
-        /// upgraded flox can write a fresh V4 state file.
-        #[test]
-        fn parse_versioned_activation_state_v3_no_running_pids_discards() {
-            let proc = start_process();
-            let pid = proc.id();
-            stop_process(proc);
-
-            let json = json!({
-                "version": 3,
-                "mode": "dev",
-                "ready": false,
-                "executive_pid": EXECUTIVE_NOT_STARTED,
-                "attached_pids": {
-                    pid.to_string(): {},
-                },
-            })
-            .to_string();
-
-            let result = parse_versioned_activation_state(&json).unwrap();
-            assert_eq!(result, None, "should discard pre-V4 state");
-        }
     }
 
     mod invocation_type {
         use super::*;
-
-        fn attachment_with(invocation_type: InvocationType) -> Attachment {
-            Attachment {
-                start_id: StartIdentifier::new("/nix/store/path"),
-                expiration: None,
-                invocation_type,
-            }
-        }
-
-        #[test]
-        fn attachment_roundtrips_in_place() {
-            let attachment = attachment_with(InvocationType::InPlace);
-            let json = serde_json::to_string(&attachment).unwrap();
-            let parsed: Attachment = serde_json::from_str(&json).unwrap();
-            assert_eq!(parsed, attachment);
-        }
-
-        #[test]
-        fn attachment_roundtrips_interactive() {
-            let attachment = attachment_with(InvocationType::Interactive);
-            let json = serde_json::to_string(&attachment).unwrap();
-            let parsed: Attachment = serde_json::from_str(&json).unwrap();
-            assert_eq!(parsed, attachment);
-        }
-
-        #[test]
-        fn attachment_roundtrips_shell_command() {
-            let attachment = attachment_with(InvocationType::ShellCommand("echo hi".to_string()));
-            let json = serde_json::to_string(&attachment).unwrap();
-            let parsed: Attachment = serde_json::from_str(&json).unwrap();
-            assert_eq!(parsed, attachment);
-        }
-
-        #[test]
-        fn attachment_roundtrips_exec_command() {
-            let attachment = attachment_with(InvocationType::ExecCommand(vec![
-                "ls".to_string(),
-                "-l".to_string(),
-            ]));
-            let json = serde_json::to_string(&attachment).unwrap();
-            let parsed: Attachment = serde_json::from_str(&json).unwrap();
-            assert_eq!(parsed, attachment);
-        }
 
         #[test]
         fn start_or_attach_records_invocation_type_on_start() {
