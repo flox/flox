@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use time::OffsetDateTime;
 use tracing::{debug, trace};
 
+use crate::activate::context::InvocationType;
 use crate::activate::mode::ActivateMode;
 use crate::proc_status::pid_is_running;
 use crate::{Version, path_hash};
@@ -331,6 +332,7 @@ impl StartIdentifier {
 pub struct Attachment {
     start_id: StartIdentifier,
     expiration: Option<OffsetDateTime>,
+    invocation_type: InvocationType,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -356,7 +358,7 @@ struct EnvironmentInfo {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ActivationState {
-    version: Version<3>,
+    version: Version<4>,
     info: EnvironmentInfo,
     mode: ActivateMode,
     ready: Ready,
@@ -406,6 +408,7 @@ impl ActivationState {
                 let Attachment {
                     expiration,
                     start_id,
+                    invocation_type: _,
                 } = attachment;
                 acc.entry(start_id.clone())
                     .or_default()
@@ -442,6 +445,7 @@ impl ActivationState {
         &mut self,
         pid: Pid,
         store_path: impl AsRef<Path>,
+        invocation_type: InvocationType,
     ) -> StartOrAttachResult {
         if let Ready::Starting(starting_pid, ref start_id) = self.ready
             && pid_is_running(starting_pid)
@@ -458,11 +462,12 @@ impl ActivationState {
                 self.attach(pid, Attachment {
                     start_id: start_id.clone(),
                     expiration: None,
+                    invocation_type,
                 });
                 StartOrAttachResult::Attach { start_id }
             },
             Ready::False | Ready::True(_) | Ready::Starting(_, _) => {
-                let start_id = self.start(pid, &store_path);
+                let start_id = self.start(pid, &store_path, invocation_type);
                 StartOrAttachResult::Start { start_id }
             },
         }
@@ -568,11 +573,17 @@ impl ActivationState {
         }
     }
 
-    fn start(&mut self, pid: Pid, store_path: impl AsRef<Path>) -> StartIdentifier {
+    fn start(
+        &mut self,
+        pid: Pid,
+        store_path: impl AsRef<Path>,
+        invocation_type: InvocationType,
+    ) -> StartIdentifier {
         let start_id = StartIdentifier::new(store_path);
         let attachment = Attachment {
             start_id: start_id.clone(),
             expiration: None,
+            invocation_type,
         };
 
         debug!(pid, ?start_id, "starting new activation");
@@ -677,6 +688,7 @@ impl ActivationState {
         let new_attachment = Attachment {
             start_id,
             expiration,
+            invocation_type: old_attachment.invocation_type,
         };
 
         self.attached_pids.insert(new_pid, new_attachment);
@@ -719,12 +731,14 @@ fn parse_versioned_activation_state(content: &str) -> Result<Option<ActivationSt
 
     match version_check.version.as_u64() {
         // Current version.
-        Some(3) => {
+        Some(4) => {
             let state: ActivationState =
                 serde_json::from_str(content).context("Failed to parse state.json")?;
             Ok(Some(state))
         },
         // Versions 1 and 2 were stored in a different path so we don't need to handle migrations.
+        // Version 3 shares the current path but is no longer supported; mismatched files are
+        // either errored (running PIDs/executive) or discarded.
         // This also handles the case where someone upgrades and then downgrades Flox.
         _ => {
             let running = extract_running_pids_from_json(content)?;
@@ -878,6 +892,7 @@ mod tests {
         Attachment {
             start_id,
             expiration: None,
+            invocation_type: InvocationType::Interactive,
         }
     }
 
@@ -944,7 +959,11 @@ mod tests {
             let store_path = PathBuf::from("/nix/store/test");
 
             // Start activation with first PID
-            let result = activations.start_or_attach(proc_running.id() as i32, &store_path);
+            let result = activations.start_or_attach(
+                proc_running.id() as i32,
+                &store_path,
+                InvocationType::Interactive,
+            );
             let start_id = match result {
                 StartOrAttachResult::Start { start_id, .. } => start_id,
                 _ => panic!("Expected Start"),
@@ -954,7 +973,11 @@ mod tests {
             activations.set_ready(&start_id);
 
             // Attach second PID
-            activations.start_or_attach(proc_stopped.id() as i32, &store_path);
+            activations.start_or_attach(
+                proc_stopped.id() as i32,
+                &store_path,
+                InvocationType::Interactive,
+            );
 
             stop_process(proc_stopped);
 
@@ -975,7 +998,8 @@ mod tests {
             let store_path2 = PathBuf::from("/nix/store/path2");
 
             // Start activation with first store path
-            let result = activations.start_or_attach(100, &store_path1);
+            let result =
+                activations.start_or_attach(100, &store_path1, InvocationType::Interactive);
             let start_id1 = match result {
                 StartOrAttachResult::Start { start_id, .. } => start_id,
                 _ => panic!("Expected Start"),
@@ -985,10 +1009,11 @@ mod tests {
             activations.set_ready(&start_id1);
 
             // Attach second PID to same start_id
-            activations.start_or_attach(200, &store_path1);
+            activations.start_or_attach(200, &store_path1, InvocationType::Interactive);
 
             // Start activation with second store path (creates new start_id)
-            let result = activations.start_or_attach(300, &store_path2);
+            let result =
+                activations.start_or_attach(300, &store_path2, InvocationType::Interactive);
             let start_id2 = match result {
                 StartOrAttachResult::Start { start_id, .. } => start_id,
                 _ => panic!("Expected Start"),
@@ -1015,7 +1040,7 @@ mod tests {
             let mut activations = make_activations(Ready::False);
 
             let pid = 123;
-            let result = activations.start_or_attach(pid, &store_path);
+            let result = activations.start_or_attach(pid, &store_path, InvocationType::Interactive);
 
             let start_id = match result {
                 StartOrAttachResult::Start { start_id } => start_id,
@@ -1041,7 +1066,8 @@ mod tests {
             let mut activations = make_activations(Ready::True(start_id.clone()));
 
             let pid = 123;
-            let result = activations.start_or_attach(pid, &start_id.store_path);
+            let result =
+                activations.start_or_attach(pid, &start_id.store_path, InvocationType::Interactive);
 
             match result {
                 StartOrAttachResult::Attach { start_id: id } => {
@@ -1064,7 +1090,7 @@ mod tests {
             let mut activations = make_activations(Ready::True(existing));
 
             let pid = 123;
-            let result = activations.start_or_attach(pid, &new_path);
+            let result = activations.start_or_attach(pid, &new_path, InvocationType::Interactive);
 
             let start_id = match result {
                 StartOrAttachResult::Start { start_id } => start_id,
@@ -1091,7 +1117,8 @@ mod tests {
             let start_id = StartIdentifier::new("/nix/store/path1");
             let mut activations = make_activations(Ready::Starting(pid, start_id.clone()));
 
-            let result = activations.start_or_attach(123, &start_id.store_path);
+            let result =
+                activations.start_or_attach(123, &start_id.store_path, InvocationType::Interactive);
 
             match result {
                 StartOrAttachResult::AlreadyStarting {
@@ -1124,7 +1151,11 @@ mod tests {
                 make_activations(Ready::Starting(stopped_pid, old_start_id.clone()));
 
             let pid = 123;
-            let result = activations.start_or_attach(pid, &old_start_id.store_path);
+            let result = activations.start_or_attach(
+                pid,
+                &old_start_id.store_path,
+                InvocationType::Interactive,
+            );
 
             let new_start_id = match result {
                 StartOrAttachResult::Start { start_id } => start_id,
@@ -1150,7 +1181,11 @@ mod tests {
             let mut activations = make_activations(Ready::True(start_id.clone()));
 
             for pid in [100, 200, 300].iter() {
-                let result = activations.start_or_attach(*pid, &start_id.store_path);
+                let result = activations.start_or_attach(
+                    *pid,
+                    &start_id.store_path,
+                    InvocationType::Interactive,
+                );
                 match result {
                     StartOrAttachResult::Attach { start_id: id } => {
                         assert_eq!(id, start_id);
@@ -1179,7 +1214,7 @@ mod tests {
             let store_path = PathBuf::from("/nix/store/path1");
 
             let pid = 123;
-            let result = activations.start_or_attach(pid, &store_path);
+            let result = activations.start_or_attach(pid, &store_path, InvocationType::Interactive);
             let start_id = match result {
                 StartOrAttachResult::Start { start_id, .. } => start_id,
                 _ => panic!("Expected Start"),
@@ -1192,7 +1227,8 @@ mod tests {
             activations.set_ready(&start_id);
 
             // Attach same PID again - should replace existing attachment
-            let result = activations.start_or_attach(pid, &start_id.store_path);
+            let result =
+                activations.start_or_attach(pid, &start_id.store_path, InvocationType::Interactive);
 
             match result {
                 StartOrAttachResult::Attach { start_id: id } => {
@@ -1221,6 +1257,7 @@ mod tests {
         let attachment = Attachment {
             start_id: start_id.clone(),
             expiration: Some(expiration),
+            invocation_type: InvocationType::Interactive,
         };
         activations.attach(pid, attachment);
 
@@ -1243,6 +1280,7 @@ mod tests {
         let attachment = Attachment {
             start_id: start_id.clone(),
             expiration: Some(expiration),
+            invocation_type: InvocationType::Interactive,
         };
         activations.attach(pid, attachment);
 
@@ -1415,6 +1453,204 @@ mod tests {
             assert_eq!(err.to_string(), expected_msg);
 
             stop_process(exec_proc);
+        }
+
+        /// V3 used the same path as V4 but is no longer supported. With running
+        /// PIDs the read errors so the user knows to exit their old shells before
+        /// upgrading.
+        #[test]
+        fn parse_versioned_activation_state_v3_with_running_pids_errors() {
+            let proc = start_process();
+            let pid = proc.id() as i32;
+
+            let json = json!({
+                "version": 3,
+                "mode": "dev",
+                "ready": false,
+                "executive_pid": EXECUTIVE_NOT_STARTED,
+                "attached_pids": {
+                    pid.to_string(): {},
+                },
+            })
+            .to_string();
+
+            let err = parse_versioned_activation_state(&json).unwrap_err();
+            let expected_msg = formatdoc! {"
+                This environment has already been activated with an incompatible version of 'flox'.
+
+                Exit all activations of the environment and try again.
+                PIDs of the running activations: {pid}",
+            };
+            assert_eq!(err.to_string(), expected_msg);
+
+            stop_process(proc);
+        }
+
+        /// V3 state.json with no running PIDs or executive is discarded so the
+        /// upgraded flox can write a fresh V4 state file.
+        #[test]
+        fn parse_versioned_activation_state_v3_no_running_pids_discards() {
+            let proc = start_process();
+            let pid = proc.id();
+            stop_process(proc);
+
+            let json = json!({
+                "version": 3,
+                "mode": "dev",
+                "ready": false,
+                "executive_pid": EXECUTIVE_NOT_STARTED,
+                "attached_pids": {
+                    pid.to_string(): {},
+                },
+            })
+            .to_string();
+
+            let result = parse_versioned_activation_state(&json).unwrap();
+            assert_eq!(result, None, "should discard pre-V4 state");
+        }
+    }
+
+    mod invocation_type {
+        use super::*;
+
+        fn attachment_with(invocation_type: InvocationType) -> Attachment {
+            Attachment {
+                start_id: StartIdentifier::new("/nix/store/path"),
+                expiration: None,
+                invocation_type,
+            }
+        }
+
+        #[test]
+        fn attachment_roundtrips_in_place() {
+            let attachment = attachment_with(InvocationType::InPlace);
+            let json = serde_json::to_string(&attachment).unwrap();
+            let parsed: Attachment = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, attachment);
+        }
+
+        #[test]
+        fn attachment_roundtrips_interactive() {
+            let attachment = attachment_with(InvocationType::Interactive);
+            let json = serde_json::to_string(&attachment).unwrap();
+            let parsed: Attachment = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, attachment);
+        }
+
+        #[test]
+        fn attachment_roundtrips_shell_command() {
+            let attachment = attachment_with(InvocationType::ShellCommand("echo hi".to_string()));
+            let json = serde_json::to_string(&attachment).unwrap();
+            let parsed: Attachment = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, attachment);
+        }
+
+        #[test]
+        fn attachment_roundtrips_exec_command() {
+            let attachment = attachment_with(InvocationType::ExecCommand(vec![
+                "ls".to_string(),
+                "-l".to_string(),
+            ]));
+            let json = serde_json::to_string(&attachment).unwrap();
+            let parsed: Attachment = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, attachment);
+        }
+
+        #[test]
+        fn start_or_attach_records_invocation_type_on_start() {
+            let store_path = PathBuf::from("/nix/store/path1");
+            let mut activations = make_activations(Ready::False);
+
+            let pid = 123;
+            let result = activations.start_or_attach(
+                pid,
+                &store_path,
+                InvocationType::ShellCommand("echo hi".to_string()),
+            );
+            let start_id = match result {
+                StartOrAttachResult::Start { start_id } => start_id,
+                _ => panic!("Expected Start, got {:?}", result),
+            };
+
+            let expected = Attachment {
+                start_id,
+                expiration: None,
+                invocation_type: InvocationType::ShellCommand("echo hi".to_string()),
+            };
+            assert_eq!(activations.attached_pids, BTreeMap::from([(pid, expected)]));
+        }
+
+        #[test]
+        fn start_or_attach_records_invocation_type_on_attach() {
+            let start_id = StartIdentifier::new("/nix/store/path1");
+            let mut activations = make_activations(Ready::True(start_id.clone()));
+
+            let pid = 123;
+            let result =
+                activations.start_or_attach(pid, &start_id.store_path, InvocationType::InPlace);
+            match result {
+                StartOrAttachResult::Attach { start_id: id } => assert_eq!(id, start_id),
+                _ => panic!("Expected Attach, got {:?}", result),
+            }
+
+            let expected = Attachment {
+                start_id,
+                expiration: None,
+                invocation_type: InvocationType::InPlace,
+            };
+            assert_eq!(activations.attached_pids, BTreeMap::from([(pid, expected)]));
+        }
+
+        #[test]
+        fn replace_attachment_preserves_invocation_type_on_timeout() {
+            let start_id = StartIdentifier::new("/nix/store/path1");
+            let mut activations = make_activations(Ready::True(start_id.clone()));
+            let pid = 123;
+            activations.attach(pid, Attachment {
+                start_id: start_id.clone(),
+                expiration: None,
+                invocation_type: InvocationType::ExecCommand(vec!["ls".to_string()]),
+            });
+
+            let now = OffsetDateTime::now_utc();
+            let expiration = now + Duration::from_secs(60);
+            activations
+                .replace_attachment(start_id.clone(), pid, pid, Some(expiration))
+                .unwrap();
+
+            let expected = Attachment {
+                start_id,
+                expiration: Some(expiration),
+                invocation_type: InvocationType::ExecCommand(vec!["ls".to_string()]),
+            };
+            assert_eq!(activations.attached_pids, BTreeMap::from([(pid, expected)]));
+        }
+
+        #[test]
+        fn replace_attachment_preserves_invocation_type_on_pid_swap() {
+            let start_id = StartIdentifier::new("/nix/store/path1");
+            let mut activations = make_activations(Ready::True(start_id.clone()));
+            let old_pid = 123;
+            let new_pid = 456;
+            activations.attach(old_pid, Attachment {
+                start_id: start_id.clone(),
+                expiration: None,
+                invocation_type: InvocationType::InPlace,
+            });
+
+            activations
+                .replace_attachment(start_id.clone(), old_pid, new_pid, None)
+                .unwrap();
+
+            let expected = Attachment {
+                start_id,
+                expiration: None,
+                invocation_type: InvocationType::InPlace,
+            };
+            assert_eq!(
+                activations.attached_pids,
+                BTreeMap::from([(new_pid, expected)])
+            );
         }
     }
 }
