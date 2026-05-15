@@ -127,12 +127,14 @@ pub(crate) fn startup_ctx(
         None
     };
 
+    let is_in_place = invocation_type == InvocationType::InPlace;
     let attach_diff = AttachDiff::new(
         &ctx.attach_ctx,
         ctx.project_ctx.as_ref(),
         subsystem_verbosity,
         vars_from_env,
         &start_diff,
+        is_in_place,
     )?;
 
     let set_prompt = ctx.attach_ctx.set_prompt;
@@ -142,7 +144,7 @@ pub(crate) fn startup_ctx(
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-            is_in_place: invocation_type == InvocationType::InPlace,
+            is_in_place,
             bashrc_path,
             flox_sourcing_rc: is_sourcing_rc,
             flox_activate_tracer: activate_tracer.to_string(),
@@ -156,7 +158,7 @@ pub(crate) fn startup_ctx(
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-            is_in_place: invocation_type == InvocationType::InPlace,
+            is_in_place,
             flox_sourcing_rc: is_sourcing_rc,
             flox_activate_tracer: activate_tracer.to_string(),
             flox_activations,
@@ -170,7 +172,7 @@ pub(crate) fn startup_ctx(
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-            is_in_place: invocation_type == InvocationType::InPlace,
+            is_in_place,
             flox_sourcing_rc: is_sourcing_rc,
             flox_activate_tracer: activate_tracer.to_string(),
             flox_activations,
@@ -182,7 +184,7 @@ pub(crate) fn startup_ctx(
         ShellWithPath::Zsh(_) => StartupArgs::Zsh(ZshStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
-            is_in_place: invocation_type == InvocationType::InPlace,
+            is_in_place,
             clean_up,
             auto_activate: ctx.auto_activate,
             flox_bin: ctx.flox_bin.clone(),

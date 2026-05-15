@@ -103,6 +103,7 @@ pub fn start_process_compose_no_services(
         subsystem_verbosity,
         vars_from_env,
         &start_diff,
+        false,
     )?;
     attach_diff.apply_to_command(&mut command);
 

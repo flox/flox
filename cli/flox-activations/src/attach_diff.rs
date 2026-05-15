@@ -82,6 +82,7 @@ impl AttachDiff {
         subsystem_verbosity: u32,
         mut vars_from_env: VarsFromEnvironment,
         start_diff: &StartDiff,
+        is_in_place: bool,
     ) -> Result<Self> {
         // Extract the pre-activation snapshot before consuming vars_from_env.
         let full_env = vars_from_env.full_env.take();
@@ -94,8 +95,10 @@ impl AttachDiff {
 
         let mut sets: HashMap<String, String> = HashMap::new();
 
-        for (k, v) in collect_activate_exports(context, subsystem_verbosity, vars_from_env) {
-            sets.insert(k.to_string(), v);
+        if !is_in_place {
+            for (k, v) in collect_activate_exports(context, subsystem_verbosity, vars_from_env) {
+                sets.insert(k.to_string(), v);
+            }
         }
 
         // For now don't prevent users overriding our variables
@@ -110,12 +113,20 @@ impl AttachDiff {
             .extend(start_diff.deletions().iter().cloned());
 
         // Compute the activation diff if we have a pre-activation snapshot.
-        // Fold all three maps into the intended-sets union so the diff sees
-        // the same variables that will end up on the activated environment.
         let encoded_diff = if let Some(ref current_env) = full_env {
-            let mut intended_sets = sets.clone();
-            intended_sets.extend(single_sets.clone());
-            intended_sets.extend(double_sets.additions.clone());
+            let mut intended_sets = if is_in_place {
+                // These variables are computed by set-env-dirs and fix-paths,
+                // for which values must be computed dynamically at runtime
+                HashSet::from([
+                    FLOX_ENV_DIRS_VAR.to_string(),
+                    "PATH".to_string(),
+                    "MANPATH".to_string(),
+                ])
+            } else {
+                sets.keys().cloned().collect()
+            };
+            intended_sets.extend(single_sets.keys().cloned());
+            intended_sets.extend(double_sets.additions.keys().cloned());
             let intended_removals: HashSet<String> =
                 double_sets.deletions.iter().cloned().collect();
             let diff = diff_env(current_env, &intended_sets, &intended_removals);
@@ -162,12 +173,17 @@ impl AttachDiff {
     /// - single_sets are skipped when not in in-place mode (since those have
     ///   already been applied by apply_to_command)
     /// - `sets`, which haven't yet been folded together
-    /// - FLOX_HOOK_DIFF_VAR
     pub(crate) fn generate_statements(&self, is_in_place: bool) -> Vec<Statement> {
         let mut stmts = Vec::new();
         if is_in_place {
             for (k, v) in self.single_sets.iter().sorted_by_key(|(k, _)| *k) {
                 stmts.push(set_exported_unexpanded(k, v));
+            }
+            if let Some(ref encoded) = self.encoded_diff {
+                stmts.push(set_exported_unexpanded(
+                    activation_diff::FLOX_HOOK_DIFF_VAR,
+                    encoded,
+                ));
             }
         }
         for (k, v) in self.double_sets.additions.iter().sorted_by_key(|(k, _)| *k) {
@@ -234,17 +250,17 @@ pub(crate) fn todo_drop_unset(name: impl AsRef<str>) -> Statement {
 /// `intended_sets` and `intended_removals` are pre-assembled by the caller.
 fn diff_env(
     current_env: &HashMap<String, String>,
-    intended_sets: &HashMap<String, String>,
+    intended_sets: &HashSet<String>,
     intended_removals: &HashSet<String>,
 ) -> DiffSerializer {
-    let mut added = HashMap::new();
+    let mut added = HashSet::new();
     let mut modified = HashMap::new();
     let mut removed = HashMap::new();
 
-    for (k, new_val) in intended_sets {
+    for k in intended_sets {
         match current_env.get(k) {
             None => {
-                added.insert(k.clone(), new_val.clone());
+                added.insert(k.clone());
             },
             Some(old_val) => {
                 modified.insert(k.clone(), old_val.clone());
@@ -428,17 +444,17 @@ mod tests {
             .collect()
     }
 
-    fn make_removals(keys: &[&str]) -> HashSet<String> {
+    fn make_keys(keys: &[&str]) -> HashSet<String> {
         keys.iter().map(|k| k.to_string()).collect()
     }
 
     #[test]
     fn compute_additions() {
         let current = make_env(&[("EXISTING", "value")]);
-        let sets = make_env(&[("NEW_VAR", "new_value")]);
-        let diff = diff_env(&current, &sets, &make_removals(&[]));
+        let sets = make_keys(&["NEW_VAR"]);
+        let diff = diff_env(&current, &sets, &make_keys(&[]));
 
-        assert_eq!(diff.added, make_env(&[("NEW_VAR", "new_value")]));
+        assert_eq!(diff.added, make_keys(&["NEW_VAR"]));
         assert!(diff.modified.is_empty());
         assert!(diff.removed.is_empty());
     }
@@ -446,8 +462,8 @@ mod tests {
     #[test]
     fn compute_modifications() {
         let current = make_env(&[("MY_VAR", "old_value")]);
-        let sets = make_env(&[("MY_VAR", "new_value")]);
-        let diff = diff_env(&current, &sets, &make_removals(&[]));
+        let sets = make_keys(&["MY_VAR"]);
+        let diff = diff_env(&current, &sets, &make_keys(&[]));
 
         // modified stores original value
         assert!(diff.added.is_empty());
@@ -458,7 +474,7 @@ mod tests {
     #[test]
     fn compute_removals() {
         let current = make_env(&[("GONE_VAR", "gone_value")]);
-        let diff = diff_env(&current, &HashMap::new(), &make_removals(&["GONE_VAR"]));
+        let diff = diff_env(&current, &HashSet::new(), &make_keys(&["GONE_VAR"]));
 
         // removed stores original value
         assert!(diff.added.is_empty());
@@ -469,10 +485,10 @@ mod tests {
     #[test]
     fn compute_mixed() {
         let current = make_env(&[("MODIFIED_VAR", "orig"), ("REMOVED_VAR", "to_remove")]);
-        let sets = make_env(&[("NEW_VAR", "new"), ("MODIFIED_VAR", "changed")]);
-        let diff = diff_env(&current, &sets, &make_removals(&["REMOVED_VAR"]));
+        let sets = make_keys(&["NEW_VAR", "MODIFIED_VAR"]);
+        let diff = diff_env(&current, &sets, &make_keys(&["REMOVED_VAR"]));
 
-        assert_eq!(diff.added, make_env(&[("NEW_VAR", "new")]));
+        assert_eq!(diff.added, make_keys(&["NEW_VAR"]));
         assert_eq!(diff.modified, make_env(&[("MODIFIED_VAR", "orig")]));
         assert_eq!(diff.removed, make_env(&[("REMOVED_VAR", "to_remove")]));
     }
@@ -482,8 +498,8 @@ mod tests {
         let current = make_env(&[("UNCHANGED", "value")]);
         // Even when old == new, we track in modified so deactivation can
         // restore the original value if the user changes the var manually.
-        let sets = make_env(&[("UNCHANGED", "value")]);
-        let diff = diff_env(&current, &sets, &make_removals(&[]));
+        let sets = make_keys(&["UNCHANGED"]);
+        let diff = diff_env(&current, &sets, &make_keys(&[]));
 
         assert!(diff.added.is_empty());
         assert_eq!(diff.modified, make_env(&[("UNCHANGED", "value")]));
