@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>models/environment/CLAUDE.md — Hot-area rules</title>
+<style>
+:root {
+  --fg: #1c1f24; --fg-mute: #5a6270; --bg: #fbfbfa; --bg-card: #ffffff;
+  --border: #e4e6eb; --accent: #3b6bd6; --good: #2f8a52; --warn: #c98a17;
+  --bad: #c44545; --neutral: #6c757d; --code-bg: #f3f4f6;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.04);
+}
+* { box-sizing: border-box; }
+body {
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: var(--fg); background: var(--bg); margin: 0; padding: 32px 24px 80px;
+}
+.container { max-width: 1080px; margin: 0 auto; }
+header.page-header {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 24px 28px; box-shadow: var(--shadow);
+  margin-bottom: 22px;
+}
+header.page-header h1 { margin: 0 0 4px; font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
+header.page-header .subtitle { color: var(--fg-mute); font-size: 14px; margin: 0; }
+header.page-header .back { margin-top: 14px; font-size: 13px; }
+header.page-header .back a { color: var(--accent); text-decoration: none; }
+header.page-header .back a:hover { text-decoration: underline; }
+section.body {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 24px 32px; box-shadow: var(--shadow);
+}
+section.body h1 { font-size: 22px; font-weight: 600; margin: 22px 0 10px; letter-spacing: -.005em; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+section.body h2 { font-size: 19px; font-weight: 600; margin: 26px 0 10px; letter-spacing: -.005em; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+section.body h2:first-child, section.body h1:first-child { margin-top: 0; }
+section.body h3 { font-size: 16px; font-weight: 600; margin: 20px 0 8px; }
+section.body h4 { font-size: 14px; font-weight: 600; margin: 16px 0 6px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: .03em; }
+section.body h5, section.body h6 { font-size: 13px; font-weight: 600; margin: 14px 0 4px; }
+section.body p { margin: 0 0 12px; }
+section.body ul, section.body ol { margin: 6px 0 12px; padding-left: 26px; }
+section.body li { margin: 3px 0; }
+section.body li > p { margin: 0 0 6px; }
+section.body code {
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13px;
+  background: var(--code-bg); padding: 1px 5px; border-radius: 3px;
+}
+section.body pre {
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px;
+  background: var(--code-bg); border-radius: 6px; padding: 14px 16px;
+  overflow-x: auto; line-height: 1.45; margin: 8px 0 14px;
+}
+section.body pre code { background: transparent; padding: 0; font-size: 12.5px; }
+section.body blockquote {
+  border-left: 3px solid var(--border); padding: 6px 14px; margin: 10px 0;
+  background: var(--code-bg); color: var(--fg-mute); border-radius: 0 6px 6px 0;
+}
+section.body blockquote p { margin: 4px 0; }
+section.body a { color: var(--accent); text-decoration: none; }
+section.body a:hover { text-decoration: underline; }
+section.body hr { border: none; border-top: 1px solid var(--border); margin: 22px 0; }
+section.body table {
+  width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 13.5px;
+}
+section.body th, section.body td {
+  border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top;
+}
+section.body th { background: var(--code-bg); font-weight: 600; color: var(--fg-mute); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+section.body tbody tr:hover { background: #fafbfc; }
+section.body strong { font-weight: 600; }
+
+nav.toc {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 18px 24px; margin-bottom: 22px; box-shadow: var(--shadow);
+  max-height: 480px; overflow-y: auto;
+}
+nav.toc h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--fg-mute); margin: 0 0 10px; font-weight: 600; }
+nav.toc ul { list-style: none; padding-left: 0; margin: 0 0 6px; font-size: 13px; }
+nav.toc ul ul { padding-left: 16px; margin: 2px 0 4px; }
+nav.toc li { margin: 2px 0; }
+nav.toc a { color: var(--accent); text-decoration: none; }
+nav.toc a:hover { text-decoration: underline; }
+nav.toc details { margin: 4px 0; }
+nav.toc summary { font-weight: 600; cursor: pointer; color: var(--fg); font-size: 13px; }
+nav.toc summary:hover { color: var(--accent); }
+
+footer.page-footer { color: var(--fg-mute); font-size: 12px; text-align: center; margin-top: 22px; }
+footer.page-footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="page-header">
+  <h1>models/environment/CLAUDE.md — Hot-area rules</h1>
+  <div class="subtitle">Environment-model-specific rules synthesized from PR reviews.</div>
+  <div class="subtitle" style="margin-top:6px;">Source: <code>cli/flox-rust-sdk/src/models/environment/CLAUDE.md</code></div>
+  <div class="back"><a href="../../../../../rust-pr-analysis-index-01.html">&larr; Back to index</a></div>
+</header>
+
+
+
+<section class="body">
+<h1 id="conventions-for-cli-flox-rust-sdk-src-models-environment">Conventions for <code>cli/flox-rust-sdk/src/models/environment/</code></h1>
+<p>This directory contains the core environment model implementations (<code>ManagedEnvironment</code>, <code>PathEnvironment</code>, <code>RemoteEnvironment</code>, <code>CoreEnvironment</code>) and their supporting modules (<code>floxmeta_branch</code>, <code>generations</code>, <code>install</code>, <code>uninstall</code>, <code>fetcher</code>). Reviewers most often catch: missing test coverage for new error paths; error chains being flattened to strings instead of boxed; raw manifest strings smuggled past the typed <code>Manifest&lt;S&gt;</code> boundary; auth-result errors silently swallowed via <code>.ok()</code>; and build-skipping or locking logic applied in one method but not in a parallel one that does the same operation.</p>
+<h2 id="area-specific-rules">Area-specific rules</h2>
+<h3 id="testing">Testing</h3>
+<p><strong>Always add a unit or integration test for every new error path, including newly introduced variants such as <code>ManagedEnvironmentError::Diverged(DivergedMetadata)</code>.</strong> New code paths without tests are routinely flagged as blocking. If a bats test already exists, add an assertion on the specific output rather than relying on the test passing silently. Evidence: PR #3646, PR #4076.</p>
+<p><strong>When adding assertions to integration tests, assert against the generated summary message content, not just exit codes.</strong> Reviewers have pointed out cases where a bats test passes but says nothing about what the error message contains; a follow-up assertion against generation summary strings (e.g., local vs. remote generation descriptions) is expected. Evidence: PR #3646.</p>
+<p><strong>Use <code>assert_eq!</code> on the entire struct, not on individual fields, and do not drop output assertions when consolidating tests.</strong> When collapsing multiple tests into one, check that every prior assertion is still present. A consolidation that silently removes the "Next steps" tip assertion is a coverage gap that reviewers will call out. Evidence: PR #4114.</p>
+<p><strong>Add unit tests for new helper functions extracted into their own files (e.g., <code>install.rs</code>, <code>uninstall.rs</code>) covering both the happy path and error paths.</strong> Reviewers treating a new module without tests as a blocker is the established pattern in this area. Evidence: PR #4076.</p>
+<hr>
+<h3 id="error-variant-design">Error variant design</h3>
+<p><strong>When multiple source error types must map to a single enum variant, wrap with <code>Box&lt;dyn std::error::Error + Send + Sync&gt;</code> or <code>io::Error::new(ErrorKind::Other, e)</code> — never convert to a display string via <code>display_chain()</code>.</strong> Converting to a string destroys the error chain; downstream handlers and logging lose the ability to inspect the original cause. Prefer separate variants when they are semantically distinct. Evidence: PR #3673.</p>
+<p><strong>Fix typos in <code>#[error(...)]</code> strings immediately, and update all tests that assert on the exact text of that error.</strong> A typo in an error variant that appears in bats test output will break CI. The fix and the test update belong in the same commit. Evidence: PR #3646.</p>
+<p><strong>Distinguish <code>CloneBranch</code> from <code>FetchBranch</code> error variants when routing git remote errors to typed environment errors.</strong> These two variants represent different operations; conflating them misroutes access-denied and ref-not-found errors. Match on the correct variant at the relevant call site. Evidence: PR #3717.</p>
+<p><strong>Do not silently discard authentication errors by calling <code>.ok()</code> on the result of <code>get_handle()</code> or similar auth accessors.</strong> Using <code>.ok()</code> hides whether the user is not logged in or whether there was a network/communication error. If the <code>None</code> case is intentional (no user hint available), document why in a comment. Evidence: PR #4047.</p>
+<p><strong>Use the return type (<code>Option</code> vs. <code>Result</code>) to encode authentication semantics explicitly.</strong> <code>Option&lt;String&gt;</code> for a handle that may simply not exist is correct; <code>Result</code> is required when failure indicates a real problem (missing login, network error). Choosing the wrong type forces callers to discard error information. Evidence: PR #4047.</p>
+<hr>
+<h3 id="manifest-lifecycle-in-environment-models">Manifest lifecycle in environment models</h3>
+<p><strong>Never store or pass raw manifest strings; use <code>Manifest&lt;S&gt;</code> typed constructors for every manifest read and write.</strong> Returning <code>Option&lt;String&gt;</code> from <code>UninstallationAttempt</code> (instead of <code>Option&lt;Manifest&lt;Migrated&gt;&gt;</code>) re-introduces the untyped manifest anti-pattern that the type-state design eliminates. Use the typed constructors defined in the <code>flox-manifest</code> crate. Evidence: PR #4076.</p>
+<hr>
+<h3 id="build-skipping-and-locking-consistency">Build-skipping and locking consistency</h3>
+<p><strong>When adding a new method that calls <code>build()</code> on a <code>CoreEnvironment</code>, check <code>rendered_env_links</code> (and any analogous method) for build-skipping logic and replicate it.</strong> The existing <code>rendered_env_links</code> method contains caching/skipping logic (introduced in PR #2705) to avoid unnecessary Nix builds. A new method such as <code>rendered_env_links_for_generation</code> that bypasses this logic can trigger expensive redundant builds. Evidence: PR #3638.</p>
+<p><strong>Acquire the floxmeta lock at every entry point that may trigger a git fetch, not only at the outermost open call.</strong> Git writes an <code>index.lock</code> during fetch; if a second code path (e.g., <code>ensure_generation_lock</code>) fetches without holding the floxmeta lock, concurrent operations will collide. Add lock acquisition at any boundary that issues a network-touching git operation. Evidence: PR #3717.</p>
+<p><strong>Document the intended scope and lifetime of each lock: must it be held through the entire build, or just through the git fetch?</strong> Reviewers have flagged lock variables that are acquired but whose intended scope is unclear. A short comment (<code>// held through build to prevent concurrent fetch</code>) saves future confusion. Evidence: PR #3717.</p>
+<hr>
+<h3 id="semantic-correctness-and-control-flow">Semantic correctness and control flow</h3>
+<p><strong>After any logic change to a branch condition, verify that all arms of the surrounding <code>if</code>/<code>match</code> remain reachable.</strong> Introducing a new intermediate variable (e.g., <code>let is_uptodate = ...</code>) can silently make a branch dead. Run the affected tests and check with clippy before merging. Evidence: PR #3869.</p>
+<p><strong>Preserve the behavior of <code>--force</code> flags carefully: <code>flox pull --force</code> must reset local state to upstream even when the local branch is ahead.</strong> The interaction between <code>checkout_valid</code>, <code>is_uptodate</code>, and <code>force</code> is subtle. A change that appears to simplify the condition can break the case where the user is ahead of FloxHub but wants to reset to it. Evidence: PR #3869.</p>
+<p><strong>Verify output message formatting makes semantic sense before changing a <code>Display</code> implementation or format string.</strong> A change from <code>format!("{id} ({url})")</code> to <code>format!("{id} ({pkg})")</code> (delegating to <code>pkg</code>'s <code>Display</code>) must produce output that is meaningful to the user; reviewers will check what the rendered string looks like. Evidence: PR #4075.</p>
+<hr>
+<h3 id="documentation-and-comments">Documentation and comments</h3>
+<p><strong>Add a doc comment to every non-obvious struct in this area — especially <code>FloxmetaBranch</code>, <code>Generations</code>, and <code>GenerationLock</code> — explaining what the type represents, its invariants, and how it relates to adjacent types.</strong> These structs sit at the intersection of git, Nix, and environment lifecycle concerns; without a doc comment a reviewer has to reconstruct their semantics from the implementation. A one-paragraph description is sufficient. Evidence: PR #3813.</p>
+<p><strong>When a code path contains a deliberate shortcut for an edge case (e.g., <code>outputsToInstall = None</code>), document its practical rarity with concrete evidence (e.g., the nixpkgs <code>stdenv.mkDerivation</code> behavior) rather than merely noting the type is <code>None</code>.</strong> A comment that says "this can be None" adds nothing beyond the type signature. A comment explaining that nixpkgs <code>stdenv</code> always populates <code>outputsToInstall</code> via <code>commonMeta</code>, so <code>None</code> only occurs in non-stdenv derivations or catalog bugs, gives reviewers the context to decide whether the shortcut is acceptable. Evidence: PR #4215.</p>
+<p><strong>Comments on <code>Option</code> fields must enumerate all semantically distinct <code>None</code> cases, including future ones.</strong> If <code>None</code> currently means "currently live generation" but a future state could introduce "never been live", note both in the doc comment. A comment that only documents the current use case will silently mislead future engineers. Evidence: PR #3652.</p>
+<hr>
+<h3 id="code-organization">Code organization</h3>
+<p><strong>Drop <code>pub</code> visibility on module-internal helper functions and order functions in dependency sequence (callers before callees, or by logical flow).</strong> Functions that are implementation details of a single public entry point — such as a helper used only by <code>resolve_specs_to_modifications</code> — should not be <code>pub</code>. Ordering them after the public function they serve makes the module easier to read top-down. Evidence: PR #4076.</p>
+<hr>
+<h3 id="unrelated-changes">Unrelated changes</h3>
+<p><strong>If a PR includes an unrelated bug fix, make it explicit in the PR description and consider extracting it into a separate commit.</strong> Reviewers will notice and ask. An unrelated fix buried in a feature PR can also break tests in unexpected ways if the two changes interact. Evidence: PR #3869.</p>
+<h2 id="cross-cutting-reminders">Cross-cutting reminders</h2>
+<ul>
+<li>Error type hierarchy (extending variants vs. string-matching at call sites) — <code>.claude/skills/flox-rust-review/SKILL.md</code></li>
+<li>Provider trait and associated type design — <code>.claude/skills/flox-rust-review/SKILL.md</code></li>
+<li>Manifest type-state lifecycle (<code>Manifest&lt;S&gt;</code> constructors, <code>ManifestLatest</code>) — <code>.claude/skills/flox-rust-stylistic-conventions/SKILL.md</code></li>
+<li>User-facing message syntax, sentence structure, and emoji conventions — <code>.claude/skills/flox-rust-stylistic-conventions/SKILL.md</code></li>
+<li>Test naming (no <code>test_</code> prefix, descriptive names) — <code>.claude/skills/flox-rust-stylistic-conventions/SKILL.md</code></li>
+<li><code>use</code> statement placement (module scope, not function scope) — <code>.claude/skills/flox-rust-stylistic-conventions/SKILL.md</code></li>
+</ul>
+<h2 id="when-in-doubt">When in doubt</h2>
+<p>Most active reviewers in this area: <strong>ysndr</strong> (T1), <strong>dcarley</strong> (T1) — the two with the highest comment counts. mkenigs (T1) is also active. Their prior comments are the best precedent — see PRs #3638, #3646, #3652, #3673, #3717, #3813, #3869, #4045, #4047, #4075, #4076, #4114, #4215.</p>
+</section>
+
+<footer class="page-footer">
+  Generated 2026-05-17 18:25 UTC &middot; <a href="../../../../../rust-pr-analysis-index-01.html">Back to index</a>
+</footer>
+
+</div>
+</body>
+</html>

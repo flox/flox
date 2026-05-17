@@ -64,6 +64,8 @@ ul.tight li, ol.tight li { margin: 2px 0; }
 .card .meta { font-size: 12px; color: var(--fg-mute); margin-bottom: 8px; }
 .card .meta b { color: var(--fg); font-weight: 600; }
 .card .open { font-size: 13px; font-weight: 600; }
+.card .source { font-size: 12px; color: var(--fg-mute); margin-top: 4px; }
+.card .source a { color: var(--fg-mute); text-decoration: underline; }
 .kbd { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px; background: #f0f0ef; border: 1px solid var(--border); padding: 1px 5px; border-radius: 3px; color: #333; }
 .badge-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
 </style>
@@ -90,7 +92,7 @@ ul.tight li, ol.tight li { margin: 2px 0; }
     <div class="stat"><div class="label">Taxonomy entries</div><div class="value">15</div></div>
     <div class="stat"><div class="label">Reviewer tiers</div><div class="value">4</div></div>
     <div class="stat"><div class="label">Audit invariants</div><div class="value">4</div></div>
-    <div class="stat"><div class="label">Latest commit</div><div class="value"><code>bd81ab99f</code></div></div>
+    <div class="stat"><div class="label">Latest commit</div><div class="value"><code>4b4302989</code></div></div>
   </div>
   <p style="margin-top:14px;font-size:13px;"><a href="rust-pr-analysis-index-01.html">&larr; Back to index</a></p>
 </header>
@@ -155,8 +157,8 @@ ul.tight li, ol.tight li { margin: 2px 0; }
   <p>Outputs:</p>
   <ul class="tight">
     <li><code>.claude/skills/flox-rust-review/SKILL.md</code></li>
-    <li><code>.claude/skills/flox-rust-stylistic-conventions/SKILL.md</code> &mdash; <b>NEW</b>, extracted from the noise deep-dive</li>
-    <li>Three area-specific <code>CLAUDE.md</code> files (commands, models/environment, providers)</li>
+    <li><code>.claude/skills/flox-rust-stylistic-conventions/SKILL.md</code></li>
+    <li>Three area-specific <code>CLAUDE.md</code> files (commands, models/environment, providers) plus <code>cli/CLAUDE.md</code></li>
     <li><code>scripts/pr-analysis/findings/gap-report.md</code></li>
   </ul>
 
@@ -165,7 +167,9 @@ ul.tight li, ol.tight li { margin: 2px 0; }
   <ul class="tight">
     <li><code>build_dashboard.py</code> &rarr; <code>rust-pr-analysis-dashboard-01.html</code></li>
     <li><code>build_noise_deep_dive.py</code> &rarr; <code>rust-pr-analysis-noise-deep-dive-01.html</code></li>
-    <li><code>build_index_and_pipeline.py</code> &rarr; this page + the index</li>
+    <li><code>build_results_html.py</code> &rarr; <code>findings/results-summary.html</code></li>
+    <li><code>build_journey_html.py</code> &rarr; <code>findings/journey-report.html</code></li>
+    <li><code>build_index_and_pipeline.py</code> &rarr; this page, the index, and every markdown-to-HTML rendering</li>
   </ul>
 </section>
 
@@ -223,7 +227,8 @@ ul.tight li, ol.tight li { margin: 2px 0; }
     <code>user-facing-messages</code>, <code>naming</code>, <code>testing</code>,
     <code>imports</code>, <code>manifest-usage</code>, <code>deprecated-patterns</code>,
     <code>logging-tracing</code>, <code>formatting-style</code>, <code>control-flow</code>,
-    <code>semantic-correctness</code>, <code>ld-floxlib</code>, <code>other</code>
+    <code>semantic-correctness</code>, <code>ld-floxlib</code>, <code>panic-discipline</code>,
+    <code>other</code>
   </p>
 
   <h3>Other</h3>
@@ -267,7 +272,7 @@ ul.tight li, ol.tight li { margin: 2px 0; }
 </section>
 
 <div class="footer">
-  Generated 2026-05-17 17:41 UTC &middot; latest commit <code>bd81ab99f</code> &middot;
+  Generated 2026-05-17 18:25 UTC &middot; latest commit <code>4b4302989</code> &middot;
   <a href="rust-pr-analysis-index-01.html">Back to index</a>
 </div>
 

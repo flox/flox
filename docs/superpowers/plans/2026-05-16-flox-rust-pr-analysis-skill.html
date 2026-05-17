@@ -1,0 +1,2873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Original Implementation Plan (2026-05-16)</title>
+<style>
+:root {
+  --fg: #1c1f24; --fg-mute: #5a6270; --bg: #fbfbfa; --bg-card: #ffffff;
+  --border: #e4e6eb; --accent: #3b6bd6; --good: #2f8a52; --warn: #c98a17;
+  --bad: #c44545; --neutral: #6c757d; --code-bg: #f3f4f6;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.04);
+}
+* { box-sizing: border-box; }
+body {
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: var(--fg); background: var(--bg); margin: 0; padding: 32px 24px 80px;
+}
+.container { max-width: 1080px; margin: 0 auto; }
+header.page-header {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 24px 28px; box-shadow: var(--shadow);
+  margin-bottom: 22px;
+}
+header.page-header h1 { margin: 0 0 4px; font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
+header.page-header .subtitle { color: var(--fg-mute); font-size: 14px; margin: 0; }
+header.page-header .back { margin-top: 14px; font-size: 13px; }
+header.page-header .back a { color: var(--accent); text-decoration: none; }
+header.page-header .back a:hover { text-decoration: underline; }
+section.body {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 24px 32px; box-shadow: var(--shadow);
+}
+section.body h1 { font-size: 22px; font-weight: 600; margin: 22px 0 10px; letter-spacing: -.005em; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+section.body h2 { font-size: 19px; font-weight: 600; margin: 26px 0 10px; letter-spacing: -.005em; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+section.body h2:first-child, section.body h1:first-child { margin-top: 0; }
+section.body h3 { font-size: 16px; font-weight: 600; margin: 20px 0 8px; }
+section.body h4 { font-size: 14px; font-weight: 600; margin: 16px 0 6px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: .03em; }
+section.body h5, section.body h6 { font-size: 13px; font-weight: 600; margin: 14px 0 4px; }
+section.body p { margin: 0 0 12px; }
+section.body ul, section.body ol { margin: 6px 0 12px; padding-left: 26px; }
+section.body li { margin: 3px 0; }
+section.body li > p { margin: 0 0 6px; }
+section.body code {
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13px;
+  background: var(--code-bg); padding: 1px 5px; border-radius: 3px;
+}
+section.body pre {
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px;
+  background: var(--code-bg); border-radius: 6px; padding: 14px 16px;
+  overflow-x: auto; line-height: 1.45; margin: 8px 0 14px;
+}
+section.body pre code { background: transparent; padding: 0; font-size: 12.5px; }
+section.body blockquote {
+  border-left: 3px solid var(--border); padding: 6px 14px; margin: 10px 0;
+  background: var(--code-bg); color: var(--fg-mute); border-radius: 0 6px 6px 0;
+}
+section.body blockquote p { margin: 4px 0; }
+section.body a { color: var(--accent); text-decoration: none; }
+section.body a:hover { text-decoration: underline; }
+section.body hr { border: none; border-top: 1px solid var(--border); margin: 22px 0; }
+section.body table {
+  width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 13.5px;
+}
+section.body th, section.body td {
+  border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top;
+}
+section.body th { background: var(--code-bg); font-weight: 600; color: var(--fg-mute); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+section.body tbody tr:hover { background: #fafbfc; }
+section.body strong { font-weight: 600; }
+
+nav.toc {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 18px 24px; margin-bottom: 22px; box-shadow: var(--shadow);
+  max-height: 480px; overflow-y: auto;
+}
+nav.toc h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--fg-mute); margin: 0 0 10px; font-weight: 600; }
+nav.toc ul { list-style: none; padding-left: 0; margin: 0 0 6px; font-size: 13px; }
+nav.toc ul ul { padding-left: 16px; margin: 2px 0 4px; }
+nav.toc li { margin: 2px 0; }
+nav.toc a { color: var(--accent); text-decoration: none; }
+nav.toc a:hover { text-decoration: underline; }
+nav.toc details { margin: 4px 0; }
+nav.toc summary { font-weight: 600; cursor: pointer; color: var(--fg); font-size: 13px; }
+nav.toc summary:hover { color: var(--accent); }
+
+footer.page-footer { color: var(--fg-mute); font-size: 12px; text-align: center; margin-top: 22px; }
+footer.page-footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="page-header">
+  <h1>Original Implementation Plan (2026-05-16)</h1>
+  <div class="subtitle">13-task plan written before any code was committed.</div>
+  <div class="subtitle" style="margin-top:6px;">Source: <code>docs/superpowers/plans/2026-05-16-flox-rust-pr-analysis-skill.md</code></div>
+  <div class="back"><a href="../../../rust-pr-analysis-index-01.html">&larr; Back to index</a></div>
+</header>
+
+<nav class="toc">
+<h2>Contents</h2>
+<ul>
+<li><a href="#file-structure">File Structure</a></li>
+<li><a href="#task-1-bootstrap-pipeline-directory-schema-and-reviewer-seed">Task 1: Bootstrap pipeline directory, schema, and reviewer seed</a><ul>
+<li><a href="#full-corpus-task-8-onward-all-157-rust-prs">Full corpus (Task 8 onward): all 157 Rust PRs</a></li>
+</ul></li>
+<li><a href="#task-2-gh-subprocess-wrapper-and-pr-list-ingest">Task 2: gh subprocess wrapper and PR list ingest</a></li>
+<li><a href="#task-3-line-comment-ingest-with-reviewer-area-tagging">Task 3: Line-comment ingest with reviewer/area tagging</a></li>
+<li><a href="#task-4-final-merged-code-snippet-extraction">Task 4: Final-merged-code snippet extraction</a></li>
+<li><a href="#task-5-llm-classifier-claude-haiku-4-5">Task 5: LLM classifier (Claude Haiku 4.5)</a></li>
+<li><a href="#task-6-findings-aggregator-the-intermediate-analysis-artifact">Task 6: Findings aggregator — the intermediate analysis artifact</a></li>
+<li><a href="#task-7-pilot-extraction-on-15-prs-design-retrospective">Task 7: Pilot extraction on 15 PRs + design retrospective</a></li>
+<li><a href="#task-8-full-corpus-run-on-all-157-rust-touching-prs">Task 8: Full-corpus run on all 157 Rust-touching PRs</a></li>
+<li><a href="#task-9-user-review-checkpoint-on-findings">Task 9: User review checkpoint on findings</a></li>
+<li><a href="#task-10-cross-cutting-skill-synthesis">Task 10: Cross-cutting skill synthesis</a></li>
+<li><a href="#task-11-area-specific-synthesis-three-parallel-runs">Task 11: Area-specific synthesis — three parallel runs</a></li>
+<li><a href="#task-12-gap-report-what-reviewers-enforce-that-agents-md-doesn-t">Task 12: Gap report — what reviewers enforce that AGENTS.md doesn't</a></li>
+<li><a href="#task-13-final-review-checkpoint-verification">Task 13: Final review checkpoint + verification</a></li>
+<li><a href="#cost-and-time-budget-informational-not-a-task">Cost and time budget (informational, not a task)</a></li>
+</ul></nav>
+
+<section class="body">
+<h1 id="flox-rust-pr-analysis-skill-implementation-plan">Flox Rust PR-Analysis Skill Implementation Plan</h1>
+<blockquote><p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p></blockquote>
+<p><strong>Goal:</strong> Mine 6 months of merged PRs touching Rust files in <code>flox/flox</code> to extract review-validated coding rules, materialize them as one cross-cutting skill plus three area-specific <code>CLAUDE.md</code> files, and produce a gap report against the existing <code>AGENTS.md</code>.</p>
+<p><strong>Architecture:</strong> A four-stage pipeline implemented as Python <code>uv</code> shebang scripts that share a SQLite database. Stage 1 ingests PR metadata, files, line-comments, and a final-merged-code snippet per comment from the GitHub API via the <code>gh</code> CLI. Stage 2 runs each comment through Claude Haiku 4.5 to classify it into a taxonomy seeded from <code>AGENTS.md</code> sections, judge whether it was addressed, and extract a one-sentence rule. Stage 3 aggregates classified comments into reviewer-weighted, area-tagged <code>finding</code> rows — the intermediate analysis artifact. Stage 4 synthesizes findings into four deliverables: the cross-cutting skill, three area-specific <code>CLAUDE.md</code> files (<code>commands/</code>, <code>models/environment/</code>, <code>providers/</code>), and a gap report.</p>
+<p>The pipeline runs <strong>twice</strong>: first as a 15-PR pilot (Task 7) that validates schema, taxonomy, prompt, and clustering against real data and surfaces a structured retrospective for human review — iterating until calibrated; then at full corpus scale (Task 8). A coverage-audit script proves "every comment on every PR landed in the DB and was classified" before any synthesis runs, so completeness is guaranteed, not assumed.</p>
+<p><strong>Tech Stack:</strong></p>
+<ul>
+<li>Python 3.12 via <code>uv</code> shebang scripts with inline script dependencies (<code>anthropic</code>, <code>httpx</code> — <code>gh</code> invoked as subprocess)</li>
+<li>SQLite (Python stdlib <code>sqlite3</code>)</li>
+<li><code>gh</code> CLI for GitHub API (already authenticated as <code>smorin</code>)</li>
+<li>Anthropic API (<code>claude-haiku-4-5-20251001</code> for classification, <code>claude-sonnet-4-6</code> for synthesis)</li>
+<li>Tested with <code>pytest</code> (also <code>uv add --script ... pytest</code> per-script where applicable; primary tests live in <code>scripts/pr-analysis/tests/</code>)</li>
+</ul>
+<p><strong>Corpus parameters (locked from volume check on 2026-05-16):</strong></p>
+<ul>
+<li>Window: merged on or after <code>2025-11-16</code> (last 6 months from today, <code>2026-05-16</code>)</li>
+<li>Rust-touching merged PRs: <strong>157</strong></li>
+<li>Projected line-comments: <strong>~1,470</strong></li>
+<li>Reviewer weights:</li>
+<ul>
+<li>Tier 1 (most opinionated): <code>ysndr</code>, <code>mkenigs</code>, <code>dcarley</code> → weight <code>3.0</code></li>
+<li>Tier 2: <code>djsauble</code>, <code>gilmishal</code>, <code>billlevine</code> → weight <code>2.0</code></li>
+<li>Other humans → weight <code>1.0</code></li>
+<li>Bots → weight <code>0.0</code> (kept in DB, excluded from synthesis)</ul></li>
+<li>Hot areas getting dedicated analysis passes:</li>
+<ul>
+<li><code>cli/flox/src/commands/</code> (207 PR-touches)</li>
+<li><code>cli/flox-rust-sdk/src/models/environment/</code> (115 PR-touches)</li>
+<li><code>cli/flox-rust-sdk/src/providers/</code> (103 PR-touches)</ul></li>
+<li>Cross-cutting threshold: a finding is <code>scope = 'cross-cutting'</code> iff <code>cross_area_count &gt;= 2</code> AND <code>tier1_reviewer_count &gt;= 1</code>. Otherwise <code>area-specific</code>.</li>
+</ul>
+<hr>
+<h2 id="file-structure">File Structure</h2>
+<p>All pipeline code, fixtures, and intermediate findings live under <code>scripts/pr-analysis/</code>. Final synthesized artifacts (<code>CLAUDE.md</code>s and the skill file) write into the locations they're meant to live.</p>
+<pre><code>scripts/pr-analysis/
+  README.md                       # how to run the pipeline
+  schema.sql                      # SQLite DDL (single source of truth)
+  init_db.py                      # apply schema.sql, seed reviewer table
+  ingest_prs.py                   # fetch PR list + metadata + files
+  ingest_comments.py              # fetch line-comments per PR
+  ingest_final_code.py            # fetch ~40-line snippet from merge_commit_sha
+  classify_comments.py            # LLM classification (concurrent)
+  aggregate_findings.py           # group classified comments → finding rows
+  audit_coverage.py               # prove every comment ingested+classified
+  synthesize_cross_cutting.py     # writes .claude/skills/flox-rust-review/SKILL.md
+  synthesize_area.py              # writes &lt;area&gt;/CLAUDE.md for one area
+  synthesize_gap_report.py        # writes findings/gap-report.md
+  lib/
+    __init__.py
+    db.py                         # sqlite helpers, connection factory
+    areas.py                      # path → area mapping
+    reviewers.py                  # weights/tiers, helpers
+    llm.py                        # Claude API client wrapper, retries
+    taxonomy.py                   # initial taxonomy seeded from AGENTS.md
+    gh.py                         # subprocess wrapper for `gh api`, JSON parse
+  data/
+    pr_analysis.db                # SQLite DB (gitignored)
+    .gitignore                    # ignore *.db
+  findings/                       # committed analysis outputs
+    pilot-retro.md                # Task 7 retrospective digest + decisions
+    revision_log.md               # iteration history (added on first iterate)
+    cross-cutting-themes.md       # narrative companion to finding rows
+    area-commands.md              # narrative for commands/ area
+    area-models-environment.md
+    area-providers.md
+    gap-report.md
+  tests/
+    __init__.py
+    test_areas.py
+    test_reviewers.py
+    test_taxonomy.py
+    test_gh.py
+    test_classify_comments.py
+    test_aggregate_findings.py
+    fixtures/
+      pr_4231_comments.json       # real captured fixture for known-rich PR
+      pr_4231_files.json
+      classification_sample.json
+
+# Synthesized deliverables (written by Stage 4)
+.claude/skills/flox-rust-review/SKILL.md
+cli/flox/src/commands/CLAUDE.md
+cli/flox-rust-sdk/src/models/environment/CLAUDE.md
+cli/flox-rust-sdk/src/providers/CLAUDE.md
+scripts/pr-analysis/findings/gap-report.md</code></pre>
+<p>Each <code>lib/</code> module has one responsibility; pipeline scripts are thin orchestration over them. Ingestion scripts are idempotent: re-running upserts rather than duplicates, so partial runs can resume.</p>
+<hr>
+<h2 id="task-1-bootstrap-pipeline-directory-schema-and-reviewer-seed">Task 1: Bootstrap pipeline directory, schema, and reviewer seed</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>scripts/pr-analysis/schema.sql</code></li>
+<li>Create: <code>scripts/pr-analysis/data/.gitignore</code></li>
+<li>Create: <code>scripts/pr-analysis/lib/__init__.py</code></li>
+<li>Create: <code>scripts/pr-analysis/lib/db.py</code></li>
+<li>Create: <code>scripts/pr-analysis/lib/reviewers.py</code></li>
+<li>Create: <code>scripts/pr-analysis/lib/areas.py</code></li>
+<li>Create: <code>scripts/pr-analysis/lib/taxonomy.py</code></li>
+<li>Create: <code>scripts/pr-analysis/init_db.py</code></li>
+<li>Create: <code>scripts/pr-analysis/tests/__init__.py</code></li>
+<li>Create: <code>scripts/pr-analysis/tests/test_areas.py</code></li>
+<li>Create: <code>scripts/pr-analysis/tests/test_reviewers.py</code></li>
+<li>Create: <code>scripts/pr-analysis/tests/test_taxonomy.py</code></li>
+<li>Create: <code>scripts/pr-analysis/README.md</code></li>
+<li>[ ] <strong>Step 1: Write <code>scripts/pr-analysis/schema.sql</code></strong></li>
+</ul>
+<pre><code class="lang-sql">PRAGMA foreign_keys = ON;
+PRAGMA journal_mode = WAL;
+
+CREATE TABLE IF NOT EXISTS pr (
+  number INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  author TEXT NOT NULL,
+  author_type TEXT NOT NULL,
+  state TEXT NOT NULL,
+  merged_at TEXT NOT NULL,
+  base_sha TEXT,
+  head_sha TEXT,
+  merge_commit_sha TEXT,
+  url TEXT NOT NULL,
+  fetched_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS pr_file (
+  pr_number INTEGER NOT NULL REFERENCES pr(number) ON DELETE CASCADE,
+  path TEXT NOT NULL,
+  status TEXT,
+  additions INTEGER,
+  deletions INTEGER,
+  PRIMARY KEY (pr_number, path)
+);
+CREATE INDEX IF NOT EXISTS idx_pr_file_path ON pr_file(path);
+
+CREATE TABLE IF NOT EXISTS reviewer (
+  login TEXT PRIMARY KEY,
+  weight REAL NOT NULL,
+  tier INTEGER NOT NULL,
+  notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS line_comment (
+  id INTEGER PRIMARY KEY,
+  pr_number INTEGER NOT NULL REFERENCES pr(number) ON DELETE CASCADE,
+  author TEXT NOT NULL,
+  author_type TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  path TEXT NOT NULL,
+  line INTEGER,
+  original_line INTEGER,
+  side TEXT,
+  diff_hunk TEXT,
+  body TEXT NOT NULL,
+  in_reply_to_id INTEGER,
+  area TEXT NOT NULL,
+  reviewer_weight REAL NOT NULL DEFAULT 1.0,
+  reviewer_tier INTEGER NOT NULL DEFAULT 3
+);
+CREATE INDEX IF NOT EXISTS idx_comment_area ON line_comment(area);
+CREATE INDEX IF NOT EXISTS idx_comment_author ON line_comment(author);
+CREATE INDEX IF NOT EXISTS idx_comment_pr ON line_comment(pr_number);
+CREATE INDEX IF NOT EXISTS idx_comment_tier ON line_comment(reviewer_tier);
+
+CREATE TABLE IF NOT EXISTS comment_final_code (
+  comment_id INTEGER PRIMARY KEY REFERENCES line_comment(id) ON DELETE CASCADE,
+  final_code_snippet TEXT,
+  snippet_available INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS classification (
+  comment_id INTEGER PRIMARY KEY REFERENCES line_comment(id) ON DELETE CASCADE,
+  taxonomy TEXT NOT NULL,
+  was_addressed INTEGER,
+  rule_statement TEXT,
+  confidence REAL NOT NULL,
+  classifier_model TEXT NOT NULL,
+  classified_at TEXT NOT NULL,
+  raw_response TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_classification_taxonomy ON classification(taxonomy);
+CREATE INDEX IF NOT EXISTS idx_classification_addressed ON classification(was_addressed);
+
+CREATE TABLE IF NOT EXISTS finding (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  theme TEXT NOT NULL,
+  rule_statement TEXT NOT NULL,
+  taxonomy TEXT NOT NULL,
+  area TEXT NOT NULL,
+  scope TEXT NOT NULL CHECK (scope IN ('cross-cutting','area-specific')),
+  primary_reviewer TEXT,
+  reviewer_logins TEXT NOT NULL,
+  tier1_reviewer_count INTEGER NOT NULL,
+  tier2_reviewer_count INTEGER NOT NULL,
+  total_evidence_count INTEGER NOT NULL,
+  evidence_comment_ids TEXT NOT NULL,
+  evidence_pr_numbers TEXT NOT NULL,
+  cross_area_count INTEGER NOT NULL,
+  areas_seen TEXT NOT NULL,
+  acceptance_rate REAL,
+  in_agents_md INTEGER NOT NULL,
+  agents_md_section TEXT,
+  confidence_score REAL NOT NULL,
+  notes TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_finding_area ON finding(area);
+CREATE INDEX IF NOT EXISTS idx_finding_scope ON finding(scope);
+CREATE INDEX IF NOT EXISTS idx_finding_confidence ON finding(confidence_score DESC);</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Write <code>scripts/pr-analysis/data/.gitignore</code></strong></li>
+</ul>
+<pre><code>*.db
+*.db-wal
+*.db-shm</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Write <code>scripts/pr-analysis/lib/__init__.py</code></strong> (empty)</li>
+</ul>
+<pre><code class="lang-python"></code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Write <code>scripts/pr-analysis/lib/db.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">"""SQLite connection factory and a tiny helper for upserts."""
+from __future__ import annotations
+
+import sqlite3
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Iterator
+
+DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "pr_analysis.db"
+
+
+def connect(db_path: Path = DEFAULT_DB_PATH) -&gt; sqlite3.Connection:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+@contextmanager
+def transaction(conn: sqlite3.Connection) -&gt; Iterator[sqlite3.Connection]:
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def apply_schema(conn: sqlite3.Connection, schema_path: Path) -&gt; None:
+    conn.executescript(schema_path.read_text())
+    conn.commit()</code></pre>
+<ul>
+<li>[ ] <strong>Step 5: Write <code>scripts/pr-analysis/lib/reviewers.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">"""Reviewer tiering and weighting derived from 6-month volume analysis."""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+TIER1 = ("ysndr", "mkenigs", "dcarley")
+TIER2 = ("djsauble", "gilmishal", "billlevine")
+
+WEIGHTS = {1: 3.0, 2: 2.0, 3: 1.0, 4: 0.0}
+
+
+@dataclass(frozen=True)
+class Reviewer:
+    login: str
+    tier: int
+    weight: float
+
+
+def classify(login: str, author_type: str) -&gt; Reviewer:
+    if author_type == "Bot":
+        return Reviewer(login, 4, WEIGHTS[4])
+    if login in TIER1:
+        return Reviewer(login, 1, WEIGHTS[1])
+    if login in TIER2:
+        return Reviewer(login, 2, WEIGHTS[2])
+    return Reviewer(login, 3, WEIGHTS[3])
+
+
+def seed_rows() -&gt; list[tuple[str, float, int, str]]:
+    rows = []
+    for login in TIER1:
+        rows.append((login, WEIGHTS[1], 1, "tier1: top opinionated reviewer"))
+    for login in TIER2:
+        rows.append((login, WEIGHTS[2], 2, "tier2: top-6 reviewer"))
+    return rows</code></pre>
+<ul>
+<li>[ ] <strong>Step 6: Write <code>scripts/pr-analysis/lib/areas.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">"""Map a repo-relative file path to a normalized area label.
+
+Areas are coarsened so that comments on related files group together. The
+three "hot areas" (commands, models/environment, providers) keep enough
+granularity to drive per-area CLAUDE.md synthesis; everything else falls
+into broader buckets.
+"""
+from __future__ import annotations
+
+# Order matters: longest, most-specific prefixes first.
+_PREFIX_MAP: list[tuple[str, str]] = [
+    ("cli/flox/src/commands/services/", "commands/services"),
+    ("cli/flox/src/commands/init/", "commands/init"),
+    ("cli/flox/src/commands/", "commands"),
+    ("cli/flox-rust-sdk/src/models/environment/", "models/environment"),
+    ("cli/flox-rust-sdk/src/models/", "models/other"),
+    ("cli/flox-rust-sdk/src/providers/", "providers"),
+    ("cli/flox-activations/src/", "activations"),
+    ("cli/flox-core/src/", "core"),
+    ("cli/flox-test-utils/", "test-utils"),
+    ("cli/flox-manifest/", "manifest"),
+    ("cli/flox/src/utils/", "cli/utils"),
+    ("cli/flox/src/", "cli/other"),
+    ("cli/", "cli/other"),
+    ("nix-plugins/", "nix-plugins"),
+    ("assets/activation-scripts/", "activation-scripts"),
+]
+
+HOT_AREAS = ("commands", "models/environment", "providers")
+
+
+def area_for_path(path: str) -&gt; str:
+    for prefix, area in _PREFIX_MAP:
+        if path.startswith(prefix):
+            return area
+    return "other"
+
+
+def is_rust(path: str) -&gt; bool:
+    return path.endswith(".rs")</code></pre>
+<ul>
+<li>[ ] <strong>Step 7: Write <code>scripts/pr-analysis/lib/taxonomy.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">"""Taxonomy seeded from AGENTS.md sections.
+
+Each entry has a short id, a description used in LLM prompts, and a list
+of AGENTS.md section anchors used by the gap-report to mark coverage.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class TaxonomyEntry:
+    id: str
+    description: str
+    agents_md_sections: tuple[str, ...]
+
+
+TAXONOMY: tuple[TaxonomyEntry, ...] = (
+    TaxonomyEntry(
+        "error-handling",
+        "Error type hierarchy, classification, where to extend enums vs. parse strings, "
+        "credential sanitization, message rewriting at product boundary.",
+        ("Error handling architecture",),
+    ),
+    TaxonomyEntry(
+        "provider-traits",
+        "When to introduce a provider trait vs. concrete type, associated-type usage, "
+        "consumer constraints.",
+        ("Provider traits and associated types",),
+    ),
+    TaxonomyEntry(
+        "type-safety",
+        "Parsing at boundaries, preferring domain types (Url, PackageSystem, NixFlakeref, "
+        "BaseCatalogUrl) over raw strings.",
+        ("Type safety at function boundaries",),
+    ),
+    TaxonomyEntry(
+        "user-facing-messages",
+        "Sentence structure, brand naming, emoji map, next-step suggestions, line wrap, voice.",
+        ("User-visible message syntax, structure, and content", "CLI output conventions"),
+    ),
+    TaxonomyEntry(
+        "naming",
+        "Helper naming conventions, test naming (no test_ prefix), descriptive names.",
+        ("Naming new helpers", "Test naming"),
+    ),
+    TaxonomyEntry(
+        "testing",
+        "assert_eq on entire structs, integration vs unit, bats filter patterns, test data.",
+        ("Rust style",),
+    ),
+    TaxonomyEntry(
+        "imports",
+        "use rather than ::, where to place use statements, updating on moves.",
+        ("use guidelines",),
+    ),
+    TaxonomyEntry(
+        "manifest-usage",
+        "Manifest&lt;S&gt; type-state, never serialize by hand, schema-version rules.",
+        ("Manifest usage",),
+    ),
+    TaxonomyEntry(
+        "deprecated-patterns",
+        "Recognising and avoiding deprecated infrastructure, unimplemented!() over extending.",
+        ("Deprecated infrastructure",),
+    ),
+    TaxonomyEntry(
+        "logging-tracing",
+        "Structured tracing fields rather than interpolation.",
+        ("Rust style",),
+    ),
+    TaxonomyEntry(
+        "formatting-style",
+        "formatdoc!/indoc!, single-quote command examples, line length on user strings.",
+        ("Rust style",),
+    ),
+    TaxonomyEntry(
+        "control-flow",
+        "Early returns, functional style, avoid nested conditionals, Clone/Debug derives.",
+        ("Rust style",),
+    ),
+    TaxonomyEntry(
+        "semantic-correctness",
+        "Understand semantics before rewriting messages or refactoring.",
+        ("Understand semantics before rewriting messages",),
+    ),
+    TaxonomyEntry(
+        "ld-floxlib",
+        "GLIBC version binding rules for ld-floxlib.c.",
+        ("ld-floxlib",),
+    ),
+    TaxonomyEntry(
+        "other",
+        "Anything that does not fit; open bucket for new rules.",
+        (),
+    ),
+)
+
+TAXONOMY_IDS: tuple[str, ...] = tuple(t.id for t in TAXONOMY)
+TAXONOMY_BY_ID = {t.id: t for t in TAXONOMY}</code></pre>
+<ul>
+<li>[ ] <strong>Step 8: Write <code>scripts/pr-analysis/tests/__init__.py</code></strong> (empty)</li>
+</ul>
+<pre><code class="lang-python"></code></pre>
+<ul>
+<li>[ ] <strong>Step 9: Write <code>scripts/pr-analysis/tests/test_areas.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">from scripts.pr_analysis.lib.areas import area_for_path, is_rust, HOT_AREAS
+
+
+def commands_services_routes_to_services_bucket():
+    assert area_for_path("cli/flox/src/commands/services/start.rs") == "commands/services"
+
+
+def commands_init_routes_to_init_bucket():
+    assert area_for_path("cli/flox/src/commands/init/handler.rs") == "commands/init"
+
+
+def generic_commands_file_routes_to_commands_bucket():
+    assert area_for_path("cli/flox/src/commands/install.rs") == "commands"
+
+
+def environment_model_routes_to_models_environment():
+    assert area_for_path(
+        "cli/flox-rust-sdk/src/models/environment/managed_environment.rs"
+    ) == "models/environment"
+
+
+def non_environment_model_routes_to_models_other():
+    assert area_for_path("cli/flox-rust-sdk/src/models/lockfile.rs") == "models/other"
+
+
+def providers_routes_to_providers():
+    assert area_for_path("cli/flox-rust-sdk/src/providers/catalog.rs") == "providers"
+
+
+def unknown_path_routes_to_other():
+    assert area_for_path("README.md") == "other"
+
+
+def hot_areas_are_the_three_we_locked_in():
+    assert HOT_AREAS == ("commands", "models/environment", "providers")
+
+
+def rust_detector_is_extension_based():
+    assert is_rust("foo/bar.rs")
+    assert not is_rust("foo/bar.bats")</code></pre>
+<ul>
+<li>[ ] <strong>Step 10: Write <code>scripts/pr-analysis/tests/test_reviewers.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">from scripts.pr_analysis.lib.reviewers import classify, seed_rows, TIER1, TIER2
+
+
+def tier1_reviewers_get_weight_three():
+    for login in TIER1:
+        r = classify(login, "User")
+        assert r.tier == 1
+        assert r.weight == 3.0
+
+
+def tier2_reviewers_get_weight_two():
+    for login in TIER2:
+        r = classify(login, "User")
+        assert r.tier == 2
+        assert r.weight == 2.0
+
+
+def unknown_human_gets_weight_one():
+    r = classify("random_contributor", "User")
+    assert r.tier == 3
+    assert r.weight == 1.0
+
+
+def bot_gets_weight_zero_regardless_of_login():
+    r = classify("ysndr", "Bot")
+    assert r.tier == 4
+    assert r.weight == 0.0
+
+
+def seed_rows_covers_both_tiers():
+    rows = seed_rows()
+    logins = {row[0] for row in rows}
+    assert set(TIER1) | set(TIER2) &lt;= logins
+    assert len(rows) == len(TIER1) + len(TIER2)</code></pre>
+<ul>
+<li>[ ] <strong>Step 11: Write <code>scripts/pr-analysis/tests/test_taxonomy.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">from scripts.pr_analysis.lib.taxonomy import TAXONOMY, TAXONOMY_IDS, TAXONOMY_BY_ID
+
+
+def taxonomy_ids_are_unique():
+    assert len(TAXONOMY_IDS) == len(set(TAXONOMY_IDS))
+
+
+def taxonomy_has_open_bucket():
+    assert "other" in TAXONOMY_IDS
+
+
+def taxonomy_has_core_agents_md_categories():
+    required = {"error-handling", "type-safety", "user-facing-messages", "naming"}
+    assert required &lt;= set(TAXONOMY_IDS)
+
+
+def lookup_by_id_returns_entry():
+    entry = TAXONOMY_BY_ID["error-handling"]
+    assert "Error type hierarchy" in entry.description</code></pre>
+<ul>
+<li>[ ] <strong>Step 12: Write <code>scripts/pr-analysis/init_db.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = "&gt;=3.12"
+# dependencies = []
+# ///
+"""Initialize the SQLite database: apply schema and seed reviewer rows.
+
+Pass --reset to drop the existing DB file first. Used between the pilot
+run (Task 7) and the full-corpus run (Task 8), and any time a schema
+revision lands during the retro loop.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+from pathlib import Path
+
+from lib.db import DEFAULT_DB_PATH, apply_schema, connect, transaction
+from lib.reviewers import seed_rows
+
+SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
+
+
+def main() -&gt; None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--reset", action="store_true",
+                        help="delete the existing DB file before applying schema")
+    args = parser.parse_args()
+
+    if args.reset and DEFAULT_DB_PATH.exists():
+        DEFAULT_DB_PATH.unlink()
+        for suffix in ("-wal", "-shm"):
+            sidecar = DEFAULT_DB_PATH.with_name(DEFAULT_DB_PATH.name + suffix)
+            if sidecar.exists():
+                sidecar.unlink()
+        print(f"reset: removed {DEFAULT_DB_PATH}")
+
+    conn = connect()
+    apply_schema(conn, SCHEMA_PATH)
+    with transaction(conn):
+        conn.executemany(
+            "INSERT OR REPLACE INTO reviewer (login, weight, tier, notes) "
+            "VALUES (?, ?, ?, ?)",
+            seed_rows(),
+        )
+    print(f"initialized db; reviewers seeded; now: {dt.datetime.now().isoformat()}")
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+<ul>
+<li>[ ] <strong>Step 13: Write <code>scripts/pr-analysis/README.md</code></strong></li>
+</ul>
+<pre><code class="lang-`markdown"># pr-analysis pipeline
+
+Extracts review-validated coding rules from 6 months of merged PRs in
+`flox/flox`. Produces one cross-cutting skill plus three area-specific
+`CLAUDE.md` files plus a gap report against `AGENTS.md`.
+
+## Prereqs
+
+- `gh` CLI authenticated for `flox/flox`
+- `uv` on PATH
+- `ANTHROPIC_API_KEY` exported
+
+## Run order
+
+### Pilot (Task 7): 15-PR calibration run
+
+```bash
+uv run scripts/pr-analysis/init_db.py --reset
+uv run scripts/pr-analysis/ingest_prs.py --since 2025-11-16 --limit 25
+uv run scripts/pr-analysis/ingest_comments.py
+uv run scripts/pr-analysis/ingest_final_code.py
+uv run scripts/pr-analysis/audit_coverage.py --ingest-only
+uv run scripts/pr-analysis/classify_comments.py --concurrency 4
+uv run scripts/pr-analysis/audit_coverage.py
+uv run scripts/pr-analysis/aggregate_findings.py
+# then build the retro digest per Task 7 Step 7</code></pre>
+<h3 id="full-corpus-task-8-onward-all-157-rust-prs">Full corpus (Task 8 onward): all 157 Rust PRs</h3>
+<pre><code class="lang-bash">uv run scripts/pr-analysis/init_db.py --reset
+uv run scripts/pr-analysis/ingest_prs.py --since 2025-11-16
+uv run scripts/pr-analysis/ingest_comments.py
+uv run scripts/pr-analysis/ingest_final_code.py
+uv run scripts/pr-analysis/audit_coverage.py --ingest-only
+uv run scripts/pr-analysis/classify_comments.py --concurrency 8
+uv run scripts/pr-analysis/audit_coverage.py
+uv run scripts/pr-analysis/aggregate_findings.py
+uv run scripts/pr-analysis/synthesize_cross_cutting.py
+uv run scripts/pr-analysis/synthesize_area.py --area commands
+uv run scripts/pr-analysis/synthesize_area.py --area models/environment
+uv run scripts/pr-analysis/synthesize_area.py --area providers
+uv run scripts/pr-analysis/synthesize_gap_report.py</code></pre>
+<p>Every ingest script is idempotent (<code>INSERT OR REPLACE</code>). Stages can resume within a run. Across runs, <code>init_db.py --reset</code> is the clean-slate switch.</p>
+<pre><code class="lang-`">
+- [ ] **Step 14: Run all unit tests; verify they fail with missing module path**
+
+Run: `cd scripts/pr-analysis &amp;&amp; uv run --with pytest pytest tests/ -v`
+
+Expected: tests fail with `ModuleNotFoundError: No module named 'scripts'` — because tests use absolute imports. Fix by adding a `conftest.py`.
+
+- [ ] **Step 15: Write `scripts/pr-analysis/tests/conftest.py`**
+
+```python
+"""Make the package importable from tests when running pytest from any cwd."""
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]  # repo root
+sys.path.insert(0, str(ROOT))
+
+# Allow `from scripts.pr_analysis.lib.foo import ...` style imports
+# by aliasing the hyphenated dir under an importable name.
+import importlib.util
+import types
+
+ALIAS_TARGET = ROOT / "scripts" / "pr-analysis"
+pkg = types.ModuleType("scripts")
+pkg.__path__ = [str(ROOT / "scripts")]
+sys.modules.setdefault("scripts", pkg)
+
+inner = types.ModuleType("scripts.pr_analysis")
+inner.__path__ = [str(ALIAS_TARGET)]
+sys.modules.setdefault("scripts.pr_analysis", inner)</code></pre>
+<ul>
+<li>[ ] <strong>Step 16: Re-run tests; verify all pass</strong></li>
+</ul>
+<p>Run: <code>cd scripts/pr-analysis &amp;&amp; uv run --with pytest pytest tests/ -v</code></p>
+<p>Expected: 18 tests pass (<code>test_areas.py</code> 9, <code>test_reviewers.py</code> 5, <code>test_taxonomy.py</code> 4).</p>
+<ul>
+<li>[ ] <strong>Step 17: Initialize the DB and verify schema</strong></li>
+</ul>
+<p>Run: <code>cd scripts/pr-analysis &amp;&amp; uv run init_db.py</code></p>
+<p>Then: <code>sqlite3 scripts/pr-analysis/data/pr_analysis.db ".tables"</code></p>
+<p>Expected output contains: <code>classification comment_final_code finding line_comment pr pr_file reviewer</code></p>
+<p>Then: <code>sqlite3 scripts/pr-analysis/data/pr_analysis.db "SELECT login, tier, weight FROM reviewer ORDER BY tier, login"</code></p>
+<p>Expected output (6 rows):</p>
+<pre><code>billlevine|2|2.0
+djsauble|2|2.0
+gilmishal|2|2.0
+dcarley|1|3.0
+mkenigs|1|3.0
+ysndr|1|3.0</code></pre>
+<ul>
+<li>[ ] <strong>Step 18: Commit</strong></li>
+</ul>
+<pre><code class="lang-bash">git add scripts/pr-analysis/ docs/superpowers/plans/
+git commit -m "chore(pr-analysis): bootstrap pipeline directory, schema, and reviewer seed"</code></pre>
+<hr>
+<h2 id="task-2-gh-subprocess-wrapper-and-pr-list-ingest">Task 2: <code>gh</code> subprocess wrapper and PR list ingest</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>scripts/pr-analysis/lib/gh.py</code></li>
+<li>Create: <code>scripts/pr-analysis/tests/test_gh.py</code></li>
+<li>Create: <code>scripts/pr-analysis/ingest_prs.py</code></li>
+<li>Create: <code>scripts/pr-analysis/tests/fixtures/pr_list_sample.json</code></li>
+<li>[ ] <strong>Step 1: Capture a small real fixture for the PR list shape</strong></li>
+</ul>
+<p>Run: <code>gh pr list --repo flox/flox --state merged --search "merged:&gt;=2026-04-16" --limit 3 --json number,title,author,state,mergedAt,baseRefOid,headRefOid,mergeCommitOid,url,files &gt; scripts/pr-analysis/tests/fixtures/pr_list_sample.json</code></p>
+<p>Then <code>cat scripts/pr-analysis/tests/fixtures/pr_list_sample.json | head -20</code> to sanity-check it's well-formed JSON.</p>
+<ul>
+<li>[ ] <strong>Step 2: Write <code>scripts/pr-analysis/lib/gh.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">"""Thin subprocess wrapper around the `gh` CLI returning parsed JSON."""
+from __future__ import annotations
+
+import json
+import subprocess
+from typing import Any
+
+
+class GhError(RuntimeError):
+    pass
+
+
+def run_json(args: list[str]) -&gt; Any:
+    """Invoke gh with the given args; return parsed JSON. Raises GhError on failure."""
+    proc = subprocess.run(
+        ["gh", *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise GhError(f"gh {' '.join(args)} failed: {proc.stderr.strip()}")
+    if not proc.stdout.strip():
+        return None
+    try:
+        return json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise GhError(f"gh {' '.join(args)} returned non-JSON: {exc}") from exc
+
+
+def paginate_jsonl(args: list[str]) -&gt; list[Any]:
+    """Invoke gh with --paginate and parse each line as JSON.
+
+    `gh api --paginate -q '.[]'` emits one JSON value per line per array element
+    across all pages.
+    """
+    proc = subprocess.run(
+        ["gh", *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise GhError(f"gh {' '.join(args)} failed: {proc.stderr.strip()}")
+    out = []
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        out.append(json.loads(line))
+    return out</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Write <code>scripts/pr-analysis/tests/test_gh.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">import json
+from pathlib import Path
+
+from scripts.pr_analysis.lib.gh import GhError, run_json
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def fixture_pr_list_is_a_well_formed_list_of_dicts():
+    data = json.loads((FIXTURES / "pr_list_sample.json").read_text())
+    assert isinstance(data, list)
+    for pr in data:
+        assert {"number", "title", "author", "mergedAt", "url", "files"} &lt;= set(pr.keys())
+        assert isinstance(pr["files"], list)
+
+
+def gh_error_is_a_subclass_of_runtime_error():
+    assert issubclass(GhError, RuntimeError)
+
+
+def run_json_propagates_gh_failures(monkeypatch):
+    import subprocess as sp
+    class FakeProc:
+        returncode = 1
+        stdout = ""
+        stderr = "boom"
+    monkeypatch.setattr(sp, "run", lambda *a, **kw: FakeProc())
+    try:
+        run_json(["bogus"])
+    except GhError as exc:
+        assert "boom" in str(exc)
+        return
+    raise AssertionError("expected GhError")</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Run gh tests; verify all pass</strong></li>
+</ul>
+<p>Run: <code>cd scripts/pr-analysis &amp;&amp; uv run --with pytest pytest tests/test_gh.py -v</code></p>
+<p>Expected: 3 tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Write <code>scripts/pr-analysis/ingest_prs.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = "&gt;=3.12"
+# dependencies = []
+# ///
+"""Fetch the merged-PR list for the configured window and upsert into `pr` and
+`pr_file` tables.
+
+Idempotent: re-running updates rows in place.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from lib.areas import is_rust
+from lib.db import connect, transaction
+from lib.gh import run_json
+
+REPO = "flox/flox"
+FIELDS = "number,title,author,state,mergedAt,baseRefOid,headRefOid,mergeCommitOid,url,files"
+
+
+def main() -&gt; None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--since", required=True, help="YYYY-MM-DD")
+    parser.add_argument("--limit", type=int, default=1000)
+    parser.add_argument("--rust-only", action="store_true", default=True,
+                        help="(default true) only upsert PRs touching .rs files")
+    parser.add_argument("--all", dest="rust_only", action="store_false")
+    args = parser.parse_args()
+
+    prs = run_json([
+        "pr", "list",
+        "--repo", REPO,
+        "--state", "merged",
+        "--search", f"merged:&gt;={args.since}",
+        "--limit", str(args.limit),
+        "--json", FIELDS,
+    ])
+
+    now = dt.datetime.utcnow().isoformat()
+    conn = connect()
+    rust_prs = 0
+    with transaction(conn):
+        for pr in prs:
+            files = pr.get("files") or []
+            touches_rust = any(is_rust(f["path"]) for f in files)
+            if args.rust_only and not touches_rust:
+                continue
+            rust_prs += 1
+            author = pr.get("author") or {}
+            conn.execute(
+                """INSERT OR REPLACE INTO pr
+                   (number, title, author, author_type, state, merged_at,
+                    base_sha, head_sha, merge_commit_sha, url, fetched_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    pr["number"],
+                    pr["title"],
+                    author.get("login", "unknown"),
+                    author.get("type", "User"),
+                    pr["state"],
+                    pr["mergedAt"],
+                    pr.get("baseRefOid"),
+                    pr.get("headRefOid"),
+                    pr.get("mergeCommitOid"),
+                    pr["url"],
+                    now,
+                ),
+            )
+            conn.execute("DELETE FROM pr_file WHERE pr_number = ?", (pr["number"],))
+            conn.executemany(
+                """INSERT INTO pr_file (pr_number, path, status, additions, deletions)
+                   VALUES (?,?,?,?,?)""",
+                [
+                    (pr["number"], f["path"], None, f.get("additions"), f.get("deletions"))
+                    for f in files
+                ],
+            )
+    print(f"Ingested PRs: total={len(prs)} rust_touching={rust_prs}")
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+<ul>
+<li>[ ] <strong>Step 6: Smoke-ingest 5 most-recent PRs to verify shape</strong></li>
+</ul>
+<p>The full ingest is intentionally deferred to Task 8. Tasks 7 (pilot) and 8 (full) both reset the DB first, so this smoke ingest is throwaway data — we just want to confirm rows land in the expected shape.</p>
+<p>Run: <code>cd scripts/pr-analysis &amp;&amp; uv run ingest_prs.py --since 2025-11-16 --limit 5</code></p>
+<p>Expected stdout: <code>Ingested PRs: total=5 rust_touching=N</code> where <code>0 &lt;= N &lt;= 5</code>.</p>
+<p>Then: <code>sqlite3 scripts/pr-analysis/data/pr_analysis.db "SELECT number, title, author, merged_at FROM pr ORDER BY number DESC"</code></p>
+<p>Expected: rows look well-formed; <code>merged_at</code> is an ISO-8601 timestamp; <code>author</code> is a login string.</p>
+<p>Then: <code>sqlite3 scripts/pr-analysis/data/pr_analysis.db "SELECT pr_number, COUNT(*) FROM pr_file GROUP BY pr_number ORDER BY pr_number DESC"</code></p>
+<p>Expected: each ingested PR has at least one row (the PRs touch at least one file).</p>
+<ul>
+<li>[ ] <strong>Step 7: Commit</strong></li>
+</ul>
+<pre><code class="lang-bash">git add scripts/pr-analysis/lib/gh.py scripts/pr-analysis/ingest_prs.py \
+        scripts/pr-analysis/tests/test_gh.py \
+        scripts/pr-analysis/tests/fixtures/pr_list_sample.json
+git commit -m "feat(pr-analysis): add gh wrapper and PR list ingest"</code></pre>
+<hr>
+<h2 id="task-3-line-comment-ingest-with-reviewer-area-tagging">Task 3: Line-comment ingest with reviewer/area tagging</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>scripts/pr-analysis/ingest_comments.py</code></li>
+<li>Create: <code>scripts/pr-analysis/tests/fixtures/pr_4231_comments.json</code></li>
+<li>Modify: <code>scripts/pr-analysis/tests/test_gh.py</code> (add fixture sanity check) — append new tests, do not rewrite existing tests</li>
+<li>[ ] <strong>Step 1: Capture a real fixture for the comment shape (PR #4231 had 63 line-comments)</strong></li>
+</ul>
+<p>Run: <code>gh api 'repos/flox/flox/pulls/4231/comments' --paginate &gt; scripts/pr-analysis/tests/fixtures/pr_4231_comments.json</code></p>
+<ul>
+<li>[ ] <strong>Step 2: Append fixture-shape test to <code>tests/test_gh.py</code></strong></li>
+</ul>
+<p>Add at the end of the file:</p>
+<pre><code class="lang-python">def pr_4231_comments_fixture_has_expected_fields():
+    raw = (FIXTURES / "pr_4231_comments.json").read_text()
+    # gh --paginate concatenates JSON arrays back-to-back; split and parse.
+    arrays = []
+    decoder = json.JSONDecoder()
+    idx = 0
+    while idx &lt; len(raw):
+        while idx &lt; len(raw) and raw[idx].isspace():
+            idx += 1
+        if idx &gt;= len(raw):
+            break
+        val, end = decoder.raw_decode(raw, idx)
+        arrays.append(val)
+        idx = end
+    comments = [c for arr in arrays for c in arr]
+    assert len(comments) &gt;= 30  # PR #4231 has ~63
+    for c in comments[:5]:
+        assert {"id", "user", "path", "body", "diff_hunk", "created_at"} &lt;= set(c.keys())</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Run the new test</strong></li>
+</ul>
+<p>Run: <code>cd scripts/pr-analysis &amp;&amp; uv run --with pytest pytest tests/test_gh.py::pr_4231_comments_fixture_has_expected_fields -v</code></p>
+<p>Expected: PASS.</p>
+<ul>
+<li>[ ] <strong>Step 4: Write <code>scripts/pr-analysis/ingest_comments.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = "&gt;=3.12"
+# dependencies = []
+# ///
+"""For every PR already in the `pr` table, fetch line-comments and upsert
+into `line_comment` with reviewer tier/weight and area tag pre-computed.
+
+Idempotent.
+"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from lib.areas import area_for_path
+from lib.db import connect, transaction
+from lib.gh import run_json
+from lib.reviewers import classify
+
+
+def fetch_comments(pr_number: int) -&gt; list[dict]:
+    return run_json([
+        "api", "--paginate",
+        f"repos/flox/flox/pulls/{pr_number}/comments",
+    ]) or []
+
+
+def main() -&gt; None:
+    conn = connect()
+    pr_numbers = [r["number"] for r in conn.execute("SELECT number FROM pr ORDER BY number")]
+    total_comments = 0
+    for i, n in enumerate(pr_numbers, start=1):
+        comments = fetch_comments(n)
+        with transaction(conn):
+            for c in comments:
+                user = c.get("user") or {}
+                login = user.get("login", "unknown")
+                author_type = user.get("type", "User")
+                rev = classify(login, author_type)
+                conn.execute(
+                    """INSERT OR REPLACE INTO line_comment
+                       (id, pr_number, author, author_type, created_at,
+                        path, line, original_line, side, diff_hunk, body,
+                        in_reply_to_id, area, reviewer_weight, reviewer_tier)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        c["id"],
+                        n,
+                        login,
+                        author_type,
+                        c["created_at"],
+                        c["path"],
+                        c.get("line"),
+                        c.get("original_line"),
+                        c.get("side"),
+                        c.get("diff_hunk"),
+                        c["body"],
+                        c.get("in_reply_to_id"),
+                        area_for_path(c["path"]),
+                        rev.weight,
+                        rev.tier,
+                    ),
+                )
+        total_comments += len(comments)
+        if i % 25 == 0 or i == len(pr_numbers):
+            print(f"[{i}/{len(pr_numbers)}] cumulative comments={total_comments}")
+    print(f"done. total comments ingested: {total_comments}")
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+<ul>
+<li>[ ] <strong>Step 5: Smoke-ingest comments for the 5 PRs already in DB</strong></li>
+</ul>
+<p>Full ingest happens in Task 8. This step just walks the ingest code over whatever PRs Task 2 Step 6 loaded so we can verify reviewer-tier tagging and area-derivation work end-to-end.</p>
+<p>Run: <code>cd scripts/pr-analysis &amp;&amp; uv run ingest_comments.py</code></p>
+<p>Expected: a single progress line and <code>done. total comments ingested: N</code> where N is small (0-50 depending on which 5 PRs landed).</p>
+<p>Then: <code>sqlite3 data/pr_analysis.db "SELECT reviewer_tier, COUNT(*) FROM line_comment GROUP BY reviewer_tier ORDER BY reviewer_tier"</code></p>
+<p>Expected: tier values are in <code>{1, 2, 3, 4}</code> with weights matching <code>lib/reviewers.py</code>.</p>
+<p>Then: <code>sqlite3 data/pr_analysis.db "SELECT DISTINCT area FROM line_comment"</code></p>
+<p>Expected: every value is one of the labels enumerated in <code>lib/areas.py</code> (<code>commands</code>, <code>models/environment</code>, <code>providers</code>, etc.). No raw paths leak through.</p>
+<ul>
+<li>[ ] <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="lang-bash">git add scripts/pr-analysis/ingest_comments.py \
+        scripts/pr-analysis/tests/fixtures/pr_4231_comments.json \
+        scripts/pr-analysis/tests/test_gh.py
+git commit -m "feat(pr-analysis): ingest line-comments tagged by area and reviewer tier"</code></pre>
+<hr>
+<h2 id="task-4-final-merged-code-snippet-extraction">Task 4: Final-merged-code snippet extraction</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>scripts/pr-analysis/ingest_final_code.py</code></li>
+<li>Create: <code>scripts/pr-analysis/tests/test_ingest_final_code.py</code></li>
+<li>[ ] <strong>Step 1: Write <code>scripts/pr-analysis/tests/test_ingest_final_code.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">"""Pure-logic tests for snippet extraction. Network-touching code is exercised
+via the real run, not unit-mocked."""
+from scripts.pr_analysis.ingest_final_code import extract_window
+
+
+def extract_window_returns_n_lines_around_anchor():
+    lines = [f"line {i}" for i in range(1, 101)]
+    snippet = extract_window(lines, anchor_line=50, radius=5)
+    out = snippet.splitlines()
+    assert out[0].startswith("45:")
+    assert out[-1].startswith("55:")
+    assert len(out) == 11
+
+
+def extract_window_clamps_at_file_start():
+    lines = [f"line {i}" for i in range(1, 11)]
+    snippet = extract_window(lines, anchor_line=2, radius=5)
+    out = snippet.splitlines()
+    assert out[0].startswith("1:")
+    assert out[-1].startswith("7:")
+
+
+def extract_window_clamps_at_file_end():
+    lines = [f"line {i}" for i in range(1, 11)]
+    snippet = extract_window(lines, anchor_line=9, radius=5)
+    out = snippet.splitlines()
+    assert out[0].startswith("4:")
+    assert out[-1].startswith("10:")
+
+
+def extract_window_returns_empty_for_none_anchor():
+    assert extract_window(["a", "b"], anchor_line=None, radius=5) == ""</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Write <code>scripts/pr-analysis/ingest_final_code.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = "&gt;=3.12"
+# dependencies = []
+# ///
+"""For each line_comment, fetch the file at the PR's merge_commit_sha and
+extract a ~40-line window around the comment's anchor line. Stores into
+`comment_final_code`. Idempotent.
+
+We use `gh api repos/flox/flox/contents/&lt;path&gt;?ref=&lt;sha&gt;` which returns
+base64-encoded file content. Files that no longer exist (deleted) record
+snippet_available = 0.
+"""
+from __future__ import annotations
+
+import base64
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from lib.db import connect, transaction
+from lib.gh import GhError, run_json
+
+RADIUS = 20  # ~40-line window
+
+
+def extract_window(lines: list[str], anchor_line: int | None, radius: int) -&gt; str:
+    if anchor_line is None:
+        return ""
+    start = max(1, anchor_line - radius)
+    end = min(len(lines), anchor_line + radius)
+    out = []
+    for i in range(start, end + 1):
+        out.append(f"{i}:{lines[i-1]}")
+    return "\n".join(out)
+
+
+def fetch_file(path: str, ref: str) -&gt; list[str] | None:
+    try:
+        payload = run_json([
+            "api", f"repos/flox/flox/contents/{path}?ref={ref}",
+        ])
+    except GhError:
+        return None
+    if not payload or payload.get("encoding") != "base64":
+        return None
+    try:
+        text = base64.b64decode(payload["content"]).decode("utf-8", errors="replace")
+    except Exception:
+        return None
+    return text.splitlines()
+
+
+def main() -&gt; None:
+    conn = connect()
+    rows = conn.execute(
+        """SELECT lc.id, lc.path, lc.line, lc.original_line, p.merge_commit_sha
+           FROM line_comment lc
+           JOIN pr p ON p.number = lc.pr_number
+           WHERE lc.id NOT IN (SELECT comment_id FROM comment_final_code)"""
+    ).fetchall()
+    total = len(rows)
+    print(f"need to fetch snippets for {total} comments")
+    file_cache: dict[tuple[str, str], list[str] | None] = {}
+    done = 0
+    for r in rows:
+        key = (r["path"], r["merge_commit_sha"])
+        if key not in file_cache:
+            file_cache[key] = fetch_file(r["path"], r["merge_commit_sha"])
+        file_lines = file_cache[key]
+        anchor = r["line"] if r["line"] is not None else r["original_line"]
+        if file_lines is None:
+            snippet, available = None, 0
+        else:
+            snippet = extract_window(file_lines, anchor, RADIUS)
+            available = 1
+        with transaction(conn):
+            conn.execute(
+                """INSERT OR REPLACE INTO comment_final_code
+                   (comment_id, final_code_snippet, snippet_available)
+                   VALUES (?,?,?)""",
+                (r["id"], snippet, available),
+            )
+        done += 1
+        if done % 100 == 0 or done == total:
+            print(f"[{done}/{total}] cached files={len(file_cache)}")
+    print("done")
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Run unit tests</strong></li>
+</ul>
+<p>Run: <code>cd scripts/pr-analysis &amp;&amp; uv run --with pytest pytest tests/test_ingest_final_code.py -v</code></p>
+<p>Expected: 4 tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 4: Smoke-run snippet extraction on the 5-PR sample</strong></li>
+</ul>
+<p>Run: <code>cd scripts/pr-analysis &amp;&amp; uv run ingest_final_code.py</code></p>
+<p>Expected wall time: &lt;1 minute on the smoke sample. Output: a single batch of progress lines ending in <code>done</code>.</p>
+<p>Then: <code>sqlite3 data/pr_analysis.db "SELECT snippet_available, COUNT(*) FROM comment_final_code GROUP BY snippet_available"</code></p>
+<p>Expected: at least one row with <code>snippet_available=1</code> (a non-deleted file). If the smoke set happened to ingest a PR whose files were later renamed, you may also see <code>snippet_available=0</code> rows — that's correct behavior, not a bug.</p>
+<p>Then spot-check one snippet:</p>
+<pre><code>sqlite3 data/pr_analysis.db "SELECT comment_id, SUBSTR(final_code_snippet, 1, 200) FROM comment_final_code WHERE snippet_available = 1 LIMIT 1"</code></pre>
+<p>Expected: a multi-line snippet prefixed with line numbers (e.g. <code>42:    fn foo() {</code>).</p>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="lang-bash">git add scripts/pr-analysis/ingest_final_code.py \
+        scripts/pr-analysis/tests/test_ingest_final_code.py
+git commit -m "feat(pr-analysis): extract final-merged-code snippets per comment"</code></pre>
+<hr>
+<h2 id="task-5-llm-classifier-claude-haiku-4-5">Task 5: LLM classifier (Claude Haiku 4.5)</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>scripts/pr-analysis/lib/llm.py</code></li>
+<li>Create: <code>scripts/pr-analysis/classify_comments.py</code></li>
+<li>Create: <code>scripts/pr-analysis/tests/test_classify_comments.py</code></li>
+<li>Create: <code>scripts/pr-analysis/tests/fixtures/classification_sample.json</code></li>
+<li>[ ] <strong>Step 1: Write <code>scripts/pr-analysis/lib/llm.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">"""Anthropic API wrapper used by classify and synthesize stages."""
+from __future__ import annotations
+
+import os
+import time
+
+from anthropic import Anthropic, APIError
+
+CLASSIFY_MODEL = "claude-haiku-4-5-20251001"
+SYNTH_MODEL = "claude-sonnet-4-6"
+
+
+def client() -&gt; Anthropic:
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
+    return Anthropic(api_key=api_key)
+
+
+def call_with_retry(
+    anthropic: Anthropic,
+    *,
+    model: str,
+    system: str,
+    user: str,
+    max_tokens: int = 800,
+    attempts: int = 4,
+) -&gt; str:
+    last_exc: Exception | None = None
+    for i in range(attempts):
+        try:
+            msg = anthropic.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+            )
+            return msg.content[0].text
+        except APIError as exc:
+            last_exc = exc
+            time.sleep(2 ** i)
+    assert last_exc is not None
+    raise last_exc</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Write <code>scripts/pr-analysis/classify_comments.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = "&gt;=3.12"
+# dependencies = ["anthropic&gt;=0.40"]
+# ///
+"""Run Claude Haiku 4.5 over every un-classified line_comment and write a
+row into `classification`.
+
+Concurrent via a thread pool with bounded parallelism (Anthropic SDK uses
+httpx; threads are fine).
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from lib.db import connect, transaction
+from lib.llm import CLASSIFY_MODEL, call_with_retry, client
+from lib.taxonomy import TAXONOMY, TAXONOMY_IDS
+
+SYSTEM_PROMPT = (
+    "You analyze Rust PR review comments for the flox/flox repository. "
+    "For each comment you receive the body, the original diff hunk it pointed at, "
+    "and the code that exists at that location in the merged result. "
+    "You output strict JSON with this exact shape: "
+    '{"taxonomy": "&lt;one of the allowed ids&gt;", '
+    '"was_addressed": true|false|null, '
+    '"rule_statement": "&lt;one-sentence imperative rule, present tense, &lt;= 160 chars&gt;", '
+    '"confidence": 0.0..1.0}. '
+    "If the comment is conversational only (e.g. 'nit', 'lgtm', 'thanks') and teaches no rule, "
+    'set taxonomy="other", rule_statement="" and confidence &lt; 0.3. '
+    "Do not emit any text outside the JSON object."
+)
+
+
+def build_user_prompt(body: str, diff_hunk: str, final_snippet: str, taxonomy_block: str) -&gt; str:
+    return (
+        f"Allowed taxonomy ids:\n{taxonomy_block}\n\n"
+        "Review comment body:\n"
+        "```\n" + body + "\n```\n\n"
+        "Original diff hunk it pointed at:\n"
+        "```\n" + (diff_hunk or "(no hunk)") + "\n```\n\n"
+        "Code at that location in the merged result:\n"
+        "```\n" + (final_snippet or "(snippet unavailable)") + "\n```\n\n"
+        "Emit the JSON object now."
+    )
+
+
+def taxonomy_block() -&gt; str:
+    return "\n".join(f"- {t.id}: {t.description}" for t in TAXONOMY)
+
+
+def parse(raw: str) -&gt; dict:
+    # Be lenient: find the first { and the matching closing }.
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start == -1 or end == -1:
+        raise ValueError(f"no JSON object in response: {raw[:200]}")
+    obj = json.loads(raw[start:end + 1])
+    if obj.get("taxonomy") not in TAXONOMY_IDS:
+        obj["taxonomy"] = "other"
+    if "was_addressed" not in obj:
+        obj["was_addressed"] = None
+    if "rule_statement" not in obj:
+        obj["rule_statement"] = ""
+    if "confidence" not in obj:
+        obj["confidence"] = 0.0
+    return obj
+
+
+def classify_one(anthropic, row: dict, tax_block: str) -&gt; tuple[int, dict, str]:
+    user = build_user_prompt(
+        row["body"], row["diff_hunk"] or "", row["final_code_snippet"] or "", tax_block
+    )
+    raw = call_with_retry(
+        anthropic, model=CLASSIFY_MODEL, system=SYSTEM_PROMPT, user=user
+    )
+    return row["id"], parse(raw), raw
+
+
+def main() -&gt; None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--concurrency", type=int, default=8)
+    parser.add_argument("--limit", type=int, default=None,
+                        help="for smoke runs; classifies at most N comments")
+    args = parser.parse_args()
+
+    conn = connect()
+    sql = """
+        SELECT lc.id, lc.body, lc.diff_hunk, cfc.final_code_snippet
+        FROM line_comment lc
+        LEFT JOIN comment_final_code cfc ON cfc.comment_id = lc.id
+        WHERE lc.id NOT IN (SELECT comment_id FROM classification)
+          AND lc.reviewer_tier != 4
+    """
+    if args.limit:
+        sql += f" LIMIT {args.limit}"
+    rows = [dict(r) for r in conn.execute(sql).fetchall()]
+    print(f"to classify: {len(rows)}")
+
+    tax_block = taxonomy_block()
+    anthropic = client()
+    now = dt.datetime.utcnow().isoformat()
+    done = 0
+    with ThreadPoolExecutor(max_workers=args.concurrency) as ex:
+        futs = {ex.submit(classify_one, anthropic, r, tax_block): r["id"] for r in rows}
+        for fut in as_completed(futs):
+            cid = futs[fut]
+            try:
+                comment_id, parsed, raw = fut.result()
+            except Exception as exc:
+                print(f"comment {cid} failed: {exc}", file=sys.stderr)
+                continue
+            with transaction(conn):
+                conn.execute(
+                    """INSERT OR REPLACE INTO classification
+                       (comment_id, taxonomy, was_addressed, rule_statement,
+                        confidence, classifier_model, classified_at, raw_response)
+                       VALUES (?,?,?,?,?,?,?,?)""",
+                    (
+                        comment_id,
+                        parsed["taxonomy"],
+                        1 if parsed["was_addressed"] is True else (0 if parsed["was_addressed"] is False else None),
+                        parsed["rule_statement"],
+                        float(parsed["confidence"]),
+                        CLASSIFY_MODEL,
+                        now,
+                        raw,
+                    ),
+                )
+            done += 1
+            if done % 50 == 0:
+                print(f"classified {done}/{len(rows)}")
+    print(f"done. classified {done}/{len(rows)}")
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Write golden-case parser tests in <code>tests/test_classify_comments.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">import pytest
+from scripts.pr_analysis.classify_comments import parse
+
+
+def well_formed_json_parses():
+    raw = '{"taxonomy":"error-handling","was_addressed":true,"rule_statement":"Extend error enums rather than parsing strings at call sites.","confidence":0.85}'
+    out = parse(raw)
+    assert out["taxonomy"] == "error-handling"
+    assert out["was_addressed"] is True
+    assert "Extend error enums" in out["rule_statement"]
+    assert out["confidence"] == 0.85
+
+
+def unknown_taxonomy_falls_back_to_other():
+    raw = '{"taxonomy":"made-up","was_addressed":false,"rule_statement":"x","confidence":0.4}'
+    assert parse(raw)["taxonomy"] == "other"
+
+
+def extracts_object_when_wrapped_in_prose():
+    raw = 'Here is the JSON: {"taxonomy":"naming","was_addressed":null,"rule_statement":"Helpers follow the str_to_x convention in flox-catalog.","confidence":0.7} done.'
+    out = parse(raw)
+    assert out["taxonomy"] == "naming"
+    assert out["was_addressed"] is None
+
+
+def missing_fields_default_safely():
+    raw = '{"taxonomy":"naming"}'
+    out = parse(raw)
+    assert out["was_addressed"] is None
+    assert out["rule_statement"] == ""
+    assert out["confidence"] == 0.0
+
+
+def non_json_response_raises():
+    with pytest.raises(ValueError):
+        parse("no object here")</code></pre>
+<ul>
+<li>[ ] <strong>Step 4: Run parser tests</strong></li>
+</ul>
+<p>Run: <code>cd scripts/pr-analysis &amp;&amp; uv run --with pytest pytest tests/test_classify_comments.py -v</code></p>
+<p>Expected: 5 tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Smoke-test classification on 5 comments</strong></li>
+</ul>
+<p>Run: <code>cd scripts/pr-analysis &amp;&amp; ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY uv run classify_comments.py --limit 5 --concurrency 2</code></p>
+<p>Expected: prints <code>to classify: 5</code> then <code>done. classified 5/5</code>.</p>
+<p>Then: <code>sqlite3 data/pr_analysis.db "SELECT comment_id, taxonomy, was_addressed, confidence, rule_statement FROM classification LIMIT 5"</code></p>
+<p>Sanity-check: every row has a taxonomy id from the seed list and a coherent rule_statement (or empty for low-confidence conversational comments).</p>
+<ul>
+<li>[ ] <strong>Step 6: Commit</strong></li>
+</ul>
+<p>The full-corpus classification run is intentionally deferred to Task 8 — it runs after the pilot in Task 7 has validated taxonomy coverage, prompt fidelity, and JSON-parse robustness on a small subset, so we don't sink 15-40 minutes and dollars-tier API spend into a flawed classifier.</p>
+<pre><code class="lang-bash">git add scripts/pr-analysis/lib/llm.py scripts/pr-analysis/classify_comments.py \
+        scripts/pr-analysis/tests/test_classify_comments.py
+git commit -m "feat(pr-analysis): classify line-comments via Claude Haiku 4.5"</code></pre>
+<hr>
+<h2 id="task-6-findings-aggregator-the-intermediate-analysis-artifact">Task 6: Findings aggregator — the intermediate analysis artifact</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>scripts/pr-analysis/aggregate_findings.py</code></li>
+<li>Create: <code>scripts/pr-analysis/tests/test_aggregate_findings.py</code></li>
+</ul>
+<p>This task implements the <code>finding</code> table the user specifically called out: one row per (theme × area), with reviewer attribution, evidence pointers, cross-area count, AGENTS.md coverage, and confidence.</p>
+<ul>
+<li>[ ] <strong>Step 1: Write <code>scripts/pr-analysis/tests/test_aggregate_findings.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">"""Tests for the pure functions in aggregate_findings (clustering and scoring).
+The DB-touching driver is exercised by the real run."""
+from scripts.pr_analysis.aggregate_findings import (
+    cluster_rule_statements,
+    confidence_score,
+    determine_scope,
+)
+
+
+def cluster_groups_near_duplicates_via_normalized_prefix():
+    statements = [
+        "Extend error enums rather than parsing strings at call sites.",
+        "Extend error enums rather than string-matching at call sites.",  # near-dup
+        "Use formatdoc! for multi-line strings.",
+    ]
+    clusters = cluster_rule_statements(statements, threshold=0.6)
+    assert len(clusters) == 2
+
+
+def confidence_combines_tier_evidence_cross_area_and_acceptance():
+    score = confidence_score(
+        tier1_count=2, tier2_count=1,
+        total_evidence=5, cross_area_count=2,
+        acceptance_rate=0.8,
+    )
+    assert 0.7 &lt;= score &lt;= 1.0
+
+
+def confidence_for_lone_taste_comment_is_low():
+    score = confidence_score(
+        tier1_count=0, tier2_count=0,
+        total_evidence=1, cross_area_count=1,
+        acceptance_rate=0.0,
+    )
+    assert score &lt; 0.3
+
+
+def scope_cross_cutting_requires_tier1_and_multi_area():
+    assert determine_scope(tier1_count=1, cross_area_count=2) == "cross-cutting"
+    assert determine_scope(tier1_count=0, cross_area_count=3) == "area-specific"
+    assert determine_scope(tier1_count=2, cross_area_count=1) == "area-specific"</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Write <code>scripts/pr-analysis/aggregate_findings.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = "&gt;=3.12"
+# dependencies = []
+# ///
+"""Aggregate classified comments into `finding` rows.
+
+Approach:
+- Group by (taxonomy, area). Within each group, cluster rule_statements by
+  normalized-token Jaccard similarity above THRESHOLD to merge near-duplicates.
+- For each cluster: emit one finding row with reviewer attribution, evidence,
+  cross-area count (number of areas in which this same theme also clustered),
+  AGENTS.md coverage, and a confidence score.
+
+Idempotent: deletes existing findings before re-aggregating.
+"""
+from __future__ import annotations
+
+import datetime as dt
+import json
+import re
+import sys
+from collections import defaultdict
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from lib.areas import HOT_AREAS
+from lib.db import connect, transaction
+from lib.taxonomy import TAXONOMY_BY_ID
+
+AGENTS_MD_PATH = Path(__file__).resolve().parent.parent.parent / "AGENTS.md"
+
+CLUSTER_THRESHOLD = 0.6
+
+
+def _tokens(s: str) -&gt; set[str]:
+    return set(re.findall(r"[a-z0-9_]+", s.lower())) - {
+        "the", "a", "an", "of", "to", "in", "on", "for", "is", "are", "and",
+        "or", "with", "at", "by", "use", "uses", "used", "using",
+    }
+
+
+def _jaccard(a: set[str], b: set[str]) -&gt; float:
+    if not a and not b:
+        return 1.0
+    inter = a &amp; b
+    union = a | b
+    return len(inter) / max(1, len(union))
+
+
+def cluster_rule_statements(statements: list[str], threshold: float = CLUSTER_THRESHOLD
+                            ) -&gt; list[list[int]]:
+    """Return clusters as lists of indices into `statements`."""
+    token_sets = [_tokens(s) for s in statements]
+    clusters: list[list[int]] = []
+    cluster_tokens: list[set[str]] = []
+    for i, ts in enumerate(token_sets):
+        if not ts:
+            continue
+        placed = False
+        for j, ct in enumerate(cluster_tokens):
+            if _jaccard(ts, ct) &gt;= threshold:
+                clusters[j].append(i)
+                cluster_tokens[j] = ct | ts
+                placed = True
+                break
+        if not placed:
+            clusters.append([i])
+            cluster_tokens.append(set(ts))
+    return clusters
+
+
+def confidence_score(*, tier1_count: int, tier2_count: int,
+                     total_evidence: int, cross_area_count: int,
+                     acceptance_rate: float) -&gt; float:
+    tier_signal = 1.0 if tier1_count &gt; 0 else (0.5 if tier2_count &gt; 0 else 0.0)
+    return round(
+        0.4 * tier_signal
+        + 0.2 * min(total_evidence / 5.0, 1.0)
+        + 0.2 * min(cross_area_count / 3.0, 1.0)
+        + 0.2 * (acceptance_rate if acceptance_rate is not None else 0.5),
+        3,
+    )
+
+
+def determine_scope(*, tier1_count: int, cross_area_count: int) -&gt; str:
+    if tier1_count &gt;= 1 and cross_area_count &gt;= 2:
+        return "cross-cutting"
+    return "area-specific"
+
+
+def agents_md_coverage(taxonomy: str, agents_text: str) -&gt; tuple[int, str | None]:
+    entry = TAXONOMY_BY_ID.get(taxonomy)
+    if not entry:
+        return (0, None)
+    for section in entry.agents_md_sections:
+        if section.lower() in agents_text.lower():
+            return (1, section)
+    return (0, None)
+
+
+def main() -&gt; None:
+    conn = connect()
+    agents_text = AGENTS_MD_PATH.read_text() if AGENTS_MD_PATH.exists() else ""
+
+    classified = conn.execute(
+        """SELECT c.comment_id, c.taxonomy, c.was_addressed, c.rule_statement, c.confidence,
+                  lc.area, lc.pr_number, lc.author, lc.reviewer_tier
+           FROM classification c
+           JOIN line_comment lc ON lc.id = c.comment_id
+           WHERE c.rule_statement &lt;&gt; '' AND c.confidence &gt;= 0.4"""
+    ).fetchall()
+
+    # First pass: cluster per (taxonomy, area) to know area-level themes,
+    # then derive a global theme key per cluster so we can count cross-areas.
+    by_tax_area: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for r in classified:
+        by_tax_area[(r["taxonomy"], r["area"])].append(dict(r))
+
+    # area_themes[(tax, area)] = list of clusters; each cluster = list of comment dicts
+    area_themes: dict[tuple[str, str], list[list[dict]]] = {}
+    for key, rows in by_tax_area.items():
+        statements = [r["rule_statement"] for r in rows]
+        clusters_idx = cluster_rule_statements(statements)
+        area_themes[key] = [[rows[i] for i in idxs] for idxs in clusters_idx]
+
+    # Build a global theme signature -&gt; list of (area, cluster) for cross-area count.
+    def signature(cluster: list[dict]) -&gt; frozenset[str]:
+        # use the union of meaningful tokens across all statements as the signature
+        toks: set[str] = set()
+        for r in cluster:
+            toks |= _tokens(r["rule_statement"])
+        # keep top 8 tokens by length to stabilize
+        return frozenset(sorted(toks, key=lambda t: -len(t))[:8])
+
+    sig_to_areas: dict[frozenset[str], set[str]] = defaultdict(set)
+    for (tax, area), clusters in area_themes.items():
+        for cluster in clusters:
+            sig_to_areas[signature(cluster)].add(area)
+
+    with transaction(conn):
+        conn.execute("DELETE FROM finding")
+        for (tax, area), clusters in area_themes.items():
+            for cluster in clusters:
+                sig = signature(cluster)
+                areas_seen = sorted(sig_to_areas[sig])
+                cross_area_count = len(areas_seen)
+                tier1 = len({r["author"] for r in cluster if r["reviewer_tier"] == 1})
+                tier2 = len({r["author"] for r in cluster if r["reviewer_tier"] == 2})
+                addressed = [r["was_addressed"] for r in cluster if r["was_addressed"] is not None]
+                acceptance = (sum(addressed) / len(addressed)) if addressed else None
+                # pick the canonical rule_statement = the longest one (most descriptive)
+                canonical = max(cluster, key=lambda r: len(r["rule_statement"] or ""))["rule_statement"]
+                # primary reviewer = most-frequent author in cluster
+                from collections import Counter
+                top_author, _ = Counter(r["author"] for r in cluster).most_common(1)[0]
+                in_md, section = agents_md_coverage(tax, agents_text)
+                conn.execute(
+                    """INSERT INTO finding
+                       (theme, rule_statement, taxonomy, area, scope,
+                        primary_reviewer, reviewer_logins,
+                        tier1_reviewer_count, tier2_reviewer_count,
+                        total_evidence_count, evidence_comment_ids, evidence_pr_numbers,
+                        cross_area_count, areas_seen, acceptance_rate,
+                        in_agents_md, agents_md_section, confidence_score, notes,
+                        created_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        canonical[:80] or tax,
+                        canonical,
+                        tax,
+                        area,
+                        determine_scope(tier1_count=tier1, cross_area_count=cross_area_count),
+                        top_author,
+                        json.dumps(sorted({r["author"] for r in cluster})),
+                        tier1, tier2,
+                        len(cluster),
+                        json.dumps([r["comment_id"] for r in cluster]),
+                        json.dumps(sorted({r["pr_number"] for r in cluster})),
+                        cross_area_count,
+                        json.dumps(areas_seen),
+                        acceptance,
+                        in_md, section,
+                        confidence_score(
+                            tier1_count=tier1, tier2_count=tier2,
+                            total_evidence=len(cluster),
+                            cross_area_count=cross_area_count,
+                            acceptance_rate=acceptance if acceptance is not None else 0.5,
+                        ),
+                        None,
+                        dt.datetime.utcnow().isoformat(),
+                    ),
+                )
+    n = conn.execute("SELECT COUNT(*) AS n FROM finding").fetchone()["n"]
+    print(f"wrote {n} findings")
+    by_scope = conn.execute(
+        "SELECT scope, COUNT(*) AS n FROM finding GROUP BY scope"
+    ).fetchall()
+    for r in by_scope:
+        print(f"  {r['scope']}: {r['n']}")
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+<ul>
+<li>[ ] <strong>Step 3: Run aggregator tests</strong></li>
+</ul>
+<p>Run: <code>cd scripts/pr-analysis &amp;&amp; uv run --with pytest pytest tests/test_aggregate_findings.py -v</code></p>
+<p>Expected: 4 tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 4: Commit</strong></li>
+</ul>
+<p>The first meaningful aggregation run happens in Task 7 (pilot) once we have ~15 PRs of classified comments to cluster. Running it now on the 5-PR smoke set with <code>--limit 5</code> classifications would only verify the script imports correctly.</p>
+<pre><code class="lang-bash">git add scripts/pr-analysis/aggregate_findings.py \
+        scripts/pr-analysis/tests/test_aggregate_findings.py
+git commit -m "feat(pr-analysis): aggregate findings table with reviewer-weighted clustering"</code></pre>
+<hr>
+<h2 id="task-7-pilot-extraction-on-15-prs-design-retrospective">Task 7: Pilot extraction on 15 PRs + design retrospective</h2>
+<p>This is the calibration checkpoint. Reset the DB, run the full pipeline end-to-end on the 15 most-recent merged Rust-touching PRs, audit coverage to prove every comment landed, present a structured retro to the user, and iterate on schema/code/prompts before committing to the full 157-PR run. Catching a missing column, weak prompt, or bad clustering threshold here costs minutes; catching it in Task 8 costs ~1 hour and a re-spend on API calls.</p>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>scripts/pr-analysis/audit_coverage.py</code></li>
+<li>Create: <code>scripts/pr-analysis/findings/pilot-retro.md</code></li>
+<li>Create on first iteration: <code>scripts/pr-analysis/findings/revision_log.md</code></li>
+<li>(Possibly modify under retro iteration: <code>schema.sql</code>, <code>lib/taxonomy.py</code>, <code>lib/areas.py</code>, <code>lib/reviewers.py</code>, <code>classify_comments.py</code>, <code>aggregate_findings.py</code>.)</li>
+<li>[ ] <strong>Step 1: Write <code>scripts/pr-analysis/audit_coverage.py</code></strong></li>
+</ul>
+<p>This script proves "every comment on every PR was reviewed." It cross-references GitHub's per-PR line-comment counts against what's in SQLite and reports any mismatches, orphan rows, or unclassified comments.</p>
+<pre><code class="lang-python">#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = "&gt;=3.12"
+# dependencies = []
+# ///
+"""Coverage audit: prove every line-comment on every ingested PR landed
+in the DB and was classified.
+
+Exits non-zero (and prints a summary) if any of these invariants fail:
+  1. The set of comment IDs in the DB for a PR matches what GitHub reports.
+  2. Every comment has a comment_final_code row (snippet may be null).
+  3. Every non-bot comment has a classification row.
+     (Skipped under --ingest-only — used between ingest and classification.)
+  4. No line_comment has area = 'other' for a path under cli/ (would
+     indicate a missing prefix in lib/areas.py).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from lib.db import connect
+
+
+def gh_comment_ids(pr_number: int) -&gt; set[int]:
+    proc = subprocess.run(
+        ["gh", "api", "--paginate",
+         f"repos/flox/flox/pulls/{pr_number}/comments",
+         "-q", ".[].id"],
+        capture_output=True, text=True, check=True,
+    )
+    return {int(line) for line in proc.stdout.split() if line.strip()}
+
+
+def main() -&gt; int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--ingest-only",
+        action="store_true",
+        help="run between ingest and classification: skips invariant 3 "
+             "(every non-bot comment classified)",
+    )
+    args = parser.parse_args()
+
+    conn = connect()
+    failures: list[str] = []
+
+    prs = [r["number"] for r in conn.execute("SELECT number FROM pr ORDER BY number")]
+    print(f"auditing {len(prs)} PRs (mode={'ingest-only' if args.ingest_only else 'full'})")
+
+    # Invariant 1: per-PR comment-id parity with GitHub.
+    for n in prs:
+        gh_ids = gh_comment_ids(n)
+        db_ids = {
+            r["id"] for r in conn.execute(
+                "SELECT id FROM line_comment WHERE pr_number = ?", (n,)
+            )
+        }
+        missing = gh_ids - db_ids
+        extra = db_ids - gh_ids
+        if missing or extra:
+            failures.append(
+                f"PR #{n}: gh={len(gh_ids)} db={len(db_ids)} "
+                f"missing_from_db={sorted(missing)} extra_in_db={sorted(extra)}"
+            )
+
+    # Invariant 2: every comment has a comment_final_code row.
+    orphans = conn.execute(
+        """SELECT lc.id FROM line_comment lc
+           LEFT JOIN comment_final_code cfc ON cfc.comment_id = lc.id
+           WHERE cfc.comment_id IS NULL"""
+    ).fetchall()
+    if orphans:
+        failures.append(f"{len(orphans)} comments have no comment_final_code row")
+
+    # Invariant 3: every non-bot comment has a classification row.
+    if not args.ingest_only:
+        unclassified = conn.execute(
+            """SELECT lc.id FROM line_comment lc
+               LEFT JOIN classification c ON c.comment_id = lc.id
+               WHERE lc.reviewer_tier != 4 AND c.comment_id IS NULL"""
+        ).fetchall()
+        if unclassified:
+            failures.append(f"{len(unclassified)} non-bot comments are unclassified")
+
+    # Invariant 4: no 'other' area for cli/ paths.
+    leaked = conn.execute(
+        """SELECT id, path FROM line_comment
+           WHERE area = 'other' AND path LIKE 'cli/%'"""
+    ).fetchall()
+    if leaked:
+        sample = ", ".join(f"#{r['id']}({r['path']})" for r in leaked[:5])
+        failures.append(
+            f"{len(leaked)} cli/* comments fell into area='other' (lib/areas.py gap): {sample}"
+        )
+
+    print("---")
+    if failures:
+        print("FAIL")
+        for f in failures:
+            print(" - " + f)
+        return 1
+    print("OK")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Reset the DB and ingest the pilot set</strong></li>
+</ul>
+<pre><code class="lang-bash">cd scripts/pr-analysis
+uv run init_db.py --reset
+uv run ingest_prs.py --since 2025-11-16 --limit 25</code></pre>
+<p>We over-fetch to <code>--limit 25</code> because <code>--rust-only</code> (default) drops non-Rust-touching PRs, and the 6-month sample shows ~63% touch Rust. 25 fetched typically yields 13-17 Rust PRs — close enough to the 10-15 target. If you get &lt; 10, bump <code>--limit</code> to 35 and re-run; if &gt; 18, that's still fine for the pilot.</p>
+<p>Verify:</p>
+<pre><code class="lang-bash">sqlite3 data/pr_analysis.db "SELECT COUNT(*) FROM pr"</code></pre>
+<p>Expected: a number between 10 and 18.</p>
+<ul>
+<li>[ ] <strong>Step 3: Run comment + snippet ingest on the pilot set</strong></li>
+</ul>
+<pre><code class="lang-bash">uv run ingest_comments.py
+uv run ingest_final_code.py</code></pre>
+<p>Expected wall time: 1-3 minutes total. Each script processes only PRs currently in the DB.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run the coverage audit before classifying</strong></li>
+</ul>
+<p>Run: <code>uv run audit_coverage.py --ingest-only</code></p>
+<p>Expected: <code>OK</code>.</p>
+<p>If FAIL: the failure mode tells you which invariant broke. Common causes:</p>
+<ul>
+<li><code>missing_from_db</code>: <code>ingest_comments.py</code> pagination is dropping pages → check <code>--paginate</code> usage in <code>lib/gh.py</code>.</li>
+<li><code>comment_final_code</code> orphans: <code>ingest_final_code.py</code> crashed mid-run → rerun it (idempotent).</li>
+<li><code>area='other' for cli/*</code>: a new subdirectory was added since <code>lib/areas.py</code> was seeded → extend <code>_PREFIX_MAP</code>.</li>
+</ul>
+<p>Fix and re-audit until OK. Do not move to Step 5 with a failing audit — the whole point of the pilot is that completeness is provable.</p>
+<ul>
+<li>[ ] <strong>Step 5: Classify the pilot comments</strong></li>
+</ul>
+<pre><code class="lang-bash">ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY uv run classify_comments.py --concurrency 4</code></pre>
+<p>Expected wall time: 2-5 minutes (~100-200 comments at concurrency 4). Cost: &lt;$1.</p>
+<p>Then re-run the audit:</p>
+<pre><code class="lang-bash">uv run audit_coverage.py</code></pre>
+<p>Expected: OK on all four invariants.</p>
+<ul>
+<li>[ ] <strong>Step 6: Aggregate findings on the pilot set</strong></li>
+</ul>
+<pre><code class="lang-bash">uv run aggregate_findings.py</code></pre>
+<p>Expected: <code>wrote N findings</code> where N is roughly 20-80.</p>
+<ul>
+<li>[ ] <strong>Step 7: Generate the retro digest</strong></li>
+</ul>
+<p>Build a structured digest that drives the human review. This is plain SQL — no LLM — so the retro is grounded in raw data, not in a model's summary.</p>
+<p>Run:</p>
+<pre><code class="lang-bash">mkdir -p findings
+RETRO=findings/pilot-retro.md
+{
+  echo "# Pilot retrospective (run on $(date -u +%Y-%m-%dT%H:%M:%SZ))"
+  echo
+  echo "## Corpus shape"
+  sqlite3 -header -markdown data/pr_analysis.db &lt;&lt;'SQL'
+SELECT
+  (SELECT COUNT(*) FROM pr) AS prs,
+  (SELECT COUNT(*) FROM line_comment) AS comments_total,
+  (SELECT COUNT(*) FROM line_comment WHERE reviewer_tier = 1) AS tier1,
+  (SELECT COUNT(*) FROM line_comment WHERE reviewer_tier = 2) AS tier2,
+  (SELECT COUNT(*) FROM line_comment WHERE reviewer_tier = 4) AS bot,
+  (SELECT COUNT(*) FROM classification) AS classified,
+  (SELECT COUNT(*) FROM finding) AS findings;
+SQL
+  echo
+  echo "## Area coverage"
+  sqlite3 -header -markdown data/pr_analysis.db \
+    "SELECT area, COUNT(*) AS comments FROM line_comment GROUP BY area ORDER BY 2 DESC"
+  echo
+  echo "## Taxonomy distribution"
+  sqlite3 -header -markdown data/pr_analysis.db \
+    "SELECT taxonomy, COUNT(*) AS n, ROUND(AVG(confidence), 2) AS avg_conf FROM classification GROUP BY taxonomy ORDER BY 2 DESC"
+  echo
+  echo "## 'Other' bucket sample (candidate-new categories)"
+  sqlite3 -header -markdown data/pr_analysis.db \
+    "SELECT comment_id, ROUND(confidence,2) AS conf, SUBSTR(rule_statement,1,120) AS rule FROM classification WHERE taxonomy='other' AND rule_statement &lt;&gt; '' ORDER BY confidence DESC LIMIT 15"
+  echo
+  echo "## Top findings"
+  sqlite3 -header -markdown data/pr_analysis.db \
+    "SELECT area, scope, tier1_reviewer_count AS t1, total_evidence_count AS evd, cross_area_count AS xa, in_agents_md AS md, ROUND(confidence_score,2) AS conf, SUBSTR(rule_statement,1,90) AS rule FROM finding ORDER BY confidence_score DESC LIMIT 25"
+  echo
+  echo "## Lowest-confidence classifications (sanity check the prompt)"
+  sqlite3 -header -markdown data/pr_analysis.db \
+    "SELECT c.comment_id, lc.author, c.taxonomy, ROUND(c.confidence,2) AS conf, SUBSTR(lc.body, 1, 80) AS body, SUBSTR(c.rule_statement, 1, 80) AS rule FROM classification c JOIN line_comment lc ON lc.id=c.comment_id ORDER BY c.confidence ASC LIMIT 15"
+  echo
+  echo "## Coverage audit"
+  uv run audit_coverage.py 2&gt;&amp;1 || true
+} &gt; "$RETRO"
+
+echo "wrote $RETRO"
+wc -l "$RETRO"</code></pre>
+<p>Expected: <code>$RETRO</code> is 100-300 lines of Markdown tables.</p>
+<ul>
+<li>[ ] <strong>Step 8: Capture additional-scope samples (decision input for the retro)</strong></li>
+</ul>
+<p>The user explicitly asked: <em>"we want to make sure for every PR we review every comment that is put in place."</em> GitHub PR feedback comes in three buckets, and we currently only ingest one (line-anchored review comments). Capture small samples of the other two so the retro can decide whether to expand scope.</p>
+<pre><code class="lang-bash">PILOT_PRS=$(sqlite3 data/pr_analysis.db "SELECT number FROM pr ORDER BY number DESC LIMIT 5")
+{
+  echo "# Additional comment scopes (decision input)"
+  echo
+  echo "## Review-summary bodies (gh api .../pulls/N/reviews body field)"
+  for n in $PILOT_PRS; do
+    echo "### PR #$n"
+    gh api "repos/flox/flox/pulls/$n/reviews" \
+      -q '.[] | select(.body != "" and .body != null) | "- @\(.user.login) [\(.state)]: \(.body | gsub("\n"; " ") | .[0:200])"' \
+      2&gt;/dev/null
+    echo
+  done
+  echo
+  echo "## Issue-level conversation (gh api .../issues/N/comments)"
+  for n in $PILOT_PRS; do
+    echo "### PR #$n"
+    gh api "repos/flox/flox/issues/$n/comments" \
+      -q '.[] | "- @\(.user.login) (\(.user.type)): \(.body | gsub("\n"; " ") | .[0:200])"' \
+      2&gt;/dev/null
+    echo
+  done
+} &gt;&gt; "$RETRO"
+echo "appended additional-scope samples to $RETRO"</code></pre>
+<p>This bolts the samples onto the retro doc so they sit alongside the line-comment analysis when the human reviews it.</p>
+<ul>
+<li>[ ] <strong>Step 9: Write the retro question template into the file</strong></li>
+</ul>
+<p>Append the retro questions:</p>
+<pre><code class="lang-bash">cat &gt;&gt; findings/pilot-retro.md &lt;&lt;'EOF'
+
+---
+
+# Retro decisions (to be filled in by reviewer)
+
+For each section, mark **KEEP** (no change) or **CHANGE** (with the specific change). If CHANGE, the iteration loop in Step 10 re-runs the pilot.
+
+## Q1. Ingest scope completeness
+Currently we ingest `pulls/:n/comments` (line-anchored). Samples above show what we'd add by also ingesting `pulls/:n/reviews` (review-summary bodies) and `issues/:n/comments` (top-level PR discussion).
+
+- [ ] **KEEP** line-comments only.
+- [ ] **CHANGE**: add review-summary bodies. (Schema impact: add `kind` column to `line_comment`, or new `review_summary` table; update `ingest_reviews.py`; re-run.)
+- [ ] **CHANGE**: add issue-level comments. (Schema impact: similar.)
+
+## Q2. Schema completeness
+Look at the corpus-shape and top-findings tables. Are there columns you wish you had?
+
+Common candidates:
+- `line_comment.thread_root_id` — to cluster comment chains, not isolated comments.
+- `line_comment.resolved_at` / `resolved_by` — GitHub now exposes thread resolution state in `pulls/:n/reviewThreads`.
+- `line_comment.commit_id_at_comment` — captures the commit SHA the comment was written against, distinct from `merge_commit_sha`.
+- `pr_file.is_test` — derived flag for `.bats`/`tests/` files to weight rule signal.
+
+- [ ] **KEEP** current schema.
+- [ ] **CHANGE**: add columns: ______. (Iteration impact: edit `schema.sql`, re-run `init_db.py --reset` then full pilot.)
+
+## Q3. Taxonomy completeness
+Look at the **'Other' bucket sample**. Is there a recurring rule type that deserves its own taxonomy entry?
+
+- [ ] **KEEP** current taxonomy.
+- [ ] **CHANGE**: add taxonomy entries: ______ . (Edit `lib/taxonomy.py`, then re-run classifier on existing comments via: `sqlite3 data/pr_analysis.db "DELETE FROM classification"; uv run classify_comments.py`.)
+
+## Q4. Prompt fidelity
+Look at the **Lowest-confidence classifications** table. Are the low-confidence rows actually conversational/noise (good — prompt is calibrated) or are they substantive rules the classifier misread (bad — prompt needs tightening)?
+
+- [ ] **KEEP** prompt as-is.
+- [ ] **CHANGE**: edit `SYSTEM_PROMPT` / `USER_TEMPLATE` in `classify_comments.py` to: ______. Re-run classifier.
+
+## Q5. Clustering threshold
+Look at the **Top findings** table. Are there obvious duplicates that should have merged into one finding (lower `CLUSTER_THRESHOLD`)? Or generic mush that should have stayed separate (raise it)?
+
+- [ ] **KEEP** `CLUSTER_THRESHOLD = 0.6`.
+- [ ] **CHANGE** to: ______. (Edit `aggregate_findings.py`, re-run aggregator only.)
+
+## Q6. Reviewer weights
+Confirm the Tier 1/2 split still feels right after seeing real evidence. Do any Tier-3 reviewers show up unexpectedly often with high-quality rules?
+
+- [ ] **KEEP** weights as seeded.
+- [ ] **CHANGE**: promote/demote: ______. (Edit `lib/reviewers.py`, re-run `init_db.py --reset` + full pilot.)
+
+## Q7. Confidence formula
+The `confidence_score` weights 0.4/0.2/0.2/0.2 across (tier-signal / evidence-count / cross-area / acceptance). Does the ranking in the top-findings table feel right?
+
+- [ ] **KEEP**.
+- [ ] **CHANGE** weights: ______. (Edit `aggregate_findings.py::confidence_score`, re-run aggregator only.)
+
+## Q8. Anything else
+Free-form notes from the reviewer.
+
+______
+EOF</code></pre>
+<ul>
+<li>[ ] <strong>Step 10: Present retro to user and iterate</strong></li>
+</ul>
+<p>Hand <code>findings/pilot-retro.md</code> to the user. They fill in the KEEP/CHANGE choices in Q1-Q8 and return them. For each CHANGE:</p>
+<ol>
+<li>Apply the code/schema/prompt change exactly as described in that question's "Iteration impact" line.</li>
+<li>Append the change to <code>scripts/pr-analysis/findings/revision_log.md</code> (create on first iteration): ``` ## Iteration N — 2026-MM-DD - Q2: added <code>line_comment.thread_root_id</code> column - Q3: added taxonomy entry <code>module-organization</code> - ... ```</li>
+<li>Re-run the <strong>scope</strong> of the iteration: - Schema change → <code>uv run init_db.py --reset</code> + Steps 2-9 of this task. - Taxonomy or prompt change → just clear <code>classification</code> and re-run classifier + aggregator + retro digest. - Threshold/weight change → just re-run aggregator + retro digest.</li>
+<li>Re-present the updated <code>findings/pilot-retro.md</code> to the user.</li>
+</ol>
+<p>Loop until the user signs off on all eight questions. No iteration cap — calibration debt here is the cheapest debt in the whole pipeline.</p>
+<ul>
+<li>[ ] <strong>Step 11: Commit pilot artifacts and any iterated changes</strong></li>
+</ul>
+<pre><code class="lang-bash">git add scripts/pr-analysis/audit_coverage.py \
+        scripts/pr-analysis/findings/pilot-retro.md
+# Add any iterated files (schema, lib/, classify, aggregate, revision_log):
+git add scripts/pr-analysis/schema.sql \
+        scripts/pr-analysis/lib/ \
+        scripts/pr-analysis/classify_comments.py \
+        scripts/pr-analysis/aggregate_findings.py \
+        scripts/pr-analysis/findings/revision_log.md 2&gt;/dev/null || true
+git commit -m "feat(pr-analysis): pilot retrospective on 15 PRs and design adjustments"</code></pre>
+<hr>
+<h2 id="task-8-full-corpus-run-on-all-157-rust-touching-prs">Task 8: Full-corpus run on all 157 Rust-touching PRs</h2>
+<p>After Task 7 sign-off, blow away the pilot DB and re-run the validated pipeline at full scale.</p>
+<ul>
+<li>[ ] <strong>Step 1: Reset DB and ingest the full corpus</strong></li>
+</ul>
+<pre><code class="lang-bash">cd scripts/pr-analysis
+uv run init_db.py --reset
+uv run ingest_prs.py --since 2025-11-16</code></pre>
+<p>Expected stdout: <code>Ingested PRs: total=249 rust_touching=157</code>.</p>
+<p>Verify:</p>
+<pre><code class="lang-bash">sqlite3 data/pr_analysis.db "SELECT COUNT(*) FROM pr"</code></pre>
+<p>Expected: <code>157</code>.</p>
+<ul>
+<li>[ ] <strong>Step 2: Ingest comments and snippets for the full corpus</strong></li>
+</ul>
+<pre><code class="lang-bash">uv run ingest_comments.py
+uv run ingest_final_code.py</code></pre>
+<p>Expected wall time: 15-45 minutes combined. Output: progress lines every 25 PRs (comments) and every 100 comments (snippets), each ending in <code>done</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Coverage audit on the full corpus (pre-classification)</strong></li>
+</ul>
+<pre><code class="lang-bash">uv run audit_coverage.py --ingest-only</code></pre>
+<p>Expected: OK. If any PR shows a mismatch, the audit names the PR and the missing/extra comment IDs — re-run <code>ingest_comments.py</code> (it's idempotent) and re-audit. Do not classify until the audit is clean: classifier cost is proportional to comment count, so re-classifying after a partial-ingest correction wastes API calls.</p>
+<ul>
+<li>[ ] <strong>Step 4: Classify the full corpus</strong></li>
+</ul>
+<pre><code class="lang-bash">ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY uv run classify_comments.py --concurrency 8</code></pre>
+<p>Expected wall time: 15-40 minutes for ~1,400 non-bot comments at concurrency 8. Cost: $1-3 at Haiku 4.5 pricing.</p>
+<p>Then verify completeness:</p>
+<pre><code class="lang-bash">sqlite3 data/pr_analysis.db \
+  "SELECT COUNT(*) AS unclassified FROM line_comment lc \
+   WHERE lc.reviewer_tier != 4 \
+     AND lc.id NOT IN (SELECT comment_id FROM classification)"</code></pre>
+<p>Expected: <code>0</code>.</p>
+<p>Then sanity-check taxonomy distribution:</p>
+<pre><code class="lang-bash">sqlite3 -header -markdown data/pr_analysis.db \
+  "SELECT taxonomy, COUNT(*) FROM classification GROUP BY taxonomy ORDER BY 2 DESC"</code></pre>
+<p>Expected: head dominated by <code>error-handling</code>, <code>user-facing-messages</code>, <code>type-safety</code>, <code>naming</code>, <code>testing</code> (matching <code>AGENTS.md</code>'s emphasis); long tail in <code>other</code>.</p>
+<ul>
+<li>[ ] <strong>Step 5: Aggregate findings on the full corpus</strong></li>
+</ul>
+<pre><code class="lang-bash">uv run aggregate_findings.py</code></pre>
+<p>Expected: <code>wrote N findings</code> where N is roughly 100-300, and a cross-cutting/area-specific split (cross-cutting typically 15-40, area-specific the rest).</p>
+<ul>
+<li>[ ] <strong>Step 6: Final audit + commit</strong></li>
+</ul>
+<pre><code class="lang-bash">uv run audit_coverage.py</code></pre>
+<p>Expected: OK.</p>
+<pre><code class="lang-bash">git add -A
+git commit -m "chore(pr-analysis): full-corpus extraction and findings"</code></pre>
+<p>(This commit primarily captures any incidental files; the DB itself is gitignored. The next tasks consume the DB to produce committed artifacts.)</p>
+<hr>
+<h2 id="task-9-user-review-checkpoint-on-findings">Task 9: User review checkpoint on findings</h2>
+<p>Stop and have the user sanity-check the full-corpus <code>finding</code> table before generating skill/CLAUDE.md content. The pilot retro (Task 7) calibrated the schema, prompt, and weights; this checkpoint confirms the same calibration still holds at scale and catches any drift that 15 PRs couldn't surface.</p>
+<ul>
+<li>[ ] <strong>Step 1: Generate a per-area human-readable digest</strong></li>
+</ul>
+<p>Run:</p>
+<pre><code class="lang-bash">sqlite3 -header -column scripts/pr-analysis/data/pr_analysis.db &lt;&lt;'SQL' &gt; /tmp/findings-digest.txt
+SELECT area, scope, tier1_reviewer_count AS t1, total_evidence_count AS evd,
+       cross_area_count AS xa, in_agents_md AS md, ROUND(confidence_score,2) AS conf,
+       SUBSTR(rule_statement,1,90) AS rule
+FROM finding
+WHERE confidence_score &gt;= 0.5
+ORDER BY area, confidence_score DESC;
+SQL</code></pre>
+<p>Then <code>wc -l /tmp/findings-digest.txt</code> to size it; if very large (&gt; 500 lines), increase the <code>confidence_score</code> filter.</p>
+<ul>
+<li>[ ] <strong>Step 2: Present to user</strong></li>
+</ul>
+<p>Show the user the path <code>/tmp/findings-digest.txt</code> and the three queries:</p>
+<ol>
+<li>Top 20 cross-cutting findings by confidence</li>
+<li>Top 10 area-specific findings per hot area</li>
+<li>The 20 highest-confidence findings where <code>in_agents_md = 0</code> (gap candidates)</li>
+</ol>
+<p>Ask: <em>"Calibration check — anything in this set looks wrong (mis-clustered, wrong taxonomy, false-positive rule)? If yes, what should change in <code>aggregate_findings.py</code> (cluster threshold, confidence weights, taxonomy seed)? If looks right, proceed to synthesis."</em></p>
+<ul>
+<li>[ ] <strong>Step 3: If adjustments needed, edit <code>aggregate_findings.py</code> (or re-run classifier with a tightened prompt) and re-aggregate. If approved, proceed to Task 10.</strong></li>
+</ul>
+<p>(No commit here; this is a human-in-the-loop checkpoint.)</p>
+<hr>
+<h2 id="task-10-cross-cutting-skill-synthesis">Task 10: Cross-cutting skill synthesis</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>scripts/pr-analysis/synthesize_cross_cutting.py</code></li>
+<li>Create: <code>.claude/skills/flox-rust-review/SKILL.md</code></li>
+<li>Create: <code>scripts/pr-analysis/findings/cross-cutting-themes.md</code></li>
+<li>[ ] <strong>Step 1: Write <code>scripts/pr-analysis/synthesize_cross_cutting.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = "&gt;=3.12"
+# dependencies = ["anthropic&gt;=0.40"]
+# ///
+"""Synthesize the cross-cutting skill by handing the top cross-cutting
+findings to Claude Sonnet 4.6.
+
+Outputs two files:
+  1. .claude/skills/flox-rust-review/SKILL.md  -- the skill itself
+  2. scripts/pr-analysis/findings/cross-cutting-themes.md -- narrative
+     companion showing evidence per rule
+"""
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from lib.db import connect
+from lib.llm import SYNTH_MODEL, call_with_retry, client
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+SKILL_PATH = REPO_ROOT / ".claude" / "skills" / "flox-rust-review" / "SKILL.md"
+NARRATIVE_PATH = REPO_ROOT / "scripts" / "pr-analysis" / "findings" / "cross-cutting-themes.md"
+
+SYSTEM = (
+    "You are writing a Claude Code skill file. The skill content guides an "
+    "agent who is about to edit Rust code in flox/flox. "
+    "Audience: a developer with general Rust skill but limited flox context. "
+    "Tone: imperative, terse, sentence-case, no fluff. "
+    "Use the same conventions as AGENTS.md (which the agent already reads): "
+    "rules grouped by theme, each with a one-line rule plus an indented "
+    "rationale or example when non-obvious. "
+    "Cite PR numbers in parentheses as evidence; do not invent any. "
+    "Skip any rule already covered in AGENTS.md unless the evidence shows it "
+    "still needs reinforcement (i.e., multiple recent comments enforcing it)."
+)
+
+USER_TEMPLATE = """\
+You are synthesizing the cross-cutting rules portion of a `SKILL.md` for the
+`flox-rust-review` skill. Below are the highest-confidence cross-cutting
+findings, mined from 6 months of merged PRs in flox/flox.
+
+Each finding has:
+  - theme
+  - rule_statement (one-sentence rule)
+  - taxonomy (category from AGENTS.md taxonomy)
+  - areas_seen (which subsystems showed this pattern)
+  - tier1_reviewer_count (number of top-3 reviewers who enforced it)
+  - total_evidence_count (number of distinct comments)
+  - cross_area_count
+  - evidence_pr_numbers (cite a couple)
+  - in_agents_md (1 = already in AGENTS.md; 0 = gap)
+
+Produce a `SKILL.md` body (not the YAML frontmatter; that is handled separately)
+that:
+1. Opens with a one-paragraph summary of what reviewers consistently enforce.
+2. Groups rules by theme (taxonomy id is fine as a section heading, in title case).
+3. For each rule: bold one-line rule, then 1-2 sentence rationale, then
+   "Evidence:" with up to 3 PR numbers.
+4. At the end, a section titled "Where to look first" listing the three hot areas
+   and what kinds of mistakes recur in each.
+Output only the Markdown body — no preamble, no explanation.
+
+Findings JSON:
+{findings_json}
+"""
+
+FRONTMATTER = """\
+---
+name: flox-rust-review
+description: Use when editing Rust in the flox/flox repository. Encodes review-validated rules mined from 6 months of merged PRs, organized by reviewer-enforced theme. Complements AGENTS.md.
+---
+
+"""
+
+
+def fetch_findings(conn) -&gt; list[dict]:
+    rows = conn.execute(
+        """SELECT theme, rule_statement, taxonomy, areas_seen, tier1_reviewer_count,
+                  total_evidence_count, cross_area_count, evidence_pr_numbers, in_agents_md
+           FROM finding
+           WHERE scope = 'cross-cutting' AND confidence_score &gt;= 0.55
+           ORDER BY confidence_score DESC
+           LIMIT 60"""
+    ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["areas_seen"] = json.loads(d["areas_seen"])
+        d["evidence_pr_numbers"] = json.loads(d["evidence_pr_numbers"])
+        out.append(d)
+    return out
+
+
+def main() -&gt; None:
+    conn = connect()
+    findings = fetch_findings(conn)
+    print(f"synthesizing cross-cutting skill from {len(findings)} findings")
+    body = call_with_retry(
+        client(),
+        model=SYNTH_MODEL,
+        system=SYSTEM,
+        user=USER_TEMPLATE.format(findings_json=json.dumps(findings, indent=2)),
+        max_tokens=4000,
+    )
+    SKILL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SKILL_PATH.write_text(FRONTMATTER + body.strip() + "\n")
+    print(f"wrote {SKILL_PATH}")
+
+    # Narrative companion: list every finding with full evidence (no LLM call)
+    lines = ["# Cross-cutting themes (evidence)\n"]
+    for f in findings:
+        lines.append(f"## {f['theme']}\n")
+        lines.append(f"- **Rule:** {f['rule_statement']}")
+        lines.append(f"- **Taxonomy:** {f['taxonomy']}")
+        lines.append(f"- **Areas seen:** {', '.join(f['areas_seen'])}")
+        lines.append(f"- **Tier-1 reviewer count:** {f['tier1_reviewer_count']}")
+        lines.append(f"- **Total evidence comments:** {f['total_evidence_count']}")
+        prs = ", ".join(f"#{n}" for n in f["evidence_pr_numbers"][:8])
+        lines.append(f"- **Evidence PRs:** {prs}")
+        lines.append(f"- **Already in AGENTS.md:** {'yes' if f['in_agents_md'] else 'no'}\n")
+    NARRATIVE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    NARRATIVE_PATH.write_text("\n".join(lines))
+    print(f"wrote {NARRATIVE_PATH}")
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run synthesis</strong></li>
+</ul>
+<p>Run: <code>cd scripts/pr-analysis &amp;&amp; ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY uv run synthesize_cross_cutting.py</code></p>
+<p>Expected output: writes both files; prints both paths.</p>
+<ul>
+<li>[ ] <strong>Step 3: Inspect outputs</strong></li>
+</ul>
+<pre><code class="lang-bash">cat .claude/skills/flox-rust-review/SKILL.md | head -80
+wc -l scripts/pr-analysis/findings/cross-cutting-themes.md</code></pre>
+<p>Expected: <code>SKILL.md</code> is 100-400 lines, themed, with concrete PR citations and a "Where to look first" section.</p>
+<ul>
+<li>[ ] <strong>Step 4: Commit</strong></li>
+</ul>
+<pre><code class="lang-bash">git add scripts/pr-analysis/synthesize_cross_cutting.py \
+        .claude/skills/flox-rust-review/SKILL.md \
+        scripts/pr-analysis/findings/cross-cutting-themes.md
+git commit -m "feat(pr-analysis): synthesize cross-cutting flox-rust-review skill"</code></pre>
+<hr>
+<h2 id="task-11-area-specific-synthesis-three-parallel-runs">Task 11: Area-specific synthesis — three parallel runs</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>scripts/pr-analysis/synthesize_area.py</code></li>
+<li>Create: <code>cli/flox/src/commands/CLAUDE.md</code></li>
+<li>Create: <code>cli/flox-rust-sdk/src/models/environment/CLAUDE.md</code></li>
+<li>Create: <code>cli/flox-rust-sdk/src/providers/CLAUDE.md</code></li>
+<li>Create: <code>scripts/pr-analysis/findings/area-commands.md</code></li>
+<li>Create: <code>scripts/pr-analysis/findings/area-models-environment.md</code></li>
+<li>Create: <code>scripts/pr-analysis/findings/area-providers.md</code></li>
+<li>[ ] <strong>Step 1: Write <code>scripts/pr-analysis/synthesize_area.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = "&gt;=3.12"
+# dependencies = ["anthropic&gt;=0.40"]
+# ///
+"""Synthesize a CLAUDE.md for a single area from findings whose area matches
+(both 'area-specific' AND 'cross-cutting' findings touching this area
+contribute, but cross-cutting ones are noted as such and referenced rather
+than duplicated)."""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from lib.db import connect
+from lib.llm import SYNTH_MODEL, call_with_retry, client
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+AREA_TO_TARGET = {
+    "commands": REPO_ROOT / "cli/flox/src/commands/CLAUDE.md",
+    "models/environment": REPO_ROOT / "cli/flox-rust-sdk/src/models/environment/CLAUDE.md",
+    "providers": REPO_ROOT / "cli/flox-rust-sdk/src/providers/CLAUDE.md",
+}
+
+AREA_TO_NARRATIVE = {
+    "commands": REPO_ROOT / "scripts/pr-analysis/findings/area-commands.md",
+    "models/environment": REPO_ROOT / "scripts/pr-analysis/findings/area-models-environment.md",
+    "providers": REPO_ROOT / "scripts/pr-analysis/findings/area-providers.md",
+}
+
+SYSTEM = (
+    "You are writing an area-specific CLAUDE.md for a subdirectory of "
+    "flox/flox. Audience: an agent about to edit code in this exact area. "
+    "Tone: imperative, terse, sentence-case. "
+    "Cite PR numbers as evidence; do not invent any. "
+    "Be explicit about which rules are area-specific (only matter here) vs. "
+    "cross-cutting (apply repo-wide; reference the parent skill rather than "
+    "restating). The repo's parent AGENTS.md already covers many universals."
+)
+
+USER_TEMPLATE = """\
+Area: `{area}`
+Target path: `{target_path}`
+
+Below are findings clustered for this area. Some are 'area-specific'
+(found primarily here) and some are 'cross-cutting' (also seen in other
+hot areas). Synthesize a CLAUDE.md that:
+
+1. Opens with one paragraph describing what reviewers most often catch in
+   this area, based on the data.
+2. Lists area-specific rules grouped by theme. Bold one-line rule, 1-2 sentence
+   rationale, and "Evidence:" with up to 3 PR numbers.
+3. Has a short "Cross-cutting reminders" section that names (does not restate)
+   the cross-cutting themes that hit this area heavily, pointing at
+   `.claude/skills/flox-rust-review/SKILL.md` for the full text.
+4. Closes with a "When in doubt" section listing 2-3 reviewer voices whose
+   prior comments are the best precedent for this area (from the data).
+
+Output only the Markdown body. No preamble.
+
+Findings JSON:
+{findings_json}
+"""
+
+
+def fetch_findings(conn, area: str) -&gt; list[dict]:
+    rows = conn.execute(
+        """SELECT theme, rule_statement, taxonomy, scope, area, areas_seen,
+                  primary_reviewer, reviewer_logins, tier1_reviewer_count,
+                  total_evidence_count, cross_area_count, evidence_pr_numbers,
+                  in_agents_md
+           FROM finding
+           WHERE (area = ? OR (scope = 'cross-cutting' AND areas_seen LIKE ?))
+             AND confidence_score &gt;= 0.5
+           ORDER BY (area = ?) DESC, confidence_score DESC
+           LIMIT 80""",
+        (area, f"%{area}%", area),
+    ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["areas_seen"] = json.loads(d["areas_seen"])
+        d["reviewer_logins"] = json.loads(d["reviewer_logins"])
+        d["evidence_pr_numbers"] = json.loads(d["evidence_pr_numbers"])
+        out.append(d)
+    return out
+
+
+def main() -&gt; None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--area", required=True, choices=list(AREA_TO_TARGET.keys()))
+    args = parser.parse_args()
+
+    conn = connect()
+    findings = fetch_findings(conn, args.area)
+    target = AREA_TO_TARGET[args.area]
+    print(f"synthesizing {target} from {len(findings)} findings (area={args.area})")
+    body = call_with_retry(
+        client(),
+        model=SYNTH_MODEL,
+        system=SYSTEM,
+        user=USER_TEMPLATE.format(
+            area=args.area,
+            target_path=str(target.relative_to(REPO_ROOT)),
+            findings_json=json.dumps(findings, indent=2),
+        ),
+        max_tokens=4000,
+    )
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(body.strip() + "\n")
+    print(f"wrote {target}")
+
+    # Narrative dump (no LLM): every finding with full evidence.
+    narrative = AREA_TO_NARRATIVE[args.area]
+    lines = [f"# Findings narrative: `{args.area}`\n"]
+    for f in findings:
+        lines.append(f"## [{f['scope']}] {f['theme']}\n")
+        lines.append(f"- **Rule:** {f['rule_statement']}")
+        lines.append(f"- **Taxonomy:** {f['taxonomy']}")
+        lines.append(f"- **Areas seen:** {', '.join(f['areas_seen'])}")
+        lines.append(f"- **Reviewers:** {', '.join(f['reviewer_logins'])}")
+        lines.append(f"- **Tier-1 reviewer count:** {f['tier1_reviewer_count']}")
+        lines.append(f"- **Evidence comments:** {f['total_evidence_count']}")
+        prs = ", ".join(f"#{n}" for n in f["evidence_pr_numbers"][:8])
+        lines.append(f"- **Evidence PRs:** {prs}")
+        lines.append(f"- **Already in AGENTS.md:** {'yes' if f['in_agents_md'] else 'no'}\n")
+    narrative.write_text("\n".join(lines))
+    print(f"wrote {narrative}")
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run synthesis for <code>commands</code> area</strong></li>
+</ul>
+<p>Run: <code>cd scripts/pr-analysis &amp;&amp; ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY uv run synthesize_area.py --area commands</code></p>
+<p>Expected: writes <code>cli/flox/src/commands/CLAUDE.md</code> and <code>scripts/pr-analysis/findings/area-commands.md</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Run synthesis for <code>models/environment</code> area</strong></li>
+</ul>
+<p>Run: <code>cd scripts/pr-analysis &amp;&amp; ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY uv run synthesize_area.py --area models/environment</code></p>
+<p>Expected: writes <code>cli/flox-rust-sdk/src/models/environment/CLAUDE.md</code> and <code>scripts/pr-analysis/findings/area-models-environment.md</code>.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run synthesis for <code>providers</code> area</strong></li>
+</ul>
+<p>Run: <code>cd scripts/pr-analysis &amp;&amp; ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY uv run synthesize_area.py --area providers</code></p>
+<p>Expected: writes <code>cli/flox-rust-sdk/src/providers/CLAUDE.md</code> and <code>scripts/pr-analysis/findings/area-providers.md</code>.</p>
+<ul>
+<li>[ ] <strong>Step 5: Spot-check each area file</strong></li>
+</ul>
+<pre><code class="lang-bash">head -40 cli/flox/src/commands/CLAUDE.md
+head -40 cli/flox-rust-sdk/src/models/environment/CLAUDE.md
+head -40 cli/flox-rust-sdk/src/providers/CLAUDE.md</code></pre>
+<p>Verify each: opens with an area summary; lists rules with bolded one-liners; has a "Cross-cutting reminders" section pointing at the parent skill; closes with reviewer-precedent guidance.</p>
+<ul>
+<li>[ ] <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="lang-bash">git add scripts/pr-analysis/synthesize_area.py \
+        cli/flox/src/commands/CLAUDE.md \
+        cli/flox-rust-sdk/src/models/environment/CLAUDE.md \
+        cli/flox-rust-sdk/src/providers/CLAUDE.md \
+        scripts/pr-analysis/findings/area-commands.md \
+        scripts/pr-analysis/findings/area-models-environment.md \
+        scripts/pr-analysis/findings/area-providers.md
+git commit -m "feat(pr-analysis): synthesize area-specific CLAUDE.md for commands, models/environment, providers"</code></pre>
+<hr>
+<h2 id="task-12-gap-report-what-reviewers-enforce-that-agents-md-doesn-t">Task 12: Gap report — what reviewers enforce that AGENTS.md doesn't</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>scripts/pr-analysis/synthesize_gap_report.py</code></li>
+<li>Create: <code>scripts/pr-analysis/findings/gap-report.md</code></li>
+<li>[ ] <strong>Step 1: Write <code>scripts/pr-analysis/synthesize_gap_report.py</code></strong></li>
+</ul>
+<pre><code class="lang-python">#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = "&gt;=3.12"
+# dependencies = ["anthropic&gt;=0.40"]
+# ///
+"""Produce a Markdown gap report: findings with `in_agents_md = 0` that
+nonetheless show strong reviewer signal, plus a "still enforced" section
+for in_agents_md = 1 findings with high recent evidence (suggesting the
+existing rule needs reinforcement or example expansion)."""
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from lib.db import connect
+from lib.llm import SYNTH_MODEL, call_with_retry, client
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+GAP_REPORT = REPO_ROOT / "scripts" / "pr-analysis" / "findings" / "gap-report.md"
+
+SYSTEM = (
+    "You are writing a gap report comparing review-mined rules against the "
+    "existing AGENTS.md. Audience: maintainers deciding whether to amend "
+    "AGENTS.md. Be precise, cite PRs, and recommend explicitly which section "
+    "of AGENTS.md each new rule should live in (or whether a new section is "
+    "warranted)."
+)
+
+USER_TEMPLATE = """\
+Below are two sets of findings.
+
+SET A — Candidate new AGENTS.md rules (in_agents_md = 0, high confidence):
+{set_a}
+
+SET B — Existing AGENTS.md rules still actively enforced (in_agents_md = 1,
+high recent evidence — may need clearer examples or reinforcement):
+{set_b}
+
+Produce a Markdown gap report with three sections:
+1. "## Proposed new rules" — for each item in Set A: rule, evidence,
+   suggested AGENTS.md section (or "new section: &lt;name&gt;").
+2. "## Existing rules with high recent enforcement" — for each item in
+   Set B: the rule, what reviewers most often catch about it, suggested
+   refinement to the existing AGENTS.md text.
+3. "## Reviewer voice notes" — one paragraph each on `ysndr`, `mkenigs`,
+   `dcarley` summarizing the kinds of feedback that recur in their reviews,
+   inferred from the rule_statement/theme data.
+
+Output only the Markdown body.
+"""
+
+
+def fetch(conn) -&gt; tuple[list[dict], list[dict]]:
+    def _rows(sql):
+        rows = conn.execute(sql).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["areas_seen"] = json.loads(d["areas_seen"])
+            d["reviewer_logins"] = json.loads(d["reviewer_logins"])
+            d["evidence_pr_numbers"] = json.loads(d["evidence_pr_numbers"])
+            out.append(d)
+        return out
+
+    set_a = _rows(
+        """SELECT theme, rule_statement, taxonomy, area, areas_seen,
+                  reviewer_logins, tier1_reviewer_count, total_evidence_count,
+                  evidence_pr_numbers
+           FROM finding
+           WHERE in_agents_md = 0 AND confidence_score &gt;= 0.55
+           ORDER BY confidence_score DESC LIMIT 40"""
+    )
+    set_b = _rows(
+        """SELECT theme, rule_statement, taxonomy, area, areas_seen,
+                  reviewer_logins, tier1_reviewer_count, total_evidence_count,
+                  evidence_pr_numbers, agents_md_section
+           FROM finding
+           WHERE in_agents_md = 1 AND confidence_score &gt;= 0.6
+           ORDER BY total_evidence_count DESC, confidence_score DESC LIMIT 30"""
+    )
+    return set_a, set_b
+
+
+def main() -&gt; None:
+    conn = connect()
+    set_a, set_b = fetch(conn)
+    print(f"set_a (proposed new rules): {len(set_a)}")
+    print(f"set_b (existing reinforcement): {len(set_b)}")
+    body = call_with_retry(
+        client(),
+        model=SYNTH_MODEL,
+        system=SYSTEM,
+        user=USER_TEMPLATE.format(
+            set_a=json.dumps(set_a, indent=2),
+            set_b=json.dumps(set_b, indent=2),
+        ),
+        max_tokens=4000,
+    )
+    GAP_REPORT.parent.mkdir(parents=True, exist_ok=True)
+    GAP_REPORT.write_text(body.strip() + "\n")
+    print(f"wrote {GAP_REPORT}")
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+<ul>
+<li>[ ] <strong>Step 2: Run gap report synthesis</strong></li>
+</ul>
+<p>Run: <code>cd scripts/pr-analysis &amp;&amp; ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY uv run synthesize_gap_report.py</code></p>
+<p>Expected: writes <code>scripts/pr-analysis/findings/gap-report.md</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Inspect</strong></li>
+</ul>
+<p>Run: <code>head -80 scripts/pr-analysis/findings/gap-report.md</code></p>
+<p>Expected: three sections in order; PR citations look real (cross-reference one against <code>gh pr view &lt;n&gt;</code>).</p>
+<ul>
+<li>[ ] <strong>Step 4: Commit</strong></li>
+</ul>
+<pre><code class="lang-bash">git add scripts/pr-analysis/synthesize_gap_report.py \
+        scripts/pr-analysis/findings/gap-report.md
+git commit -m "feat(pr-analysis): produce AGENTS.md gap report"</code></pre>
+<hr>
+<h2 id="task-13-final-review-checkpoint-verification">Task 13: Final review checkpoint + verification</h2>
+<ul>
+<li>[ ] <strong>Step 1: Run full test suite</strong></li>
+</ul>
+<p>Run: <code>cd scripts/pr-analysis &amp;&amp; uv run --with pytest pytest tests/ -v</code></p>
+<p>Expected: all tests still pass after all the script additions.</p>
+<ul>
+<li>[ ] <strong>Step 2: Smoke-verify deliverables exist</strong></li>
+</ul>
+<pre><code class="lang-bash">ls -l .claude/skills/flox-rust-review/SKILL.md \
+      cli/flox/src/commands/CLAUDE.md \
+      cli/flox-rust-sdk/src/models/environment/CLAUDE.md \
+      cli/flox-rust-sdk/src/providers/CLAUDE.md \
+      scripts/pr-analysis/findings/gap-report.md \
+      scripts/pr-analysis/findings/cross-cutting-themes.md</code></pre>
+<p>All six files must exist and be non-empty.</p>
+<ul>
+<li>[ ] <strong>Step 3: Cross-reference one cited PR in each artifact</strong></li>
+</ul>
+<p>For each of the four "rule" artifacts (<code>SKILL.md</code> + three <code>CLAUDE.md</code>), grep one PR number cited and run <code>gh pr view &lt;n&gt; --json title,url -q '.title + " " + .url'</code> to confirm it exists and roughly matches the rule's claim. This catches LLM hallucination of PR numbers.</p>
+<ul>
+<li>[ ] <strong>Step 4: Present to user for review</strong></li>
+</ul>
+<p>Ask the user to review in this order:</p>
+<ol>
+<li><code>scripts/pr-analysis/findings/cross-cutting-themes.md</code> — evidence quality</li>
+<li><code>.claude/skills/flox-rust-review/SKILL.md</code> — the main deliverable</li>
+<li>Each <code>CLAUDE.md</code> — area focus</li>
+<li><code>scripts/pr-analysis/findings/gap-report.md</code> — AGENTS.md amendments</li>
+</ol>
+<p>For each, ask: <em>"Accept as-is? Edit? Re-synthesize with adjusted prompt?"</em></p>
+<ul>
+<li>[ ] <strong>Step 5: After approval, commit any user edits</strong></li>
+</ul>
+<pre><code class="lang-bash">git add -A
+git commit -m "docs(rust-review): human-review polish for skill, area CLAUDE.md, and gap report"</code></pre>
+<ul>
+<li>[ ] <strong>Step 6: Open PR (or merge worktree branch into main per the user's normal flow)</strong></li>
+</ul>
+<p>Per repo convention and the user's CLAUDE.md, ask the user before doing anything irreversible (no auto-push, no auto-PR). Suggest:</p>
+<pre><code class="lang-bash">gh pr create --title "feat: review-mined Rust skill and per-area CLAUDE.md" \
+  --body "Adds .claude/skills/flox-rust-review/ plus three area CLAUDE.md files mined from 6 months of PR reviews. See scripts/pr-analysis/findings/ for full evidence and gap-report.md for proposed AGENTS.md amendments."</code></pre>
+<hr>
+<h2 id="cost-and-time-budget-informational-not-a-task">Cost and time budget (informational, not a task)</h2>
+<table>
+<thead><tr>
+<th>Stage</th>
+<th>Wall time</th>
+<th>API cost (rough)</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>Task 1 (bootstrap)</td>
+<td>5 min</td>
+<td>$0</td>
+</tr>
+<tr>
+<td>Task 2 (PR list — smoke 5)</td>
+<td>1 min</td>
+<td>$0</td>
+</tr>
+<tr>
+<td>Task 3 (comments ingest — smoke)</td>
+<td>&lt;1 min</td>
+<td>$0</td>
+</tr>
+<tr>
+<td>Task 4 (final code — smoke)</td>
+<td>&lt;1 min</td>
+<td>$0</td>
+</tr>
+<tr>
+<td>Task 5 (classifier — built + smoke 5)</td>
+<td>5 min</td>
+<td>~$0.01</td>
+</tr>
+<tr>
+<td>Task 6 (aggregator — built, not run)</td>
+<td>&lt;1 min</td>
+<td>$0</td>
+</tr>
+<tr>
+<td><strong>Task 7 (pilot on 15 PRs + retro, may iterate)</strong></td>
+<td><strong>20-60 min/iter + human</strong></td>
+<td><strong>~$0.30/iter</strong></td>
+</tr>
+<tr>
+<td><strong>Task 8 (full-corpus run, all stages)</strong></td>
+<td><strong>45-90 min</strong></td>
+<td><strong>~$1-3</strong></td>
+</tr>
+<tr>
+<td>Task 9 (human checkpoint on findings)</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Task 10 (cross-cutting synthesis, Sonnet 4.6)</td>
+<td>1-2 min</td>
+<td>~$0.30</td>
+</tr>
+<tr>
+<td>Task 11 (three area syntheses)</td>
+<td>3-5 min</td>
+<td>~$1</td>
+</tr>
+<tr>
+<td>Task 12 (gap report)</td>
+<td>1-2 min</td>
+<td>~$0.30</td>
+</tr>
+<tr>
+<td>Task 13 (final review)</td>
+<td>human</td>
+<td>—</td>
+</tr>
+<tr>
+<td><strong>Total (one pilot iteration)</strong></td>
+<td><strong>~2-3 hours</strong></td>
+<td><strong>~$3-5</strong></td>
+</tr>
+<tr>
+<td><strong>Per extra pilot iteration</strong></td>
+<td><strong>+20-60 min</strong></td>
+<td><strong>+$0.30</strong></td>
+</tr>
+</tbody></table>
+<p>GitHub API: full run is ~157 PR fetches + ~157 comment-list pages + ~500-1000 file-content fetches + (Task 7 audit) ~15 extra <code>pulls/:n/comments</code> calls. Well within the 5000-req/hour authenticated rate limit. The audit script in Task 7/Task 8 hits the API again for parity-checking; expect ~2× the comment-list call volume on those runs.</p>
+</section>
+
+<footer class="page-footer">
+  Generated 2026-05-17 18:25 UTC &middot; <a href="../../../rust-pr-analysis-index-01.html">Back to index</a>
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pilot Retrospective (iter 1–3)</title>
+<style>
+:root {
+  --fg: #1c1f24; --fg-mute: #5a6270; --bg: #fbfbfa; --bg-card: #ffffff;
+  --border: #e4e6eb; --accent: #3b6bd6; --good: #2f8a52; --warn: #c98a17;
+  --bad: #c44545; --neutral: #6c757d; --code-bg: #f3f4f6;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.04);
+}
+* { box-sizing: border-box; }
+body {
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: var(--fg); background: var(--bg); margin: 0; padding: 32px 24px 80px;
+}
+.container { max-width: 1080px; margin: 0 auto; }
+header.page-header {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 24px 28px; box-shadow: var(--shadow);
+  margin-bottom: 22px;
+}
+header.page-header h1 { margin: 0 0 4px; font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
+header.page-header .subtitle { color: var(--fg-mute); font-size: 14px; margin: 0; }
+header.page-header .back { margin-top: 14px; font-size: 13px; }
+header.page-header .back a { color: var(--accent); text-decoration: none; }
+header.page-header .back a:hover { text-decoration: underline; }
+section.body {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 24px 32px; box-shadow: var(--shadow);
+}
+section.body h1 { font-size: 22px; font-weight: 600; margin: 22px 0 10px; letter-spacing: -.005em; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+section.body h2 { font-size: 19px; font-weight: 600; margin: 26px 0 10px; letter-spacing: -.005em; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+section.body h2:first-child, section.body h1:first-child { margin-top: 0; }
+section.body h3 { font-size: 16px; font-weight: 600; margin: 20px 0 8px; }
+section.body h4 { font-size: 14px; font-weight: 600; margin: 16px 0 6px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: .03em; }
+section.body h5, section.body h6 { font-size: 13px; font-weight: 600; margin: 14px 0 4px; }
+section.body p { margin: 0 0 12px; }
+section.body ul, section.body ol { margin: 6px 0 12px; padding-left: 26px; }
+section.body li { margin: 3px 0; }
+section.body li > p { margin: 0 0 6px; }
+section.body code {
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13px;
+  background: var(--code-bg); padding: 1px 5px; border-radius: 3px;
+}
+section.body pre {
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px;
+  background: var(--code-bg); border-radius: 6px; padding: 14px 16px;
+  overflow-x: auto; line-height: 1.45; margin: 8px 0 14px;
+}
+section.body pre code { background: transparent; padding: 0; font-size: 12.5px; }
+section.body blockquote {
+  border-left: 3px solid var(--border); padding: 6px 14px; margin: 10px 0;
+  background: var(--code-bg); color: var(--fg-mute); border-radius: 0 6px 6px 0;
+}
+section.body blockquote p { margin: 4px 0; }
+section.body a { color: var(--accent); text-decoration: none; }
+section.body a:hover { text-decoration: underline; }
+section.body hr { border: none; border-top: 1px solid var(--border); margin: 22px 0; }
+section.body table {
+  width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 13.5px;
+}
+section.body th, section.body td {
+  border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top;
+}
+section.body th { background: var(--code-bg); font-weight: 600; color: var(--fg-mute); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+section.body tbody tr:hover { background: #fafbfc; }
+section.body strong { font-weight: 600; }
+
+nav.toc {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 18px 24px; margin-bottom: 22px; box-shadow: var(--shadow);
+  max-height: 480px; overflow-y: auto;
+}
+nav.toc h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--fg-mute); margin: 0 0 10px; font-weight: 600; }
+nav.toc ul { list-style: none; padding-left: 0; margin: 0 0 6px; font-size: 13px; }
+nav.toc ul ul { padding-left: 16px; margin: 2px 0 4px; }
+nav.toc li { margin: 2px 0; }
+nav.toc a { color: var(--accent); text-decoration: none; }
+nav.toc a:hover { text-decoration: underline; }
+nav.toc details { margin: 4px 0; }
+nav.toc summary { font-weight: 600; cursor: pointer; color: var(--fg); font-size: 13px; }
+nav.toc summary:hover { color: var(--accent); }
+
+footer.page-footer { color: var(--fg-mute); font-size: 12px; text-align: center; margin-top: 22px; }
+footer.page-footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="page-header">
+  <h1>Pilot Retrospective (iter 1–3)</h1>
+  <div class="subtitle">Pre-Task-8 retrospective digest. Now superseded by the journey log + Task 8 results, kept for traceability.</div>
+  <div class="subtitle" style="margin-top:6px;">Source: <code>scripts/pr-analysis/findings/pilot-retro.md</code></div>
+  <div class="back"><a href="../../../rust-pr-analysis-index-01.html">&larr; Back to index</a></div>
+</header>
+
+
+
+<section class="body">
+<h1 id="pilot-retrospective-iteration-3-run-on-2026-05-17t07-22-35z">Pilot retrospective — iteration 3 (run on 2026-05-17T07:22:35Z)</h1>
+<h2 id="iteration-comparison-summary">Iteration comparison summary</h2>
+<table>
+<thead><tr>
+<th>Metric</th>
+<th>Iter 1</th>
+<th>Iter 2</th>
+<th>Iter 3</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>Comments to classify</td>
+<td>115</td>
+<td>94 (noise filter)</td>
+<td>94</td>
+</tr>
+<tr>
+<td><code>other</code> count</td>
+<td>62 (54%)</td>
+<td>41 (44%)</td>
+<td>29 (31%)</td>
+</tr>
+<tr>
+<td>Findings total</td>
+<td>51</td>
+<td>49</td>
+<td>52</td>
+</tr>
+<tr>
+<td>Findings with evd &gt; 1 (clustered)</td>
+<td>2 (4%)</td>
+<td>4 (8%)</td>
+<td>9 (17%)</td>
+</tr>
+<tr>
+<td>Findings tagged in_agents_md=1</td>
+<td>51 (100%)</td>
+<td>0 (0%)</td>
+<td>38 (73%)</td>
+</tr>
+<tr>
+<td>was_addressed=NULL</td>
+<td>—</td>
+<td>~38</td>
+<td>11</td>
+</tr>
+<tr>
+<td>Batch retries needed</td>
+<td>1/4</td>
+<td>0/7</td>
+<td>0/7</td>
+</tr>
+</tbody></table>
+<h2 id="corpus-shape">Corpus shape</h2>
+<table>
+<thead><tr>
+<th>prs</th>
+<th>line_comments_total</th>
+<th>noise_dropped</th>
+<th>classified</th>
+<th>review_summaries</th>
+<th>pr_top_level_comments</th>
+<th>threads_resolved</th>
+<th>threads_unresolved</th>
+<th>findings</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>13</td>
+<td>115</td>
+<td>21</td>
+<td>94</td>
+<td>7</td>
+<td>29</td>
+<td>72</td>
+<td>43</td>
+<td>52</td>
+</tr>
+</tbody></table>
+<h2 id="taxonomy-distribution">Taxonomy distribution</h2>
+<table>
+<thead><tr>
+<th>taxonomy</th>
+<th>n</th>
+<th>avg_conf</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>other</td>
+<td>29</td>
+<td>0.15</td>
+</tr>
+<tr>
+<td>testing</td>
+<td>19</td>
+<td>0.76</td>
+</tr>
+<tr>
+<td>control-flow</td>
+<td>12</td>
+<td>0.77</td>
+</tr>
+<tr>
+<td>semantic-correctness</td>
+<td>12</td>
+<td>0.74</td>
+</tr>
+<tr>
+<td>user-facing-messages</td>
+<td>11</td>
+<td>0.77</td>
+</tr>
+<tr>
+<td>naming</td>
+<td>4</td>
+<td>0.81</td>
+</tr>
+<tr>
+<td>formatting-style</td>
+<td>3</td>
+<td>0.77</td>
+</tr>
+<tr>
+<td>error-handling</td>
+<td>2</td>
+<td>0.83</td>
+</tr>
+<tr>
+<td>imports</td>
+<td>1</td>
+<td>0.7</td>
+</tr>
+<tr>
+<td>logging-tracing</td>
+<td>1</td>
+<td>0.78</td>
+</tr>
+</tbody></table>
+<h2 id="was-addressed-thread-resolved-cross-tab">was_addressed × thread_resolved cross-tab</h2>
+<table>
+<thead><tr>
+<th>was_addressed</th>
+<th>thread_resolved</th>
+<th>COUNT(*)</th>
+</tr></thead>
+<tbody>
+<tr>
+<td></td>
+<td>0</td>
+<td>11</td>
+</tr>
+<tr>
+<td>0</td>
+<td>0</td>
+<td>19</td>
+</tr>
+<tr>
+<td>1</td>
+<td>0</td>
+<td>7</td>
+</tr>
+<tr>
+<td>1</td>
+<td>1</td>
+<td>57</td>
+</tr>
+</tbody></table>
+<h2 id="finding-evidence-distribution-clustering-effectiveness">Finding-evidence distribution (clustering effectiveness)</h2>
+<table>
+<thead><tr>
+<th>evd</th>
+<th>n_findings</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>43</td>
+</tr>
+<tr>
+<td>2</td>
+<td>6</td>
+</tr>
+<tr>
+<td>3</td>
+<td>2</td>
+</tr>
+<tr>
+<td>4</td>
+<td>1</td>
+</tr>
+</tbody></table>
+<h2 id="agents-md-match-distribution-sections-matched">AGENTS.md match distribution (sections matched)</h2>
+<table>
+<thead><tr>
+<th>in_agents_md</th>
+<th>section</th>
+<th>n</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Conventions</td>
+<td>36</td>
+</tr>
+<tr>
+<td>0</td>
+<td>(no match)</td>
+<td>14</td>
+</tr>
+<tr>
+<td>1</td>
+<td>Common Commands</td>
+<td>1</td>
+</tr>
+<tr>
+<td>1</td>
+<td>Project Overview</td>
+<td>1</td>
+</tr>
+</tbody></table>
+<h2 id="top-25-findings-by-confidence">Top 25 findings (by confidence)</h2>
+<table>
+<thead><tr>
+<th>area</th>
+<th>scope</th>
+<th>t1</th>
+<th>evd</th>
+<th>md</th>
+<th>conf</th>
+<th>rule</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>activations</td>
+<td>area-specific</td>
+<td>1</td>
+<td>3</td>
+<td>1</td>
+<td>0.79</td>
+<td>Refactor apply_activation_env to extract shared environment variable assembly logic for re</td>
+</tr>
+<tr>
+<td>cli/other</td>
+<td>area-specific</td>
+<td>1</td>
+<td>2</td>
+<td>1</td>
+<td>0.75</td>
+<td>Use sed to strip whitespace before line-exact grep matching to avoid false positives in ba</td>
+</tr>
+<tr>
+<td>cli/other</td>
+<td>area-specific</td>
+<td>1</td>
+<td>3</td>
+<td>1</td>
+<td>0.72</td>
+<td>Use single assert_output checks for shell-agnostic test validation.</td>
+</tr>
+<tr>
+<td>activations</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>0.71</td>
+<td>Defer refactoring of in-place activation rendering to a separate PR to minimize unrelated</td>
+</tr>
+<tr>
+<td>activations</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Remove deprecated or intermediate helper functions to minimize diff size when cleaner alte</td>
+</tr>
+<tr>
+<td>activations</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Evaluate whether EnvDiff and ActivationDiff can be unified or if their differing semantics</td>
+</tr>
+<tr>
+<td>activations</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Recognize unreachable code paths and remove or clearly document them rather than adding er</td>
+</tr>
+<tr>
+<td>activations</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Use formatdoc! or indoc! macros for multiline formatted strings.</td>
+</tr>
+<tr>
+<td>activations</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Use version suffixes in environment variable names to avoid namespace collisions.</td>
+</tr>
+<tr>
+<td>cli/other</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Remove tests that do not verify their stated intent.</td>
+</tr>
+<tr>
+<td>cli/other</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Remove redundant test coverage superseded by comprehensive tests.</td>
+</tr>
+<tr>
+<td>models/environment</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Understand edge cases and document assumptions about package output defaults</td>
+</tr>
+<tr>
+<td>models/environment</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>0.71</td>
+<td>Document edge case behaviors explicitly with reasoning instead of leaving incomplete</td>
+</tr>
+<tr>
+<td>models/environment</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Clarify comments when they would guide future code review and understanding</td>
+</tr>
+<tr>
+<td>commands</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Use domain-specific nouns (targets, build outputs) instead of generic terms (artifacts) in</td>
+</tr>
+<tr>
+<td>activations</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>0.71</td>
+<td>Document all CLI flags in usage messages.</td>
+</tr>
+<tr>
+<td>commands</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Reuse shell type enums to catch unsupported shells at compile time.</td>
+</tr>
+<tr>
+<td>cli/other</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Prefer printenv over eval for simpler quoting in shell tests.</td>
+</tr>
+<tr>
+<td>cli/other</td>
+<td>area-specific</td>
+<td>0</td>
+<td>4</td>
+<td>0</td>
+<td>0.63</td>
+<td>Combine TODO comments with simplified assertions for feature-flag dependent tests.</td>
+</tr>
+<tr>
+<td>activations</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.61</td>
+<td>Balance code organization (per-shell modules) against coherence of related logic.</td>
+</tr>
+<tr>
+<td>cli/other</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.61</td>
+<td>Write tests that verify authentication requirements in non-interactive contexts</td>
+</tr>
+<tr>
+<td>commands</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>0.61</td>
+<td>Prefix unused parameters with underscore to signal intentional non-use</td>
+</tr>
+<tr>
+<td>activations</td>
+<td>area-specific</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.61</td>
+<td>Organize shell-specific functions into their respective shell modules.</td>
+</tr>
+<tr>
+<td>cli/other</td>
+<td>area-specific</td>
+<td>0</td>
+<td>2</td>
+<td>1</td>
+<td>0.55</td>
+<td>Consolidate overlapping assertions; each test should verify one semantic property.</td>
+</tr>
+<tr>
+<td>cli/other</td>
+<td>area-specific</td>
+<td>1</td>
+<td>2</td>
+<td>1</td>
+<td>0.55</td>
+<td>Measure test execution time and ensure new integration tests don't slow the suite excessiv</td>
+</tr>
+</tbody></table>
+<h2 id="other-bucket-any-high-confidence-candidates-0-4">'Other' bucket — any high-confidence candidates? (&gt;=0.4)</h2>
+<h2 id="gap-candidates-findings-not-in-agents-md-review-for-novelty">Gap candidates: findings NOT in AGENTS.md (review for novelty)</h2>
+<table>
+<thead><tr>
+<th>area</th>
+<th>t1</th>
+<th>evd</th>
+<th>conf</th>
+<th>rule</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>activations</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Defer refactoring of in-place activation rendering to a separate PR to minimize unrelated changes in this PR.</td>
+</tr>
+<tr>
+<td>models/environment</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Document edge case behaviors explicitly with reasoning instead of leaving incomplete</td>
+</tr>
+<tr>
+<td>activations</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Document all CLI flags in usage messages.</td>
+</tr>
+<tr>
+<td>cli/other</td>
+<td>0</td>
+<td>4</td>
+<td>0.63</td>
+<td>Combine TODO comments with simplified assertions for feature-flag dependent tests.</td>
+</tr>
+<tr>
+<td>commands</td>
+<td>1</td>
+<td>1</td>
+<td>0.61</td>
+<td>Prefix unused parameters with underscore to signal intentional non-use</td>
+</tr>
+<tr>
+<td>activations</td>
+<td>1</td>
+<td>2</td>
+<td>0.55</td>
+<td>Describe manual testing approach in test documentation for future automation efforts.</td>
+</tr>
+<tr>
+<td>activations</td>
+<td>1</td>
+<td>1</td>
+<td>0.51</td>
+<td>Test backward compatibility with older CLI feature states.</td>
+</tr>
+<tr>
+<td>activations</td>
+<td>0</td>
+<td>1</td>
+<td>0.51</td>
+<td>Rename ActivationDiff to DiffSerializer to clarify its role in serialization.</td>
+</tr>
+<tr>
+<td>cli/other</td>
+<td>1</td>
+<td>1</td>
+<td>0.51</td>
+<td>Test hook automatic firing behavior, not just registration.</td>
+</tr>
+<tr>
+<td>commands</td>
+<td>1</td>
+<td>1</td>
+<td>0.51</td>
+<td>Avoid redundant validation when upstream guards are sufficient.</td>
+</tr>
+<tr>
+<td>commands</td>
+<td>0</td>
+<td>2</td>
+<td>0.35</td>
+<td>Use message::deleted or message::updated for cleanup/removal, reserve message::created for new artifacts</td>
+</tr>
+<tr>
+<td>commands</td>
+<td>0</td>
+<td>2</td>
+<td>0.35</td>
+<td>Use consistent verb-led phrasing across related match arms in messages</td>
+</tr>
+<tr>
+<td>activations</td>
+<td>0</td>
+<td>1</td>
+<td>0.31</td>
+<td>Document behavioral rationale by examining reference implementations when purpose is unclear.</td>
+</tr>
+<tr>
+<td>commands</td>
+<td>0</td>
+<td>1</td>
+<td>0.31</td>
+<td>Consider bulleted lists for enumerations with multiple items instead of comma-separated</td>
+</tr>
+</tbody></table>
+</section>
+
+<footer class="page-footer">
+  Generated 2026-05-17 18:25 UTC &middot; <a href="../../../rust-pr-analysis-index-01.html">Back to index</a>
+</footer>
+
+</div>
+</body>
+</html>

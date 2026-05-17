@@ -263,17 +263,17 @@
 <header class="page-header">
   <h1>Rust PR Analysis Journey — Log 01</h1>
   <div class="subtitle">
-    Session <code>rust-pr-analysis-skill</code> · branch <code>worktree-rust-pr-analysis-skill</code> · started 2026-05-16 · log captured 2026-05-17
+    Session <code>rust-pr-analysis-skill</code> · branch <code>worktree-rust-pr-analysis-skill</code> · started 2026-05-16 · log captured 2026-05-17 (updated through event 79)
   </div>
   <div class="stat-grid">
     <div class="stat"><div class="label">Plan tasks</div><div class="value">13 + 2 added</div></div>
-    <div class="stat"><div class="label">Tasks complete</div><div class="value">6 / 15</div></div>
-    <div class="stat"><div class="label">Commits</div><div class="value">17</div></div>
-    <div class="stat"><div class="label">Tests passing</div><div class="value">67</div></div>
-    <div class="stat"><div class="label">Pilot iterations</div><div class="value">3 + 1 in flight</div></div>
-    <div class="stat"><div class="label">PRs ingested (pilot)</div><div class="value">13</div></div>
-    <div class="stat"><div class="label">Comments classified</div><div class="value">94</div></div>
-    <div class="stat"><div class="label">Findings (latest)</div><div class="value">52</div></div>
+    <div class="stat"><div class="label">Tasks complete</div><div class="value">14 / 15</div></div>
+    <div class="stat"><div class="label">Commits</div><div class="value">34</div></div>
+    <div class="stat"><div class="label">Tests (pilot-era)</div><div class="value">67</div></div>
+    <div class="stat"><div class="label">Pilot iterations</div><div class="value">4 + full corpus</div></div>
+    <div class="stat"><div class="label">PRs analysed</div><div class="value">216</div></div>
+    <div class="stat"><div class="label">Comments classified</div><div class="value">944</div></div>
+    <div class="stat"><div class="label">Findings (latest)</div><div class="value">488</div></div>
   </div>
 </header>
 
@@ -306,15 +306,15 @@
       <div class="ph-name">Iter 2 + Storage</div>
       <div class="ph-status">Noise filter, schema adds, 6 new tables/cols</div>
     </div>
-    <div class="phase active">
+    <div class="phase done">
       <div class="ph-num">Phase 5</div>
       <div class="ph-name">Iter 3 / 4</div>
       <div class="ph-status">Embeddings, key-token AGENTS.md, different window</div>
     </div>
-    <div class="phase pending">
+    <div class="phase done">
       <div class="ph-num">Phase 6</div>
       <div class="ph-name">Task 8 + Synthesis</div>
-      <div class="ph-status">Full corpus, skill, area CLAUDE.md, gap report</div>
+      <div class="ph-status">216 PRs, 944 classifications, 488 findings; 2 skills + 4 CLAUDE.md + gap report</div>
     </div>
   </div>
 </section>
@@ -394,7 +394,7 @@
 </section>
 
 <section>
-  <h2>Chronological log (66 events)</h2>
+  <h2>Chronological log (79 events)</h2>
   <div class="legend">
     <span class="major">major step / dispatch</span>
     <span class="win">win / improvement landed</span>
@@ -470,6 +470,19 @@
     <li class="user"><span class="seq">64</span>User renamed session to <code>rust-pr-analysis-skill</code></li>
     <li class="user"><span class="seq">65</span>User asked to pause analysis and produce this journey log</li>
     <li><span class="seq">66</span>Wrote <code>rust-pr-analysis-jouney-01.md</code> and this HTML</li>
+    <li class="win"><span class="seq">67</span><strong>Built analytics dashboard</strong> &mdash; 86 KB HTML with KPIs, PRs/commits/LOC over time, top reviewers/authors/committers, area &times; reviewer heatmap (commit <code>77cd65198</code>)</li>
+    <li class="win"><span class="seq">68</span><strong>Built noise filter deep-dive</strong> &mdash; 90 KB HTML, forensic audit of 87 filtered comments (45 suggestion / 22 lgtm / 16 url / 4 praise-nit), tier-rate sanity check, 163 stylistic classifications (54 gap candidates) (commit <code>dd101beb4</code>)</li>
+    <li class="win"><span class="seq">69</span><strong>Sonnet 4.6 re-classification pass</strong> (commit <code>5680a1f45</code>) &mdash; re-classified 104 high-evidence comments; <strong>20 upgrades</strong> from generic Haiku rules (&ldquo;use complete sentences in errors&rdquo;) to specific Rust patterns (<code>ErrorEnum::Custom(Box&lt;dyn Error&gt;)</code>, <code>Result::or()</code> priority fallback, <code>AuthnMode::Never</code> rename, <code>VarsFromEnvironment</code> retention, panic-discipline expansion 2&rarr;4). Drove the <strong>522 &rarr; 488</strong> finding-count transition.</li>
+    <li class="fix"><span class="seq">70</span>Added <code>panic-discipline</code> taxonomy entry in <code>lib/taxonomy.py</code> (commit <code>142656d95</code>)</li>
+    <li class="major"><span class="seq">71</span><strong>Wrote summary prompt</strong> &mdash; <code>rust-pr-analysis-summary-prompt-01.md</code> capturing pipeline + state for resuming session-by-session</li>
+    <li class="major"><span class="seq">72</span><strong>Built master index + pipeline architecture HTMLs</strong> &mdash; <code>rust-pr-analysis-index-01.html</code> and <code>rust-pr-analysis-pipeline-01.html</code> (commit <code>bd81ab99f</code>)</li>
+    <li class="fix"><span class="seq">73</span>Index completeness pass &mdash; added findings/ section, Sonnet re-classification narrative, removed &ldquo;Coming next&rdquo; (scope clarification: analysis only) (commit <code>174ef0b24</code>)</li>
+    <li class="major"><span class="seq">74</span>Generated per-target synthesis input files &mdash; JSON payloads grouping findings by hot area / cross-cutting / stylistic to drive Sonnet synthesis (commit <code>fff0968f9</code>)</li>
+    <li class="major"><span class="seq">75</span><strong>Synthesized 2 skills + 3 area CLAUDE.md + gap-report.md</strong> &mdash; <code>flox-rust-review</code> (cross-cutting), <code>flox-rust-stylistic-conventions</code> (stylistic), <code>commands/CLAUDE.md</code>, <code>models/environment/CLAUDE.md</code>, <code>providers/CLAUDE.md</code>, plus 30-amendment gap report (commit <code>3c498be25</code>)</li>
+    <li class="fix"><span class="seq">76</span>Added <code>cli/CLAUDE.md</code> &mdash; Rust cross-cutting rules at the CLI tree root pointing at the two skills + per-area files</li>
+    <li class="fix"><span class="seq">77</span>Updated root <code>CLAUDE.md</code> to direct agents at <code>cli/CLAUDE.md</code> + the two skills + per-area files (commit <code>56646fa17</code>)</li>
+    <li class="win"><span class="seq">78</span><strong>Built <code>findings/results-summary.html</code></strong> &mdash; 62 KB, 5 sections, AGENTS.md before/after diff with greenlight inserts (commit <code>c1e460bfd</code>)</li>
+    <li class="win"><span class="seq">79</span><strong>Built <code>findings/journey-report.html</code></strong> &mdash; 57 KB, 10 sections, full iter1-4 calibration story (commit <code>4b4302989</code>)</li>
   </ol>
 </section>
 
@@ -494,7 +507,24 @@
       <tr><td class="num">14</td><td><code>9f1151fc8</code></td><td>Iter-2 retro digest</td></tr>
       <tr><td class="num">15</td><td><code>bfc871482</code></td><td>Iter-3 calibration (key-token AGENTS.md, MiniLM embeddings, thread hint)</td></tr>
       <tr><td class="num">16</td><td><code>c49aee683</code></td><td>Iter-3 retro digest</td></tr>
-      <tr><td class="num">17</td><td><em>(uncommitted)</em></td><td>Iter-4 pilot window change in flight</td></tr>
+      <tr><td class="num">17</td><td><code>dd965f8dc</code></td><td>Add <code>--until</code> flag for windowed pilots</td></tr>
+      <tr><td class="num">18</td><td><code>454c531d6</code></td><td>Iter-4 cross-window validation</td></tr>
+      <tr><td class="num">19</td><td><code>2ccc6ce76</code></td><td>Detect missing classifications + retry batch</td></tr>
+      <tr><td class="num">20</td><td><code>966ebd41d</code></td><td>Task 8 full-corpus findings (216 PRs, 522 findings)</td></tr>
+      <tr><td class="num">21</td><td><code>970281a2c</code></td><td>Dedup cross-cutting findings + cluster 'other' candidates</td></tr>
+      <tr><td class="num">22</td><td><code>77cd65198</code></td><td>Comprehensive Task 8 analytics dashboard</td></tr>
+      <tr><td class="num">23</td><td><code>983f38121</code></td><td>Enriched Task 9 review doc with code-level evidence</td></tr>
+      <tr><td class="num">24</td><td><code>142656d95</code></td><td>Panic-discipline taxonomy + prep Sonnet re-classify input</td></tr>
+      <tr><td class="num">25</td><td><code>dd101beb4</code></td><td>Noise filter audit + stylistic Rust convention deep-dive</td></tr>
+      <tr><td class="num">26</td><td><code>5680a1f45</code></td><td>Sonnet 4.6 re-classification + corrected review doc (522 &rarr; 488)</td></tr>
+      <tr><td class="num">27</td><td><code>bd81ab99f</code></td><td>Index page + pipeline architecture HTML</td></tr>
+      <tr><td class="num">28</td><td><code>174ef0b24</code></td><td>Index page completeness fixes</td></tr>
+      <tr><td class="num">29</td><td><code>fff0968f9</code></td><td>Per-target synthesis input files</td></tr>
+      <tr><td class="num">30</td><td><code>3c498be25</code></td><td>Synthesize 2 skills + 3 area CLAUDE.md + gap report</td></tr>
+      <tr><td class="num">31</td><td><code>56646fa17</code></td><td>Root CLAUDE.md &rarr; <code>cli/CLAUDE.md</code> and the two skills</td></tr>
+      <tr><td class="num">32</td><td><code>c1e460bfd</code></td><td>Final-results HTML summary</td></tr>
+      <tr><td class="num">33</td><td><code>4b4302989</code></td><td>Journey HTML report</td></tr>
+      <tr><td class="num">34</td><td><em>(this commit)</em></td><td>HTML rendering of every MD; index expansion; journey log through event 79</td></tr>
     </tbody>
   </table>
 </section>
@@ -502,15 +532,10 @@
 <section>
   <h2>Pending decisions / next steps</h2>
   <ol>
-    <li><strong>Iter-4 pilot</strong> on the <code>2025-09-16..2025-11-15</code> window (paused mid-dispatch when user asked for this log)</li>
-    <li><strong>Task 8</strong> — full 157-PR corpus run end-to-end with calibrated pipeline</li>
-    <li><strong>Task 8.5</strong> — conditional <code>other</code>-bucket re-classification (runs only if <code>other</code> &gt; 25%)</li>
-    <li><strong>Task 9</strong> — findings checkpoint (HUMAN-IN-LOOP)</li>
-    <li><strong>Task 10</strong> — cross-cutting <code>.claude/skills/flox-rust-review/SKILL.md</code> synthesis</li>
-    <li><strong>Task 11</strong> — three area-specific <code>CLAUDE.md</code> files in <code>commands/</code>, <code>models/environment/</code>, <code>providers/</code></li>
-    <li><strong>Task 12</strong> — gap report against <code>AGENTS.md</code></li>
-    <li><strong>Task 13</strong> — final review checkpoint + optional PR creation (HUMAN-IN-LOOP)</li>
+    <li><strong>Task 13 / final review</strong> &mdash; human review of the synthesized skills, four CLAUDE.md files, and <code>gap-report.md</code>; decide whether to land AGENTS.md amendments and open a PR.</li>
+    <li><strong>Decide on adoption</strong> &mdash; whether to make <code>flox-rust-review</code> and <code>flox-rust-stylistic-conventions</code> skills part of the main <code>flox/flox</code> repo or keep them in this worktree.</li>
   </ol>
+  <p style="font-size:13px;color:var(--fg-mute);margin-top:6px;">All earlier work items (iter-4 validation, full 216-PR corpus run, conditional &lsquo;other&rsquo; re-pass, findings checkpoint, cross-cutting synthesis, three area <code>CLAUDE.md</code> files, gap report) are done.</p>
 </section>
 
 <section>
@@ -526,7 +551,7 @@
 </section>
 
 <footer>
-  Generated 2026-05-17 · Worktree <code>rust-pr-analysis-skill</code> at <code>c49aee683</code>
+  Generated 2026-05-17 (updated through event 79) · Worktree <code>rust-pr-analysis-skill</code> at <code>4b4302989</code> · <a href="rust-pr-analysis-index-01.html">Back to index</a>
 </footer>
 
 </div>

@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Iteration 4 — Second-Window Validation</title>
+<style>
+:root {
+  --fg: #1c1f24; --fg-mute: #5a6270; --bg: #fbfbfa; --bg-card: #ffffff;
+  --border: #e4e6eb; --accent: #3b6bd6; --good: #2f8a52; --warn: #c98a17;
+  --bad: #c44545; --neutral: #6c757d; --code-bg: #f3f4f6;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.04);
+}
+* { box-sizing: border-box; }
+body {
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: var(--fg); background: var(--bg); margin: 0; padding: 32px 24px 80px;
+}
+.container { max-width: 1080px; margin: 0 auto; }
+header.page-header {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 24px 28px; box-shadow: var(--shadow);
+  margin-bottom: 22px;
+}
+header.page-header h1 { margin: 0 0 4px; font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
+header.page-header .subtitle { color: var(--fg-mute); font-size: 14px; margin: 0; }
+header.page-header .back { margin-top: 14px; font-size: 13px; }
+header.page-header .back a { color: var(--accent); text-decoration: none; }
+header.page-header .back a:hover { text-decoration: underline; }
+section.body {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 24px 32px; box-shadow: var(--shadow);
+}
+section.body h1 { font-size: 22px; font-weight: 600; margin: 22px 0 10px; letter-spacing: -.005em; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+section.body h2 { font-size: 19px; font-weight: 600; margin: 26px 0 10px; letter-spacing: -.005em; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+section.body h2:first-child, section.body h1:first-child { margin-top: 0; }
+section.body h3 { font-size: 16px; font-weight: 600; margin: 20px 0 8px; }
+section.body h4 { font-size: 14px; font-weight: 600; margin: 16px 0 6px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: .03em; }
+section.body h5, section.body h6 { font-size: 13px; font-weight: 600; margin: 14px 0 4px; }
+section.body p { margin: 0 0 12px; }
+section.body ul, section.body ol { margin: 6px 0 12px; padding-left: 26px; }
+section.body li { margin: 3px 0; }
+section.body li > p { margin: 0 0 6px; }
+section.body code {
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13px;
+  background: var(--code-bg); padding: 1px 5px; border-radius: 3px;
+}
+section.body pre {
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px;
+  background: var(--code-bg); border-radius: 6px; padding: 14px 16px;
+  overflow-x: auto; line-height: 1.45; margin: 8px 0 14px;
+}
+section.body pre code { background: transparent; padding: 0; font-size: 12.5px; }
+section.body blockquote {
+  border-left: 3px solid var(--border); padding: 6px 14px; margin: 10px 0;
+  background: var(--code-bg); color: var(--fg-mute); border-radius: 0 6px 6px 0;
+}
+section.body blockquote p { margin: 4px 0; }
+section.body a { color: var(--accent); text-decoration: none; }
+section.body a:hover { text-decoration: underline; }
+section.body hr { border: none; border-top: 1px solid var(--border); margin: 22px 0; }
+section.body table {
+  width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 13.5px;
+}
+section.body th, section.body td {
+  border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top;
+}
+section.body th { background: var(--code-bg); font-weight: 600; color: var(--fg-mute); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+section.body tbody tr:hover { background: #fafbfc; }
+section.body strong { font-weight: 600; }
+
+nav.toc {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 18px 24px; margin-bottom: 22px; box-shadow: var(--shadow);
+  max-height: 480px; overflow-y: auto;
+}
+nav.toc h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--fg-mute); margin: 0 0 10px; font-weight: 600; }
+nav.toc ul { list-style: none; padding-left: 0; margin: 0 0 6px; font-size: 13px; }
+nav.toc ul ul { padding-left: 16px; margin: 2px 0 4px; }
+nav.toc li { margin: 2px 0; }
+nav.toc a { color: var(--accent); text-decoration: none; }
+nav.toc a:hover { text-decoration: underline; }
+nav.toc details { margin: 4px 0; }
+nav.toc summary { font-weight: 600; cursor: pointer; color: var(--fg); font-size: 13px; }
+nav.toc summary:hover { color: var(--accent); }
+
+footer.page-footer { color: var(--fg-mute); font-size: 12px; text-align: center; margin-top: 22px; }
+footer.page-footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="page-header">
+  <h1>Iteration 4 — Second-Window Validation</h1>
+  <div class="subtitle">2025-09-16 → 2025-11-15 pilot comparison to verify calibration generalises beyond the original window.</div>
+  <div class="subtitle" style="margin-top:6px;">Source: <code>scripts/pr-analysis/findings/iter4-comparison.md</code></div>
+  <div class="back"><a href="../../../rust-pr-analysis-index-01.html">&larr; Back to index</a></div>
+</header>
+
+
+
+<section class="body">
+<h1 id="pilot-iteration-4-cross-window-validation">Pilot iteration 4 — cross-window validation</h1>
+<p><strong>Window:</strong> 2025-10-15 → 2025-11-15 (6-7 months back). Different from iter3 which sampled 2026-04-15 → 2026-05-15 (last month).</p>
+<h2 id="iter-3-vs-iter-4-comparison">Iter 3 vs Iter 4 comparison</h2>
+<table>
+<thead><tr>
+<th>Metric</th>
+<th>Iter 3 (recent)</th>
+<th>Iter 4 (6-7mo back)</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>PRs</td>
+<td>13</td>
+<td>36</td>
+</tr>
+<tr>
+<td>Comments classified</td>
+<td>94</td>
+<td>78</td>
+</tr>
+<tr>
+<td><code>other</code> %</td>
+<td>31%</td>
+<td><strong>51%</strong></td>
+</tr>
+<tr>
+<td>Findings total</td>
+<td>52</td>
+<td>36</td>
+</tr>
+<tr>
+<td>Findings evd&gt;1</td>
+<td>9 (17%)</td>
+<td>2 (6%)</td>
+</tr>
+<tr>
+<td>in_agents_md</td>
+<td>73%</td>
+<td>81%</td>
+</tr>
+<tr>
+<td>was_addressed=NULL</td>
+<td>11</td>
+<td>30</td>
+</tr>
+<tr>
+<td>threads_resolved</td>
+<td>72/115 (63%)</td>
+<td>18/80 (23%)</td>
+</tr>
+</tbody></table>
+<h2 id="iter-4-taxonomy-distribution-notice-the-diversity">Iter 4 taxonomy distribution (notice the diversity)</h2>
+<table>
+<thead><tr>
+<th>taxonomy</th>
+<th>n</th>
+<th>avg_conf</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>other</td>
+<td>40</td>
+<td>0.17</td>
+</tr>
+<tr>
+<td>testing</td>
+<td>9</td>
+<td>0.7</td>
+</tr>
+<tr>
+<td>error-handling</td>
+<td>8</td>
+<td>0.75</td>
+</tr>
+<tr>
+<td>naming</td>
+<td>7</td>
+<td>0.82</td>
+</tr>
+<tr>
+<td>semantic-correctness</td>
+<td>7</td>
+<td>0.71</td>
+</tr>
+<tr>
+<td>control-flow</td>
+<td>3</td>
+<td>0.73</td>
+</tr>
+<tr>
+<td>type-safety</td>
+<td>2</td>
+<td>0.7</td>
+</tr>
+<tr>
+<td>manifest-usage</td>
+<td>1</td>
+<td>0.9</td>
+</tr>
+<tr>
+<td>provider-traits</td>
+<td>1</td>
+<td>0.72</td>
+</tr>
+</tbody></table>
+<h2 id="iter-4-top-findings-high-quality-substantive-rules">Iter 4 top findings — high quality substantive rules</h2>
+<table>
+<thead><tr>
+<th>area</th>
+<th>t1</th>
+<th>evd</th>
+<th>md</th>
+<th>conf</th>
+<th>rule</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>models/environment</td>
+<td>1</td>
+<td>2</td>
+<td>1</td>
+<td>0.75</td>
+<td>Use separate error variants or wrap in io::Error with ErrorKind::Other instead of string merging.</td>
+</tr>
+<tr>
+<td>activations</td>
+<td>1</td>
+<td>2</td>
+<td>1</td>
+<td>0.75</td>
+<td>Use variable names that clarify data type (e.g. watchdog_bin for path).</td>
+</tr>
+<tr>
+<td>models/environment</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Wrap errors consistently across error variants to enable product-level message formatting.</td>
+</tr>
+<tr>
+<td>models/environment</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Use correct error enum variants for clone vs fetch operations; explain refactoring rationale.</td>
+</tr>
+<tr>
+<td>cli/other</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Extend error enums instead of erasing type information; use Box&lt;Error&gt; over string compression.</td>
+</tr>
+<tr>
+<td>cli/other</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Use Box&lt;dyn std::error::Error + Send + Sync&gt; when only the message is needed, but keep error handlin</td>
+</tr>
+<tr>
+<td>other</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>0.71</td>
+<td>Verify CI checks catch generated schema drift in automated builds.</td>
+</tr>
+<tr>
+<td>commands</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Add unit tests by accepting &amp;mut impl Write to enable buffer-based testing.</td>
+</tr>
+<tr>
+<td>commands</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Write tests to verify concurrent locking behavior and environment generation switching logic.</td>
+</tr>
+<tr>
+<td>commands</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Use descriptor fields rather than reconstructing path from catalog and attr_path.</td>
+</tr>
+<tr>
+<td>commands</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Document when an intermediate type will be converted; avoid misleading temporary state.</td>
+</tr>
+<tr>
+<td>commands</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Avoid unnecessary operations before checking guard conditions; defer expensive calls until required.</td>
+</tr>
+<tr>
+<td>commands</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Position frequently-used flags at top level, not nested in subcommand variants, for better UX.</td>
+</tr>
+<tr>
+<td>models/environment</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Understand error handling logic before refactoring; ensure all cases properly handled.</td>
+</tr>
+<tr>
+<td>models/environment</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>0.71</td>
+<td>Acknowledge manual verification; document trade-offs between flakiness and test coverage.</td>
+</tr>
+</tbody></table>
+<h2 id="iter-4-gap-candidates-not-in-agents-md">Iter 4 gap candidates (NOT in AGENTS.md)</h2>
+<table>
+<thead><tr>
+<th>area</th>
+<th>t1</th>
+<th>evd</th>
+<th>conf</th>
+<th>rule</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>other</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Verify CI checks catch generated schema drift in automated builds.</td>
+</tr>
+<tr>
+<td>models/environment</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Acknowledge manual verification; document trade-offs between flakiness and test coverage.</td>
+</tr>
+<tr>
+<td>core</td>
+<td>1</td>
+<td>1</td>
+<td>0.71</td>
+<td>Rename modules to reflect their semantic purpose (context vs data).</td>
+</tr>
+<tr>
+<td>models/environment</td>
+<td>1</td>
+<td>1</td>
+<td>0.51</td>
+<td>Clarify lock lifetime requirements; ensure resource guards held for entire critical section.</td>
+</tr>
+<tr>
+<td>core</td>
+<td>0</td>
+<td>1</td>
+<td>0.21</td>
+<td>Document whether PathBuf represents absolute or relative paths in type or comment.</td>
+</tr>
+<tr>
+<td>activations</td>
+<td>0</td>
+<td>1</td>
+<td>0.21</td>
+<td>Preserve stderr/stdout interleaving order to maintain context in errors.</td>
+</tr>
+<tr>
+<td>activations</td>
+<td>0</td>
+<td>1</td>
+<td>0.11</td>
+<td>Preserve intentional verbosity mappings when refactoring log levels.</td>
+</tr>
+</tbody></table>
+</section>
+
+<footer class="page-footer">
+  Generated 2026-05-17 18:25 UTC &middot; <a href="../../../rust-pr-analysis-index-01.html">Back to index</a>
+</footer>
+
+</div>
+</body>
+</html>

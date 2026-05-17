@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>flox-rust-stylistic-conventions — Skill</title>
+<style>
+:root {
+  --fg: #1c1f24; --fg-mute: #5a6270; --bg: #fbfbfa; --bg-card: #ffffff;
+  --border: #e4e6eb; --accent: #3b6bd6; --good: #2f8a52; --warn: #c98a17;
+  --bad: #c44545; --neutral: #6c757d; --code-bg: #f3f4f6;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.04);
+}
+* { box-sizing: border-box; }
+body {
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: var(--fg); background: var(--bg); margin: 0; padding: 32px 24px 80px;
+}
+.container { max-width: 1080px; margin: 0 auto; }
+header.page-header {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 24px 28px; box-shadow: var(--shadow);
+  margin-bottom: 22px;
+}
+header.page-header h1 { margin: 0 0 4px; font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
+header.page-header .subtitle { color: var(--fg-mute); font-size: 14px; margin: 0; }
+header.page-header .back { margin-top: 14px; font-size: 13px; }
+header.page-header .back a { color: var(--accent); text-decoration: none; }
+header.page-header .back a:hover { text-decoration: underline; }
+section.body {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 24px 32px; box-shadow: var(--shadow);
+}
+section.body h1 { font-size: 22px; font-weight: 600; margin: 22px 0 10px; letter-spacing: -.005em; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+section.body h2 { font-size: 19px; font-weight: 600; margin: 26px 0 10px; letter-spacing: -.005em; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+section.body h2:first-child, section.body h1:first-child { margin-top: 0; }
+section.body h3 { font-size: 16px; font-weight: 600; margin: 20px 0 8px; }
+section.body h4 { font-size: 14px; font-weight: 600; margin: 16px 0 6px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: .03em; }
+section.body h5, section.body h6 { font-size: 13px; font-weight: 600; margin: 14px 0 4px; }
+section.body p { margin: 0 0 12px; }
+section.body ul, section.body ol { margin: 6px 0 12px; padding-left: 26px; }
+section.body li { margin: 3px 0; }
+section.body li > p { margin: 0 0 6px; }
+section.body code {
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13px;
+  background: var(--code-bg); padding: 1px 5px; border-radius: 3px;
+}
+section.body pre {
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px;
+  background: var(--code-bg); border-radius: 6px; padding: 14px 16px;
+  overflow-x: auto; line-height: 1.45; margin: 8px 0 14px;
+}
+section.body pre code { background: transparent; padding: 0; font-size: 12.5px; }
+section.body blockquote {
+  border-left: 3px solid var(--border); padding: 6px 14px; margin: 10px 0;
+  background: var(--code-bg); color: var(--fg-mute); border-radius: 0 6px 6px 0;
+}
+section.body blockquote p { margin: 4px 0; }
+section.body a { color: var(--accent); text-decoration: none; }
+section.body a:hover { text-decoration: underline; }
+section.body hr { border: none; border-top: 1px solid var(--border); margin: 22px 0; }
+section.body table {
+  width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 13.5px;
+}
+section.body th, section.body td {
+  border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top;
+}
+section.body th { background: var(--code-bg); font-weight: 600; color: var(--fg-mute); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+section.body tbody tr:hover { background: #fafbfc; }
+section.body strong { font-weight: 600; }
+
+nav.toc {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 18px 24px; margin-bottom: 22px; box-shadow: var(--shadow);
+  max-height: 480px; overflow-y: auto;
+}
+nav.toc h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--fg-mute); margin: 0 0 10px; font-weight: 600; }
+nav.toc ul { list-style: none; padding-left: 0; margin: 0 0 6px; font-size: 13px; }
+nav.toc ul ul { padding-left: 16px; margin: 2px 0 4px; }
+nav.toc li { margin: 2px 0; }
+nav.toc a { color: var(--accent); text-decoration: none; }
+nav.toc a:hover { text-decoration: underline; }
+nav.toc details { margin: 4px 0; }
+nav.toc summary { font-weight: 600; cursor: pointer; color: var(--fg); font-size: 13px; }
+nav.toc summary:hover { color: var(--accent); }
+
+footer.page-footer { color: var(--fg-mute); font-size: 12px; text-align: center; margin-top: 22px; }
+footer.page-footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="page-header">
+  <h1>flox-rust-stylistic-conventions — Skill</h1>
+  <div class="subtitle">Stylistic Rust conventions skill. 54 gap-candidate stylistic rules extracted from the noise-filter deep-dive.</div>
+  <div class="subtitle" style="margin-top:6px;">Source: <code>.claude/skills/flox-rust-stylistic-conventions/SKILL.md</code></div>
+  <div class="back"><a href="../../../rust-pr-analysis-index-01.html">&larr; Back to index</a></div>
+</header>
+
+
+
+<section class="body">
+<hr>
+<p>name: flox-rust-stylistic-conventions description: Use when editing Rust in flox/flox. Encodes review-validated stylistic conventions — rules where the original code works but reviewers prefer a different shape. Covers naming conventions, formatting, imports, message wording style, and other taste-driven choices. Mined from 944 review comments across 216 PRs (8 months). Complements AGENTS.md and lives alongside <code>flox-rust-review</code>.</p>
+<hr>
+<p>The flox team prioritizes legibility of intent over brevity: names should describe what a thing <em>does</em> or <em>represents</em>, not how it is triggered or which vendor powers it; user-facing strings are stretched past the 80-character source limit rather than broken mid-thought; warnings are reserved for conditions the user can act on; and every repeated literal or pattern gets extracted into a named constant or helper the moment it appears twice. Reviewers consistently nudge toward specificity — the right domain constant, the right qualifier on visibility, the right term used uniformly across all call sites.</p>
+<hr>
+<h2 id="naming">Naming</h2>
+<p><strong>Use the <code>str_to_x</code> pattern for query-parameter parsers in <code>flox-catalog</code>; do not inline the parsing.</strong></p>
+<p>The file already has <code>str_to_catalog_name</code>, <code>str_to_package_name</code>, etc. A new parser for a system field must be named <code>str_to_system</code>, not <code>PackageSystem::from_str</code> inlined at the call site.</p>
+<pre><code class="lang-rust">// before
+let system = api_types::PackageSystem::from_str(system).map_err(|_| { ... })?;
+
+// after
+let system = str_to_system(system)?;</code></pre>
+<p>Evidence: PR #4156. (reinforces AGENTS.md §Naming new helpers)</p>
+<hr>
+<p><strong>Name a function by what it does, not what triggered it; when a name is opaque, add a doc comment.</strong></p>
+<p><code>gather_services_for_flag</code> became <code>services_to_start</code>. <code>check_build</code> became <code>check_build_already_recorded</code> with a doc comment explaining it checks for duplicate builds in the catalog before spending time on a Nix build.</p>
+<p>Evidence: PR #4152, PR #4156. (reinforces AGENTS.md §Conventions)</p>
+<hr>
+<p><strong>Name CLI positional arguments by their actual type (<code>installable</code>, <code>attrpath</code>), not an approximate concept (<code>expression</code>).</strong></p>
+<p>The positional argument in <code>#[bpaf(positional("expression"))]</code> was renamed to <code>"installable"</code> once the parameter accepted a flakeref + attrpath combined form.</p>
+<p>Evidence: PR #3599. (reinforces AGENTS.md §Conventions)</p>
+<hr>
+<p><strong>Do not prefix test functions with <code>test_</code>.</strong></p>
+<p><code>#[test]</code> and the <code>#[cfg(test)]</code> module already identify them. Name tests descriptively for what they verify: <code>gather_repo_meta_no_upstream_suggests_set_upstream</code>, not <code>test_gather_repo_meta</code>.</p>
+<p>Evidence: PR #4165. (reinforces AGENTS.md §Test naming)</p>
+<hr>
+<p><strong>Use generic authentication terminology in type and variant names; do not surface provider names (<code>Auth0</code>, <code>Auth0Mode</code>) in the API.</strong></p>
+<p>The config-level type was renamed from <code>Auth0Mode</code> to <code>AuthnMode</code>. The distinction between <code>AuthnMode</code> (config-level policy) and <code>AuthContext</code> (runtime-materialized credential) should be visible in the name. Use a single term — <code>auth_context</code> — consistently across function parameters, struct fields, and test helpers.</p>
+<p>Evidence: PR #4172. (reinforces AGENTS.md §Conventions)</p>
+<hr>
+<p><strong>Name structs by their purpose, not their implementation; prefer <code>DiffSerializer</code> over <code>ActivationDiff</code>.</strong></p>
+<p>When a struct serializes or transforms data rather than representing a domain concept, pick a name that describes its role (<code>DiffSerializer</code>) rather than the domain entity it was derived from (<code>ActivationDiff</code>).</p>
+<p>Evidence: PR #4202. (reinforces AGENTS.md §Conventions)</p>
+<hr>
+<p><strong>Use domain-specific constants instead of magic numbers.</strong></p>
+<p>Replace bare integer literals like <code>2</code> for stderr with <code>nix::libc::STDERR_FILENO</code>.</p>
+<p>Evidence: PR #3801.</p>
+<hr>
+<p><strong>Extract repeated string literals into named constants; do not repeat them across call sites.</strong></p>
+<p>When the same string appears more than once, define a constant. This is especially true for environment variable names and fixed command strings used in tests.</p>
+<p>Evidence: PR #4231. (reinforces AGENTS.md §Conventions)</p>
+<hr>
+<p><strong>Use the <code>COMMON_NIXPKGS_URL</code> constant as the default nixpkgs flake reference, not the bare string <code>"nixpkgs"</code>.</strong></p>
+<pre><code class="lang-rust">// before
+let flake_ref = nixpkgs_flake.as_deref().unwrap_or("nixpkgs");
+
+// after
+let flake_ref = nixpkgs_flake.as_deref().unwrap_or(&amp;COMMON_NIXPKGS_URL);</code></pre>
+<p>Evidence: PR #3599. (reinforces AGENTS.md §Conventions)</p>
+<hr>
+<p><strong>Keep shell-specific helpers in their respective modules; extract into subdirectories once a module grows large.</strong></p>
+<p>Shell helper code (bash, zsh, fish) belongs in per-shell modules, not a single shared file. When a single module exceeds a reasonable size, split into a subdirectory with <code>mod.rs</code>.</p>
+<p>Evidence: PR #4231. (reinforces AGENTS.md §Conventions)</p>
+<hr>
+<p><strong>Document non-obvious structs explaining what they represent, their invariants, and their relationship to adjacent types.</strong></p>
+<p>A struct like <code>FloxmetaBranch</code> that is not self-explanatory needs a doc comment covering: what it wraps, what invariants hold, and how it differs from related types (<code>Generations</code>, <code>CoreEnvironment</code>).</p>
+<p>Evidence: PR #3813. (reinforces AGENTS.md §Conventions)</p>
+<hr>
+<p><strong>Document trait methods, not trait implementations; omit doc comments from <code>impl</code> blocks that would duplicate the trait's own docs.</strong></p>
+<p>Evidence: PR #4076. (reinforces AGENTS.md §Conventions)</p>
+<hr>
+<p><strong>Use semantic names in docs and user-facing text: "source reference" not "flake reference" when the value does not have to be a flake.</strong></p>
+<p>Evidence: PR #4183. (reinforces AGENTS.md §Conventions)</p>
+<hr>
+<h2 id="formatting">Formatting</h2>
+<p><strong>Use <code>formatdoc!</code> or <code>indoc!</code> for multiline formatted strings; never <code>format!</code> with <code>\</code> line continuations or raw strings.</strong></p>
+<pre><code class="lang-rust">// before
+let msg = format!(r#"
+    First line {foo}
+    Second line {bar}
+"#);
+
+// after
+let msg = formatdoc! {"
+    First line {foo}
+    Second line {bar}
+"};</code></pre>
+<p>Evidence: PR #4156, PR #4165. (reinforces AGENTS.md §Conventions)</p>
+<hr>
+<p><strong>Keep source code lines at 80 characters; stretch past 80 for user-facing string content rather than breaking mid-thought.</strong></p>
+<p>These are not contradictory: the 80-character limit governs code structure; user-visible messages are stretched because line breaks in <code>formatdoc!</code> appear verbatim in the terminal. When a message fits on one line under ~80 chars, keep it there. When it cannot, use <code>formatdoc!</code> and place natural sentence breaks at the wrapped line rather than source-column breaks.</p>
+<p>Evidence: PR #3646. (reinforces AGENTS.md §User-facing string literals)</p>
+<hr>
+<p><strong>Use <code>pub(crate)</code> or <code>pub(super)</code> instead of bare <code>pub</code> for functions and constants that are not part of a stable public API.</strong></p>
+<p>Bare <code>pub</code> implies a commitment to external callers. Module-internal helpers, constants, and crate-only functions should use <code>pub(crate)</code> or <code>pub(super)</code>.</p>
+<pre><code class="lang-rust">// before
+pub const SOME_INTERNAL_CONSTANT: &amp;str = "...";
+
+// after
+pub(crate) const SOME_INTERNAL_CONSTANT: &amp;str = "...";</code></pre>
+<p>Evidence: PR #4172, PR #3988. (reinforces AGENTS.md §Conventions)</p>
+<hr>
+<p><strong>Break long method chains and assignments across lines at natural boundaries.</strong></p>
+<p>Evidence: PR #4093.</p>
+<hr>
+<p><strong>Do not extract a helper function for a single-use operation; inline the code.</strong></p>
+<p>Helpers are for reuse. When a function is only ever called from one place, inline it rather than creating an indirection that obscures the reader's path through the code.</p>
+<p>Evidence: PR #4140. (reinforces AGENTS.md §Conventions)</p>
+<hr>
+<p><strong>Add explanatory comments when non-obvious patterns (manual symlinks, recursion, catalog heuristics) are maintained by hand.</strong></p>
+<p>If the structure cannot be inferred from reading adjacent code, add a comment saying why.</p>
+<p>Evidence: PR #3960, PR #4122.</p>
+<hr>
+<h2 id="imports">Imports</h2>
+<p><strong>Use workspace dependency versions in <code>Cargo.toml</code>; do not pin a version separately in a member crate when the workspace root already declares it.</strong></p>
+<p>Evidence: PR #3939.</p>
+<hr>
+<p><strong>Import tracing macros (<code>warn!</code>, <code>debug!</code>, <code>info!</code>, <code>instrument</code>) at the module level with <code>use tracing::...</code>; do not qualify them with <code>tracing::</code> at each call site when the module already uses the crate.</strong></p>
+<p>Evidence: PR #4156. (reinforces AGENTS.md §use guidelines)</p>
+<hr>
+<p><strong>Private modules implicitly narrow function visibility; understand this before adding <code>pub</code> to items inside a <code>mod</code> block that is not itself <code>pub</code>.</strong></p>
+<p>A <code>pub fn</code> inside a private <code>mod</code> is still invisible outside the file. Rely on module privacy instead of redundant <code>pub(crate)</code> annotations where the module already provides the restriction.</p>
+<p>Evidence: PR #4172.</p>
+<hr>
+<h2 id="user-facing-message-style">User-facing Message Style</h2>
+<p><strong>Error messages must name the operation that failed, not a copy-pasted operation from nearby code.</strong></p>
+<p>When <code>update_catalogs</code> was added by copying <code>import_nixpkgs</code>, the error strings still said "Cannot import from nixpkgs…". Each operation must have its own wording describing what <em>it</em> does.</p>
+<pre><code class="lang-rust">// before (copy-paste)
+bail!("Cannot import from nixpkgs in an environment on FloxHub.")
+
+// after (correct)
+bail!("Cannot update catalogs in a managed environment on FloxHub.")</code></pre>
+<p>Evidence: PR #3969. (reinforces AGENTS.md §User-visible message syntax)</p>
+<hr>
+<p><strong>Error messages must describe the condition accurately; always verify what triggers the message before writing it.</strong></p>
+<p>Evidence: PR #3649, PR #4165. (reinforces AGENTS.md §Understand semantics before rewriting messages)</p>
+<hr>
+<p><strong>Include actionable next steps at the end of error and restriction messages.</strong></p>
+<p>When a user hits a restriction ("Cannot change the owner of an environment already pushed to FloxHub."), the next line should tell them what to do instead.</p>
+<p>Evidence: PR #3649. (reinforces AGENTS.md §User-visible message syntax)</p>
+<hr>
+<p><strong>Emit warnings only for conditions the user can act on; suppress noise from automatic actions.</strong></p>
+<p>When a service auto-starts on every activation, do not warn on every activation that "no services are defined." Reserve <code>message::warning</code> for <code>--start-services</code> being explicitly requested by the user. Auto-triggered code paths should fail silently or log at <code>debug!</code> level.</p>
+<p>Evidence: PR #4152. (reinforces AGENTS.md §User-visible message syntax)</p>
+<hr>
+<p><strong>Keep user-facing messages concise when the state is unchanged; do not describe a non-event verbosely.</strong></p>
+<p>Evidence: PR #3869. (reinforces AGENTS.md §User-visible message syntax)</p>
+<hr>
+<p><strong>Do not warn twice for the same condition; merge the user-visible warning into one clear sentence.</strong></p>
+<p>If a check fails, emit one <code>message::warning</code> with a plain-language explanation (e.g., "Unable to check if already published — continuing with build and publish."), and separately log the internal detail at <code>warn!</code> in tracing.</p>
+<p>Evidence: PR #4156. (reinforces AGENTS.md §User-visible message syntax)</p>
+<hr>
+<p><strong>Show error messages with the full joined path (<code>{dir}/pkgs</code>), not path components the user must concatenate mentally.</strong></p>
+<p>Evidence: PR #4096. (reinforces AGENTS.md §User-visible message syntax)</p>
+<hr>
+<p><strong>Show relative paths in error messages, not absolute paths from the Nix store or build checkout.</strong></p>
+<p>Evidence: PR #4102. (reinforces AGENTS.md §User-visible message syntax)</p>
+<hr>
+<p><strong>Progress messages use gerund form ("Building…", "Publishing…") with quoted context details.</strong></p>
+<p>Match the form used by existing <code>message::*</code> calls throughout the CLI. Check existing patterns before inventing a new format.</p>
+<p>Evidence: PR #4140. (reinforces AGENTS.md §CLI output conventions)</p>
+<hr>
+<p><strong>In documentation, present general forms before shorthand; introduce the structured syntax before URL syntax.</strong></p>
+<p>When documenting a configuration format that has both a <code>type</code>-based structured form and a URL shorthand, document the structured form first because the URL form is derived from it.</p>
+<p>Evidence: PR #4183.</p>
+<hr>
+<p><strong>Provide complete documentation for configuration options: list possible values, explain the semantics of each, and describe the default.</strong></p>
+<p>Evidence: PR #4198. (reinforces AGENTS.md §Conventions)</p>
+<hr>
+<hr>
+<h2 id="where-reviewers-most-often-nudge-style">Where reviewers most often nudge style</h2>
+<ol>
+<li><strong><code>formatdoc!</code>/<code>indoc!</code> discipline</strong> — <code>format!</code> with <code>\</code> continuations or raw strings appear repeatedly; reviewers catch them in almost every PR.</li>
+<li><strong>Message accuracy</strong> — copy-pasted error strings that describe the wrong operation, and messages that describe internal tool state rather than product-level meaning.</li>
+<li><strong>Naming specificity</strong> — function names that describe a trigger (<code>gather_services_for_flag</code>) rather than a result (<code>services_to_start</code>), and provider-specific terms leaking into the type API (<code>Auth0Mode</code>, <code>Auth0</code>).</li>
+<li><strong>Visibility narrowing</strong> — bare <code>pub</code> on helpers and constants that only need <code>pub(crate)</code> or <code>pub(super)</code>.</li>
+<li><strong>Warning noise</strong> — warnings emitted unconditionally by auto-triggered code paths, and duplicate warnings for the same condition.</li>
+</ol>
+</section>
+
+<footer class="page-footer">
+  Generated 2026-05-17 18:25 UTC &middot; <a href="../../../rust-pr-analysis-index-01.html">Back to index</a>
+</footer>
+
+</div>
+</body>
+</html>

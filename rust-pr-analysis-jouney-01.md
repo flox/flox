@@ -4,8 +4,8 @@
 **Worktree:** `/Users/stevemorin/c/flox_repos/flox/.claude/worktrees/rust-pr-analysis-skill`
 **Branch:** `worktree-rust-pr-analysis-skill`
 **Started:** 2026-05-16 (plan file dated 2026-05-16)
-**Latest commit at log time:** `c49aee683` (iter-3 retro digest)
-**Total commits during session:** 17
+**Latest commit at log time:** `4b4302989` (journey HTML report)
+**Total commits during session:** 34
 
 ---
 
@@ -83,6 +83,19 @@ Mine 6 months of merged PRs touching Rust files in `flox/flox` to extract review
 64. User interrupted: widen the window to 2025-09-16..2025-11-15 (2 months instead of 1)
 65. User renamed session to `rust-pr-analysis-skill`
 66. User asked to pause analysis and produce this journey log (markdown + HTML)
+67. **Built analytics dashboard** — comprehensive 86KB HTML with KPIs, PRs/commits/LOC over time, top reviewers/authors/committers, area×reviewer heatmap (commit `77cd65198`)
+68. **Built noise filter deep-dive** — 90KB HTML; forensic audit of 87 filtered comments (45 suggestion / 22 lgtm / 16 url / 4 praise-nit), tier-rate sanity check, 163 stylistic classifications (54 gap candidates) (commit `dd101beb4`)
+69. **Sonnet 4.6 re-classification pass** (commit `5680a1f45`) — re-classified 104 high-evidence comments; 20 upgrades from generic Haiku rules ("use complete sentences in errors") to specific Rust patterns (`ErrorEnum::Custom(Box<dyn Error>)`, `Result::or()` priority fallback, `AuthnMode::Never` rename, `VarsFromEnvironment` retention, panic-discipline expansion 2→4). Drove the 522→488 finding-count transition.
+70. **Added panic-discipline taxonomy** — new entry in `lib/taxonomy.py` for panic-related discipline rules (commit `142656d95` and prep work)
+71. **Wrote summary prompt** — `rust-pr-analysis-summary-prompt-01.md` capturing pipeline + state for resuming session-by-session
+72. **Built master index + pipeline architecture HTMLs** — `rust-pr-analysis-index-01.html` and `rust-pr-analysis-pipeline-01.html` (commit `bd81ab99f`)
+73. **Index completeness pass** — added findings/ section listing the 5 markdown deliverables, Sonnet re-classification narrative, removed "Coming next" (scope clarification: analysis only) (commit `174ef0b24`)
+74. **Per-target synthesis input files** — generated JSON payloads grouping findings by hot area / cross-cutting / stylistic to drive Sonnet synthesis (commit `fff0968f9`)
+75. **Synthesized 2 skills + 3 area CLAUDE.md + gap-report.md** — `flox-rust-review` (cross-cutting), `flox-rust-stylistic-conventions` (stylistic), `commands/CLAUDE.md`, `models/environment/CLAUDE.md`, `providers/CLAUDE.md`, plus 30-amendment gap report (commit `3c498be25`)
+76. **Added `cli/CLAUDE.md`** — Rust cross-cutting rules at the CLI tree root pointing at the two skills + per-area files
+77. **Updated root `CLAUDE.md`** to direct agents at `cli/CLAUDE.md` + the two skills + per-area files (commit `56646fa17`)
+78. **Built `findings/results-summary.html`** — 62KB, 5 sections, AGENTS.md before/after diff with greenlight inserts (commit `c1e460bfd`)
+79. **Built `findings/journey-report.html`** — 57KB, 10 sections, full iter1-4 calibration story (commit `4b4302989`)
 
 ---
 
@@ -142,14 +155,14 @@ scripts/pr-analysis/
 
 ## Pending decisions / next steps
 
-1. **Iter-4 pilot** on the 2025-09-16..2025-11-15 window (paused mid-dispatch when user asked for this log)
-2. **Task 8** — full 157-PR corpus run end-to-end with calibrated pipeline
-3. **Task 8.5** — conditional `other`-bucket re-classification (runs only if `other` > 25%)
-4. **Tasks 9-13** — findings checkpoint, cross-cutting synthesis, three area `CLAUDE.md` files, gap report, final review
+1. **Task 13 / final review** — human review of the synthesized skills, four CLAUDE.md files, and gap-report.md; decide whether to land AGENTS.md amendments and open a PR
+2. **Decide on adoption** — whether to make `flox-rust-review` and `flox-rust-stylistic-conventions` skills part of the main `flox/flox` repo or keep them in this worktree
+
+All earlier tasks (iter-4 validation, full 157→216-PR corpus run, conditional 'other' re-pass, findings checkpoint, cross-cutting synthesis, three area `CLAUDE.md` files, gap report) are now done.
 
 ---
 
-## Commits during session (17 total)
+## Commits during session (34 total)
 
 | # | SHA         | Description                                                                |
 |---|-------------|----------------------------------------------------------------------------|
@@ -169,7 +182,24 @@ scripts/pr-analysis/
 |14 | `9f1151fc8` | Iter-2 retro digest                                                        |
 |15 | `bfc871482` | Iter-3 calibration: key-token AGENTS.md, MiniLM embeddings, thread hint    |
 |16 | `c49aee683` | Iter-3 retro digest                                                        |
-|17 |  *current*  | (no commit yet for iter-4)                                                 |
+|17 | `dd965f8dc` | Add `--until` flag for windowed pilots                                      |
+|18 | `454c531d6` | Iter-4 cross-window validation                                              |
+|19 | `2ccc6ce76` | Detect missing classifications + retry batch                                |
+|20 | `966ebd41d` | Task 8 full-corpus findings (216 PRs, 522 findings)                         |
+|21 | `970281a2c` | Dedup cross-cutting findings + cluster 'other' candidates                   |
+|22 | `77cd65198` | Comprehensive Task 8 analytics dashboard                                    |
+|23 | `983f38121` | Enriched Task 9 review doc with code-level evidence                         |
+|24 | `142656d95` | Panic-discipline taxonomy + prep Sonnet re-classify input                   |
+|25 | `dd101beb4` | Noise filter audit + stylistic Rust convention deep-dive                    |
+|26 | `5680a1f45` | Sonnet 4.6 re-classification + corrected review doc (522→488)               |
+|27 | `bd81ab99f` | Index page + pipeline architecture HTML                                     |
+|28 | `174ef0b24` | Index page completeness fixes                                               |
+|29 | `fff0968f9` | Per-target synthesis input files                                            |
+|30 | `3c498be25` | Synthesize 2 skills + 3 area CLAUDE.md + gap report                         |
+|31 | `56646fa17` | Root CLAUDE.md → cli/CLAUDE.md and the two skills                           |
+|32 | `c1e460bfd` | Final-results HTML summary                                                  |
+|33 | `4b4302989` | Journey HTML report                                                         |
+|34 |  *current*  | (HTML rendering of every MD; index expansion; journey log to event 79)      |
 
 ---
 
