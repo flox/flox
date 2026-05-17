@@ -1,0 +1,48 @@
+loaded 19 high-confidence 'other'-bucket rules
+
+== Cluster 1  size=7  common-tokens=['review', 'comment', 'addressing', 'code', 'change']
+  [conf=0.50 area=models/environment] Review comment addressing code change.
+  [conf=0.50 area=activations       ] Review comment addressing code change.
+  [conf=0.50 area=activations       ] Review comment addressing code change.
+  [conf=0.50 area=cli/other         ] Review comment addressing code change.
+  [conf=0.50 area=activations       ] Review comment addressing code change.
+  [conf=0.50 area=activations       ] Review comment addressing code change.
+  [conf=0.50 area=activations       ] Review comment addressing code change.
+
+== Cluster 2  size=2  common-tokens=['handle', 'explicitly']
+  [conf=0.80 area=activations       ] Handle all error cases explicitly; don't panic in library code.
+  [conf=0.70 area=core              ] Handle errors explicitly rather than unwrapping or panicking.
+
+== Cluster 3  size=2  common-tokens=['logic', 'errors', 'match', 'intended', 'behavior']
+  [conf=0.75 area=activations       ] Fix logic errors to match intended behavior.
+  [conf=0.75 area=cli/other         ] Fix logic errors to match intended behavior.
+
+== Cluster 4  size=1  common-tokens=[]
+  [conf=0.70 area=providers         ] Document non-obvious code with comments explaining intent.
+
+== Cluster 5  size=1  common-tokens=[]
+  [conf=0.70 area=commands          ] Document non-obvious behavior and public APIs.
+
+== Cluster 6  size=1  common-tokens=['some']
+  [conf=0.65 area=cli/utils         ] question nonblocking: did you mean to remove all the comments? Seems like some could be stale but some might not be
+
+== Cluster 7  size=1  common-tokens=['these']
+  [conf=0.65 area=models/environment] hrm, yeah these remain gc-roots, we already do "migrations" for the oldold format, i think its reasonable to add to also delete these cental gcroots there as...
+
+== Cluster 8  size=1  common-tokens=[]
+  [conf=0.65 area=models/environment] this is kind of what i meant in the previous comment about how we produce dependencies on the client where we wouldnt quite need to
+
+== Cluster 9  size=1  common-tokens=[]
+  [conf=0.60 area=commands          ] > After the remote→reference refactor, FloxHub environments can have local changes
+> that aren't yet synced to a generation
+
+== Cluster 10  size=1  common-tokens=['client']
+  [conf=0.60 area=cli/other         ] question: why do we move all the token handling to the client crate now?
+at the level i see it the client itself only needs to know what to use to authentica...
+
+== Cluster 11  size=1  common-tokens=[]
+  [conf=0.60 area=models/environment] The labelled block seems odd and requires you to mentally jump backwards through the logic:
+```suggestion
+            if is_dir_empty {
+                de...
+

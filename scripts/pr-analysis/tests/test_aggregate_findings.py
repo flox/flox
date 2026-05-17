@@ -79,6 +79,16 @@ def test_agents_md_coverage_returns_zero_for_unrelated_rule():
     assert in_md == 0
 
 
+def test_is_generic_placeholder_drops_short_rules():
+    from scripts.pr_analysis.aggregate_findings import _is_generic_placeholder
+    assert _is_generic_placeholder("Review comment addressing code change.")
+    assert _is_generic_placeholder("Fix logic errors.")
+    assert not _is_generic_placeholder(
+        "Extend error enums rather than parsing strings at call sites for"
+        " classification."
+    )
+
+
 def test_agents_md_coverage_returns_zero_when_too_few_distinctive_tokens():
     """A rule with fewer than min_overlap distinctive tokens (>= 4 chars,
     non-stopword) is not eligible for matching."""

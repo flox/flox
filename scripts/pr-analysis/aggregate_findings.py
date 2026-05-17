@@ -41,6 +41,13 @@ def _tokens(s: str) -> set[str]:
     }
 
 
+def _is_generic_placeholder(rule: str) -> bool:
+    """Drop rules with fewer than 8 distinct content tokens (likely generic
+    placeholder like 'Review comment addressing code change.')."""
+    tokens = _tokens(rule)
+    return len(tokens) < 8
+
+
 def _embedder():
     """Lazy-load the embedding model. Cached per process."""
     global _embedder_instance
@@ -184,6 +191,7 @@ def main() -> None:
         for cluster in clusters:
             sig_to_areas[signature(cluster)].add(area)
 
+    dropped_placeholders = 0
     with transaction(conn):
         conn.execute("DELETE FROM finding")
         for (tax, area), clusters in area_themes.items():
@@ -197,6 +205,9 @@ def main() -> None:
                 acceptance = (sum(addressed) / len(addressed)) if addressed else None
                 # pick the canonical rule_statement = the longest one (most descriptive)
                 canonical = max(cluster, key=lambda r: len(r["rule_statement"] or ""))["rule_statement"]
+                if _is_generic_placeholder(canonical):
+                    dropped_placeholders += 1
+                    continue
                 # primary reviewer = most-frequent author in cluster
                 top_author, _ = Counter(r["author"] for r in cluster).most_common(1)[0]
                 in_md, section = agents_md_coverage(canonical, agents_text)
@@ -236,6 +247,109 @@ def main() -> None:
                         dt.datetime.now(dt.UTC).isoformat(),
                     ),
                 )
+    print(f"dropped {dropped_placeholders} generic placeholder findings")
+
+    # Second pass: collapse cross-cutting findings whose canonical
+    # rule_statement is identical (across areas) into a single canonical row,
+    # unioning evidence + reviewers and recomputing confidence_score.
+    collapsed_rows = 0
+    canonical_count = 0
+    with transaction(conn):
+        crosscutting = conn.execute(
+            "SELECT id, rule_statement, evidence_comment_ids, evidence_pr_numbers, "
+            "areas_seen, tier1_reviewer_count, tier2_reviewer_count, "
+            "total_evidence_count, primary_reviewer, reviewer_logins, area, taxonomy, "
+            "in_agents_md, agents_md_section, confidence_score "
+            "FROM finding WHERE scope = 'cross-cutting' ORDER BY rule_statement"
+        ).fetchall()
+        groups: dict[str, list[dict]] = defaultdict(list)
+        for row in crosscutting:
+            groups[row["rule_statement"]].append(dict(row))
+        for rule_statement, rows in groups.items():
+            if len(rows) <= 1:
+                continue
+            canonical_count += 1
+            # Pick highest-confidence row as canonical
+            canonical_row = max(rows, key=lambda r: r["confidence_score"])
+            others = [r for r in rows if r["id"] != canonical_row["id"]]
+            # Union evidence
+            comment_ids: list[int] = []
+            for r in rows:
+                comment_ids.extend(json.loads(r["evidence_comment_ids"]))
+            comment_ids = sorted(set(comment_ids))
+            pr_numbers: list[int] = []
+            for r in rows:
+                pr_numbers.extend(json.loads(r["evidence_pr_numbers"]))
+            pr_numbers = sorted(set(pr_numbers))
+            areas_union: set[str] = set()
+            for r in rows:
+                areas_union.update(json.loads(r["areas_seen"]))
+            areas_seen_list = sorted(areas_union)
+            # Union reviewer logins; recompute tier counts over DISTINCT reviewers
+            reviewers_union: set[str] = set()
+            for r in rows:
+                reviewers_union.update(json.loads(r["reviewer_logins"]))
+            placeholders = ",".join("?" for _ in reviewers_union)
+            tier1_new = 0
+            tier2_new = 0
+            if reviewers_union:
+                tier_rows = conn.execute(
+                    f"SELECT login, tier FROM reviewer WHERE login IN ({placeholders})",
+                    tuple(reviewers_union),
+                ).fetchall()
+                tier_lookup = {tr["login"]: tr["tier"] for tr in tier_rows}
+                tier1_new = sum(
+                    1 for login in reviewers_union if tier_lookup.get(login) == 1
+                )
+                tier2_new = sum(
+                    1 for login in reviewers_union if tier_lookup.get(login) == 2
+                )
+            total_evidence_new = len(comment_ids)
+            cross_area_new = len(areas_seen_list)
+            # Recompute confidence with same acceptance proxy (0.5) used in
+            # the original write path when acceptance is absent. We don't have
+            # acceptance for the merged row at this stage, so use 0.5 as in
+            # the first pass's confidence_score call.
+            new_conf = confidence_score(
+                tier1_count=tier1_new,
+                tier2_count=tier2_new,
+                total_evidence=total_evidence_new,
+                cross_area_count=cross_area_new,
+                acceptance_rate=0.5,
+            )
+            conn.execute(
+                """UPDATE finding SET
+                       evidence_comment_ids = ?,
+                       evidence_pr_numbers = ?,
+                       areas_seen = ?,
+                       reviewer_logins = ?,
+                       tier1_reviewer_count = ?,
+                       tier2_reviewer_count = ?,
+                       total_evidence_count = ?,
+                       cross_area_count = ?,
+                       confidence_score = ?
+                   WHERE id = ?""",
+                (
+                    json.dumps(comment_ids),
+                    json.dumps(pr_numbers),
+                    json.dumps(areas_seen_list),
+                    json.dumps(sorted(reviewers_union)),
+                    tier1_new,
+                    tier2_new,
+                    total_evidence_new,
+                    cross_area_new,
+                    new_conf,
+                    canonical_row["id"],
+                ),
+            )
+            for r in others:
+                conn.execute("DELETE FROM finding WHERE id = ?", (r["id"],))
+                collapsed_rows += 1
+    print(
+        f"Collapsed {collapsed_rows} duplicate cross-cutting findings "
+        f"into {canonical_count} canonical rows."
+    )
+
     n = conn.execute("SELECT COUNT(*) AS n FROM finding").fetchone()["n"]
     print(f"wrote {n} findings")
     by_scope = conn.execute(
