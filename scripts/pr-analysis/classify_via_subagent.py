@@ -173,6 +173,42 @@ def _batch_path_for_result(result_path: Path) -> Path:
     return result_path.parent / f"batch_{suffix}"
 
 
+def _batch_label(batch_path: Path) -> str:
+    """Return the batch label (e.g. ``1``, ``retry``) from a batch_<label>.json path."""
+    stem = batch_path.stem  # batch_<label>
+    return stem[len("batch_"):] if stem.startswith("batch_") else stem
+
+
+def compare_batch_and_result(
+    batch_path: Path, result_path: Path
+) -> dict:
+    """Compare a batch file's comment IDs against the result file's classified IDs.
+
+    Returns ``{"batch_ids": [...], "result_ids": [...], "missing": [...], "extra": [...]}``.
+    Missing = ids present in batch but absent from result. Extra = vice versa.
+    Both lists are sorted ascending. Non-integer / malformed entries are
+    silently dropped from the result side (so an unparseable item simply
+    shows up as missing).
+    """
+    batch_payload = json.loads(batch_path.read_text())
+    result_items = json.loads(result_path.read_text())
+    batch_ids = sorted(
+        c["id"] for c in batch_payload.get("comments", []) if isinstance(c.get("id"), int)
+    )
+    result_ids_set: set[int] = set()
+    if isinstance(result_items, list):
+        for item in result_items:
+            if isinstance(item, dict) and isinstance(item.get("comment_id"), int):
+                result_ids_set.add(item["comment_id"])
+    batch_set = set(batch_ids)
+    return {
+        "batch_ids": batch_ids,
+        "result_ids": sorted(result_ids_set),
+        "missing": sorted(batch_set - result_ids_set),
+        "extra": sorted(result_ids_set - batch_set),
+    }
+
+
 def _read_prompt_hash(batch_path: Path) -> str | None:
     """Return the prompt_hash field from the batch file, or None if unavailable."""
     if not batch_path.is_file():
@@ -190,28 +226,53 @@ def ingest_results(
     in_dir: Path,
     *,
     now_iso: str | None = None,
-) -> tuple[int, int]:
+) -> tuple[int, int, dict[str, list[int]]]:
     """Ingest every ``result_*.json`` file in ``in_dir``.
 
-    Returns ``(rows_inserted, files_processed)``.
+    Returns ``(rows_inserted, files_processed, missing_by_batch)`` where
+    ``missing_by_batch`` maps batch label (e.g. ``"1"``, ``"retry"``) to
+    the list of comment IDs present in the batch but absent from the
+    corresponding result file. Batches with no missing IDs are omitted.
+    A per-batch line is printed to stdout summarising ingested / missing
+    / extra IDs.
     """
     now_iso = now_iso or dt.datetime.now(dt.UTC).isoformat()
     result_files = sorted(in_dir.glob("result_*.json"))
     if not result_files:
         print(f"no result_*.json files found in {in_dir}", file=sys.stderr)
-        return 0, 0
+        return 0, 0, {}
 
     # Pre-fetch the set of valid comment ids so we can warn on bad IDs.
     valid_ids = {row[0] for row in conn.execute("SELECT id FROM line_comment").fetchall()}
 
     rows_inserted = 0
+    missing_by_batch: dict[str, list[int]] = {}
     for path in result_files:
+        batch_path = _batch_path_for_result(path)
         try:
             items = load_result_file(path)
         except (ValueError, json.JSONDecodeError) as exc:
             print(f"warning: skipping {path.name}: {exc}", file=sys.stderr)
             continue
-        batch_ph = _read_prompt_hash(_batch_path_for_result(path))
+        # Per-batch length-mismatch detection.
+        if batch_path.is_file():
+            try:
+                diff = compare_batch_and_result(batch_path, path)
+                label = _batch_label(batch_path)
+                ingested = len(diff["result_ids"])
+                total = len(diff["batch_ids"])
+                print(
+                    f"batch {label}: ingested {ingested} of {total} "
+                    f"(missing: {diff['missing']}, extra: {diff['extra']})"
+                )
+                if diff["missing"]:
+                    missing_by_batch[label] = diff["missing"]
+            except (ValueError, json.JSONDecodeError, KeyError) as exc:
+                print(
+                    f"warning: could not compare {batch_path.name} vs {path.name}: {exc}",
+                    file=sys.stderr,
+                )
+        batch_ph = _read_prompt_hash(batch_path)
         for raw_item in items:
             if not isinstance(raw_item, dict):
                 print(f"warning: {path.name}: non-object entry skipped", file=sys.stderr)
@@ -254,7 +315,7 @@ def ingest_results(
                     ),
                 )
             rows_inserted += 1
-    return rows_inserted, len(result_files)
+    return rows_inserted, len(result_files), missing_by_batch
 
 
 def print_taxonomy_distribution(conn: sqlite3.Connection) -> None:
@@ -271,15 +332,130 @@ def print_taxonomy_distribution(conn: sqlite3.Connection) -> None:
         print(f"  {row['taxonomy']}: {row['n']}")
 
 
+MISSING_JSON_INSTRUCTIONS = (
+    "Re-prepare these as a single batch and dispatch a retry subagent."
+)
+
+
+def write_missing_json(
+    in_dir: Path, missing_by_batch: dict[str, list[int]]
+) -> Path:
+    """Write ``<in_dir>/missing.json`` summarising missing comment IDs."""
+    flat: list[int] = []
+    for ids in missing_by_batch.values():
+        flat.extend(ids)
+    payload = {
+        "missing_comment_ids": sorted(set(flat)),
+        "by_batch": missing_by_batch,
+        "instructions": MISSING_JSON_INSTRUCTIONS,
+    }
+    path = in_dir / "missing.json"
+    path.write_text(json.dumps(payload, indent=2))
+    return path
+
+
 def ingest_cmd(args: argparse.Namespace) -> int:
     in_dir = Path(args.in_dir).resolve()
     if not in_dir.is_dir():
         print(f"error: {in_dir} is not a directory", file=sys.stderr)
         return 2
     conn = connect()
-    rows, files = ingest_results(conn, in_dir)
+    rows, files, missing_by_batch = ingest_results(conn, in_dir)
     print(f"ingested {rows} classifications across {files} batch files")
+    if missing_by_batch:
+        path = write_missing_json(in_dir, missing_by_batch)
+        total_missing = sum(len(ids) for ids in missing_by_batch.values())
+        print(
+            f"WARNING: {total_missing} comments missing across "
+            f"{len(missing_by_batch)} batches. See {path} for retry instructions."
+        )
     print_taxonomy_distribution(conn)
+    if missing_by_batch and not getattr(args, "allow_partial", False):
+        return 1
+    if missing_by_batch and getattr(args, "allow_partial", False):
+        print("--allow-partial set: exiting 0 despite missing classifications.")
+    return 0
+
+
+# -----------------------------------------------------------------------------
+# prepare-missing mode
+# -----------------------------------------------------------------------------
+
+
+def prepare_missing_batch(
+    conn: sqlite3.Connection,
+    missing_ids: list[int],
+) -> dict:
+    """Build a batch payload for the given missing comment IDs.
+
+    Pulls each comment's full context from the DB (body, diff_hunk,
+    final_code_snippet, area, thread_resolved, thread_resolved_by) and
+    returns a payload matching the shape of the original batch files.
+    Skips IDs that are not present in ``line_comment``.
+    """
+    tax_block = taxonomy_block()
+    ph = prompt_hash(SYSTEM_PROMPT, tax_block)
+    comments: list[dict] = []
+    placeholders = ",".join("?" * len(missing_ids)) if missing_ids else ""
+    if missing_ids:
+        sql = f"""
+            SELECT lc.id, lc.body, lc.diff_hunk, lc.area,
+                   lc.thread_resolved, lc.thread_resolved_by,
+                   cfc.final_code_snippet
+            FROM line_comment lc
+            LEFT JOIN comment_final_code cfc ON cfc.comment_id = lc.id
+            WHERE lc.id IN ({placeholders})
+            ORDER BY lc.id
+        """
+        rows = conn.execute(sql, missing_ids).fetchall()
+        for r in rows:
+            comments.append({
+                "id": r["id"],
+                "body": r["body"],
+                "diff_hunk": r["diff_hunk"] or "",
+                "final_code_snippet": r["final_code_snippet"] or "",
+                "area": r["area"],
+                "thread_resolved": r["thread_resolved"],
+                "thread_resolved_by": r["thread_resolved_by"],
+            })
+    return {
+        "batch_id": "retry",
+        "prompt_hash": ph,
+        "system_prompt": SYSTEM_PROMPT,
+        "taxonomy_block": tax_block,
+        "comments": comments,
+    }
+
+
+def prepare_missing_cmd(args: argparse.Namespace) -> int:
+    in_dir = Path(args.in_dir).resolve()
+    out_file = Path(args.out_file).resolve()
+    missing_path = in_dir / "missing.json"
+    if not missing_path.is_file():
+        print(f"error: {missing_path} not found", file=sys.stderr)
+        return 2
+    payload = json.loads(missing_path.read_text())
+    ids = payload.get("missing_comment_ids") or []
+    if not isinstance(ids, list) or not all(isinstance(i, int) for i in ids):
+        print(
+            f"error: {missing_path}: missing_comment_ids must be a list of ints",
+            file=sys.stderr,
+        )
+        return 2
+    conn = connect()
+    batch = prepare_missing_batch(conn, ids)
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    out_file.write_text(json.dumps(batch, indent=2))
+    print(
+        f"Prepared retry batch with {len(batch['comments'])} comments "
+        f"-> {out_file.name}"
+    )
+    if len(batch["comments"]) != len(ids):
+        skipped = sorted(set(ids) - {c["id"] for c in batch["comments"]})
+        print(
+            f"warning: {len(skipped)} requested IDs not found in line_comment: {skipped}",
+            file=sys.stderr,
+        )
     return 0
 
 
@@ -299,7 +475,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_ing = sub.add_parser("ingest", help="ingest result_*.json files into classification")
     p_ing.add_argument("--in-dir", required=True)
+    p_ing.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="exit 0 even if some comments are missing (default: exit 1)",
+    )
     p_ing.set_defaults(func=ingest_cmd)
+
+    p_miss = sub.add_parser(
+        "prepare-missing",
+        help="re-prepare a retry batch from missing.json",
+    )
+    p_miss.add_argument("--in-dir", required=True)
+    p_miss.add_argument("--out-file", required=True)
+    p_miss.set_defaults(func=prepare_missing_cmd)
 
     return parser
 
