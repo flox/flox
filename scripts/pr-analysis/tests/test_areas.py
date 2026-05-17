@@ -66,3 +66,9 @@ def test_hot_areas_are_all_producible_by_area_for_path():
         f"HOT_AREAS contains values not produced by _PREFIX_MAP: "
         f"{set(HOT_AREAS) - produced}"
     )
+
+
+def test_environment_interpreter_assets_route_to_activations():
+    assert area_for_path(
+        "assets/environment-interpreter/etc/profile.d/foo.sh"
+    ) == "activations"

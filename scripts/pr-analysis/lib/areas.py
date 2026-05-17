@@ -23,6 +23,7 @@ _PREFIX_MAP: list[tuple[str, str]] = [
     ("cli/flox/src/", "cli/other"),
     ("cli/", "cli/other"),
     ("nix-plugins/", "nix-plugins"),
+    ("assets/environment-interpreter/", "activations"),
     ("assets/activation-scripts/", "activation-scripts"),
 ]
 
