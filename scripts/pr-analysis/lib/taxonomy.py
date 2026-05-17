@@ -92,6 +92,13 @@ TAXONOMY: tuple[TaxonomyEntry, ...] = (
         ("ld-floxlib",),
     ),
     TaxonomyEntry(
+        "panic-discipline",
+        "Avoid panics in library code; prefer Result<E> or explicit error handling. "
+        "Includes guidance against unwrap()/expect() on user-facing paths and against "
+        "panic-on-startup patterns.",
+        ("Error handling architecture",),
+    ),
+    TaxonomyEntry(
         "other",
         "Anything that does not fit; open bucket for new rules.",
         (),
