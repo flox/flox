@@ -109,6 +109,13 @@ def test_prepare_writes_batches_and_manifest(temp_db, tmp_path):
         "area": "commands",
     }
     assert payload["comments"][0] == expected_first
+    # prompt_hash is a stable 64-char hex SHA256 of system_prompt + taxonomy.
+    assert isinstance(payload["prompt_hash"], str)
+    assert len(payload["prompt_hash"]) == 64
+    int(payload["prompt_hash"], 16)  # raises if not hex
+    # Both batches should pin to the same hash.
+    payload2 = json.loads((out_dir / "batch_2.json").read_text())
+    assert payload2["prompt_hash"] == payload["prompt_hash"]
 
 
 def test_ingest_handles_unknown_taxonomy(temp_db, tmp_path):
@@ -116,6 +123,14 @@ def test_ingest_handles_unknown_taxonomy(temp_db, tmp_path):
     _insert_comment(temp_db, cid=20, pr_number=2)
     temp_db.commit()
 
+    batch_path = tmp_path / "batch_1.json"
+    batch_path.write_text(json.dumps({
+        "batch_id": 1,
+        "prompt_hash": "a" * 64,
+        "system_prompt": "sp",
+        "taxonomy_block": "tb",
+        "comments": [],
+    }))
     result_path = tmp_path / "result_1.json"
     result_path.write_text(json.dumps([
         {
@@ -130,13 +145,14 @@ def test_ingest_handles_unknown_taxonomy(temp_db, tmp_path):
     rows, files = ingest_results(temp_db, tmp_path)
     assert (rows, files) == (1, 1)
     row = temp_db.execute(
-        "SELECT taxonomy, was_addressed, classifier_model FROM classification WHERE comment_id = ?",
+        "SELECT taxonomy, was_addressed, classifier_model, prompt_hash FROM classification WHERE comment_id = ?",
         (20,),
     ).fetchone()
     assert dict(row) == {
         "taxonomy": "other",
         "was_addressed": 1,
         "classifier_model": CLASSIFIER_MODEL,
+        "prompt_hash": "a" * 64,
     }
 
 
@@ -217,3 +233,64 @@ def test_normalize_result_defaults_missing_fields():
         "rule_statement": "",
         "confidence": 0.0,
     }
+
+
+def test_ingest_persists_prompt_hash_from_result_item(temp_db, tmp_path):
+    """If the subagent passes prompt_hash through on the result item, that
+    value wins over the batch file's value."""
+    _insert_pr(temp_db, 5)
+    _insert_comment(temp_db, cid=50, pr_number=5)
+    temp_db.commit()
+
+    batch_path = tmp_path / "batch_1.json"
+    batch_path.write_text(json.dumps({
+        "batch_id": 1,
+        "prompt_hash": "b" * 64,
+        "system_prompt": "sp",
+        "taxonomy_block": "tb",
+        "comments": [],
+    }))
+    result_path = tmp_path / "result_1.json"
+    result_path.write_text(json.dumps([
+        {
+            "comment_id": 50,
+            "taxonomy": "naming",
+            "was_addressed": True,
+            "rule_statement": "r",
+            "confidence": 0.9,
+            "prompt_hash": "c" * 64,
+        }
+    ]))
+
+    rows, _ = ingest_results(temp_db, tmp_path)
+    assert rows == 1
+    ph = temp_db.execute(
+        "SELECT prompt_hash FROM classification WHERE comment_id = ?", (50,),
+    ).fetchone()["prompt_hash"]
+    assert ph == "c" * 64
+
+
+def test_ingest_persists_null_prompt_hash_when_batch_missing(temp_db, tmp_path):
+    """If no batch file is present and the result lacks prompt_hash, the
+    column is written as NULL rather than blowing up."""
+    _insert_pr(temp_db, 6)
+    _insert_comment(temp_db, cid=60, pr_number=6)
+    temp_db.commit()
+
+    result_path = tmp_path / "result_1.json"
+    result_path.write_text(json.dumps([
+        {
+            "comment_id": 60,
+            "taxonomy": "naming",
+            "was_addressed": True,
+            "rule_statement": "r",
+            "confidence": 0.9,
+        }
+    ]))
+
+    rows, _ = ingest_results(temp_db, tmp_path)
+    assert rows == 1
+    ph = temp_db.execute(
+        "SELECT prompt_hash FROM classification WHERE comment_id = ?", (60,),
+    ).fetchone()["prompt_hash"]
+    assert ph is None

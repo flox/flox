@@ -24,7 +24,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from lib.classify_helpers import SYSTEM_PROMPT, parse, taxonomy_block
+from lib.classify_helpers import SYSTEM_PROMPT, parse, prompt_hash, taxonomy_block
 from lib.db import connect, transaction
 from lib.taxonomy import TAXONOMY_IDS
 
@@ -74,12 +74,14 @@ def write_batches(
 ) -> list[tuple[Path, int]]:
     out_dir.mkdir(parents=True, exist_ok=True)
     tax_block = taxonomy_block()
+    ph = prompt_hash(SYSTEM_PROMPT, tax_block)
     batches = chunked(comments, batch_size)
     written: list[tuple[Path, int]] = []
     for idx, batch in enumerate(batches, start=1):
         path = out_dir / f"batch_{idx}.json"
         payload = {
             "batch_id": idx,
+            "prompt_hash": ph,
             "system_prompt": SYSTEM_PROMPT,
             "taxonomy_block": tax_block,
             "comments": batch,
@@ -97,7 +99,8 @@ def prepare_cmd(args: argparse.Namespace) -> int:
         return 0
     out_dir = Path(args.out_dir).resolve()
     written = write_batches(comments, batch_size=args.batch_size, out_dir=out_dir)
-    print(f"Prepared {len(written)} batches in {out_dir}/")
+    ph = prompt_hash(SYSTEM_PROMPT, taxonomy_block())
+    print(f"Prepared {len(written)} batches in {out_dir}/ (prompt_hash={ph})")
     for path, count in written:
         print(f"{path.name}: {count} comments")
     print("Controller next steps:")
@@ -158,6 +161,26 @@ def load_result_file(path: Path) -> list[dict]:
     return data
 
 
+def _batch_path_for_result(result_path: Path) -> Path:
+    """Sibling batch file for a result_<N>.json — same dir, batch_<N>.json."""
+    name = result_path.name
+    # result_<N>.json -> batch_<N>.json
+    suffix = name[len("result_"):]
+    return result_path.parent / f"batch_{suffix}"
+
+
+def _read_prompt_hash(batch_path: Path) -> str | None:
+    """Return the prompt_hash field from the batch file, or None if unavailable."""
+    if not batch_path.is_file():
+        return None
+    try:
+        payload = json.loads(batch_path.read_text())
+    except (ValueError, json.JSONDecodeError):
+        return None
+    ph = payload.get("prompt_hash")
+    return ph if isinstance(ph, str) else None
+
+
 def ingest_results(
     conn: sqlite3.Connection,
     in_dir: Path,
@@ -184,6 +207,7 @@ def ingest_results(
         except (ValueError, json.JSONDecodeError) as exc:
             print(f"warning: skipping {path.name}: {exc}", file=sys.stderr)
             continue
+        batch_ph = _read_prompt_hash(_batch_path_for_result(path))
         for raw_item in items:
             if not isinstance(raw_item, dict):
                 print(f"warning: {path.name}: non-object entry skipped", file=sys.stderr)
@@ -202,12 +226,17 @@ def ingest_results(
                 )
                 continue
             normalized = normalize_result(raw_item)
+            # Prefer the prompt_hash on the result item (subagent may pass it
+            # through) but fall back to the batch file as the source of truth.
+            item_ph = raw_item.get("prompt_hash")
+            ph = item_ph if isinstance(item_ph, str) else batch_ph
             with transaction(conn):
                 conn.execute(
                     """INSERT OR REPLACE INTO classification
                        (comment_id, taxonomy, was_addressed, rule_statement,
-                        confidence, classifier_model, classified_at, raw_response)
-                       VALUES (?,?,?,?,?,?,?,?)""",
+                        confidence, classifier_model, classified_at, raw_response,
+                        prompt_hash)
+                       VALUES (?,?,?,?,?,?,?,?,?)""",
                     (
                         comment_id,
                         normalized["taxonomy"],
@@ -217,6 +246,7 @@ def ingest_results(
                         CLASSIFIER_MODEL,
                         now_iso,
                         json.dumps(raw_item),
+                        ph,
                     ),
                 )
             rows_inserted += 1

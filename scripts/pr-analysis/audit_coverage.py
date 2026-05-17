@@ -96,6 +96,21 @@ def main() -> int:
             f"{len(leaked)} cli/* comments fell into area='other' (lib/areas.py gap): {sample}"
         )
 
+    # Invariant 5 (informational): review_summary and pr_comment row counts.
+    # Real parity checks vs. gh would need additional API queries; defer to
+    # a future task. This just confirms the tables are populated.
+    if not args.ingest_only:
+        has_review_summary = conn.execute(
+            "SELECT COUNT(*) AS c FROM review_summary"
+        ).fetchone()["c"]
+        has_pr_comment = conn.execute(
+            "SELECT COUNT(*) AS c FROM pr_comment"
+        ).fetchone()["c"]
+        print(
+            f"info: review_summary rows={has_review_summary}, "
+            f"pr_comment rows={has_pr_comment}"
+        )
+
     print("---")
     if failures:
         print("FAIL")

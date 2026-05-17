@@ -5,9 +5,17 @@ subagent-orchestrated classifier without requiring the SDK.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 
 from lib.taxonomy import TAXONOMY, TAXONOMY_IDS
+
+
+def prompt_hash(system_prompt: str, taxonomy_block_text: str) -> str:
+    """Stable SHA256 of the prompt configuration. Lets us tell whether two
+    classification runs used the same prompt + taxonomy."""
+    payload = (system_prompt + "\n---\n" + taxonomy_block_text).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 SYSTEM_PROMPT = (
     "You analyze Rust PR review comments for the flox/flox repository. "
