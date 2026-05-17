@@ -1,6 +1,6 @@
 # Task 9 user-review document
 
-**Source:** 216 PRs, 944 classifications, 461 findings after dedup.
+**Source:** 216 PRs, 944 classifications, 488 findings after dedup.
 **Reviewer's job:** verify each rule captures a real Rust convention; flag false positives.
 
 ## How to read
@@ -18,474 +18,154 @@ Long diff hunks and final code snippets are truncated to ~800 chars with a `[...
 
 ## Cross-cutting findings (top of the skill)
 
-_2 cross-cutting findings, ordered by confidence descending._
-
-### F#841: Use complete sentences in errors; suggest next steps; follow brand and emoji conventions.
-- **Taxonomy:** `user-facing-messages`   **Area:** `providers`   **Scope:** `cross-cutting`
-- **Reviewer-tier breakdown:** T1=2, T2=0
-- **Evidence:** 7 comments across PRs #3785, #3813, #3864
-- **Confidence:** 0.90   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 5
-
-#### Evidence 1: PR #3785 @ `cli/flox-rust-sdk/src/providers/buildenv.rs:412` — ysndr (Tier 1)
-- **Thread resolved:** N   **was_addressed:** unknown   **classification confidence:** 0.90
-
-**Source comment:**
-> How I read store locations initially (turns out to be wrong, but as a clarification):
-> 
-> Store locations are the … store locations provided by the catalog. Thus they can be None if the catalog for some reason returned none (e.g. user access was revoked etc).
-> That would mean, here we check if we have locations and if not skip realizing custom packages entirely resulting in an incomplete environment but no error).
-> 
-> I later noticed that store_locations is None iff we determined that all paths are alr [...]
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -292,221 +332,318 @@ where
-                     ))
-                 })?;
- 
--            // ManifestPackageDescriptor
--
-             match package {
--                LockedPackage::Catalog(locked) => self.realise_nixpkgs(
--                    client,
--                    &manifest_package,
--                    locked,
--                    pre_checked_store_paths,
--                )?,
--                LockedPackage::Flake(locked) => {
--                    self.realise_flakes(locked, pre_checked_store_paths)?
--                },
--                LockedPackage::StorePath(locked) => {
--                    self.realise_store_path(locked, pre_checked_store_paths)?
-+                LockedPackage::Catalog(pkg) => {
-+                    if manifest_package.is_from_custom_catalog() {
-+ [...]
-```
-
-**Merged final code:**
-```
-392:            for pkg in base_catalog_pkgs.iter() {
-393:                // Check if we already have the store paths for this package.
-394:                let all_valid_in_pre_checked = pkg
-395:                    .outputs
-396:                    .values()
-397:                    .all(|store_path| pre_checked_store_paths.valid(store_path).unwrap_or(false));
-398:                if all_valid_in_pre_checked {
-399:                    continue;
-400:                }
-401:                let handle = s.spawn(|| {
-402:                    Self::realise_single_base_catalog_pkg(
-403:                        pkg,
-404:                        gc_root_base_path,
-405:                        span.clone(),
-406:                        &semaphore,
-407:                    )
-408:                });
-409: [...]
-```
-
-#### Evidence 2: PR #3785 @ `cli/flox-rust-sdk/src/providers/buildenv.rs:686` — ysndr (Tier 1)
-- **Thread resolved:** N   **was_addressed:** unknown   **classification confidence:** 0.70
-
-**Source comment:**
-> I think what I mean is if we want to throw cases we don’t really care to handle downstream into a “custom” case we could also throw mutex errors (that we don’t even expect to see) into the same box, both figuratively and literally as `ErrorEnum::Custom(Box<dyn Error>)` for which there are universal conversions.
-> 
-> Here I was noting that we seem to express a stronger need to model mutex errors explicitly than these operational errors, while I’d argue e.g. thread panics could also be surfaced as a [...]
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -515,54 +652,34 @@ where
-             return Ok(());
-         }
- 
--        // TODO: less flimsy handling of building published packages
--        // 1. custom catalogs are distinguished from nixpkgs catalog
--        //    only by the prefix of the url field.
--        // 2. custom packages cannot be referred to by nix installable
--        // 3. from this point onward the whole buildprocess diverges between both types of packages
-         let installable = {
--            let mut locked_url = locked.locked_url.to_string();
--
--            if !manifest_package.is_from_custom_catalog() {
--                if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
--                    locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
-- [...]
-```
-
-**Merged final code:**
-```
-666:        // If all store paths are valid after substitution, we can return early.
-667:        if all_valid_after_build_or_substitution {
-668:            return Ok(());
-669:        }
-670:
-671:        // If we get here it means we need to build a package from source.
-672:
-673:        let installable = {
-674:            // We swap out the locked URL of the package (which points at our nixpkgs
-675:            // fork) for a flake reference that uses our custom `flox-nixpkgs` URL
-676:            // scheme. This disables certain built-in evaluation checks (allowUnfree, etc).
-677:            // That's important because we move those checks into manifest options, and
-678:            // don't want conflicts or duplicates.
-679:            let mut locked_url = locked_pkg.locked_url.to_string();
-68 [...]
-```
-
-#### Evidence 3: PR #3813 @ `cli/flox-rust-sdk/src/models/environment/floxmeta_branch.rs:83` — mkenigs (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.80
-
-**Source comment:**
-> suggestion nonblocking: a doc comment explaining what a FloxmetaBranch represents would be nice
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -0,0 +1,1447 @@
-+use std::fs;
-+use std::path::Path;
-+
-+use fslock::LockFile;
-+use serde::{Deserialize, Serialize};
-+use thiserror::Error;
-+use tracing::debug;
-+
-+use super::{ManagedPointer, path_hash};
-+use crate::data::CanonicalPath;
-+use crate::flox::{Flox, RemoteEnvironmentRef};
-+use crate::models::environment::generations::Generations;
-+use crate::models::floxmeta::{BRANCH_NAME_PATH_SEPARATOR, FloxMeta, FloxMetaError, floxmeta_dir};
-+use crate::providers::git::{
-+    GitCommandBranchHashError,
-+    GitCommandError,
-+    GitProvider,
-+    GitRemoteCommandError,
-+};
-+
-+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-+pub struct GenerationLock {
-+    pub version: flox_core::Version<1>,
-+    /// Revision of the environment on FloxHub.
-+    /// This could be stale if the envir [...]
-```
-
-**Merged final code:**
-```
-63:///
-64:/// That includes creating new branches upon first use,
-65:/// locking of local state and restoring from branches from existing locks.
-66:/// Besides that it provides access to [Generations],
-67:/// i.e. the data stored on a branch which in turn
-68:/// can be interpreted as [CoreEnvironment]s allowing environment management.
-69:///
-70:/// [FloxmetaBranch] is meant to separate FloxMeta/FloxHub concerns
-71:/// from the management of environment data itself
-72:/// (i.e. modification and locking of manifests, building of environments
-73:/// and managing environment links).
-74:/// Currently, the latter responsibilities are mixed into
-75:/// the higher level environment abstractions themselves,
-76:/// causing duplication and increasing complexity.
-77:/// That is because we maintain mul [...]
-```
-
-### F#752: Verify logic moved to other functions to ensure nothing is lost.
-- **Taxonomy:** `semantic-correctness`   **Area:** `other`   **Scope:** `cross-cutting`
-- **Reviewer-tier breakdown:** T1=1, T2=0
-- **Evidence:** 1 comments across PRs #3762
-- **Confidence:** 0.57   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 2
-- **Acceptance rate:** 0.00
-
-#### Evidence 1: PR #3762 @ `mkContainer/mkContainer.nix:?` — mkenigs (Tier 1)
-- **Thread resolved:** N   **was_addressed:** false   **classification confidence:** 0.65
-
-**Source comment:**
-> ```suggestion
-> ```
-> This is handled in `flox-activations activate` now, right?
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -152,27 +186,15 @@ let
-         #     -> launches crippled interactive shell with no controlling
-         #        terminal .. kinda useless
-         Entrypoint = [
--          "${environment}/activate"
--          "--env"
--          environment
--          "--mode"
--          activationMode
--          "--env-cache"
--          "/tmp"
--          "--env-description"
--          containerName
--          "--shell"
--          "${containerPkgs.bashInteractive}/bin/bash"
-+          "${environment}/libexec/flox-activations"
-+          "activate"
-+          "--activate-data"
-+          "${activateCtxStorePath}"
-         ];
- 
-         Env = mapAttrsToList (name: value: "${name}=${value}") {
--          "FLOX_PROMPT_ENVIRONMENTS" = "floxenv";
--          "FLOX_PROMPT_COLOR_1" = "99";
--          "FLOX_PR [...]
-```
-
-**Merged final code:**
-```
-177:      config = containerConfig // {
-178:        # Use activate script as the [one] entrypoint capable of
-179:        # detecting interactive vs. command activation modes.
-180:        # Usage:
-181:        #   podman run -it
-182:        #     -> launches interactive shell with controlling terminal
-183:        #   podman run -i <cmd>
-184:        #     -> invokes interactive command
-185:        #   podman run -i [SIC]
-186:        #     -> launches crippled interactive shell with no controlling
-187:        #        terminal .. kinda useless
-188:        Entrypoint = [
-189:          "${environment}/libexec/flox-activations"
-190:          "activate"
-191:          "--activate-data"
-192:          "${activateCtxStorePath}"
-193:        ];
-194:      };
-195:
-196:      passthru = {
-197:        # This [...]
-```
+_0 cross-cutting findings, ordered by confidence descending._
 
 ## Top area-specific findings — 50 highest confidence
 
-### F#632: Simplify test assertions by eliminating nested run statements for cleaner verification.
-- **Taxonomy:** `testing`   **Area:** `cli/other`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=2, T2=1
-- **Evidence:** 6 comments across PRs #3645, #4231
-- **Confidence:** 0.87   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
+### F#1366: Prefer returning borrowed references (`&str`, `Option<&str>`) over owned `String`/`Option<String>` when the data is stored in `self`; callers convert to owned explicitly when needed.
+- **Taxonomy:** `type-safety`   **Area:** `cli/other`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=1
+- **Evidence:** 4 comments across PRs #4172
+- **Confidence:** 0.83   **In AGENTS.md?:** Y (Manifest usage (`flox-manifest` crate))   **Cross-area count:** 1
 - **Acceptance rate:** 1.00
 
-#### Evidence 1: PR #3645 @ `cli/tests/generations.bats:?` — dcarley (Tier 1)
-- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.70
+#### Evidence 1: PR #4172 @ `cli/flox-catalog/src/auth/credential.rs:?` — ysndr (Tier 1)
+- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.85
 
 **Source comment:**
-> True! Would you prefer changing it for the following? If so, should we still move the helpers?
-> ```sh
-> run cat generation
-> assert_output "generation 2"
-> ```
+> suggestion: consider returning Option<&str>
 
 **Diff hunk (what reviewer saw):**
 ```
-@@ -143,6 +144,45 @@ hello
- EOF
+@@ -0,0 +1,85 @@
++//! Authentication credential types
++
++use std::sync::Arc;
++
++use url::Url;
++
++use super::AuthMethod;
++use crate::token::FloxhubToken;
++
++/// A function that generates a SPNEGO token for a given URL.
++pub type TokenGenerator = Arc<dyn Fn(&Url) -> Result<String, String> + Send + Sync>;
++
++/// Represents available authentication material.
++/// Transport adapters decide how to apply it.
++#[derive(Clone)]
++pub enum Credential {
++    /// A bearer token (JWT from Auth0)
++    Bearer(FloxhubToken),
++    /// Kerberos — carries the resolved principal and a function to generate
++    /// SPNEGO tokens for a target URL. Git transport ignores the token generator
++    /// (kerberized git uses the ccache directly).
++    Kerberos {
++        principal: String,
++        generate_token: Toke [...]
+```
+
+**Merged final code:**
+```
+(snippet not available — file deleted, renamed, or out-of-range at merge)
+```
+
+#### Evidence 2: PR #4172 @ `cli/flox-catalog/src/auth/credential.rs:?` — gilmishal (Tier 2)
+- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.85
+
+**Source comment:**
+> Addressed: `handle()` now returns `Option<&str>`.
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -0,0 +1,85 @@
++//! Authentication credential types
++
++use std::sync::Arc;
++
++use url::Url;
++
++use super::AuthMethod;
++use crate::token::FloxhubToken;
++
++/// A function that generates a SPNEGO token for a given URL.
++pub type TokenGenerator = Arc<dyn Fn(&Url) -> Result<String, String> + Send + Sync>;
++
++/// Represents available authentication material.
++/// Transport adapters decide how to apply it.
++#[derive(Clone)]
++pub enum Credential {
++    /// A bearer token (JWT from Auth0)
++    Bearer(FloxhubToken),
++    /// Kerberos — carries the resolved principal and a function to generate
++    /// SPNEGO tokens for a target URL. Git transport ignores the token generator
++    /// (kerberized git uses the ccache directly).
++    Kerberos {
++        principal: String,
++        generate_token: Toke [...]
+```
+
+**Merged final code:**
+```
+(snippet not available — file deleted, renamed, or out-of-range at merge)
+```
+
+#### Evidence 3: PR #4172 @ `cli/flox-rust-sdk/src/flox.rs:?` — ysndr (Tier 1)
+- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.82
+
+**Source comment:**
+> **[NOTE]** question: does this need to return an owned `String`? It would be preferable to return a reference if possible.
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -84,40 +71,23 @@ pub struct Flox {
  }
  
-+# 'flox services start' performs an "ephemeral" activation, which is more
-+# cumbersome than 'flox activate -s' and should respect the generation of the
-+# current activation.
-+@test "activate --generation: flox services start respects generation" {
-+  # Generation 1
-+  "$FLOX_BIN" init --name "test"
-+  "$FLOX_BIN" push --owner owner
-+
-+  # Generation 2
-+  "$FLOX_BIN" edit -f - <<'EOF'
-+    version = 1
-+
-+    [services.write_generation]
-+    command = "echo 'generation 2' > generation"
-+EOF
-+
-+  # Generation 3
-+  "$FLOX_BIN" edit -f - <<'EOF'
-+    version = 1
-+
-+    [services.write_generation]
-+    command = "echo 'generation 3' > generation"
-+EOF
-+
-+  SCRIPT="$(cat <<'EOF'
-+    "$FLOX_BIN" services start
-+    "${TESTS_DIR}"/services/wait_for_service_s [...]
+ impl Flox {
+-    /// Validate that auth is available and return the user's handle.
++    /// Return the user's handle if a credential is available.
+     pub fn get_handle(&self) -> Option<String> {
+-        match self.auth_strategy.get_handle() {
+-            Ok(handle) => Some(handle),
+-            Err(AuthError::Expired { handle, message: _ }) => Some(handle),
+-            Err(_) => None,
+-        }
++        self.auth_context.handle().map(str::to_string)
 ```
 
 **Merged final code:**
 ```
-159:    [services.write_generation]
-160:    command = "echo 'generation 2' > generation"
-161:EOF
-162:
-163:  # Generation 3
-164:  "$FLOX_BIN" edit -f - <<'EOF'
-165:    version = 1
-166:
-167:    [services.write_generation]
-168:    command = "echo 'generation 3' > generation"
-169:EOF
-170:
-171:  SCRIPT="$(cat <<'EOF'
-172:    "$FLOX_BIN" services start
-173:    "${TESTS_DIR}"/services/wait_for_service_status.sh write_generation:Completed
-174:EOF
-175:  )"
-176:
-177:  run "$FLOX_BIN" activate --generation 2 -- bash -c "$SCRIPT"
-178:  assert_success
-179:  run cat generation
-180:  assert_success
-181:  assert_output "generation 2"
-182:
-183:  run "$FLOX_BIN" activate --generation 3 -- bash -c "$SCRIPT"
-184:  assert_success
-185:  run cat generation
-186:  assert_success
-187:  assert_output "generation 3" [...]
-```
-
-#### Evidence 2: PR #4231 @ `cli/tests/hook.bats:?` — djsauble (Tier 2)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.85
-
-**Source comment:**
-> Simplified to a single `assert_output --partial "hook-env --shell bash"` per your suggestion.
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -0,0 +1,159 @@
-+#! /usr/bin/env bats
-+# -*- mode: bats; -*-
-+# ============================================================================ #
-+#
-+# Test the `flox hook-env` command and hook code injection into
-+# `flox activate` output.
-+#
-+# ============================================================================ #
-+
-+load test_support.bash
-+
-+# bats file_tags=hook
-+
-+# ---------------------------------------------------------------------------- #
-+
-+project_setup() {
-+  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/project-${BATS_TEST_NUMBER?}"
-+  rm -rf "$PROJECT_DIR"
-+  mkdir -p "$PROJECT_DIR"
-+  pushd "$PROJECT_DIR" >/dev/null || return
-+  "$FLOX_BIN" init -d "$PROJECT_DIR"
-+}
-+
-+project_teardown() {
-+  popd >/dev/null || return
-+  rm -rf "${PROJECT_DIR?}"
-+  unset PROJECT_DIR
-+}
-+ [...]
-```
-
-**Merged final code:**
-```
-55:
-56:# ---------------------------------------------------------------------------- #
-57:# Hook fires: verify _FLOX_HOOK_FIRED is set per shell
-58:# ---------------------------------------------------------------------------- #
+56:
+57:    /// The current authentication credential.
+58:    pub auth_context: AuthContext,
 59:
-60:# Each test has the shell call `flox activate` directly (not pre-captured in
-61:# a bats variable) to avoid quoting issues across shells.
+60:    pub catalog_client: catalog::Client,
+61:    pub installable_locker: flake_installable_locker::InstallableLockerImpl,
 62:
-63:# bats test_tags=hook:fires:bash
-64:@test "bash: hook fires and sets _FLOX_HOOK_FIRED to cwd" {
-65:  project_setup
-66:  export FLOX_FEATURES_AUTO_ACTIVATE=true
+63:    /// Feature flags
+64:    pub features: Features,
+65:
+66:    pub verbosity: i32,
 67:
-68:  run bash -c "
-69:    export FLOX_FEATURES_AUTO_ACTIVATE=true
-70:    export FLOX_SHELL=\$(which bash)
-71:    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
-72:    _flox_hook
-73:    printenv _FLOX_HOOK_FIRED
-74:  "
-75:  assert_success
-76:  assert_out [...]
+68:    /// Device UUID for telemetry correlation.
+69:    /// None when metrics are disabled.
+70:    pub metrics_device_uuid: Option<Uuid>,
+71:}
+72:
+73:impl Flox {
+74:    /// Set a new token and rebuild the credential to reflect it.
+75:    ///
+76:    /// Note: when using Kerberos authentication, the token is stored but has
+77:    /// no effect on the credential — Kerberos does not use FloxHub tokens.
+78:    pub fn set_auth_context(
+79:        &mut self,
+80:        auth_context: Aut [...]
 ```
 
-#### Evidence 3: PR #4231 @ `cli/tests/hook.bats:?` — djsauble (Tier 2)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.85
-
-**Source comment:**
-> Simplified all per-shell tests to a single `assert_output --partial "hook-env --shell <shell>"` check.
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -0,0 +1,159 @@
-+#! /usr/bin/env bats
-+# -*- mode: bats; -*-
-+# ============================================================================ #
-+#
-+# Test the `flox hook-env` command and hook code injection into
-+# `flox activate` output.
-+#
-+# ============================================================================ #
-+
-+load test_support.bash
-+
-+# bats file_tags=hook
-+
-+# ---------------------------------------------------------------------------- #
-+
-+project_setup() {
-+  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/project-${BATS_TEST_NUMBER?}"
-+  rm -rf "$PROJECT_DIR"
-+  mkdir -p "$PROJECT_DIR"
-+  pushd "$PROJECT_DIR" >/dev/null || return
-+  "$FLOX_BIN" init -d "$PROJECT_DIR"
-+}
-+
-+project_teardown() {
-+  popd >/dev/null || return
-+  rm -rf "${PROJECT_DIR?}"
-+  unset PROJECT_DIR
-+}
-+ [...]
-```
-
-**Merged final code:**
-```
-91:  assert_success
-92:  assert_output --partial "$PWD"
-93:}
-94:
-95:# bats test_tags=hook:fires:fish
-96:@test "fish: hook fires and sets _FLOX_HOOK_FIRED to cwd" {
-97:  project_setup
-98:  export FLOX_FEATURES_AUTO_ACTIVATE=true
-99:
-100:  run fish -c "
-101:    set -gx FLOX_FEATURES_AUTO_ACTIVATE true
-102:    eval ($FLOX_BIN activate -d $PROJECT_DIR)
-103:    _flox_hook
-104:    printenv _FLOX_HOOK_FIRED
-105:  "
-106:  assert_success
-107:  assert_output --partial "$PWD"
-108:}
-109:
-110:# bats test_tags=hook:fires:tcsh
-111:@test "tcsh: hook fires and sets _FLOX_HOOK_FIRED to cwd" {
-112:  project_setup
-113:  export FLOX_FEATURES_AUTO_ACTIVATE=true
-114:
-115:  run tcsh -c "
-116:    setenv FLOX_FEATURES_AUTO_ACTIVATE true
-117:    eval \`$FLOX_BIN activate -d $PROJECT_DIR\`
-118:    precmd
-119:    prin [...]
-```
-
-### F#882: Use domain types like Url instead of &str for type safety at function boundaries.
+### F#1365: Change URL-typed function parameters from `&str` to `&Url` throughout the call chain when callers always have a URL; this prevents passing non-URL strings at compile time.
 - **Taxonomy:** `type-safety`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=2
-- **Evidence:** 4 comments across PRs #4156, #4172
-- **Confidence:** 0.83   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
+- **Evidence:** 3 comments across PRs #4156, #4172
+- **Confidence:** 0.79   **In AGENTS.md?:** Y (Manifest usage (`flox-manifest` crate))   **Cross-area count:** 1
 - **Acceptance rate:** 1.00
 
 #### Evidence 1: PR #4156 @ `cli/flox-catalog/src/client.rs:?` — ysndr (Tier 1)
@@ -535,7 +215,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 ```
 
 #### Evidence 2: PR #4156 @ `cli/flox-catalog/src/client.rs:?` — billlevine (Tier 2)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.92
+- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.85
 
 **Source comment:**
 > **Applied via implementation-worker:**
@@ -588,39 +268,15 @@ _2 cross-cutting findings, ordered by confidence descending._
 483:            .map_ap [...]
 ```
 
-#### Evidence 3: PR #4172 @ `cli/flox-catalog/src/auth/credential.rs:?` — gilmishal (Tier 2)
-- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.70
+#### Evidence 3: PR #4172 @ `cli/flox-catalog/src/auth/credential_factory/kerberos.rs:?` — gilmishal (Tier 2)
+- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.85
 
 **Source comment:**
-> Addressed: `handle()` now returns `Option<&str>`.
+> Addressed: `generate_spnego_token` now takes `&Url` directly.
 
 **Diff hunk (what reviewer saw):**
 ```
-@@ -0,0 +1,85 @@
-+//! Authentication credential types
-+
-+use std::sync::Arc;
-+
-+use url::Url;
-+
-+use super::AuthMethod;
-+use crate::token::FloxhubToken;
-+
-+/// A function that generates a SPNEGO token for a given URL.
-+pub type TokenGenerator = Arc<dyn Fn(&Url) -> Result<String, String> + Send + Sync>;
-+
-+/// Represents available authentication material.
-+/// Transport adapters decide how to apply it.
-+#[derive(Clone)]
-+pub enum Credential {
-+    /// A bearer token (JWT from Auth0)
-+    Bearer(FloxhubToken),
-+    /// Kerberos — carries the resolved principal and a function to generate
-+    /// SPNEGO tokens for a target URL. Git transport ignores the token generator
-+    /// (kerberized git uses the ccache directly).
-+    Kerberos {
-+        principal: String,
-+        generate_token: Toke [...]
+(empty)
 ```
 
 **Merged final code:**
@@ -628,24 +284,217 @@ _2 cross-cutting findings, ordered by confidence descending._
 (snippet not available — file deleted, renamed, or out-of-range at merge)
 ```
 
-### F#560: Use pkgs/default.nix for package storage to match nixpkgs conventions and existing examples.
-- **Taxonomy:** `naming`   **Area:** `commands`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=1, T2=0
-- **Evidence:** 3 comments across PRs #3599
+### F#1469: When removing deprecated mock dispatch (e.g., `Response::CheckBuild`), also remove all unit tests that depend on it; replace the trait method with `unimplemented!()` to satisfy the trait contract.
+- **Taxonomy:** `deprecated-patterns`   **Area:** `providers`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=1
+- **Evidence:** 3 comments across PRs #4156
 - **Confidence:** 0.79   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
 - **Acceptance rate:** 1.00
 
-#### Evidence 1: PR #3599 @ `cli/flox/src/commands/build.rs:?` — ysndr (Tier 1)
-- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.80
+#### Evidence 1: PR #4156 @ `cli/flox-rust-sdk/src/providers/catalog.rs:?` — ysndr (Tier 1)
+- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.80
 
 **Source comment:**
-> nit, this argument does not take an expression, but an attrpath.
-> 
-> To more nix aligned people this split between nixpkgs ref and attrpath will still be a bit weird, I'd expect to be able to provide an installable, with maybe a fallback if the installable has no flakeref.
+> fwiw, we have been deprecating these mocks and dont really add new functionality to it. I'm relatively certain the we indeed AintGonnaNeedIt.
 
 **Diff hunk (what reviewer saw):**
 ```
-@@ -91,6 +91,26 @@ enum SubcommandOrBuildTargets {
+@@ -514,6 +551,32 @@ impl ClientTrait for MockClient {
+ 
+         Ok(resp)
+     }
++
++    async fn check_build(
++        &self,
++        _catalog_name: impl AsRef<str> + Send + Sync,
++        _package_name: impl AsRef<str> + Send + Sync,
++        _source_url: &str,
++        _source_rev: &str,
++        _nixpkgs_rev: &str,
++        _system: &str,
++    ) -> Result<CheckBuildResponse, CatalogClientError> {
++        let mock_resp = self
++            .mock_responses
++            .lock()
++            .expect("couldn't acquire mock lock")
++            .pop_front();
++        match mock_resp {
++            Some(Response::CheckBuild(resp)) => Ok(resp),
++            Some(Response::Error(err)) => Err(CatalogClientError::APIError(
++                flox_catalog::ApiError::ErrorResponse(
++ [...]
+```
+
+**Merged final code:**
+```
+559:        Ok(resp)
+560:    }
+561:
+562:    async fn get_catalog_locked_sources(
+563:        &self,
+564:        _catalog_name: impl AsRef<str> + Send + Sync,
+565:    ) -> Result<ResultsPage<LockedSourceItem>, CatalogClientError> {
+566:        unimplemented!("get_catalog_locked_sources not implemented for MockClient")
+567:    }
+568:
+569:    async fn check_build_already_recorded(
+570:        &self,
+571:        _catalog_name: impl AsRef<str> + Send + Sync,
+572:        _package_name: impl AsRef<str> + Send + Sync,
+573:        _source_url: &Url,
+574:        _source_rev: &str,
+575:        _nixpkgs_rev: &str,
+576:        _system: PackageSystem,
+577:    ) -> Result<CheckBuildResponse, CatalogClientError> {
+578:        unimplemented!("check_build_already_recorded is not supported in MockClient")
+57 [...]
+```
+
+#### Evidence 2: PR #4156 @ `cli/flox-rust-sdk/src/providers/catalog.rs:?` — billlevine (Tier 2)
+- **Thread resolved:** Y   **was_addressed:** unknown   **classification confidence:** 0.60
+
+**Source comment:**
+> Good observation -- these mocks are on the way out. Removing this one is a reasonable option. Leaving this open for the author to follow up on whether to remove it in this PR or a subsequent cleanup pass.
+> 
+> ---
+> *Via Forge (pr-discussion-processor) • 7d9d7128*
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -514,6 +551,32 @@ impl ClientTrait for MockClient {
+ 
+         Ok(resp)
+     }
++
++    async fn check_build(
++        &self,
++        _catalog_name: impl AsRef<str> + Send + Sync,
++        _package_name: impl AsRef<str> + Send + Sync,
++        _source_url: &str,
++        _source_rev: &str,
++        _nixpkgs_rev: &str,
++        _system: &str,
++    ) -> Result<CheckBuildResponse, CatalogClientError> {
++        let mock_resp = self
++            .mock_responses
++            .lock()
++            .expect("couldn't acquire mock lock")
++            .pop_front();
++        match mock_resp {
++            Some(Response::CheckBuild(resp)) => Ok(resp),
++            Some(Response::Error(err)) => Err(CatalogClientError::APIError(
++                flox_catalog::ApiError::ErrorResponse(
++ [...]
+```
+
+**Merged final code:**
+```
+559:        Ok(resp)
+560:    }
+561:
+562:    async fn get_catalog_locked_sources(
+563:        &self,
+564:        _catalog_name: impl AsRef<str> + Send + Sync,
+565:    ) -> Result<ResultsPage<LockedSourceItem>, CatalogClientError> {
+566:        unimplemented!("get_catalog_locked_sources not implemented for MockClient")
+567:    }
+568:
+569:    async fn check_build_already_recorded(
+570:        &self,
+571:        _catalog_name: impl AsRef<str> + Send + Sync,
+572:        _package_name: impl AsRef<str> + Send + Sync,
+573:        _source_url: &Url,
+574:        _source_rev: &str,
+575:        _nixpkgs_rev: &str,
+576:        _system: PackageSystem,
+577:    ) -> Result<CheckBuildResponse, CatalogClientError> {
+578:        unimplemented!("check_build_already_recorded is not supported in MockClient")
+57 [...]
+```
+
+#### Evidence 3: PR #4156 @ `cli/flox-rust-sdk/src/providers/catalog.rs:?` — billlevine (Tier 2)
+- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.85
+
+**Source comment:**
+> **Applied via implementation-worker:**
+> 
+> Removed the MockClient `check_build_already_recorded` dispatch (Response::CheckBuild variant) and the three unit tests that depended on it (test_publish_skips_build_on_duplicate, test_publish_proceeds_on_check_failure, test_publish_normal_flow_on_new). The trait method now has an `unimplemented!()` stub. Net reduction of ~153 lines; remaining 5 publish tests pass.
+> 
+> - Action: Mock variant and associated tests removed per YAGNI
+> - Commit: e870e5770
+> 
+> ---
+> *Via [...]
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -514,6 +551,32 @@ impl ClientTrait for MockClient {
+ 
+         Ok(resp)
+     }
++
++    async fn check_build(
++        &self,
++        _catalog_name: impl AsRef<str> + Send + Sync,
++        _package_name: impl AsRef<str> + Send + Sync,
++        _source_url: &str,
++        _source_rev: &str,
++        _nixpkgs_rev: &str,
++        _system: &str,
++    ) -> Result<CheckBuildResponse, CatalogClientError> {
++        let mock_resp = self
++            .mock_responses
++            .lock()
++            .expect("couldn't acquire mock lock")
++            .pop_front();
++        match mock_resp {
++            Some(Response::CheckBuild(resp)) => Ok(resp),
++            Some(Response::Error(err)) => Err(CatalogClientError::APIError(
++                flox_catalog::ApiError::ErrorResponse(
++ [...]
+```
+
+**Merged final code:**
+```
+559:        Ok(resp)
+560:    }
+561:
+562:    async fn get_catalog_locked_sources(
+563:        &self,
+564:        _catalog_name: impl AsRef<str> + Send + Sync,
+565:    ) -> Result<ResultsPage<LockedSourceItem>, CatalogClientError> {
+566:        unimplemented!("get_catalog_locked_sources not implemented for MockClient")
+567:    }
+568:
+569:    async fn check_build_already_recorded(
+570:        &self,
+571:        _catalog_name: impl AsRef<str> + Send + Sync,
+572:        _package_name: impl AsRef<str> + Send + Sync,
+573:        _source_url: &Url,
+574:        _source_rev: &str,
+575:        _nixpkgs_rev: &str,
+576:        _system: PackageSystem,
+577:    ) -> Result<CheckBuildResponse, CatalogClientError> {
+578:        unimplemented!("check_build_already_recorded is not supported in MockClient")
+57 [...]
+```
+
+### F#1010: Use `NixFlakeRef` instead of `String` for flake reference fields; parse at the entry point and propagate the typed value to avoid redundant parsing at each use site.
+- **Taxonomy:** `type-safety`   **Area:** `commands`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=0
+- **Evidence:** 2 comments across PRs #3599, #4156
+- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
+- **Acceptance rate:** 1.00
+
+#### Evidence 1: PR #3599 @ `cli/flox/src/commands/build.rs:?` — ysndr (Tier 1)
+- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.72
+
+**Source comment:**
+> Id consider either providing a flakeref here, or make nixpkgs configurable separately.
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -91,6 +91,22 @@ enum SubcommandOrBuildTargets {
          #[bpaf(positional("package"))]
          targets: Vec<String>,
      },
@@ -661,17 +510,17 @@ _2 cross-cutting findings, ordered by confidence descending._
 +        #[bpaf(long, short)]
 +        force: bool,
 +
-+        /// Flake reference to use for nixpkgs (defaults to nixpkgs)
-+        #[bpaf(long("nixpkgs"), argument("flake-ref"), optional)]
-+        nixpkgs_flake: Option<String>,
-+
 +        /// The package name to import from nixpkgs
 +        #[bpaf(positional("expression"))]
-+        expression: String [...]
++        expression: String,
 ```
 
 **Merged final code:**
 ```
+88:        /// The package(s) to clean.
+89:        /// Corresponds to entries in the 'build' table in the environment's manifest.toml.
+90:        /// If not specified, all packages are cleaned up.
+91:        #[bpaf(positional("package"))]
 92:        targets: Vec<String>,
 93:    },
 94:    /// Import package definition from nixpkgs
@@ -687,18 +536,68 @@ _2 cross-cutting findings, ordered by confidence descending._
 104:        force: bool,
 105:
 106:        /// The package to import (e.g., nixpkgs#hello, github:nixos/nixpkgs#hello)
-107:        #[bpaf(positional("installable"))]
-108:        installable: String,
-109:    },
-110:    BuildTargets {
-111:        #[bpaf(external(base_catalog_url_select), optional)]
-112:        base_catalog_url_select: Option<BaseCatalogUrlSelect>,
-113:
-114:        #[bpaf(e [...]
+107:        #[bpaf(positional("i [...]
 ```
 
-#### Evidence 2: PR #3599 @ `cli/flox/src/commands/build.rs:?` — ysndr (Tier 1)
-- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.85
+#### Evidence 2: PR #4156 @ `cli/flox/src/commands/publish.rs:?` — ysndr (Tier 1)
+- **Thread resolved:** Y   **was_addressed:** unknown   **classification confidence:** 0.78
+
+**Source comment:**
+> nit(future): I think the `base_catalog_ref` and downstream places should use the NixFlakeRef type now that exists. This parsing dance is kinda ridiculous.
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -232,6 +233,71 @@ impl Publish {
+                 .kind()
+                 .is_manifest_build()
+         );
++
++        // Pre-check: ask the catalog server if this exact build already exists
++        // before spending time on the Nix build. If the check fails, warn the
++        // user and continue — the dedup feature must never block publishes.
++        let base_url_str = publish_provider
++            .package_metadata
++            .base_catalog_ref
++            .to_string();
++        // Format is "https://...?rev=<40-char-hex>"
++        let nixpkgs_rev = base_url_str.split("?rev=").nth(1).unwrap_or_else(|| {
++            tracing::warn!(
++                url = %base_url_str,
++                "could not extract nixpkgs rev from base catalog URL; \
++                 dedup check will lik [...]
+```
+
+**Merged final code:**
+```
+232:                .package_metadata
+233:                .package
+234:                .kind()
+235:                .is_manifest_build()
+236:        );
+237:
+238:        // Pre-check: ask the catalog server if this exact build already exists
+239:        // before spending time on the build. If the check fails, warn the
+240:        // user and continue — the dedup feature must never block publishes.
+241:        let nixpkgs_rev = publish_provider
+242:            .package_metadata
+243:            .base_catalog_ref
+244:            .rev()
+245:            .unwrap_or_else(|| {
+246:                warn!(
+247:                    url = %publish_provider.package_metadata.base_catalog_ref,
+248:                    "could not extract nixpkgs rev from base catalog URL; \
+249:                     dedup chec [...]
+```
+
+### F#1026: Use the `COMMON_NIXPKGS_URL` constant (or equivalent) as the default nixpkgs flake reference instead of the bare string 'nixpkgs'; this ensures Flox uses the same pinned nixpkgs everywhere.
+- **Taxonomy:** `naming`   **Area:** `commands`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=0
+- **Evidence:** 2 comments across PRs #3599
+- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
+- **Acceptance rate:** 1.00
+
+#### Evidence 1: PR #3599 @ `cli/flox/src/commands/build.rs:?` — ysndr (Tier 1)
+- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.87
 
 **Source comment:**
 > suggestion: we support both `pkg.nix` and `pkgs/default.nix`.
@@ -765,8 +664,8 @@ _2 cross-cutting findings, ordered by confidence descending._
 329:        // Split package name by dots [...]
 ```
 
-#### Evidence 3: PR #3599 @ `cli/flox/src/commands/build.rs:?` — ysndr (Tier 1)
-- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.75
+#### Evidence 2: PR #3599 @ `cli/flox/src/commands/build.rs:?` — ysndr (Tier 1)
+- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.72
 
 **Source comment:**
 > suggestion: We already have a `COMMON_NIXPKGS_URL`, and should at least use that instead of a practically unknown nixpkgs on the user side. 
@@ -827,997 +726,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 342: [...]
 ```
 
-### F#723: Extract shared helper functions only when genuinely needed by multiple callers; avoid over-abstraction.
-- **Taxonomy:** `control-flow`   **Area:** `activations`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=1, T2=1
-- **Evidence:** 3 comments across PRs #4202
-- **Confidence:** 0.79   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
-- **Acceptance rate:** 1.00
-
-#### Evidence 1: PR #4202 @ `cli/flox-activations/src/attach.rs:?` — mkenigs (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.80
-
-**Source comment:**
-> suggestion: we should apply this via `apply_activation_env`, so we don't have to repeat it 3x for different `activate_*` functions
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -259,6 +290,9 @@ fn activate_exec_command(
-         vars_from_env,
-         &startup_ctx.env_diff,
-     );
-+    if let Some(encoded) = activation_diff_encoded {
-+        command.env(activation_diff::FLOX_HOOK_DIFF_VAR, encoded);
-+    }
-```
-
-**Merged final code:**
-```
-275:
-276:    let rcfile = startup_ctx
-277:        .rc_path
-278:        .clone()
-279:        .expect("rc_path should be some for command invocation");
-280:    write_to_path(&startup_ctx, &rcfile)?;
-281:    let rcfile = rcfile.to_string_lossy();
-282:
-283:    match startup_ctx.act_ctx.shell {
-284:        ShellWithPath::Bash(_) => {
-285:            // TODO: I think we need to be checking standard input and error, not stdout
-286:            // Per man bash:
-287:            // An interactive shell is one...whose standard input and error are both connected to terminals (as determined by isatty(3))
-288:            //
-289:            // But I preserved the behavior on main.
-290:            // Running from main, profile scripts aren't run unless stdout is a pipe
-291:            // > flox list -c
-292 [...]
-```
-
-#### Evidence 2: PR #4202 @ `cli/flox-activations/src/attach_diff.rs:87` — mkenigs (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.75
-
-**Source comment:**
-> Can we drop `collect_activate_exports` and go back to just having `add_old_activate_script_exports` now? Or is `collect_activate_exports` still needed? I'd like to minimize the diff from origin/main
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -38,26 +41,152 @@ pub(super) fn assemble_activate_command(
-     command
- }
- 
--/// Set (and unset) environment variables needed to be activated.
--pub fn apply_activation_env(
--    command: &mut Command,
--    context: &AttachCtx,
--    project: Option<&AttachProjectCtx>,
--    subsystem_verbosity: u32,
--    vars_from_env: VarsFromEnvironment,
--    env_diff: &EnvDiff,
--) {
--    command.envs(old_cli_envs(context, project));
--    add_old_activate_script_exports(
--        command,
--        context,
--        project,
--        subsystem_verbosity,
--        vars_from_env,
--    );
--    command.envs(&env_diff.additions);
--    for var in &env_diff.deletions {
--        command.env_remove(var);
-+/// The complete set of environment variable changes needed for attaching.
-+///
-+/// Constructed once from t [...]
-```
-
-**Merged final code:**
-```
-67:    /// 2. `collect_activate_exports()` — activation context vars
-68:    /// 3. `start_diff.additions` / `start_diff.deletions` — from activation scripts
-69:    pub fn new(
-70:        context: &AttachCtx,
-71:        project: Option<&AttachProjectCtx>,
-72:        subsystem_verbosity: u32,
-73:        mut vars_from_env: VarsFromEnvironment,
-74:        start_diff: &StartDiff,
-75:    ) -> Result<Self> {
-76:        // Extract the pre-activation snapshot before consuming vars_from_env.
-77:        let full_env = vars_from_env.full_env.take();
-78:
-79:        // Assemble sets and removals.
-80:        let mut sets: HashMap<String, String> = HashMap::new();
-81:
-82:        for (k, v) in old_cli_envs(context, project) {
-83:            sets.insert(k.to_string(), v);
-84:        }
-85:
-86:        let (ex [...]
-```
-
-#### Evidence 3: PR #4202 @ `cli/flox-activations/src/attach_diff.rs:87` — djsauble (Tier 2)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.80
-
-**Source comment:**
-> `collect_activate_exports` is still needed — `AttachDiff::new()` calls it to assemble the environment variables for the activation diff computation. Both `add_old_activate_script_exports` and `AttachDiff::new()` share this extracted helper to avoid duplicating the logic.
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -38,26 +41,152 @@ pub(super) fn assemble_activate_command(
-     command
- }
- 
--/// Set (and unset) environment variables needed to be activated.
--pub fn apply_activation_env(
--    command: &mut Command,
--    context: &AttachCtx,
--    project: Option<&AttachProjectCtx>,
--    subsystem_verbosity: u32,
--    vars_from_env: VarsFromEnvironment,
--    env_diff: &EnvDiff,
--) {
--    command.envs(old_cli_envs(context, project));
--    add_old_activate_script_exports(
--        command,
--        context,
--        project,
--        subsystem_verbosity,
--        vars_from_env,
--    );
--    command.envs(&env_diff.additions);
--    for var in &env_diff.deletions {
--        command.env_remove(var);
-+/// The complete set of environment variable changes needed for attaching.
-+///
-+/// Constructed once from t [...]
-```
-
-**Merged final code:**
-```
-67:    /// 2. `collect_activate_exports()` — activation context vars
-68:    /// 3. `start_diff.additions` / `start_diff.deletions` — from activation scripts
-69:    pub fn new(
-70:        context: &AttachCtx,
-71:        project: Option<&AttachProjectCtx>,
-72:        subsystem_verbosity: u32,
-73:        mut vars_from_env: VarsFromEnvironment,
-74:        start_diff: &StartDiff,
-75:    ) -> Result<Self> {
-76:        // Extract the pre-activation snapshot before consuming vars_from_env.
-77:        let full_env = vars_from_env.full_env.take();
-78:
-79:        // Assemble sets and removals.
-80:        let mut sets: HashMap<String, String> = HashMap::new();
-81:
-82:        for (k, v) in old_cli_envs(context, project) {
-83:            sets.insert(k.to_string(), v);
-84:        }
-85:
-86:        let (ex [...]
-```
-
-### F#981: Remove deprecated trait implementations and replace with new patterns; avoid extending deprecated infrastructure.
-- **Taxonomy:** `deprecated-patterns`   **Area:** `providers`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=2, T2=1
-- **Evidence:** 3 comments across PRs #4152, #4156
-- **Confidence:** 0.79   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
-- **Acceptance rate:** 1.00
-
-#### Evidence 1: PR #4156 @ `cli/flox-rust-sdk/src/providers/catalog.rs:?` — ysndr (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.80
-
-**Source comment:**
-> fwiw, we have been deprecating these mocks and dont really add new functionality to it. I'm relatively certain the we indeed AintGonnaNeedIt.
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -514,6 +551,32 @@ impl ClientTrait for MockClient {
- 
-         Ok(resp)
-     }
-+
-+    async fn check_build(
-+        &self,
-+        _catalog_name: impl AsRef<str> + Send + Sync,
-+        _package_name: impl AsRef<str> + Send + Sync,
-+        _source_url: &str,
-+        _source_rev: &str,
-+        _nixpkgs_rev: &str,
-+        _system: &str,
-+    ) -> Result<CheckBuildResponse, CatalogClientError> {
-+        let mock_resp = self
-+            .mock_responses
-+            .lock()
-+            .expect("couldn't acquire mock lock")
-+            .pop_front();
-+        match mock_resp {
-+            Some(Response::CheckBuild(resp)) => Ok(resp),
-+            Some(Response::Error(err)) => Err(CatalogClientError::APIError(
-+                flox_catalog::ApiError::ErrorResponse(
-+ [...]
-```
-
-**Merged final code:**
-```
-559:        Ok(resp)
-560:    }
-561:
-562:    async fn get_catalog_locked_sources(
-563:        &self,
-564:        _catalog_name: impl AsRef<str> + Send + Sync,
-565:    ) -> Result<ResultsPage<LockedSourceItem>, CatalogClientError> {
-566:        unimplemented!("get_catalog_locked_sources not implemented for MockClient")
-567:    }
-568:
-569:    async fn check_build_already_recorded(
-570:        &self,
-571:        _catalog_name: impl AsRef<str> + Send + Sync,
-572:        _package_name: impl AsRef<str> + Send + Sync,
-573:        _source_url: &Url,
-574:        _source_rev: &str,
-575:        _nixpkgs_rev: &str,
-576:        _system: PackageSystem,
-577:    ) -> Result<CheckBuildResponse, CatalogClientError> {
-578:        unimplemented!("check_build_already_recorded is not supported in MockClient")
-57 [...]
-```
-
-#### Evidence 2: PR #4152 @ `cli/flox-rust-sdk/src/providers/services/process_compose.rs:223` — mkenigs (Tier 1)
-- **Thread resolved:** N   **was_addressed:** unknown   **classification confidence:** 0.72
-
-**Source comment:**
-> suggestion nonblocking: I think we should delete the old `impl From<Services> for ProcessComposeConfig`
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -243,6 +244,29 @@ impl From<Services> for ProcessComposeConfig {
-     }
- }
- 
-+impl From<v1_12_0::Services> for ProcessComposeConfig {
-```
-
-**Merged final code:**
-```
-203:-> impl proptest::strategy::Strategy<Value = Option<BTreeMap<String, String>>> {
-204:    use flox_test_utils::proptest::alphanum_string;
-205:
-206:    proptest::option::of(proptest::collection::btree_map(
-207:        alphanum_string(4),
-208:        alphanum_string(4),
-209:        0..=3,
-210:    ))
-211:}
-212:
-213:/// Cre
-214:pub fn generate_never_exit_process() -> ProcessConfig {
-215:    ProcessConfig {
-216:        command: format!("{} infinity", &*SLEEP_BIN),
-217:        vars: None,
-218:        is_daemon: None,
-219:        shutdown: None,
-220:    }
-221:}
-222:
-223:impl From<v1_12_0::Services> for ProcessComposeConfig {
-224:    fn from(services: v1_12_0::Services) -> Self {
-225:        let processes = services
-226:            .into_inner()
-227:            .into_iter()
-228:            .map [...]
-```
-
-#### Evidence 3: PR #4156 @ `cli/flox-rust-sdk/src/providers/catalog.rs:?` — billlevine (Tier 2)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.92
-
-**Source comment:**
-> **Applied via implementation-worker:**
-> 
-> Removed the MockClient `check_build_already_recorded` dispatch (Response::CheckBuild variant) and the three unit tests that depended on it (test_publish_skips_build_on_duplicate, test_publish_proceeds_on_check_failure, test_publish_normal_flow_on_new). The trait method now has an `unimplemented!()` stub. Net reduction of ~153 lines; remaining 5 publish tests pass.
-> 
-> - Action: Mock variant and associated tests removed per YAGNI
-> - Commit: e870e5770
-> 
-> ---
-> *Via [...]
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -514,6 +551,32 @@ impl ClientTrait for MockClient {
- 
-         Ok(resp)
-     }
-+
-+    async fn check_build(
-+        &self,
-+        _catalog_name: impl AsRef<str> + Send + Sync,
-+        _package_name: impl AsRef<str> + Send + Sync,
-+        _source_url: &str,
-+        _source_rev: &str,
-+        _nixpkgs_rev: &str,
-+        _system: &str,
-+    ) -> Result<CheckBuildResponse, CatalogClientError> {
-+        let mock_resp = self
-+            .mock_responses
-+            .lock()
-+            .expect("couldn't acquire mock lock")
-+            .pop_front();
-+        match mock_resp {
-+            Some(Response::CheckBuild(resp)) => Ok(resp),
-+            Some(Response::Error(err)) => Err(CatalogClientError::APIError(
-+                flox_catalog::ApiError::ErrorResponse(
-+ [...]
-```
-
-**Merged final code:**
-```
-559:        Ok(resp)
-560:    }
-561:
-562:    async fn get_catalog_locked_sources(
-563:        &self,
-564:        _catalog_name: impl AsRef<str> + Send + Sync,
-565:    ) -> Result<ResultsPage<LockedSourceItem>, CatalogClientError> {
-566:        unimplemented!("get_catalog_locked_sources not implemented for MockClient")
-567:    }
-568:
-569:    async fn check_build_already_recorded(
-570:        &self,
-571:        _catalog_name: impl AsRef<str> + Send + Sync,
-572:        _package_name: impl AsRef<str> + Send + Sync,
-573:        _source_url: &Url,
-574:        _source_rev: &str,
-575:        _nixpkgs_rev: &str,
-576:        _system: PackageSystem,
-577:    ) -> Result<CheckBuildResponse, CatalogClientError> {
-578:        unimplemented!("check_build_already_recorded is not supported in MockClient")
-57 [...]
-```
-
-### F#546: Accept flake refs for package sources and make nixpkgs source configurable.
-- **Taxonomy:** `type-safety`   **Area:** `commands`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=1, T2=0
-- **Evidence:** 2 comments across PRs #3599, #4156
-- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
-- **Acceptance rate:** 1.00
-
-#### Evidence 1: PR #3599 @ `cli/flox/src/commands/build.rs:?` — ysndr (Tier 1)
-- **Thread resolved:** N   **was_addressed:** unknown   **classification confidence:** 0.65
-
-**Source comment:**
-> Id consider either providing a flakeref here, or make nixpkgs configurable separately.
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -91,6 +91,22 @@ enum SubcommandOrBuildTargets {
-         #[bpaf(positional("package"))]
-         targets: Vec<String>,
-     },
-+    /// Import package definition from nixpkgs
-+    ///
-+    /// Imports a package definition from nixpkgs for use in the environment.
-+    #[bpaf(
-+        command,
-+        footer("Run 'man flox-build-import-nixpkgs' for more details.")
-+    )]
-+    ImportNixpkgs {
-+        /// Overwrite existing package file
-+        #[bpaf(long, short)]
-+        force: bool,
-+
-+        /// The package name to import from nixpkgs
-+        #[bpaf(positional("expression"))]
-+        expression: String,
-```
-
-**Merged final code:**
-```
-88:        /// The package(s) to clean.
-89:        /// Corresponds to entries in the 'build' table in the environment's manifest.toml.
-90:        /// If not specified, all packages are cleaned up.
-91:        #[bpaf(positional("package"))]
-92:        targets: Vec<String>,
-93:    },
-94:    /// Import package definition from nixpkgs
-95:    ///
-96:    /// Imports a package definition from nixpkgs for use in the environment.
-97:    #[bpaf(
-98:        command,
-99:        footer("Run 'man flox-build-import-nixpkgs' for more details.")
-100:    )]
-101:    ImportNixpkgs {
-102:        /// Overwrite existing package file
-103:        #[bpaf(long, short)]
-104:        force: bool,
-105:
-106:        /// The package to import (e.g., nixpkgs#hello, github:nixos/nixpkgs#hello)
-107:        #[bpaf(positional("i [...]
-```
-
-#### Evidence 2: PR #4156 @ `cli/flox/src/commands/publish.rs:?` — ysndr (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.85
-
-**Source comment:**
-> nit(future): I think the `base_catalog_ref` and downstream places should use the NixFlakeRef type now that exists. This parsing dance is kinda ridiculous.
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -232,6 +233,71 @@ impl Publish {
-                 .kind()
-                 .is_manifest_build()
-         );
-+
-+        // Pre-check: ask the catalog server if this exact build already exists
-+        // before spending time on the Nix build. If the check fails, warn the
-+        // user and continue — the dedup feature must never block publishes.
-+        let base_url_str = publish_provider
-+            .package_metadata
-+            .base_catalog_ref
-+            .to_string();
-+        // Format is "https://...?rev=<40-char-hex>"
-+        let nixpkgs_rev = base_url_str.split("?rev=").nth(1).unwrap_or_else(|| {
-+            tracing::warn!(
-+                url = %base_url_str,
-+                "could not extract nixpkgs rev from base catalog URL; \
-+                 dedup check will lik [...]
-```
-
-**Merged final code:**
-```
-232:                .package_metadata
-233:                .package
-234:                .kind()
-235:                .is_manifest_build()
-236:        );
-237:
-238:        // Pre-check: ask the catalog server if this exact build already exists
-239:        // before spending time on the build. If the check fails, warn the
-240:        // user and continue — the dedup feature must never block publishes.
-241:        let nixpkgs_rev = publish_provider
-242:            .package_metadata
-243:            .base_catalog_ref
-244:            .rev()
-245:            .unwrap_or_else(|| {
-246:                warn!(
-247:                    url = %publish_provider.package_metadata.base_catalog_ref,
-248:                    "could not extract nixpkgs rev from base catalog URL; \
-249:                     dedup chec [...]
-```
-
-### F#573: Verify that shell completion works end-to-end in interactive shells, not just static output.
-- **Taxonomy:** `testing`   **Area:** `commands`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=1, T2=1
-- **Evidence:** 2 comments across PRs #3988
-- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
-- **Acceptance rate:** 1.00
-
-#### Evidence 1: PR #3988 @ `cli/flox/src/commands/activate.rs:1` — dcarley (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.65
-
-**Source comment:**
-> It looks like the testing that Claude/Forge did was only to see that `--bpaf-complete*` rendered the new strings that we gave it.
-> 
-> Were you able to test that the whole thing worked end-to-end in `bash`?
-
-**Diff hunk (what reviewer saw):**
-```
-(empty)
-```
-
-**Merged final code:**
-```
-1:use std::io::{BufWriter, stdout};
-2:use std::os::unix::process::CommandExt;
-3:use std::path::{Path, PathBuf};
-4:use std::process::Stdio;
-5:use std::sync::LazyLock;
-6:use std::{env, fs};
-7:
-8:use anyhow::{Context, Result, anyhow, bail};
-9:use bpaf::Bpaf;
-10:use crossterm::tty::IsTty;
-11:use flox_core::activate::context::{
-12:    ActivateCtx,
-13:    ActivateMode,
-14:    AttachCtx,
-15:    AttachProjectCtx,
-16:    InvocationType,
-17:};
-18:use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY_VAR};
-19:use flox_core::activations::activation_state_dir_path;
-20:use flox_core::traceable_path;
-21:use flox_rust_sdk::data::System;
-```
-
-#### Evidence 2: PR #3988 @ `cli/flox/src/commands/activate.rs:1` — billlevine (Tier 2)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.70
-
-**Source comment:**
-> Yep.  Re-tested and found one issue with `flox activate -c "ba<tab>` but fixed that.
-> 
-> ```
-> $ ./cli/target/debug/flox activate -- fzf
-> fzf-file-widget  fzf-tmux         fzf-share        fzf
-> bill@Bill-FloxDev:~/github/flox/flox/_worktrees/fix-activate-completion (fix/activate-completion-3987 *) <nix>
-> $ ./cli/target/debug/flox activate -c fzf
-> fzf-file-widget  fzf-tmux         fzf-share        fzf
-> bill@Bill-FloxDev:~/github/flox/flox/_worktrees/fix-activate-completion (fix/activate-completion- [...]
-
-**Diff hunk (what reviewer saw):**
-```
-(empty)
-```
-
-**Merged final code:**
-```
-1:use std::io::{BufWriter, stdout};
-2:use std::os::unix::process::CommandExt;
-3:use std::path::{Path, PathBuf};
-4:use std::process::Stdio;
-5:use std::sync::LazyLock;
-6:use std::{env, fs};
-7:
-8:use anyhow::{Context, Result, anyhow, bail};
-9:use bpaf::Bpaf;
-10:use crossterm::tty::IsTty;
-11:use flox_core::activate::context::{
-12:    ActivateCtx,
-13:    ActivateMode,
-14:    AttachCtx,
-15:    AttachProjectCtx,
-16:    InvocationType,
-17:};
-18:use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY_VAR};
-19:use flox_core::activations::activation_state_dir_path;
-20:use flox_core::traceable_path;
-21:use flox_rust_sdk::data::System;
-```
-
-### F#593: Write complete sentences in docstrings; explain intent and valid options clearly.
-- **Taxonomy:** `user-facing-messages`   **Area:** `cli/other`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=1, T2=1
-- **Evidence:** 2 comments across PRs #4156, #4198
-- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
-- **Acceptance rate:** 1.00
-
-#### Evidence 1: PR #4156 @ `cli/flox-catalog/src/client.rs:?` — ysndr (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.80
-
-**Source comment:**
-> suggestion: add at least a doc comment what `check_build` means, and/or consider renaming to sth like `check_build_already_recorded`.
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -460,6 +474,40 @@ impl ClientTrait for CatalogClient {
-             .await
-             .map(|res| res.into_inner().into())
-     }
-+
-+    async fn check_build(
-```
-
-**Merged final code:**
-```
-458:        self.client
-459:            .create_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_post(
-460:                &catalog, &package, &body,
-461:            )
-462:            .await
-463:            .map_api_error()
-464:            .await?;
-465:
-466:        debug!("successfully created package");
-467:        Ok(())
-468:    }
-469:
-470:    async fn publish_build(
-471:        &self,
-472:        catalog_name: impl AsRef<str> + Send + Sync,
-473:        package_name: impl AsRef<str> + Send + Sync,
-474:        build_info: &UserBuildPublish,
-475:    ) -> Result<(), CatalogClientError> {
-476:        let catalog = str_to_catalog_name(catalog_name)?;
-477:        let package = str_to_package_name(package_name)?;
-478:        self.client
-479:            .create_package_build_api_v1_ [...]
-```
-
-#### Evidence 2: PR #4198 @ `cli/flox/src/config/mod.rs:?` — djsauble (Tier 2)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.80
-
-**Source comment:**
-> @mkenigs and I just decided to change `never` to a better name, because the intent isn't that auto-activation will never run, but rather that it will only run for environments that have been explicitly allowed with `flox activate allow`.
-> 
-> In contrast, if it's set to `prompt`, the user will be shown an interactive prompt every time they enter a directory with an environment that hasn't been activate yet. So the feature is turned on in both cases, but with varying levels of intrusiveness.
-> 
-> ```sugg [...]
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -115,9 +115,13 @@ pub struct FloxConfig {
- 
-     /// Flox creates a single tempdir for each process in
-     /// `$FLOX_CACHE_HOME/process`.
--    /// Flox will delete this tempdir upon conclusion of the process
-+    /// Flox will delete this empdir upon conclusion of the process
-     /// unless `keep_tempdir == true` AND verbose logs are enabled.
-     pub keep_tempdir: Option<bool>,
-+
-+    /// Whether to automatically activate environments.
-+    /// Possible values: `never` (default), `prompt`.
-```
-
-**Merged final code:**
-```
-103:    /// Upgrades are available for packages in 'environment-name'.
-104:    /// Use 'flox upgrade --dry-run' for details.
-105:    /// ```
-106:    ///
-107:    /// (default: true)
-108:    pub upgrade_notifications: Option<bool>,
-109:
-110:    /// Configuration for 'flox publish'.
-111:    pub publish: Option<PublishConfig>,
-112:
-113:    /// Release channel to use when checking for updates to Flox.
-114:    pub installer_channel: Option<InstallerChannel>,
-115:
-116:    /// Flox creates a single tempdir for each process in
-117:    /// `$FLOX_CACHE_HOME/process`.
-118:    /// Flox will delete this tempdir upon conclusion of the process
-119:    /// unless `keep_tempdir == true` AND verbose logs are enabled.
-120:    pub keep_tempdir: Option<bool>,
-121:
-122:    /// Whether to automatically activate [...]
-```
-
-### F#622: Add unit or integration tests for newly added code paths and error handling logic.
-- **Taxonomy:** `testing`   **Area:** `models/environment`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=2, T2=0
-- **Evidence:** 2 comments across PRs #3646, #4076
-- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
-- **Acceptance rate:** 1.00
-
-#### Evidence 1: PR #3646 @ `cli/flox-rust-sdk/src/models/environment/managed_environment.rs:1744` — mkenigs (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.75
-
-**Source comment:**
-> suggestion blocking: I think we want a test of some kind of this code path. Any reason you didn't add one?
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -1710,7 +1728,20 @@ impl ManagedEnvironment {
-                 .map_err(ManagedEnvironmentError::Git)?;
- 
-             if !consistent_history {
--                Err(ManagedEnvironmentError::Diverged)?;
-+                let local = generations
-+                    .metadata()
-+                    .map_err(ManagedEnvironmentError::Generations)?
-+                    .into_inner();
-+
-+                let remote = Generations::new(self.floxmeta.git.clone(), sync_branch.clone())
-+                    .metadata()
-+                    .map_err(ManagedEnvironmentError::Generations)?
-+                    .into_inner();
-+
-+                Err(ManagedEnvironmentError::Diverged(DivergedMetadata {
-+                    local,
-+                    remote,
-+                }))?;
-```
-
-**Merged final code:**
-```
-1724:            let consistent_history = self
-1725:                .floxmeta
-1726:                .git
-1727:                .branch_contains_commit(&sync_branch, &project_branch)
-1728:                .map_err(ManagedEnvironmentError::Git)?;
-1729:
-1730:            if !consistent_history {
-1731:                let local = generations
-1732:                    .metadata()
-1733:                    .map_err(ManagedEnvironmentError::Generations)?
-1734:                    .into_inner();
-1735:
-1736:                let remote = Generations::new(self.floxmeta.git.clone(), sync_branch.clone())
-1737:                    .metadata()
-1738:                    .map_err(ManagedEnvironmentError::Generations)?
-1739:                    .into_inner();
-1740:
-1741:                Err(ManagedEnvironmentError::Dive [...]
-```
-
-#### Evidence 2: PR #4076 @ `cli/flox-rust-sdk/src/models/environment/uninstall.rs:78` — dcarley (Tier 1)
-- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.80
-
-**Source comment:**
-> This now has unit tests.
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -0,0 +1,357 @@
-+use std::collections::HashMap;
-+use std::collections::hash_map::Entry;
-+
-+use flox_manifest::interfaces::PackageLookup;
-+use flox_manifest::lockfile::{LockedPackage, Lockfile, PackageOutputs};
-+use flox_manifest::parsed::v1_10_0::SelectedOutputs;
-+use flox_manifest::raw::{
-+    CatalogPackage,
-+    PackageModification,
-+    PackageToModify,
-+    RawManifestError,
-+    RawSelectedOutputs,
-+};
-+use flox_manifest::{Manifest, ManifestError, Migrated};
-+use reqwest::Url;
-+use tracing::debug;
-+
-+use super::UninstallError;
-+
-+/// A specification for what to uninstall.
-+///
-+/// Can represent a full package removal or selective output removal.
-+#[derive(Debug, Clone, PartialEq)]
-+pub struct UninstallSpec {
-+    /// The package reference (install_id or pkg_path).
-+    pub package [...]
-```
-
-**Merged final code:**
-```
-58:                } = s.parse()?;
-59:
-60:                Ok(UninstallSpec {
-61:                    package_ref: pkg_path,
-62:                    outputs,
-63:                    version,
-64:                })
-65:            },
-66:        }
-67:    }
-68:}
-69:
-70:/// Resolve uninstall specifications to PackagesToModify.
-71:///
-72:/// This function processes a list of uninstall specs and:
-73:/// 1. Resolves each package reference (pkg-path or install_id) to a concrete install_id
-74:/// 2. Aggregates outputs to remove when multiple specs target the same package
-75:/// 3. Returns detailed errors if packages are only available in includes
-76:/// 4. Validates the specified outputs exist for the package and computes the
-77:///    unnecessary modifications
-78:pub fn resolve_specs_to_modifications(
-7 [...]
-```
-
-### F#656: Verify comment semantics match actual implementation behavior before accepting changes.
-- **Taxonomy:** `semantic-correctness`   **Area:** `models/environment`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=2, T2=0
-- **Evidence:** 2 comments across PRs #3638, #3652
-- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
-- **Acceptance rate:** 1.00
-
-#### Evidence 1: PR #3638 @ `cli/flox-rust-sdk/src/models/environment/managed_environment.rs:731` — dcarley (Tier 1)
-- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.50
-
-**Source comment:**
-> Isn't it essentially a noop and no different to what we do for activating the live generation?
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -660,6 +699,48 @@ impl GenerationsExt for ManagedEnvironment {
-     ) -> Result<String, GenerationsError> {
-         self.generations().lockfile_contents(generation)
-     }
-+
-+    fn rendered_env_links_for_generation(
-+        &self,
-+        flox: &Flox,
-+        generation: GenerationId,
-+    ) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
-+        let mut generations = self.generations();
-+        let generation_rw = generations
-+            .writable(
-+                &flox.temp_dir,
-+                &flox.system_user_name,
-+                &flox.system_hostname,
-+                &flox.argv,
-+            )
-+            .map_err(ManagedEnvironmentError::Generations)?;
-+
-+        let mut core_environment = generation_rw
-+            .get_generation(*generation, self.include_ [...]
-```
-
-**Merged final code:**
-```
-711:
-712:    fn rendered_env_links_for_generation(
-713:        &self,
-714:        flox: &Flox,
-715:        generation: GenerationId,
-716:    ) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
-717:        let mut generations = self.generations();
-718:        let generation_rw = generations
-719:            .writable(
-720:                &flox.temp_dir,
-721:                &flox.system_user_name,
-722:                &flox.system_hostname,
-723:                &flox.argv,
-724:            )
-725:            .map_err(ManagedEnvironmentError::Generations)?;
-726:
-727:        let mut core_environment = generation_rw
-728:            .get_generation(*generation, self.include_fetcher.clone())
-729:            .map_err(ManagedEnvironmentError::Generations)?;
-730:
-731:        let store_paths = core_ [...]
-```
-
-#### Evidence 2: PR #3652 @ `cli/flox-rust-sdk/src/models/environment/generations.rs:842` — mkenigs (Tier 1)
-- **Thread resolved:** N   **was_addressed:** unknown   **classification confidence:** 0.65
-
-**Source comment:**
-> @ysndr is it possible for a generation to never be live? In which case it would be None if either the generation has never been live or is currently live?
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -839,7 +839,7 @@ pub struct SingleGenerationMetadata {
-     pub created: DateTime<Utc>,
- 
-     /// unix timestamp of the time when this generation was last set as live
--    /// `None` if this generation has never been set as live
-+    /// `None` if this generation is currently live
-```
-
-**Merged final code:**
-```
-822:                        last_live: None,
-823:                        description: spec.summary(),
-824:                    });
-825:                },
-826:            }
-827:        }
-828:
-829:        map
-830:    }
-831:}
-832:
-833:/// Metadata for a single generation of an environment
-834:#[derive(Clone, Debug, PartialEq, Serialize)]
-835:pub struct SingleGenerationMetadata {
-836:    pub parent: Option<GenerationId>,
-837:
-838:    /// unix timestamp of the creation time of this generation
-839:    pub created: DateTime<Utc>,
-840:
-841:    /// unix timestamp of the time when this generation was last set as live
-842:    /// `None` if this generation is currently live
-843:    pub last_live: Option<DateTime<Utc>>,
-844:
-845:    /// log message(s) describing the change from the previous generation
-8 [...]
-```
-
-### F#669: Create separate error variants or wrap diverse source errors in io::Error with ErrorKind::Other.
-- **Taxonomy:** `error-handling`   **Area:** `models/environment`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=2, T2=0
-- **Evidence:** 2 comments across PRs #3673
-- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
-- **Acceptance rate:** 1.00
-
-#### Evidence 1: PR #3673 @ `cli/flox-rust-sdk/src/models/environment/path_environment.rs:?` — mkenigs (Tier 1)
-- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.65
-
-**Source comment:**
-> `WriteEnvJson` is used both here and where the error is a `std::io::Error`, but I want the same error wrapping printed by errors.rs
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -169,17 +170,11 @@ impl PathEnvironment {
-         let pointer_content = serde_json::to_string_pretty(&self.pointer)
-             .map_err(EnvironmentError::SerializeEnvJson)?;
- 
--        let mut tempfile =
--            tempfile::NamedTempFile::new_in(&self.path).map_err(EnvironmentError::WriteEnvJson)?;
--
--        tempfile
--            .write_all(pointer_content.as_bytes())
--            .map_err(EnvironmentError::WriteEnvJson)?;
--
--        tempfile
--            .persist(self.path.join(ENVIRONMENT_POINTER_FILENAME))
--            .map_err(|e| e.error)
--            .map_err(EnvironmentError::WriteEnvJson)?;
-+        write_atomically(
-+            &self.path.join(ENVIRONMENT_POINTER_FILENAME),
-+            pointer_content,
-+        )
-+        .map_err(|e| EnvironmentError::WriteEnvJson(dis [...]
-```
-
-**Merged final code:**
-```
-157:        Ok(CoreEnvironment::new(
-158:            self.path.join(ENV_DIR_NAME),
-159:            self.include_fetcher()?,
-160:        ))
-161:    }
-162:
-163:    fn as_core_environment_mut(&mut self) -> Result<CoreEnvironment, EnvironmentError> {
-164:        self.as_core_environment()
-165:    }
-166:
-167:    pub fn rename(&mut self, new_name: EnvironmentName) -> Result<(), EnvironmentError> {
-168:        self.pointer.name = new_name;
-169:        let pointer_content = serde_json::to_string_pretty(&self.pointer)
-170:            .map_err(EnvironmentError::SerializeEnvJson)?;
-171:
-172:        write_atomically(
-173:            &self.path.join(ENVIRONMENT_POINTER_FILENAME),
-174:            pointer_content,
-175:        )
-176:        .map_err(|e| EnvironmentError::WriteEnvJson(Box::new(e)))?;
-177: [...]
-```
-
-#### Evidence 2: PR #3673 @ `cli/flox-rust-sdk/src/models/environment/path_environment.rs:?` — ysndr (Tier 1)
-- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.65
-
-**Source comment:**
-> Hmm I think I'd prefer separate errors or if they need to be a single variant wrap the error in an io error with ErrorKind::Other
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -169,17 +170,11 @@ impl PathEnvironment {
-         let pointer_content = serde_json::to_string_pretty(&self.pointer)
-             .map_err(EnvironmentError::SerializeEnvJson)?;
- 
--        let mut tempfile =
--            tempfile::NamedTempFile::new_in(&self.path).map_err(EnvironmentError::WriteEnvJson)?;
--
--        tempfile
--            .write_all(pointer_content.as_bytes())
--            .map_err(EnvironmentError::WriteEnvJson)?;
--
--        tempfile
--            .persist(self.path.join(ENVIRONMENT_POINTER_FILENAME))
--            .map_err(|e| e.error)
--            .map_err(EnvironmentError::WriteEnvJson)?;
-+        write_atomically(
-+            &self.path.join(ENVIRONMENT_POINTER_FILENAME),
-+            pointer_content,
-+        )
-+        .map_err(|e| EnvironmentError::WriteEnvJson(dis [...]
-```
-
-**Merged final code:**
-```
-157:        Ok(CoreEnvironment::new(
-158:            self.path.join(ENV_DIR_NAME),
-159:            self.include_fetcher()?,
-160:        ))
-161:    }
-162:
-163:    fn as_core_environment_mut(&mut self) -> Result<CoreEnvironment, EnvironmentError> {
-164:        self.as_core_environment()
-165:    }
-166:
-167:    pub fn rename(&mut self, new_name: EnvironmentName) -> Result<(), EnvironmentError> {
-168:        self.pointer.name = new_name;
-169:        let pointer_content = serde_json::to_string_pretty(&self.pointer)
-170:            .map_err(EnvironmentError::SerializeEnvJson)?;
-171:
-172:        write_atomically(
-173:            &self.path.join(ENVIRONMENT_POINTER_FILENAME),
-174:            pointer_content,
-175:        )
-176:        .map_err(|e| EnvironmentError::WriteEnvJson(Box::new(e)))?;
-177: [...]
-```
-
-### F#682: Follow established naming conventions like str_to_x for parser functions to ensure consistency.
+### F#1154: Name query-parameter parser functions using the `str_to_x` pattern (e.g., `str_to_system`) to match the established convention in the same file.
 - **Taxonomy:** `naming`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=1
 - **Evidence:** 2 comments across PRs #4156
@@ -1825,7 +734,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 - **Acceptance rate:** 1.00
 
 #### Evidence 1: PR #4156 @ `cli/flox-catalog/src/client.rs:?` — ysndr (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.90
+- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.88
 
 **Source comment:**
 > nit: shouldnt this be `str_to_system` consistne with `str_to_x` above?
@@ -1880,7 +789,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 ```
 
 #### Evidence 2: PR #4156 @ `cli/flox-catalog/src/client.rs:?` — billlevine (Tier 2)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.90
+- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.85
 
 **Source comment:**
 > **Applied via implementation-worker:**
@@ -1942,77 +851,114 @@ _2 cross-cutting findings, ordered by confidence descending._
 493: [...]
 ```
 
-### F#707: Extract shared activation data structures into a common crate to reduce duplication.
-- **Taxonomy:** `control-flow`   **Area:** `activations`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=1, T2=0
-- **Evidence:** 2 comments across PRs #3736, #4202
-- **Confidence:** 0.75   **In AGENTS.md?:** Y (Rust Workspace (`cli/`))   **Cross-area count:** 1
+### F#1155: Rename functions and add doc comments when the function name alone doesn't convey intent; `check_build` became `check_build_already_recorded` with a doc comment explaining it checks for duplicate builds in the catalog.
+- **Taxonomy:** `naming`   **Area:** `cli/other`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=1
+- **Evidence:** 2 comments across PRs #4156
+- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
 - **Acceptance rate:** 1.00
 
-#### Evidence 1: PR #3736 @ `cli/flox-activations/src/cli/activate.rs:24` — zmitchell (Tier 3)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.68
+#### Evidence 1: PR #4156 @ `cli/flox-catalog/src/client.rs:?` — ysndr (Tier 1)
+- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.82
 
 **Source comment:**
-> Suggestion: Should these be split out into a common crate that both `flox-activations` and `flox` can depend on?
+> suggestion: add at least a doc comment what `check_build` means, and/or consider renaming to sth like `check_build_already_recorded`.
 
 **Diff hunk (what reviewer saw):**
 ```
-@@ -0,0 +1,232 @@
-+use std::collections::HashMap;
-+use std::fs;
-+use std::os::unix::process::CommandExt;
-+use std::path::PathBuf;
-+use std::process::{Command, Stdio};
+@@ -460,6 +474,40 @@ impl ClientTrait for CatalogClient {
+             .await
+             .map(|res| res.into_inner().into())
+     }
 +
-+use anyhow::{Context, Result, anyhow};
-+use clap::Args;
-+use flox_core::activate::data::{ActivateData, InvocationType};
-+use flox_core::activate::vars::{FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_VAR};
-+use flox_core::shell::ShellWithPath;
-+use flox_core::util::default_nix_env_vars;
-+use indoc::formatdoc;
-+use itertools::Itertools;
-+use log::debug;
-+
-+#[derive(Debug, Args)]
-+pub struct ActivateArgs {
-+    /// Path to JSON file containing activation data
-+    #[arg(long)]
-+    pub activate_data: PathBuf,
-+}
-+
-+pub const FLOX_ENV_LOG_DIR_VAR: &str = "_FLOX_ENV_LOG_DIR";
++    async fn check_build(
 ```
 
 **Merged final code:**
 ```
-4:use std::path::PathBuf;
-5:use std::process::Command;
-6:
-7:use anyhow::{Context, Result};
-8:use clap::Args;
-9:use flox_core::activate::context::{ActivateCtx, InvocationType};
-10:use flox_core::activate::vars::{FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_VAR};
-11:use flox_core::shell::ShellWithPath;
-12:use flox_core::util::default_nix_env_vars;
-13:use indoc::formatdoc;
-14:use itertools::Itertools;
-15:use log::debug;
-16:
-17:#[derive(Debug, Args)]
-18:pub struct ActivateArgs {
-19:    /// Path to JSON file containing activation data
-20:    #[arg(long)]
-21:    pub activate_data: PathBuf,
-22:}
-23:
-24:pub const FLOX_ENV_LOG_DIR_VAR: &str = "_FLOX_ENV_LOG_DIR";
-25:pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
-26:/// This variable is used to communicate what socket t [...]
+458:        self.client
+459:            .create_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_post(
+460:                &catalog, &package, &body,
+461:            )
+462:            .await
+463:            .map_api_error()
+464:            .await?;
+465:
+466:        debug!("successfully created package");
+467:        Ok(())
+468:    }
+469:
+470:    async fn publish_build(
+471:        &self,
+472:        catalog_name: impl AsRef<str> + Send + Sync,
+473:        package_name: impl AsRef<str> + Send + Sync,
+474:        build_info: &UserBuildPublish,
+475:    ) -> Result<(), CatalogClientError> {
+476:        let catalog = str_to_catalog_name(catalog_name)?;
+477:        let package = str_to_package_name(package_name)?;
+478:        self.client
+479:            .create_package_build_api_v1_ [...]
 ```
 
-#### Evidence 2: PR #4202 @ `cli/flox-activations/src/activation_diff.rs:?` — mkenigs (Tier 1)
+#### Evidence 2: PR #4156 @ `cli/flox-catalog/src/client.rs:?` — billlevine (Tier 2)
 - **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.85
+
+**Source comment:**
+> **Applied via implementation-worker:**
+> 
+> Added doc comment explaining the purpose, and renamed `check_build` to `check_build_already_recorded` for clarity.
+> 
+> - Action: Doc comment added, function renamed
+> - Commit: 3fdf210cb
+> 
+> ---
+> *Via Forge (pr-discussion-processor) • 7d9d7128*
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -460,6 +474,40 @@ impl ClientTrait for CatalogClient {
+             .await
+             .map(|res| res.into_inner().into())
+     }
++
++    async fn check_build(
+```
+
+**Merged final code:**
+```
+458:        self.client
+459:            .create_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_post(
+460:                &catalog, &package, &body,
+461:            )
+462:            .await
+463:            .map_api_error()
+464:            .await?;
+465:
+466:        debug!("successfully created package");
+467:        Ok(())
+468:    }
+469:
+470:    async fn publish_build(
+471:        &self,
+472:        catalog_name: impl AsRef<str> + Send + Sync,
+473:        package_name: impl AsRef<str> + Send + Sync,
+474:        build_info: &UserBuildPublish,
+475:    ) -> Result<(), CatalogClientError> {
+476:        let catalog = str_to_catalog_name(catalog_name)?;
+477:        let package = str_to_package_name(package_name)?;
+478:        self.client
+479:            .create_package_build_api_v1_ [...]
+```
+
+### F#1203: Refactor `apply_activation_env` so its sub-steps can be extracted and reused (e.g., as `collect_activate_exports`) without duplicating logic; both `add_old_activate_script_exports` and `AttachDiff::new()` need the same environment variable set.
+- **Taxonomy:** `control-flow`   **Area:** `activations`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=1
+- **Evidence:** 2 comments across PRs #4202
+- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
+- **Acceptance rate:** 1.00
+
+#### Evidence 1: PR #4202 @ `cli/flox-activations/src/activation_diff.rs:?` — mkenigs (Tier 1)
+- **Thread resolved:** Y   **was_addressed:** unknown   **classification confidence:** 0.80
 
 **Source comment:**
 > suggestion blocking: we need to refactor `apply_activation_env` such that we can extract the info we need, rather than duplicating the components of `apply_activation_env` here
@@ -2047,211 +993,252 @@ _2 cross-cutting findings, ordered by confidence descending._
 (empty)
 ```
 
-### F#834: Add error variants to enum rather than parsing string output; classify errors at provider boundary.
-- **Taxonomy:** `error-handling`   **Area:** `providers`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=2, T2=0
-- **Evidence:** 2 comments across PRs #4154, #4165
-- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
-- **Acceptance rate:** 1.00
-
-#### Evidence 1: PR #4154 @ `cli/flox-rust-sdk/src/providers/publish.rs:?` — mkenigs (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.92
+#### Evidence 2: PR #4202 @ `cli/flox-activations/src/attach_diff.rs:87` — djsauble (Tier 2)
+- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.72
 
 **Source comment:**
-> suggestion blocking: this swallows `AuthError::CreateNetrc` and then turns it into `AuthError::NoToken` which may be inaccurate. I think we should also do what the commit says this PR does:
-> > Defer netrc file creation so it only happens when the store type requires it
-> 
-> Rather than creating netrc early and only deferring error handling
+> `collect_activate_exports` is still needed — `AttachDiff::new()` calls it to assemble the environment variables for the activation diff computation. Both `add_old_activate_script_exports` and `AttachDiff::new()` share this extracted helper to avoid duplicating the logic.
 
 **Diff hunk (what reviewer saw):**
 ```
-@@ -634,11 +634,11 @@ where
-             .await
-             .map_err(PublishError::CatalogError)?;
- 
--        let netrc_path = self.auth.create_netrc().map_err(PublishError::Auth)?;
-+        let netrc_path = self.auth.create_netrc().ok();
-```
-
-**Merged final code:**
-```
-617:        &self,
-618:        client: &impl ClientTrait,
-619:        catalog_name: &str,
-620:        _package_created: PackageCreatedGuard,
-621:        build_metadata: &CheckedBuildMetadata,
-622:        key_file: Option<PathBuf>,
-623:        metadata_only: bool,
-624:    ) -> Result<(), PublishError> {
-625:        // Step 2 hit /publish
-626:        // Catalogs are configured with their "store".
-627:        // We must request upload information for _this_ catalog to know where
-628:        // to upload store paths.
-629:        // For now calling publish just gets information about cache,
-630:        // but in the future this will also provide access tokens and other info
-631:        // needed.
-632:        tracing::debug!("Beginning publish of package...");
-633:        let publish_response = [...]
-```
-
-#### Evidence 2: PR #4165 @ `cli/flox-rust-sdk/src/providers/publish.rs:?` — ysndr (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.85
-
-**Source comment:**
-> instead of reimplementing (and leaking) the error message parsing , maybe we can just fold in the `GitRemoteCommandError` into a `GitCommandGetOriginError` variant. Either way i'd hope for this to be in a lower level.
-> I'm also not entirely sure we'd need to catch this here specifically, its pretty clear which git repo and git context we operate in that the git errors might suffice already.
-> Its the tracking branch that is not obvious.
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -959,13 +972,41 @@ fn gather_build_repo_meta(git: &impl GitProvider) -> Result<RemoteBuildRepoMetad
-         ));
-     }
- 
--    let remote_info = git
--        .get_current_branch_remote_info()
--        .map_err(|e| build_repo_err(&e.to_string()))?;
-+    let remote_info = git.get_current_branch_remote_info().map_err(|e| match e {
-+        GitCommandGetOriginError::NoUpstream => {
-+            let branch_hint = status
-+                .ref_
-+                .as_deref()
-+                .and_then(|r| r.strip_prefix("refs/heads/"))
-+                .unwrap_or("BRANCH");
-+            build_repo_err(&format!(
-+                "Current branch '{branch_hint}' has no upstream \
-+                 remote configured.\n\
-+                 Set one with: git branch \
-+                 --set-upstream-to [...]
-```
-
-**Merged final code:**
-```
-971:/// Check the local repo that the build source is in to make sure that it's in
-972:/// a state amenable to publishing an artifact built from it.
-973:///
-974:/// This entails checking that:
-975:/// - The repo has a remote configured.
-976:/// - The tracked source files are clean.
-977:/// - The current revision exists on the tracked remote branch.
-978:#[instrument(skip_all, fields(progress = "Checking repository state"))]
-979:fn gather_build_repo_meta(
-980:    git: &GitCommandProvider,
-981:) -> Result<RemoteBuildRepoMetadata, PublishError> {
-982:    let status = git
-983:        .status()
-984:        .map_err(|_e| build_repo_err("Unable to get repository status."))?;
-985:
-986:    if status.is_dirty {
-987:        return Err(build_repo_err(
-988:            "Build repository must be clean, bu [...]
-```
-
-### F#843: Use relative paths in error messages to reduce noise and match user expectations about project structure.
-- **Taxonomy:** `user-facing-messages`   **Area:** `providers`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=1, T2=0
-- **Evidence:** 2 comments across PRs #4096, #4102
-- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
-- **Acceptance rate:** 1.00
-
-#### Evidence 1: PR #4102 @ `cli/flox-rust-sdk/src/providers/publish.rs:?` — dcarley (Tier 1)
-- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.78
-
-**Source comment:**
-> Yeah. We also use the same list of files to present relative paths in the error message because the user doesn't know about the clean checkout and doesn't need the noise of the full path to the original project.
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -883,6 +888,68 @@ pub fn build_repo_err(msg: &str) -> PublishError {
-     PublishError::UnsupportedEnvironmentState(build_repo_err_msg(msg))
+@@ -38,26 +41,152 @@ pub(super) fn assemble_activate_command(
+     command
  }
  
-+/// Verify that the critical environment files are tracked by git.
-+/// Publishing creates a clean checkout, so untracked files won't be available.
-+fn check_env_files_tracked(
-+    flox: &Flox,
-+    git: &GitCommandProvider,
-+    environment: &impl Environment,
-+) -> Result<(), PublishError> {
-+    let dot_flox = environment.dot_flox_path();
-+    let manifest_path = environment
-+        .manifest_path(flox)
-+        .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
-+    let lockfile_path = environment
-+        .lockfile_path(flox)
-+        .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
-+    le [...]
+-/// Set (and unset) environment variables needed to be activated.
+-pub fn apply_activation_env(
+-    command: &mut Command,
+-    context: &AttachCtx,
+-    project: Option<&AttachProjectCtx>,
+-    subsystem_verbosity: u32,
+-    vars_from_env: VarsFromEnvironment,
+-    env_diff: &EnvDiff,
+-) {
+-    command.envs(old_cli_envs(context, project));
+-    add_old_activate_script_exports(
+-        command,
+-        context,
+-        project,
+-        subsystem_verbosity,
+-        vars_from_env,
+-    );
+-    command.envs(&env_diff.additions);
+-    for var in &env_diff.deletions {
+-        command.env_remove(var);
++/// The complete set of environment variable changes needed for attaching.
++///
++/// Constructed once from t [...]
 ```
 
 **Merged final code:**
 ```
-915:    };
-916:
-917:    let builder = FloxBuildMk::new(flox, &base_dir, &expression_ref_locked, &built_environments);
-918:
-919:    // Build the package and collect the outputs
-920:    let build_results = builder.build(
-921:        &base_nixpkgs_url.as_flake_ref()?,
-922:        &built_environments.develop,
-923:        &[pkg.name()],
-924:        Some(false),
-925:        system_override,
-926:    )?;
-927:
-928:    if build_results.len() != 1 {
-929:        return Err(PublishError::NonexistentOutputs(
-930:            "No results returned from build command.".to_string(),
-931:        ));
-932:    }
-933:    let build_result = &build_results[0];
-934:
-935:    let metadata = convert_build_result_to_build_metadata(build_result)?;
-936:    Ok(metadata)
-937:}
-938:
-939:/// Creates the error message for a bu [...]
+67:    /// 2. `collect_activate_exports()` — activation context vars
+68:    /// 3. `start_diff.additions` / `start_diff.deletions` — from activation scripts
+69:    pub fn new(
+70:        context: &AttachCtx,
+71:        project: Option<&AttachProjectCtx>,
+72:        subsystem_verbosity: u32,
+73:        mut vars_from_env: VarsFromEnvironment,
+74:        start_diff: &StartDiff,
+75:    ) -> Result<Self> {
+76:        // Extract the pre-activation snapshot before consuming vars_from_env.
+77:        let full_env = vars_from_env.full_env.take();
+78:
+79:        // Assemble sets and removals.
+80:        let mut sets: HashMap<String, String> = HashMap::new();
+81:
+82:        for (k, v) in old_cli_envs(context, project) {
+83:            sets.insert(k.to_string(), v);
+84:        }
+85:
+86:        let (ex [...]
 ```
 
-#### Evidence 2: PR #4096 @ `cli/flox-rust-sdk/src/providers/build.rs:741` — dcarley (Tier 1)
+### F#1224: Set container-specific activation context fields based on what actually runs in the container; if watchdog is not started in containers, set `watchdog_bin = null` and `flox_env_log_dir = null`.
+- **Taxonomy:** `semantic-correctness`   **Area:** `other`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=0
+- **Evidence:** 2 comments across PRs #3762
+- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
+- **Acceptance rate:** 1.00
+
+#### Evidence 1: PR #3762 @ `mkContainer/mkContainer.nix:?` — mkenigs (Tier 1)
+- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.65
+
+**Source comment:**
+> question nonblocking: should we create `/log/flox`?
+> nonblocking suggestion: I think FHS says to use `/var/log`?
+> question nonblocking: I think this is a behavior change, but for the better - seems like the watchdog may be getting passed an empty string for log dir currently? And somehow it's handling it gracefully? Is that your understanding?
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -96,6 +95,41 @@ let
+     ];
+   };
+ 
++  # For field definitions, see `ActivateCtx` in `flox-core`
++  activateCtx = {
++    mode = "${activationMode}";
++    shell = {
++      Bash = "${containerPkgs.bashInteractive}/bin/bash";
++    };
++    env = "${environment}";
++    run_args = [ ];
++    invocation_type = null;
++    remove_after_reading = false;
++    env_description = "${containerName}";
++    env_cache = "/tmp";
++    flox_env_log_dir = "/log/flox";
+```
+
+**Merged final code:**
+```
+90:    extraPasswdLines = optionals isNixStoreUserOwned [
+91:      "${nixStoreUserGroup.uname}:x:${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid}:created by Flox:/var/empty:/bin/sh"
+92:    ];
+93:    extraGroupLines = optionals isNixStoreUserOwned [
+94:      "${nixStoreUserGroup.gname}:x:${toString nixStoreUserGroup.gid}:"
+95:    ];
+96:  };
+97:
+98:  # For field definitions, see `ActivateCtx` in `flox-core`
+99:  activateCtx = {
+100:    mode = "${activationMode}";
+101:    shell = {
+102:      Bash = "${containerPkgs.bashInteractive}/bin/bash";
+103:    };
+104:    env = "${environment}";
+105:    run_args = [ ];
+106:    invocation_type = null;
+107:    remove_after_reading = false;
+108:    env_description = "${containerName}";
+109:    env_cache = "/tmp";
+110:    flox_env_log_dir [...]
+```
+
+#### Evidence 2: PR #3762 @ `mkContainer/mkContainer.nix:?` — zmitchell (Tier 3)
+- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.65
+
+**Source comment:**
+> Wait, are we even starting the watchdog in the container? I don't think so, in which case, that log directory isn't even really getting used.
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -96,6 +95,41 @@ let
+     ];
+   };
+ 
++  # For field definitions, see `ActivateCtx` in `flox-core`
++  activateCtx = {
++    mode = "${activationMode}";
++    shell = {
++      Bash = "${containerPkgs.bashInteractive}/bin/bash";
++    };
++    env = "${environment}";
++    run_args = [ ];
++    invocation_type = null;
++    remove_after_reading = false;
++    env_description = "${containerName}";
++    env_cache = "/tmp";
++    flox_env_log_dir = "/log/flox";
+```
+
+**Merged final code:**
+```
+90:    extraPasswdLines = optionals isNixStoreUserOwned [
+91:      "${nixStoreUserGroup.uname}:x:${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid}:created by Flox:/var/empty:/bin/sh"
+92:    ];
+93:    extraGroupLines = optionals isNixStoreUserOwned [
+94:      "${nixStoreUserGroup.gname}:x:${toString nixStoreUserGroup.gid}:"
+95:    ];
+96:  };
+97:
+98:  # For field definitions, see `ActivateCtx` in `flox-core`
+99:  activateCtx = {
+100:    mode = "${activationMode}";
+101:    shell = {
+102:      Bash = "${containerPkgs.bashInteractive}/bin/bash";
+103:    };
+104:    env = "${environment}";
+105:    run_args = [ ];
+106:    invocation_type = null;
+107:    remove_after_reading = false;
+108:    env_description = "${containerName}";
+109:    env_cache = "/tmp";
+110:    flox_env_log_dir [...]
+```
+
+### F#1327: When refactoring auth provider construction, preserve the pre-refactor behavior for each auth mode; Kerberos must construct `NixAuth { floxhub_token: None, ... }` because `create_netrc()` handles missing tokens gracefully.
+- **Taxonomy:** `error-handling`   **Area:** `providers`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=1
+- **Evidence:** 2 comments across PRs #4172
+- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
+- **Acceptance rate:** 1.00
+
+#### Evidence 1: PR #4172 @ `cli/flox-rust-sdk/src/providers/auth.rs:?` — ysndr (Tier 1)
 - **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.82
 
 **Source comment:**
-> (nit) Can we just join `{expression_dir}/pkgs` so that the user doesn't have to join the dots?
+> **[NOTE]** wouldn't this cause all auth'ed nix operations to fail now?
 
 **Diff hunk (what reviewer saw):**
 ```
-@@ -736,9 +737,10 @@ impl PackageTargets {
-             if targets.contains_key(&expression_build_target) {
-                 return Err(PackageTargetError::new(formatdoc! {"
-                     '{expression_build_target}' is defined in the manifest and as a Nix expression.
--                    Rename or delete either the package definition in {expression_dir}
-+                    Rename or delete either the package definition
-+                    in the 'pkgs/' dir located in '{expression_ref}'
+@@ -86,10 +87,18 @@ pub struct Auth {
+ impl Auth {
+     /// Construct a new auth provider from a Flox instance
+     pub fn from_flox(flox: &Flox) -> Result<Self, AuthError> {
+-        Ok(Self {
+-            floxhub_token: flox.floxhub_token.clone(),
+-            netrc_tempdir: tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?,
+-        })
++        match &flox.auth_context {
++            AuthContext::Auth0(token) => Ok(Self {
++                floxhub_token: token.clone(),
++                netrc_tempdir: tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?,
++            }),
++            AuthContext::Kerberos(_) => {
++                // Do nothing, Kerberos authentication is handled differently
++                Err(AuthError::CatchAll(
++                    "Kerberos Auth [...]
 ```
 
 **Merged final code:**
 ```
-721:    ) -> Result<PackageTargets, PackageTargetError> {
-722:        let environment_packages = manifest.as_latest_schema().build();
-723:
-724:        let nix_expression_packages = get_nix_expression_targets(expression_ref)
-725:            .map_err(|e| PackageTargetError::new(e.to_string()))?;
-726:
-727:        let mut targets = HashMap::new();
-728:
-729:        targets.extend(
-730:            environment_packages
-731:                .inner()
-732:                .keys()
-733:                .map(|name| (name.to_string(), PackageTargetKind::ManifestBuild)),
-734:        );
-735:
-736:        for (expression_build_target, expression_build_metadata) in nix_expression_packages {
-737:            if targets.contains_key(&expression_build_target) {
-738:                return Err(PackageTargetError::new [...]
+(snippet not available — file deleted, renamed, or out-of-range at merge)
 ```
 
-### F#856: Parsing order must split outputs (^) before version (@) to avoid ambiguity in argument parsing.
+#### Evidence 2: PR #4172 @ `cli/flox-rust-sdk/src/providers/auth.rs:?` — gilmishal (Tier 2)
+- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.82
+
+**Source comment:**
+> Good catch — this was a regression from the AuthContext refactor. The original code just grabbed `flox.floxhub_token` (which could be `None`) without caring about auth mode. Fixed: Kerberos now constructs `NixAuth` with `floxhub_token: None`, matching pre-refactor behavior. The struct already handles missing tokens gracefully (`create_netrc()` returns `NoToken`, `try_create_netrc()` returns `None`).
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -86,10 +87,18 @@ pub struct Auth {
+ impl Auth {
+     /// Construct a new auth provider from a Flox instance
+     pub fn from_flox(flox: &Flox) -> Result<Self, AuthError> {
+-        Ok(Self {
+-            floxhub_token: flox.floxhub_token.clone(),
+-            netrc_tempdir: tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?,
+-        })
++        match &flox.auth_context {
++            AuthContext::Auth0(token) => Ok(Self {
++                floxhub_token: token.clone(),
++                netrc_tempdir: tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?,
++            }),
++            AuthContext::Kerberos(_) => {
++                // Do nothing, Kerberos authentication is handled differently
++                Err(AuthError::CatchAll(
++                    "Kerberos Auth [...]
+```
+
+**Merged final code:**
+```
+(snippet not available — file deleted, renamed, or out-of-range at merge)
+```
+
+### F#1341: Parse installable descriptors outputs-first (`^`) then version (`@`) to avoid ambiguity: split on `^` before `@`, so a version string containing `^` is not misidentified as an outputs specifier.
 - **Taxonomy:** `semantic-correctness`   **Area:** `models/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=1
 - **Evidence:** 2 comments across PRs #3864
@@ -2259,7 +1246,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 - **Acceptance rate:** 1.00
 
 #### Evidence 1: PR #3864 @ `cli/flox-rust-sdk/src/models/manifest/raw.rs:?` — ysndr (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.85
+- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.88
 
 **Source comment:**
 > blocking: this does seem to parse `<attr_path>[@<version>][^<outputs>]` rather than `<attr_path>[^<outputs>][@<version>]` as it is described in the PR description:
@@ -2342,438 +1329,15 @@ _2 cross-cutting findings, ordered by confidence descending._
 797:                if version.is_empty( [...]
 ```
 
-### F#859: Avoid adding Ord/PartialOrd traits unless semantically justified by actual use cases.
-- **Taxonomy:** `control-flow`   **Area:** `models/other`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=1, T2=1
-- **Evidence:** 2 comments across PRs #3864
-- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
-- **Acceptance rate:** 1.00
-
-#### Evidence 1: PR #3864 @ `cli/flox-rust-sdk/src/models/manifest/raw.rs:673` — gilmishal (Tier 2)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.70
-
-**Source comment:**
-> Using `SelectedOutputs` got me into a rabbit hole of trying to either add `Ord` and `PartialOrd` traits to `SelectedOutputs` - which I think is the wrong thing to do -- or trying to remove them from `SelectedOutputs` - which is a worse rabbit hole.
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -667,6 +667,27 @@ pub(super) fn is_custom_package(pkg_path: &str) -> bool {
-     !is_base_catalog_pkg
- }
- 
-+/// Represents the outputs to install for a package.
-+/// This is the raw representation used in parsing CLI arguments.
-+#[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
-+pub enum RawSelectedOutputs {
-```
-
-**Merged final code:**
-```
-653:            PackageToInstall::Catalog(pkg) => Some((*pkg).clone()),
-654:            _ => None,
-655:        })
-656:        .collect()
-657:}
-658:
-659:/// Custom packages are of the form "<prefix>/<suffix>" where the prefix is not
-660:/// allowed to contain a '.' character. This is a quick and dirty way of
-661:/// identifying custom packages using that logic.
-662:///
-663:/// Favour using CatalogPackage::is_custom_catalog if you already have a CatalogPackage
-664:pub(super) fn is_custom_package(pkg_path: &str) -> bool {
-665:    let parts: Vec<&str> = pkg_path.split('/').collect();
-666:    let is_base_catalog_pkg = parts.len() == 1 || parts.first().is_some_and(|p| p.contains('.'));
-667:    !is_base_catalog_pkg
-668:}
-669:
-670:/// Represents the outputs to install for a package.
-671:/// This i [...]
-```
-
-#### Evidence 2: PR #3864 @ `cli/flox-rust-sdk/src/models/manifest/raw.rs:673` — ysndr (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.75
-
-**Source comment:**
-> why do we add Ord here anyway?
-> where are >output lists< ordered (mind ord, would canonically order list against list, rather than ordering the elements of the list)
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -667,6 +667,27 @@ pub(super) fn is_custom_package(pkg_path: &str) -> bool {
-     !is_base_catalog_pkg
- }
- 
-+/// Represents the outputs to install for a package.
-+/// This is the raw representation used in parsing CLI arguments.
-+#[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
-+pub enum RawSelectedOutputs {
-```
-
-**Merged final code:**
-```
-653:            PackageToInstall::Catalog(pkg) => Some((*pkg).clone()),
-654:            _ => None,
-655:        })
-656:        .collect()
-657:}
-658:
-659:/// Custom packages are of the form "<prefix>/<suffix>" where the prefix is not
-660:/// allowed to contain a '.' character. This is a quick and dirty way of
-661:/// identifying custom packages using that logic.
-662:///
-663:/// Favour using CatalogPackage::is_custom_catalog if you already have a CatalogPackage
-664:pub(super) fn is_custom_package(pkg_path: &str) -> bool {
-665:    let parts: Vec<&str> = pkg_path.split('/').collect();
-666:    let is_base_catalog_pkg = parts.len() == 1 || parts.first().is_some_and(|p| p.contains('.'));
-667:    !is_base_catalog_pkg
-668:}
-669:
-670:/// Represents the outputs to install for a package.
-671:/// This i [...]
-```
-
-### F#937: Allow ^output specifications without #attr in flake URLs to match Nix behavior.
-- **Taxonomy:** `semantic-correctness`   **Area:** `manifest`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=2, T2=0
-- **Evidence:** 2 comments across PRs #4070
-- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
-- **Acceptance rate:** 1.00
-
-#### Evidence 1: PR #4070 @ `cli/flox-manifest/src/raw/mod.rs:305` — dcarley (Tier 1)
-- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.68
-
-**Source comment:**
-> Should it be valid to have `^output` without `#attr`?
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -296,6 +293,40 @@ fn infer_flake_install_id(url: &Url) -> Result<String, RawManifestError> {
-     }
- }
- 
-+/// Extracts `^output` specifications from a flake URL fragment.
-+///
-+/// Returns the URL with the `^output` stripped from its fragment,
-+/// along with the parsed outputs if present.
-+fn extract_flake_outputs(
-+    mut url: Url,
-+) -> Result<(Url, Option<RawSelectedOutputs>), RawManifestError> {
-+    let Some(fragment) = url.fragment() else {
-+        return Ok((url, None));
-+    };
-```
-
-**Merged final code:**
-```
-285:            .map(|s| url_escape::decode(s).to_string())
-286:            .ok_or(RawManifestError::InvalidFlakeRef(url.to_string()))
-287:    } else {
-288:        url.path()
-289:            .split('/')
-290:            .next_back()
-291:            .map(|s| url_escape::decode(s).to_string())
-292:            .ok_or(RawManifestError::InvalidFlakeRef(url.to_string()))
-293:    }
-294:}
-295:
-296:/// Extracts `^output` specifications from a flake URL fragment.
-297:///
-298:/// Returns the URL with the `^output` stripped from its fragment,
-299:/// along with the parsed outputs if present.
-300:fn extract_flake_outputs(
-301:    mut url: Url,
-302:) -> Result<(Url, Option<RawSelectedOutputs>), RawManifestError> {
-303:    let Some(fragment) = url.fragment() else {
-304:        return Ok((url, None));
-305: [...]
-```
-
-#### Evidence 2: PR #4070 @ `cli/flox-manifest/src/raw/mod.rs:305` — mkenigs (Tier 1)
-- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.78
-
-**Source comment:**
-> I feel like that doesn't matter much, but Nix supports it:
-> ```
-> > nix build 'github:flox/flox^out'
-> > nix build 'github:flox/flox^foo'
-> error: derivation '/nix/store/lfsj5hpq47qnw38m4hrn8f0q9l1wxka3-flox-1.9.1-g70b9431.drv' does not have output 'foo'
-> ```
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -296,6 +293,40 @@ fn infer_flake_install_id(url: &Url) -> Result<String, RawManifestError> {
-     }
- }
- 
-+/// Extracts `^output` specifications from a flake URL fragment.
-+///
-+/// Returns the URL with the `^output` stripped from its fragment,
-+/// along with the parsed outputs if present.
-+fn extract_flake_outputs(
-+    mut url: Url,
-+) -> Result<(Url, Option<RawSelectedOutputs>), RawManifestError> {
-+    let Some(fragment) = url.fragment() else {
-+        return Ok((url, None));
-+    };
-```
-
-**Merged final code:**
-```
-285:            .map(|s| url_escape::decode(s).to_string())
-286:            .ok_or(RawManifestError::InvalidFlakeRef(url.to_string()))
-287:    } else {
-288:        url.path()
-289:            .split('/')
-290:            .next_back()
-291:            .map(|s| url_escape::decode(s).to_string())
-292:            .ok_or(RawManifestError::InvalidFlakeRef(url.to_string()))
-293:    }
-294:}
-295:
-296:/// Extracts `^output` specifications from a flake URL fragment.
-297:///
-298:/// Returns the URL with the `^output` stripped from its fragment,
-299:/// along with the parsed outputs if present.
-300:fn extract_flake_outputs(
-301:    mut url: Url,
-302:) -> Result<(Url, Option<RawSelectedOutputs>), RawManifestError> {
-303:    let Some(fragment) = url.fragment() else {
-304:        return Ok((url, None));
-305: [...]
-```
-
-### F#950: Drop exhaustive test coverage in favor of representative assertion cases to avoid redundancy.
-- **Taxonomy:** `testing`   **Area:** `manifest`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=1, T2=0
-- **Evidence:** 2 comments across PRs #4152
-- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
-- **Acceptance rate:** 1.00
-
-#### Evidence 1: PR #4152 @ `cli/flox-manifest/src/compose/shallow.rs:?` — mkenigs (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.80
-
-**Source comment:**
-> suggestion nonblocking: I think we can add this one assertion to `merges_services_section` and drop this test
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -716,6 +731,62 @@ mod tests {
-         }
-     }
- 
-+    #[test]
-+    fn merge_services_auto_start_high_priority_some_true_overrides_low_priority_some_false() {
-+        let high = Services {
-+            auto_start: Some(true),
-+            service_map: Default::default(),
-+        };
-+        let low = Services {
-+            auto_start: Some(false),
-+            service_map: Default::default(),
-+        };
-+        let (merged, _) = ShallowMerger::merge_services(&low, &high).unwrap();
-+        assert_eq!(merged.auto_start, Some(true));
-+    }
-+
-+    #[test]
-+    fn merge_services_auto_start_high_priority_none_falls_back_to_low_priority() {
-+        let high = Services {
-+            auto_start: None,
-+            service_map: Default::default(),
-+        };
-+        let low = Services [...]
-```
-
-**Merged final code:**
-```
-767:    fn containerize_does_trivial_merge() {
-768:        let (merged, _warnings) = ShallowMerger::merge_containerize(None, None).unwrap();
-769:        assert_eq!(None, merged);
-770:
-771:        let low_priority = Some(Containerize::default());
-772:        let high_priority = None;
-773:        let (merged, _warnings) =
-774:            ShallowMerger::merge_containerize(low_priority.as_ref(), high_priority.as_ref())
-775:                .unwrap();
-776:        assert_eq!(low_priority, merged);
-777:
-778:        let low_priority = None;
-779:        let high_priority = Some(Containerize::default());
-780:        let (merged, _warnings) =
-781:            ShallowMerger::merge_containerize(low_priority.as_ref(), high_priority.as_ref())
-782:                .unwrap();
-783:        assert_eq!(high_prior [...]
-```
-
-#### Evidence 2: PR #4152 @ `cli/flox-manifest/src/compose/shallow.rs:765` — mkenigs (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.75
-
-**Source comment:**
-> I don't feel strongly, but not sure we need to cover every single case. We could probably drop this in favor of `merge_services_auto_start_high_priority_some_true_overrides_low_priority_some_false`
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -716,6 +731,62 @@ mod tests {
-         }
-     }
- 
-+    #[test]
-+    fn merge_services_auto_start_high_priority_some_true_overrides_low_priority_some_false() {
-+        let high = Services {
-+            auto_start: Some(true),
-+            service_map: Default::default(),
-+        };
-+        let low = Services {
-+            auto_start: Some(false),
-+            service_map: Default::default(),
-+        };
-+        let (merged, _) = ShallowMerger::merge_services(&low, &high).unwrap();
-+        assert_eq!(merged.auto_start, Some(true));
-+    }
-+
-+    #[test]
-+    fn merge_services_auto_start_high_priority_none_falls_back_to_low_priority() {
-+        let high = Services {
-+            auto_start: None,
-+            service_map: Default::default(),
-+        };
-+        let low = Services [...]
-```
-
-**Merged final code:**
-```
-745:            auto_start: Some(false),
-746:            service_map: Default::default(),
-747:        };
-748:        let (merged, _) = ShallowMerger::merge_services(&low, &high).unwrap();
-749:        assert_eq!(merged.auto_start, Some(true));
-750:    }
-751:
-752:    #[test]
-753:    fn merge_services_auto_start_high_priority_some_false_overrides_low_priority_some_true() {
-754:        let high = Services {
-755:            auto_start: Some(false),
-756:            service_map: Default::default(),
-757:        };
-758:        let low = Services {
-759:            auto_start: Some(true),
-760:            service_map: Default::default(),
-761:        };
-762:        let (merged, _) = ShallowMerger::merge_services(&low, &high).unwrap();
-763:        assert_eq!(merged.auto_start, Some(false));
-764:    }
-76 [...]
-```
-
-### F#957: Use Manifest constructor helpers like `migrated_manifest()` instead of calling `migrate_typed_only()` directly.
-- **Taxonomy:** `manifest-usage`   **Area:** `providers`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=2, T2=0
-- **Evidence:** 2 comments across PRs #4161
-- **Confidence:** 0.75   **In AGENTS.md?:** Y (Manifest usage (`flox-manifest` crate))   **Cross-area count:** 1
-- **Acceptance rate:** 1.00
-
-#### Evidence 1: PR #4161 @ `cli/flox-rust-sdk/src/providers/buildenv.rs:367` — dcarley (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.90
-
-**Source comment:**
-> (non-blocking) There are some other uses that could be replaced for consistency:
-> ```
-> (2) ~/projects/flox/flox on HEAD (796c66695) [$]
-> % rg 'lockfile.manifest.migrate_typed_only'
-> cli/flox/src/commands/services/mod.rs
-> 159:        let manifest = lockfile.manifest.migrate_typed_only(Some(&lockfile))?;
-> 
-> cli/flox/src/commands/activate.rs
-> 248:        let manifest = &lockfile.manifest.migrate_typed_only(Some(&lockfile))?;
-> 
-> cli/flox/src/commands/publish.rs
-> 174:        let lockfile_manifest = lockfile.man [...]
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -364,7 +364,7 @@ where
-         let mut flake_pkgs = vec![];
-         let mut store_path_pkgs = vec![];
- 
--        let complete_migrated_manifest = lockfile.manifest.migrate_typed_only(Some(lockfile))?;
-+        let complete_migrated_manifest = lockfile.migrated_manifest()?;
-```
-
-**Merged final code:**
-```
-347:    }
-348:
-349:    /// Realise all store paths of packages that are installed to the environment,
-350:    /// for the given system.
-351:    /// This goes through all packages in the lockfile and realises them with
-352:    /// the appropriate method for the package type.
-353:    ///
-354:    /// See the individual realisation functions for more details.
-355:    fn realise_lockfile(
-356:        &self,
-357:        client: &impl ClientTrait,
-358:        lockfile: &Lockfile,
-359:        system: &System,
-360:        pre_checked_store_paths: &CheckedStorePaths,
-361:    ) -> Result<(), BuildEnvError> {
-362:        let mut base_catalog_pkgs = vec![];
-363:        let mut custom_catalog_pkgs = vec![];
-364:        let mut flake_pkgs = vec![];
-365:        let mut store_path_pkgs = vec![];
-366:
-367: [...]
-```
-
-#### Evidence 2: PR #4161 @ `cli/flox-rust-sdk/src/providers/buildenv.rs:367` — ysndr (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.95
-
-**Source comment:**
-> +1
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -364,7 +364,7 @@ where
-         let mut flake_pkgs = vec![];
-         let mut store_path_pkgs = vec![];
- 
--        let complete_migrated_manifest = lockfile.manifest.migrate_typed_only(Some(lockfile))?;
-+        let complete_migrated_manifest = lockfile.migrated_manifest()?;
-```
-
-**Merged final code:**
-```
-347:    }
-348:
-349:    /// Realise all store paths of packages that are installed to the environment,
-350:    /// for the given system.
-351:    /// This goes through all packages in the lockfile and realises them with
-352:    /// the appropriate method for the package type.
-353:    ///
-354:    /// See the individual realisation functions for more details.
-355:    fn realise_lockfile(
-356:        &self,
-357:        client: &impl ClientTrait,
-358:        lockfile: &Lockfile,
-359:        system: &System,
-360:        pre_checked_store_paths: &CheckedStorePaths,
-361:    ) -> Result<(), BuildEnvError> {
-362:        let mut base_catalog_pkgs = vec![];
-363:        let mut custom_catalog_pkgs = vec![];
-364:        let mut flake_pkgs = vec![];
-365:        let mut store_path_pkgs = vec![];
-366:
-367: [...]
-```
-
-### F#983: Add structured tracing logs for all authentication flow branches.
+### F#1471: Add a `tracing::debug!` log at each authentication flow branch so that auth mode decisions are visible in traces; e.g., 'Kerberos mode — git auth handled natively via ccache'.
 - **Taxonomy:** `logging-tracing`   **Area:** `providers`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=1
 - **Evidence:** 2 comments across PRs #4172
-- **Confidence:** 0.75   **In AGENTS.md?:** N (—)   **Cross-area count:** 1
+- **Confidence:** 0.75   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
 - **Acceptance rate:** 1.00
 
 #### Evidence 1: PR #4172 @ `cli/flox-rust-sdk/src/providers/git_auth.rs:?` — ysndr (Tier 1)
-- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.85
+- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.82
 
 **Source comment:**
 > **[SUGGESTION]** worth adding a log here too.
@@ -2872,158 +1436,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 21:        let token = [...]
 ```
 
-### F#685: Use generic terminology (e.g. 'provider', 'token auth') unless implementation-specific detail is essential.
-- **Taxonomy:** `naming`   **Area:** `cli/other`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=1, T2=1
-- **Evidence:** 4 comments across PRs #4172
-- **Confidence:** 0.73   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
-- **Acceptance rate:** 0.50
-
-#### Evidence 1: PR #4172 @ `cli/flox-catalog/src/auth/mod.rs:27` — ysndr (Tier 1)
-- **Thread resolved:** N   **was_addressed:** false   **classification confidence:** 0.65
-
-**Source comment:**
-> **[NOTE]** question: is this rename purely to align with the semantics?
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -20,52 +22,10 @@ pub enum AuthError {
-     Expired { handle: String, message: String },
- }
- 
--/// Strategy pattern for authentication header insertion
--pub trait AuthStrategy: Send + Sync + std::fmt::Debug {
--    /// Add authorization headers to the provided HeaderMap
--    // TODO: return header key-value pairs instead of mutating the HeaderMap
--    // directly, and let the hook layer map them into headers.
--    fn add_auth_headers(&self, header_map: &mut HeaderMap);
--
--    /// Validate that auth is available and return the user's handle.
--    fn get_handle(&self) -> Result<String, AuthError>;
--
--    /// Return the authentication method this strategy implements.
--    fn auth_method(&self) -> AuthMethod;
--}
--
--/// Construct the appropriate strategy for the given [`AuthMethod`].
--///
--/// [...]
-```
-
-**Merged final code:**
-```
-7://! - `floxhub-authn-kerberos`: Kerberos authentication via GSSAPI
-8:
-9:use serde::{Deserialize, Serialize};
-10:
-11:mod auth_context;
-12:mod auth_context_factory;
-13:
-14:pub use auth_context::{AuthContext, AuthFailure, AuthHeaderError, KerberosMaterial};
-15:
-16:/// Errors from authentication validation (internal, used by Kerberos credential acquisition).
-17:#[cfg(feature = "floxhub-authn-kerberos")]
-18:#[derive(Debug, Clone, thiserror::Error)]
-19:pub(crate) enum AuthError {
-20:    #[error("{0}")]
-21:    NotAuthenticated(String),
-22:}
-23:
-24:/// Available authentication methods
-25:#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-26:#[serde(rename_all = "lowercase")]
-27:pub enum AuthnMode {
-28:    /// Auth0 authentication
-29:    Auth0,
-30:    /// Kerberos authentication
-31: [...]
-```
-
-#### Evidence 2: PR #4172 @ `cli/flox-rust-sdk/src/flox.rs:?` — ysndr (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.80
-
-**Source comment:**
-> **[NOTE]** we should align on either `auth_context` or `credential`.
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -341,8 +311,7 @@ pub mod test_helpers {
-                 git_url_override,
-             )
-             .unwrap(),
--            floxhub_token: None,
--            auth_strategy,
-+            auth_context: credential,
-```
-
-**Merged final code:**
-```
-294:
-295:        let flox = Flox {
-296:            system: env!("NIX_TARGET_SYSTEM").to_string(),
-297:            system_user_name: "its-a-me-mario".to_string(),
-298:            system_hostname: "mushroom-kingdom".to_string(),
-299:            argv: vec![],
-300:            cache_dir,
-301:            data_dir,
-302:            state_dir,
-303:            temp_dir,
-304:            config_dir,
-305:            runtime_dir,
-306:            floxhub: Floxhub::new(
-307:                Url::from_str("https://hub.flox.dev").unwrap(),
-308:                git_url_override,
-309:            )
-310:            .unwrap(),
-311:            auth_context,
-312:            catalog_client: MockClient::default().into(),
-313:            installable_locker: InstallableLockerImpl::Mock(InstallableLockerMock::new()),
-314 [...]
-```
-
-#### Evidence 3: PR #4172 @ `cli/flox-rust-sdk/src/flox.rs:?` — gilmishal (Tier 2)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.85
-
-**Source comment:**
-> Addressed: renamed `credential` variable to `auth_context` throughout (test helpers, function parameters, etc.).
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -341,8 +311,7 @@ pub mod test_helpers {
-                 git_url_override,
-             )
-             .unwrap(),
--            floxhub_token: None,
--            auth_strategy,
-+            auth_context: credential,
-```
-
-**Merged final code:**
-```
-294:
-295:        let flox = Flox {
-296:            system: env!("NIX_TARGET_SYSTEM").to_string(),
-297:            system_user_name: "its-a-me-mario".to_string(),
-298:            system_hostname: "mushroom-kingdom".to_string(),
-299:            argv: vec![],
-300:            cache_dir,
-301:            data_dir,
-302:            state_dir,
-303:            temp_dir,
-304:            config_dir,
-305:            runtime_dir,
-306:            floxhub: Floxhub::new(
-307:                Url::from_str("https://hub.flox.dev").unwrap(),
-308:                git_url_override,
-309:            )
-310:            .unwrap(),
-311:            auth_context,
-312:            catalog_client: MockClient::default().into(),
-313:            installable_locker: InstallableLockerImpl::Mock(InstallableLockerMock::new()),
-314 [...]
-```
-
-### F#523: Extend error handling to cover all ConcreteEnvironment variants, not just Path.
+### F#987: Extend error handling to cover all ConcreteEnvironment variants, not just Path.
 - **Taxonomy:** `error-handling`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3599
@@ -3079,7 +1492,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 318:            ConcreteEnvironm [...]
 ```
 
-### F#528: Distinguish auth status between Kerberos and Auth0 modes in user-facing messages.
+### F#992: Distinguish auth status between Kerberos and Auth0 modes in user-facing messages.
 - **Taxonomy:** `error-handling`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4172
@@ -3129,7 +1542,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 280:                let Aut [...]
 ```
 
-### F#529: Use existing helper functions like nix_expression_dir instead of duplicating path logic.
+### F#993: Use existing helper functions like nix_expression_dir instead of duplicating path logic.
 - **Taxonomy:** `semantic-correctness`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3599
@@ -3192,7 +1605,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 310: [...]
 ```
 
-### F#530: Split nested package names by dots to create proper directory nesting in .flox/pkgs.
+### F#994: Split nested package names by dots to create proper directory nesting in .flox/pkgs.
 - **Taxonomy:** `semantic-correctness`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3599
@@ -3253,7 +1666,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 310:    asy [...]
 ```
 
-### F#531: Use nix eval to extract package source location instead of making assumptions about nixpkgs availability.
+### F#995: Use nix eval to extract package source location instead of making assumptions about nixpkgs availability.
 - **Taxonomy:** `semantic-correctness`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3599
@@ -3324,7 +1737,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 331:            let mut pkgs_ [...]
 ```
 
-### F#532: Write binary output directly with fs::write instead of converting through String.
+### F#996: Write binary output directly with fs::write instead of converting through String.
 - **Taxonomy:** `semantic-correctness`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3599
@@ -3386,7 +1799,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 374:        // Read the package definition fr [...]
 ```
 
-### F#534: Remove obsolete pattern-matching branches when introducing better-typed error variants.
+### F#998: Remove obsolete pattern-matching branches when introducing better-typed error variants.
 - **Taxonomy:** `semantic-correctness`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3646
@@ -3434,7 +1847,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 152:            EnvironmentError::ManagedEnvironment(ManagedEnvironmentError::UpstreamAlreadyExists { [...]
 ```
 
-### F#541: Acknowledge command-name completion for -c flag has limited value for typical quoted shell strings.
+### F#1005: Acknowledge command-name completion for -c flag has limited value for typical quoted shell strings.
 - **Taxonomy:** `semantic-correctness`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3988
@@ -3488,7 +1901,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 79:            complete_shell(SHELL_COM [...]
 ```
 
-### F#543: Add TODOs for auth flows that are undefined with certain configurations; defer multi-auth refactoring to follow-up work.
+### F#1007: Add TODOs for auth flows that are undefined with certain configurations; defer multi-auth refactoring to follow-up work.
 - **Taxonomy:** `semantic-correctness`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4047
@@ -3532,7 +1945,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 315:p [...]
 ```
 
-### F#545: Parse values at boundaries once; avoid redundant parsing of already-parsed types.
+### F#1009: Parse values at boundaries once; avoid redundant parsing of already-parsed types.
 - **Taxonomy:** `semantic-correctness`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4156
@@ -3593,7 +2006,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 260:                .context("invalid [...]
 ```
 
-### F#547: Access manifest descriptor fields directly instead of reconstructing from catalog data.
+### F#1011: Access manifest descriptor fields directly instead of reconstructing from catalog data.
 - **Taxonomy:** `type-safety`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3700
@@ -3658,7 +2071,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 189:                        id = loc [...]
 ```
 
-### F#549: Use domain types (Shell enum) instead of strings to catch unsupported variants at compile time.
+### F#1013: Use domain types (Shell enum) instead of strings to catch unsupported variants at compile time.
 - **Taxonomy:** `type-safety`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4231
@@ -3713,7 +2126,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 24:        let cwd = std::env [...]
 ```
 
-### F#551: Use select! to wait for either signal handler or CLI completion, dropping tempdir on exit.
+### F#1015: Use select! to wait for either signal handler or CLI completion, dropping tempdir on exit.
 - **Taxonomy:** `control-flow`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3600
@@ -3769,7 +2182,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 427:                    result = tokio::t [...]
 ```
 
-### F#552: Use early-return style guards with `&&` and `let Some()` to avoid reading unnecessary metadata.
+### F#1016: Use early-return style guards with `&&` and `let Some()` to avoid reading unnecessary metadata.
 - **Taxonomy:** `control-flow`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3715
@@ -3822,7 +2235,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 285: [...]
 ```
 
-### F#554: Refactor duplicated logic into unified functions to avoid messaging inconsistencies across code paths.
+### F#1018: Refactor duplicated logic into unified functions to avoid messaging inconsistencies across code paths.
 - **Taxonomy:** `control-flow`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4152
@@ -3867,7 +2280,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 392:            .unwrap_or(utils::colors::INDIGO_400.to_ansi2 [...]
 ```
 
-### F#556: Clone shared data at the boundary where ownership is determined, not throughout the function.
+### F#1020: Clone shared data at the boundary where ownership is determined, not throughout the function.
 - **Taxonomy:** `control-flow`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4172
@@ -3924,7 +2337,76 @@ _2 cross-cutting findings, ordered by confidence descending._
 1316:                    Choice("Trust, save choice", Choi [...]
 ```
 
-### F#562: Rename ImportNixpkgs to import-from-installable to reflect parameter change.
+### F#1025: Name CLI positional arguments by their actual type ('installable', 'attrpath'), not by an approximate concept ('expression'); prefer a single installable argument with an optional fallback for no-flakeref cases.
+- **Taxonomy:** `naming`   **Area:** `commands`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=0
+- **Evidence:** 1 comments across PRs #3599
+- **Confidence:** 0.71   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
+- **Acceptance rate:** 1.00
+
+#### Evidence 1: PR #3599 @ `cli/flox/src/commands/build.rs:?` — ysndr (Tier 1)
+- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.80
+
+**Source comment:**
+> nit, this argument does not take an expression, but an attrpath.
+> 
+> To more nix aligned people this split between nixpkgs ref and attrpath will still be a bit weird, I'd expect to be able to provide an installable, with maybe a fallback if the installable has no flakeref.
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -91,6 +91,26 @@ enum SubcommandOrBuildTargets {
+         #[bpaf(positional("package"))]
+         targets: Vec<String>,
+     },
++    /// Import package definition from nixpkgs
++    ///
++    /// Imports a package definition from nixpkgs for use in the environment.
++    #[bpaf(
++        command,
++        footer("Run 'man flox-build-import-nixpkgs' for more details.")
++    )]
++    ImportNixpkgs {
++        /// Overwrite existing package file
++        #[bpaf(long, short)]
++        force: bool,
++
++        /// Flake reference to use for nixpkgs (defaults to nixpkgs)
++        #[bpaf(long("nixpkgs"), argument("flake-ref"), optional)]
++        nixpkgs_flake: Option<String>,
++
++        /// The package name to import from nixpkgs
++        #[bpaf(positional("expression"))]
++        expression: String [...]
+```
+
+**Merged final code:**
+```
+92:        targets: Vec<String>,
+93:    },
+94:    /// Import package definition from nixpkgs
+95:    ///
+96:    /// Imports a package definition from nixpkgs for use in the environment.
+97:    #[bpaf(
+98:        command,
+99:        footer("Run 'man flox-build-import-nixpkgs' for more details.")
+100:    )]
+101:    ImportNixpkgs {
+102:        /// Overwrite existing package file
+103:        #[bpaf(long, short)]
+104:        force: bool,
+105:
+106:        /// The package to import (e.g., nixpkgs#hello, github:nixos/nixpkgs#hello)
+107:        #[bpaf(positional("installable"))]
+108:        installable: String,
+109:    },
+110:    BuildTargets {
+111:        #[bpaf(external(base_catalog_url_select), optional)]
+112:        base_catalog_url_select: Option<BaseCatalogUrlSelect>,
+113:
+114:        #[bpaf(e [...]
+```
+
+### F#1028: Rename ImportNixpkgs to import-from-installable to reflect parameter change.
 - **Taxonomy:** `naming`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3599
@@ -3976,7 +2458,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 99:        footer("Run 'man flox-build-import-nixpkgs' for more details.") [...]
 ```
 
-### F#563: Rename function to describe what it does, not how it was triggered.
+### F#1029: Rename function to describe what it does, not how it was triggered.
 - **Taxonomy:** `naming`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4152
@@ -4037,7 +2519,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 544:    / [...]
 ```
 
-### F#565: Prefix unused function parameters with underscore to signal intentional non-use.
+### F#1031: Prefix unused function parameters with underscore to signal intentional non-use.
 - **Taxonomy:** `naming`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4219
@@ -4081,7 +2563,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 640:        [first, second, ..] => Some(format!(" [...]
 ```
 
-### F#567: Add unit tests that write to a buffer; change function signature to accept &mut impl Write.
+### F#1033: Add unit tests that write to a buffer; change function signature to accept &mut impl Write.
 - **Taxonomy:** `testing`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3695
@@ -4127,7 +2609,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 151:    use flox_rust_sdk::providers::catalog::test_helpers::auto_recording_catalog_cli [...]
 ```
 
-### F#571: Add integration tests that verify real workflows through the full stack, not just unit mocks.
+### F#1037: Add integration tests that verify real workflows through the full stack, not just unit mocks.
 - **Taxonomy:** `testing`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3969
@@ -4195,7 +2677,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 437:    /// current_dir should be canoni [...]
 ```
 
-### F#572: Add CLI happy-path integration test for update-catalogs to verify the feature works end-to-end.
+### F#1038: Add CLI happy-path integration test for update-catalogs to verify the feature works end-to-end.
 - **Taxonomy:** `testing`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3969
@@ -4267,7 +2749,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 437:    /// current_dir should be canoni [...]
 ```
 
-### F#575: Remove trivial tests that only verify bpaf parser mechanics.
+### F#1042: Remove trivial tests that only verify bpaf parser mechanics.
 - **Taxonomy:** `testing`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4200
@@ -4319,7 +2801,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 (empty)
 ```
 
-### F#577: Add generation field to expecting error or make error generic to maintain consistency.
+### F#1044: Add generation field to expecting error or make error generic to maintain consistency.
 - **Taxonomy:** `user-facing-messages`   **Area:** `models/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3607
@@ -4365,7 +2847,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 1043:        #[cfg_attr(test, proptest(strategy = "optional [...]
 ```
 
-### F#581: Drop pub visibility for module-internal helper functions; organize by dependency order.
+### F#1047: Drop pub visibility for module-internal helper functions; organize by dependency order.
 - **Taxonomy:** `control-flow`   **Area:** `models/environment`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4076
@@ -4448,7 +2930,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 82:) -> Result<Vec<Package [...]
 ```
 
-### F#583: Choose between combined (owner/name:gen) or separate (owner/name --generation gen) format.
+### F#1049: Choose between combined (owner/name:gen) or separate (owner/name --generation gen) format.
 - **Taxonomy:** `naming`   **Area:** `models/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3607
@@ -4503,7 +2985,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 1043:        #[cfg_attr(test, proptest(strategy = "optional [...]
 ```
 
-### F#584: Clarify 'raw' in type names when it refers to parsed CLI argument representation vs. manifest view.
+### F#1050: Clarify 'raw' in type names when it refers to parsed CLI argument representation vs. manifest view.
 - **Taxonomy:** `naming`   **Area:** `models/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3864
@@ -4553,7 +3035,7 @@ _2 cross-cutting findings, ordered by confidence descending._
 671:/// This i [...]
 ```
 
-### F#585: Clarify what 'environment's build context' means in documentation.
+### F#1051: Clarify what 'environment's build context' means in documentation.
 - **Taxonomy:** `user-facing-messages`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3599
@@ -4634,90 +3116,634 @@ _2 cross-cutting findings, ordered by confidence descending._
 111:[`manifest. [...]
 ```
 
-## Gap candidates — rules NOT in AGENTS.md (81 total, ordered by confidence)
+### F#1052: Use concise terminology in documentation when describing environment types and generation support.
+- **Taxonomy:** `user-facing-messages`   **Area:** `cli/other`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=0
+- **Evidence:** 1 comments across PRs #3638
+- **Confidence:** 0.71   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
+- **Acceptance rate:** 1.00
+
+#### Evidence 1: PR #3638 @ `cli/flox/doc/flox-activate.md:115` — dcarley (Tier 1)
+- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.55
+
+**Source comment:**
+> Do you mean for a managed environment where the generation has been created locally but not pushed?
+> 
+> I did stumble a bit over how to describe the environments that are supported by this flag without mentioning "managed" or "remote". In other places we say "an environment that has been pushed to FloxHub" but that seemed to wordy here and it would be worse for the local generation case.
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -110,6 +111,9 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
+    See [`manifest.toml(5)`](./manifest.toml.md) for more details on activation
+    modes.
+ 
++`-g <generation>`, `--generation <generation>`
++:  Activate a FloxHub environment at a specific generation.
+```
+
+**Merged final code:**
+```
+95::  Start the services listed in the manifest when activating the environment.
+96:   If no services are running, the services from the manifest will be started,
+97:   otherwise a warning will displayed and activation will continue.
+98:
+99:   This flag is currently incompatible with "in-place" activations,
+100:   but this feature will be added in the future.
+101:
+102:   The services started with this flag will be cleaned up once the last
+103:   activation of this environment terminates.
+104:
+105:   A remote environment can only have a single set of running services,
+106:   regardless of how many times the environment is activated concurrently.
+107:
+108:`-m (dev|run)`, `--mode (dev|run)`
+109::  Activate the environment in either "dev" or "run" mode.
+110:   Overrides the `options.activate.m [...]
+```
+
+### F#1056: Use concrete language about cache directory storage instead of abstract descriptions.
+- **Taxonomy:** `user-facing-messages`   **Area:** `cli/other`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=0
+- **Evidence:** 1 comments across PRs #3750
+- **Confidence:** 0.71   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
+- **Acceptance rate:** 1.00
+
+#### Evidence 1: PR #3750 @ `cli/flox/doc/flox-pull.md:?` — mkenigs (Tier 1)
+- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.82
+
+**Source comment:**
+> suggestion nonblocking: I think just saying we store it in cache is a bit more concrete and might be easier to understand, maybe:
+> ```
+> When using the `--remote` flag, commands will operate on a
+> copy of the environment stored in Flox's cache directory.
+> ```
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -11,33 +11,64 @@ flox-pull - pull environment from FloxHub
+ # SYNOPSIS
+ 
+ ```
+-flox [<general-options>] pull
++# Pull a new environment into a directory
++flox [<general-options>] pull <owner>/<name>
+      [-d=<path>]
+-     [-r=<owner>/<name> | <owner>/<name> | [-f]]
+      [-f]
+      [-c]
++     [-g=<generation>]
++
++# Update an existing environment in a directory
++flox [<general-options>] pull
++     [-d=<path>]
++     [-f]
++
++# Fetch updates for a remote environment
++flox [<general-options>] pull -r <owner>/<name>
++     [-f]
+ ```
+ 
+ # DESCRIPTION
+ 
+ Pull an environment from FloxHub and create a local reference to it,
+ or, if an environment has already been pulled, retrieve any updates.
+ 
+-When pulling an environment for the first time, `-d` specifies the directory
+-in which to create that e [...]
+```
+
+**Merged final code:**
+```
+41:You can make changes locally and push them back with
+42:[`flox-push(1)`](./flox-push.md).
+43:
+44:Alternatively, the `--copy` flag allows you to create an environment,
+45:but does not link it to its upstream on FloxHub.
+46:Optionally, the `--generation <generation>` can be used to select a specific
+47:generation to create a copy of.
+48:
+49:## Updating an existing environment in a directory (`[--dir]`)
+50:
+51:Without a `<owner>/<name>` argument, updates an environment that has already
+52:been pulled into the current directory, or the directory specified by the
+53:`--dir` flag .
+54:
+55:`-f` may be specified to forcibly update the environment locally even if
+56:there are local changes not reflected in the remote environment.
+57:
+58:## Updating FloxHub environments (`--reference <owner>/<nam [...]
+```
+
+### F#1058: Provide complete documentation for configuration options with clear descriptions of values and behavior.
+- **Taxonomy:** `user-facing-messages`   **Area:** `cli/other`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=0
+- **Evidence:** 1 comments across PRs #4198
+- **Confidence:** 0.71   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
+- **Acceptance rate:** 1.00
+
+#### Evidence 1: PR #4198 @ `cli/flox/doc-auto-activate/flox-config.md:76` — mkenigs (Tier 1)
+- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.80
+
+**Source comment:**
+> suggestion nonblocking
+> ```suggestion
+>     Possible values are `allowed` (default) and `prompt`.
+>     `allowed` will activate environments that have been allowed with `flox activate allow`
+>     or by previously allowing an environment with prompt.
+>     `prompt` will prompt whether to allow an environment the first time the directory containing that environment is entered
+> ```
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -0,0 +1,147 @@
++---
++title: FLOX-CONFIG
++section: 1
++header: "Flox User Manuals"
++...
++
++
++# NAME
++
++flox-config - view and set configuration options
++
++# SYNOPSIS
++
++```
++flox [<general-options>] config
++     [-l |
++      -r |
++      --set <key> <string> |
++      --delete=<key>]
++```
++
++# DESCRIPTION
++
++Without any flags or when `-l` is passed, `flox config` shows all options with
++their computed value.
++
++Config values are read from the following sources in order of descending priority:
++
++1. Environment variables.
++   All config options may be set by prefixing with `FLOX_` and using
++   SCREAMING_SNAKE_CASE.
++   For example, `disable_metrics` may be set with `FLOX_DISABLE_METRICS=true`.
++2. User customizations from `$FLOX_CONFIG_DIR/flox.toml` if set,
++   otherwise `flox/flox.toml` i [...]
+```
+
+**Merged final code:**
+```
+56::   List the current values of all options.
+57:
+58:`-r`, `--reset`
+59::   Reset all options to their default values without confirmation.
+60:
+61:`--set <key> <string>`
+62::  Set `<key> = <string>` for a config key
+63:
+64:`--delete <key>`
+65::   Delete config key
+66:
+67:```{.include}
+68:./include/general-options.md
+69:```
+70:
+71:# SUPPORTED CONFIGURATION OPTIONS
+72:
+73:`auto_activate`
+74::   Whether to automatically activate flox environments
+75:    when entering a directory.
+76:    Possible values are `allowed` (default) and `prompt`.
+77:    `allowed` will activate environments that have been allowed
+78:    with `flox activate allow` or by previously allowing an
+79:    environment with prompt.
+80:    `prompt` will prompt whether to allow an environment the
+81:    first time the director [...]
+```
+
+### F#1060: Use precise terminology; prefer 'source reference' over 'flake reference' when not specific to flakes.
+- **Taxonomy:** `user-facing-messages`   **Area:** `cli/other`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=0
+- **Evidence:** 1 comments across PRs #4183
+- **Confidence:** 0.71   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
+- **Acceptance rate:** 1.00
+
+#### Evidence 1: PR #4183 @ `cli/flox/doc/nix-builds.toml.md:?` — ysndr (Tier 1)
+- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.75
+
+**Source comment:**
+> I'd prefer "source reference", as 1. it doesnt need to be a flake, nor do we specifically support flakes even if it was.
+> 
+> ```suggestion
+> Provide a single `url` field containing a Nix source reference:
+> ```
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -0,0 +1,149 @@
++---
++title: NIX-BUILDS.TOML
++section: 5
++header: "Flox User Manuals"
++...
++
++# NAME
++
++nix-builds.toml - catalog configuration for Nix expression builds
++
++# SYNOPSIS
++
++The `nix-builds.toml` file declares external catalogs that are made
++available to Nix expression builds within a Flox environment.
++It lives at `.flox/nix-builds.toml` alongside the environment manifest.
++
++# DESCRIPTION
++
++When a Flox environment uses Nix expression builds (packages defined
++as `.nix` files under `.flox/pkgs/`), those expressions can depend on
++packages provided by external catalogs.
++The `nix-builds.toml` file declares which catalogs are available and
++where they come from.
++
++Running `flox build update-catalogs` resolves every catalog entry and
++writes the pinned result to `.flox/nix- [...]
+```
+
+**Merged final code:**
+```
+30:
+31:Required.
+32:The configuration format version.
+33:Currently the only supported value is `1`.
+34:
+35:```toml
+36:version = 1
+37:```
+38:
+39:## `[catalogs.<name>]`
+40:
+41:Each section under `catalogs` declares a single catalog.
+42:The `<name>` becomes the key used to reference the catalog in Nix
+43:expressions: a package `foo` in catalog `mycatalog` is accessed as
+44:`catalogs.mycatalog.foo`.
+45:
+46:A catalog can be specified in one of three forms.
+47:
+48:### Structured Nix source type
+49:
+50:Provide a `type` field naming a Nix source type together with
+51:additional fields appropriate to that type:
+52:
+53:```toml
+54:[catalogs.mycatalog]
+55:type = "git"
+56:url = "https://github.com/org/repo"
+57:ref = "main"
+58:```
+59:
+60:The supported types and their fields are documented in the
+61:[Nix [...]
+```
+
+### F#1061: Present general forms before specialized shorthand; introduce structured syntax before URL syntax.
+- **Taxonomy:** `user-facing-messages`   **Area:** `cli/other`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=0
+- **Evidence:** 1 comments across PRs #4183
+- **Confidence:** 0.71   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
+- **Acceptance rate:** 1.00
+
+#### Evidence 1: PR #4183 @ `cli/flox/doc/nix-builds.toml.md:48` — ysndr (Tier 1)
+- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.75
+
+**Source comment:**
+> nit: regarding order, the url type is actually just a shorthand for this form, thus i think we should introduce the source type attribute form first.
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -0,0 +1,149 @@
++---
++title: NIX-BUILDS.TOML
++section: 5
++header: "Flox User Manuals"
++...
++
++# NAME
++
++nix-builds.toml - catalog configuration for Nix expression builds
++
++# SYNOPSIS
++
++The `nix-builds.toml` file declares external catalogs that are made
++available to Nix expression builds within a Flox environment.
++It lives at `.flox/nix-builds.toml` alongside the environment manifest.
++
++# DESCRIPTION
++
++When a Flox environment uses Nix expression builds (packages defined
++as `.nix` files under `.flox/pkgs/`), those expressions can depend on
++packages provided by external catalogs.
++The `nix-builds.toml` file declares which catalogs are available and
++where they come from.
++
++Running `flox build update-catalogs` resolves every catalog entry and
++writes the pinned result to `.flox/nix- [...]
+```
+
+**Merged final code:**
+```
+28:
+29:## `version`
+30:
+31:Required.
+32:The configuration format version.
+33:Currently the only supported value is `1`.
+34:
+35:```toml
+36:version = 1
+37:```
+38:
+39:## `[catalogs.<name>]`
+40:
+41:Each section under `catalogs` declares a single catalog.
+42:The `<name>` becomes the key used to reference the catalog in Nix
+43:expressions: a package `foo` in catalog `mycatalog` is accessed as
+44:`catalogs.mycatalog.foo`.
+45:
+46:A catalog can be specified in one of three forms.
+47:
+48:### Structured Nix source type
+49:
+50:Provide a `type` field naming a Nix source type together with
+51:additional fields appropriate to that type:
+52:
+53:```toml
+54:[catalogs.mycatalog]
+55:type = "git"
+56:url = "https://github.com/org/repo"
+57:ref = "main"
+58:```
+59:
+60:The supported types and their fields are docum [...]
+```
+
+### F#1062: Clarify message wording to prevent user confusion about what is being included.
+- **Taxonomy:** `user-facing-messages`   **Area:** `cli/other`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=0
+- **Evidence:** 1 comments across PRs #4183
+- **Confidence:** 0.71   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
+- **Acceptance rate:** 1.00
+
+#### Evidence 1: PR #4183 @ `cli/flox/doc/nix-builds.toml.md:?` — ysndr (Tier 1)
+- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.85
+
+**Source comment:**
+> nit: we dont want to confuse people here that you include a specific "published" package, rather your getting the whole set of packages under the specified org/user.
+> 
+> ```suggestion
+> [catalogs.myorg]
+> ```
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -0,0 +1,149 @@
++---
++title: NIX-BUILDS.TOML
++section: 5
++header: "Flox User Manuals"
++...
++
++# NAME
++
++nix-builds.toml - catalog configuration for Nix expression builds
++
++# SYNOPSIS
++
++The `nix-builds.toml` file declares external catalogs that are made
++available to Nix expression builds within a Flox environment.
++It lives at `.flox/nix-builds.toml` alongside the environment manifest.
++
++# DESCRIPTION
++
++When a Flox environment uses Nix expression builds (packages defined
++as `.nix` files under `.flox/pkgs/`), those expressions can depend on
++packages provided by external catalogs.
++The `nix-builds.toml` file declares which catalogs are available and
++where they come from.
++
++Running `flox build update-catalogs` resolves every catalog entry and
++writes the pinned result to `.flox/nix- [...]
+```
+
+**Merged final code:**
+```
+113:
+114:[catalogs.mylib]
+115:url = "git+https://github.com/org/mylib"
+116:```
+117:
+118:## Declare a catalog with a pinned branch
+119:
+120:```toml
+121:version = 1
+122:
+123:[catalogs.mylib]
+124:type = "git"
+125:url = "https://github.com/org/mylib"
+126:ref = "release-2.0"
+127:```
+128:
+129:## Declare a FloxHub catalog
+130:
+131:```toml
+132:version = 1
+133:
+134:[catalogs.myorg]
+135:type = "floxhub"
+136:```
+137:
+138:## Use a catalog in a package expression
+139:
+140:```nix
+141:# .flox/pkgs/app.nix
+142:{ catalogs }:
+143:catalogs.myorg.build-tool
+144:```
+145:
+146:# SEE ALSO
+147:
+148:[`flox-build-update-catalogs(1)`](./flox-build-update-catalogs.md)
+149:[`flox-build(1)`](./flox-build.md)
+150:[`manifest.toml(5)`](./manifest.toml.md)
+```
+
+### F#1064: Provide actionable next steps in error messages when users encounter restrictions.
+- **Taxonomy:** `user-facing-messages`   **Area:** `commands`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=0
+- **Evidence:** 1 comments across PRs #3649
+- **Confidence:** 0.71   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
+- **Acceptance rate:** 1.00
+
+#### Evidence 1: PR #3649 @ `cli/flox/src/commands/push.rs:?` — mkenigs (Tier 1)
+- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.83
+
+**Source comment:**
+> blocking
+> ```suggestion
+>                         Cannot change the owner of an environment already pushed to FloxHub.
+> ```
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -65,14 +66,27 @@ impl Push {
+             CanonicalPath::new(&dot_flox.path).expect("DotFlox path was just opened");
+ 
+         match dot_flox.pointer {
++            // Update an existing managed environment
+             EnvironmentPointer::Managed(managed_pointer) => {
+-                let message = Self::push_message(&managed_pointer, self.force, true)?;
++                if let Some(owner) = self.owner
++                    && owner != managed_pointer.owner
++                {
++                    bail!(formatdoc! {"
++                        Cannot change the owner of an existing managed environment.
+```
+
+**Merged final code:**
+```
+55:        // Start a span that doesn't include authentication
+56:        let span = tracing::info_span!("post-auth");
+57:        let _guard = span.enter();
+58:
+59:        let dir = match self.dir {
+60:            Some(d) => d,
+61:            None => std::env::current_dir().context("could not get current directory")?,
+62:        };
+63:
+64:        let dot_flox = DotFlox::open_in(dir)?;
+65:        let canonical_dot_flox_path =
+66:            CanonicalPath::new(&dot_flox.path).expect("DotFlox path was just opened");
+67:
+68:        match dot_flox.pointer {
+69:            // Update an existing managed environment
+70:            EnvironmentPointer::Managed(managed_pointer) => {
+71:                if let Some(owner) = self.owner
+72:                    && owner != managed_pointer.owner
+73: [...]
+```
+
+### F#1065: Place CLI flags at the top-level struct instead of nested variants to reduce positional ambiguity.
+- **Taxonomy:** `user-facing-messages`   **Area:** `commands`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=0
+- **Evidence:** 1 comments across PRs #3715
+- **Confidence:** 0.71   **In AGENTS.md?:** Y (Conventions)   **Cross-area count:** 1
+- **Acceptance rate:** 1.00
+
+#### Evidence 1: PR #3715 @ `cli/flox/src/commands/pull.rs:?` — dcarley (Tier 1)
+- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.70
+
+**Source comment:**
+> Needing to specify the generation after the remote feels kinda odd:
+> ```
+> % flox pull --copy --generation 2 -d ~/demo/bygen dcarley/tmp
+> ❌ ERROR: `--generation` is not expected in this context
+> 1 % flox pull --copy -d ~/demo/bygen dcarley/tmp --generation 2
+> ✨ Created path environment from dcarley/tmp.
+> ```
+> 
+> Suggestion (assumes no `hide`, see other thread):
+> ```diff
+> diff --git a/cli/flox/src/commands/pull.rs b/cli/flox/src/commands/pull.rs
+> index e0a9476c5..4d687e930 100644
+> --- a/cli/flox/src/commands/p [...]
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -40,11 +41,17 @@ enum PullSelect {
+         /// ID of the environment to pull
+         #[bpaf(long, short, argument("owner>/<name"))]
+         remote: EnvironmentRef,
++        /// Pull the specified generation. Must be used with --copy
++        #[bpaf(long, hide)]
++        generation: Option<GenerationId>,
+```
+
+**Merged final code:**
+```
+26:use indoc::{formatdoc, indoc};
+27:use toml_edit::DocumentMut;
+28:use tracing::{debug, info_span, instrument};
+29:
+30:use super::services::warn_manifest_changes_for_services;
+31:use super::{ConcreteEnvironment, open_path};
+32:use crate::commands::SHELL_COMPLETION_DIR;
+33:use crate::subcommand_metric;
+34:use crate::utils::dialog::{Dialog, Select};
+35:use crate::utils::errors::{display_chain, format_core_error};
+36:use crate::utils::message;
+37:
+38:#[derive(Debug, Clone, Bpaf)]
+39:enum PullSelect {
+40:    New {
+41:        /// ID of the environment to pull
+42:        #[bpaf(long, short, argument("owner>/<name"))]
+43:        remote: EnvironmentRef,
+44:    },
+45:    NewAbbreviated {
+46:        /// ID of the environment to pull
+47:        #[bpaf(positional("owner>/<name"))]
+48:        remote: [...]
+```
+
+### F#1066: Frame breaking changes as benefits; explain new features' advantages to users.
+- **Taxonomy:** `user-facing-messages`   **Area:** `commands`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=0
+- **Evidence:** 1 comments across PRs #3803
+- **Confidence:** 0.71   **In AGENTS.md?:** N (—)   **Cross-area count:** 1
+- **Acceptance rate:** 1.00
+
+#### Evidence 1: PR #3803 @ `cli/flox/src/commands/activate.rs:1` — dcarley (Tier 1)
+- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.55
+
+**Source comment:**
+> (non-blocking until release, threading unrelated to this file)
+> 
+> > Breaking change: `flox activate -- cmd` no longer starts a subshell and no longer runs profile scripts. To get the old behavior, a new `-c` option has been added. `flox activate -c "cmd && cmd"` will start a subshell and run profile scripts
+> 
+> I'm don't know how disruptive this will be. Is there anything we can say to sell this as a benefit to users?
+
+**Diff hunk (what reviewer saw):**
+```
+(empty)
+```
+
+**Merged final code:**
+```
+1:use std::io::{BufWriter, stdout};
+2:use std::os::unix::process::CommandExt;
+3:use std::path::PathBuf;
+4:use std::process::Stdio;
+5:use std::sync::LazyLock;
+6:use std::{env, fs};
+7:
+8:use anyhow::{Context, Result, anyhow, bail};
+9:use bpaf::Bpaf;
+10:use crossterm::tty::IsTty;
+11:use flox_core::activate::context::{ActivateCtx, InvocationType};
+12:use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY_VAR};
+13:use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
+14:use flox_rust_sdk::models::environment::generations::GenerationId;
+15:use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, EnvironmentError};
+16:use flox_rust_sdk::models::lockfile::LockResult;
+17:use flox_rust_sdk::models::manifest::typed::{ActivateMode, IncludeDescriptor, Inner};
+18:use [...]
+```
+
+## Gap candidates — rules NOT in AGENTS.md (78 total, ordered by confidence)
 
 _Tighter rendering: comment body truncated to 200 chars, diff hunk and final code to 400 chars._
 
-### F#983: Add structured tracing logs for all authentication flow branches.
-- **Taxonomy:** `logging-tracing`   **Area:** `providers`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=1, T2=1
-- **Evidence:** 2 comments across PRs #4172
-- **Confidence:** 0.75   **In AGENTS.md?:** N (—)   **Cross-area count:** 1
-- **Acceptance rate:** 1.00
-
-#### Evidence 1: PR #4172 @ `cli/flox-rust-sdk/src/providers/git_auth.rs:?` — ysndr (Tier 1)
-- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.85
-
-**Source comment:**
-> **[SUGGESTION]** worth adding a log here too.
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -0,0 +1,39 @@
-+use flox_catalog::AuthContext;
-+use url::Url;
-+
-+use super::git::GitCommandOptions;
-+use crate::models::floxmeta::FLOXHUB_TOKEN_ENV_VAR;
-+
-+/// Apply authentication to git command options based on a [Credential].
-+///
-+/// Matches on the credential variant because git genuinely needs different
-+/// behavior per auth type:
-+/// - Bearer: inline credential helper with the token
-+// [...]
-```
-
-**Merged final code:**
-```
-5:use crate::providers::git::GitCommandOptions;
-6:
-7:/// Extension trait for applying authentication to git command options.
-8:pub trait GitCommandOptionsExt {
-9:    /// Apply authentication based on the [`AuthContext`].
-10:    ///
-11:    /// Matches on the variant because git genuinely needs different behavior
-12:    /// per auth type:
-13:    /// - Auth0 (bearer): inline credential helper with th [...]
-```
-
-#### Evidence 2: PR #4172 @ `cli/flox-rust-sdk/src/providers/git_auth.rs:?` — gilmishal (Tier 2)
-- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.85
-
-**Source comment:**
-> Addressed: added `tracing::debug!("Kerberos mode — git auth handled natively via ccache")` before the return.
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -0,0 +1,39 @@
-+use flox_catalog::AuthContext;
-+use url::Url;
-+
-+use super::git::GitCommandOptions;
-+use crate::models::floxmeta::FLOXHUB_TOKEN_ENV_VAR;
-+
-+/// Apply authentication to git command options based on a [Credential].
-+///
-+/// Matches on the credential variant because git genuinely needs different
-+/// behavior per auth type:
-+/// - Bearer: inline credential helper with the token
-+// [...]
-```
-
-**Merged final code:**
-```
-5:use crate::providers::git::GitCommandOptions;
-6:
-7:/// Extension trait for applying authentication to git command options.
-8:pub trait GitCommandOptionsExt {
-9:    /// Apply authentication based on the [`AuthContext`].
-10:    ///
-11:    /// Matches on the variant because git genuinely needs different behavior
-12:    /// per auth type:
-13:    /// - Auth0 (bearer): inline credential helper with th [...]
-```
-
-### F#551: Use select! to wait for either signal handler or CLI completion, dropping tempdir on exit.
+### F#1015: Use select! to wait for either signal handler or CLI completion, dropping tempdir on exit.
 - **Taxonomy:** `control-flow`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3600
@@ -4756,7 +3782,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 421:                        // For now we rely on subprocesses to inherit `flox [...]
 ```
 
-### F#585: Clarify what 'environment's build context' means in documentation.
+### F#1051: Clarify what 'environment's build context' means in documentation.
 - **Taxonomy:** `user-facing-messages`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3599
@@ -4819,7 +3845,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 102:- This command only works with local environments (not managed or [...]
 ```
 
-### F#602: Frame breaking changes as benefits; explain new features' advantages to users.
+### F#1066: Frame breaking changes as benefits; explain new features' advantages to users.
 - **Taxonomy:** `user-facing-messages`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3803
@@ -4855,7 +3881,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 12:use flox_core::activate::vars::{FLOX_ACTIVATIONS_BI [...]
 ```
 
-### F#605: Add man page references or mark with TODO when feature flags gate CLI subcommands.
+### F#1069: Add man page references or mark with TODO when feature flags gate CLI subcommands.
 - **Taxonomy:** `user-facing-messages`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3969
@@ -4895,7 +3921,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 103:        #[bpaf(lon [...]
 ```
 
-### F#619: Use precise terminology: 'targets' instead of 'artifacts' when paths are unavailable.
+### F#1084: Use precise terminology: 'targets' instead of 'artifacts' when paths are unavailable.
 - **Taxonomy:** `user-facing-messages`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4232
@@ -4933,7 +3959,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 20 [...]
 ```
 
-### F#661: Clarify whether bug fixes are related to the primary change; document unrelated fixes separately.
+### F#1132: Clarify whether bug fixes are related to the primary change; document unrelated fixes separately.
 - **Taxonomy:** `semantic-correctness`   **Area:** `models/environment`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3869
@@ -4971,7 +3997,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 1495: [...]
 ```
 
-### F#662: Preserve force-flag behavior that resets local state to upstream even when branches are ahead.
+### F#1133: Preserve force-flag behavior that resets local state to upstream even when branches are ahead.
 - **Taxonomy:** `semantic-correctness`   **Area:** `models/environment`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3869
@@ -5017,7 +4043,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 1495: [...]
 ```
 
-### F#665: Document edge cases in comments (e.g. outputsToInstall=None) to guide future refactoring and code review.
+### F#1136: Document edge cases in comments (e.g. outputsToInstall=None) to guide future refactoring and code review.
 - **Taxonomy:** `semantic-correctness`   **Area:** `models/environment`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4215
@@ -5060,7 +4086,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 94:                //   (if hasOutput " [...]
 ```
 
-### F#666: Document rarity of edge cases with evidence (nixpkgs stdenv behavior) to justify deliberate shortcuts.
+### F#1138: Document rarity of edge cases with evidence (nixpkgs stdenv behavior) to justify deliberate shortcuts.
 - **Taxonomy:** `semantic-correctness`   **Area:** `models/environment`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4215
@@ -5103,7 +4129,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 94:                //   (if hasOutput " [...]
 ```
 
-### F#700: Add diagnostic messages for unsupported authentication modes on incompatible builds.
+### F#1176: Add diagnostic messages for unsupported authentication modes on incompatible builds.
 - **Taxonomy:** `error-handling`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4172
@@ -5150,7 +4176,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 15:    /// [...]
 ```
 
-### F#708: Align CLI and flox-activations behavior with consistent argument handling.
+### F#1186: Align CLI and flox-activations behavior with consistent argument handling.
 - **Taxonomy:** `control-flow`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3766
@@ -5195,7 +4221,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 16:    } [...]
 ```
 
-### F#720: Avoid spinning on state changes; filter events early to prevent redundant reads.
+### F#1199: Avoid spinning on state changes; filter events early to prevent redundant reads.
 - **Taxonomy:** `control-flow`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3968
@@ -5238,7 +4264,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 164:        let filename = state_js [...]
 ```
 
-### F#728: Use domain-specific constants (nix::libc::STDERR_FILENO) instead of magic numbers.
+### F#1209: Use domain-specific constants (nix::libc::STDERR_FILENO) instead of magic numbers.
 - **Taxonomy:** `naming`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3801
@@ -5277,7 +4303,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 104 [...]
 ```
 
-### F#735: Avoid double negatives in shell scripts; use positive assertions for clarity.
+### F#1216: Avoid double negatives in shell scripts; use positive assertions for clarity.
 - **Taxonomy:** `user-facing-messages`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3932
@@ -5330,7 +4356,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 228:    source_profile_d "$_profile_d [...]
 ```
 
-### F#761: Place comments adjacent to the code they document for maximum clarity.
+### F#1244: Place comments adjacent to the code they document for maximum clarity.
 - **Taxonomy:** `semantic-correctness`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3770
@@ -5377,7 +4403,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 127:        r#"eval "$('{}' profile-sc [...]
 ```
 
-### F#779: Minimize refactoring scope in PRs; defer related improvements to separate follow-up PRs.
+### F#1262: Minimize refactoring scope in PRs; defer related improvements to separate follow-up PRs.
 - **Taxonomy:** `semantic-correctness`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4202
@@ -5417,7 +4443,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 536: [...]
 ```
 
-### F#792: Document deferred work in tracking issues; ensure logging configuration handles all subsystems.
+### F#1282: Document deferred work in tracking issues; ensure logging configuration handles all subsystems.
 - **Taxonomy:** `logging-tracing`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3801
@@ -5456,7 +4482,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 49: [...]
 ```
 
-### F#796: Implement hierarchical deduplication to prevent double-counting in dotted notation.
+### F#1286: Implement hierarchical deduplication to prevent double-counting in dotted notation.
 - **Taxonomy:** `semantic-correctness`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3939
@@ -5493,7 +4519,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 (empty)
 ```
 
-### F#836: Use singular form for enum variants (e.g., AuthStrategy::Auth0).
+### F#1329: Use singular form for enum variants (e.g., AuthStrategy::Auth0).
 - **Taxonomy:** `naming`   **Area:** `providers`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3870
@@ -5538,46 +4564,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 68: [...]
 ```
 
-### F#842: Point users to documentation covering both default and custom catalog signing key setup.
-- **Taxonomy:** `user-facing-messages`   **Area:** `providers`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=1, T2=0
-- **Evidence:** 1 comments across PRs #3992
-- **Confidence:** 0.71   **In AGENTS.md?:** N (—)   **Cross-area count:** 1
-- **Acceptance rate:** 1.00
-
-#### Evidence 1: PR #3992 @ `cli/flox-rust-sdk/src/providers/buildenv.rs:113` — dcarley (Tier 1)
-- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.75
-
-**Source comment:**
-> Yes to a "custom catalog" but no to a "custom catalog store".
-> 
-> I think it's OK to point them at the same documentation either way. It already touches on the default public keys provided by the Flox in [...]
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -111,7 +111,10 @@ pub enum BuildEnvError {
- 
-     /// A custom package has been uploaded, but the current user hasn't configured
-     /// a trusted public key that matches a signature of this package.
-```
-
-**Merged final code:**
-```
-93:
-94:    #[error("Failed to write nix arguments to stdin")]
-95:    WriteNixStdin(#[source] std::io::Error),
-96:
-97:    /// An error that occurred while deserializing the output of the `nix build` command.
-98:    #[error("Failed to deserialize 'nix build' output:\n{output}\nError: {err}")]
-99:    ReadOutputs {
-100:        output: String,
-101:        err: serde_json::Error,
-102:    },
-103:
-104: [...]
-```
-
-### F#874: Use expired tokens for identification even when auth is rejected to maintain logging context.
+### F#1357: Use expired tokens for identification even when auth is rejected to maintain logging context.
 - **Taxonomy:** `error-handling`   **Area:** `models/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3921
@@ -5617,7 +4604,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 215:    // The dynamic origin allows to fetch from dif [...]
 ```
 
-### F#890: Document race condition scenarios and expected_store_path constraints to inform future refactoring.
+### F#1373: Document race condition scenarios and expected_store_path constraints to inform future refactoring.
 - **Taxonomy:** `semantic-correctness`   **Area:** `core`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3920
@@ -5662,7 +4649,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 586:    /// Otherw [...]
 ```
 
-### F#896: Use workspace dependency versions consistently across all Cargo.toml files.
+### F#1381: Use workspace dependency versions consistently across all Cargo.toml files.
 - **Taxonomy:** `imports`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3939
@@ -5699,7 +4686,46 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 49:ht [...]
 ```
 
-### F#931: Prefer simple, deterministic merge behavior to aid debugging over complex max-version logic.
+### F#1403: Point users to documentation covering both default and custom catalog signing key setup.
+- **Taxonomy:** `user-facing-messages`   **Area:** `providers`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=0
+- **Evidence:** 1 comments across PRs #3992
+- **Confidence:** 0.71   **In AGENTS.md?:** N (—)   **Cross-area count:** 1
+- **Acceptance rate:** 1.00
+
+#### Evidence 1: PR #3992 @ `cli/flox-rust-sdk/src/providers/buildenv.rs:113` — dcarley (Tier 1)
+- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.75
+
+**Source comment:**
+> Yes to a "custom catalog" but no to a "custom catalog store".
+> 
+> I think it's OK to point them at the same documentation either way. It already touches on the default public keys provided by the Flox in [...]
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -111,7 +111,10 @@ pub enum BuildEnvError {
+ 
+     /// A custom package has been uploaded, but the current user hasn't configured
+     /// a trusted public key that matches a signature of this package.
+```
+
+**Merged final code:**
+```
+93:
+94:    #[error("Failed to write nix arguments to stdin")]
+95:    WriteNixStdin(#[source] std::io::Error),
+96:
+97:    /// An error that occurred while deserializing the output of the `nix build` command.
+98:    #[error("Failed to deserialize 'nix build' output:\n{output}\nError: {err}")]
+99:    ReadOutputs {
+100:        output: String,
+101:        err: serde_json::Error,
+102:    },
+103:
+104: [...]
+```
+
+### F#1419: Prefer simple, deterministic merge behavior to aid debugging over complex max-version logic.
 - **Taxonomy:** `control-flow`   **Area:** `manifest`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4094
@@ -5739,7 +4765,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 42:        O [...]
 ```
 
-### F#932: Preserve formatting context (comments, whitespace) when modifying array elements in-place.
+### F#1420: Preserve formatting context (comments, whitespace) when modifying array elements in-place.
 - **Taxonomy:** `control-flow`   **Area:** `manifest`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4106
@@ -5784,7 +4810,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 1227:            set_entry_prefix(raw [...]
 ```
 
-### F#939: question nonblocking: did you mean to remove all the comments? Seems like some could be stale but some might not be
+### F#1427: question nonblocking: did you mean to remove all the comments? Seems like some could be stale but some might not be
 - **Taxonomy:** `other`   **Area:** `cli/utils`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4032
@@ -5822,7 +4848,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 309: [...]
 ```
 
-### F#968: Break long method chains and assignments across lines to satisfy line length requirements.
+### F#1456: Break long method chains and assignments across lines to satisfy line length requirements.
 - **Taxonomy:** `formatting-style`   **Area:** `manifest`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4093
@@ -5869,86 +4895,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 661: [...]
 ```
 
-### F#658: Clarify uncommon edge cases in comments to prevent future confusion and guide code review priorities.
-- **Taxonomy:** `semantic-correctness`   **Area:** `models/environment`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=2, T2=0
-- **Evidence:** 2 comments across PRs #3652, #4215
-- **Confidence:** 0.65   **In AGENTS.md?:** N (—)   **Cross-area count:** 1
-- **Acceptance rate:** 0.50
-
-#### Evidence 1: PR #3652 @ `cli/flox-rust-sdk/src/models/environment/generations.rs:842` — ysndr (Tier 1)
-- **Thread resolved:** N   **was_addressed:** true   **classification confidence:** 0.70
-
-**Source comment:**
-> Currently, every generation has been live at least once.
-> There are potential future extensions considerations where we would create generations but not activate/liven(?) them, at the moment this is no [...]
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -839,7 +839,7 @@ pub struct SingleGenerationMetadata {
-     pub created: DateTime<Utc>,
- 
-     /// unix timestamp of the time when this generation was last set as live
--    /// `None` if this generation has never been set as live
-+    /// `None` if this generation is currently live
-```
-
-**Merged final code:**
-```
-822:                        last_live: None,
-823:                        description: spec.summary(),
-824:                    });
-825:                },
-826:            }
-827:        }
-828:
-829:        map
-830:    }
-831:}
-832:
-833:/// Metadata for a single generation of an environment
-834:#[derive(Clone, Debug, PartialEq, Serialize)]
-835:pub struct SingleGenerationMetadata {
-836:    pub parent: Op [...]
-```
-
-#### Evidence 2: PR #4215 @ `cli/flox-rust-sdk/src/models/environment/install.rs:107` — mkenigs (Tier 1)
-- **Thread resolved:** Y   **was_addressed:** false   **classification confidence:** 0.70
-
-**Source comment:**
-> I can't remember how common having `None` is. I 👎'ed it because it was just parroting back a case that I already highlighted in a comment. We could try to default consistently across `buildenv` and he [...]
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -0,0 +1,227 @@
-+use flox_manifest::interfaces::PackageLookup;
-+use flox_manifest::lockfile::Lockfile;
-+use flox_manifest::parsed::latest::{AllSentinel, SelectedOutputs};
-+use flox_manifest::raw::{
-+    PackageModification,
-+    PackageToInstall,
-+    PackageToModify,
-+    RawSelectedOutputs,
-+};
-+use flox_manifest::{Manifest, Migrated};
-+use tracing::debug;
-+
-+use crate::models::environment::In [...]
-```
-
-**Merged final code:**
-```
-87:                // That's pretty unlikely because nixpkgs `stdenv`
-88:                // auto-populates `meta.outputsToInstall` for any package built
-89:                // via `stdenv.mkDerivation`.
-90:                // From `pkgs/stdenv/generic/check-meta.nix`:
-91:                //
-92:                // ```nix
-93:                // outputsToInstall = [
-94:                //   (if hasOutput " [...]
-```
-
-### F#536: Update upgrade notification state on push to prevent false positives.
+### F#1000: Update upgrade notification state on push to prevent false positives.
 - **Taxonomy:** `semantic-correctness`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3820
@@ -5982,7 +4929,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 797:            remote_environment.generations_metadata() [...]
 ```
 
-### F#569: Add test coverage for generation switching and concurrent pull operations.
+### F#1035: Add test coverage for generation switching and concurrent pull operations.
 - **Taxonomy:** `testing`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3715
@@ -6023,7 +4970,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 28 [...]
 ```
 
-### F#659: Clarify lock scope and whether it must be held throughout the build operation.
+### F#1130: Clarify lock scope and whether it must be held throughout the build operation.
 - **Taxonomy:** `semantic-correctness`   **Area:** `models/environment`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3717
@@ -6059,7 +5006,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 916:                    Err(FloxMetaError::C [...]
 ```
 
-### F#688: Document manual testing approaches for tty-dependent behavior when automated testing is difficult.
+### F#1164: Document manual testing approaches for tty-dependent behavior when automated testing is difficult.
 - **Taxonomy:** `testing`   **Area:** `cli/utils`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3672
@@ -6095,7 +5042,48 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 68:    pager.set_exit_strategy(ExitStrategy::Pager [...]
 ```
 
-### F#767: Consider timeout mechanisms for blocking operations to prevent indefinite hangs.
+### F#1234: Test cleanup_pid operation to verify it is a safe no-op.
+- **Taxonomy:** `testing`   **Area:** `activations`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=0
+- **Evidence:** 1 comments across PRs #3968
+- **Confidence:** 0.61   **In AGENTS.md?:** N (—)   **Cross-area count:** 1
+
+#### Evidence 1: PR #3968 @ `cli/flox-activations/src/cli/executive/mod.rs:233` — mkenigs (Tier 1)
+- **Thread resolved:** N   **was_addressed:** unknown   **classification confidence:** 0.70
+
+**Source comment:**
+> Adding a test that we can run `cleanup_pid` after removing a PID, to double check that's a no-op.
+> 
+> We only use `--remove-pid` for in-place activations so we should exit pretty soon after removing th [...]
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -245,76 +173,158 @@ fn run_monitoring_loop(
+         "checked socket"
+     );
+ 
++    // Main event loop - blocks on channel recv.
++    //
++    // Design note: Only TerminationSignal and ProcessExited can exit the loop,
++    // so strictly speaking everything else (SigChld, StartServices, StateFileChanged)
++    // could run on its own thread without the coordinator. However, routing all
++    // [...]
+```
+
+**Merged final code:**
+```
+213:                    &project_ctx,
+214:                    &activation_state_dir,
+215:                ) {
+216:                    Ok(Some((activations, lock))) => {
+217:                        write_activations_json(&activations, &state_json_path, lock)?;
+218:                    },
+219:                    Ok(None) => {},
+220:                    Err(err) => {
+221:                        error!(% [...]
+```
+
+### F#1250: Consider timeout mechanisms for blocking operations to prevent indefinite hangs.
 - **Taxonomy:** `semantic-correctness`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3794
@@ -6141,7 +5129,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 172:            invocation_type [...]
 ```
 
-### F#812: Preserve documentation when refactoring; add replacement if removed.
+### F#1302: Preserve documentation when refactoring; add replacement if removed.
 - **Taxonomy:** `semantic-correctness`   **Area:** `providers`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3785
@@ -6183,7 +5171,52 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 470:        // worried about potentially running out of memory if we end up buil [...]
 ```
 
-### F#866: The labelled block seems odd and requires you to mentally jump backwards through the logic:
+### F#1328: When spawning many threads each invoking nix processes, consider switching to async futures on tokio to reduce resource pressure from hundreds of simultaneous daemon connections.
+- **Taxonomy:** `other`   **Area:** `providers`   **Scope:** `area-specific`
+- **Reviewer-tier breakdown:** T1=1, T2=0
+- **Evidence:** 1 comments across PRs #3785
+- **Confidence:** 0.61   **In AGENTS.md?:** N (—)   **Cross-area count:** 1
+
+#### Evidence 1: PR #3785 @ `cli/flox-rust-sdk/src/providers/buildenv.rs:?` — ysndr (Tier 1)
+- **Thread resolved:** N   **was_addressed:** unknown   **classification confidence:** 0.45
+
+**Source comment:**
+> I think even 100 of threads are possible tho cause some cpu thrashing.
+> 
+> I don’t really want to look into that right now but.. running these things as async futures on tokio could be somewhat easier [...]
+
+**Diff hunk (what reviewer saw):**
+```
+@@ -292,221 +332,318 @@ where
+                     ))
+                 })?;
+ 
+-            // ManifestPackageDescriptor
+-
+             match package {
+-                LockedPackage::Catalog(locked) => self.realise_nixpkgs(
+-                    client,
+-                    &manifest_package,
+-                    locked,
+-                    pre_checked_store_paths,
+-                )?,
+- [...]
+```
+
+**Merged final code:**
+```
+334:                LockedPackage::Catalog(pkg) => {
+335:                    if manifest_package.is_from_custom_catalog() {
+336:                        custom_catalog_pkgs.push(pkg);
+337:                    } else {
+338:                        base_catalog_pkgs.push(pkg);
+339:                    }
+340:                },
+341:                LockedPackage::Flake(pkg) => flake_pkgs.push(pkg),
+342: [...]
+```
+
+### F#1349: The labelled block seems odd and requires you to mentally jump backwards through the logic:
 ```suggestion
             if is_dir_empty {
                 de...
@@ -6226,8 +5259,8 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 259:                // if all links of environments of the same owner have been removed, remove owner dir as well [...]
 ```
 
-### F#869: Handle all error cases explicitly; don't panic in library code.
-- **Taxonomy:** `other`   **Area:** `activations`   **Scope:** `area-specific`
+### F#1352: Handle all error cases explicitly; don't panic in library code.
+- **Taxonomy:** `panic-discipline`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3909
 - **Confidence:** 0.61   **In AGENTS.md?:** N (—)   **Cross-area count:** 1
@@ -6270,7 +5303,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 202:    // If you were able to create a new session as session leader and leave behind t [...]
 ```
 
-### F#885: Use Option<T> to distinguish absence from presence, not variant tags in the same enum.
+### F#1368: Use Option<T> to distinguish absence from presence, not variant tags in the same enum.
 - **Taxonomy:** `type-safety`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4172
@@ -6310,7 +5343,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 (snippet not available — file deleted, renamed, or out-of-range at merge)
 ```
 
-### F#892: Document design rationale for when ephemeral activation is preferred over direct calls.
+### F#1375: Document design rationale for when ephemeral activation is preferred over direct calls.
 - **Taxonomy:** `semantic-correctness`   **Area:** `commands/services`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3920
@@ -6348,48 +5381,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 56:        let all_processes_stopped = existing_processes. [...]
 ```
 
-### F#901: Test cleanup_pid operation to verify it is a safe no-op.
-- **Taxonomy:** `testing`   **Area:** `activations`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=1, T2=0
-- **Evidence:** 1 comments across PRs #3968
-- **Confidence:** 0.61   **In AGENTS.md?:** N (—)   **Cross-area count:** 1
-
-#### Evidence 1: PR #3968 @ `cli/flox-activations/src/cli/executive/mod.rs:233` — mkenigs (Tier 1)
-- **Thread resolved:** N   **was_addressed:** unknown   **classification confidence:** 0.70
-
-**Source comment:**
-> Adding a test that we can run `cleanup_pid` after removing a PID, to double check that's a no-op.
-> 
-> We only use `--remove-pid` for in-place activations so we should exit pretty soon after removing th [...]
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -245,76 +173,158 @@ fn run_monitoring_loop(
-         "checked socket"
-     );
- 
-+    // Main event loop - blocks on channel recv.
-+    //
-+    // Design note: Only TerminationSignal and ProcessExited can exit the loop,
-+    // so strictly speaking everything else (SigChld, StartServices, StateFileChanged)
-+    // could run on its own thread without the coordinator. However, routing all
-+    // [...]
-```
-
-**Merged final code:**
-```
-213:                    &project_ctx,
-214:                    &activation_state_dir,
-215:                ) {
-216:                    Ok(Some((activations, lock))) => {
-217:                        write_activations_json(&activations, &state_json_path, lock)?;
-218:                    },
-219:                    Ok(None) => {},
-220:                    Err(err) => {
-221:                        error!(% [...]
-```
-
-### F#920: Document when to use async sandwich vs coloring locking functions.
+### F#1396: Document when to use async sandwich vs coloring locking functions.
 - **Taxonomy:** `control-flow`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4122
@@ -6435,87 +5427,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 9 [...]
 ```
 
-### F#683: Rename functions for clarity about purpose; add doc comments explaining intent.
-- **Taxonomy:** `naming`   **Area:** `cli/other`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=0, T2=2
-- **Evidence:** 2 comments across PRs #4156, #4198
-- **Confidence:** 0.55   **In AGENTS.md?:** N (—)   **Cross-area count:** 1
-- **Acceptance rate:** 1.00
-
-#### Evidence 1: PR #4156 @ `cli/flox-catalog/src/client.rs:?` — billlevine (Tier 2)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.85
-
-**Source comment:**
-> **Applied via implementation-worker:**
-> 
-> Added doc comment explaining the purpose, and renamed `check_build` to `check_build_already_recorded` for clarity.
-> 
-> - Action: Doc comment added, function rename [...]
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -460,6 +474,40 @@ impl ClientTrait for CatalogClient {
-             .await
-             .map(|res| res.into_inner().into())
-     }
-+
-+    async fn check_build(
-```
-
-**Merged final code:**
-```
-458:        self.client
-459:            .create_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_post(
-460:                &catalog, &package, &body,
-461:            )
-462:            .await
-463:            .map_api_error()
-464:            .await?;
-465:
-466:        debug!("successfully created package");
-467:        Ok(())
-468:    }
-469:
-470:    async fn publish_build(
-471:        &se [...]
-```
-
-#### Evidence 2: PR #4198 @ `cli/flox/src/config/mod.rs:?` — djsauble (Tier 2)
-- **Thread resolved:** Y   **was_addressed:** true   **classification confidence:** 0.70
-
-**Source comment:**
-> Last minute change, see previous comment for the full explanation. https://github.com/flox/forge/pull/746/changes#diff-d2cbf451fdaf8f76ac2e0504614c411c074713b629a0e5a6d8374c3e070b48adR26-R27
-> 
-> ```sugge [...]
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -156,6 +160,15 @@ pub enum InstallerChannel {
-     Qa,
- }
- 
-+/// Whether to automatically activate environments
-+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
-+#[serde(rename_all = "lowercase")]
-+pub enum AutoActivate {
-+    #[default]
-+    Never,
-```
-
-**Merged final code:**
-```
-148:    /// Default path of the signing key used by 'flox publish'
-149:    pub signing_private_key: Option<PathBuf>,
-150:}
-151:
-152:/// Channels must match: https://downloads.flox.dev/?prefix=by-env/
-153:#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
-154:#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-155:#[serde(rename_all = "lowercase")]
-156:pub enum InstallerChann [...]
-```
-
-### F#538: Implement rate-limiting or caching to prevent expensive operations on every invocation.
+### F#1002: Implement rate-limiting or caching to prevent expensive operations on every invocation.
 - **Taxonomy:** `semantic-correctness`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3869
@@ -6561,7 +5473,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 1 [...]
 ```
 
-### F#544: Track missing Kerberos support with TODO and follow-up issue.
+### F#1008: Track missing Kerberos support with TODO and follow-up issue.
 - **Taxonomy:** `semantic-correctness`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=1
 - **Evidence:** 1 comments across PRs #4172
@@ -6598,7 +5510,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 271:                message::updated(" [...]
 ```
 
-### F#557: Avoid unnecessary clones; refactor to use references when design permits.
+### F#1021: Avoid unnecessary clones; refactor to use references when design permits.
 - **Taxonomy:** `control-flow`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=1
 - **Evidence:** 1 comments across PRs #4172
@@ -6640,7 +5552,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 1310: [...]
 ```
 
-### F#570: Add unit test coverage for bug fixes and cross-component interactions.
+### F#1036: Add unit test coverage for bug fixes and cross-component interactions.
 - **Taxonomy:** `testing`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3869
@@ -6685,7 +5597,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 186:fn push_message(env: &M [...]
 ```
 
-### F#579: Warn on upgrade if environment has force pushes; warn if pinned and upgrade does nothing.
+### F#1045: Warn on upgrade if environment has force pushes; warn if pinned and upgrade does nothing.
 - **Taxonomy:** `control-flow`   **Area:** `models/environment`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3607
@@ -6718,7 +5630,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 9:use crate::models::environment [...]
 ```
 
-### F#587: Explicitly mark unstable API outputs with version stability disclaimers in documentation.
+### F#1053: Explicitly mark unstable API outputs with version stability disclaimers in documentation.
 - **Taxonomy:** `user-facing-messages`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3651
@@ -6768,7 +5680,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 29:`flox generations [...]
 ```
 
-### F#591: Flag counterintuitive terminology in docs for clarity and user comprehension review.
+### F#1057: Flag counterintuitive terminology in docs for clarity and user comprehension review.
 - **Taxonomy:** `user-facing-messages`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3750
@@ -6815,7 +5727,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 52 [...]
 ```
 
-### F#595: Link Nix expression builds to relevant documentation or provide definition in context.
+### F#1059: Link Nix expression builds to relevant documentation or provide definition in context.
 - **Taxonomy:** `user-facing-messages`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4183
@@ -6873,7 +5785,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 41:Each section under [...]
 ```
 
-### F#635: Document proptest field-count constraints when combinatorial explosion prevents full coverage.
+### F#1101: Document proptest field-count constraints when combinatorial explosion prevents full coverage.
 - **Taxonomy:** `testing`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3702
@@ -6919,7 +5831,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 27:#[derive(Debug, Clone, Default, JsonSchema, Seria [...]
 ```
 
-### F#640: Synchronize test data files with JWT token claims to avoid future confusion.
+### F#1107: Synchronize test data files with JWT token claims to avoid future confusion.
 - **Taxonomy:** `testing`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3921
@@ -6964,7 +5876,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 318:            std::fs::read_to_string(test_user_file_path). [...]
 ```
 
-### F#643: Add comprehensive tests covering edge cases, hierarchies, and mixed scenarios.
+### F#1111: Add comprehensive tests covering edge cases, hierarchies, and mixed scenarios.
 - **Taxonomy:** `testing`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=1
 - **Evidence:** 1 comments across PRs #3939
@@ -7003,7 +5915,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 (empty)
 ```
 
-### F#677: Use mutually exclusive option notation in man pages to clarify conflicting flags.
+### F#1149: Use mutually exclusive option notation in man pages to clarify conflicting flags.
 - **Taxonomy:** `naming`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3651
@@ -7052,7 +5964,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 22:Show all environment genera [...]
 ```
 
-### F#680: Extract larger subsystems into dedicated modules with re-exports for backward compatibility.
+### F#1152: Extract larger subsystems into dedicated modules with re-exports for backward compatibility.
 - **Taxonomy:** `naming`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=1
 - **Evidence:** 1 comments across PRs #3939
@@ -7103,7 +6015,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 23:use self::error [...]
 ```
 
-### F#686: Distinguish AuthnMode (config-level) from AuthContext (runtime material).
+### F#1161: Distinguish AuthnMode (config-level) from AuthContext (runtime material).
 - **Taxonomy:** `naming`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=1
 - **Evidence:** 1 comments across PRs #4172
@@ -7144,7 +6056,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 17:#[cfg(feature = "floxhub-authn-kerbero [...]
 ```
 
-### F#741: Set environment variable defaults explicitly when across CLI versions.
+### F#1222: Set environment variable defaults explicitly when across CLI versions.
 - **Taxonomy:** `user-facing-messages`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4233
@@ -7182,7 +6094,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 6 [...]
 ```
 
-### F#758: Preserve temporary files for debugging unless explicitly deleted by independent cleanup logic.
+### F#1241: Preserve temporary files for debugging unless explicitly deleted by independent cleanup logic.
 - **Taxonomy:** `semantic-correctness`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3770
@@ -7227,7 +6139,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 224: [...]
 ```
 
-### F#772: Document tradeoffs between synchronous and asynchronous signal handling in monitoring loops.
+### F#1255: Document tradeoffs between synchronous and asynchronous signal handling in monitoring loops.
 - **Taxonomy:** `semantic-correctness`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3920
@@ -7268,7 +6180,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 332:fn handle_start_services_signa [...]
 ```
 
-### F#783: Document intent behind output formatting choices informed by upstream behavior.
+### F#1266: Document intent behind output formatting choices informed by upstream behavior.
 - **Taxonomy:** `semantic-correctness`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=1
 - **Evidence:** 1 comments across PRs #4231
@@ -7311,7 +6223,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 85:            if set -q _flox_pwd_ [...]
 ```
 
-### F#800: Document upstream issues in code comments; defer fixes to separate PRs when defect is not in scope.
+### F#1290: Document upstream issues in code comments; defer fixes to separate PRs when defect is not in scope.
 - **Taxonomy:** `semantic-correctness`   **Area:** `cli/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3988
@@ -7360,7 +6272,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 227:/// in user input (unclose [...]
 ```
 
-### F#823: Document the downstream semantic purpose of design choices; defer optimization until bottleneck confirmed.
+### F#1313: Document the downstream semantic purpose of design choices; defer optimization until bottleneck confirmed.
 - **Taxonomy:** `semantic-correctness`   **Area:** `providers`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=1
 - **Evidence:** 1 comments across PRs #4140
@@ -7402,7 +6314,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 298:            signing_private_key_pa [...]
 ```
 
-### F#839: Consider renaming git_auth to clarify Kerberos vs Auth0 handling differences.
+### F#1332: Consider renaming git_auth to clarify Kerberos vs Auth0 handling differences.
 - **Taxonomy:** `naming`   **Area:** `providers`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4172
@@ -7434,7 +6346,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 (snippet not available — file deleted, renamed, or out-of-range at merge)
 ```
 
-### F#857: Design constraints changed; version and outputs cannot be used together.
+### F#1342: Design constraints changed; version and outputs cannot be used together.
 - **Taxonomy:** `semantic-correctness`   **Area:** `models/other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=1
 - **Evidence:** 1 comments across PRs #3864
@@ -7474,7 +6386,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 7 [...]
 ```
 
-### F#861: Extract flag logic into named enum to clarify overlapping auto-setup behavior states.
+### F#1344: Extract flag logic into named enum to clarify overlapping auto-setup behavior states.
 - **Taxonomy:** `control-flow`   **Area:** `commands/init`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3884
@@ -7518,7 +6430,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 180:    /// Unless `--auto-set [...]
 ```
 
-### F#864: Keep unit test scope focused; extract overly complex functionality to reduce side-effect coverage needs.
+### F#1347: Keep unit test scope focused; extract overly complex functionality to reduce side-effect coverage needs.
 - **Taxonomy:** `testing`   **Area:** `core`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3903
@@ -7555,7 +6467,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 1064:                match result [...]
 ```
 
-### F#910: Add explanatory comments when maintaining manual symlink setup in Nix scripts.
+### F#1386: Add explanatory comments when maintaining manual symlink setup in Nix scripts.
 - **Taxonomy:** `formatting-style`   **Area:** `other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3960
@@ -7595,7 +6507,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 125:              prev.runCommandNo [...]
 ```
 
-### F#922: Record metrics for catalog-using build operations to track feature adoption.
+### F#1398: Record metrics for catalog-using build operations to track feature adoption.
 - **Taxonomy:** `logging-tracing`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #3969
@@ -7634,7 +6546,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 142:            Subcom [...]
 ```
 
-### F#975: Avoid unnecessary allocations in iterative processing; use `peekable()` instead of collecting to Vec.
+### F#1463: Avoid unnecessary allocations in iterative processing; use `peekable()` instead of collecting to Vec.
 - **Taxonomy:** `control-flow`   **Area:** `providers`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=1, T2=0
 - **Evidence:** 1 comments across PRs #4102
@@ -7680,7 +6592,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 961:    dot_flox_p [...]
 ```
 
-### F#524: Ensure managed environments are properly rejected with appropriate error messages.
+### F#988: Ensure managed environments are properly rejected with appropriate error messages.
 - **Taxonomy:** `error-handling`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=0
 - **Evidence:** 1 comments across PRs #3599
@@ -7721,7 +6633,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 305:            Ok(("nixpkgs".to_string(), installa [...]
 ```
 
-### F#614: Match message helpers (created/updated/deleted) to semantic intent; use deleted or updated for cleanup, not created.
+### F#1078: Match message helpers (created/updated/deleted) to semantic intent; use deleted or updated for cleanup, not created.
 - **Taxonomy:** `user-facing-messages`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=0
 - **Evidence:** 1 comments across PRs #4232
@@ -7759,7 +6671,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 202:        let lockf [...]
 ```
 
-### F#615: Use verb-led message templates consistently across related outputs.
+### F#1079: Use verb-led message templates consistently across related outputs.
 - **Taxonomy:** `user-facing-messages`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=0
 - **Evidence:** 1 comments across PRs #4232
@@ -7804,7 +6716,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 310:            .map(|package| Self::form [...]
 ```
 
-### F#617: Select message icon based on operation semantics, not just verb.
+### F#1081: Select message icon based on operation semantics, not just verb.
 - **Taxonomy:** `user-facing-messages`   **Area:** `commands`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=0
 - **Evidence:** 1 comments across PRs #4232
@@ -7842,7 +6754,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 202:        let lockf [...]
 ```
 
-### F#764: Clarify assumptions about standard streams and check isatty on stdin and stderr, not stdout.
+### F#1247: Clarify assumptions about standard streams and check isatty on stdin and stderr, not stdout.
 - **Taxonomy:** `semantic-correctness`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=0
 - **Evidence:** 1 comments across PRs #3780
@@ -7878,7 +6790,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 385: [...]
 ```
 
-### F#765: Document pipe and dup2 operations clearly; explain file descriptor lifecycle.
+### F#1248: Document pipe and dup2 operations clearly; explain file descriptor lifecycle.
 - **Taxonomy:** `semantic-correctness`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=0
 - **Evidence:** 1 comments across PRs #3780
@@ -7917,7 +6829,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 418: [...]
 ```
 
-### F#893: Use socket queries or process checks instead of socket existence for robust process-compose liveness detection.
+### F#1376: Use socket queries or process checks instead of socket existence for robust process-compose liveness detection.
 - **Taxonomy:** `semantic-correctness`   **Area:** `commands/services`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=0
 - **Evidence:** 1 comments across PRs #3920
@@ -7959,7 +6871,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 164:    /// We currently use the existence of the socket to determine whether services are running, [...]
 ```
 
-### F#971: Use NUL-separated streams for filenames with special characters instead of eval.
+### F#1459: Use NUL-separated streams for filenames with special characters instead of eval.
 - **Taxonomy:** `error-handling`   **Area:** `other`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=0
 - **Evidence:** 1 comments across PRs #4191
@@ -7999,7 +6911,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 486:  $(eval _do_buildCache = $(if $(DISABLE_BUILDCACHE),,tru [...]
 ```
 
-### F#711: Keep generate_* functions agnostic to I/O details; extract writer selection to caller.
+### F#1189: Keep generate_* functions agnostic to I/O details; extract writer selection to caller.
 - **Taxonomy:** `control-flow`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=0
 - **Evidence:** 1 comments across PRs #3770
@@ -8043,63 +6955,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 81: [...]
 ```
 
-### F#715: Organize generation methods on operations parameterized by shell, not vice versa.
-- **Taxonomy:** `control-flow`   **Area:** `activations`   **Scope:** `area-specific`
-- **Reviewer-tier breakdown:** T1=0, T2=0
-- **Evidence:** 1 comments across PRs #3770
-- **Confidence:** 0.11   **In AGENTS.md?:** N (—)   **Cross-area count:** 1
-- **Acceptance rate:** 0.00
-
-#### Evidence 1: PR #3770 @ `cli/flox-activations/src/gen_rc/bash.rs:40` — zmitchell (Tier 3)
-- **Thread resolved:** N   **was_addressed:** false   **classification confidence:** 0.60
-
-**Source comment:**
-> or it could be (with the helper functions I described above)
-> 
-> ```
-> stmts.push(exported_no_expansion("_flox_sourcing_rc", "true"));
-> ...
-> generate(shell, writer)
-> ```
-> 
-> I think that's close enough t [...]
-
-**Diff hunk (what reviewer saw):**
-```
-@@ -0,0 +1,198 @@
-+use std::io::Write;
-+use std::path::PathBuf;
-+
-+use anyhow::Result;
-+use shell_gen::{GenerateShell, SetVar, Shell, Source, UnsetVar};
-+
-+use crate::env_diff::EnvDiff;
-+
-+/// Arguments for generating bash startup commands
-+#[derive(Debug, Clone)]
-+pub struct BashStartupArgs {
-+    pub flox_activate_tracelevel: u32,
-+    pub activate_d: PathBuf,
-+    pub flox_env: PathBuf,
-+    pu [...]
-```
-
-**Merged final code:**
-```
-20:
-21:    // Some(_) if it exists, None otherwise
-22:    pub bashrc_path: Option<PathBuf>,
-23:    pub flox_activate_tracer: String,
-24:    pub flox_sourcing_rc: bool,
-25:    pub flox_activations: PathBuf,
-26:}
-27:
-28:// N.B. the output of these scripts may be eval'd with backticks which have
-29:// the effect of removing newlines from the output, so we must ensure that
-30:// the output is a valid [...]
-```
-
-### F#736: Include diagnostic hints for unexpected failures; explain likely causes (e.g. OOM, kill -9, exec) to aid debugging.
+### F#1217: Include diagnostic hints for unexpected failures; explain likely causes (e.g. OOM, kill -9, exec) to aid debugging.
 - **Taxonomy:** `user-facing-messages`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=0
 - **Evidence:** 1 comments across PRs #3970
@@ -8144,7 +7000,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 27:    pub fn from_files(activation_state_d [...]
 ```
 
-### F#759: Decouple cleanup behavior from verbosity flags; use independent controls for file retention.
+### F#1242: Decouple cleanup behavior from verbosity flags; use independent controls for file retention.
 - **Taxonomy:** `semantic-correctness`   **Area:** `activations`   **Scope:** `area-specific`
 - **Reviewer-tier breakdown:** T1=0, T2=0
 - **Evidence:** 1 comments across PRs #3770
@@ -8191,7 +7047,7 @@ _Tighter rendering: comment body truncated to 200 chars, diff hunk and final cod
 
 ## High-confidence 'other'-bucket rules (Task 8.5 candidates)
 
-_Found 19 high-confidence 'other'-bucket classifications in 12 clusters._
+_Found 17 high-confidence 'other'-bucket classifications in 10 clusters._
 
 ### Other-cluster 1  (size=7)
 _Common tokens: addressing, change, code, comment, review_
@@ -8642,69 +7498,6 @@ _Common tokens: behavior, errors, intended, logic, match_
 ```
 
 ### Other-cluster 3  (size=1)
-_Common tokens: cases, code, error, explicitly, handle, library, panic_
-
-#### PR #3909 @ `cli/flox-activations/src/cli/executive/mod.rs:None` — dcarley (Tier 1, conf=0.80)
-- **Rule statement:** Handle all error cases explicitly; don't panic in library code.
-- **Area:** `activations`   **Thread resolved:** N   **was_addressed:** unknown
-
-**Source comment:**
-> I'm not sure this logic to..
-> 
-> - clean up on errors
-> - not clean up on termination signals
-> 
-> ..is still correct now that..
-> 
-> - we only have a single executive
-> - we'll discard the state when a new executive is started
-> 
-> Maybe both cases should exit without cleanup?
-
-**Diff hunk:**
-```
-@@ -0,0 +1,321 @@
-+use std::fs;
-+use std::path::{Path, PathBuf};
-+use std::sync::Arc;
-+use std::sync::atomic::AtomicBool;
-+
-+use anyhow::{Context, Result, bail};
-+use clap::Args;
-+use flox_core::activate::context::ActivateCtx;
-+use flox_core::activations::{activation_state_dir_path, read_activations_json, state_json_path};
-+use flox_core::traceable_path;
-+use log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
-+use nix::libc::{SIGCHLD, SIGINT, SIGQUIT, SIGTERM};
-+use nix::sys::signal::Signal::SIGUSR1;
-+use nix::sys::signal::kill;
-+use nix::unistd::{Pid, getpgid, getpid, setsid};
-+use serde::{Deserialize, Serialize};
-+use signal_hook::iterator::Signals;
-+use tracing::{debug, debug_span, error, info, instrument};
-+use watcher::{LockedActivationState, PidWatcher, WaitResult, Watcher};
-+
-+us [...]
-```
-
-**Merged final code:**
-```
-199:    // You can't create a new session if you're already a session leader, the reason being that
-200:    // the other processes in the group aren't automatically moved to the new session. You're supposed
-201:    // to have this invariant: all processes in a process group share the same controlling terminal.
-202:    // If you were able to create a new session as session leader and leave behind the other processes
-203:    // in the group in the old session, it would be possible for processes in this group to be in two
-204:    // different sessions and therefore have two different controlling terminals.
-205:    if pid != getpgid(None).context("failed to get process group leader")? {
-206:        setsid().context("failed to create new session")?;
-207:    }
-208:    Ok(())
-209:}
-210:
-211:/// M [...]
-```
-
-### Other-cluster 4  (size=1)
 _Common tokens: code, comments, document, explaining, intent, obvious, with_
 
 #### PR #3785 @ `cli/flox-rust-sdk/src/providers/buildenv.rs:702` — ysndr (Tier 1, conf=0.70)
@@ -8753,58 +7546,7 @@ _Common tokens: code, comments, document, explaining, intent, obvious, with_
 696:            ) [...]
 ```
 
-### Other-cluster 5  (size=1)
-_Common tokens: errors, explicitly, handle, panicking, rather, than, unwrapping_
-
-#### PR #3843 @ `cli/flox-core/src/activations.rs:None` — mkenigs (Tier 1, conf=0.70)
-- **Rule statement:** Handle errors explicitly rather than unwrapping or panicking.
-- **Area:** `core`   **Thread resolved:** N   **was_addressed:** unknown
-
-**Source comment:**
-> suggestion blocking: I think we need to add `parent().unwrap_or_else("root")`, this is putting `.flox` in every path
-
-**Diff hunk:**
-```
-@@ -323,29 +322,50 @@ pub fn acquire_activations_json_lock(
- /// The presence of the lock file does not indicate an active lock because the
- /// file isn't removed after use.
- /// This is a separate file because we replace activations.json on write.
--#[allow(unused)]
- fn activations_json_lock_path(activations_json_path: impl AsRef<Path>) -> PathBuf {
-     activations_json_path.as_ref().with_extension("lock")
- }
- 
--/// {flox_runtime_dir}/{path_hash(flox_env)}/activations.json
--pub fn activations_json_path(runtime_dir: impl AsRef<Path>, flox_env: impl AsRef<Path>) -> PathBuf {
-+/// Base state directory for activations (plural) of the given environment.
-+///
-+/// {flox_runtime_dir}/activations/{path_hash(dot_flox_path)}-{basename(dot_flox_path)}/
-+fn activations_state_dir_path(
-+    runtime_d [...]
-```
-
-**Merged final code:**
-```
-319:}
-320:
-321:/// Returns the path to the lock file for activations.json.
-322:/// The presence of the lock file does not indicate an active lock because the
-323:/// file isn't removed after use.
-324:/// This is a separate file because we replace activations.json on write.
-325:fn activations_json_lock_path(activations_json_path: impl AsRef<Path>) -> PathBuf {
-326:    activations_json_path.as_ref().with_extension("lock")
-327:}
-328:
-329:/// Base state directory for activations (plural) of the given environment.
-330:///
-331:/// `dot_flox_path` should be canonicalized before being passed to this
-332:/// function. We can't enforce the type here because the `executive` needs to
-333:/// still be able to read state if the environment has been deleted beneath it.
-334:///
-335:/// If there's a FloxHu [...]
-```
-
-### Other-cluster 6  (size=1)
+### Other-cluster 4  (size=1)
 _Common tokens: apis, behavior, document, obvious, public_
 
 #### PR #3869 @ `cli/flox/src/commands/check_for_upgrades.rs:141` — ysndr (Tier 1, conf=0.70)
@@ -8876,7 +7618,7 @@ _Common tokens: apis, behavior, document, obvious, public_
 146:        Concrete [...]
 ```
 
-### Other-cluster 7  (size=1)
+### Other-cluster 5  (size=1)
 _Common tokens: comments, could, like, mean, might, nonblocking, question, remove, seems, some, stale_
 
 #### PR #4032 @ `cli/flox/src/utils/errors.rs:321` — mkenigs (Tier 1, conf=0.65)
@@ -8918,7 +7660,7 @@ _Common tokens: comments, could, like, mean, might, nonblocking, question, remov
 316:        CoreEnvironmentError::Manifest(er [...]
 ```
 
-### Other-cluster 8  (size=1)
+### Other-cluster 6  (size=1)
 _Common tokens: already, also, cental, delete, format, gcroots, migrations, oldold, reasonable, remain, roots, there, these, think, yeah_
 
 #### PR #4045 @ `cli/flox-rust-sdk/src/models/environment/remote_environment.rs:227` — ysndr (Tier 1, conf=0.65)
@@ -8970,7 +7712,7 @@ _Common tokens: already, also, cental, delete, format, gcroots, migrations, oldo
 220:        // We therefore only track links for the inner managed environment [...]
 ```
 
-### Other-cluster 9  (size=1)
+### Other-cluster 7  (size=1)
 _Common tokens: about, client, comment, dependencies, kind, meant, need, previous, produce, quite, this, what, where, wouldnt_
 
 #### PR #4047 @ `cli/flox-rust-sdk/src/models/environment/floxmeta_branch.rs:None` — ysndr (Tier 1, conf=0.65)
@@ -9013,7 +7755,7 @@ _Common tokens: about, client, comment, dependencies, kind, meant, need, previou
 329:            return Err(FloxmetaBranchError::UpstreamNotFound { [...]
 ```
 
-### Other-cluster 10  (size=1)
+### Other-cluster 8  (size=1)
 _Common tokens: after, aren, changes, environments, floxhub, generation, have, local, refactor, reference, remote, synced, that_
 
 #### PR #4045 @ `cli/flox/src/commands/edit.rs:1` — dcarley (Tier 1, conf=0.60)
@@ -9060,7 +7802,7 @@ _Common tokens: after, aren, changes, environments, floxhub, generation, have, l
 21:    EditResult,
 ```
 
-### Other-cluster 11  (size=1)
+### Other-cluster 9  (size=1)
 _Common tokens: authentica, client, crate, handling, itself, know, level, move, needs, only, question, token, what_
 
 #### PR #4047 @ `cli/flox-catalog/src/auth/auth0.rs:1` — ysndr (Tier 1, conf=0.60)
@@ -9106,7 +7848,7 @@ at the level i see it the client itself only needs to know what to use to authen
 21:        Self { token }
 ```
 
-### Other-cluster 12  (size=1)
+### Other-cluster 10  (size=1)
 _Common tokens: backwards, block, empty, jump, labelled, logic, mentally, requires, seems, suggestion, through_
 
 #### PR #4045 @ `cli/flox-rust-sdk/src/models/environment/remote_environment.rs:None` — dcarley (Tier 1, conf=0.60)
@@ -9172,63 +7914,69 @@ _Common tokens: backwards, block, empty, jump, labelled, logic, mentally, requir
 
 _10 random samples from the 'other'-bucket classifications with confidence < 0.3 — these should look like reviewer noise (acks, questions, nits unrelated to a rule)._
 
-#### Sample 1: PR #4202 @ `cli/flox-activations/src/attach.rs:None` — djsauble (Tier 2, conf=0.10)
+#### Sample 1: PR #3770 @ `cli/flox-activations/src/cli/activate/mod.rs:None` — zmitchell (Tier 3, conf=0.05)
 - **Area:** `activations`
 
 **Source comment:**
-> Follow-up changes: https://github.com/flox/flox/pull/4202/commits/13a546b3bda3875f769baa1ce716d55ba906a2d3
+> Ah, `script` is a string, not a `Path`
 
-#### Sample 2: PR #4231 @ `cli/flox-activations/src/gen_rc/bash.rs:157` — djsauble (Tier 2, conf=0.05)
-- **Area:** `activations`
-
-**Source comment:**
-> At this point I'm tempted to put all the hook code in a file named `thar_be_dragons.rs`.
-
-#### Sample 3: PR #4215 @ `cli/flox-manifest/src/parsed/v1_10_0/package_descriptor.rs:None` — mkenigs (Tier 1, conf=0.25)
-- **Area:** `manifest`
-
-**Source comment:**
-> Fixing
-
-#### Sample 4: PR #4096 @ `cli/flox-rust-sdk/src/providers/publish.rs:670` — ysndr (Tier 1, conf=0.15)
-- **Area:** `providers`
-
-**Source comment:**
-> yes, thanks good call
-
-#### Sample 5: PR #3920 @ `cli/flox-activations/src/cli/executive/mod.rs:1` — dcarley (Tier 1, conf=0.15)
-- **Area:** `activations`
-
-**Source comment:**
-> I'm hoping it's fixed by 08b3407345dadd1c667eb00d7a998c2b9db0ff69
-
-#### Sample 6: PR #4233 @ `cli/flox-activations/src/gen_rc/bash.rs:73` — djsauble (Tier 2, conf=0.10)
-- **Area:** `activations`
-
-**Source comment:**
-> Just answered my own question. https://github.com/flox/flox/pull/4233/changes/bb173720422b498661f84b73f7f0aa399d051ab9#diff-4443391fe19087c4edb2316b2721bdb959c86056b745e1b33fa0f8b17910f824R60-R65
-
-#### Sample 7: PR #4032 @ `buildenv/buildenv.nix:260` — mkenigs (Tier 1, conf=0.05)
-- **Area:** `other`
-
-**Source comment:**
-> question nonblocking: should we be migrating the lockfile in Rust and then only supporting latest version in buildenv?
-
-#### Sample 8: PR #4032 @ `cli/flox-rust-sdk/src/providers/lock_manifest.rs:440` — mkenigs (Tier 1, conf=0.15)
-- **Area:** `providers`
-
-**Source comment:**
-> suggestion: drop this file?
-
-#### Sample 9: PR #3715 @ `cli/flox/src/commands/pull.rs:None` — mkenigs (Tier 1, conf=0.20)
-- **Area:** `commands`
-
-**Source comment:**
-> Good catch
-
-#### Sample 10: PR #4198 @ `cli/flox/src/config/mod.rs:None` — stephenyeargin (Tier 3, conf=0.15)
+#### Sample 2: PR #4231 @ `cli/tests/hook.bats:None` — djsauble (Tier 2, conf=0.00)
 - **Area:** `cli/other`
 
 **Source comment:**
-> Fixed in [a9c3835](https://github.com/flox/flox/commit/a9c38354d65eeafe9bfdaf7b10d8eca827b7bc6b)
+> What is the purpose of testing that each of these partial strings is in the output? Would't it be sufficient to have a single `assert_output --partial "hook-env --shell bash"`?
+
+#### Sample 3: PR #4045 @ `cli/flox-rust-sdk/src/models/environment/remote_environment.rs:None` — ysndr (Tier 1, conf=0.15)
+- **Area:** `models/environment`
+
+**Source comment:**
+> I made it nested if blocks, and changed the `exits()` for `is_symlink()` to correctly delete stale symlinks as well
+
+#### Sample 4: PR #4198 @ `cli/flox/src/config/mod.rs:None` — djsauble (Tier 2, conf=0.25)
+- **Area:** `cli/other`
+
+**Source comment:**
+> Sorry if this is a dumb question, but since the default value of this config option is `allowed`, if it's not set shouldn't the value actually be `AutoActivate::Allowed`?
+
+#### Sample 5: PR #4231 @ `cli/flox-activations/src/hook.rs:None` — djsauble (Tier 2, conf=0.10)
+- **Area:** `activations`
+
+**Source comment:**
+> Love it. https://github.com/flox/flox/pull/4231/changes/424db909cf8119797fcd71321dfe592cd2d44bad
+
+#### Sample 6: PR #4122 @ `cli/nef-lock-catalog/src/bin/lock.rs:34` — mkenigs (Tier 1, conf=0.10)
+- **Area:** `cli/other`
+
+**Source comment:**
+> Forgot this was test only again 😬
+
+#### Sample 7: PR #4032 @ `cli/flox-rust-sdk/src/models/environment/core_environment.rs:None` — zmitchell (Tier 3, conf=0.10)
+- **Area:** `models/environment`
+
+**Source comment:**
+> I think it's a leftover. At one point I was storing the pre-migration `Manifest<S>` on `CoreEnvironment`, and so constructing a `CoreEnvironment` involved reading the manifest from disk, which is fallible. Fixed.
+
+#### Sample 8: PR #3939 @ `cli/flox-rust-sdk/src/providers/catalog.rs:379` — billlevine (Tier 2, conf=0.20)
+- **Area:** `providers`
+
+**Source comment:**
+> All headers are passed through in the catalog server, except for a few that are filtered out (like auth).  So no change there should be needed.
+
+#### Sample 9: PR #3803 @ `cli/flox/src/commands/activate.rs:None` — mkenigs (Tier 1, conf=0.15)
+- **Area:** `commands`
+
+**Source comment:**
+> Changed to unreachable and added a branch for empty command
+
+#### Sample 10: PR #4122 @ `cli/nef-lock-catalog/src/tree.rs:84` — ysndr (Tier 1, conf=0.25)
+- **Area:** `cli/other`
+
+**Source comment:**
+> > Do these actually get emitted to the user? I don't recall our tracing setup and ran into problems creating packages to test this scenario.
+> 
+> looking, if they get emitted they'll also be somewhat ugly (log) messages
+> 
+> > Would we change these 3 warning cases into errors when we provide users with a mechanism to resolve/avoid them in the future?
+> 
+> I think so, yes
 
