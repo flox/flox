@@ -24,6 +24,7 @@ FIELDS = "number,title,author,state,mergedAt,baseRefOid,headRefOid,mergeCommit,u
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--since", required=True, help="YYYY-MM-DD")
+    parser.add_argument("--until", help="optional YYYY-MM-DD upper bound (inclusive)")
     parser.add_argument("--limit", type=int, default=1000)
     parser.add_argument("--rust-only", action="store_true", default=True,
                         help="(default true) only upsert PRs touching .rs files")
@@ -33,11 +34,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    search = f"merged:>={args.since}"
+    if args.until:
+        search += f" merged:<={args.until}"
     prs = run_json([
         "pr", "list",
         "--repo", REPO,
         "--state", "merged",
-        "--search", f"merged:>={args.since}",
+        "--search", search,
         "--limit", str(args.limit),
         "--json", FIELDS,
     ])
