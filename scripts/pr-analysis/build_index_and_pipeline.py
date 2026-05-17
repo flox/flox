@@ -143,6 +143,17 @@ def file_kb(path: Path) -> str:
     return f"{path.stat().st_size // 1024} KB"
 
 
+def file_lines(path: Path) -> int:
+    if not path.exists():
+        return 0
+    with open(path, "rb") as f:
+        return sum(1 for _ in f)
+
+
+def today_iso() -> str:
+    return dt.date.today().isoformat()
+
+
 def render_index(stats: dict[str, int | str], sha: str, commit_count: int) -> str:
     css = CSS_PALETTE
     blurb = (
@@ -166,7 +177,7 @@ def render_index(stats: dict[str, int | str], sha: str, commit_count: int) -> st
                 "resume the work without losing context."
             ),
             "stats": [
-                ("Format", "Markdown"),
+                ("Lines", f"{file_lines(WORKTREE / 'rust-pr-analysis-summary-prompt-01.md'):,}"),
                 ("Size", file_kb(WORKTREE / "rust-pr-analysis-summary-prompt-01.md")),
                 ("Audience", "Resuming session"),
             ],
@@ -179,14 +190,20 @@ def render_index(stats: dict[str, int | str], sha: str, commit_count: int) -> st
             "blurb": (
                 "Chronological log of 66 events through the build, an iteration "
                 "comparison table (Iter 1 broken-true &rarr; Iter 2 broken-false &rarr; "
-                "Iter 3 defensible), and links to every commit. Also available as raw "
-                "Markdown alongside the HTML."
+                "Iter 3 defensible), and links to every commit. Also covers the "
+                "Sonnet 4.6 re-classification pass (commit "
+                "<code><a href=\"https://github.com/flox/flox/commit/5680a1f45a76522ec28c0377ea548c00bb62fbd2\">5680a1f45</a></code>) "
+                "that re-classified 104 high-evidence comments, upgrading 20 from "
+                "generic Haiku rules (e.g., &ldquo;use complete sentences in errors&rdquo;) "
+                "to specific Rust patterns (e.g., "
+                "<code>ErrorEnum::Custom(Box&lt;dyn Error&gt;)</code> design rule) &mdash; "
+                "this is what drove the 522 &rarr; 488 finding-count transition. Also "
+                "available as raw Markdown alongside the HTML."
             ),
             "stats": [
                 ("Events", "66"),
                 ("Iterations", "3 + Task 8"),
-                ("Commits referenced", str(commit_count)),
-                ("Markdown source", "rust-pr-analysis-jouney-01.md"),
+                ("Size", file_kb(WORKTREE / "rust-pr-analysis-jouney-01.html")),
             ],
         },
         {
@@ -203,7 +220,6 @@ def render_index(stats: dict[str, int | str], sha: str, commit_count: int) -> st
             ),
             "stats": [
                 ("PRs", str(stats["pr_count"])),
-                ("Comments classified", f"{stats['classified_count']:,}"),
                 ("Findings", str(stats["finding_count"])),
                 ("Size", file_kb(WORKTREE / "rust-pr-analysis-dashboard-01.html")),
             ],
@@ -223,7 +239,6 @@ def render_index(stats: dict[str, int | str], sha: str, commit_count: int) -> st
             ),
             "stats": [
                 ("Noise filtered", str(stats["noise_count"])),
-                ("Stylistic classifications", "163"),
                 ("Stylistic gap candidates", "54"),
                 ("Size", file_kb(WORKTREE / "rust-pr-analysis-noise-deep-dive-01.html")),
             ],
@@ -242,8 +257,7 @@ def render_index(stats: dict[str, int | str], sha: str, commit_count: int) -> st
             "stats": [
                 ("Stages", "5"),
                 ("Tables", "10"),
-                ("Taxonomy entries", "15"),
-                ("Reviewer tiers", "4"),
+                ("Size", file_kb(WORKTREE / "rust-pr-analysis-pipeline-01.html")),
             ],
         },
         {
@@ -260,7 +274,7 @@ def render_index(stats: dict[str, int | str], sha: str, commit_count: int) -> st
             "stats": [
                 ("Tasks", "13"),
                 ("Authored", "2026-05-16"),
-                ("Format", "Markdown"),
+                ("Size", file_kb(WORKTREE / "docs/superpowers/plans/2026-05-16-flox-rust-pr-analysis-skill.md")),
             ],
         },
     ]
@@ -286,7 +300,94 @@ def render_index(stats: dict[str, int | str], sha: str, commit_count: int) -> st
         )
 
     cards_block = "\n".join(cards_html)
+
+    # ---- Rule-level analysis (findings/) cards ----
+    findings_dir = WORKTREE / "scripts" / "pr-analysis" / "findings"
+    findings_cards = [
+        {
+            "title": "task9-review.md",
+            "href": "scripts/pr-analysis/findings/task9-review.md",
+            "path": findings_dir / "task9-review.md",
+            "role": "Primary deliverable",
+            "blurb": (
+                "Rule-by-rule review document. Every finding rendered with source "
+                "comment, diff hunk, merged final code, reviewer voices, and "
+                "AGENTS.md status. <b>The primary substantive analysis "
+                "deliverable.</b>"
+            ),
+        },
+        {
+            "title": "task8-full-corpus.md",
+            "href": "scripts/pr-analysis/findings/task8-full-corpus.md",
+            "path": findings_dir / "task8-full-corpus.md",
+            "role": "Corpus digest",
+            "blurb": (
+                "Task 8 full-corpus run results document &mdash; 8-month window "
+                "(2025-09-17 &rarr; 2026-05-17) digest covering 216 Rust-touching "
+                "PRs from 335 merged."
+            ),
+        },
+        {
+            "title": "iter4-comparison.md",
+            "href": "scripts/pr-analysis/findings/iter4-comparison.md",
+            "path": findings_dir / "iter4-comparison.md",
+            "role": "Validation",
+            "blurb": (
+                "Iteration-4 pilot comparison &mdash; second-window validation "
+                "across 2025-09-16 &rarr; 2025-11-15 to verify calibration "
+                "generalises beyond the original recent-month window."
+            ),
+        },
+        {
+            "title": "pilot-retro.md",
+            "href": "scripts/pr-analysis/findings/pilot-retro.md",
+            "path": findings_dir / "pilot-retro.md",
+            "role": "Retrospective",
+            "blurb": (
+                "Pilot retrospective digest from iterations 1&ndash;3 "
+                "(now superseded by the journey log + Task 8 results, kept for "
+                "traceability)."
+            ),
+        },
+        {
+            "title": "other-cluster-candidates.txt",
+            "href": "scripts/pr-analysis/findings/other-cluster-candidates.txt",
+            "path": findings_dir / "other-cluster-candidates.txt",
+            "role": "Taxonomy input",
+            "blurb": (
+                "Task 8.5 input: high-confidence <code>taxonomy='other'</code> "
+                "rule statements clustered as candidates for taxonomy expansion."
+            ),
+        },
+    ]
+
+    findings_cards_html = []
+    for fc in findings_cards:
+        lines = file_lines(fc["path"])
+        size = file_kb(fc["path"])
+        fmt = "Text" if fc["path"].suffix == ".txt" else "Markdown"
+        stat_pairs = (
+            f'<div class="stat"><div class="label">Lines</div><div class="value">{lines:,}</div></div>'
+            f'<div class="stat"><div class="label">Size</div><div class="value">{size}</div></div>'
+            f'<div class="stat"><div class="label">Role</div><div class="value">{fc["role"]}</div></div>'
+        )
+        findings_cards_html.append(
+            f"""
+<div class="card">
+  <div class="badge-row">
+    <span class="pill neutral">{fmt}</span>
+  </div>
+  <div class="ttl"><h3><a href="{fc['href']}">{fc['title']}</a></h3></div>
+  <div class="blurb">{fc['blurb']}</div>
+  <div class="stat-grid">{stat_pairs}</div>
+  <div class="open"><a href="{fc['href']}">Open &rarr;</a></div>
+</div>
+""".strip()
+        )
+    findings_cards_block = "\n".join(findings_cards_html)
+
     now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    snapshot_date = today_iso()
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -317,7 +418,23 @@ def render_index(stats: dict[str, int | str], sha: str, commit_count: int) -> st
     <div class="stat"><div class="label">Tests passing</div><div class="value">67</div></div>
     <div class="stat"><div class="label">Latest commit</div><div class="value"><code>{sha}</code></div></div>
   </div>
+  <p style="margin-top:14px;font-size:12px;color:var(--fg-mute);">
+    Stats reflect DB state at commit <code>{sha}</code> / timestamp
+    <b>{snapshot_date}</b>. Numbers re-query the live DB on every
+    regeneration.
+  </p>
 </header>
+
+<section>
+  <h2>How to read these</h2>
+  <ul class="tight">
+    <li><b>First-time reader</b> &rarr; start with the <b>Journey Log</b> (the <i>why</i> and <i>how</i>).</li>
+    <li><b>Skim the corpus</b> &rarr; open the <b>Main Dashboard</b> (the <i>what</i>).</li>
+    <li><b>Understand the architecture</b> &rarr; read the <b>Pipeline page</b> (the <i>how it works</i>).</li>
+    <li><b>Audit a specific finding</b> &rarr; open <code>task9-review.md</code> (the rule-by-rule deliverable).</li>
+    <li><b>Run it yourself / hand off</b> &rarr; use the <b>Summary Prompt</b> (the <i>how to resume</i>).</li>
+  </ul>
+</section>
 
 <section>
   <h2>Artifacts</h2>
@@ -328,20 +445,25 @@ def render_index(stats: dict[str, int | str], sha: str, commit_count: int) -> st
 </section>
 
 <section>
-  <h2>Coming next</h2>
-  <p>Deliverables planned but not yet produced. The summary prompt above is the briefing for a session that will produce these.</p>
+  <h2>Rule-level analysis (findings/)</h2>
+  <p>Markdown and text artifacts under <code>scripts/pr-analysis/findings/</code> that hold the rule-by-rule substantive output and supporting iteration records. Not regenerated by the HTML builders &mdash; these are committed source-of-truth documents.</p>
+  <div class="cards">
+{findings_cards_block}
+  </div>
+</section>
+
+<section>
+  <h2>Underlying machinery</h2>
   <ul class="tight">
-    <li><code>.claude/skills/flox-rust-review/SKILL.md</code> &mdash; main cross-cutting skill drawn from cross-area, tier-1-touched findings.</li>
-    <li><code>.claude/skills/flox-rust-stylistic-conventions/SKILL.md</code> &mdash; <b>NEW</b>, extracted from the noise deep-dive: stylistic rules systematically under-codified in AGENTS.md.</li>
-    <li>Per-area <code>CLAUDE.md</code> files for the three hot areas:
-      <ul class="tight">
-        <li><code>cli/flox/src/commands/CLAUDE.md</code></li>
-        <li><code>cli/flox-rust-sdk/src/models/environment/CLAUDE.md</code></li>
-        <li><code>cli/flox-rust-sdk/src/providers/CLAUDE.md</code></li>
-      </ul>
-    </li>
-    <li><code>scripts/pr-analysis/findings/gap-report.md</code> &mdash; findings where <code>in_agents_md=0</code>, with proposed AGENTS.md additions and reviewer-voice notes for the tier-1 reviewers.</li>
+    <li><code>scripts/pr-analysis/</code> &mdash; Pipeline code (10 scripts under the top-level + <code>lib/</code> modules).</li>
+    <li><code>scripts/pr-analysis/data/pr_analysis.db</code> &mdash; SQLite snapshot powering all the HTML reports.</li>
+    <li><code>scripts/pr-analysis/build_dashboard.py</code> &mdash; Regenerates <code>rust-pr-analysis-dashboard-01.html</code>.</li>
+    <li><code>scripts/pr-analysis/build_noise_deep_dive.py</code> &mdash; Regenerates <code>rust-pr-analysis-noise-deep-dive-01.html</code>.</li>
+    <li><code>scripts/pr-analysis/build_index_and_pipeline.py</code> &mdash; Regenerates this index and the pipeline page.</li>
   </ul>
+  <p style="font-size:13px;color:var(--fg-mute);margin-top:10px;">
+    Re-running <code>aggregate_findings.py</code> may shift cluster boundaries because greedy single-pass embedding clustering is order-dependent; pin <code>comment_id</code> ordering if you need reproducibility.
+  </p>
 </section>
 
 <div class="footer">
