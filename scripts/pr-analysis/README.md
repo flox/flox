@@ -26,9 +26,14 @@ Classifying the full corpus (Task 8) runs ~1,400 line-comments through Claude Ha
 uv run scripts/pr-analysis/init_db.py --reset
 uv run scripts/pr-analysis/ingest_prs.py --since 2025-11-16 --limit 25
 uv run scripts/pr-analysis/ingest_comments.py
+uv run scripts/pr-analysis/ingest_review_summaries.py
+uv run scripts/pr-analysis/ingest_pr_comments.py
 uv run scripts/pr-analysis/ingest_final_code.py
+uv run scripts/pr-analysis/ingest_thread_resolution.py    # added in 7.5b
 uv run scripts/pr-analysis/audit_coverage.py --ingest-only
-uv run scripts/pr-analysis/classify_comments.py --concurrency 4
+uv run scripts/pr-analysis/classify_via_subagent.py prepare --batch-size 15
+# controller dispatches Haiku subagents per batch
+uv run scripts/pr-analysis/classify_via_subagent.py ingest --in-dir /tmp/pilot_classify
 uv run scripts/pr-analysis/audit_coverage.py
 uv run scripts/pr-analysis/aggregate_findings.py
 # then build the retro digest per Task 7 Step 7
@@ -40,9 +45,14 @@ uv run scripts/pr-analysis/aggregate_findings.py
 uv run scripts/pr-analysis/init_db.py --reset
 uv run scripts/pr-analysis/ingest_prs.py --since 2025-11-16
 uv run scripts/pr-analysis/ingest_comments.py
+uv run scripts/pr-analysis/ingest_review_summaries.py
+uv run scripts/pr-analysis/ingest_pr_comments.py
 uv run scripts/pr-analysis/ingest_final_code.py
+uv run scripts/pr-analysis/ingest_thread_resolution.py    # added in 7.5b
 uv run scripts/pr-analysis/audit_coverage.py --ingest-only
-uv run scripts/pr-analysis/classify_comments.py --concurrency 8
+uv run scripts/pr-analysis/classify_via_subagent.py prepare --batch-size 15
+# controller dispatches Haiku subagents per batch
+uv run scripts/pr-analysis/classify_via_subagent.py ingest --in-dir /tmp/full_classify
 uv run scripts/pr-analysis/audit_coverage.py
 uv run scripts/pr-analysis/aggregate_findings.py
 uv run scripts/pr-analysis/synthesize_cross_cutting.py

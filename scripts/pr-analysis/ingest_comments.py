@@ -40,8 +40,9 @@ def main() -> None:
                     """INSERT INTO line_comment
                        (id, pr_number, author, author_type, created_at,
                         path, line, original_line, side, diff_hunk, body, is_noise,
-                        in_reply_to_id, area, reviewer_weight, reviewer_tier)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        in_reply_to_id, area, reviewer_weight, reviewer_tier,
+                        commit_id, original_commit_id)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                        ON CONFLICT(id) DO UPDATE SET
                          pr_number=excluded.pr_number,
                          author=excluded.author,
@@ -57,7 +58,9 @@ def main() -> None:
                          in_reply_to_id=excluded.in_reply_to_id,
                          area=excluded.area,
                          reviewer_weight=excluded.reviewer_weight,
-                         reviewer_tier=excluded.reviewer_tier""",
+                         reviewer_tier=excluded.reviewer_tier,
+                         commit_id=excluded.commit_id,
+                         original_commit_id=excluded.original_commit_id""",
                     (
                         c["id"],
                         n,
@@ -75,6 +78,8 @@ def main() -> None:
                         area_for_path(c["path"]),
                         rev.weight,
                         rev.tier,
+                        c.get("commit_id"),
+                        c.get("original_commit_id"),
                     ),
                 )
         total_comments += len(comments)
