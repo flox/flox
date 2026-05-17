@@ -10,6 +10,14 @@ Extracts review-validated coding rules from 6 months of merged PRs in
 - `uv` on PATH
 - `ANTHROPIC_API_KEY` exported
 
+## Status
+
+This directory is built up across multiple tasks. **Task 1 ships only `init_db.py`** (plus the schema, lib modules, and tests). The other scripts referenced in the run order below — `ingest_prs.py`, `ingest_comments.py`, `ingest_final_code.py`, `classify_comments.py`, `audit_coverage.py`, `aggregate_findings.py`, `synthesize_*.py` — land in subsequent tasks. Running the full pipeline before later tasks complete will error with `No such file or directory`.
+
+## Cost expectations
+
+Classifying the full corpus (Task 8) runs ~1,400 line-comments through Claude Haiku 4.5; expect **~$1–3** in Anthropic API spend per full run. The pilot (Task 7) classifies ~100–200 comments and costs **~$0.30 per iteration**. The synthesis stages (Tasks 10–12) use Claude Sonnet 4.6 and add **~$1.50** combined. GitHub API calls are free under the standard authenticated rate limit.
+
 ## Run order
 
 ### Pilot (Task 7): 15-PR calibration run

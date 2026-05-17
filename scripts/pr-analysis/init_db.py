@@ -29,7 +29,7 @@ def main() -> None:
 
     if args.reset and DEFAULT_DB_PATH.exists():
         DEFAULT_DB_PATH.unlink()
-        for suffix in ("-wal", "-shm"):
+        for suffix in ("-wal", "-shm", "-journal"):
             sidecar = DEFAULT_DB_PATH.with_name(DEFAULT_DB_PATH.name + suffix)
             if sidecar.exists():
                 sidecar.unlink()
@@ -43,7 +43,7 @@ def main() -> None:
             "VALUES (?, ?, ?, ?)",
             seed_rows(),
         )
-    print(f"initialized db; reviewers seeded; now: {dt.datetime.now().isoformat()}")
+    print(f"initialized db; reviewers seeded; now: {dt.datetime.now(dt.UTC).isoformat()}")
 
 
 if __name__ == "__main__":

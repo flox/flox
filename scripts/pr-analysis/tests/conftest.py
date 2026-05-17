@@ -7,7 +7,6 @@ sys.path.insert(0, str(ROOT))
 
 # Allow `from scripts.pr_analysis.lib.foo import ...` style imports
 # by aliasing the hyphenated dir under an importable name.
-import importlib.util
 import types
 
 ALIAS_TARGET = ROOT / "scripts" / "pr-analysis"
