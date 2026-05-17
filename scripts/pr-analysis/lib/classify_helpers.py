@@ -28,13 +28,28 @@ SYSTEM_PROMPT = (
     '"confidence": 0.0..1.0}. '
     "If the comment is conversational only (e.g. 'nit', 'lgtm', 'thanks') and teaches no rule, "
     'set taxonomy="other", rule_statement="" and confidence < 0.3. '
+    "When a comment has `thread_resolved=true`, treat that as strong evidence the "
+    "reviewer's point was addressed (set was_addressed=true unless the merged code "
+    "clearly contradicts). When thread_resolved=false, that's NOT evidence it was "
+    "NOT addressed — the thread may simply not have been marked resolved. Use null "
+    "in ambiguous cases. "
     "Do not emit any text outside the JSON object."
 )
 
 
-def build_user_prompt(body: str, diff_hunk: str, final_snippet: str, taxonomy_block: str) -> str:
+def build_user_prompt(body: str, diff_hunk: str, final_snippet: str,
+                      taxonomy_block: str,
+                      thread_resolved: bool | int | None = None,
+                      thread_resolved_by: str | None = None) -> str:
+    if thread_resolved is None:
+        resolved_str = "unknown"
+    elif thread_resolved:
+        resolved_str = f"resolved (by {thread_resolved_by or 'unknown'})"
+    else:
+        resolved_str = "unresolved"
     return (
         f"Allowed taxonomy ids:\n{taxonomy_block}\n\n"
+        f"Review-thread resolution state: {resolved_str}\n\n"
         "Review comment body:\n"
         "```\n" + body + "\n```\n\n"
         "Original diff hunk it pointed at:\n"

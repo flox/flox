@@ -7,14 +7,21 @@ from scripts.pr_analysis.aggregate_findings import (
 )
 
 
-def test_cluster_groups_near_duplicates_via_normalized_prefix():
+def test_cluster_groups_semantically_similar_rules():
     statements = [
         "Extend error enums rather than parsing strings at call sites.",
-        "Extend error enums rather than string-matching at call sites.",  # near-dup
+        "Add new error variants instead of string-matching downstream.",
         "Use formatdoc! for multi-line strings.",
     ]
-    clusters = cluster_rule_statements(statements, threshold=0.6)
-    assert len(clusters) == 2
+    # MiniLM rates the two error-handling sentences ~0.58 cosine, the third
+    # ~0.23/0.30 against either. Pass a lower threshold in the test so that
+    # the production constant (0.65, deliberately conservative) is preserved.
+    clusters = cluster_rule_statements(statements, threshold=0.5)
+    assert len(clusters) == 2  # the two error-handling rules merge
+    # Find the multi-member cluster
+    multi = [c for c in clusters if len(c) > 1]
+    assert len(multi) == 1
+    assert sorted(multi[0]) == [0, 1]
 
 
 def test_confidence_combines_tier_evidence_cross_area_and_acceptance():
@@ -39,14 +46,6 @@ def test_scope_cross_cutting_requires_tier1_and_multi_area():
     assert determine_scope(tier1_count=1, cross_area_count=2) == "cross-cutting"
     assert determine_scope(tier1_count=0, cross_area_count=3) == "area-specific"
     assert determine_scope(tier1_count=2, cross_area_count=1) == "area-specific"
-
-
-def test_cluster_threshold_is_loosened_to_35_pct():
-    from scripts.pr_analysis.aggregate_findings import CLUSTER_THRESHOLD
-    assert CLUSTER_THRESHOLD <= 0.40, (
-        "threshold should be loose enough to merge near-duplicate rules; "
-        f"got {CLUSTER_THRESHOLD}"
-    )
 
 
 def test_agents_md_coverage_matches_substantive_rule_in_section():
@@ -78,3 +77,16 @@ def test_agents_md_coverage_returns_zero_for_unrelated_rule():
         agents_text,
     )
     assert in_md == 0
+
+
+def test_agents_md_coverage_returns_zero_when_too_few_distinctive_tokens():
+    """A rule with fewer than min_overlap distinctive tokens (>= 4 chars,
+    non-stopword) is not eligible for matching."""
+    from scripts.pr_analysis.aggregate_findings import agents_md_coverage
+    agents_text = (
+        "## Rust style\n\nUse early returns from functions; avoid nested conditionals.\n"
+    )
+    # "do it now" — only 'now' has >= 4 chars; below min_overlap=3.
+    in_md, section = agents_md_coverage("do it now", agents_text)
+    assert in_md == 0
+    assert section is None

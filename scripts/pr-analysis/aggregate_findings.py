@@ -1,13 +1,15 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.12"
-# dependencies = []
+# dependencies = [
+#   "sentence-transformers>=2.5",
+# ]
 # ///
 """Aggregate classified comments into `finding` rows.
 
 Approach:
 - Group by (taxonomy, area). Within each group, cluster rule_statements by
-  normalized-token Jaccard similarity above THRESHOLD to merge near-duplicates.
+  cosine similarity of MiniLM sentence embeddings to merge near-duplicates.
 - For each cluster: emit one finding row with reviewer attribution, evidence,
   cross-area count (number of areas in which this same theme also clustered),
   AGENTS.md coverage, and a confidence score.
@@ -28,7 +30,8 @@ from lib.taxonomy import TAXONOMY_BY_ID
 
 AGENTS_MD_PATH = Path(__file__).resolve().parent.parent.parent / "AGENTS.md"
 
-CLUSTER_THRESHOLD = 0.35
+CLUSTER_THRESHOLD = 0.65  # cosine similarity (was 0.35 for Jaccard)
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
 
 def _tokens(s: str) -> set[str]:
@@ -38,33 +41,53 @@ def _tokens(s: str) -> set[str]:
     }
 
 
-def _jaccard(a: set[str], b: set[str]) -> float:
-    if not a and not b:
-        return 1.0
-    inter = a & b
-    union = a | b
-    return len(inter) / max(1, len(union))
+def _embedder():
+    """Lazy-load the embedding model. Cached per process."""
+    global _embedder_instance
+    if "_embedder_instance" not in globals():
+        from sentence_transformers import SentenceTransformer
+        _embedder_instance = SentenceTransformer(EMBEDDING_MODEL)
+    return _embedder_instance
 
 
-def cluster_rule_statements(statements: list[str], threshold: float = CLUSTER_THRESHOLD
+def cluster_rule_statements(statements: list[str],
+                            threshold: float = CLUSTER_THRESHOLD
                             ) -> list[list[int]]:
-    """Return clusters as lists of indices into `statements`."""
-    token_sets = [_tokens(s) for s in statements]
+    """Greedy clustering by cosine similarity of MiniLM embeddings.
+
+    For each statement: if its similarity to any existing cluster's mean
+    embedding exceeds threshold, join that cluster; else start a new one.
+    Statements with empty token sets are silently skipped.
+    """
+    import numpy as np
+
+    # Mask out empty-token statements (mirror prior behavior)
+    indices = [i for i, s in enumerate(statements) if _tokens(s)]
+    if not indices:
+        return []
+    texts = [statements[i] for i in indices]
+    embeddings = _embedder().encode(
+        texts, normalize_embeddings=True, show_progress_bar=False
+    )
+
     clusters: list[list[int]] = []
-    cluster_tokens: list[set[str]] = []
-    for i, ts in enumerate(token_sets):
-        if not ts:
-            continue
+    cluster_means: list[np.ndarray] = []
+    for local_idx, original_idx in enumerate(indices):
+        vec = embeddings[local_idx]
         placed = False
-        for j, ct in enumerate(cluster_tokens):
-            if _jaccard(ts, ct) >= threshold:
-                clusters[j].append(i)
-                cluster_tokens[j] = ct | ts
+        for c_idx, mean in enumerate(cluster_means):
+            sim = float(np.dot(mean, vec))
+            if sim >= threshold:
+                clusters[c_idx].append(original_idx)
+                # update mean (still normalized since we re-normalize)
+                new_mean = (mean * (len(clusters[c_idx]) - 1) + vec) / len(clusters[c_idx])
+                norm = np.linalg.norm(new_mean)
+                cluster_means[c_idx] = new_mean / norm if norm > 0 else new_mean
                 placed = True
                 break
         if not placed:
-            clusters.append([i])
-            cluster_tokens.append(set(ts))
+            clusters.append([original_idx])
+            cluster_means.append(vec)
     return clusters
 
 
@@ -88,34 +111,36 @@ def determine_scope(*, tier1_count: int, cross_area_count: int) -> str:
 
 
 def agents_md_coverage(rule_statement: str, agents_text: str,
-                      threshold: float = 0.25) -> tuple[int, str | None]:
-    """Return (1, matched_section_title) if rule_statement's tokens overlap
-    AGENTS.md content meaningfully, else (0, None).
+                      min_token_len: int = 4,
+                      min_overlap: int = 3) -> tuple[int, str | None]:
+    """Return (1, matched_section_title) if at least `min_overlap` distinctive
+    tokens from rule_statement appear in the same AGENTS.md section.
 
-    Splits AGENTS.md into sections (## or ### headings), computes token-Jaccard
-    of rule_statement against each section's body, returns the best section
-    whose similarity exceeds threshold.
+    'Distinctive' = length >= min_token_len AND not in the stopword set.
+    This is forgiving to phrasing differences (imperative rules vs descriptive
+    prose) where Jaccard fails because vocabularies don't overlap enough.
     """
-    rule_tokens = _tokens(rule_statement)
-    if not rule_tokens:
+    rule_tokens = {
+        t for t in _tokens(rule_statement)
+        if len(t) >= min_token_len
+    }
+    if len(rule_tokens) < min_overlap:
+        # Not enough distinctive tokens to make a reliable match.
         return (0, None)
     best_section: str | None = None
-    best_score = 0.0
-    # Split on headings; keep the heading text as section title.
-    section_blocks = re.split(r"\n(?=#{2,3} )", agents_text)
+    best_overlap = 0
+    section_blocks = re.split(r"\n(?=#{2,4} )", agents_text)
     for block in section_blocks:
         if not block.strip():
             continue
-        heading_match = re.match(r"#{2,3} (.+)", block)
+        heading_match = re.match(r"#{2,4} (.+)", block)
         title = heading_match.group(1).strip() if heading_match else "(intro)"
         body_tokens = _tokens(block)
-        if not body_tokens:
-            continue
-        score = _jaccard(rule_tokens, body_tokens)
-        if score > best_score:
-            best_score = score
+        overlap = len(rule_tokens & body_tokens)
+        if overlap > best_overlap:
+            best_overlap = overlap
             best_section = title
-    if best_score >= threshold:
+    if best_overlap >= min_overlap:
         return (1, best_section)
     return (0, None)
 

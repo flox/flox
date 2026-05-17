@@ -36,7 +36,9 @@ CLASSIFIER_MODEL = "claude-haiku-4-5-via-subagent"
 # -----------------------------------------------------------------------------
 
 UNCLASSIFIED_SQL = """
-    SELECT lc.id, lc.body, lc.diff_hunk, lc.area, cfc.final_code_snippet
+    SELECT lc.id, lc.body, lc.diff_hunk, lc.area,
+           lc.thread_resolved, lc.thread_resolved_by,
+           cfc.final_code_snippet
     FROM line_comment lc
     LEFT JOIN comment_final_code cfc ON cfc.comment_id = lc.id
     WHERE lc.id NOT IN (SELECT comment_id FROM classification)
@@ -55,6 +57,8 @@ def fetch_unclassified(conn: sqlite3.Connection) -> list[dict]:
             "diff_hunk": r["diff_hunk"] or "",
             "final_code_snippet": r["final_code_snippet"] or "",
             "area": r["area"],
+            "thread_resolved": r["thread_resolved"],
+            "thread_resolved_by": r["thread_resolved_by"],
         }
         for r in rows
     ]

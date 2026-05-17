@@ -107,6 +107,8 @@ def test_prepare_writes_batches_and_manifest(temp_db, tmp_path):
         "diff_hunk": "@@ hunk",
         "final_code_snippet": "",
         "area": "commands",
+        "thread_resolved": 0,
+        "thread_resolved_by": None,
     }
     assert payload["comments"][0] == expected_first
     # prompt_hash is a stable 64-char hex SHA256 of system_prompt + taxonomy.
@@ -116,6 +118,34 @@ def test_prepare_writes_batches_and_manifest(temp_db, tmp_path):
     # Both batches should pin to the same hash.
     payload2 = json.loads((out_dir / "batch_2.json").read_text())
     assert payload2["prompt_hash"] == payload["prompt_hash"]
+
+
+def test_prepare_batch_includes_thread_resolution_fields(temp_db, tmp_path):
+    """Each comment in a batch file must include thread_resolved and
+    thread_resolved_by so the subagent can use them as a hint."""
+    _insert_pr(temp_db, 7)
+    _insert_comment(temp_db, cid=70, pr_number=7, body="b70")
+    _insert_comment(temp_db, cid=71, pr_number=7, body="b71")
+    # Mark 70 as resolved-by-reviewer; 71 unresolved.
+    temp_db.execute(
+        "UPDATE line_comment SET thread_resolved = 1, thread_resolved_by = ? WHERE id = ?",
+        ("reviewer", 70),
+    )
+    temp_db.commit()
+
+    out_dir = tmp_path / "batches"
+    from scripts.pr_analysis.classify_via_subagent import fetch_unclassified
+    comments = fetch_unclassified(temp_db)
+    write_batches(comments, batch_size=10, out_dir=out_dir)
+
+    payload = json.loads((out_dir / "batch_1.json").read_text())
+    by_id = {c["id"]: c for c in payload["comments"]}
+    assert "thread_resolved" in by_id[70]
+    assert "thread_resolved_by" in by_id[70]
+    assert by_id[70]["thread_resolved"] == 1
+    assert by_id[70]["thread_resolved_by"] == "reviewer"
+    assert by_id[71]["thread_resolved"] == 0
+    assert by_id[71]["thread_resolved_by"] is None
 
 
 def test_ingest_handles_unknown_taxonomy(temp_db, tmp_path):
