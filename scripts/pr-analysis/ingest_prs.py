@@ -12,10 +12,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lib.areas import is_rust
 from lib.db import connect, transaction
@@ -31,7 +27,10 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=1000)
     parser.add_argument("--rust-only", action="store_true", default=True,
                         help="(default true) only upsert PRs touching .rs files")
-    parser.add_argument("--all", dest="rust_only", action="store_false")
+    parser.add_argument(
+        "--all", dest="rust_only", action="store_false",
+        help="upsert all PRs, not just Rust-touching ones",
+    )
     args = parser.parse_args()
 
     prs = run_json([
@@ -43,6 +42,7 @@ def main() -> None:
         "--json", FIELDS,
     ])
 
+    # single timestamp for the whole ingest batch — all rows reflect this run
     now = dt.datetime.now(dt.UTC).isoformat()
     conn = connect()
     rust_prs = 0
@@ -64,7 +64,7 @@ def main() -> None:
                     pr["number"],
                     pr["title"],
                     author.get("login", "unknown"),
-                    author.get("type", "User"),
+                    "Bot" if author.get("is_bot") else "User",
                     pr["state"],
                     pr["mergedAt"],
                     pr.get("baseRefOid"),
@@ -74,6 +74,8 @@ def main() -> None:
                     now,
                 ),
             )
+            # defensive: ON DELETE CASCADE from the REPLACE above already wipes these,
+            # but keep the explicit wipe in case a future schema drops the cascade.
             conn.execute("DELETE FROM pr_file WHERE pr_number = ?", (pr["number"],))
             conn.executemany(
                 """INSERT INTO pr_file (pr_number, path, status, additions, deletions)

@@ -10,8 +10,8 @@ class GhError(RuntimeError):
     pass
 
 
-def run_json(args: list[str]) -> Any:
-    """Invoke gh with the given args; return parsed JSON. Raises GhError on failure."""
+def _run(args: list[str]) -> str:
+    """Invoke gh with the given args; return stdout as text. Raises GhError on non-zero exit."""
     proc = subprocess.run(
         ["gh", *args],
         capture_output=True,
@@ -20,32 +20,36 @@ def run_json(args: list[str]) -> Any:
     )
     if proc.returncode != 0:
         raise GhError(f"gh {' '.join(args)} failed: {proc.stderr.strip()}")
-    if not proc.stdout.strip():
+    return proc.stdout
+
+
+def run_json(args: list[str]) -> Any:
+    """Invoke gh with the given args; return parsed JSON. Raises GhError on failure."""
+    stdout = _run(args)
+    if not stdout.strip():
         return None
     try:
-        return json.loads(proc.stdout)
+        return json.loads(stdout)
     except json.JSONDecodeError as exc:
         raise GhError(f"gh {' '.join(args)} returned non-JSON: {exc}") from exc
 
 
 def paginate_jsonl(args: list[str]) -> list[Any]:
-    """Invoke gh with --paginate and parse each line as JSON.
+    """Invoke gh and parse each line of stdout as JSON.
 
-    `gh api --paginate -q '.[]'` emits one JSON value per line per array element
-    across all pages.
+    Caller is responsible for passing `--paginate` and a `-q` filter that
+    yields one JSON value per line (typically `-q '.[]'`); without those,
+    a single JSON document is emitted and this function will raise GhError
+    when the multi-line parse fails.
     """
-    proc = subprocess.run(
-        ["gh", *args],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        raise GhError(f"gh {' '.join(args)} failed: {proc.stderr.strip()}")
-    out = []
-    for line in proc.stdout.splitlines():
+    stdout = _run(args)
+    out: list[Any] = []
+    for line in stdout.splitlines():
         line = line.strip()
         if not line:
             continue
-        out.append(json.loads(line))
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError as exc:
+            raise GhError(f"gh {' '.join(args)} emitted non-JSON line: {exc}") from exc
     return out
