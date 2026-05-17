@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1280">
+<title>What 8 months of code review taught us</title>
+<style>
+  :root {
+    --fg: #1c1f24; --fg-mute: #5a6270; --bg: #fbfbfa; --bg-card: #ffffff;
+    --border: #e4e6eb; --accent: #3b6bd6; --good: #2f8a52; --warn: #c98a17;
+    --bad: #c44545; --neutral: #6c757d; --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: #0e1116; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", sans-serif;
+    color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  .deck { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .slide {
+    display: none;
+    width: min(1280px, 96vw);
+    height: min(800px, 92vh);
+    background: var(--bg);
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.45);
+    padding: 72px 88px;
+    overflow: hidden;
+    position: relative;
+  }
+  .slide.active { display: block; }
+  h1 { font-size: 48px; line-height: 1.1; margin: 0 0 12px; font-weight: 700; letter-spacing: -0.01em; }
+  h2 { font-size: 32px; line-height: 1.2; margin: 0 0 28px; font-weight: 600; letter-spacing: -0.005em; }
+  h3 { font-size: 20px; margin: 0 0 10px; font-weight: 600; }
+  .sub { font-size: 22px; color: var(--fg-mute); margin: 0 0 32px; line-height: 1.4; }
+  .eyebrow { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: var(--accent); font-weight: 600; margin-bottom: 18px; }
+  p { font-size: 20px; line-height: 1.5; }
+  .body { font-size: 22px; line-height: 1.55; color: var(--fg); }
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.92em; background: var(--code-bg); padding: 1px 6px; border-radius: 3px; }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid #c8d4f2; }
+
+  /* nav */
+  .ctrl { position: absolute; bottom: 18px; right: 20px; display: flex; gap: 10px; align-items: center; z-index: 30; }
+  .ctrl button {
+    background: rgba(255,255,255,.9); color: #1c1f24; border: 1px solid #ccd0d8;
+    border-radius: 6px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .ctrl button:hover { background: #fff; }
+  .counter { color: #cdd1d8; font-size: 13px; margin-left: 4px; font-variant-numeric: tabular-nums; }
+  .dots { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 30; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #444a55; border: none; cursor: pointer; padding: 0; }
+  .dot.current { background: #e6e9f0; }
+
+  /* shared building blocks */
+  .funnel { display: flex; flex-direction: column; gap: 18px; margin-top: 24px; }
+  .funnel .bar { display: flex; align-items: center; gap: 18px; }
+  .funnel .bar .seg {
+    height: 64px; border-radius: 6px; display: flex; align-items: center; padding: 0 22px;
+    color: white; font-weight: 600; font-size: 22px; letter-spacing: 0.01em;
+  }
+  .funnel .bar .num { font-size: 32px; font-weight: 700; margin-right: 14px; font-variant-numeric: tabular-nums; }
+  .funnel .bar .lbl { font-size: 18px; color: #ffffffd0; }
+
+  .cards { display: grid; gap: 22px; }
+  .cards.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .cards.cols-2 { grid-template-columns: 1fr 1fr; }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px 26px;
+  }
+  .card h3 { font-size: 18px; margin-bottom: 10px; }
+  .card p { margin: 0; font-size: 16px; color: var(--fg-mute); }
+
+  .badge {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; padding: 3px 8px; border-radius: 999px;
+  }
+  .badge.t1 { background: #e3f3e8; color: #1e5a35; }
+  .badge.fmt { background: #faecd1; color: #7c5510; }
+  .badge.naming { background: #e3f3e8; color: #1e5a35; }
+  .badge.imports { background: #e9eef9; color: #1e3a7a; }
+  .badge.control { background: #fde6da; color: #7b3415; }
+  .badge.log { background: #ece1f8; color: #4a2a72; }
+  .badge.ux { background: #f8dada; color: #7a2929; }
+  .badge.test { background: #d8ecf6; color: #1a4f6c; }
+  .badge.err { background: #f8dada; color: #7a2929; }
+  .badge.sem { background: #faecd1; color: #7c5510; }
+
+  .callout {
+    border-left: 4px solid var(--accent);
+    background: #eef3fd;
+    padding: 18px 22px;
+    border-radius: 0 8px 8px 0;
+    font-size: 20px;
+    line-height: 1.45;
+    color: #1c2a4f;
+  }
+  .pr { font-family: "SF Mono", Menlo, monospace; font-size: 13px; color: var(--accent); background: #eef3fd; padding: 2px 7px; border-radius: 4px; }
+
+  /* Slide 4 calibration bars */
+  .calib { display: flex; flex-direction: column; gap: 16px; margin-top: 28px; }
+  .calib-row { display: grid; grid-template-columns: 110px 1fr; gap: 18px; align-items: center; }
+  .calib-row .label { font-weight: 700; font-size: 16px; }
+  .calib-row .bar { height: 38px; border-radius: 6px; display: flex; align-items: center; padding: 0 16px; color: #fff; font-size: 15px; font-weight: 500; }
+
+  /* Slide 4 pipeline */
+  .pipe { display: grid; grid-template-columns: repeat(5, 1fr) ; gap: 12px; align-items: stretch; margin-top: 6px; }
+  .pipe .step {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px 14px; position: relative; font-size: 15px; line-height: 1.3;
+  }
+  .pipe .step .ph { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--fg-mute); font-weight: 600; margin-bottom: 6px; }
+  .pipe .step .name { font-weight: 700; font-size: 17px; color: var(--fg); }
+  .pipe .step .det { color: var(--fg-mute); margin-top: 4px; }
+
+  /* Slide 5 chart */
+  .barchart { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 18px 22px; }
+  .barchart .row { display: grid; grid-template-columns: 160px 1fr 60px; gap: 12px; align-items: center; margin-bottom: 8px; font-size: 14px; }
+  .barchart .row .l { color: var(--fg); font-weight: 500; }
+  .barchart .row .b { height: 18px; border-radius: 3px; }
+  .barchart .row .v { color: var(--fg-mute); font-variant-numeric: tabular-nums; font-size: 13px; text-align: right; }
+
+  /* Slide 5 reviewer cards */
+  .rev-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 18px; }
+  .rev-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+  .rev-card .who { font-weight: 700; font-size: 17px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .rev-card .theme { color: var(--fg-mute); font-size: 13px; margin-bottom: 12px; line-height: 1.35; }
+  .rev-card blockquote {
+    margin: 0; padding: 12px 14px; background: var(--code-bg); border-left: 3px solid var(--accent);
+    border-radius: 0 6px 6px 0; font-size: 14px; line-height: 1.5; color: var(--fg);
+  }
+  .rev-card .src { margin-top: 8px; font-size: 12px; color: var(--fg-mute); }
+
+  /* Slide 6 list */
+  .rules { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
+  .rule { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; display: flex; gap: 14px; }
+  .rule .n {
+    width: 36px; height: 36px; flex: 0 0 36px; border-radius: 50%; background: var(--accent); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px;
+  }
+  .rule .txt h3 { font-size: 16px; margin: 0 0 6px; line-height: 1.3; }
+  .rule .txt .r { color: var(--fg-mute); font-size: 13px; line-height: 1.4; margin: 0 0 8px; }
+  .rule .txt .meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+  /* Slide 7 taxonomy cards */
+  .tax-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 4px; }
+  .tax-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .tax-card .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .tax-card .body { font-size: 15px; line-height: 1.4; color: var(--fg); }
+
+  /* Slide 8 columns */
+  .ship { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-top: 6px; }
+  .ship .col { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 22px 24px; }
+  .ship .col .head { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); font-weight: 700; margin-bottom: 10px; }
+  .ship .col h3 { font-size: 19px; margin: 0 0 12px; }
+  .ship .col ul { padding-left: 0; list-style: none; margin: 0; }
+  .ship .col li { font-size: 15px; line-height: 1.5; margin-bottom: 10px; color: var(--fg); }
+  .ship .col li code { font-size: 13px; }
+  .ship .col li .det { display: block; color: var(--fg-mute); font-size: 13px; margin-top: 2px; }
+
+  /* Slide 9 asks */
+  .asks { display: grid; gap: 18px; margin-top: 6px; }
+  .ask { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 22px 26px; display: grid; grid-template-columns: 50px 1fr; gap: 18px; }
+  .ask .n {
+    width: 42px; height: 42px; border-radius: 50%; background: var(--accent); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 22px;
+  }
+  .ask h3 { font-size: 20px; margin-bottom: 6px; }
+  .ask p { font-size: 16px; line-height: 1.5; color: var(--fg-mute); margin: 0; }
+
+  .links { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 22px; font-size: 14px; }
+  .links a { background: var(--code-bg); padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); }
+
+  .footnote { position: absolute; bottom: 56px; left: 88px; right: 88px; color: var(--fg-mute); font-size: 14px; }
+  .closing { margin-top: 24px; font-size: 18px; color: var(--fg-mute); font-style: italic; }
+</style>
+</head>
+<body>
+<div class="deck">
+
+<!-- Slide 1 -->
+<section class="slide active">
+  <div class="eyebrow">Rust review analysis · 8 months · 216 PRs</div>
+  <h1>What 8 months of code review taught us</h1>
+  <p class="sub">Mining 216 Rust PRs to extract review-validated rules</p>
+
+  <div class="funnel">
+    <div class="bar">
+      <div class="seg" style="width: 100%; background: #6b8fdc;">
+        <span class="num">216</span><span class="lbl">PRs ingested · Aug 2025 – May 2026</span>
+      </div>
+    </div>
+    <div class="bar">
+      <div class="seg" style="width: 80%; background: #4f76c6;">
+        <span class="num">944</span><span class="lbl">line-comments classified · taxonomy + addressed</span>
+      </div>
+    </div>
+    <div class="bar">
+      <div class="seg" style="width: 55%; background: #355eaf;">
+        <span class="num">67</span><span class="lbl">high-confidence findings <em>not</em> in AGENTS.md</span>
+      </div>
+    </div>
+    <div class="bar">
+      <div class="seg" style="width: 32%; background: #1d4796;">
+        <span class="num">2&nbsp;skills · 4&nbsp;CLAUDE.md</span><span class="lbl">shipping today</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Slide 2 -->
+<section class="slide">
+  <div class="eyebrow">The hook</div>
+  <h1>67 rules your team enforces in review<br>that aren't in AGENTS.md</h1>
+
+  <div class="body" style="display: grid; gap: 22px; margin-top: 36px;">
+    <div><strong style="color: var(--bad); font-size: 28px;">33%</strong> &nbsp;of stylistic rules (formatting, naming, imports) are tribal knowledge</div>
+    <div><strong style="color: var(--warn); font-size: 28px;">27%</strong> &nbsp;of <em>all</em> rules across the corpus are tribal knowledge</div>
+    <div><strong style="color: var(--accent); font-size: 28px;">~600 comments</strong> &nbsp;from tier-1 reviewers (<code>ysndr</code>, <code>mkenigs</code>, <code>dcarley</code>) enforcing these</div>
+  </div>
+
+  <div class="callout" style="margin-top: 48px;">
+    Tribal knowledge passes from senior to junior via PR review. We can write it down.
+  </div>
+</section>
+
+<!-- Slide 3 -->
+<section class="slide">
+  <div class="eyebrow">What changed</div>
+  <h1>Things possible now that weren't 12 months ago</h1>
+
+  <div class="cards cols-3" style="margin-top: 24px;">
+    <div class="card">
+      <h3>Extract structured rules<br>from review text</h3>
+      <p style="margin-top: 14px;"><strong style="color: var(--bad);">Before:</strong> ~a month of senior-engineer time, partial coverage.</p>
+      <p style="margin-top: 8px;"><strong style="color: var(--good);">Now:</strong> one calibrated day, ~$3&ndash;5 in API.</p>
+    </div>
+    <div class="card">
+      <h3>Cross-reference patterns<br>against AGENTS.md</h3>
+      <p style="margin-top: 14px;"><strong style="color: var(--bad);">Before:</strong> manual spot-check, brittle.</p>
+      <p style="margin-top: 8px;"><strong style="color: var(--good);">Now:</strong> automated key-token matching; every finding tagged.</p>
+    </div>
+    <div class="card">
+      <h3>Generate LLM-ready skill files<br>from a corpus</h3>
+      <p style="margin-top: 14px;"><strong style="color: var(--bad);">Before:</strong> didn't exist.</p>
+      <p style="margin-top: 8px;"><strong style="color: var(--good);">Now:</strong> synthesis via Claude Sonnet; 2 skills + per-area CLAUDE.md from the same corpus.</p>
+    </div>
+  </div>
+
+  <p class="closing" style="margin-top: 56px;">Cheap LLMs + structured ETL changed the cost/feasibility math. This is the first application; there will be more.</p>
+</section>
+
+<!-- Slide 4 -->
+<section class="slide">
+  <div class="eyebrow">How</div>
+  <h1>The pipeline &mdash; calibrated, not guessed</h1>
+
+  <div class="pipe">
+    <div class="step"><div class="ph">Stage 1</div><div class="name">Ingest</div><div class="det">216 PRs &rarr; SQLite</div></div>
+    <div class="step"><div class="ph">Stage 2</div><div class="name">Classify</div><div class="det">Haiku 4.5 &middot; taxonomy + addressed</div></div>
+    <div class="step"><div class="ph">Stage 3</div><div class="name">Aggregate</div><div class="det">MiniLM clustering &middot; dedup near-dupes</div></div>
+    <div class="step"><div class="ph">Stage 4</div><div class="name">Synthesize</div><div class="det">Sonnet 4.6 &middot; rule statements + confidence</div></div>
+    <div class="step"><div class="ph">Stage 5</div><div class="name">Emit</div><div class="det">Skills + CLAUDE.md files</div></div>
+  </div>
+
+  <h2 style="margin-top: 52px; font-size: 22px;">Calibrating <code>in_agents_md</code> &mdash; three iterations to defensible</h2>
+
+  <div class="calib">
+    <div class="calib-row">
+      <div class="label" style="color: var(--bad);">Iter 1</div>
+      <div class="bar" style="background: var(--bad); width: 100%;">
+        Matched <em>everything</em> &mdash; heuristic was substring-on-section-names. Broken-true.
+      </div>
+    </div>
+    <div class="calib-row">
+      <div class="label" style="color: var(--warn);">Iter 2</div>
+      <div class="bar" style="background: var(--warn); width: 40%;">
+        Matched nothing &mdash; Jaccard threshold too tight. Broken-false.
+      </div>
+    </div>
+    <div class="calib-row">
+      <div class="label" style="color: var(--good);">Iter 3</div>
+      <div class="bar" style="background: var(--good); width: 73%;">
+        73% match &mdash; key-token substring with &ge;3 tokens. Defensible.
+      </div>
+    </div>
+  </div>
+
+  <p class="closing" style="margin-top: 30px;">Three iterations to defensible. Each fix: a 1-line config change + re-run.</p>
+</section>
+
+<!-- Slide 5 -->
+<section class="slide">
+  <div class="eyebrow">Evidence</div>
+  <h1>These rules aren't external &mdash; they're already in your team's heads</h1>
+
+  <div class="barchart" style="margin-bottom: 22px;">
+    <div class="row"><div class="l">semantic-correctness</div><div><div class="b" style="width: 100%; background: #6b8fdc;"></div></div><div class="v">125</div></div>
+    <div class="row"><div class="l">testing</div><div><div class="b" style="width: 72.8%; background: #6b8fdc;"></div></div><div class="v">91</div></div>
+    <div class="row"><div class="l">control-flow</div><div><div class="b" style="width: 53.6%; background: #6b8fdc;"></div></div><div class="v">67</div></div>
+    <div class="row"><div class="l">user-facing-messages</div><div><div class="b" style="width: 51.2%; background: #6b8fdc;"></div></div><div class="v">64</div></div>
+    <div class="row"><div class="l">naming</div><div><div class="b" style="width: 45.6%; background: #6b8fdc;"></div></div><div class="v">57</div></div>
+    <div class="row"><div class="l">error-handling</div><div><div class="b" style="width: 40.0%; background: #6b8fdc;"></div></div><div class="v">50</div></div>
+    <div class="row"><div class="l">type-safety</div><div><div class="b" style="width: 32.0%; background: #6b8fdc;"></div></div><div class="v">40</div></div>
+    <div class="row"><div class="l">formatting-style</div><div><div class="b" style="width: 14.4%; background: #6b8fdc;"></div></div><div class="v">18</div></div>
+  </div>
+
+  <div class="rev-cards">
+    <div class="rev-card">
+      <div class="who">ysndr <span class="badge t1">tier 1</span></div>
+      <div class="theme">Error type design &amp; type-safety at boundaries &mdash; prefers proper <code>Error</code> impls over ad-hoc classifications, owned types only when needed.</div>
+      <blockquote>"Might be worth implementing <code>Error</code> for this as well, it looks pretty much like an error type. Besides, it's unclear what failure would be recoverable, and technically not for the catalog crate to know what the cli can do &mdash; to me that classification would be a 'fatal' error or so."</blockquote>
+      <div class="src">PR <span class="pr">#4172</span> &middot; error-handling &middot; confidence 0.85</div>
+    </div>
+
+    <div class="rev-card">
+      <div class="who">mkenigs <span class="badge t1">tier 1</span></div>
+      <div class="theme">Semantic correctness &amp; testing &mdash; pushes back when behavior changes look incidental, asks for tests that reflect user-visible properties.</div>
+      <blockquote>"In general we should cleanup tmp files. If I'm debugging, we print the command to run the shell, and if I'm debugging, I might want to copy that and run it. If we delete the file, I can't run the command. Or I just might want to look at it."</blockquote>
+      <div class="src">PR <span class="pr">#3770</span> &middot; semantic-correctness &middot; confidence 0.80</div>
+    </div>
+
+    <div class="rev-card">
+      <div class="who">dcarley <span class="badge t1">tier 1</span></div>
+      <div class="theme">User-facing messages &amp; readability &mdash; flags double-negatives, semantic line breaks, anything a junior would misread on first pass.</div>
+      <blockquote>"The double negative had me re-read this a few times. Maybe rename the arg? &hellip; <code>if [ "$_skip_hook_on_activate" = "false" ]; then</code> &hellip; And/or swap the comparison?"</blockquote>
+      <div class="src">PR <span class="pr">#3932</span> &middot; user-facing-messages &middot; confidence 0.85</div>
+    </div>
+  </div>
+</section>
+
+<!-- Slide 6 -->
+<section class="slide">
+  <div class="eyebrow">Top gap rules</div>
+  <h1>Five rules every Rust engineer here would benefit from</h1>
+
+  <div class="rules">
+    <div class="rule">
+      <div class="n">1</div>
+      <div class="txt">
+        <h3>Use <code>formatdoc!</code> for multiline strings</h3>
+        <p class="r">Instead of <code>format!</code> with backslash continuations &mdash; preserves intent and avoids ragged source.</p>
+        <div class="meta"><span class="badge fmt">formatting-style</span><span class="pr">PR #4165</span></div>
+      </div>
+    </div>
+
+    <div class="rule">
+      <div class="n">2</div>
+      <div class="txt">
+        <h3>Remove <code>dbg!</code> macros before submission</h3>
+        <p class="r">They're for local debugging, not production. Reviewers catch them, but the rule should be automatic.</p>
+        <div class="meta"><span class="badge fmt">formatting-style</span><span class="pr">PR #4096</span></div>
+      </div>
+    </div>
+
+    <div class="rule">
+      <div class="n">3</div>
+      <div class="txt">
+        <h3>No <code>test_</code> prefix on test functions</h3>
+        <p class="r"><code>#[test]</code> and <code>#[cfg(test)]</code> already identify them. Name tests for what they verify.</p>
+        <div class="meta"><span class="badge naming">naming</span><span class="pr">PR #4165</span></div>
+      </div>
+    </div>
+
+    <div class="rule">
+      <div class="n">4</div>
+      <div class="txt">
+        <h3>Use <code>pub(super)</code> or <code>pub(crate)</code> for internal items</h3>
+        <p class="r">Bare <code>pub</code> implies a stable public API commitment. Don't make that promise unintentionally.</p>
+        <div class="meta"><span class="badge fmt">formatting-style</span><span class="pr">PR #4172</span></div>
+      </div>
+    </div>
+
+    <div class="rule">
+      <div class="n">5</div>
+      <div class="txt">
+        <h3>Follow <code>str_to_x</code> naming for parser functions</h3>
+        <p class="r">Established convention in <code>flox-catalog</code>. Check the file for naming patterns before adding helpers.</p>
+        <div class="meta"><span class="badge naming">naming</span><span class="pr">PR #4156</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Slide 7 -->
+<section class="slide">
+  <div class="eyebrow">Breadth</div>
+  <h1>One rule from each stylistic taxonomy</h1>
+
+  <div class="tax-grid">
+    <div class="tax-card">
+      <div class="top"><span class="badge naming">naming</span><span class="pr">PR #3801</span></div>
+      <div class="body">Use domain-specific constants (e.g. <code>nix::libc::STDERR_FILENO</code>) instead of magic numbers.</div>
+    </div>
+    <div class="tax-card">
+      <div class="top"><span class="badge fmt">formatting-style</span><span class="pr">PR #4093</span></div>
+      <div class="body">Break long method chains and assignments across lines to satisfy line-length requirements.</div>
+    </div>
+    <div class="tax-card">
+      <div class="top"><span class="badge imports">imports</span><span class="pr">PR #3939</span></div>
+      <div class="body">Use workspace dependency versions consistently across all <code>Cargo.toml</code> files.</div>
+    </div>
+    <div class="tax-card">
+      <div class="top"><span class="badge control">control-flow</span><span class="pr">PR #3600</span></div>
+      <div class="body">Use <code>select!</code> to wait for either a signal handler or CLI completion, dropping <code>tempdir</code> on exit.</div>
+    </div>
+    <div class="tax-card" style="grid-column: span 2;">
+      <div class="top"><span class="badge log">logging-tracing</span><span class="pr">PR #3801</span></div>
+      <div class="body">Document deferred work in tracking issues; ensure logging configuration handles all subsystems.</div>
+    </div>
+  </div>
+
+  <p class="closing" style="margin-top: 24px;">Five taxonomies, five rules, all currently un-codified &mdash; this is the long tail behind the headline gap count.</p>
+</section>
+
+<!-- Slide 8 -->
+<section class="slide">
+  <div class="eyebrow">The deliverable</div>
+  <h1>What we're proposing today</h1>
+
+  <div class="ship">
+    <div class="col">
+      <div class="head">Two new skills</div>
+      <ul>
+        <li><strong><code>flox-rust-review</code></strong>
+          <span class="det">144 lines &middot; substantive rules (error handling, type safety, panic discipline)</span>
+        </li>
+        <li><strong><code>flox-rust-stylistic-conventions</code></strong>
+          <span class="det">312 lines &middot; stylistic rules (naming, formatting, imports)</span>
+        </li>
+      </ul>
+    </div>
+    <div class="col">
+      <div class="head">Three per-area CLAUDE.md</div>
+      <ul>
+        <li><code>cli/flox/src/commands/CLAUDE.md</code>
+          <span class="det">164 lines</span></li>
+        <li><code>cli/flox-rust-sdk/src/models/environment/CLAUDE.md</code>
+          <span class="det">132 lines</span></li>
+        <li><code>cli/flox-rust-sdk/src/providers/CLAUDE.md</code>
+          <span class="det">140 lines</span></li>
+      </ul>
+    </div>
+    <div class="col">
+      <div class="head">Cross-cutting docs</div>
+      <ul>
+        <li><code>CLAUDE.md</code> (root)
+          <span class="det">+12 lines pointing at skills</span></li>
+        <li><code>cli/CLAUDE.md</code>
+          <span class="det">80 lines &middot; Rust cross-cutting</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout" style="margin-top: 36px;">
+    <strong>7 files, 984 lines, single coherent PR.</strong> &nbsp;Branch: <code>feat/rust-review-skills</code>
+  </div>
+</section>
+
+<!-- Slide 9 -->
+<section class="slide">
+  <div class="eyebrow">The ask</div>
+  <h1>Three decisions &mdash; separable, ranked</h1>
+
+  <div class="asks">
+    <div class="ask">
+      <div class="n">1</div>
+      <div>
+        <h3>Review the PR</h3>
+        <p>Push back on anything that's not your team's actual practice. Branch <code>feat/rust-review-skills</code>. Reviewers can dig into specific rules.</p>
+      </div>
+    </div>
+    <div class="ask">
+      <div class="n">2</div>
+      <div>
+        <h3>Triage the 30 proposed AGENTS.md amendments</h3>
+        <p>Follow-up PR &mdash; can be reviewed independently. Gap report has PR-by-PR evidence.</p>
+      </div>
+    </div>
+    <div class="ask">
+      <div class="n">3</div>
+      <div>
+        <h3>What's the next corpus?</h3>
+        <p>Bug reports, design docs, other repos. If this technique is worth scaling, where next?</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="links">
+    <a href="../rust-pr-analysis-skill/rust-pr-analysis-dashboard-01.html">Main dashboard</a>
+    <a href="../rust-pr-analysis-skill/rust-pr-analysis-jouney-01.html">Journey log</a>
+    <a href="../rust-pr-analysis-skill/scripts/pr-analysis/findings/gap-report.html">Gap report</a>
+    <a href="../rust-pr-analysis-skill/scripts/pr-analysis/findings/task9-review.html">Rule-level audit</a>
+    <a href="../rust-pr-analysis-skill/rust-pr-analysis-pipeline-01.html">Pipeline architecture</a>
+  </div>
+</section>
+
+</div><!-- /deck -->
+
+<div class="dots" id="dots"></div>
+<div class="ctrl">
+  <button id="prev" type="button">&larr; Prev</button>
+  <button id="next" type="button">Next &rarr;</button>
+  <span class="counter" id="counter">1 / 9</span>
+</div>
+
+<script>
+  (function () {
+    var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+    var dotsEl = document.getElementById('dots');
+    var counter = document.getElementById('counter');
+    var i = 0;
+    slides.forEach(function (_, idx) {
+      var d = document.createElement('button');
+      d.className = 'dot' + (idx === 0 ? ' current' : '');
+      d.type = 'button';
+      d.setAttribute('aria-label', 'Slide ' + (idx + 1));
+      d.addEventListener('click', function () { show(idx); });
+      dotsEl.appendChild(d);
+    });
+    var dots = Array.prototype.slice.call(document.querySelectorAll('.dot'));
+    function show(n) {
+      i = Math.max(0, Math.min(slides.length - 1, n));
+      slides.forEach(function (s, idx) { s.classList.toggle('active', idx === i); });
+      dots.forEach(function (d, idx) { d.classList.toggle('current', idx === i); });
+      counter.textContent = (i + 1) + ' / ' + slides.length;
+    }
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { show(i + 1); e.preventDefault(); }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { show(i - 1); e.preventDefault(); }
+      else if (e.key === 'Home') { show(0); }
+      else if (e.key === 'End') { show(slides.length - 1); }
+    });
+    document.getElementById('next').addEventListener('click', function () { show(i + 1); });
+    document.getElementById('prev').addEventListener('click', function () { show(i - 1); });
+    show(0);
+  })();
+</script>
+</body>
+</html>
