@@ -31,3 +31,23 @@ def test_run_json_propagates_gh_failures(monkeypatch):
         assert "boom" in str(exc)
         return
     raise AssertionError("expected GhError")
+
+
+def test_pr_4231_comments_fixture_has_expected_fields():
+    raw = (FIXTURES / "pr_4231_comments.json").read_text()
+    # gh --paginate concatenates JSON arrays back-to-back; split and parse.
+    arrays = []
+    decoder = json.JSONDecoder()
+    idx = 0
+    while idx < len(raw):
+        while idx < len(raw) and raw[idx].isspace():
+            idx += 1
+        if idx >= len(raw):
+            break
+        val, end = decoder.raw_decode(raw, idx)
+        arrays.append(val)
+        idx = end
+    comments = [c for arr in arrays for c in arr]
+    assert len(comments) >= 30  # PR #4231 has ~63
+    for c in comments[:5]:
+        assert {"id", "user", "path", "body", "diff_hunk", "created_at"} <= set(c.keys())
