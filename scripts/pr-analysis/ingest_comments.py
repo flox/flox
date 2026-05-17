@@ -13,6 +13,7 @@ from __future__ import annotations
 from lib.areas import area_for_path
 from lib.db import connect, transaction
 from lib.gh import run_json
+from lib.noise_filter import is_noise
 from lib.reviewers import classify
 
 
@@ -36,11 +37,27 @@ def main() -> None:
                 author_type = user.get("type", "User")
                 rev = classify(login, author_type)
                 conn.execute(
-                    """INSERT OR REPLACE INTO line_comment
+                    """INSERT INTO line_comment
                        (id, pr_number, author, author_type, created_at,
-                        path, line, original_line, side, diff_hunk, body,
+                        path, line, original_line, side, diff_hunk, body, is_noise,
                         in_reply_to_id, area, reviewer_weight, reviewer_tier)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                       ON CONFLICT(id) DO UPDATE SET
+                         pr_number=excluded.pr_number,
+                         author=excluded.author,
+                         author_type=excluded.author_type,
+                         created_at=excluded.created_at,
+                         path=excluded.path,
+                         line=excluded.line,
+                         original_line=excluded.original_line,
+                         side=excluded.side,
+                         diff_hunk=excluded.diff_hunk,
+                         body=excluded.body,
+                         is_noise=excluded.is_noise,
+                         in_reply_to_id=excluded.in_reply_to_id,
+                         area=excluded.area,
+                         reviewer_weight=excluded.reviewer_weight,
+                         reviewer_tier=excluded.reviewer_tier""",
                     (
                         c["id"],
                         n,
@@ -53,6 +70,7 @@ def main() -> None:
                         c.get("side"),
                         c.get("diff_hunk"),
                         c["body"],
+                        1 if is_noise(c["body"]) else 0,
                         c.get("in_reply_to_id"),
                         area_for_path(c["path"]),
                         rev.weight,

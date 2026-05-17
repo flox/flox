@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS line_comment (
   side TEXT,
   diff_hunk TEXT,
   body TEXT NOT NULL,
+  is_noise INTEGER NOT NULL DEFAULT 0,
   in_reply_to_id INTEGER,
   area TEXT NOT NULL,
   reviewer_weight REAL NOT NULL DEFAULT 1.0,
@@ -53,6 +54,7 @@ CREATE INDEX IF NOT EXISTS idx_comment_area ON line_comment(area);
 CREATE INDEX IF NOT EXISTS idx_comment_author ON line_comment(author);
 CREATE INDEX IF NOT EXISTS idx_comment_pr ON line_comment(pr_number);
 CREATE INDEX IF NOT EXISTS idx_comment_tier ON line_comment(reviewer_tier);
+CREATE INDEX IF NOT EXISTS idx_comment_noise ON line_comment(is_noise);
 
 CREATE TABLE IF NOT EXISTS comment_final_code (
   comment_id INTEGER PRIMARY KEY REFERENCES line_comment(id) ON DELETE CASCADE,

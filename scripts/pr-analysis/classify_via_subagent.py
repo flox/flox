@@ -41,6 +41,7 @@ UNCLASSIFIED_SQL = """
     LEFT JOIN comment_final_code cfc ON cfc.comment_id = lc.id
     WHERE lc.id NOT IN (SELECT comment_id FROM classification)
       AND lc.reviewer_tier != 4
+      AND lc.is_noise = 0
     ORDER BY lc.id
 """
 
@@ -258,7 +259,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="mode", required=True)
 
     p_prep = sub.add_parser("prepare", help="write per-batch JSON files for subagents")
-    p_prep.add_argument("--batch-size", type=int, default=30)
+    p_prep.add_argument("--batch-size", type=int, default=15)
     p_prep.add_argument("--out-dir", required=True)
     p_prep.set_defaults(func=prepare_cmd)
 

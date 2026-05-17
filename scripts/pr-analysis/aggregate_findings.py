@@ -28,7 +28,7 @@ from lib.taxonomy import TAXONOMY_BY_ID
 
 AGENTS_MD_PATH = Path(__file__).resolve().parent.parent.parent / "AGENTS.md"
 
-CLUSTER_THRESHOLD = 0.6
+CLUSTER_THRESHOLD = 0.35
 
 
 def _tokens(s: str) -> set[str]:
@@ -87,13 +87,36 @@ def determine_scope(*, tier1_count: int, cross_area_count: int) -> str:
     return "area-specific"
 
 
-def agents_md_coverage(taxonomy: str, agents_text: str) -> tuple[int, str | None]:
-    entry = TAXONOMY_BY_ID.get(taxonomy)
-    if not entry:
+def agents_md_coverage(rule_statement: str, agents_text: str,
+                      threshold: float = 0.25) -> tuple[int, str | None]:
+    """Return (1, matched_section_title) if rule_statement's tokens overlap
+    AGENTS.md content meaningfully, else (0, None).
+
+    Splits AGENTS.md into sections (## or ### headings), computes token-Jaccard
+    of rule_statement against each section's body, returns the best section
+    whose similarity exceeds threshold.
+    """
+    rule_tokens = _tokens(rule_statement)
+    if not rule_tokens:
         return (0, None)
-    for section in entry.agents_md_sections:
-        if section.lower() in agents_text.lower():
-            return (1, section)
+    best_section: str | None = None
+    best_score = 0.0
+    # Split on headings; keep the heading text as section title.
+    section_blocks = re.split(r"\n(?=#{2,3} )", agents_text)
+    for block in section_blocks:
+        if not block.strip():
+            continue
+        heading_match = re.match(r"#{2,3} (.+)", block)
+        title = heading_match.group(1).strip() if heading_match else "(intro)"
+        body_tokens = _tokens(block)
+        if not body_tokens:
+            continue
+        score = _jaccard(rule_tokens, body_tokens)
+        if score > best_score:
+            best_score = score
+            best_section = title
+    if best_score >= threshold:
+        return (1, best_section)
     return (0, None)
 
 
@@ -151,7 +174,7 @@ def main() -> None:
                 canonical = max(cluster, key=lambda r: len(r["rule_statement"] or ""))["rule_statement"]
                 # primary reviewer = most-frequent author in cluster
                 top_author, _ = Counter(r["author"] for r in cluster).most_common(1)[0]
-                in_md, section = agents_md_coverage(tax, agents_text)
+                in_md, section = agents_md_coverage(canonical, agents_text)
                 conn.execute(
                     """INSERT INTO finding
                        (theme, rule_statement, taxonomy, area, scope,

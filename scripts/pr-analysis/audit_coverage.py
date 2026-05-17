@@ -79,10 +79,11 @@ def main() -> int:
         unclassified = conn.execute(
             """SELECT lc.id FROM line_comment lc
                LEFT JOIN classification c ON c.comment_id = lc.id
-               WHERE lc.reviewer_tier != 4 AND c.comment_id IS NULL"""
+               WHERE lc.reviewer_tier != 4 AND lc.is_noise = 0
+                 AND c.comment_id IS NULL"""
         ).fetchall()
         if unclassified:
-            failures.append(f"{len(unclassified)} non-bot comments are unclassified")
+            failures.append(f"{len(unclassified)} non-bot, non-noise comments are unclassified")
 
     # Invariant 4: no 'other' area for cli/ paths.
     leaked = conn.execute(

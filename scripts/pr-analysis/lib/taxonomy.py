@@ -51,7 +51,9 @@ TAXONOMY: tuple[TaxonomyEntry, ...] = (
     ),
     TaxonomyEntry(
         "imports",
-        "use rather than ::, where to place use statements, updating on moves.",
+        "Import organization: use vs. ::-qualification, where to place use statements "
+        "(module top vs. nearest function), updating use when moving code, re-export "
+        "discipline, import grouping (stdlib/external/local).",
         ("use guidelines",),
     ),
     TaxonomyEntry(
