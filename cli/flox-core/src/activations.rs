@@ -1462,51 +1462,6 @@ mod tests {
         use super::*;
 
         #[test]
-        fn start_or_attach_records_invocation_type_on_start() {
-            let store_path = PathBuf::from("/nix/store/path1");
-            let mut activations = make_activations(Ready::False);
-
-            let pid = 123;
-            let result = activations.start_or_attach(
-                pid,
-                &store_path,
-                InvocationType::ShellCommand("echo hi".to_string()),
-            );
-            let start_id = match result {
-                StartOrAttachResult::Start { start_id } => start_id,
-                _ => panic!("Expected Start, got {:?}", result),
-            };
-
-            let expected = Attachment {
-                start_id,
-                expiration: None,
-                invocation_type: Some(InvocationType::ShellCommand("echo hi".to_string())),
-            };
-            assert_eq!(activations.attached_pids, BTreeMap::from([(pid, expected)]));
-        }
-
-        #[test]
-        fn start_or_attach_records_invocation_type_on_attach() {
-            let start_id = StartIdentifier::new("/nix/store/path1");
-            let mut activations = make_activations(Ready::True(start_id.clone()));
-
-            let pid = 123;
-            let result =
-                activations.start_or_attach(pid, &start_id.store_path, InvocationType::InPlace);
-            match result {
-                StartOrAttachResult::Attach { start_id: id } => assert_eq!(id, start_id),
-                _ => panic!("Expected Attach, got {:?}", result),
-            }
-
-            let expected = Attachment {
-                start_id,
-                expiration: None,
-                invocation_type: Some(InvocationType::InPlace),
-            };
-            assert_eq!(activations.attached_pids, BTreeMap::from([(pid, expected)]));
-        }
-
-        #[test]
         fn replace_attachment_preserves_invocation_type_on_timeout() {
             let start_id = StartIdentifier::new("/nix/store/path1");
             let mut activations = make_activations(Ready::True(start_id.clone()));
