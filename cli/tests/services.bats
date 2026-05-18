@@ -896,8 +896,10 @@ EOF
   export _FLOX_SERVICES_ACTIVATE_TIMEOUT=0.1
 
   # process-compose will never be able to create this socket,
-  # which looks the same as taking a long time to create the socket
-  export _FLOX_SERVICES_SOCKET_OVERRIDE="/no_permission.sock"
+  # which looks the same as taking a long time to create the socket.
+  # Use a path under a non-existent directory so creating the socket fails even
+  # when running this test as root.
+  export _FLOX_SERVICES_SOCKET_OVERRIDE="/nonexistent_dir/does_not_exist.sock"
   run "$FLOX_BIN" activate -s -- true
   assert_output "✘ ERROR: Failed to start services: process-compose socket not ready"
 }
