@@ -132,7 +132,7 @@ pub enum AutoActivateFishMode {
     DisableArrow,
 }
 
-#[derive(Clone, Debug, Deserialize, derive_more::Display, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, derive_more::Display, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InvocationType {
     #[display("inplace")]

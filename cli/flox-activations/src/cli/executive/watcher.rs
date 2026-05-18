@@ -77,6 +77,7 @@ pub mod test {
     use std::process::{Child, Command};
     use std::time::Duration;
 
+    use flox_core::activate::context::InvocationType;
     use flox_core::activate::mode::ActivateMode;
     use flox_core::activations::test_helpers::write_activation_state;
     use flox_core::activations::{StartOrAttachResult, activation_state_dir_path, state_json_path};
@@ -153,12 +154,12 @@ pub mod test {
         // Create an ActivationState with two PIDs attached to the same start_id
         let mut state =
             ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
-        let result = state.start_or_attach(pid1, &store_path);
+        let result = state.start_or_attach(pid1, &store_path, InvocationType::Interactive);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
         };
         state.set_ready(&start_id);
-        let result = state.start_or_attach(pid2, &store_path);
+        let result = state.start_or_attach(pid2, &store_path, InvocationType::Interactive);
         assert!(matches!(result, StartOrAttachResult::Attach { .. }));
 
         write_activation_state(runtime_dir.path(), &dot_flox_path, state);
@@ -200,7 +201,7 @@ pub mod test {
         // Start and set ready for store_path_1
         let mut state =
             ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
-        let result = state.start_or_attach(pid1, &store_path_1);
+        let result = state.start_or_attach(pid1, &store_path_1, InvocationType::Interactive);
         let StartOrAttachResult::Start {
             start_id: start_id_1,
             ..
@@ -211,7 +212,7 @@ pub mod test {
         state.set_ready(&start_id_1);
 
         // Start and set ready for store_path_2
-        let result = state.start_or_attach(pid2, &store_path_2);
+        let result = state.start_or_attach(pid2, &store_path_2, InvocationType::Interactive);
         let StartOrAttachResult::Start {
             start_id: start_id_2,
             ..
