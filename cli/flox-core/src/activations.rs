@@ -1462,7 +1462,7 @@ mod tests {
         use super::*;
 
         #[test]
-        fn replace_attachment_preserves_invocation_type_on_timeout() {
+        fn replace_attachment_preserves_invocation_type_with_expiration() {
             let start_id = StartIdentifier::new("/nix/store/path1");
             let mut activations = make_activations(Ready::True(start_id.clone()));
             let pid = 123;
