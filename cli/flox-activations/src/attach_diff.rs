@@ -11,9 +11,9 @@ use itertools::Itertools;
 use shell_gen::{GenerateShell, SetVar, Statement, UnsetVar};
 use tracing::debug;
 
-use crate::activation_diff::{self, DiffSerializer};
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
+use crate::diff_serializer::{DiffSerializer, FLOX_HOOK_DIFF_VAR};
 use crate::env_diff::EnvDiff;
 use crate::start_diff::StartDiff;
 use crate::vars_from_env::VarsFromEnvironment;
@@ -163,7 +163,7 @@ impl AttachDiff {
             command.env_remove(var);
         }
         if let Some(ref encoded) = self.encoded_diff {
-            command.env(activation_diff::FLOX_HOOK_DIFF_VAR, encoded);
+            command.env(FLOX_HOOK_DIFF_VAR, encoded);
         }
     }
 
@@ -180,10 +180,7 @@ impl AttachDiff {
                 stmts.push(set_exported_unexpanded(k, v));
             }
             if let Some(ref encoded) = self.encoded_diff {
-                stmts.push(set_exported_unexpanded(
-                    activation_diff::FLOX_HOOK_DIFF_VAR,
-                    encoded,
-                ));
+                stmts.push(set_exported_unexpanded(FLOX_HOOK_DIFF_VAR, encoded));
             }
         }
         for (k, v) in self.double_sets.additions.iter().sorted_by_key(|(k, _)| *k) {
