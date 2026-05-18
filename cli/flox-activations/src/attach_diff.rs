@@ -35,7 +35,7 @@ pub(super) fn assemble_activate_command(
     for var in &double_sets.deletions {
         command.env_remove(var);
     }
-    command.envs(collect_activate_exports(
+    command.envs(non_in_place_exports(
         &context.attach_ctx,
         subsystem_verbosity,
         vars_from_env,
@@ -60,7 +60,7 @@ pub struct AttachDiff {
     /// control, we currently skip that.
     single_sets: HashMap<String, String>,
     /// Variables that haven't yet been folded into either single or double sets.
-    sets: HashMap<String, String>,
+    non_in_place_sets: HashMap<String, String>,
     /// Variables that we set (or unset) twice for non-in-place activations.
     /// We set (or unset) these:
     /// 1. As environment variables before we exec
@@ -93,11 +93,11 @@ impl AttachDiff {
             .collect();
         let mut double_sets = double_set_envs(context, project);
 
-        let mut sets: HashMap<String, String> = HashMap::new();
+        let mut non_in_place_sets: HashMap<String, String> = HashMap::new();
 
         if !is_in_place {
-            for (k, v) in collect_activate_exports(context, subsystem_verbosity, vars_from_env) {
-                sets.insert(k.to_string(), v);
+            for (k, v) in non_in_place_exports(context, subsystem_verbosity, vars_from_env) {
+                non_in_place_sets.insert(k.to_string(), v);
             }
         }
 
@@ -123,7 +123,7 @@ impl AttachDiff {
                     "MANPATH".to_string(),
                 ])
             } else {
-                sets.keys().cloned().collect()
+                non_in_place_sets.keys().cloned().collect()
             };
             intended_sets.extend(single_sets.keys().cloned());
             intended_sets.extend(double_sets.additions.keys().cloned());
@@ -145,7 +145,7 @@ impl AttachDiff {
 
         Ok(Self {
             single_sets,
-            sets,
+            non_in_place_sets,
             double_sets,
             encoded_diff,
         })
@@ -156,7 +156,7 @@ impl AttachDiff {
     /// Sets all accumulated variables, removes all accumulated unsets,
     /// and sets the _FLOX_HOOK_DIFF env var if a diff was computed.
     pub fn apply_to_command(&self, command: &mut Command) {
-        command.envs(&self.sets);
+        command.envs(&self.non_in_place_sets);
         command.envs(&self.single_sets);
         command.envs(&self.double_sets.additions);
         for var in &self.double_sets.deletions {
@@ -359,7 +359,7 @@ fn add_activate_script_options(
 /// _flox_activate_tracelevel, _flox_activate_tracer, and _activate_d still need some cleanup
 /// fixed_vars_to_export are used for interactive activations but are handled
 /// differently for in-place activations
-pub fn collect_activate_exports(
+pub fn non_in_place_exports(
     context: &AttachCtx,
     subsystem_verbosity: u32,
     vars_from_environment: VarsFromEnvironment,
