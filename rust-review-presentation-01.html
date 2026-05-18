@@ -87,6 +87,8 @@
   .badge.test { background: #d8ecf6; color: #1a4f6c; }
   .badge.err { background: #f8dada; color: #7a2929; }
   .badge.sem { background: #faecd1; color: #7c5510; }
+  .badge.panic { background: #f8dada; color: #7a2929; }
+  .badge.type { background: #e9eef9; color: #1e3a7a; }
 
   .callout {
     border-left: 4px solid var(--accent);
@@ -340,45 +342,45 @@
     <div class="rule">
       <div class="n">1</div>
       <div class="txt">
-        <h3>Use <code>formatdoc!</code> for multiline strings</h3>
-        <p class="r">Instead of <code>format!</code> with backslash continuations &mdash; preserves intent and avoids ragged source.</p>
-        <div class="meta"><span class="badge fmt">formatting-style</span><span class="pr">PR #4165</span></div>
+        <h3>Use <code>select!</code> to wait for signal or CLI completion</h3>
+        <p class="r">Race signal handlers against the work future so cleanup (e.g. dropping a <code>tempdir</code>) happens on either exit path.</p>
+        <div class="meta"><span class="badge control">control-flow</span><span class="pr">PR #3600</span></div>
       </div>
     </div>
 
     <div class="rule">
       <div class="n">2</div>
       <div class="txt">
-        <h3>Remove <code>dbg!</code> macros before submission</h3>
-        <p class="r">They're for local debugging, not production. Reviewers catch them, but the rule should be automatic.</p>
-        <div class="meta"><span class="badge fmt">formatting-style</span><span class="pr">PR #4096</span></div>
+        <h3>Don't panic in library code</h3>
+        <p class="r">Handle all error cases explicitly &mdash; surface them as <code>Result</code> variants. Panics in library code remove the caller's choice.</p>
+        <div class="meta"><span class="badge panic">panic-discipline</span><span class="pr">PR #3909</span></div>
       </div>
     </div>
 
     <div class="rule">
       <div class="n">3</div>
       <div class="txt">
-        <h3>No <code>test_</code> prefix on test functions</h3>
-        <p class="r"><code>#[test]</code> and <code>#[cfg(test)]</code> already identify them. Name tests for what they verify.</p>
-        <div class="meta"><span class="badge naming">naming</span><span class="pr">PR #4165</span></div>
+        <h3>Use <code>Option&lt;T&gt;</code> for absence, not enum tags</h3>
+        <p class="r">Distinguish absence from presence with <code>Option&lt;T&gt;</code>; don't bake "missing" into the variant set of a domain enum.</p>
+        <div class="meta"><span class="badge type">type-safety</span><span class="pr">PR #4172</span></div>
       </div>
     </div>
 
     <div class="rule">
       <div class="n">4</div>
       <div class="txt">
-        <h3>Use <code>pub(super)</code> or <code>pub(crate)</code> for internal items</h3>
-        <p class="r">Bare <code>pub</code> implies a stable public API commitment. Don't make that promise unintentionally.</p>
-        <div class="meta"><span class="badge fmt">formatting-style</span><span class="pr">PR #4172</span></div>
+        <h3>Preserve documentation when refactoring</h3>
+        <p class="r">If you remove a doc comment, add a replacement. Refactors shouldn't silently strip the rationale future readers depend on.</p>
+        <div class="meta"><span class="badge sem">semantic-correctness</span><span class="pr">PR #3785</span></div>
       </div>
     </div>
 
     <div class="rule">
       <div class="n">5</div>
       <div class="txt">
-        <h3>Follow <code>str_to_x</code> naming for parser functions</h3>
-        <p class="r">Established convention in <code>flox-catalog</code>. Check the file for naming patterns before adding helpers.</p>
-        <div class="meta"><span class="badge naming">naming</span><span class="pr">PR #4156</span></div>
+        <h3>Use precise domain terminology in user-facing strings</h3>
+        <p class="r">e.g. say "targets" rather than "artifacts" when paths aren't available &mdash; the word the user sees should match what the system actually knows.</p>
+        <div class="meta"><span class="badge ux">user-facing-messages</span><span class="pr">PR #4232</span></div>
       </div>
     </div>
   </div>
@@ -407,8 +409,8 @@
       <div class="body">Use <code>select!</code> to wait for either a signal handler or CLI completion, dropping <code>tempdir</code> on exit.</div>
     </div>
     <div class="tax-card" style="grid-column: span 2;">
-      <div class="top"><span class="badge log">logging-tracing</span><span class="pr">PR #3801</span></div>
-      <div class="body">Document deferred work in tracking issues; ensure logging configuration handles all subsystems.</div>
+      <div class="top"><span class="badge log">logging-tracing</span><span class="pr">PR #3969</span></div>
+      <div class="body">Record metrics for catalog-using build operations to track feature adoption.</div>
     </div>
   </div>
 
