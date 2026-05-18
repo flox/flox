@@ -29,7 +29,6 @@ pub enum StartupArgs {
 pub struct StartupCtx {
     pub args: StartupArgs,
     pub rc_path: Option<PathBuf>,
-    pub start_state_dir: PathBuf,
     pub act_ctx: ActivateCtx,
     pub attach_diff: AttachDiff,
 }
@@ -37,7 +36,7 @@ pub struct StartupCtx {
 #[cfg(test)]
 pub(crate) mod test_helpers {
     use std::collections::HashMap;
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx, InvocationType};
     use flox_core::activate::mode::ActivateMode;
@@ -114,7 +113,6 @@ pub(crate) mod test_helpers {
             invocation_type,
             rc_path,
             start_diff,
-            Path::new("/start_state_dir"),
             "TRACER",
             3,
             vars_from_env,

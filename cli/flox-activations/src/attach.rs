@@ -71,7 +71,6 @@ pub fn attach(
         invocation_type.clone(),
         rc_path,
         diff,
-        &start_state_dir,
         &tracer,
         subsystem_verbosity,
         vars_from_env,
@@ -111,7 +110,6 @@ pub(crate) fn startup_ctx(
     invocation_type: InvocationType,
     rc_path: Option<PathBuf>,
     start_diff: StartDiff,
-    start_state_dir: &Path,
     activate_tracer: &str,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
@@ -193,7 +191,6 @@ pub(crate) fn startup_ctx(
 
     Ok(StartupCtx {
         args,
-        start_state_dir: start_state_dir.to_path_buf(),
         rc_path,
         act_ctx: ctx,
         attach_diff,
