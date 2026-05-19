@@ -3,6 +3,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
+use flox_core::activate::context::InvocationType;
 use shell_gen::{GenerateShell, Shell};
 
 use crate::attach_diff::{AttachDiff, todo_drop_set_exported_unexpanded};
@@ -14,7 +15,7 @@ pub struct TcshStartupArgs {
     pub flox_activate_tracelevel: u32,
     pub activate_d: PathBuf,
     pub flox_env: PathBuf,
-    pub is_in_place: bool,
+    pub invocation_type: InvocationType,
     pub clean_up: Option<PathBuf>,
 
     pub flox_activate_tracer: String,
@@ -40,7 +41,7 @@ pub fn generate_tcsh_startup_commands(
         stmts.push("set verbose".to_stmt());
     }
 
-    stmts.extend(attach_diff.generate_statements(args.is_in_place));
+    stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
 
     stmts.push(todo_drop_set_exported_unexpanded(
         "_activate_d",

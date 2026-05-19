@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use flox_core::activate::context::AutoActivateFishMode;
+use flox_core::activate::context::{AutoActivateFishMode, InvocationType};
 use shell_gen::{GenerateShell, Shell};
 
 use crate::attach_diff::{AttachDiff, todo_drop_set_exported_unexpanded};
@@ -15,7 +15,7 @@ pub struct FishStartupArgs {
     pub flox_activate_tracelevel: u32,
     pub activate_d: PathBuf,
     pub flox_env: PathBuf,
-    pub is_in_place: bool,
+    pub invocation_type: InvocationType,
     pub clean_up: Option<PathBuf>,
 
     // Some(_) if it exists, None otherwise
@@ -48,7 +48,7 @@ pub fn generate_fish_startup_commands(
     // is no requirement to go back and source the user's own config
     // as we do in bash.
 
-    stmts.extend(attach_diff.generate_statements(args.is_in_place));
+    stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
 
     stmts.push(todo_drop_set_exported_unexpanded(
         "_activate_d",
