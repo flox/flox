@@ -165,6 +165,10 @@ let
         mkdir -m 1777 tmp
         mkdir -m 1770 run
         mkdir -p -m 1770 run/flox
+        if [ -e bin/env ] && [ ! -e usr/bin/env ]; then
+          mkdir -p usr/bin
+          ln -s ../../bin/env usr/bin/env
+        fi
       '';
 
       # symlinkJoin fails when drv contains a symlinked bin directory, so wrap in an additional buildEnv.

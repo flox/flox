@@ -820,14 +820,6 @@ if ($manifest) {
             }
         }
 
-        # Symlink /bin/env to /usr/bin/env (for compat)
-        if (-e "$out/bin/env" && !-e "$out/usr/bin/env") {
-            mkpath("$out/usr/bin") or die "cannot create directory `$out/usr/bin': $!";
-            symlink "../../bin/env", "$out/usr/bin/env" ||
-                die "error creating link `$out/usr/bin/env': $!";
-            $nrLinks++;
-        }
-
         info("created %d symlinks in '%s' environment in %.06f seconds",
             $nrLinks, $envName, tv_interval ( $t0 ));
 
