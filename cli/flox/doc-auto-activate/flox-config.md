@@ -111,6 +111,13 @@ flox config --set 'trusted_environments."owner/name"' trust
 `disable_metrics`
 :   Disable collecting and sending usage metrics.
 
+`disable_update_checks`
+:   Disable Flox CLI version update checks and activate-time environment
+    upgrade checks. When set to `true`, Flox does not check
+    `downloads.flox.dev` for CLI updates and does not start background
+    upgrade checks during `flox activate`.
+    (default: false)
+
 `floxhub_token`
 :   Token to authenticate on FloxHub.
 
@@ -164,3 +171,8 @@ flox config --set 'trusted_environments."owner/name"' trust
 :   Variable for disabling the collection/sending of metrics data.
     If set to `true`, prevents Flox from submitting basic metrics information
     such as a unique token and the subcommand issued.
+
+`$FLOX_DISABLE_UPDATE_CHECKS`
+:   Variable for disabling Flox CLI version update checks and activate-time
+    environment upgrade checks. If set to `true`, prevents update checks from
+    running.

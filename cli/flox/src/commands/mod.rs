@@ -208,6 +208,7 @@ impl FloxArgs {
         // `temp_dir` will automatically be removed from disk when the function returns
         let temp_dir = TempDir::new_in(process_dir)?;
 
+        let check_for_cli_updates = should_check_for_cli_updates(&config);
         let update_channel = config.flox.installer_channel.clone();
 
         // Given no command, skip initialization and print welcome message
@@ -218,22 +219,26 @@ impl FloxArgs {
             .unwrap_or_default();
             let active_environments = activated_environments();
             print_welcome_message(envs, active_environments);
-            UpdateNotification::check_for_and_print_update_notification(
-                &config.flox.cache_dir,
-                &update_channel,
-            )
-            .await;
+            if check_for_cli_updates {
+                UpdateNotification::check_for_and_print_update_notification(
+                    &config.flox.cache_dir,
+                    &update_channel,
+                )
+                .await;
+            } else {
+                debug!("Skipping CLI update check because update checks are disabled");
+            }
             return Ok(());
         }
 
         let cache_dir = config.flox.cache_dir.clone();
 
-        let check_for_update_handle = {
+        let check_for_update_handle = check_for_cli_updates.then(|| {
             let update_channel = update_channel.clone();
             tokio::spawn(async move {
                 UpdateNotification::check_for_update(cache_dir, &update_channel).await
             })
-        };
+        });
 
         if !config.flox.disable_metrics {
             debug!("Metrics collection enabled");
@@ -373,11 +378,18 @@ impl FloxArgs {
             // command but before an error is printed for an unsuccessful command.
             // That's a bit weird,
             // but I'm not sure it's worth a refactor.
-            match check_for_update_handle.await {
-                Ok(update_notification) => {
-                    UpdateNotification::handle_update_result(update_notification, &update_channel);
-                },
-                Err(e) => debug!("Failed to check for CLI update: {}", display_chain(&e)),
+            if let Some(check_for_update_handle) = check_for_update_handle {
+                match check_for_update_handle.await {
+                    Ok(update_notification) => {
+                        UpdateNotification::handle_update_result(
+                            update_notification,
+                            &update_channel,
+                        );
+                    },
+                    Err(e) => debug!("Failed to check for CLI update: {}", display_chain(&e)),
+                }
+            } else {
+                debug!("Skipping CLI update check because update checks are disabled");
             }
 
             result
@@ -411,6 +423,10 @@ impl FloxArgs {
 
         result
     }
+}
+
+fn should_check_for_cli_updates(config: &Config) -> bool {
+    !config.flox.disable_update_checks()
 }
 
 /// Print general welcome message with short usage instructions
@@ -1477,4 +1493,24 @@ fn render_composition_manifest(manifest: &Manifest<TypedOnly>) -> Result<String>
     toml_edit::visit_mut::visit_document_mut(&mut Visitor::new_for_document(), &mut document);
 
     Ok(document.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cli_update_checks_enabled_by_default() {
+        let config = Config::default();
+
+        assert!(should_check_for_cli_updates(&config));
+    }
+
+    #[test]
+    fn disabled_update_checks_suppress_cli_update_checks() {
+        let mut config = Config::default();
+        config.flox.disable_update_checks = Some(true);
+
+        assert!(!should_check_for_cli_updates(&config));
+    }
 }

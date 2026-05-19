@@ -18,6 +18,7 @@ use time::{Duration, OffsetDateTime};
 use tracing::{debug, info_span, instrument};
 
 use super::UninitializedEnvironment;
+use crate::config::Config;
 use crate::subcommand_metric;
 
 /// By default check once a day
@@ -50,6 +51,11 @@ impl CheckForUpgrades {
     #[instrument(name = "check-upgrade", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("check-upgrade");
+
+        if Config::parse()?.flox.disable_update_checks() {
+            debug!("Update checks disabled. Skipping.");
+            return Ok(());
+        }
 
         // For catalog requests made by this command, set the QoS to background.
         // Eventually we might want to prioritize these requests differently,
@@ -270,6 +276,8 @@ pub fn spawn_detached_check_for_upgrades_process(
 #[cfg(test)]
 mod tests {
 
+    use std::fs;
+
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::UpgradeResult;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
@@ -358,5 +366,39 @@ mod tests {
             &info.upgrade_result.new_lockfile,
             info.upgrade_result.old_lockfile.as_ref().unwrap()
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn handle_skips_when_update_checks_are_disabled() {
+        let (flox, _tempdir) = flox_instance();
+
+        let environment =
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        let cache_path = environment.cache_path().unwrap();
+        let environment = UninitializedEnvironment::from_concrete_environment(&environment.into());
+
+        let config_dir = tempfile::tempdir().unwrap();
+        fs::write(
+            config_dir.path().join("flox.toml"),
+            "disable_update_checks = true\n",
+        )
+        .unwrap();
+
+        temp_env::async_with_vars(
+            [("FLOX_CONFIG_DIR", Some(config_dir.path().to_str().unwrap()))],
+            async move {
+                CheckForUpgrades {
+                    check_timeout: DEFAULT_TIMEOUT_SECONDS,
+                    environment,
+                }
+                .handle(flox)
+                .await
+                .unwrap();
+            },
+        )
+        .await;
+
+        let upgrade_information = UpgradeInformationGuard::read_in(cache_path).unwrap();
+        assert!(upgrade_information.info().is_none());
     }
 }

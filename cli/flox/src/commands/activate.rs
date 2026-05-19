@@ -204,26 +204,29 @@ impl Activate {
             },
         };
 
-        if (invocation_type == InvocationType::Interactive
-            || invocation_type == InvocationType::InPlace)
-            && config.flox.upgrade_notifications.unwrap_or(true)
-        {
+        if should_notify_about_upgrades(&config, &invocation_type) {
             // Read the results of a previous upgrade check
             // and print a message if an upgrade is available.
             notify_upgrades_if_available(&flox, &mut concrete_environment, &self.environment)?;
+        } else if config.flox.disable_update_checks() {
+            debug!("Upgrade checks disabled");
         } else {
             debug!("Upgrade notification disabled");
         }
 
-        // Spawn a detached process to check for upgrades in the background.
-        let environment =
-            UninitializedEnvironment::from_concrete_environment(&concrete_environment);
-        spawn_detached_check_for_upgrades_process(
-            &environment,
-            None,
-            &concrete_environment.log_path()?,
-            None,
-        )?;
+        if should_check_for_activation_upgrades(&config) {
+            // Spawn a detached process to check for upgrades in the background.
+            let environment =
+                UninitializedEnvironment::from_concrete_environment(&concrete_environment);
+            spawn_detached_check_for_upgrades_process(
+                &environment,
+                None,
+                &concrete_environment.log_path()?,
+                None,
+            )?;
+        } else {
+            debug!("Skipping upgrade check because update checks are disabled");
+        }
 
         self.activate(
             config,
@@ -650,6 +653,19 @@ impl Activate {
     }
 }
 
+fn should_notify_about_upgrades(config: &Config, invocation_type: &InvocationType) -> bool {
+    !config.flox.disable_update_checks()
+        && matches!(
+            invocation_type,
+            InvocationType::Interactive | InvocationType::InPlace
+        )
+        && config.flox.upgrade_notifications.unwrap_or(true)
+}
+
+fn should_check_for_activation_upgrades(config: &Config) -> bool {
+    !config.flox.disable_update_checks()
+}
+
 /// Notify the user of available upgrades
 ///
 /// Upon activation flox will start a detached process to check for upgrades.
@@ -972,6 +988,41 @@ mod tests {
     fn test_conflicting_service_flags_are_rejected() {
         let activate = activate_with_flags(true, true);
         assert!(activate.validate_service_flags().is_err());
+    }
+
+    #[test]
+    fn upgrade_notifications_enabled_by_default_for_interactive_activation() {
+        let config = Config::default();
+
+        assert!(should_notify_about_upgrades(
+            &config,
+            &InvocationType::Interactive
+        ));
+    }
+
+    #[test]
+    fn upgrade_notifications_disabled_by_legacy_notification_config() {
+        let mut config = Config::default();
+        config.flox.upgrade_notifications = Some(false);
+
+        assert!(!should_notify_about_upgrades(
+            &config,
+            &InvocationType::Interactive
+        ));
+        assert!(should_check_for_activation_upgrades(&config));
+    }
+
+    #[test]
+    fn update_checks_disabled_suppresses_activation_upgrade_checks() {
+        let mut config = Config::default();
+        config.flox.disable_update_checks = Some(true);
+        config.flox.upgrade_notifications = Some(true);
+
+        assert!(!should_notify_about_upgrades(
+            &config,
+            &InvocationType::Interactive
+        ));
+        assert!(!should_check_for_activation_upgrades(&config));
     }
 }
 
