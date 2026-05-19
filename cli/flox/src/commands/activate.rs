@@ -503,8 +503,8 @@ impl Activate {
         // Write a persistent marker so 'flox envs' can show [persistent] tag.
         if self.persistent {
             let marker = activation_state_dir.join("persistent");
-            if let Err(e) = fs::create_dir_all(&activation_state_dir)
-                .and_then(|_| fs::write(&marker, b"1"))
+            if let Err(e) =
+                fs::create_dir_all(&activation_state_dir).and_then(|_| fs::write(&marker, b"1"))
             {
                 warn!("Could not write persistent marker: {e}");
             }
@@ -752,11 +752,23 @@ fn build_sandbox_command(
 ) -> Result<std::process::Command> {
     #[cfg(target_os = "macos")]
     {
-        build_sandbox_exec_command(temp_dir, activations_bin, verbosity_num, activate_data, dot_flox_path)
+        build_sandbox_exec_command(
+            temp_dir,
+            activations_bin,
+            verbosity_num,
+            activate_data,
+            dot_flox_path,
+        )
     }
     #[cfg(target_os = "linux")]
     {
-        build_bwrap_command(temp_dir, activations_bin, verbosity_num, activate_data, dot_flox_path)
+        build_bwrap_command(
+            temp_dir,
+            activations_bin,
+            verbosity_num,
+            activate_data,
+            dot_flox_path,
+        )
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
@@ -846,17 +858,23 @@ fn build_sandbox_exec_command(
 
     // Set env vars so 'flox sandbox status' can report what's active.
     let mut cmd = std::process::Command::new("sandbox-exec");
-    cmd.env("FLOX_SANDBOX_PROFILE", policy_path.to_string_lossy().as_ref())
-        .env("FLOX_SANDBOX_BACKEND", "sandbox-exec")
-        .env("FLOX_SANDBOX_ALLOW_READ", "/nix/store:/nix/var/nix")
-        .env("FLOX_SANDBOX_ALLOW_WRITE", format!("{}/.cache/flox:{}", home, cwd))
-        .env(FLOX_ACTIVATIONS_VERBOSITY_VAR, format!("{verbosity_num}"))
-        .arg("-f")
-        .arg(&policy_path)
-        .arg(activations_bin)
-        .arg("activate")
-        .arg("--activate-data")
-        .arg(activate_data);
+    cmd.env(
+        "FLOX_SANDBOX_PROFILE",
+        policy_path.to_string_lossy().as_ref(),
+    )
+    .env("FLOX_SANDBOX_BACKEND", "sandbox-exec")
+    .env("FLOX_SANDBOX_ALLOW_READ", "/nix/store:/nix/var/nix")
+    .env(
+        "FLOX_SANDBOX_ALLOW_WRITE",
+        format!("{}/.cache/flox:{}", home, cwd),
+    )
+    .env(FLOX_ACTIVATIONS_VERBOSITY_VAR, format!("{verbosity_num}"))
+    .arg("-f")
+    .arg(&policy_path)
+    .arg(activations_bin)
+    .arg("activate")
+    .arg("--activate-data")
+    .arg(activate_data);
     Ok(cmd)
 }
 
