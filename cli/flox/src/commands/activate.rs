@@ -1248,6 +1248,10 @@ mod tests {
             mode: None,
             generation: None,
             command: None,
+            // Flox Agent prototype flags — not used in test helpers.
+            persistent: false,
+            frozen: false,
+            sandbox: false,
         }
     }
 
