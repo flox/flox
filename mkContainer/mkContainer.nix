@@ -167,7 +167,7 @@ let
         mkdir -p -m 1770 run/flox
         if [ -e bin/env ] && [ ! -e usr/bin/env ]; then
           mkdir -p usr/bin
-          ln -s ../../bin/env usr/bin/env
+          ln -s ${containerPkgs.coreutils}/bin/env usr/bin/env
         fi
       '';
 
