@@ -104,6 +104,19 @@ pub struct Activate {
 
 #[derive(Bpaf, Clone)]
 pub enum ActivateSubcommandOrOptions {
+    AutoActivate {
+        #[bpaf(external(auto_activate))]
+        auto_activate: AutoActivate,
+    },
+
+    ActivateOptions {
+        #[bpaf(external(activate_options))]
+        options: ActivateOptions,
+    },
+}
+
+#[derive(Bpaf, Debug, Clone, Copy)]
+pub enum AutoActivate {
     /// Allow auto-activation for an environment
     #[bpaf(command, hide)]
     Allow,
@@ -111,11 +124,6 @@ pub enum ActivateSubcommandOrOptions {
     /// Deny auto-activation for an environment
     #[bpaf(command, hide)]
     Deny,
-
-    ActivateOptions {
-        #[bpaf(external(activate_options))]
-        options: ActivateOptions,
-    },
 }
 
 #[derive(Bpaf, Clone)]
@@ -163,29 +171,16 @@ impl ActivateOptions {
 
 impl Activate {
     pub async fn handle(self, mut config: Config, mut flox: Flox) -> Result<()> {
-        match self.subcommand_or_options {
-            ActivateSubcommandOrOptions::Allow => {
+        let options = match self.subcommand_or_options {
+            ActivateSubcommandOrOptions::AutoActivate { auto_activate } => {
                 return self
-                    .handle_auto_activation_subcommand(
-                        AutoActivationSubcommand::Allow,
-                        config,
-                        flox,
-                    )
+                    .handle_auto_activation_subcommand(auto_activate, config, flox)
                     .await;
             },
-            ActivateSubcommandOrOptions::Deny => {
-                return self
-                    .handle_auto_activation_subcommand(AutoActivationSubcommand::Deny, config, flox)
-                    .await;
-            },
-            ActivateSubcommandOrOptions::ActivateOptions { ref options } => {
+            ActivateSubcommandOrOptions::ActivateOptions { options } => {
                 options.validate_service_flags()?;
+                options
             },
-        }
-
-        let ActivateSubcommandOrOptions::ActivateOptions { options } = self.subcommand_or_options
-        else {
-            unreachable!()
         };
 
         let mut concrete_environment = match self
@@ -290,14 +285,14 @@ impl Activate {
 
     async fn handle_auto_activation_subcommand(
         self,
-        subcommand: AutoActivationSubcommand,
+        subcommand: AutoActivate,
         config: Config,
         mut flox: Flox,
     ) -> Result<()> {
         if !flox.features.auto_activate {
             let cmd_name = match subcommand {
-                AutoActivationSubcommand::Allow => "allow",
-                AutoActivationSubcommand::Deny => "deny",
+                AutoActivate::Allow => "allow",
+                AutoActivate::Deny => "deny",
             };
             bail!(
                 "'{}' requires the auto_activate feature flag. Set FLOX_FEATURES_AUTO_ACTIVATE=true.",
@@ -312,11 +307,11 @@ impl Activate {
             .context("Failed to find environment")?;
 
         let verb = match subcommand {
-            AutoActivationSubcommand::Allow => {
+            AutoActivate::Allow => {
                 allow(&config, &concrete_environment)?;
                 "allowed"
             },
-            AutoActivationSubcommand::Deny => {
+            AutoActivate::Deny => {
                 deny(&config, &concrete_environment)?;
                 "denied"
             },
@@ -329,12 +324,6 @@ impl Activate {
 
         Ok(())
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum AutoActivationSubcommand {
-    Allow,
-    Deny,
 }
 
 impl ActivateOptions {
