@@ -17,13 +17,17 @@ mod init;
 mod install;
 mod list;
 mod lock_manifest;
+pub(crate) mod plugin;
 mod publish;
 mod pull;
 mod push;
+pub(crate) mod recap;
+mod sandbox;
 mod search;
 mod services;
 mod services_socket;
 mod show;
+mod telemetry;
 mod uninstall;
 mod upgrade;
 mod upload;
@@ -366,6 +370,7 @@ impl FloxArgs {
                 Commands::Modify(args) => args.handle(config, flox).await,
                 Commands::Share(args) => args.handle(config, flox).await,
                 Commands::Admin(args) => args.handle(config, flox).await,
+                Commands::Agent(args) => args.handle(flox),
                 Commands::Internal(args) => args.handle(flox).await,
             };
 
@@ -468,6 +473,7 @@ enum Commands {
     Modify(#[bpaf(external(modify_commands))] ModifyCommands),
     Share(#[bpaf(external(share_commands))] ShareCommands),
     Admin(#[bpaf(external(admin_commands))] AdminCommands),
+    Agent(#[bpaf(external(agent_commands))] AgentCommands),
 
     Internal(#[bpaf(external(internal_commands))] InternalCommands),
 }
@@ -758,6 +764,45 @@ impl AdminCommands {
             AdminCommands::Gc(args) => args.handle(flox)?,
         }
         Ok(())
+    }
+}
+
+/// Flox Agent commands — sandboxing, plugins, session recap, telemetry.
+/// These are prototype-grade surfaces for the Flox Agent offering.
+#[derive(Bpaf, Clone)]
+enum AgentCommands {
+    /// Manage plugins and integrations (Flox Agent prototype)
+    #[bpaf(command, long("plugin"))]
+    Plugin(
+        #[bpaf(
+            external(plugin::plugin_commands),
+            fallback(plugin::PluginCommands::List)
+        )]
+        plugin::PluginCommands,
+    ),
+
+    /// Sandbox introspection (Flox Agent prototype)
+    #[bpaf(command, long("sandbox"))]
+    Sandbox(
+        #[bpaf(
+            external(sandbox::sandbox_commands),
+            fallback(sandbox::SandboxCommands::Status)
+        )]
+        sandbox::SandboxCommands,
+    ),
+
+    /// Show a human-readable summary of what the agent changed this session
+    #[bpaf(command, long("recap"))]
+    Recap(#[bpaf(external(recap::recap))] recap::Recap),
+}
+
+impl AgentCommands {
+    fn handle(self, flox: Flox) -> Result<()> {
+        match self {
+            AgentCommands::Plugin(args) => args.handle(flox),
+            AgentCommands::Sandbox(args) => args.handle(flox),
+            AgentCommands::Recap(args) => args.handle(flox),
+        }
     }
 }
 
