@@ -131,7 +131,7 @@ pub struct FloxConfig {
     /// Per-directory auto-activation preferences.
     /// Maps absolute paths to explicit allow/deny decisions.
     #[serde(default)]
-    pub auto_activation_preferences: HashMap<PathBuf, AutoActivationPreference>,
+    pub auto_activate_environments: HashMap<PathBuf, AutoActivationPreference>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -50,6 +50,7 @@ use super::{
     environment_select,
 };
 use crate::commands::check_for_upgrades::spawn_detached_check_for_upgrades_process;
+use crate::commands::general::update_config;
 use crate::commands::services::ServicesCommandsError;
 use crate::commands::{
     EnvironmentSelectError,
@@ -59,7 +60,7 @@ use crate::commands::{
     render_composition_manifest,
     uninitialized_environment_description,
 };
-use crate::config::{Config, EnvironmentPromptConfig};
+use crate::config::{AutoActivationPreference, Config, EnvironmentPromptConfig};
 use crate::utils::errors::format_diverged_metadata;
 use crate::utils::message;
 use crate::utils::openers::CliShellExt;
@@ -681,11 +682,8 @@ impl Activate {
                 AutoActivationSubcommand::Allow => "allow",
                 AutoActivationSubcommand::Deny => "deny",
             };
-            bail!("Unknown command '{}'.", cmd_name);
+            bail!("'{}' requires the auto_activate feature flag. Set FLOX_FEATURES_AUTO_ACTIVATE=true.", cmd_name);
         }
-
-        use crate::commands::general::update_config;
-        use crate::config::AutoActivationPreference;
 
         let concrete_environment = self
             .environment
@@ -701,7 +699,7 @@ impl Activate {
         };
 
         let path_str = env_path.display().to_string();
-        let key = format!("auto_activation_preferences.{}", path_str);
+        let key = format!("auto_activate_environments.{}", path_str);
         update_config(&config.flox.config_dir, key, Some(preference))?;
 
         let description = environment_description(&concrete_environment)?;
