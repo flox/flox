@@ -125,7 +125,12 @@ pub fn generate_bash_startup_commands(
         stmt.generate_with_newline(Shell::Bash, writer)?;
     }
 
-    if args.auto_activate {
+    if args.auto_activate
+        && matches!(
+            args.invocation_type,
+            InvocationType::Interactive | InvocationType::InPlace
+        )
+    {
         write!(writer, "{}", crate::hook::bash_hook(&args.flox_bin))?;
     }
 

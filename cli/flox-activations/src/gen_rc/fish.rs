@@ -124,7 +124,12 @@ pub fn generate_fish_startup_commands(
         stmt.generate_with_newline(Shell::Fish, writer)?;
     }
 
-    if args.auto_activate {
+    if args.auto_activate
+        && matches!(
+            args.invocation_type,
+            InvocationType::Interactive | InvocationType::InPlace
+        )
+    {
         if let Some(mode) = &args.auto_activate_fish_mode {
             writeln!(writer, "set -gx FLOX_AUTO_ACTIVATE_FISH_MODE {mode};")?;
         }
