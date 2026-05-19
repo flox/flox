@@ -41,12 +41,12 @@ fn handle_status() -> Result<()> {
                 ("FLOX_SANDBOX_ALLOW_WRITE", "Read-write paths"),
                 ("FLOX_SANDBOX_ALLOW_NET", "Network hosts"),
             ] {
-                if let Ok(val) = std::env::var(key) {
-                    if !val.is_empty() {
-                        println!("  {label}:");
-                        for item in val.split(':') {
-                            println!("    {item}");
-                        }
+                if let Ok(val) = std::env::var(key)
+                    && !val.is_empty()
+                {
+                    println!("  {label}:");
+                    for item in val.split(':') {
+                        println!("    {item}");
                     }
                 }
             }

@@ -5,7 +5,7 @@
 /// process (outside the sandbox) so the agent cannot tamper with it.
 ///
 /// Structured log format matches the FloxHub "Recap" tab schema.
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::utils::message;
 
 /// Default location for the agent audit log, outside any sandbox writable view.
-pub fn default_audit_log_path(cache_dir: &PathBuf) -> PathBuf {
+pub fn default_audit_log_path(cache_dir: &Path) -> PathBuf {
     cache_dir.join("agent-sessions.jsonl")
 }
 
@@ -187,7 +187,9 @@ fn print_recap(events: &[AuditEvent]) {
 
 /// Append an audit event to the session log.
 /// Called by commands that track agent actions (install, uninstall, edit).
-pub fn append_audit_event(cache_dir: &PathBuf, event: AuditEvent) -> Result<()> {
+// Prototype public API — not yet wired into commands.
+#[allow(dead_code)]
+pub fn append_audit_event(cache_dir: &Path, event: AuditEvent) -> Result<()> {
     use std::io::Write;
     let log_path = default_audit_log_path(cache_dir);
     let mut file = std::fs::OpenOptions::new()

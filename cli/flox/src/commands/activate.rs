@@ -636,16 +636,17 @@ impl ActivateOptions {
         // On Linux: bubblewrap (bwrap) if available.
         // The policy is written by the launcher (this process, outside the sandbox)
         // and passed via parameter — the policy file is NOT visible inside the sandbox.
+        let activations_bin: &std::path::Path = &FLOX_ACTIVATIONS_BIN;
         let mut command = if self.sandbox {
             build_sandbox_command(
                 &flox_temp_dir,
-                &*FLOX_ACTIVATIONS_BIN,
+                activations_bin,
                 verbosity_num,
                 &tempfile,
                 &dot_flox_path,
             )?
         } else {
-            let mut cmd = std::process::Command::new(&*FLOX_ACTIVATIONS_BIN);
+            let mut cmd = std::process::Command::new(activations_bin);
             cmd.env(FLOX_ACTIVATIONS_VERBOSITY_VAR, format!("{verbosity_num}"))
                 .arg("activate")
                 .arg("--activate-data")
