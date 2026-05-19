@@ -1559,9 +1559,94 @@ mod migration_tests {
         included_env.edit(&flox, updated_included_manifest).unwrap();
 
         // Upgrade all includes on the composer.
-        composer.include_upgrade(&flox, vec![]).unwrap();
+        let new_lockfile = composer
+            .include_upgrade(&flox, vec![])
+            .unwrap()
+            .new_lockfile;
 
-        // The composer's manifest should now be migrated to v1.10.0.
+        // Check all schemas have been migrated to latest
+        // #1 compose.composer in lockfile
+        assert_eq!(
+            new_lockfile
+                .compose
+                .as_ref()
+                .unwrap()
+                .composer
+                .get_schema_version(),
+            KnownSchemaVersion::latest()
+        );
+
+        // #2 manifest in lockfile
+        assert_eq!(
+            new_lockfile.manifest.get_schema_version(),
+            KnownSchemaVersion::latest()
+        );
+
+        // #3 on-disk manifest
+        let manifest = composer.manifest_without_migrating(&flox).unwrap();
+        assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::latest());
+    }
+
+    /// A v1 composer that includes a v1 environment should have its
+    /// compose.composer migrated when the composer itself is edited to
+    /// add a package with explicit outputs.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn edit_triggers_migration() {
+        let (mut flox, tempdir) = flox_instance();
+
+        // Set up a v1 included environment with only vars.
+        let included_manifest = with_schema(KnownSchemaVersion::V1, indoc! {r#"
+            [vars]
+            included_var = "value"
+        "#});
+        setup_locked_included_env(&flox, tempdir.path(), &included_manifest);
+
+        // Create and lock a v1 composer that includes it.
+        let mut composer = setup_v1_composer_with_include(&flox, tempdir.path());
+        composer.lockfile(&flox).unwrap();
+
+        let manifest = composer.manifest_without_migrating(&flox).unwrap();
+        assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::V1);
+
+        // Edit the composer to add a package with explicit outputs,
+        // which requires a schema bump.
+        let edited_manifest = with_latest_schema(indoc! {r#"
+            [include]
+            environments = [
+              { dir = "../included" },
+            ]
+
+            [install]
+            bash.pkg-path = "bashNonInteractive"
+            bash.outputs = "all"
+        "#});
+
+        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
+
+        let result = composer.edit(&flox, edited_manifest).unwrap();
+        let EditResult::Changed { new_lockfile, .. } = result else {
+            panic!("expected EditResult::Changed");
+        };
+
+        // Check all schemas have been migrated to latest
+        // #1 compose.composer in lockfile
+        assert_eq!(
+            new_lockfile
+                .compose
+                .as_ref()
+                .unwrap()
+                .composer
+                .get_schema_version(),
+            KnownSchemaVersion::latest()
+        );
+
+        // #2 manifest in lockfile
+        assert_eq!(
+            new_lockfile.manifest.get_schema_version(),
+            KnownSchemaVersion::latest()
+        );
+
+        // #3 on-disk manifest
         let manifest = composer.manifest_without_migrating(&flox).unwrap();
         assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::latest());
     }
@@ -1602,6 +1687,12 @@ mod migration_tests {
             .unwrap()
             .get_schema_version();
         assert_eq!(on_disk_schema, KnownSchemaVersion::V1);
+
+        // Re-locking must consider the lockfile up to date; otherwise every
+        // flox activate will unnecessarily re-lock the environment.
+        assert!(composer.lockfile_up_to_date().unwrap());
+        let second_lock = composer.lockfile(&flox).unwrap();
+        assert!(matches!(second_lock, LockResult::Unchanged(_)));
     }
 
     #[tokio::test(flavor = "multi_thread")]

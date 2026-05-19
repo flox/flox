@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 
 use anyhow::Result;
@@ -10,12 +10,13 @@ pub const FLOX_HOOK_DIFF_VAR: &str = "_FLOX_HOOK_DIFF";
 /// The diff between the pre-activation shell environment and the intended
 /// post-activation environment, captured at attach time.
 ///
-/// Each category stores the *original* value (for deactivation purposes),
-/// except for `added` which stores the new value (since there is no original).
+/// `modified` and `removed` store the *original* value so deactivation can
+/// restore it. `added` stores only the name: the var did not exist before, so
+/// deactivation will unset it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DiffSerializer {
-    /// Vars newly set by activation (stores new value).
-    pub added: HashMap<String, String>,
+    /// Vars newly set by activation.
+    pub added: HashSet<String>,
     /// Vars whose value will change (stores *original* value).
     pub modified: HashMap<String, String>,
     /// Vars that will be unset (stores *original* value).
@@ -56,10 +57,14 @@ mod tests {
             .collect()
     }
 
+    fn make_keys(keys: &[&str]) -> HashSet<String> {
+        keys.iter().map(|k| k.to_string()).collect()
+    }
+
     #[test]
     fn encode_decode_roundtrip() {
         let original = DiffSerializer {
-            added: make_env(&[("NEW_VAR", "new_value")]),
+            added: make_keys(&["NEW_VAR"]),
             modified: make_env(&[("MOD_VAR", "original_value")]),
             removed: make_env(&[("REM_VAR", "removed_value")]),
         };

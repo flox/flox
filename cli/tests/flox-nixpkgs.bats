@@ -13,7 +13,9 @@ load setup_suite.bash
 # ---------------------------------------------------------------------------- #
 
 @test "'github' fetcher does NOT set 'allowUnfree' and 'allowBroken'" {
-  run --separate-stderr nix --option plugin-files "$NIX_PLUGINS" \
+  run --separate-stderr nix \
+    --extra-experimental-features 'nix-command flakes' \
+    --option plugin-files "$NIX_PLUGINS" \
     eval --expr "let
     nixpkgs = builtins.getFlake \"github:NixOS/nixpkgs/$TEST_NIXPKGS_REV_NEW\";
     inherit (nixpkgs.legacyPackages.x86_64-linux) config;
@@ -25,7 +27,9 @@ load setup_suite.bash
 # ---------------------------------------------------------------------------- #
 
 @test "'flox-nixpkgs' fetcher sets 'allowUnfree' and 'allowBroken'" {
-  run --separate-stderr nix --option plugin-files "$NIX_PLUGINS" \
+  run --separate-stderr nix \
+    --extra-experimental-features 'nix-command flakes' \
+    --option plugin-files "$NIX_PLUGINS" \
     eval --expr "let
     nixpkgs = builtins.getFlake
                 \"flox-nixpkgs:v0/flox/$TEST_NIXPKGS_REV_NEW\";
@@ -38,7 +42,9 @@ load setup_suite.bash
 # ---------------------------------------------------------------------------- #
 
 @test "'flox-nixpkgs' and 'github' 'outPaths' match" {
-  run --separate-stderr nix --option plugin-files "$NIX_PLUGINS" \
+  run --separate-stderr nix \
+    --extra-experimental-features 'nix-command flakes' \
+    --option plugin-files "$NIX_PLUGINS" \
     eval --expr "let
     fp0 = builtins.getFlake
             \"flox-nixpkgs\:v0/flox/$TEST_NIXPKGS_REV_NEW\";

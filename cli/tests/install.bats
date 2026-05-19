@@ -468,7 +468,9 @@ EOF
 # bats test_tags=install:install-store-path
 @test "'flox install' install-store-path" {
   "$FLOX_BIN" init
-  hello_store_path="$(nix build "github:nixos/nixpkgs/$TEST_NIXPKGS_REV_NEW#hello^out" --no-link --print-out-paths)"
+  hello_store_path="$(nix build \
+    --extra-experimental-features 'nix-command flakes' \
+    "github:nixos/nixpkgs/$TEST_NIXPKGS_REV_NEW#hello^out" --no-link --print-out-paths)"
 
   PROJECT_DIR="$(realpath "$PROJECT_DIR")"
   run "$FLOX_BIN" install "$hello_store_path"
@@ -486,7 +488,9 @@ EOF
 # bats test_tags=install:install-store-path
 @test "'flox install' install-store-path from link" {
  "$FLOX_BIN" init
-  vim_store_path="$(nix build "github:nixos/nixpkgs/$TEST_NIXPKGS_REV_NEW#vim^out" --out-link ./result-vim --print-out-paths)"
+  vim_store_path="$(nix build \
+    --extra-experimental-features 'nix-command flakes' \
+    "github:nixos/nixpkgs/$TEST_NIXPKGS_REV_NEW#vim^out" --out-link ./result-vim --print-out-paths)"
 
   PROJECT_DIR="$(realpath "$PROJECT_DIR")"
   run "$FLOX_BIN" install "./result-vim"

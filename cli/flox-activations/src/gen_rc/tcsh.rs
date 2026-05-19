@@ -1,14 +1,13 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use itertools::Itertools;
-use shell_gen::{GenerateShell, Shell, set_exported_unexpanded, unset};
+use flox_core::activate::context::InvocationType;
+use shell_gen::{GenerateShell, Shell};
 
+use crate::attach_diff::{AttachDiff, todo_drop_set_exported_unexpanded};
 use crate::gen_rc::RM;
-use crate::start_diff::StartDiff;
 
 /// Arguments for generating tcsh startup commands
 #[derive(Debug, Clone)]
@@ -16,10 +15,7 @@ pub struct TcshStartupArgs {
     pub flox_activate_tracelevel: u32,
     pub activate_d: PathBuf,
     pub flox_env: PathBuf,
-    pub flox_env_cache: Option<PathBuf>,
-    pub flox_env_project: Option<PathBuf>,
-    pub flox_env_description: Option<String>,
-    pub is_in_place: bool,
+    pub invocation_type: InvocationType,
     pub clean_up: Option<PathBuf>,
 
     pub flox_activate_tracer: String,
@@ -35,9 +31,7 @@ pub struct TcshStartupArgs {
 // the output is a valid shell script fragment when represented on a single line.
 pub fn generate_tcsh_startup_commands(
     args: &TcshStartupArgs,
-    start_diff: &StartDiff,
-    single_sets: &HashMap<String, String>,
-    double_sets: &HashMap<String, String>,
+    attach_diff: &AttachDiff,
     writer: &mut impl Write,
 ) -> Result<()> {
     let mut stmts = vec![];
@@ -47,61 +41,17 @@ pub fn generate_tcsh_startup_commands(
         stmts.push("set verbose".to_stmt());
     }
 
-    // For non-in-place activations, these were set as environment variables
-    // prior to exec'ing
-    if args.is_in_place {
-        for (k, v) in single_sets.iter().sorted_by_key(|(k, _)| *k) {
-            stmts.push(set_exported_unexpanded(k, v));
-        }
-    }
-    for (k, v) in double_sets.iter().sorted_by_key(|(k, _)| *k) {
-        stmts.push(set_exported_unexpanded(k, v));
-    }
+    stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
 
-    // Restore environment variables set in the previous tcsh initialization.
-    start_diff.generate_statements(&mut stmts);
-
-    // Propagate required variables that are documented as exposed.
-    stmts.push(set_exported_unexpanded(
-        "FLOX_ENV",
-        args.flox_env.display().to_string(),
-    ));
-
-    // Propagate optional variables that are documented as exposed.
-    if let Some(flox_env_cache) = &args.flox_env_cache {
-        stmts.push(set_exported_unexpanded(
-            "FLOX_ENV_CACHE",
-            flox_env_cache.display().to_string(),
-        ));
-    } else {
-        stmts.push(unset("FLOX_ENV_CACHE"));
-    }
-
-    if let Some(flox_env_project) = &args.flox_env_project {
-        stmts.push(set_exported_unexpanded(
-            "FLOX_ENV_PROJECT",
-            flox_env_project.display().to_string(),
-        ));
-    } else {
-        stmts.push(unset("FLOX_ENV_PROJECT"));
-    }
-
-    if let Some(description) = &args.flox_env_description {
-        stmts.push(set_exported_unexpanded("FLOX_ENV_DESCRIPTION", description));
-    } else {
-        stmts.push(unset("FLOX_ENV_DESCRIPTION"));
-    }
-
-    stmts.push(set_exported_unexpanded(
+    stmts.push(todo_drop_set_exported_unexpanded(
         "_activate_d",
         args.activate_d.display().to_string(),
     ));
-    stmts.push(set_exported_unexpanded(
+    stmts.push(todo_drop_set_exported_unexpanded(
         "_flox_activations",
         args.flox_activations.display().to_string(),
     ));
-
-    stmts.push(set_exported_unexpanded(
+    stmts.push(todo_drop_set_exported_unexpanded(
         "_flox_activate_tracer",
         &args.flox_activate_tracer,
     ));
@@ -185,85 +135,38 @@ pub fn generate_tcsh_startup_commands(
 #[cfg(test)]
 mod tests {
     use expect_test::expect;
+    use shell_gen::ShellWithPath;
 
     use super::*;
+    use crate::gen_rc::test_helpers::{render_normalized, test_startup_ctx};
 
     // NOTE: For these `expect!` tests, run unit tests with `UPDATE_EXPECT=1`
     //  to have it automatically update the expected value when the implementation
     //  changes.
 
-    fn basic_args(
-        is_in_place: bool,
-    ) -> (
-        TcshStartupArgs,
-        HashMap<String, String>,
-        HashMap<String, String>,
-    ) {
-        let args = TcshStartupArgs {
-            flox_activate_tracelevel: 3,
-            activate_d: PathBuf::from("/activate_d"),
-            flox_env: "/flox_env".into(),
-            flox_env_cache: Some("/flox_env_cache".into()),
-            flox_env_project: Some("/flox_env_project".into()),
-            flox_env_description: Some("env_description".to_string()),
-            is_in_place,
-            flox_sourcing_rc: false,
-            flox_activate_tracer: "TRACER".into(),
-            flox_activations: PathBuf::from("/flox_activations"),
-            clean_up: Some("/path/to/rc/file".into()),
-            auto_activate: false,
-            flox_bin: "flox".to_string(),
-            set_prompt: true,
-        };
-        let single_sets = HashMap::from([
-            ("SINGLE_B".to_string(), "single_b".to_string()),
-            ("SINGLE_A".to_string(), "single_a".to_string()),
-        ]);
-        let double_sets = HashMap::from([("DOUBLE_X".to_string(), "double_x".to_string())]);
-        (args, single_sets, double_sets)
-    }
-
-    fn render(
-        args: &TcshStartupArgs,
-        single_sets: &HashMap<String, String>,
-        double_sets: &HashMap<String, String>,
-    ) -> String {
-        let additions = HashMap::from([
-            ("QUOTED_VAR".to_string(), "QUOTED'VALUE".to_string()),
-            ("ADDED_VAR".to_string(), "ADDED_VALUE".to_string()),
-        ]);
-        let deletions = vec!["DELETED_VAR".to_string()];
-        let start_diff = StartDiff::from_parts(additions, deletions);
-        let mut buf = Vec::new();
-        generate_tcsh_startup_commands(args, &start_diff, single_sets, double_sets, &mut buf)
-            .unwrap();
-        String::from_utf8_lossy(&buf).into_owned()
+    fn render(is_in_place: bool) -> String {
+        let shell = ShellWithPath::Tcsh(PathBuf::from("/bin/tcsh"));
+        let ctx = test_startup_ctx(shell, is_in_place);
+        render_normalized(&ctx)
     }
 
     #[test]
     fn test_generate_tcsh_startup_commands_subprocess() {
-        let (args, single_sets, double_sets) = basic_args(false);
-        let output = render(&args, &single_sets, &double_sets);
-        let (main_output, last_line) = output
-            .strip_suffix('\n')
-            .unwrap()
-            .rsplit_once('\n')
-            .unwrap();
-        assert_eq!(last_line, format!("{RM} /path/to/rc/file;"));
+        let output = render(false);
         expect![[r#"
             set verbose
-            setenv DOUBLE_X double_x;
             setenv ADDED_VAR ADDED_VALUE;
-            setenv QUOTED_VAR 'QUOTED'\''VALUE';
-            unsetenv DELETED_VAR;
+            setenv FLOX_ACTIVATE_START_SERVICES false;
             setenv FLOX_ENV /flox_env;
             setenv FLOX_ENV_CACHE /flox_env_cache;
-            setenv FLOX_ENV_PROJECT /flox_env_project;
             setenv FLOX_ENV_DESCRIPTION env_description;
-            setenv _activate_d /activate_d;
+            setenv FLOX_ENV_PROJECT /flox_env_project;
+            setenv QUOTED_VAR 'QUOTED'\''VALUE';
+            unsetenv DELETED_VAR;
+            setenv _activate_d /interpreter/activate.d;
             setenv _flox_activations /flox_activations;
             setenv _flox_activate_tracer TRACER;
-            if ( $?tty ) then; source '/activate_d/set-prompt.tcsh'; endif;
+            if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
             if (! $?FLOX_ENV_DIRS) setenv FLOX_ENV_DIRS "empty";
             eval "`'/flox_activations' set-env-dirs --shell tcsh --flox-env '/flox_env' --env-dirs $FLOX_ENV_DIRS:q`";
             if (! $?MANPATH) setenv MANPATH "empty";
@@ -272,35 +175,32 @@ mod tests {
             if ($?_FLOX_SOURCED_PROFILE_SCRIPTS) set _already_sourced_args = ( --already-sourced-env-dirs `echo $_FLOX_SOURCED_PROFILE_SCRIPTS:q` );
             eval "`'/flox_activations' profile-scripts --shell tcsh --env-dirs $FLOX_ENV_DIRS:q $_already_sourced_args:q`";
             unhash;
-            unset verbose;"#]].assert_eq(main_output);
+            unset verbose;
+            /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+        "#]].assert_eq(&output);
     }
 
     #[test]
     fn test_generate_tcsh_startup_commands_in_place() {
-        let (args, single_sets, double_sets) = basic_args(true);
-        let output = render(&args, &single_sets, &double_sets);
-        let (main_output, last_line) = output
-            .strip_suffix('\n')
-            .unwrap()
-            .rsplit_once('\n')
-            .unwrap();
-        assert_eq!(last_line, format!("{RM} /path/to/rc/file;"));
+        let output = render(true);
         expect![[r#"
             set verbose
-            setenv SINGLE_A single_a;
-            setenv SINGLE_B single_b;
-            setenv DOUBLE_X double_x;
+            setenv FLOX_PROMPT_COLOR_1 1;
+            setenv FLOX_PROMPT_COLOR_2 2;
+            setenv FLOX_PROMPT_ENVIRONMENTS prompt_envs;
+            setenv _FLOX_ACTIVE_ENVIRONMENTS active_envs;
             setenv ADDED_VAR ADDED_VALUE;
-            setenv QUOTED_VAR 'QUOTED'\''VALUE';
-            unsetenv DELETED_VAR;
+            setenv FLOX_ACTIVATE_START_SERVICES false;
             setenv FLOX_ENV /flox_env;
             setenv FLOX_ENV_CACHE /flox_env_cache;
-            setenv FLOX_ENV_PROJECT /flox_env_project;
             setenv FLOX_ENV_DESCRIPTION env_description;
-            setenv _activate_d /activate_d;
+            setenv FLOX_ENV_PROJECT /flox_env_project;
+            setenv QUOTED_VAR 'QUOTED'\''VALUE';
+            unsetenv DELETED_VAR;
+            setenv _activate_d /interpreter/activate.d;
             setenv _flox_activations /flox_activations;
             setenv _flox_activate_tracer TRACER;
-            if ( $?tty ) then; source '/activate_d/set-prompt.tcsh'; endif;
+            if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
             if (! $?FLOX_ENV_DIRS) setenv FLOX_ENV_DIRS "empty";
             eval "`'/flox_activations' set-env-dirs --shell tcsh --flox-env '/flox_env' --env-dirs $FLOX_ENV_DIRS:q`";
             if (! $?MANPATH) setenv MANPATH "empty";
@@ -309,6 +209,8 @@ mod tests {
             if ($?_FLOX_SOURCED_PROFILE_SCRIPTS) set _already_sourced_args = ( --already-sourced-env-dirs `echo $_FLOX_SOURCED_PROFILE_SCRIPTS:q` );
             eval "`'/flox_activations' profile-scripts --shell tcsh --env-dirs $FLOX_ENV_DIRS:q $_already_sourced_args:q`";
             unhash;
-            unset verbose;"#]].assert_eq(main_output);
+            unset verbose;
+            /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+        "#]].assert_eq(&output);
     }
 }

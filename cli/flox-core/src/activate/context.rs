@@ -132,7 +132,7 @@ pub enum AutoActivateFishMode {
     DisableArrow,
 }
 
-#[derive(Clone, Debug, Deserialize, derive_more::Display, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, derive_more::Display, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InvocationType {
     #[display("inplace")]
@@ -143,4 +143,10 @@ pub enum InvocationType {
     ShellCommand(String),
     #[display("execcommand")]
     ExecCommand(Vec<String>),
+}
+
+impl InvocationType {
+    pub fn is_in_place(&self) -> bool {
+        matches!(self, Self::InPlace)
+    }
 }

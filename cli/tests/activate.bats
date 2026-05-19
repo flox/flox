@@ -1268,12 +1268,13 @@ sets_NIX_SSL_CERT_FILE() {
 
   run bash -c 'eval "$($FLOX_BIN activate)"; type hello; echo $foo'
   assert_success
-  assert_line "sourcing hook.on-activate"
-  assert_line "sourcing profile.common"
-  assert_line "sourcing profile.bash"
-  refute_line "sourcing profile.zsh"
-  assert_line --partial "hello is $(realpath $PROJECT_DIR)/.flox/run/"
-  assert_line "baz"
+  assert_output - <<EOF
+sourcing hook.on-activate
+sourcing profile.common
+sourcing profile.bash
+hello is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/hello
+baz
+EOF
 }
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:fish
@@ -1290,14 +1291,15 @@ sets_NIX_SSL_CERT_FILE() {
 
   run fish -c 'eval "$($FLOX_BIN activate)"; type hello; echo $foo'
   assert_success
-  assert_line "sourcing hook.on-activate"
-  assert_line "sourcing profile.common"
-  refute_line "sourcing profile.bash"
-  assert_line "sourcing profile.fish"
-  refute_line "sourcing profile.tcsh"
-  refute_line "sourcing profile.zsh"
-  assert_line --partial "hello is $(realpath $PROJECT_DIR)/.flox/run/"
-  assert_line "baz"
+  assert_output - <<EOF
+Sourcing config.fish
+Setting PATH from config.fish
+sourcing hook.on-activate
+sourcing profile.common
+sourcing profile.fish
+hello is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/hello
+baz
+EOF
 }
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:tcsh
@@ -1314,14 +1316,15 @@ sets_NIX_SSL_CERT_FILE() {
 
   run tcsh -c 'eval "`$FLOX_BIN activate`"; echo hello is `which hello`; echo $foo'
   assert_success
-  assert_line "sourcing hook.on-activate"
-  assert_line "sourcing profile.common"
-  refute_line "sourcing profile.bash"
-  refute_line "sourcing profile.fish"
-  assert_line "sourcing profile.tcsh"
-  refute_line "sourcing profile.zsh"
-  assert_line --partial "hello is $(realpath $PROJECT_DIR)/.flox/run/"
-  assert_line "baz"
+  assert_output - <<EOF
+Sourcing .tcshrc
+Setting PATH from .tcshrc
+sourcing hook.on-activate
+sourcing profile.common
+sourcing profile.tcsh
+hello is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/hello
+baz
+EOF
 }
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:zsh
@@ -1338,14 +1341,15 @@ sets_NIX_SSL_CERT_FILE() {
 
   run zsh -c 'eval "$("$FLOX_BIN" activate)"; type hello; echo $foo'
   assert_success
-  assert_line "sourcing hook.on-activate"
-  assert_line "sourcing profile.common"
-  refute_line "sourcing profile.bash"
-  refute_line "sourcing profile.fish"
-  refute_line "sourcing profile.tcsh"
-  assert_line "sourcing profile.zsh"
-  assert_line --partial "hello is $(realpath $PROJECT_DIR)/.flox/run/"
-  assert_line "baz"
+  assert_output - <<EOF
+Sourcing .zshenv
+Setting PATH from .zshenv
+sourcing hook.on-activate
+sourcing profile.common
+sourcing profile.zsh
+hello is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/hello
+baz
+EOF
 }
 
 # ---------------------------------------------------------------------------- #
@@ -3504,14 +3508,13 @@ PIDs of the running activations: ${ACTIVATION_PID}"
   case "$NIX_SYSTEM" in
     *-linux)
       VIM_MAN="$(realpath "$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man/man1/vim.1.gz")"
-      run $_man --path vim
-      assert_failure
-      refute_output "$VIM_MAN"
-
       EMACS_MAN="$(realpath "$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man/man1/emacs.1.gz")"
-      run $_man --path emacs
-      assert_failure
-      refute_output "$EMACS_MAN"
+
+      # Neither environment starts out in MANPATH
+      run $_man --path
+      assert_success
+      refute_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
+      refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
 
       # vim gets added to MANPATH
       _man=$_man FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -c "$_man --path vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
@@ -4055,7 +4058,9 @@ Setting PATH from ${rc_file}"
 
   # Pre-fetch without a timeout.
   # Skip the test if we're running a release
-  if ! OUTPUT=$(nix build "github:flox/flox/v${FLOX_LATEST_VERSION}" 2>&1); then
+  if ! OUTPUT=$(nix build \
+    --extra-experimental-features 'nix-command flakes' \
+    "github:flox/flox/v${FLOX_LATEST_VERSION}" 2>&1); then
     if [[ "$OUTPUT" == *"No commit found for SHA: v${FLOX_LATEST_VERSION}"* ]]; then
       skip "skipping compatibility check for what is likely a release commit"
     else

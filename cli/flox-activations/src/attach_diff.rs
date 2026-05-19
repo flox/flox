@@ -7,11 +7,14 @@ use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
 use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
+use itertools::Itertools;
+use shell_gen::{GenerateShell, SetVar, Statement, UnsetVar};
 use tracing::debug;
 
-use crate::activation_diff::{self, DiffSerializer};
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
+use crate::diff_serializer::{DiffSerializer, FLOX_HOOK_DIFF_VAR};
+use crate::env_diff::EnvDiff;
 use crate::start_diff::StartDiff;
 use crate::vars_from_env::VarsFromEnvironment;
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
@@ -27,14 +30,16 @@ pub(super) fn assemble_activate_command(
 ) -> Command {
     let mut command = Command::new(context.attach_ctx.interpreter_path.join("activate"));
     command.envs(single_set_envs(&context.attach_ctx));
-    command.envs(double_set_envs(context.project_ctx.as_ref()));
-    add_old_activate_script_exports(
-        &mut command,
+    let double_sets = double_set_envs(&context.attach_ctx, context.project_ctx.as_ref());
+    command.envs(&double_sets.additions);
+    for var in &double_sets.deletions {
+        command.env_remove(var);
+    }
+    command.envs(non_in_place_exports(
         &context.attach_ctx,
-        context.project_ctx.as_ref(),
         subsystem_verbosity,
         vars_from_env,
-    );
+    ));
     add_activate_script_options(&mut command, context, start_state_dir);
     command
 }
@@ -53,39 +58,31 @@ pub struct AttachDiff {
     ///
     /// It probably wouldn't hurt to double set them, but for variables we
     /// control, we currently skip that.
-    pub single_sets: HashMap<String, String>,
-    /// Variables that haven't yet been folded into either single or double sets
-    /// These are handled on a case by case basis in startup scripts
-    pub sets: HashMap<String, String>,
-    /// Variables that we set twice for non-in-place activations.
-    /// We set these:
+    single_sets: HashMap<String, String>,
+    /// Variables that haven't yet been folded into either single or double sets.
+    non_in_place_sets: HashMap<String, String>,
+    /// Variables that we set (or unset) twice for non-in-place activations.
+    /// We set (or unset) these:
     /// 1. As environment variables before we exec
     /// 2. Via our generated startup scripts, after user RC files have run.
     ///    This ensures we re-apply these variables after they could have been
     ///    changed, particularly if user RC files contain flox activations
-    pub double_sets: HashMap<String, String>,
-    /// Variables to unset from the command/shell.
-    pub removals: HashSet<String>,
+    double_sets: EnvDiff,
     /// Pre-encoded diff string for _FLOX_HOOK_DIFF. None if snapshot unavailable.
-    pub encoded_diff: Option<String>,
+    encoded_diff: Option<String>,
 }
 
 impl AttachDiff {
-    /// Assemble all environment variable sets and removals needed for
+    /// Assemble all environment variable sets and unsets needed for
     /// activation, and compute the activation diff if a pre-activation
     /// snapshot is available.
-    ///
-    /// Sources are applied in precedence order (later overrides earlier):
-    /// 1. `single_set_envs()` / `double_set_envs()` — FLOX_* context vars +
-    ///    default nix vars
-    /// 2. `collect_activate_exports()` — activation context vars
-    /// 3. `start_diff.additions` / `start_diff.deletions` — from activation scripts
     pub fn new(
         context: &AttachCtx,
         project: Option<&AttachProjectCtx>,
         subsystem_verbosity: u32,
         mut vars_from_env: VarsFromEnvironment,
         start_diff: &StartDiff,
+        is_in_place: bool,
     ) -> Result<Self> {
         // Extract the pre-activation snapshot before consuming vars_from_env.
         let full_env = vars_from_env.full_env.take();
@@ -94,40 +91,45 @@ impl AttachDiff {
             .into_iter()
             .map(|(k, v)| (k.to_string(), v))
             .collect();
-        let double_sets: HashMap<String, String> = double_set_envs(project)
-            .into_iter()
-            .map(|(k, v)| (k.to_string(), v))
-            .collect();
+        let mut double_sets = double_set_envs(context, project);
 
-        // Assemble sets and removals.
-        let mut sets: HashMap<String, String> = HashMap::new();
+        let mut non_in_place_sets: HashMap<String, String> = HashMap::new();
 
-        let (export_map, removal_list) =
-            collect_activate_exports(context, project, subsystem_verbosity, vars_from_env);
-        for (k, v) in export_map {
-            sets.insert(k.to_string(), v);
+        if !is_in_place {
+            for (k, v) in non_in_place_exports(context, subsystem_verbosity, vars_from_env) {
+                non_in_place_sets.insert(k.to_string(), v);
+            }
         }
 
-        for (k, v) in &start_diff.additions {
-            sets.insert(k.clone(), v.clone());
-        }
-
-        let mut removals: HashSet<String> = HashSet::new();
-        for k in &removal_list {
-            removals.insert(k.to_string());
-        }
-        for k in &start_diff.deletions {
-            removals.insert(k.clone());
-        }
+        // For now don't prevent users overriding our variables
+        double_sets.additions.extend(
+            start_diff
+                .additions()
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone())),
+        );
+        double_sets
+            .deletions
+            .extend(start_diff.deletions().iter().cloned());
 
         // Compute the activation diff if we have a pre-activation snapshot.
-        // Fold all three maps into the intended-sets union so the diff sees
-        // the same variables that will end up on the activated environment.
         let encoded_diff = if let Some(ref current_env) = full_env {
-            let mut intended_sets = sets.clone();
-            intended_sets.extend(single_sets.clone());
-            intended_sets.extend(double_sets.clone());
-            let diff = diff_env(current_env, &intended_sets, &removals);
+            let mut intended_sets = if is_in_place {
+                // These variables are computed by set-env-dirs and fix-paths,
+                // for which values must be computed dynamically at runtime
+                HashSet::from([
+                    FLOX_ENV_DIRS_VAR.to_string(),
+                    "PATH".to_string(),
+                    "MANPATH".to_string(),
+                ])
+            } else {
+                non_in_place_sets.keys().cloned().collect()
+            };
+            intended_sets.extend(single_sets.keys().cloned());
+            intended_sets.extend(double_sets.additions.keys().cloned());
+            let intended_removals: HashSet<String> =
+                double_sets.deletions.iter().cloned().collect();
+            let diff = diff_env(current_env, &intended_sets, &intended_removals);
             let encoded = diff.encode()?;
             debug!(
                 "captured activation diff: {} added, {} modified, {} removed ({} bytes encoded)",
@@ -143,28 +145,100 @@ impl AttachDiff {
 
         Ok(Self {
             single_sets,
-            sets,
+            non_in_place_sets,
             double_sets,
-            removals,
             encoded_diff,
         })
     }
 
     /// Apply the activation environment to a Command.
     ///
-    /// Sets all accumulated variables, removes all accumulated removals,
+    /// Sets all accumulated variables, removes all accumulated unsets,
     /// and sets the _FLOX_HOOK_DIFF env var if a diff was computed.
     pub fn apply_to_command(&self, command: &mut Command) {
-        command.envs(&self.sets);
+        command.envs(&self.non_in_place_sets);
         command.envs(&self.single_sets);
-        command.envs(&self.double_sets);
-        for var in &self.removals {
+        command.envs(&self.double_sets.additions);
+        for var in &self.double_sets.deletions {
             command.env_remove(var);
         }
         if let Some(ref encoded) = self.encoded_diff {
-            command.env(activation_diff::FLOX_HOOK_DIFF_VAR, encoded);
+            command.env(FLOX_HOOK_DIFF_VAR, encoded);
         }
     }
+
+    /// Generate statements that apply the environment in a gen_rc script
+    ///
+    /// This is the same as `apply_to_command` except:
+    /// - single_sets are skipped when not in in-place mode (since those have
+    ///   already been applied by apply_to_command)
+    /// - `sets`, which haven't yet been folded together
+    pub(crate) fn generate_statements(&self, is_in_place: bool) -> Vec<Statement> {
+        let mut stmts = Vec::new();
+        if is_in_place {
+            for (k, v) in self.single_sets.iter().sorted_by_key(|(k, _)| *k) {
+                stmts.push(set_exported_unexpanded(k, v));
+            }
+            if let Some(ref encoded) = self.encoded_diff {
+                stmts.push(set_exported_unexpanded(FLOX_HOOK_DIFF_VAR, encoded));
+            }
+        }
+        for (k, v) in self.double_sets.additions.iter().sorted_by_key(|(k, _)| *k) {
+            stmts.push(set_exported_unexpanded(k, v));
+        }
+        for name in self.double_sets.deletions.iter().sorted() {
+            stmts.push(unset(name));
+        }
+        stmts
+    }
+}
+
+// We define this here without `pub` so we don't accidentally export variables
+// in gen_rc that we don't capture for `flox deactivate`
+fn set_exported_unexpanded(name: impl AsRef<str>, value: impl AsRef<str>) -> Statement {
+    SetVar::exported_no_expansion(name, value).to_stmt()
+}
+
+// We define this here without `pub` so we don't accidentally export variables
+// in gen_rc that we don't capture for `flox deactivate`
+#[allow(dead_code)]
+fn set_exported_expanded(name: impl AsRef<str>, value: impl AsRef<str>) -> Statement {
+    SetVar::exported_with_expansion(name, value).to_stmt()
+}
+
+// We define this here without `pub` so we don't accidentally change variables
+// in gen_rc that we don't capture for `flox deactivate`
+fn unset(name: impl AsRef<str>) -> Statement {
+    UnsetVar::new(name).to_stmt()
+}
+
+// ─── Inline set/unset NOT yet folded into AttachDiff ────────────────────────
+// Each call to a `todo_drop_*` helper below is a marker for an emission this
+// refactor deferred. Move each caller into `AttachDiff::generate_statements`
+// (or its inputs) and delete the corresponding shim when the last caller is
+// gone.
+//
+// Helper-routed inline leaks:
+//   • `_activate_d`           — gen_rc/{bash,fish,tcsh}.rs (export)
+//   • `_flox_activations`     — gen_rc/{bash,fish,tcsh}.rs (export)
+//   • `_flox_activate_tracer` — gen_rc/{bash,fish,tcsh}.rs (export, via args.flox_activate_tracer)
+//   • `_flox_sourcing_rc`     — gen_rc/bash.rs            (export + unset, bashrc-sourcing dance)
+//   • `fish_trace` (opener)   — gen_rc/fish.rs            (export, when tracelevel ≥ 2)
+//
+// Zsh emits no exports inline — its `_flox_activate_tracelevel` and
+// `_activate_d` go through the non-export `set_unexported_unexpanded` helper,
+// which is NOT moving out of `shell_gen`.
+// ────────────────────────────────────────────────────────────────────────────
+
+pub(crate) fn todo_drop_set_exported_unexpanded(
+    name: impl AsRef<str>,
+    value: impl AsRef<str>,
+) -> Statement {
+    SetVar::exported_no_expansion(name, value).to_stmt()
+}
+
+pub(crate) fn todo_drop_unset(name: impl AsRef<str>) -> Statement {
+    UnsetVar::new(name).to_stmt()
 }
 
 /// Compute the diff between the current environment and the intended
@@ -173,17 +247,17 @@ impl AttachDiff {
 /// `intended_sets` and `intended_removals` are pre-assembled by the caller.
 fn diff_env(
     current_env: &HashMap<String, String>,
-    intended_sets: &HashMap<String, String>,
+    intended_sets: &HashSet<String>,
     intended_removals: &HashSet<String>,
 ) -> DiffSerializer {
-    let mut added = HashMap::new();
+    let mut added = HashSet::new();
     let mut modified = HashMap::new();
     let mut removed = HashMap::new();
 
-    for (k, new_val) in intended_sets {
+    for k in intended_sets {
         match current_env.get(k) {
             None => {
-                added.insert(k.clone(), new_val.clone());
+                added.insert(k.clone());
             },
             Some(old_val) => {
                 modified.insert(k.clone(), old_val.clone());
@@ -227,13 +301,38 @@ pub fn single_set_envs(context: &AttachCtx) -> HashMap<&'static str, String> {
     exports
 }
 
-pub fn double_set_envs(project: Option<&AttachProjectCtx>) -> HashMap<&'static str, String> {
-    HashMap::from([(
-        FLOX_ACTIVATE_START_SERVICES_VAR,
-        project
-            .is_some_and(|p| !p.services_to_start.is_empty())
-            .to_string(),
-    )])
+pub fn double_set_envs(context: &AttachCtx, project: Option<&AttachProjectCtx>) -> EnvDiff {
+    let mut deletions = Vec::new();
+    let mut exports = HashMap::from([
+        (
+            FLOX_ACTIVATE_START_SERVICES_VAR,
+            project
+                .is_some_and(|p| !p.services_to_start.is_empty())
+                .to_string(),
+        ),
+        // Propagate required variables that are documented as exposed.
+        ("FLOX_ENV", context.env.clone()),
+        (
+            "FLOX_ENV_CACHE",
+            context.env_cache.to_string_lossy().to_string(),
+        ),
+        ("FLOX_ENV_DESCRIPTION", context.env_description.clone()),
+    ]);
+    // Propagate optional variables that are documented as exposed.
+    if let Some(project) = project {
+        exports.insert(
+            "FLOX_ENV_PROJECT",
+            project.env_project.to_string_lossy().to_string(),
+        );
+    } else {
+        deletions.push("FLOX_ENV_PROJECT".to_string());
+    }
+
+    let additions = exports
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+    EnvDiff::from_parts(additions, deletions)
 }
 
 /// Options parsed by getopt in the activate script
@@ -254,50 +353,16 @@ fn add_activate_script_options(
     }
 }
 
-/// Prior to the refactor, these variables were exported in the activate script
-// TODO: we still use std::env::var in this function,
-// so we should either drop those uses and get those vars in VarsFromEnvironment,
-// or we should completely drop VarsFromEnvironment .
-fn add_old_activate_script_exports(
-    command: &mut Command,
+/// _flox_activate_tracelevel, _flox_activate_tracer, and _activate_d still need some cleanup
+/// fixed_vars_to_export are used for interactive activations but are handled
+/// differently for in-place activations
+pub fn non_in_place_exports(
     context: &AttachCtx,
-    project: Option<&AttachProjectCtx>,
     subsystem_verbosity: u32,
     vars_from_environment: VarsFromEnvironment,
-) {
-    let (exports, removals) =
-        collect_activate_exports(context, project, subsystem_verbosity, vars_from_environment);
-    command.envs(&exports);
-    for var in &removals {
-        command.env_remove(var);
-    }
-}
-
-/// Collect the environment variables that should be set and unset for activation.
-///
-/// Returns a tuple of (exports, removals) where exports maps variable names to
-/// values and removals is a list of variable names to unset.
-///
-/// This is split out from `add_old_activate_script_exports` so that the data
-/// can be inspected independently — for example when computing the activation diff.
-pub fn collect_activate_exports(
-    context: &AttachCtx,
-    project: Option<&AttachProjectCtx>,
-    subsystem_verbosity: u32,
-    vars_from_environment: VarsFromEnvironment,
-) -> (HashMap<&'static str, String>, Vec<&'static str>) {
-    let mut removals = Vec::new();
+) -> HashMap<&'static str, String> {
     let mut exports = HashMap::from([
         ("_flox_activate_tracelevel", subsystem_verbosity.to_string()),
-        // Propagate required variables that are documented as exposed.
-        ("FLOX_ENV", context.env.clone()),
-        (
-            "FLOX_ENV_CACHE",
-            context.env_cache.to_string_lossy().to_string(),
-        ),
-        ("FLOX_ENV_DESCRIPTION", context.env_description.clone()),
-        // These are used by various scripts...custom ZDOTDIR files, set-prompt,
-        // .tcshrc
         (
             "_flox_activate_tracer",
             activate_tracer(&context.interpreter_path),
@@ -311,20 +376,8 @@ pub fn collect_activate_exports(
                 .to_string(),
         ),
     ]);
-    // Propagate optional variables that are documented as exposed.
-    // NB: `generate_*_start_commands()` performs the same logic except for zsh.
-    if let Some(project) = project {
-        exports.insert(
-            "FLOX_ENV_PROJECT",
-            project.env_project.to_string_lossy().to_string(),
-        );
-    } else {
-        removals.push("FLOX_ENV_PROJECT");
-    }
-
     exports.extend(fixed_vars_to_export(&context.env, vars_from_environment));
-
-    (exports, removals)
+    exports
 }
 
 /// Calculate values for FLOX_ENV_DIRS, PATH, and MANPATH
@@ -388,17 +441,17 @@ mod tests {
             .collect()
     }
 
-    fn make_removals(keys: &[&str]) -> HashSet<String> {
+    fn make_keys(keys: &[&str]) -> HashSet<String> {
         keys.iter().map(|k| k.to_string()).collect()
     }
 
     #[test]
     fn compute_additions() {
         let current = make_env(&[("EXISTING", "value")]);
-        let sets = make_env(&[("NEW_VAR", "new_value")]);
-        let diff = diff_env(&current, &sets, &make_removals(&[]));
+        let sets = make_keys(&["NEW_VAR"]);
+        let diff = diff_env(&current, &sets, &make_keys(&[]));
 
-        assert_eq!(diff.added, make_env(&[("NEW_VAR", "new_value")]));
+        assert_eq!(diff.added, make_keys(&["NEW_VAR"]));
         assert!(diff.modified.is_empty());
         assert!(diff.removed.is_empty());
     }
@@ -406,8 +459,8 @@ mod tests {
     #[test]
     fn compute_modifications() {
         let current = make_env(&[("MY_VAR", "old_value")]);
-        let sets = make_env(&[("MY_VAR", "new_value")]);
-        let diff = diff_env(&current, &sets, &make_removals(&[]));
+        let sets = make_keys(&["MY_VAR"]);
+        let diff = diff_env(&current, &sets, &make_keys(&[]));
 
         // modified stores original value
         assert!(diff.added.is_empty());
@@ -418,7 +471,7 @@ mod tests {
     #[test]
     fn compute_removals() {
         let current = make_env(&[("GONE_VAR", "gone_value")]);
-        let diff = diff_env(&current, &HashMap::new(), &make_removals(&["GONE_VAR"]));
+        let diff = diff_env(&current, &HashSet::new(), &make_keys(&["GONE_VAR"]));
 
         // removed stores original value
         assert!(diff.added.is_empty());
@@ -429,10 +482,10 @@ mod tests {
     #[test]
     fn compute_mixed() {
         let current = make_env(&[("MODIFIED_VAR", "orig"), ("REMOVED_VAR", "to_remove")]);
-        let sets = make_env(&[("NEW_VAR", "new"), ("MODIFIED_VAR", "changed")]);
-        let diff = diff_env(&current, &sets, &make_removals(&["REMOVED_VAR"]));
+        let sets = make_keys(&["NEW_VAR", "MODIFIED_VAR"]);
+        let diff = diff_env(&current, &sets, &make_keys(&["REMOVED_VAR"]));
 
-        assert_eq!(diff.added, make_env(&[("NEW_VAR", "new")]));
+        assert_eq!(diff.added, make_keys(&["NEW_VAR"]));
         assert_eq!(diff.modified, make_env(&[("MODIFIED_VAR", "orig")]));
         assert_eq!(diff.removed, make_env(&[("REMOVED_VAR", "to_remove")]));
     }
@@ -442,8 +495,8 @@ mod tests {
         let current = make_env(&[("UNCHANGED", "value")]);
         // Even when old == new, we track in modified so deactivation can
         // restore the original value if the user changes the var manually.
-        let sets = make_env(&[("UNCHANGED", "value")]);
-        let diff = diff_env(&current, &sets, &make_removals(&[]));
+        let sets = make_keys(&["UNCHANGED"]);
+        let diff = diff_env(&current, &sets, &make_keys(&[]));
 
         assert!(diff.added.is_empty());
         assert_eq!(diff.modified, make_env(&[("UNCHANGED", "value")]));
