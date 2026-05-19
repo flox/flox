@@ -49,7 +49,7 @@ use tracing::{debug, info_span, instrument, span, warn};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
-use crate::commands::activate::Activate;
+use crate::commands::activate::ActivateOptions;
 use crate::commands::{
     ConcreteEnvironment,
     EnvironmentSelectError,
@@ -671,7 +671,7 @@ fn package_list_for_prompt(packages: &[PackageToInstall]) -> Option<String> {
 }
 
 fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
-    let shell = Activate::detect_shell_for_in_place()?;
+    let shell = ActivateOptions::detect_shell_for_in_place()?;
     let shell_cmd = match shell {
         // TODO: should we use source <(flox activate --default) for bash?
         // There are unicode quoting issues with the current form

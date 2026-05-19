@@ -24,7 +24,7 @@ use super::{
     UninitializedEnvironment,
     activated_environments,
 };
-use crate::commands::activate::{Activate, CommandSelect};
+use crate::commands::activate::{ActivateOptions, CommandSelect};
 use crate::commands::display_help;
 use crate::config::Config;
 use crate::utils::message;
@@ -358,7 +358,7 @@ fn processes_by_name_or_default_to_all<'a>(
 pub async fn start_services_with_new_process_compose(
     config: Config,
     flox: Flox,
-    environment_select: EnvironmentSelect,
+    _environment_select: EnvironmentSelect,
     mut concrete_environment: ConcreteEnvironment,
     activate_mode: ActivateMode,
     names: &[String],
@@ -396,9 +396,7 @@ pub async fn start_services_with_new_process_compose(
         names.to_vec()
     };
 
-    Activate {
-        auto_activation_subcommand: None,
-        environment: environment_select,
+    ActivateOptions {
         // We currently only check for trust for remote environments,
         // but set this to false in case that changes.
         trust: false,
