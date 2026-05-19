@@ -144,3 +144,9 @@ pub enum InvocationType {
     #[display("execcommand")]
     ExecCommand(Vec<String>),
 }
+
+impl InvocationType {
+    pub fn is_in_place(&self) -> bool {
+        matches!(self, Self::InPlace)
+    }
+}

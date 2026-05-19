@@ -3,6 +3,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
+use flox_core::activate::context::InvocationType;
 use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file};
 
 use crate::attach_diff::AttachDiff;
@@ -13,7 +14,7 @@ use crate::gen_rc::RM;
 pub struct ZshStartupArgs {
     pub flox_activate_tracelevel: u32,
     pub activate_d: PathBuf,
-    pub is_in_place: bool,
+    pub invocation_type: InvocationType,
     pub clean_up: Option<PathBuf>,
     pub auto_activate: bool,
     pub flox_bin: String,
@@ -35,7 +36,7 @@ pub fn generate_zsh_startup_commands(
         args.activate_d.display().to_string(),
     ));
 
-    stmts.extend(attach_diff.generate_statements(args.is_in_place));
+    stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
 
     stmts.push(source_file(args.activate_d.join("zsh")));
 

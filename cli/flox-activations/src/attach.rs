@@ -133,6 +133,7 @@ pub(crate) fn startup_ctx(
         subsystem_verbosity,
         vars_from_env,
         &start_diff,
+        invocation_type.is_in_place(),
     )?;
 
     let set_prompt = ctx.attach_ctx.set_prompt;
@@ -142,7 +143,7 @@ pub(crate) fn startup_ctx(
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-            is_in_place: invocation_type == InvocationType::InPlace,
+            invocation_type,
             bashrc_path,
             flox_sourcing_rc: is_sourcing_rc,
             flox_activate_tracer: activate_tracer.to_string(),
@@ -156,7 +157,7 @@ pub(crate) fn startup_ctx(
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-            is_in_place: invocation_type == InvocationType::InPlace,
+            invocation_type,
             flox_sourcing_rc: is_sourcing_rc,
             flox_activate_tracer: activate_tracer.to_string(),
             flox_activations,
@@ -170,7 +171,7 @@ pub(crate) fn startup_ctx(
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-            is_in_place: invocation_type == InvocationType::InPlace,
+            invocation_type,
             flox_sourcing_rc: is_sourcing_rc,
             flox_activate_tracer: activate_tracer.to_string(),
             flox_activations,
@@ -182,7 +183,7 @@ pub(crate) fn startup_ctx(
         ShellWithPath::Zsh(_) => StartupArgs::Zsh(ZshStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
-            is_in_place: invocation_type == InvocationType::InPlace,
+            invocation_type,
             clean_up,
             auto_activate: ctx.auto_activate,
             flox_bin: ctx.flox_bin.clone(),

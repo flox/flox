@@ -3,6 +3,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
+use flox_core::activate::context::InvocationType;
 use shell_gen::{GenerateShell, Shell, source_file};
 
 use crate::attach_diff::{AttachDiff, todo_drop_set_exported_unexpanded, todo_drop_unset};
@@ -14,7 +15,7 @@ pub struct BashStartupArgs {
     pub flox_activate_tracelevel: u32,
     pub activate_d: PathBuf,
     pub flox_env: PathBuf,
-    pub is_in_place: bool,
+    pub invocation_type: InvocationType,
     pub clean_up: Option<PathBuf>,
 
     // Some(_) if it exists, None otherwise
@@ -44,7 +45,8 @@ pub fn generate_bash_startup_commands(
 
     // The bashrc-sourcing dance must come before `attach_diff.generate_statements`
     // so a `flox activate` inside .bashrc can't override values
-    let should_source = args.bashrc_path.is_some() && !args.is_in_place && !args.flox_sourcing_rc;
+    let should_source =
+        args.bashrc_path.is_some() && !args.invocation_type.is_in_place() && !args.flox_sourcing_rc;
     if should_source {
         stmts.push(todo_drop_set_exported_unexpanded(
             "_flox_sourcing_rc",
@@ -54,7 +56,7 @@ pub fn generate_bash_startup_commands(
         stmts.push(todo_drop_unset("_flox_sourcing_rc"));
     }
 
-    stmts.extend(attach_diff.generate_statements(args.is_in_place));
+    stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
 
     stmts.push(todo_drop_set_exported_unexpanded(
         "_activate_d",
