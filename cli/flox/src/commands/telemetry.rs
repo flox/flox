@@ -1,13 +1,15 @@
-/// Token telemetry for the Flox Agent prototype.
-///
-/// Emits structured events to a local JSONL file that a background process
-/// (or the FloxHub agent) can tail and forward to FloxHub.  Direct HTTP
-/// posting is left as a future enhancement; the local file lets the demo
-/// work end-to-end even without a running FloxHub.
-///
-/// File location: $FLOX_AGENT_TELEMETRY_FILE or ~/.cache/flox/agent-telemetry.jsonl
+//! Token telemetry for the Flox Agent prototype.
+//!
+//! Emits structured events to a local JSONL file that a background process
+//! (or the FloxHub agent) can tail and forward to FloxHub.  Direct HTTP
+//! posting is left as a future enhancement; the local file lets the demo
+//! work end-to-end even without a running FloxHub.
+//!
+//! File location: $FLOX_AGENT_TELEMETRY_FILE or ~/.cache/flox/agent-telemetry.jsonl
+//! Prototype module — public API not yet wired into commands.
+#![allow(dead_code)]
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -40,7 +42,7 @@ pub enum TelemetryEventType {
 }
 
 /// Emit a telemetry event.  Fire-and-forget: failures are logged but not propagated.
-pub fn emit(cache_dir: &PathBuf, event: TelemetryEvent) {
+pub fn emit(cache_dir: &Path, event: TelemetryEvent) {
     let log_path = telemetry_log_path(cache_dir);
 
     let json = match serde_json::to_string(&event) {
@@ -57,14 +59,14 @@ pub fn emit(cache_dir: &PathBuf, event: TelemetryEvent) {
     }
 }
 
-fn telemetry_log_path(cache_dir: &PathBuf) -> PathBuf {
+fn telemetry_log_path(cache_dir: &Path) -> PathBuf {
     std::env::var("FLOX_AGENT_TELEMETRY_FILE")
         .ok()
         .map(PathBuf::from)
         .unwrap_or_else(|| cache_dir.join("agent-telemetry.jsonl"))
 }
 
-fn append_to_local_log(path: &PathBuf, json: &str) -> anyhow::Result<()> {
+fn append_to_local_log(path: &Path, json: &str) -> anyhow::Result<()> {
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
