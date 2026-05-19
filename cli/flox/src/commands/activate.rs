@@ -691,16 +691,16 @@ impl Activate {
             .await
             .context("Failed to find environment")?;
 
-        let env_path = concrete_environment.parent_path()?;
-
-        let (preference, verb) = match subcommand {
-            AutoActivationSubcommand::Allow => (AutoActivationPreference::Allow, "allowed"),
-            AutoActivationSubcommand::Deny => (AutoActivationPreference::Deny, "denied"),
+        let verb = match subcommand {
+            AutoActivationSubcommand::Allow => {
+                allow(&config, &concrete_environment)?;
+                "allowed"
+            },
+            AutoActivationSubcommand::Deny => {
+                deny(&config, &concrete_environment)?;
+                "denied"
+            },
         };
-
-        let path_str = env_path.display().to_string();
-        let key = format!("auto_activate_environments.{}", path_str);
-        update_config(&config.flox.config_dir, key, Some(preference))?;
 
         let description = environment_description(&concrete_environment)?;
         message::updated(formatdoc! {"
@@ -892,6 +892,50 @@ fn notify_environment_upgrades(
     Ok(())
 }
 
+/// Allow auto-activation for an environment by updating the config.
+///
+/// Writes the allow preference to the config file for the environment's parent path.
+pub fn allow(config: &Config, concrete_environment: &ConcreteEnvironment) -> Result<()> {
+    let env_path = concrete_environment.parent_path()?;
+    let path_str = env_path.display().to_string();
+    let key = format!("auto_activate_environments.{}", path_str);
+    update_config(
+        &config.flox.config_dir,
+        key,
+        Some(AutoActivationPreference::Allow),
+    )?;
+    Ok(())
+}
+
+/// Deny auto-activation for an environment by updating the config.
+///
+/// Writes the deny preference to the config file for the environment's parent path.
+pub fn deny(config: &Config, concrete_environment: &ConcreteEnvironment) -> Result<()> {
+    let env_path = concrete_environment.parent_path()?;
+    let path_str = env_path.display().to_string();
+    let key = format!("auto_activate_environments.{}", path_str);
+    update_config(
+        &config.flox.config_dir,
+        key,
+        Some(AutoActivationPreference::Deny),
+    )?;
+    Ok(())
+}
+
+/// Check if auto-activation is allowed for an environment.
+///
+/// Returns true if the environment is explicitly allowed or has no preference set.
+/// Returns false if the environment is explicitly denied.
+pub fn is_allowed(config: &Config, concrete_environment: &ConcreteEnvironment) -> Result<bool> {
+    let env_path = concrete_environment.parent_path()?;
+    let preference = config.flox.auto_activate_environments.get(&env_path);
+
+    match preference {
+        Some(AutoActivationPreference::Deny) => Ok(false),
+        Some(AutoActivationPreference::Allow) | None => Ok(true),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::LazyLock;
@@ -1058,6 +1102,7 @@ mod upgrade_notification_tests {
     #[test]
     fn no_notification_printed_if_absent() {
         let (flox, _tempdir) = flox_instance();
+        
         let (subscriber, writer) = test_subscriber_message_only();
 
         let environment =
