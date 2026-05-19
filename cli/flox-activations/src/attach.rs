@@ -17,11 +17,11 @@ use tracing::debug;
 use crate::attach_diff::{AttachDiff, activate_tracer};
 use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
 use crate::cli::attach::{AttachArgs, AttachExclusiveArgs};
-use crate::gen_rc::bash::{BashStartupArgs, generate_bash_startup_commands};
-use crate::gen_rc::fish::{FishStartupArgs, generate_fish_startup_commands};
-use crate::gen_rc::tcsh::{TcshStartupArgs, generate_tcsh_startup_commands};
-use crate::gen_rc::zsh::{ZshStartupArgs, generate_zsh_startup_commands};
-use crate::gen_rc::{StartupArgs, StartupCtx};
+use crate::gen_rc::bash::{BashStartupArgs, generate_bash_profile_commands};
+use crate::gen_rc::fish::{FishStartupArgs, generate_fish_profile_commands};
+use crate::gen_rc::tcsh::{TcshStartupArgs, generate_tcsh_profile_commands};
+use crate::gen_rc::zsh::{ZshStartupArgs, generate_zsh_profile_commands};
+use crate::gen_rc::{Action, ShellStartupArgs, StartupCtx};
 use crate::start_diff::StartDiff;
 use crate::vars_from_env::VarsFromEnvironment;
 
@@ -137,7 +137,7 @@ pub(crate) fn startup_ctx(
     let set_prompt = ctx.attach_ctx.set_prompt;
 
     let args = match ctx.shell {
-        ShellWithPath::Bash(_) => StartupArgs::Bash(BashStartupArgs {
+        ShellWithPath::Bash(_) => ShellStartupArgs::Bash(BashStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
@@ -151,7 +151,7 @@ pub(crate) fn startup_ctx(
             flox_bin: ctx.flox_bin.clone(),
             set_prompt,
         }),
-        ShellWithPath::Fish(_) => StartupArgs::Fish(FishStartupArgs {
+        ShellWithPath::Fish(_) => ShellStartupArgs::Fish(FishStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
@@ -165,7 +165,7 @@ pub(crate) fn startup_ctx(
             auto_activate_fish_mode: ctx.auto_activate_fish_mode,
             set_prompt,
         }),
-        ShellWithPath::Tcsh(_) => StartupArgs::Tcsh(TcshStartupArgs {
+        ShellWithPath::Tcsh(_) => ShellStartupArgs::Tcsh(TcshStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
@@ -178,7 +178,7 @@ pub(crate) fn startup_ctx(
             flox_bin: ctx.flox_bin.clone(),
             set_prompt,
         }),
-        ShellWithPath::Zsh(_) => StartupArgs::Zsh(ZshStartupArgs {
+        ShellWithPath::Zsh(_) => ShellStartupArgs::Zsh(ZshStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             invocation_type,
@@ -198,18 +198,35 @@ pub(crate) fn startup_ctx(
 }
 
 pub(crate) fn write_to_writer(ctx: &StartupCtx, writer: &mut impl std::io::Write) -> Result<()> {
-    match ctx.args {
-        StartupArgs::Bash(ref args) => {
-            generate_bash_startup_commands(args, &ctx.attach_diff, writer)?
+    let attach_diff = ctx.attach_diff.clone();
+    match &ctx.args {
+        ShellStartupArgs::Bash(args) => {
+            let action = Action::Activate {
+                args: args.clone(),
+                attach_diff,
+            };
+            generate_bash_profile_commands(&action, writer)?
         },
-        StartupArgs::Fish(ref args) => {
-            generate_fish_startup_commands(args, &ctx.attach_diff, writer)?
+        ShellStartupArgs::Fish(args) => {
+            let action = Action::Activate {
+                args: args.clone(),
+                attach_diff,
+            };
+            generate_fish_profile_commands(&action, writer)?
         },
-        StartupArgs::Tcsh(ref args) => {
-            generate_tcsh_startup_commands(args, &ctx.attach_diff, writer)?
+        ShellStartupArgs::Tcsh(args) => {
+            let action = Action::Activate {
+                args: args.clone(),
+                attach_diff,
+            };
+            generate_tcsh_profile_commands(&action, writer)?
         },
-        StartupArgs::Zsh(ref args) => {
-            generate_zsh_startup_commands(args, &ctx.attach_diff, writer)?
+        ShellStartupArgs::Zsh(args) => {
+            let action = Action::Activate {
+                args: args.clone(),
+                attach_diff,
+            };
+            generate_zsh_profile_commands(&action, writer)?
         },
     }
     Ok(())

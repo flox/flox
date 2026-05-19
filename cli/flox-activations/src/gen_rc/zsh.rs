@@ -6,8 +6,7 @@ use anyhow::Result;
 use flox_core::activate::context::InvocationType;
 use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file};
 
-use crate::attach_diff::AttachDiff;
-use crate::gen_rc::RM;
+use crate::gen_rc::{Action, RM};
 
 /// Arguments for generating zsh startup commands
 #[derive(Debug, Clone)]
@@ -21,41 +20,79 @@ pub struct ZshStartupArgs {
     pub set_prompt: bool,
 }
 
-pub fn generate_zsh_startup_commands(
-    args: &ZshStartupArgs,
-    attach_diff: &AttachDiff,
+pub fn generate_zsh_profile_commands(
+    action: &Action<ZshStartupArgs>,
     writer: &mut impl Write,
 ) -> Result<()> {
     let mut stmts = vec![];
-    stmts.push(set_unexported_unexpanded(
-        "_flox_activate_tracelevel",
-        format!("{}", &args.flox_activate_tracelevel),
-    ));
-    stmts.push(set_unexported_unexpanded(
-        "_activate_d",
-        args.activate_d.display().to_string(),
-    ));
 
-    stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
-
-    stmts.push(source_file(args.activate_d.join("zsh")));
-
-    // Set the prompt if we're in an interactive shell.
-    if args.set_prompt {
-        let set_prompt_path = args.activate_d.join("set-prompt.zsh");
-        stmts.push(
-            format!(
-                "if [[ -o interactive ]]; then source '{}'; fi;",
-                set_prompt_path.display()
-            )
-            .to_stmt(),
-        );
+    match action {
+        Action::Activate { args, .. } => {
+            stmts.push(set_unexported_unexpanded(
+                "_flox_activate_tracelevel",
+                format!("{}", &args.flox_activate_tracelevel),
+            ));
+            stmts.push(set_unexported_unexpanded(
+                "_activate_d",
+                args.activate_d.display().to_string(),
+            ));
+        },
+        Action::Deactivate => {
+            // TODO: we might not need to set these in the first place
+        },
     }
 
-    if let Some(path) = args.clean_up.as_ref() {
-        let path_str = path.to_string_lossy();
-        let escaped_path = shell_escape::escape(Cow::Borrowed(path_str.as_ref()));
-        stmts.push(format!("{RM} {};", escaped_path).to_stmt());
+    // Environment variables
+    match action {
+        Action::Activate { args, attach_diff } => {
+            stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
+        },
+        Action::Deactivate => {
+            // TODO: decode `_FLOX_HOOK_DIFF` and emit restores.
+        },
+    }
+
+    // Source the zsh activate.d entry point
+    match action {
+        Action::Activate { args, .. } => {
+            stmts.push(source_file(args.activate_d.join("zsh")));
+        },
+        Action::Deactivate => {
+            // TODO: undo everything in activate_d/zsh
+        },
+    }
+
+    // Set the prompt if we're in an interactive shell.
+    match action {
+        Action::Activate { args, .. } => {
+            if args.set_prompt {
+                let set_prompt_path = args.activate_d.join("set-prompt.zsh");
+                stmts.push(
+                    format!(
+                        "if [[ -o interactive ]]; then source '{}'; fi;",
+                        set_prompt_path.display()
+                    )
+                    .to_stmt(),
+                );
+            }
+        },
+        Action::Deactivate => {
+            // TODO: revert the prompt.
+        },
+    }
+
+    // Self-destruct rc file
+    match action {
+        Action::Activate { args, .. } => {
+            if let Some(path) = args.clean_up.as_ref() {
+                let path_str = path.to_string_lossy();
+                let escaped_path = shell_escape::escape(Cow::Borrowed(path_str.as_ref()));
+                stmts.push(format!("{RM} {};", escaped_path).to_stmt());
+            }
+        },
+        Action::Deactivate => {
+            // No-op: deactivate has no rc file to remove.
+        },
     }
 
     // N.B. the output of these scripts may be eval'd with backticks which have
@@ -65,13 +102,21 @@ pub fn generate_zsh_startup_commands(
         stmt.generate_with_newline(Shell::Zsh, writer)?;
     }
 
-    if args.auto_activate
-        && matches!(
-            args.invocation_type,
-            InvocationType::Interactive | InvocationType::InPlace
-        )
-    {
-        write!(writer, "{}", crate::hook::zsh_hook(&args.flox_bin))?;
+    // Auto-activate hook registration
+    match action {
+        Action::Activate { args, .. } => {
+            if args.auto_activate
+                && matches!(
+                    args.invocation_type,
+                    InvocationType::Interactive | InvocationType::InPlace
+                )
+            {
+                write!(writer, "{}", crate::hook::zsh_hook(&args.flox_bin))?;
+            }
+        },
+        Action::Deactivate => {
+            // TODO: unregister the auto-activate hook
+        },
     }
 
     Ok(())
@@ -93,6 +138,13 @@ mod tests {
         let shell = ShellWithPath::Zsh(PathBuf::from("/bin/zsh"));
         let ctx = test_startup_ctx(shell, is_in_place);
         render_normalized(&ctx)
+    }
+
+    fn render_deactivate() -> String {
+        let action = Action::<ZshStartupArgs>::Deactivate;
+        let mut buf = Vec::new();
+        generate_zsh_profile_commands(&action, &mut buf).expect("generator should succeed");
+        String::from_utf8(buf).expect("output should be utf-8")
     }
 
     #[test]
@@ -139,5 +191,11 @@ mod tests {
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
         "#]]
         .assert_eq(&output);
+    }
+
+    #[test]
+    fn generate_zsh_profile_commands_deactivate() {
+        let output = render_deactivate();
+        expect![""].assert_eq(&output);
     }
 }

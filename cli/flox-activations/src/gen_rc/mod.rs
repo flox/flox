@@ -16,8 +16,15 @@ pub mod fish;
 pub mod tcsh;
 pub mod zsh;
 
+/// Struct to container arguments needed by generate_*_profile_commands
 #[derive(Debug, Clone)]
-pub enum StartupArgs {
+pub enum Action<A> {
+    Activate { args: A, attach_diff: AttachDiff },
+    Deactivate,
+}
+
+#[derive(Debug, Clone)]
+pub enum ShellStartupArgs {
     Bash(BashStartupArgs),
     Fish(FishStartupArgs),
     Tcsh(TcshStartupArgs),
@@ -27,7 +34,7 @@ pub enum StartupArgs {
 /// Context for shell startup, shared between normal and container activations.
 #[derive(Debug)]
 pub struct StartupCtx {
-    pub args: StartupArgs,
+    pub args: ShellStartupArgs,
     pub rc_path: Option<PathBuf>,
     pub act_ctx: ActivateCtx,
     pub attach_diff: AttachDiff,

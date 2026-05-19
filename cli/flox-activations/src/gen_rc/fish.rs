@@ -6,8 +6,8 @@ use anyhow::Result;
 use flox_core::activate::context::{AutoActivateFishMode, InvocationType};
 use shell_gen::{GenerateShell, Shell};
 
-use crate::attach_diff::{AttachDiff, todo_drop_set_exported_unexpanded};
-use crate::gen_rc::RM;
+use crate::attach_diff::todo_drop_set_exported_unexpanded;
+use crate::gen_rc::{Action, RM};
 
 /// Arguments for generating fish startup commands
 #[derive(Debug, Clone)]
@@ -31,16 +31,22 @@ pub struct FishStartupArgs {
 // N.B. the output of these scripts may be eval'd with backticks which have
 // the effect of removing newlines from the output, so we must ensure that
 // the output is a valid shell script fragment when represented on a single line.
-pub fn generate_fish_startup_commands(
-    args: &FishStartupArgs,
-    attach_diff: &AttachDiff,
+pub fn generate_fish_profile_commands(
+    action: &Action<FishStartupArgs>,
     writer: &mut impl Write,
 ) -> Result<()> {
     let mut stmts = vec![];
 
     // Enable trace mode if requested
-    if args.flox_activate_tracelevel >= 2 {
-        stmts.push(todo_drop_set_exported_unexpanded("fish_trace", "1").to_stmt());
+    match action {
+        Action::Activate { args, .. } => {
+            if args.flox_activate_tracelevel >= 2 {
+                stmts.push(todo_drop_set_exported_unexpanded("fish_trace", "1").to_stmt());
+            }
+        },
+        Action::Deactivate => {
+            // TODO: emit `set -gx fish_trace 1` when tracelevel >= 2
+        },
     }
 
     // The fish --init-command option allows us to source our startup
@@ -48,92 +54,154 @@ pub fn generate_fish_startup_commands(
     // is no requirement to go back and source the user's own config
     // as we do in bash.
 
-    stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
+    // Environment variables
+    match action {
+        Action::Activate { args, attach_diff } => {
+            stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
+        },
+        Action::Deactivate => {
+            // TODO: decode `_FLOX_HOOK_DIFF` and emit restores.
+        },
+    }
 
-    stmts.push(todo_drop_set_exported_unexpanded(
-        "_activate_d",
-        args.activate_d.display().to_string(),
-    ));
-    stmts.push(todo_drop_set_exported_unexpanded(
-        "_flox_activations",
-        args.flox_activations.display().to_string(),
-    ));
-    stmts.push(todo_drop_set_exported_unexpanded(
-        "_flox_activate_tracer",
-        &args.flox_activate_tracer,
-    ));
+    match action {
+        Action::Activate { args, .. } => {
+            stmts.push(todo_drop_set_exported_unexpanded(
+                "_activate_d",
+                args.activate_d.display().to_string(),
+            ));
+            stmts.push(todo_drop_set_exported_unexpanded(
+                "_flox_activations",
+                args.flox_activations.display().to_string(),
+            ));
+            stmts.push(todo_drop_set_exported_unexpanded(
+                "_flox_activate_tracer",
+                &args.flox_activate_tracer,
+            ));
+        },
+        Action::Deactivate => {
+            // TODO: we shouldn't be exporting these in the first place
+        },
+    }
 
     // Set the prompt if we're in an interactive shell.
-    if args.set_prompt {
-        let set_prompt_path = args.activate_d.join("set-prompt.fish");
-        stmts.push(format!("if isatty 1; source '{}'; end;", set_prompt_path.display()).to_stmt());
+    match action {
+        Action::Activate { args, .. } => {
+            if args.set_prompt {
+                let set_prompt_path = args.activate_d.join("set-prompt.fish");
+                stmts.push(
+                    format!("if isatty 1; source '{}'; end;", set_prompt_path.display()).to_stmt(),
+                );
+            }
+        },
+        Action::Deactivate => {
+            // TODO: revert the prompt.
+        },
     }
 
     // We already customized the PATH and MANPATH, but the user and system
     // dotfiles may have changed them, so finish by doing this again.
-
+    //
     // fish doesn't have {foo:-} syntax, so we need to provide a temporary variable
     // (foo_with_default) that is either the runtime (not generation-time) value
     // or the string 'empty'.
-    stmts.push(
-        r#"set -gx FLOX_ENV_DIRS (if set -q FLOX_ENV_DIRS; echo "$FLOX_ENV_DIRS"; else; echo empty; end);"#.to_stmt()
-    );
+    match action {
+        Action::Activate { args, .. } => {
+            stmts.push(
+                r#"set -gx FLOX_ENV_DIRS (if set -q FLOX_ENV_DIRS; echo "$FLOX_ENV_DIRS"; else; echo empty; end);"#.to_stmt()
+            );
 
-    stmts.push(
-        format!(
-            r#"{} set-env-dirs --shell fish --flox-env "{}" --env-dirs "$FLOX_ENV_DIRS" | source;"#,
-            args.flox_activations.display(),
-            args.flox_env.display()
-        )
-        .to_stmt(),
-    );
+            stmts.push(
+                format!(
+                    r#"{} set-env-dirs --shell fish --flox-env "{}" --env-dirs "$FLOX_ENV_DIRS" | source;"#,
+                    args.flox_activations.display(),
+                    args.flox_env.display()
+                )
+                .to_stmt(),
+            );
 
-    stmts.push(
-        r#"set -gx MANPATH (if set -q MANPATH; echo "$MANPATH"; else; echo empty; end);"#.to_stmt(),
-    );
+            stmts.push(
+                r#"set -gx MANPATH (if set -q MANPATH; echo "$MANPATH"; else; echo empty; end);"#
+                    .to_stmt(),
+            );
 
-    stmts.push(format!(
-        r#"{} fix-paths --shell fish --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "$MANPATH" | source;"#,
-        args.flox_activations.display()
-    ).to_stmt());
+            stmts.push(format!(
+                r#"{} fix-paths --shell fish --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "$MANPATH" | source;"#,
+                args.flox_activations.display()
+            ).to_stmt());
+        },
+        Action::Deactivate => {
+            // No-op: covered by environment restoration above
+        },
+    }
 
-    stmts.push(
-        r#"set -g  _FLOX_SOURCED_PROFILE_SCRIPTS (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end);"#.to_string()
-    .to_stmt());
+    match action {
+        Action::Activate { args, .. } => {
+            stmts.push(
+                r#"set -g  _FLOX_SOURCED_PROFILE_SCRIPTS (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end);"#.to_string()
+            .to_stmt());
 
-    stmts.push(format!(
-        r#"{} profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source;"#,
-        args.flox_activations.display()
-    ).to_stmt());
+            stmts.push(format!(
+                r#"{} profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source;"#,
+                args.flox_activations.display()
+            ).to_stmt());
+        },
+        Action::Deactivate => {
+            // TODO: run profile.deactivate.fish
+        },
+    }
 
     // fish does not use hashing in the same way bash does, so there's
     // nothing to be done here by way of that requirement.
 
     // Disable trace mode if it was enabled
-    if args.flox_activate_tracelevel >= 2 {
-        stmts.push("set -gx fish_trace 0;".to_stmt());
+    match action {
+        Action::Activate { args, .. } => {
+            if args.flox_activate_tracelevel >= 2 {
+                stmts.push("set -gx fish_trace 0;".to_stmt());
+            }
+        },
+        Action::Deactivate => {
+            // TODO: set -gx fish_trace 0
+        },
     }
 
-    if let Some(path) = args.clean_up.as_ref() {
-        let path_str = path.to_string_lossy();
-        let escaped_path = shell_escape::escape(Cow::Borrowed(path_str.as_ref()));
-        stmts.push(format!("{RM} {};", escaped_path).to_stmt());
+    // Self-destruct rc file
+    match action {
+        Action::Activate { args, .. } => {
+            if let Some(path) = args.clean_up.as_ref() {
+                let path_str = path.to_string_lossy();
+                let escaped_path = shell_escape::escape(Cow::Borrowed(path_str.as_ref()));
+                stmts.push(format!("{RM} {};", escaped_path).to_stmt());
+            }
+        },
+        Action::Deactivate => {
+            // No-op: deactivate has no rc file to remove.
+        },
     }
 
     for stmt in stmts {
         stmt.generate_with_newline(Shell::Fish, writer)?;
     }
 
-    if args.auto_activate
-        && matches!(
-            args.invocation_type,
-            InvocationType::Interactive | InvocationType::InPlace
-        )
-    {
-        if let Some(mode) = &args.auto_activate_fish_mode {
-            writeln!(writer, "set -gx FLOX_AUTO_ACTIVATE_FISH_MODE {mode};")?;
-        }
-        write!(writer, "{}", crate::hook::fish_hook(&args.flox_bin))?;
+    // Auto-activate hook registration
+    match action {
+        Action::Activate { args, .. } => {
+            if args.auto_activate
+                && matches!(
+                    args.invocation_type,
+                    InvocationType::Interactive | InvocationType::InPlace
+                )
+            {
+                if let Some(mode) = &args.auto_activate_fish_mode {
+                    writeln!(writer, "set -gx FLOX_AUTO_ACTIVATE_FISH_MODE {mode};")?;
+                }
+                write!(writer, "{}", crate::hook::fish_hook(&args.flox_bin))?;
+            }
+        },
+        Action::Deactivate => {
+            // TODO: unregister the auto-activate hook
+        },
     }
 
     Ok(())
@@ -155,6 +223,13 @@ mod tests {
         let shell = ShellWithPath::Fish(PathBuf::from("/fish"));
         let ctx = test_startup_ctx(shell, is_in_place);
         render_normalized(&ctx)
+    }
+
+    fn render_deactivate() -> String {
+        let action = Action::<FishStartupArgs>::Deactivate;
+        let mut buf = Vec::new();
+        generate_fish_profile_commands(&action, &mut buf).expect("generator should succeed");
+        String::from_utf8(buf).expect("output should be utf-8")
     }
 
     #[test]
@@ -215,5 +290,11 @@ mod tests {
             set -gx fish_trace 0;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
         "#]].assert_eq(&output);
+    }
+
+    #[test]
+    fn generate_fish_profile_deactivate() {
+        let output = render_deactivate();
+        expect![""].assert_eq(&output);
     }
 }
