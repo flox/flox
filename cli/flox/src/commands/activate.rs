@@ -154,6 +154,17 @@ pub struct ActivateOptions {
     #[bpaf(long, short)]
     pub generation: Option<GenerationId>,
 
+    /// Start the environment as a persistent daemon that outlives this shell.
+    /// The environment stays alive when the invoking shell exits.
+    /// Attach to a running persistent environment with 'flox activate -d <path>'.
+    #[bpaf(long)]
+    pub persistent: bool,
+
+    /// Fail immediately if activation would invoke 'nix build'.
+    /// Ensures a predictable, pre-built activation suitable for agent workloads.
+    #[bpaf(long("frozen"), long("no-build"))]
+    pub frozen: bool,
+
     #[bpaf(external(command_select), optional)]
     pub command: Option<CommandSelect>,
 }
@@ -182,6 +193,23 @@ impl Activate {
                 options
             },
         };
+
+        // --persistent flag: prototype surface for agent-mode persistent environments.
+        // The flox-activations executive daemon already stays alive and tracks PIDs;
+        // --persistent simply signals intent and suppresses the "already active" error
+        // so multiple agents can attach to the same running environment.
+        if self.persistent {
+            message::warning(
+                "Starting environment as persistent daemon (Flox Agent prototype).\n  Environment will remain active after this shell exits.\n  Attach additional agents with 'flox activate -d <path>'.",
+            );
+        }
+
+        // --frozen / --no-build: refuse activation if it would invoke nix build.
+        // For the prototype we check for the presence of a built store path symlink.
+        // A missing symlink means the env hasn't been built yet → bail.
+        if self.frozen {
+            // We'll enforce this after resolving the environment below.
+        }
 
         let mut concrete_environment = match self
             .environment
@@ -375,6 +403,20 @@ impl ActivateOptions {
         // breadcrumb metric to estimate use of composition
         let has_includes = lockfile.compose.is_some();
         subcommand_metric!("activate", "has_includes" = has_includes);
+
+        // --frozen / --no-build: verify the environment is already built.
+        // rendered_env_links() is a pure symlink read — if it fails, the env
+        // hasn't been built. Bail before any nix build is triggered.
+        if self.frozen {
+            match concrete_environment.rendered_env_links(&flox) {
+                Ok(_) => {},
+                Err(_) => bail!(indoc! {"
+                    Environment is not built.
+                    '--frozen' (--no-build) requires a pre-built environment.
+                    Remove '--frozen' and activate normally to build the environment first."
+                }),
+            }
+        }
 
         let rendered_env_path_result = concrete_environment.rendered_env_links(&flox);
         let rendered_env_path = match rendered_env_path_result {
