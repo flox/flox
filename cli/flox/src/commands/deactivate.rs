@@ -11,8 +11,8 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
-use flox_core::activations::{read_activations_json, state_json_path};
-use flox_core::{activations::activation_state_dir_path, proc_status::pid_is_running};
+use flox_core::activations::{activation_state_dir_path, read_activations_json, state_json_path};
+use flox_core::proc_status::pid_is_running;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::find_dot_flox;
 use indoc::formatdoc;
@@ -39,7 +39,10 @@ impl Deactivate {
                     .with_context(|| format!("Could not resolve path: {}", path.display()))?;
                 find_dot_flox(&canonical)
                     .with_context(|| {
-                        format!("No .flox directory found at or above {}", canonical.display())
+                        format!(
+                            "No .flox directory found at or above {}",
+                            canonical.display()
+                        )
                     })?
                     .map(|d| d.path)
                     .unwrap_or_else(|| canonical.join(".flox"))

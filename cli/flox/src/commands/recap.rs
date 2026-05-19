@@ -157,10 +157,16 @@ fn print_recap(events: &[AuditEvent]) {
                 println!("  ▶   Command: {}", event.detail);
             },
             AuditEventType::SessionStart => {
-                println!("  🚀  Session started: {}", event.timestamp.format("%Y-%m-%d %H:%M:%S UTC"));
+                println!(
+                    "  🚀  Session started: {}",
+                    event.timestamp.format("%Y-%m-%d %H:%M:%S UTC")
+                );
             },
             AuditEventType::SessionEnd => {
-                println!("  🏁  Session ended: {}", event.timestamp.format("%Y-%m-%d %H:%M:%S UTC"));
+                println!(
+                    "  🏁  Session ended: {}",
+                    event.timestamp.format("%Y-%m-%d %H:%M:%S UTC")
+                );
             },
         }
     }

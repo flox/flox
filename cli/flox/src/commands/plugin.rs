@@ -82,12 +82,16 @@ impl PluginCommands {
 fn handle_list() -> Result<()> {
     message::plain("Available plugins and integrations (Flox Agent prototype):\n");
     for plugin in PLUGINS {
-        let status = if plugin.installed { "[installed]" } else { "[available]" };
+        let status = if plugin.installed {
+            "[installed]"
+        } else {
+            "[available]"
+        };
         println!("  {:20}  {}  {}", plugin.name, status, plugin.description);
     }
     println!();
     message::plain(
-        "Install a plugin with 'flox plugin install <name>'\nManage integrations on FloxHub at https://hub.flox.dev"
+        "Install a plugin with 'flox plugin install <name>'\nManage integrations on FloxHub at https://hub.flox.dev",
     );
     Ok(())
 }
