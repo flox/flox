@@ -408,6 +408,7 @@ pub async fn start_services_with_new_process_compose(
         // Flox Agent prototype flags — not used in service activations.
         persistent: false,
         frozen: false,
+        sandbox: false,
         // this isn't actually used because we pass invocation type below
         command: Some(CommandSelect::ExecCommand {
             command: "true".to_string(),

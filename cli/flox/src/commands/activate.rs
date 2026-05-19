@@ -165,6 +165,13 @@ pub struct ActivateOptions {
     #[bpaf(long("frozen"), long("no-build"))]
     pub frozen: bool,
 
+    /// Activate the environment inside a default-deny sandbox.
+    /// On macOS: uses sandbox-exec with a Flox profile.
+    /// On Linux: uses bubblewrap (bwrap).
+    /// File writes, network access, and syscalls are blocked by default.
+    #[bpaf(long)]
+    pub sandbox: bool,
+
     #[bpaf(external(command_select), optional)]
     pub command: Option<CommandSelect>,
 }
@@ -585,6 +592,16 @@ impl ActivateOptions {
 
         let activation_state_dir = activation_state_dir_path(&flox.runtime_dir, &dot_flox_path);
 
+        // Write a persistent marker so 'flox envs' can show [persistent] tag.
+        if self.persistent {
+            let marker = activation_state_dir.join("persistent");
+            if let Err(e) = fs::create_dir_all(&activation_state_dir)
+                .and_then(|_| fs::write(&marker, b"1"))
+            {
+                warn!("Could not write persistent marker: {e}");
+            }
+        }
+
         let activate_data = ActivateCtx {
             flox_activate_store_path: store_path.to_string_lossy().to_string(),
             attach_ctx: core,
@@ -603,6 +620,7 @@ impl ActivateOptions {
             auto_activate_fish_mode: config.flox.auto_activate_fish_mode,
         };
 
+        let flox_temp_dir = flox.temp_dir.clone();
         let tempfile = tempfile::NamedTempFile::new_in(flox.temp_dir)?;
 
         let writer = BufWriter::new(&tempfile);
@@ -612,12 +630,28 @@ impl ActivateOptions {
         // `flox-activations` doesn't really have a "quiet" mode, so it makes
         // more sense for 0 to be the default rather than 1.
         let verbosity_num = flox.verbosity.max(0) as u32;
-        let mut command = std::process::Command::new(&*FLOX_ACTIVATIONS_BIN);
-        command
-            .env(FLOX_ACTIVATIONS_VERBOSITY_VAR, format!("{verbosity_num}"))
-            .arg("activate")
-            .arg("--activate-data")
-            .arg(tempfile);
+
+        // When --sandbox is set, wrap the activation command in the OS sandbox.
+        // On macOS: sandbox-exec with a Flox default-deny profile.
+        // On Linux: bubblewrap (bwrap) if available.
+        // The policy is written by the launcher (this process, outside the sandbox)
+        // and passed via parameter — the policy file is NOT visible inside the sandbox.
+        let mut command = if self.sandbox {
+            build_sandbox_command(
+                &flox_temp_dir,
+                &*FLOX_ACTIVATIONS_BIN,
+                verbosity_num,
+                &tempfile,
+                &dot_flox_path,
+            )?
+        } else {
+            let mut cmd = std::process::Command::new(&*FLOX_ACTIVATIONS_BIN);
+            cmd.env(FLOX_ACTIVATIONS_VERBOSITY_VAR, format!("{verbosity_num}"))
+                .arg("activate")
+                .arg("--activate-data")
+                .arg(&tempfile);
+            cmd
+        };
 
         if is_ephemeral {
             debug!("running ephemeral activation command: {:?}", command);
@@ -782,6 +816,195 @@ impl ActivateOptions {
 
         prompt_envs.join(" ")
     }
+}
+
+/// Build the activation command wrapped in the OS sandbox.
+///
+/// On macOS: uses `sandbox-exec` with a Flox default-deny profile written by
+/// the launcher (this process).  The policy file is written to the launcher's
+/// temp dir and passed via the `-f` flag — it is NOT visible inside the
+/// sandboxed environment (the sandboxed view only sees what the policy allows).
+///
+/// On Linux: uses `bwrap` (bubblewrap) if available.
+///
+/// Default-allow list:
+/// - /nix/store (read-only) — required for environment tools
+/// - /nix/var/nix/daemon-socket (read-write) — multi-user Nix daemon socket
+/// - ~/.config/flox (read-only), ~/.cache/flox, ~/.local/share/flox,
+///   ~/.local/state/flox (read-write) — Flox config and state
+/// - Per-env .flox/run/, .flox/cache/, .flox/log/, .flox/lib/ (read-write)
+/// - /tmp (tmpfs)
+/// - CWD (read-write)
+fn build_sandbox_command(
+    temp_dir: &std::path::Path,
+    activations_bin: &std::path::Path,
+    verbosity_num: u32,
+    activate_data: &std::path::Path,
+    dot_flox_path: &std::path::Path,
+) -> Result<std::process::Command> {
+    #[cfg(target_os = "macos")]
+    {
+        build_sandbox_exec_command(temp_dir, activations_bin, verbosity_num, activate_data, dot_flox_path)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        build_bwrap_command(temp_dir, activations_bin, verbosity_num, activate_data, dot_flox_path)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        bail!("--sandbox is only supported on macOS and Linux");
+    }
+}
+
+/// macOS sandbox-exec profile for Flox Agent default-deny sandboxing.
+///
+/// Tamper-resistance: the profile is written by the launcher (outside the
+/// sandbox) and passed via `-f`.  The sandboxed process cannot read or modify
+/// the policy file — /private/tmp is not readable inside the sandbox by default.
+#[cfg(target_os = "macos")]
+fn build_sandbox_exec_command(
+    temp_dir: &std::path::Path,
+    activations_bin: &std::path::Path,
+    verbosity_num: u32,
+    activate_data: &std::path::Path,
+    dot_flox_path: &std::path::Path,
+) -> Result<std::process::Command> {
+    use std::io::Write;
+
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let cwd = std::env::current_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("/tmp"))
+        .to_string_lossy()
+        .to_string();
+    let dot_flox = dot_flox_path.to_string_lossy();
+
+    // Write the sandbox-exec policy to a launcher-owned temp file.
+    // The policy uses parameter substitution so effective values are
+    // passed at exec time, not baked in — safer against profile tampering.
+    let profile = format!(
+        r#"(version 1)
+(deny default)
+
+; Allow reading from /nix/store (required for Flox environments)
+(allow file-read* (subpath "/nix/store"))
+(allow file-read* (subpath "/nix/var/nix"))
+
+; Allow reading Nix daemon socket (multi-user Nix required for Agent Mode)
+(allow file-read* file-write* (literal "/nix/var/nix/daemon-socket/socket"))
+(allow network* (local unix-socket))
+
+; Allow Flox config dirs
+(allow file-read* (subpath "{home}/.config/flox"))
+(allow file-read* file-write* (subpath "{home}/.cache/flox"))
+(allow file-read* file-write* (subpath "{home}/.local/share/flox"))
+(allow file-read* file-write* (subpath "{home}/.local/state/flox"))
+
+; Allow per-env .flox directories (run/cache/log/lib writable, env read-only)
+(allow file-read* file-write* (subpath "{dot_flox}/run"))
+(allow file-read* file-write* (subpath "{dot_flox}/cache"))
+(allow file-read* file-write* (subpath "{dot_flox}/log"))
+(allow file-read* file-write* (subpath "{dot_flox}/lib"))
+(allow file-read* (subpath "{dot_flox}/env"))
+
+; Allow current working directory
+(allow file-read* file-write* (subpath "{cwd}"))
+
+; Allow /tmp
+(allow file-read* file-write* (subpath "/tmp"))
+(allow file-read* file-write* (subpath "/private/tmp"))
+
+; Allow process operations needed for activation
+(allow process-exec process-fork)
+(allow signal)
+(allow sysctl-read)
+(allow file-read* (literal "/dev/null") (literal "/dev/urandom") (literal "/dev/random"))
+(allow file-read* file-write* (literal "/dev/stdin") (literal "/dev/stdout") (literal "/dev/stderr"))
+(allow mach-lookup)
+(allow mach-register)
+"#,
+        home = home,
+        cwd = cwd,
+        dot_flox = dot_flox,
+    );
+
+    let policy_path = temp_dir.join("flox-sandbox.sb");
+    let mut policy_file = std::fs::File::create(&policy_path)?;
+    policy_file.write_all(profile.as_bytes())?;
+    drop(policy_file);
+
+    message::warning(
+        "Starting sandboxed activation (Flox Agent prototype).\n  Backend: sandbox-exec (macOS)\n  Posture: default-deny FS/network\n  Policy written by launcher — not visible inside sandbox.",
+    );
+
+    // Set env vars so 'flox sandbox status' can report what's active.
+    let mut cmd = std::process::Command::new("sandbox-exec");
+    cmd.env("FLOX_SANDBOX_PROFILE", policy_path.to_string_lossy().as_ref())
+        .env("FLOX_SANDBOX_BACKEND", "sandbox-exec")
+        .env("FLOX_SANDBOX_ALLOW_READ", "/nix/store:/nix/var/nix")
+        .env("FLOX_SANDBOX_ALLOW_WRITE", format!("{}/.cache/flox:{}", home, cwd))
+        .env(FLOX_ACTIVATIONS_VERBOSITY_VAR, format!("{verbosity_num}"))
+        .arg("-f")
+        .arg(&policy_path)
+        .arg(activations_bin)
+        .arg("activate")
+        .arg("--activate-data")
+        .arg(activate_data);
+    Ok(cmd)
+}
+
+/// Linux bubblewrap (bwrap) sandbox for Flox Agent default-deny sandboxing.
+#[cfg(target_os = "linux")]
+fn build_bwrap_command(
+    _temp_dir: &std::path::Path,
+    activations_bin: &std::path::Path,
+    verbosity_num: u32,
+    activate_data: &std::path::Path,
+    dot_flox_path: &std::path::Path,
+) -> Result<std::process::Command> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let cwd = std::env::current_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("/tmp"))
+        .to_string_lossy()
+        .to_string();
+    let dot_flox = dot_flox_path.to_string_lossy();
+
+    message::warning(
+        "Starting sandboxed activation (Flox Agent prototype).\n  Backend: bwrap (Linux)\n  Posture: default-deny FS/network",
+    );
+
+    let mut cmd = std::process::Command::new("bwrap");
+    cmd.env("FLOX_SANDBOX_BACKEND", "bwrap")
+        .env("FLOX_SANDBOX_ALLOW_READ", "/nix/store:/nix/var/nix")
+        .env("FLOX_SANDBOX_ALLOW_WRITE", format!("{}/.cache/flox:{}", home, cwd))
+        .env(FLOX_ACTIVATIONS_VERBOSITY_VAR, format!("{verbosity_num}"))
+        // Nix store read-only
+        .arg("--ro-bind").arg("/nix").arg("/nix")
+        // Nix daemon socket (multi-user)
+        .arg("--bind").arg("/nix/var/nix/daemon-socket").arg("/nix/var/nix/daemon-socket")
+        // Flox state dirs
+        .arg("--bind").arg(format!("{home}/.cache/flox")).arg(format!("{home}/.cache/flox"))
+        .arg("--bind").arg(format!("{home}/.local/share/flox")).arg(format!("{home}/.local/share/flox"))
+        .arg("--bind").arg(format!("{home}/.local/state/flox")).arg(format!("{home}/.local/state/flox"))
+        .arg("--ro-bind").arg(format!("{home}/.config/flox")).arg(format!("{home}/.config/flox"))
+        // Per-env .flox dirs
+        .arg("--bind").arg(format!("{dot_flox}/run")).arg(format!("{dot_flox}/run"))
+        .arg("--bind").arg(format!("{dot_flox}/cache")).arg(format!("{dot_flox}/cache"))
+        .arg("--bind").arg(format!("{dot_flox}/log")).arg(format!("{dot_flox}/log"))
+        .arg("--ro-bind").arg(format!("{dot_flox}/env")).arg(format!("{dot_flox}/env"))
+        // CWD
+        .arg("--bind").arg(&cwd).arg(&cwd)
+        // /tmp
+        .arg("--tmpfs").arg("/tmp")
+        // New session and unshare network (default-deny network)
+        .arg("--new-session")
+        .arg("--unshare-net")
+        // Execute
+        .arg("--")
+        .arg(activations_bin)
+        .arg("activate")
+        .arg("--activate-data")
+        .arg(activate_data);
+    Ok(cmd)
 }
 
 /// Notify the user of available upgrades

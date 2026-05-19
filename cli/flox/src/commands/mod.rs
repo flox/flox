@@ -4,6 +4,7 @@ mod auth;
 mod build;
 mod check_for_upgrades;
 mod containerize;
+mod deactivate;
 mod delete;
 mod edit;
 mod envs;
@@ -525,6 +526,10 @@ enum ManageCommands {
         footer("Run 'man flox-delete' for more details.")
     )]
     Delete(#[bpaf(external(delete::delete))] delete::Delete),
+
+    /// Tear down a persistent Flox Agent environment (Flox Agent prototype)
+    #[bpaf(command, long("deactivate"))]
+    Deactivate(#[bpaf(external(deactivate::deactivate))] deactivate::Deactivate),
 }
 
 impl ManageCommands {
@@ -533,6 +538,7 @@ impl ManageCommands {
             ManageCommands::Init(args) => args.handle(flox).await?,
             ManageCommands::Envs(args) => args.handle(flox)?,
             ManageCommands::Delete(args) => args.handle(flox).await?,
+            ManageCommands::Deactivate(args) => args.handle(flox).await?,
         }
         Ok(())
     }
