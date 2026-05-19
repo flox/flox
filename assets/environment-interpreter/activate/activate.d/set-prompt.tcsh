@@ -26,6 +26,10 @@ if ( $?prompt && "$FLOX_PROMPT_ENVIRONMENTS" != "" ) then
     set prompt = "$_flox $FLOX_SAVE_TCSH_PROMPT"
 
     unset _flox colorReset colorBold colorPrompt1 colorPrompt2 _floxPrompt1 _floxPrompt2
+else if ( $?FLOX_SAVE_TCSH_PROMPT ) then
+    # Restore the prompt when no environments should be in the prompt
+    set prompt = "$FLOX_SAVE_TCSH_PROMPT"
+    unsetenv FLOX_SAVE_TCSH_PROMPT
 endif
 
 $_flox_activate_tracer $_activate_d/set-prompt.tcsh END

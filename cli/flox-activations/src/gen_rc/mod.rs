@@ -20,7 +20,7 @@ pub mod zsh;
 #[derive(Debug, Clone)]
 pub enum Action<A> {
     Activate { args: A, attach_diff: AttachDiff },
-    Deactivate,
+    Deactivate { activate_d: PathBuf },
 }
 
 #[derive(Debug, Clone)]

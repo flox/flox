@@ -23,6 +23,10 @@ if set -q FLOX_PROMPT_ENVIRONMENTS && test -n "$FLOX_PROMPT_ENVIRONMENTS"
         set -l original_prompt (flox_saved_fish_prompt | string collect --no-trim-newlines)
         printf "%s %s\n" $_flox $original_prompt
     end
+else if functions -q flox_saved_fish_prompt
+    # Restore the prompt when no environments should be in the prompt
+    functions --copy flox_saved_fish_prompt fish_prompt
+    functions --erase flox_saved_fish_prompt
 end
 
 "$_flox_activate_tracer" "$_activate_d/set-prompt.fish" END
