@@ -57,6 +57,7 @@ use crate::commands::telemetry::{
     command_started_event,
     emit,
     new_session_id,
+    post_audit_to_floxhub,
 };
 use crate::commands::{
     ConcreteEnvironment,
@@ -138,6 +139,13 @@ impl Install {
             &flox.cache_dir,
             command_started_event(&session_id, None, "install", None),
         );
+
+        // Auth + hub URL for recap upsert — mirrors activate.rs pattern.
+        let auth_header = flox
+            .auth_context
+            .authorization_header(flox.floxhub.base_url())
+            .and_then(|r| r.ok());
+        let floxhub_base = flox.floxhub.base_url().clone();
 
         debug!(
             "attempting to install packages [{}] to {:?}",
@@ -313,7 +321,7 @@ impl Install {
                 .map(|p| p.id().to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
-            let _ = append_audit_event(&flox.cache_dir, AuditEvent {
+            let audit_event = AuditEvent {
                 session_id: session_id.clone(),
                 env_id: Some(description.clone()),
                 event_type: AuditEventType::ManifestDiff,
@@ -321,7 +329,11 @@ impl Install {
                 before: None,
                 after: Some(format!("installed: {pkg_list}")),
                 detail: format!("flox install {pkg_list}"),
-            });
+            };
+            let _ = append_audit_event(&flox.cache_dir, audit_event.clone());
+            // Also POST to FloxHub so the dashboard Recap tab receives the event.
+            let _recap_post =
+                post_audit_to_floxhub(&floxhub_base, &audit_event, auth_header.as_deref());
         }
 
         // Prototype telemetry: command finished.

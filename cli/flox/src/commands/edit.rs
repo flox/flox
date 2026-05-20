@@ -43,6 +43,7 @@ use crate::commands::telemetry::{
     command_started_event,
     emit,
     new_session_id,
+    post_audit_to_floxhub,
 };
 use crate::commands::{EnvironmentSelectError, SHELL_COMPLETION_FILE, ensure_auth};
 use crate::utils::dialog::{Confirm, Dialog};
@@ -100,6 +101,13 @@ impl Edit {
             command_started_event(&session_id, None, "edit", None),
         );
 
+        // Auth + hub URL for recap upsert — mirrors activate.rs pattern.
+        let auth_header = flox
+            .auth_context
+            .authorization_header(flox.floxhub.base_url())
+            .and_then(|r| r.ok());
+        let floxhub_base = flox.floxhub.base_url().clone();
+
         // Ensure the user is logged in for the following remote operations
         if let EnvironmentSelect::Remote(_) = self.environment {
             ensure_auth(&mut flox).await?;
@@ -131,7 +139,7 @@ impl Edit {
                 // We optimistically record every successful `flox edit` call;
                 // edit_manifest prints a warning when nothing changed, so the
                 // human-readable recap will be accurate enough for the demo.
-                let _ = append_audit_event(&flox.cache_dir, AuditEvent {
+                let audit_event = AuditEvent {
                     session_id: session_id.clone(),
                     env_id: Some(description.clone()),
                     event_type: AuditEventType::ManifestDiff,
@@ -139,7 +147,11 @@ impl Edit {
                     before: None,
                     after: None,
                     detail: "flox edit".to_string(),
-                });
+                };
+                let _ = append_audit_event(&flox.cache_dir, audit_event.clone());
+                // Also POST to FloxHub so the dashboard Recap tab receives the event.
+                let _recap_post =
+                    post_audit_to_floxhub(&floxhub_base, &audit_event, auth_header.as_deref());
             },
             EditAction::Rename { name } => {
                 let span = tracing::info_span!("rename");

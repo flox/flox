@@ -65,6 +65,27 @@ pub fn emit(cache_dir: &Path, event: TelemetryEvent) {
     }
 }
 
+/// Derive the BFF API URL from the FloxHub hub URL.
+///
+/// Replaces the leading `hub.` hostname prefix with `api.`
+/// (e.g. `https://hub.local.flox.dev:8000` →
+///        `https://api.local.flox.dev:8000`).
+///
+/// Used by both [`post_to_floxhub`] and [`post_audit_to_floxhub`].
+pub fn derive_api_url(base_url: &Url, path: &str) -> Url {
+    let mut url = base_url.clone();
+    if let Some(host) = base_url.host_str() {
+        let api_host = if let Some(stripped) = host.strip_prefix("hub.") {
+            format!("api.{stripped}")
+        } else {
+            host.to_string()
+        };
+        let _ = url.set_host(Some(&api_host));
+    }
+    url.set_path(&format!("{}/{path}", url.path().trim_end_matches('/')));
+    url
+}
+
 /// POST a telemetry event to the FloxHub BFF asynchronously.
 ///
 /// Returns a `tokio::task::JoinHandle` so the caller can await it before
@@ -79,22 +100,9 @@ pub fn post_to_floxhub(
     event: &TelemetryEvent,
     auth_header: Option<&str>,
 ) -> tokio::task::JoinHandle<()> {
-    // Derive API URL: replace leading "hub." in hostname with "api.".
     // For local dev: https://hub.local.flox.dev:8000
     //             → https://api.local.flox.dev:8000/web-bff/api/agent/telemetry
-    let mut url = base_url.clone();
-    if let Some(host) = base_url.host_str() {
-        let api_host = if let Some(stripped) = host.strip_prefix("hub.") {
-            format!("api.{stripped}")
-        } else {
-            host.to_string()
-        };
-        let _ = url.set_host(Some(&api_host));
-    }
-    url.set_path(&format!(
-        "{}/web-bff/api/agent/telemetry",
-        url.path().trim_end_matches('/')
-    ));
+    let url = derive_api_url(base_url, "web-bff/api/agent/telemetry");
 
     // Build a minimal JSON body that matches BFF endpoint expectations.
     let body = serde_json::json!({
@@ -131,6 +139,61 @@ pub fn post_to_floxhub(
         match req.send().await {
             Ok(resp) => debug!("Telemetry POST {} -> {}", url_str, resp.status()),
             Err(e) => debug!("Telemetry POST failed (non-fatal): {e}"),
+        }
+    })
+}
+
+/// POST an audit event as a recap upsert to the FloxHub BFF asynchronously.
+///
+/// The BFF `/recap` endpoint upserts one row per session, accumulating
+/// `changes` incrementally.  Each call sends the single new audit event as a
+/// one-element `changes` array; the server merges it into the running session
+/// record via `ON CONFLICT (session_id) DO UPDATE`.
+///
+/// Matches the same fire-and-forget + 3-second timeout + accept-self-signed-cert
+/// pattern used by [`post_to_floxhub`].
+///
+/// BFF path: `<api_host>/web-bff/api/agent/recap`
+pub fn post_audit_to_floxhub(
+    base_url: &Url,
+    event: &crate::commands::recap::AuditEvent,
+    auth_header: Option<&str>,
+) -> tokio::task::JoinHandle<()> {
+    let url = derive_api_url(base_url, "web-bff/api/agent/recap");
+
+    // Build the body to match the BFF @Post('/recap') endpoint:
+    //   session_id, env_id, started_at, ended_at (null), changes ([...])
+    let body = serde_json::json!({
+        "session_id": event.session_id,
+        "env_id":     event.env_id.as_deref().unwrap_or(""),
+        "started_at": event.timestamp.to_rfc3339(),
+        "ended_at":   serde_json::Value::Null,
+        "changes":    [event],
+    });
+
+    let auth = auth_header.map(|h| h.to_string());
+    let url_str = url.to_string();
+
+    tokio::task::spawn(async move {
+        let client = match reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(std::time::Duration::from_secs(3))
+            .build()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                debug!("Could not build reqwest client for recap POST: {e}");
+                return;
+            },
+        };
+        let mut req = client.post(&url_str).json(&body);
+        if let Some(header_val) = &auth {
+            req = req.header("Authorization", header_val);
+        }
+        match req.send().await {
+            Ok(resp) => debug!("Recap POST {} -> {}", url_str, resp.status()),
+            Err(e) => debug!("Recap POST failed (non-fatal): {e}"),
         }
     })
 }
@@ -192,5 +255,65 @@ pub fn command_finished_event(
         event_type: TelemetryEventType::CommandFinished,
         timestamp: Utc::now(),
         payload: serde_json::json!({ "command": command, "success": success }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::TimeZone;
+
+    use super::*;
+    use crate::commands::recap::{AuditEvent, AuditEventType};
+
+    /// `derive_api_url` replaces `hub.` with `api.` in the hostname and appends
+    /// the supplied path, preserving port and any existing base path.
+    #[test]
+    fn derive_api_url_local_dev() {
+        let base: Url = "https://hub.local.flox.dev:8000".parse().unwrap();
+        let url = derive_api_url(&base, "web-bff/api/agent/recap");
+        assert_eq!(
+            url.as_str(),
+            "https://api.local.flox.dev:8000/web-bff/api/agent/recap"
+        );
+    }
+
+    /// `derive_api_url` handles production URLs that have no `hub.` prefix.
+    #[test]
+    fn derive_api_url_no_hub_prefix() {
+        let base: Url = "https://flox.dev".parse().unwrap();
+        let url = derive_api_url(&base, "web-bff/api/agent/recap");
+        assert_eq!(url.as_str(), "https://flox.dev/web-bff/api/agent/recap");
+    }
+
+    /// The JSON body sent to `/recap` includes all required fields that match the
+    /// BFF `@Post('/recap')` endpoint contract:
+    ///   session_id, env_id, started_at, ended_at (null), changes ([event]).
+    #[test]
+    fn recap_body_shape() {
+        let ts = Utc.with_ymd_and_hms(2026, 1, 15, 12, 0, 0).unwrap();
+        let event = AuditEvent {
+            session_id: "sess-abc".to_string(),
+            env_id: Some("owner/myenv".to_string()),
+            event_type: AuditEventType::ManifestDiff,
+            timestamp: ts,
+            before: None,
+            after: Some("installed: ripgrep".to_string()),
+            detail: "flox install ripgrep".to_string(),
+        };
+
+        let body = serde_json::json!({
+            "session_id": event.session_id,
+            "env_id":     event.env_id.as_deref().unwrap_or(""),
+            "started_at": event.timestamp.to_rfc3339(),
+            "ended_at":   serde_json::Value::Null,
+            "changes":    [&event],
+        });
+
+        assert_eq!(body["session_id"], "sess-abc");
+        assert_eq!(body["env_id"], "owner/myenv");
+        assert_eq!(body["started_at"], "2026-01-15T12:00:00+00:00");
+        assert!(body["ended_at"].is_null());
+        assert_eq!(body["changes"].as_array().unwrap().len(), 1);
+        assert_eq!(body["changes"][0]["detail"], "flox install ripgrep");
     }
 }

@@ -185,6 +185,21 @@ fn print_recap(events: &[AuditEvent]) {
     }
 }
 
+/// Stable path for the persistent-activation marker for an environment.
+///
+/// Written by `flox activate --persistent` and read by `flox envs` to
+/// display the `[persistent]` tag.  The marker lives in `cache_dir` rather
+/// than in the runtime activation-state directory so it survives shell exit
+/// (the activation-state dir is cleaned up when all PIDs detach).
+///
+/// Path: `{cache_dir}/agent/persistent-markers/{hash(dot_flox_path)}`
+pub fn persistent_marker_path(cache_dir: &Path, dot_flox_path: &Path) -> PathBuf {
+    cache_dir
+        .join("agent")
+        .join("persistent-markers")
+        .join(flox_core::path_hash(dot_flox_path))
+}
+
 /// Append an audit event to the session log.
 /// Called by commands that track agent actions (install, uninstall, edit).
 // Prototype public API — not yet wired into commands.
