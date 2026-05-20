@@ -844,7 +844,7 @@ enum InternalCommands {
     ),
 
     /// Print information how to exit environment
-    #[bpaf(command, long("exit"), long("deactivate"), hide)]
+    #[bpaf(command, long("exit"), hide)]
     Exit(#[bpaf(external(exit::exit))] exit::Exit),
 
     /// Print the activation state directory path for an environment.
