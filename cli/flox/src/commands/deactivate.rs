@@ -20,6 +20,8 @@ use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
 use tracing::debug;
 
+use shell_gen::Shell;
+
 use crate::commands::recap::persistent_marker_path;
 use crate::utils::message;
 
@@ -28,6 +30,14 @@ pub struct Deactivate {
     /// Path containing the .flox/ directory of the environment to deactivate
     #[bpaf(long("dir"), short('d'), argument("path"), optional)]
     pub dir: Option<PathBuf>,
+
+    /// Emit shell code to restore PS1 (for eval by shell wrapper function)
+    #[bpaf(long("shell-eval"), switch)]
+    pub shell_eval: bool,
+
+    /// Shell to emit PS1 restoration code for (bash, zsh)
+    #[bpaf(long("shell"), argument("SHELL"), optional)]
+    pub shell: Option<String>,
 }
 
 impl Deactivate {
@@ -105,9 +115,57 @@ impl Deactivate {
             }
         }
 
+        // Emit shell eval code to restore PS1 if --shell-eval was requested.
+        if self.shell_eval {
+            if let Some(ref shell_str) = self.shell {
+                if let Ok(shell) = shell_str.parse::<Shell>() {
+                    print!("{}", ps1_restore_code(shell));
+                    return Ok(());
+                }
+            }
+        }
+
         message::plain(format!(
             "✅  Environment deactivated (executive pid {exec_pid} terminated)."
         ));
         Ok(())
+    }
+}
+
+/// Generate shell code to restore PS1 after deactivation.
+///
+/// When `flox deactivate --shell-eval --shell <shell>` is called via the
+/// `flox()` wrapper function, this code is eval'd in the parent shell to
+/// restore PS1 from the saved value set by `set-prompt.bash/zsh`.
+pub(crate) fn ps1_restore_code(shell: Shell) -> String {
+    match shell {
+        Shell::Bash => {
+            r#"PS1="${FLOX_SAVE_BASH_PS1:-$PS1}"; unset FLOX_SAVE_BASH_PS1;"#.to_string()
+        },
+        Shell::Zsh => {
+            r#"PS1="${FLOX_SAVE_ZSH_PS1:-$PS1}"; unset FLOX_SAVE_ZSH_PS1;"#.to_string()
+        },
+        _ => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ps1_restore_code_bash_restores_from_save_var() {
+        let code = ps1_restore_code(Shell::Bash);
+        assert!(code.contains("FLOX_SAVE_BASH_PS1"), "should reference bash save var");
+        assert!(code.contains("PS1="), "should reassign PS1");
+        assert!(code.contains("unset FLOX_SAVE_BASH_PS1"), "should clean up save var");
+    }
+
+    #[test]
+    fn ps1_restore_code_zsh_restores_from_save_var() {
+        let code = ps1_restore_code(Shell::Zsh);
+        assert!(code.contains("FLOX_SAVE_ZSH_PS1"), "should reference zsh save var");
+        assert!(code.contains("PS1="), "should reassign PS1");
+        assert!(code.contains("unset FLOX_SAVE_ZSH_PS1"), "should clean up save var");
     }
 }
