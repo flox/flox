@@ -16,8 +16,15 @@ pub mod fish;
 pub mod tcsh;
 pub mod zsh;
 
+/// Struct to container arguments needed by generate_*_profile_commands
 #[derive(Debug, Clone)]
-pub enum StartupArgs {
+pub enum Action<A> {
+    Activate { args: A, attach_diff: AttachDiff },
+    Deactivate,
+}
+
+#[derive(Debug, Clone)]
+pub enum ShellStartupArgs {
     Bash(BashStartupArgs),
     Fish(FishStartupArgs),
     Tcsh(TcshStartupArgs),
@@ -27,9 +34,8 @@ pub enum StartupArgs {
 /// Context for shell startup, shared between normal and container activations.
 #[derive(Debug)]
 pub struct StartupCtx {
-    pub args: StartupArgs,
+    pub args: ShellStartupArgs,
     pub rc_path: Option<PathBuf>,
-    pub start_state_dir: PathBuf,
     pub act_ctx: ActivateCtx,
     pub attach_diff: AttachDiff,
 }
@@ -37,7 +43,7 @@ pub struct StartupCtx {
 #[cfg(test)]
 pub(crate) mod test_helpers {
     use std::collections::HashMap;
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx, InvocationType};
     use flox_core::activate::mode::ActivateMode;
@@ -114,7 +120,6 @@ pub(crate) mod test_helpers {
             invocation_type,
             rc_path,
             start_diff,
-            Path::new("/start_state_dir"),
             "TRACER",
             3,
             vars_from_env,
