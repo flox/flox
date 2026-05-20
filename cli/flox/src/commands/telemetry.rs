@@ -42,17 +42,13 @@ pub enum TelemetryEventType {
     SessionEnd,
 }
 
-/// Emit a telemetry event.  Fire-and-forget: failures are logged but not propagated.
+/// Emit a telemetry event to the local JSONL buffer.
+/// Fire-and-forget: failures are logged but not propagated.
 ///
-/// Always writes to the local JSONL buffer.  When `floxhub_url` is provided
-/// the event is also POSTed directly to the BFF; HTTP failures are silently
-/// swallowed.
-pub fn emit(
-    cache_dir: &Path,
-    event: TelemetryEvent,
-    floxhub_url: Option<&Url>,
-    auth_header: Option<&str>,
-) {
+/// For HTTP posting to FloxHub, call [`post_to_floxhub`] separately from
+/// an async context and `.await` the returned `JoinHandle` before returning
+/// from the command handler.
+pub fn emit(cache_dir: &Path, event: TelemetryEvent) {
     let log_path = telemetry_log_path(cache_dir);
 
     let json = match serde_json::to_string(&event) {
@@ -67,21 +63,37 @@ pub fn emit(
         Ok(()) => debug!("Telemetry event buffered to {}", log_path.display()),
         Err(e) => warn!("Could not write telemetry to log: {e}"),
     }
-
-    if let Some(base_url) = floxhub_url {
-        post_to_floxhub(base_url, &event, auth_header);
-    }
 }
 
-/// POST a telemetry event to the FloxHub BFF.  Spawns a one-shot async
-/// runtime so the call is truly fire-and-forget from synchronous callers.
-/// All errors are swallowed to keep activation fast.
-fn post_to_floxhub(base_url: &Url, event: &TelemetryEvent, auth_header: Option<&str>) {
+/// POST a telemetry event to the FloxHub BFF asynchronously.
+///
+/// Returns a `tokio::task::JoinHandle` so the caller can await it before
+/// returning, ensuring the HTTP call completes before the process exits.
+/// A 3-second timeout ensures we never meaningfully delay activation.
+/// All errors are swallowed — this must never fail activation.
+///
+/// BFF path convention: `<floxhub_url>/web-bff/api/agent/telemetry`
+/// (matches the nginx routing in the FloxHub stack).
+pub fn post_to_floxhub(
+    base_url: &Url,
+    event: &TelemetryEvent,
+    auth_header: Option<&str>,
+) -> tokio::task::JoinHandle<()> {
+    // Derive API URL: replace leading "hub." in hostname with "api.".
+    // For local dev: https://hub.local.flox.dev:8000
+    //             → https://api.local.flox.dev:8000/web-bff/api/agent/telemetry
     let mut url = base_url.clone();
-    // Append /api/agent/telemetry to whatever base path is configured.
+    if let Some(host) = base_url.host_str() {
+        let api_host = if host.starts_with("hub.") {
+            format!("api.{}", &host[4..])
+        } else {
+            host.to_string()
+        };
+        let _ = url.set_host(Some(&api_host));
+    }
     url.set_path(&format!(
-        "{}/api/agent/telemetry",
-        base_url.path().trim_end_matches('/')
+        "{}/web-bff/api/agent/telemetry",
+        url.path().trim_end_matches('/')
     ));
 
     // Build a minimal JSON body that matches BFF endpoint expectations.
@@ -96,31 +108,31 @@ fn post_to_floxhub(base_url: &Url, event: &TelemetryEvent, auth_header: Option<&
     let auth = auth_header.map(|h| h.to_string());
     let url_str = url.to_string();
 
-    // Spawn a background thread with its own single-threaded runtime so we
-    // don't need to be inside an async context.
-    std::thread::spawn(move || {
-        let rt = match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
+    tokio::task::spawn(async move {
+        // Accept self-signed TLS certs for local dev prototype.
+        // Disable redirects so we don't silently lose the Authorization header
+        // if nginx returns a 30x (it shouldn't, but this makes debugging easier).
+        let client = match reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(std::time::Duration::from_secs(3))
             .build()
         {
-            Ok(rt) => rt,
+            Ok(c) => c,
             Err(e) => {
-                debug!("Could not build tokio runtime for telemetry POST: {e}");
+                debug!("Could not build reqwest client for telemetry POST: {e}");
                 return;
             },
         };
-        rt.block_on(async move {
-            let client = reqwest::Client::new();
-            let mut req = client.post(&url_str).json(&body);
-            if let Some(header_val) = &auth {
-                req = req.header("Authorization", header_val);
-            }
-            match req.send().await {
-                Ok(resp) => debug!("Telemetry POST {} -> {}", url_str, resp.status()),
-                Err(e) => debug!("Telemetry POST failed (non-fatal): {e}"),
-            }
-        });
-    });
+        let mut req = client.post(&url_str).json(&body);
+        if let Some(header_val) = &auth {
+            req = req.header("Authorization", header_val);
+        }
+        match req.send().await {
+            Ok(resp) => debug!("Telemetry POST {} -> {}", url_str, resp.status()),
+            Err(e) => debug!("Telemetry POST failed (non-fatal): {e}"),
+        }
+    })
 }
 
 fn telemetry_log_path(cache_dir: &Path) -> PathBuf {

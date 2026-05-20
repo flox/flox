@@ -47,8 +47,6 @@ impl Uninstall {
         emit(
             &flox.cache_dir,
             command_started_event(&session_id, None, "uninstall", None),
-            None,
-            None,
         );
 
         sentry_set_tag("packages", self.packages.iter().join(","));
@@ -163,8 +161,6 @@ impl Uninstall {
                 timestamp: chrono::Utc::now(),
                 payload: serde_json::json!({ "command": "uninstall", "status": "ok" }),
             },
-            None,
-            None,
         );
 
         Ok(())

@@ -52,12 +52,7 @@ use super::{
 use crate::commands::check_for_upgrades::spawn_detached_check_for_upgrades_process;
 use crate::commands::general::update_config;
 use crate::commands::services::ServicesCommandsError;
-use crate::commands::telemetry::{
-    command_finished_event,
-    command_started_event,
-    emit,
-    new_session_id,
-};
+use crate::commands::telemetry::{command_started_event, emit, new_session_id, post_to_floxhub};
 use crate::commands::{
     EnvironmentSelectError,
     SHELL_COMPLETION_COMMAND,
@@ -253,7 +248,7 @@ impl Activate {
         );
 
         // Prototype telemetry: emit CommandStarted now that env_id is known.
-        // Fire-and-forget — never blocks activation.
+        // Local JSONL write is synchronous; HTTP POST is async and awaited later.
         let session_id = new_session_id();
         let env_id: Option<String> = match &concrete_environment {
             ConcreteEnvironment::Remote(env) => Some(env.env_ref().to_string()),
@@ -261,17 +256,18 @@ impl Activate {
             ConcreteEnvironment::Path(env) => Some(Environment::name(env).to_string()),
         };
         let user_id = flox.auth_context.handle().map(|s| s.to_string());
+        // Include the real Bearer token if the user is logged in to FloxHub.
+        // The BFF telemetry endpoint accepts anonymous POSTs for the prototype,
+        // so omitting the token is fine when unauthenticated.
         let auth_header = flox
             .auth_context
             .authorization_header(flox.floxhub.base_url())
             .and_then(|r| r.ok());
         let floxhub_base = flox.floxhub.base_url().clone();
-        emit(
-            &flox.cache_dir,
-            command_started_event(&session_id, env_id.clone(), "activate", user_id.as_deref()),
-            Some(&floxhub_base),
-            auth_header.as_deref(),
-        );
+        let started_event =
+            command_started_event(&session_id, env_id.clone(), "activate", user_id.as_deref());
+        emit(&flox.cache_dir, started_event.clone());
+        let started_post = post_to_floxhub(&floxhub_base, &started_event, auth_header.as_deref());
 
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment
             && !options.trust
@@ -334,10 +330,13 @@ impl Activate {
             None,
         )?;
 
-        // cache_dir needed for CommandFinished emit after flox is moved.
-        let cache_dir = flox.cache_dir.clone();
+        // Await the CommandStarted POST before exec'ing the activation.
+        // The flox-activations binary replaces this process (exec), so any code
+        // after self.activate() is unreachable for non-ephemeral activations.
+        // Awaiting here ensures the HTTP POST completes before exec.
+        let _ = started_post.await;
 
-        let result = options
+        options
             .activate(
                 config,
                 flox,
@@ -345,17 +344,7 @@ impl Activate {
                 invocation_type,
                 Vec::new(),
             )
-            .await;
-
-        // Prototype telemetry: CommandFinished (best-effort, non-exec paths only).
-        emit(
-            &cache_dir,
-            command_finished_event(&session_id, env_id, "activate", result.is_ok()),
-            Some(&floxhub_base),
-            auth_header.as_deref(),
-        );
-
-        result
+            .await
     }
 
     async fn handle_auto_activation_subcommand(
