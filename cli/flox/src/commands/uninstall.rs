@@ -46,7 +46,9 @@ impl Uninstall {
         let session_id = new_session_id();
         emit(
             &flox.cache_dir,
-            command_started_event(&session_id, None, "uninstall"),
+            command_started_event(&session_id, None, "uninstall", None),
+            None,
+            None,
         );
 
         sentry_set_tag("packages", self.packages.iter().join(","));
@@ -152,13 +154,18 @@ impl Uninstall {
                 detail: format!("flox uninstall {pkg_list}"),
             });
         }
-        emit(&flox.cache_dir, TelemetryEvent {
-            session_id,
-            env_id: Some(description),
-            event_type: TelemetryEventType::CommandFinished,
-            timestamp: chrono::Utc::now(),
-            payload: serde_json::json!({ "command": "uninstall", "status": "ok" }),
-        });
+        emit(
+            &flox.cache_dir,
+            TelemetryEvent {
+                session_id,
+                env_id: Some(description),
+                event_type: TelemetryEventType::CommandFinished,
+                timestamp: chrono::Utc::now(),
+                payload: serde_json::json!({ "command": "uninstall", "status": "ok" }),
+            },
+            None,
+            None,
+        );
 
         Ok(())
     }
