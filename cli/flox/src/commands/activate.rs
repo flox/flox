@@ -115,7 +115,8 @@ pub enum ActivateSubcommandOrOptions {
     },
 }
 
-#[derive(Bpaf, Debug, Clone, Copy)]
+#[derive(Bpaf, Debug, Clone, Copy, derive_more::Display)]
+#[display(rename_all = "lowercase")]
 pub enum AutoActivate {
     /// Allow auto-activation for an environment
     #[bpaf(command, hide)]
@@ -290,13 +291,9 @@ impl Activate {
         mut flox: Flox,
     ) -> Result<()> {
         if !flox.features.auto_activate {
-            let cmd_name = match subcommand {
-                AutoActivate::Allow => "allow",
-                AutoActivate::Deny => "deny",
-            };
             bail!(
                 "'{}' requires the auto_activate feature flag. Set FLOX_FEATURES_AUTO_ACTIVATE=true.",
-                cmd_name
+                subcommand
             );
         }
 
