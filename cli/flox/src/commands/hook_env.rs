@@ -21,6 +21,7 @@ use flox_core::hook_state::{
     HOOK_VAR_EXCLUDE_DIRS,
     HOOK_VAR_EXCLUDE_NAMES,
     HOOK_VAR_NOTIFIED,
+    HOOK_VAR_PARENT_PS1,
     HOOK_VAR_SUPPRESSED,
     HOOK_VAR_WATCHES,
     HookDiff,
@@ -209,6 +210,12 @@ impl HookEnv {
             shell,
             &mut stdout,
         )?;
+
+        // Drop the cached pre-activation PS1 once we've left every auto-active
+        // env, so a later cd-in captures a fresh value.
+        if trusted_dot_flox.is_empty() {
+            UnsetVar::new(HOOK_VAR_PARENT_PS1).generate_with_newline(shell, &mut stdout)?;
+        }
 
         Ok(())
     }
@@ -772,16 +779,28 @@ fn apply_on_activate_diff(
 
 /// Compute the value an environment variable would have after reverting the
 /// previous diff.
+///
+/// `PS1` is treated specially: the shell hook captures the pre-activation
+/// value into `_FLOX_HOOK_PARENT_PS1` because PS1 typically isn't exported
+/// and `std::env::var("PS1")` would return `None`. Without the fallback the
+/// venv's PS1 export ends up classified as `added` instead of `modified`,
+/// and the revert path then unsets PS1 entirely.
 fn reverted_env_var(key: &str, old_diff: &HookDiff) -> Option<String> {
     if old_diff.added.contains(key) {
-        None
-    } else if let Some(orig_val) = old_diff.modified.get(key) {
-        Some(orig_val.clone())
-    } else if let Some(orig_val) = old_diff.removed.get(key) {
-        Some(orig_val.clone())
-    } else {
-        std::env::var(key).ok()
+        return None;
     }
+    if let Some(orig_val) = old_diff.modified.get(key) {
+        return Some(orig_val.clone());
+    }
+    if let Some(orig_val) = old_diff.removed.get(key) {
+        return Some(orig_val.clone());
+    }
+    if key == "PS1"
+        && let Ok(val) = std::env::var(HOOK_VAR_PARENT_PS1)
+    {
+        return Some(val);
+    }
+    std::env::var(key).ok()
 }
 
 /// Result of resolving an environment, containing both env vars and metadata.
@@ -1512,5 +1531,34 @@ mod tests {
             !new_diff.removed.contains_key(key),
             "removed should skip names with no pristine value: {new_diff:?}"
         );
+    }
+
+    /// `_FLOX_HOOK_PARENT_PS1` is the shell-hook's capture of pristine PS1
+    /// (since PS1 isn't typically exported). `reverted_env_var` must use it
+    /// as a fallback for the PS1 key so the venv's PS1 export lands in
+    /// `modified` (with the pristine value), not `added` (which would
+    /// `unset PS1` on cd-out and leave the user with an invisible prompt).
+    ///
+    /// Both assertions live in one test because they share the
+    /// `_FLOX_HOOK_PARENT_PS1` env var and Rust's parallel test runner
+    /// would otherwise race on it.
+    #[test]
+    fn reverted_env_var_parent_ps1_fallback() {
+        let other_key = "FLOX_TEST_NOT_PS1";
+        // SAFETY: single-threaded test; restore on the way out.
+        unsafe {
+            std::env::remove_var("PS1");
+            std::env::remove_var(other_key);
+            std::env::set_var(HOOK_VAR_PARENT_PS1, "%m%# ");
+        }
+
+        let ps1_result = reverted_env_var("PS1", &HookDiff::default());
+        // The fallback is PS1-specific: other unset keys must not pick it up.
+        let other_result = reverted_env_var(other_key, &HookDiff::default());
+
+        unsafe { std::env::remove_var(HOOK_VAR_PARENT_PS1) };
+
+        assert_eq!(ps1_result.as_deref(), Some("%m%# "));
+        assert_eq!(other_result, None);
     }
 }

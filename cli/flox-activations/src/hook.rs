@@ -12,6 +12,7 @@ pub fn bash_hook(flox_bin: &str) -> String {
         r#"
         _flox_hook() {{
           local _prev_exit=$?;
+          if [ -z "${{_FLOX_HOOK_PARENT_PS1+x}}" ]; then export _FLOX_HOOK_PARENT_PS1="$PS1"; fi;
           local _flox_vars;
           _flox_vars="$("{flox_bin}" hook-env --shell bash)";
           trap -- '' SIGINT;
@@ -36,6 +37,7 @@ pub fn zsh_hook(flox_bin: &str) -> String {
     formatdoc!(
         r#"
         _flox_hook() {{
+          if [ -z "${{_FLOX_HOOK_PARENT_PS1+x}}" ]; then export _FLOX_HOOK_PARENT_PS1="$PS1"; fi;
           local _flox_vars;
           _flox_vars="$("{flox_bin}" hook-env --shell zsh)";
           trap -- '' SIGINT;

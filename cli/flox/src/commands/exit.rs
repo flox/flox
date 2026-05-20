@@ -5,6 +5,7 @@ use flox_core::hook_state::{
     HOOK_VAR_ACTIVATIONS,
     HOOK_VAR_DIFF,
     HOOK_VAR_DIRS,
+    HOOK_VAR_PARENT_PS1,
     HOOK_VAR_SUPPRESSED,
     HOOK_VAR_WATCHES,
     HookState,
@@ -110,6 +111,7 @@ impl Exit {
         UnsetVar::new(HOOK_VAR_DIRS).generate_with_newline(shell, &mut stdout)?;
         UnsetVar::new(HOOK_VAR_WATCHES).generate_with_newline(shell, &mut stdout)?;
         UnsetVar::new(HOOK_VAR_ACTIVATIONS).generate_with_newline(shell, &mut stdout)?;
+        UnsetVar::new(HOOK_VAR_PARENT_PS1).generate_with_newline(shell, &mut stdout)?;
 
         eprintln!(
             "flox: environment deactivated for this session. \

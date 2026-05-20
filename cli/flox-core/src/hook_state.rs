@@ -46,6 +46,12 @@ pub const HOOK_VAR_CWD: &str = "_FLOX_HOOK_CWD";
 pub const HOOK_VAR_ACTIVATIONS: &str = "_FLOX_HOOK_ACTIVATIONS";
 pub const HOOK_VAR_EXCLUDE_DIRS: &str = "_FLOX_HOOK_EXCLUDE_DIRS";
 pub const HOOK_VAR_EXCLUDE_NAMES: &str = "_FLOX_HOOK_EXCLUDE_NAMES";
+/// Captured pre-activation value of `PS1`, exported by the shell hook before
+/// `hook-env` runs. Lets `hook-env` see the user's `PS1` even when it isn't
+/// exported in the shell, so `PS1` ends up in `HookDiff::modified` (with the
+/// pristine value as the original) rather than `HookDiff::added` (which would
+/// unset PS1 on cd-out).
+pub const HOOK_VAR_PARENT_PS1: &str = "_FLOX_HOOK_PARENT_PS1";
 
 /// Environment variable changes produced by on-activate hooks.
 /// Passed from `flox-activations` back to `hook-env` via `AutoStartResult`,
