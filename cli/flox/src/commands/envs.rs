@@ -17,7 +17,6 @@ use crate::subcommand_metric;
 use crate::utils::active_environments::{ActiveEnvironments, activated_environments};
 use crate::utils::message;
 
-
 #[derive(Bpaf, Debug, Clone)]
 #[bpaf(fallback(Mode::All))]
 enum Mode {
@@ -52,8 +51,9 @@ impl Envs {
         let runtime_dir = flox.runtime_dir.clone();
 
         match self.mode {
-            Mode::Active => tracing::info_span!("active")
-                .in_scope(|| self.handle_active(active, runtime_dir)),
+            Mode::Active => {
+                tracing::info_span!("active").in_scope(|| self.handle_active(active, runtime_dir))
+            },
             Mode::All => tracing::info_span!("all").in_scope(|| {
                 let env_registry = garbage_collect(&flox)?;
                 let registered = get_registered_environments(&env_registry);
@@ -191,8 +191,7 @@ impl Display for DisplayEnvironments<'_> {
             let Some(first) = envs.next() else {
                 return Ok(());
             };
-            let persistent_tag =
-                self.persistent_tag_for(first).unwrap_or_default();
+            let persistent_tag = self.persistent_tag_for(first).unwrap_or_default();
             let first_formatted = format!(
                 "{:<widest$}  {}{}",
                 first.name(),
@@ -204,8 +203,7 @@ impl Display for DisplayEnvironments<'_> {
         }
 
         for env in envs {
-            let persistent_tag =
-                self.persistent_tag_for(env).unwrap_or_default();
+            let persistent_tag = self.persistent_tag_for(env).unwrap_or_default();
             writeln!(
                 f,
                 "{:<widest$}  {}{}",

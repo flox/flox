@@ -142,29 +142,23 @@ impl Uninstall {
         // Prototype telemetry: emit manifest_changed audit event on success.
         if !attempt.modifications.is_empty() {
             let pkg_list = self.packages.join(", ");
-            let _ = append_audit_event(
-                &flox.cache_dir,
-                AuditEvent {
-                    session_id: session_id.clone(),
-                    env_id: Some(description.clone()),
-                    event_type: AuditEventType::ManifestDiff,
-                    timestamp: chrono::Utc::now(),
-                    before: Some(format!("installed: {pkg_list}")),
-                    after: None,
-                    detail: format!("flox uninstall {pkg_list}"),
-                },
-            );
-        }
-        emit(
-            &flox.cache_dir,
-            TelemetryEvent {
-                session_id,
-                env_id: Some(description),
-                event_type: TelemetryEventType::CommandFinished,
+            let _ = append_audit_event(&flox.cache_dir, AuditEvent {
+                session_id: session_id.clone(),
+                env_id: Some(description.clone()),
+                event_type: AuditEventType::ManifestDiff,
                 timestamp: chrono::Utc::now(),
-                payload: serde_json::json!({ "command": "uninstall", "status": "ok" }),
-            },
-        );
+                before: Some(format!("installed: {pkg_list}")),
+                after: None,
+                detail: format!("flox uninstall {pkg_list}"),
+            });
+        }
+        emit(&flox.cache_dir, TelemetryEvent {
+            session_id,
+            env_id: Some(description),
+            event_type: TelemetryEventType::CommandFinished,
+            timestamp: chrono::Utc::now(),
+            payload: serde_json::json!({ "command": "uninstall", "status": "ok" }),
+        });
 
         Ok(())
     }

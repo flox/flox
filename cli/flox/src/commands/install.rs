@@ -313,31 +313,25 @@ impl Install {
                 .map(|p| p.id().to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
-            let _ = append_audit_event(
-                &flox.cache_dir,
-                AuditEvent {
-                    session_id: session_id.clone(),
-                    env_id: Some(description.clone()),
-                    event_type: AuditEventType::ManifestDiff,
-                    timestamp: chrono::Utc::now(),
-                    before: None,
-                    after: Some(format!("installed: {pkg_list}")),
-                    detail: format!("flox install {pkg_list}"),
-                },
-            );
+            let _ = append_audit_event(&flox.cache_dir, AuditEvent {
+                session_id: session_id.clone(),
+                env_id: Some(description.clone()),
+                event_type: AuditEventType::ManifestDiff,
+                timestamp: chrono::Utc::now(),
+                before: None,
+                after: Some(format!("installed: {pkg_list}")),
+                detail: format!("flox install {pkg_list}"),
+            });
         }
 
         // Prototype telemetry: command finished.
-        emit(
-            &flox.cache_dir,
-            TelemetryEvent {
-                session_id,
-                env_id: Some(description),
-                event_type: TelemetryEventType::CommandFinished,
-                timestamp: chrono::Utc::now(),
-                payload: serde_json::json!({ "command": "install", "status": "ok" }),
-            },
-        );
+        emit(&flox.cache_dir, TelemetryEvent {
+            session_id,
+            env_id: Some(description),
+            event_type: TelemetryEventType::CommandFinished,
+            timestamp: chrono::Utc::now(),
+            payload: serde_json::json!({ "command": "install", "status": "ok" }),
+        });
 
         Ok(())
     }
