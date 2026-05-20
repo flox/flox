@@ -217,15 +217,10 @@ impl Activate {
             .authorization_header(flox.floxhub.base_url())
             .and_then(|r| r.ok());
         let floxhub_base = flox.floxhub.base_url().clone();
-        let started_event = command_started_event(
-            &session_id,
-            env_id.clone(),
-            "activate",
-            user_id.as_deref(),
-        );
+        let started_event =
+            command_started_event(&session_id, env_id.clone(), "activate", user_id.as_deref());
         emit(&flox.cache_dir, started_event.clone());
-        let started_post =
-            post_to_floxhub(&floxhub_base, &started_event, auth_header.as_deref());
+        let started_post = post_to_floxhub(&floxhub_base, &started_event, auth_header.as_deref());
 
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment
             && !self.trust

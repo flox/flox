@@ -325,16 +325,13 @@ impl Install {
         }
 
         // Prototype telemetry: command finished.
-        emit(
-            &flox.cache_dir,
-            TelemetryEvent {
-                session_id,
-                env_id: Some(description),
-                event_type: TelemetryEventType::CommandFinished,
-                timestamp: chrono::Utc::now(),
-                payload: serde_json::json!({ "command": "install", "status": "ok" }),
-            },
-        );
+        emit(&flox.cache_dir, TelemetryEvent {
+            session_id,
+            env_id: Some(description),
+            event_type: TelemetryEventType::CommandFinished,
+            timestamp: chrono::Utc::now(),
+            payload: serde_json::json!({ "command": "install", "status": "ok" }),
+        });
 
         Ok(())
     }
