@@ -114,6 +114,13 @@ impl HookEnv {
             .collect();
         trusted_dot_flox.retain(|d| !exclude_dirs.contains(&d.path));
 
+        // Also filter out environments already present in _FLOX_ACTIVE_ENVIRONMENTS
+        // (i.e. manually activated via `flox activate -d <path>`).  Without this
+        // guard, cd-ing into an already-activated environment directory causes
+        // hook-env to re-apply the activation diff and re-append the PS1 segment.
+        let already_active = activated_environments();
+        filter_already_manually_activated(&mut trusted_dot_flox, &already_active);
+
         let new_active_dirs: Vec<PathBuf> =
             trusted_dot_flox.iter().map(|d| d.path.clone()).collect();
 
@@ -268,6 +275,24 @@ fn is_fast_path(
         && discovered_dirs == state.active_dirs
         && !trust_changed
         && !preference_changed
+}
+
+/// Remove environments from `candidates` that the user has already activated
+/// manually via `flox activate -d <path>`.
+///
+/// Manual activations are tracked in `_FLOX_ACTIVE_ENVIRONMENTS`.  When a
+/// user is inside a manually-activated subshell and then `cd`s into the
+/// project directory, the hook discovers the `.flox` dir and would ordinarily
+/// re-apply the activation diff and re-append the PS1 segment.  This guard
+/// prevents that double-activation.
+fn filter_already_manually_activated(
+    candidates: &mut Vec<DotFlox>,
+    already_active: &crate::utils::active_environments::ActiveEnvironments,
+) {
+    candidates.retain(|d| {
+        let as_uninitialized = UninitializedEnvironment::DotFlox(d.clone());
+        !already_active.is_active(&as_uninitialized)
+    });
 }
 
 /// Filter discovered environments by preference, trust, and suppression status.
@@ -1459,7 +1484,81 @@ pub(crate) fn spawn_auto_detach(shell_pid: i32, activation_state_dir: &Path) {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use flox_core::activate::mode::ActivateMode;
+    use flox_core::data::environment_ref::EnvironmentName;
+    use flox_rust_sdk::models::environment::{EnvironmentPointer, PathPointer};
+
     use super::*;
+    use crate::utils::active_environments::ActiveEnvironments;
+
+    /// Build a test DotFlox with a given path and env name.
+    fn make_dot_flox(path: &str, name: &str) -> DotFlox {
+        DotFlox {
+            path: PathBuf::from(path),
+            pointer: EnvironmentPointer::Path(PathPointer::new(
+                EnvironmentName::from_str(name).unwrap(),
+            )),
+        }
+    }
+
+    // --- Bug 5: filter_already_manually_activated ---
+
+    /// When an env is already in _FLOX_ACTIVE_ENVIRONMENTS (manually activated),
+    /// filter_already_manually_activated removes it from the candidate list.
+    #[test]
+    fn filter_already_manually_activated_removes_active_env() {
+        let dot_flox = make_dot_flox("/tmp/my-project/.flox", "my-project");
+        let mut candidates = vec![dot_flox.clone()];
+
+        let mut active = ActiveEnvironments::default();
+        active.set_last_active(
+            UninitializedEnvironment::DotFlox(dot_flox),
+            None,
+            ActivateMode::Dev,
+        );
+
+        filter_already_manually_activated(&mut candidates, &active);
+        assert!(
+            candidates.is_empty(),
+            "env already in _FLOX_ACTIVE_ENVIRONMENTS should be filtered out"
+        );
+    }
+
+    /// When an env is NOT in _FLOX_ACTIVE_ENVIRONMENTS, it is kept in the list.
+    #[test]
+    fn filter_already_manually_activated_keeps_inactive_env() {
+        let dot_flox = make_dot_flox("/tmp/my-project/.flox", "my-project");
+        let other = make_dot_flox("/tmp/other-project/.flox", "other-project");
+        let mut candidates = vec![dot_flox.clone()];
+
+        let mut active = ActiveEnvironments::default();
+        // Only `other` is manually activated — `dot_flox` is not.
+        active.set_last_active(
+            UninitializedEnvironment::DotFlox(other),
+            None,
+            ActivateMode::Dev,
+        );
+
+        filter_already_manually_activated(&mut candidates, &active);
+        assert_eq!(
+            candidates.len(),
+            1,
+            "env not in _FLOX_ACTIVE_ENVIRONMENTS should be kept"
+        );
+    }
+
+    /// When _FLOX_ACTIVE_ENVIRONMENTS is empty, nothing is filtered.
+    #[test]
+    fn filter_already_manually_activated_empty_active_is_noop() {
+        let dot_flox = make_dot_flox("/tmp/my-project/.flox", "my-project");
+        let mut candidates = vec![dot_flox];
+
+        let active = ActiveEnvironments::default();
+        filter_already_manually_activated(&mut candidates, &active);
+        assert_eq!(candidates.len(), 1, "no manual activations means no filtering");
+    }
 
     /// On cd-out a venv-leaked `_FLOX_HOOK_SAVE_PS1` must not survive the
     /// diff-based PS1 restore. The prompt_restore line must therefore appear
