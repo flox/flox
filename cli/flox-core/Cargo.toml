@@ -8,7 +8,9 @@ ignored = ["proptest"]
 
 [dependencies]
 anyhow.workspace = true
+base64.workspace = true
 blake3.workspace = true
+flate2.workspace = true
 crossterm.workspace = true
 derive_more.workspace = true
 fslock.workspace = true

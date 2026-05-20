@@ -406,6 +406,43 @@ fn fixed_vars_to_export(
     ])
 }
 
+/// Assemble an activate command for auto-activation (hook-env path).
+///
+/// Unlike `assemble_activate_command`, this takes component parts instead of
+/// a full `ActivateCtx`, since auto-start doesn't have shell/invocation_type.
+/// Uses `VarsFromEnvironment::get()` because auto-start inherits the shell
+/// environment via hook-env.
+pub(crate) fn assemble_auto_activate_command(
+    attach_ctx: &AttachCtx,
+    project_ctx: Option<&AttachProjectCtx>,
+    mode: &flox_core::activate::mode::ActivateMode,
+    start_state_dir: &Path,
+) -> Command {
+    let vars_from_env = VarsFromEnvironment::get().unwrap_or(VarsFromEnvironment {
+        flox_env_dirs: None,
+        path: None,
+        manpath: None,
+        full_env: None,
+    });
+
+    let mut command = Command::new(attach_ctx.interpreter_path.join("activate"));
+
+    // Set environment variables for the activate script.
+    let single_sets = single_set_envs(attach_ctx);
+    command.envs(&single_sets);
+    let double_sets = double_set_envs(attach_ctx, project_ctx);
+    command.envs(&double_sets.additions);
+    for var in &double_sets.deletions {
+        command.env_remove(var);
+    }
+    command.envs(non_in_place_exports(attach_ctx, 0, vars_from_env));
+
+    command.arg("--env").arg(&attach_ctx.env);
+    command.arg("--mode").arg(mode.to_string());
+    command.args(["--start-state-dir", &start_state_dir.to_string_lossy()]);
+    command
+}
+
 /// The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.
 /// If that env var is empty then activate_tracer is set to the full path of the `true` command in the PATH.
 /// If that env var is not empty and refers to an executable then then activate_tracer is set to that value.

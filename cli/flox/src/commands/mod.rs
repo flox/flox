@@ -1,11 +1,13 @@
 mod activate;
 mod activation_state;
+mod allow;
 mod auth;
 mod build;
 mod check_for_upgrades;
 mod containerize;
 mod deactivate;
 mod delete;
+mod deny;
 mod edit;
 mod envs;
 mod exit;
@@ -373,7 +375,7 @@ impl FloxArgs {
                 Commands::Admin(args) => args.handle(config, flox).await,
                 Commands::Agent(args) => args.handle(flox),
                 Commands::Deactivate(args) => args.handle(flox).await,
-                Commands::Internal(args) => args.handle(flox).await,
+                Commands::Internal(args) => args.handle(config, flox).await,
             };
 
             // This will print the update notification after output from a successful
@@ -578,6 +580,14 @@ enum UseCommands {
         )]
         services::ServicesCommands,
     ),
+
+    /// Allow auto-activation for a Flox environment
+    #[bpaf(command)]
+    Allow(#[bpaf(external(allow::allow))] allow::Allow),
+
+    /// Deny auto-activation for a Flox environment
+    #[bpaf(command)]
+    Deny(#[bpaf(external(deny::deny))] deny::Deny),
 }
 
 impl UseCommands {
@@ -585,6 +595,8 @@ impl UseCommands {
         match self {
             UseCommands::Activate(args) => args.handle(config, flox).await?,
             UseCommands::Services(args) => args.handle(config, flox).await?,
+            UseCommands::Allow(args) => args.handle(flox)?,
+            UseCommands::Deny(args) => args.handle(flox)?,
         }
         Ok(())
     }
@@ -866,7 +878,7 @@ enum InternalCommands {
 }
 
 impl InternalCommands {
-    async fn handle(self, flox: Flox) -> Result<()> {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             InternalCommands::ResetMetrics(args) => args.handle(flox).await?,
             InternalCommands::Upload(args) => args.handle(flox).await?,
@@ -875,7 +887,7 @@ impl InternalCommands {
             InternalCommands::Exit(args) => args.handle(flox)?,
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
-            InternalCommands::HookEnv(args) => args.handle(flox)?,
+            InternalCommands::HookEnv(args) => args.handle(config, flox)?,
         }
         Ok(())
     }
