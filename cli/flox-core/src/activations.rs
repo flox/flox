@@ -433,6 +433,13 @@ impl ActivationState {
             .collect()
     }
 
+    /// Returns the invocation type for the given PID, if attached.
+    pub fn invocation_type_for_pid(&self, pid: Pid) -> Option<Option<InvocationType>> {
+        self.attached_pids
+            .get(&pid)
+            .map(|a| a.invocation_type.clone())
+    }
+
     /// Returns the current activation mode
     pub fn mode(&self) -> &ActivateMode {
         &self.mode
