@@ -137,8 +137,6 @@ impl Install {
         emit(
             &flox.cache_dir,
             command_started_event(&session_id, None, "install", None),
-            None,
-            None,
         );
 
         debug!(
@@ -336,8 +334,6 @@ impl Install {
                 timestamp: chrono::Utc::now(),
                 payload: serde_json::json!({ "command": "install", "status": "ok" }),
             },
-            None,
-            None,
         );
 
         Ok(())

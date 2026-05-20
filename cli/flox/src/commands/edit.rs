@@ -98,8 +98,6 @@ impl Edit {
         emit(
             &flox.cache_dir,
             command_started_event(&session_id, None, "edit", None),
-            None,
-            None,
         );
 
         // Ensure the user is logged in for the following remote operations
@@ -237,8 +235,6 @@ impl Edit {
                 timestamp: chrono::Utc::now(),
                 payload: serde_json::json!({ "command": "edit", "status": "ok" }),
             },
-            None,
-            None,
         );
 
         Ok(())
