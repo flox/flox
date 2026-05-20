@@ -955,16 +955,17 @@ pub fn deny(config: &Config, concrete_environment: &ConcreteEnvironment) -> Resu
 
 /// Check if auto-activation is allowed for an environment.
 ///
-/// Returns true if the environment is explicitly allowed or has no preference set.
-/// Returns false if the environment is explicitly denied.
+/// Returns true if the environment is explicitly allowed.
+/// Returns false if the environment is explicitly denied or has no preference set.
 #[allow(dead_code)]
 pub fn is_allowed(config: &Config, concrete_environment: &ConcreteEnvironment) -> Result<bool> {
     let env_path = concrete_environment.parent_path()?;
     let preference = config.flox.auto_activate_environments.get(&env_path);
 
     match preference {
+        Some(AutoActivationPreference::Allow) => Ok(true),
         Some(AutoActivationPreference::Deny) => Ok(false),
-        Some(AutoActivationPreference::Allow) | None => Ok(true),
+        None => Ok(false),
     }
 }
 
