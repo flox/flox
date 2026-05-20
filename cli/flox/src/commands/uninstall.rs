@@ -11,6 +11,14 @@ use tracing::{debug, info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
+use crate::commands::recap::{AuditEvent, AuditEventType, append_audit_event};
+use crate::commands::telemetry::{
+    TelemetryEvent,
+    TelemetryEventType,
+    command_started_event,
+    emit,
+    new_session_id,
+};
 use crate::commands::{EnvironmentSelectError, ensure_auth, environment_description};
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
@@ -33,6 +41,13 @@ impl Uninstall {
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         // Record subcommand metric prior to environment_subcommand_metric below in case we error
         subcommand_metric!("uninstall");
+
+        // Prototype telemetry: fire-and-forget.
+        let session_id = new_session_id();
+        emit(
+            &flox.cache_dir,
+            command_started_event(&session_id, None, "uninstall"),
+        );
 
         sentry_set_tag("packages", self.packages.iter().join(","));
 
@@ -123,6 +138,33 @@ impl Uninstall {
         }
 
         warn_manifest_changes_for_services(&flox, &concrete_environment);
+
+        // Prototype telemetry: emit manifest_changed audit event on success.
+        if !attempt.modifications.is_empty() {
+            let pkg_list = self.packages.join(", ");
+            let _ = append_audit_event(
+                &flox.cache_dir,
+                AuditEvent {
+                    session_id: session_id.clone(),
+                    env_id: Some(description.clone()),
+                    event_type: AuditEventType::ManifestDiff,
+                    timestamp: chrono::Utc::now(),
+                    before: Some(format!("installed: {pkg_list}")),
+                    after: None,
+                    detail: format!("flox uninstall {pkg_list}"),
+                },
+            );
+        }
+        emit(
+            &flox.cache_dir,
+            TelemetryEvent {
+                session_id,
+                env_id: Some(description),
+                event_type: TelemetryEventType::CommandFinished,
+                timestamp: chrono::Utc::now(),
+                payload: serde_json::json!({ "command": "uninstall", "status": "ok" }),
+            },
+        );
 
         Ok(())
     }

@@ -50,6 +50,14 @@ use tracing::{debug, info_span, instrument, span, warn};
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::activate::ActivateOptions;
+use crate::commands::recap::{AuditEvent, AuditEventType, append_audit_event};
+use crate::commands::telemetry::{
+    TelemetryEvent,
+    TelemetryEventType,
+    command_started_event,
+    emit,
+    new_session_id,
+};
 use crate::commands::{
     ConcreteEnvironment,
     EnvironmentSelectError,
@@ -123,6 +131,13 @@ impl Install {
     #[instrument(name = "install", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("install");
+
+        // Prototype telemetry: fire-and-forget, never blocks the command.
+        let session_id = new_session_id();
+        emit(
+            &flox.cache_dir,
+            command_started_event(&session_id, None, "install"),
+        );
 
         debug!(
             "attempting to install packages [{}] to {:?}",
@@ -290,7 +305,33 @@ impl Install {
                 message::warning(warning);
             }
             warn_manifest_changes_for_services(&flox, &concrete_environment);
+
+            // Prototype telemetry: emit manifest_changed audit event.
+            let pkg_list = partitioned
+                .successes
+                .iter()
+                .map(|p| p.id().to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = append_audit_event(&flox.cache_dir, AuditEvent {
+                session_id: session_id.clone(),
+                env_id: Some(description.clone()),
+                event_type: AuditEventType::ManifestDiff,
+                timestamp: chrono::Utc::now(),
+                before: None,
+                after: Some(format!("installed: {pkg_list}")),
+                detail: format!("flox install {pkg_list}"),
+            });
         }
+
+        // Prototype telemetry: command finished.
+        emit(&flox.cache_dir, TelemetryEvent {
+            session_id,
+            env_id: Some(description),
+            event_type: TelemetryEventType::CommandFinished,
+            timestamp: chrono::Utc::now(),
+            payload: serde_json::json!({ "command": "install", "status": "ok" }),
+        });
 
         Ok(())
     }
