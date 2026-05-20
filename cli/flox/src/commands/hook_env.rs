@@ -1557,7 +1557,11 @@ mod tests {
 
         let active = ActiveEnvironments::default();
         filter_already_manually_activated(&mut candidates, &active);
-        assert_eq!(candidates.len(), 1, "no manual activations means no filtering");
+        assert_eq!(
+            candidates.len(),
+            1,
+            "no manual activations means no filtering"
+        );
     }
 
     /// On cd-out a venv-leaked `_FLOX_HOOK_SAVE_PS1` must not survive the

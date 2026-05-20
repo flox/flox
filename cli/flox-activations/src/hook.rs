@@ -27,6 +27,15 @@ pub fn bash_hook(flox_bin: &str) -> String {
             PROMPT_COMMAND="_flox_hook${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}";
           fi;
         fi;
+        flox() {{
+          if [ "$1" = "deactivate" ]; then
+            local _flox_eval;
+            _flox_eval="$("{flox_bin}" deactivate --shell-eval --shell bash "${{@:2}}")";
+            if [ $? -eq 0 ]; then eval "$_flox_eval"; else return $?; fi;
+          else
+            "{flox_bin}" "$@";
+          fi;
+        }};
         "#
     )
 }
@@ -52,6 +61,15 @@ pub fn zsh_hook(flox_bin: &str) -> String {
         if (( ! ${{chpwd_functions[(I)_flox_hook]}} )); then
           chpwd_functions=(_flox_hook $chpwd_functions);
         fi;
+        flox() {{
+          if [ "$1" = "deactivate" ]; then
+            local _flox_eval;
+            _flox_eval="$("{flox_bin}" deactivate --shell-eval --shell zsh "${{@:2}}")";
+            if [ $? -eq 0 ]; then eval "$_flox_eval"; else return $?; fi;
+          else
+            "{flox_bin}" "$@";
+          fi;
+        }};
         "#
     )
 }

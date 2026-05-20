@@ -381,8 +381,7 @@ mod tests {
         assert_eq!(display.persistent_tag_for(&path_env), None);
 
         // Write the stable marker the way activate does.
-        let marker =
-            crate::commands::recap::persistent_marker_path(&cache_dir, &dot_flox_path);
+        let marker = crate::commands::recap::persistent_marker_path(&cache_dir, &dot_flox_path);
         std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
         std::fs::write(&marker, b"1").unwrap();
 
