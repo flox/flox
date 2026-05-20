@@ -5,7 +5,6 @@ use std::path::Path;
 use anyhow::Result;
 use bpaf::Bpaf;
 use crossterm::style::Stylize;
-use flox_core::activations::activation_state_dir_path;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::env_registry::{EnvRegistry, garbage_collect};
 use flox_rust_sdk::models::environment::{DotFlox, EnvironmentPointer, ManagedPointer};
@@ -13,6 +12,7 @@ use serde_json::json;
 use tracing::instrument;
 
 use super::UninitializedEnvironment;
+use crate::commands::recap::persistent_marker_path;
 use crate::subcommand_metric;
 use crate::utils::active_environments::{ActiveEnvironments, activated_environments};
 use crate::utils::message;
@@ -48,17 +48,17 @@ impl Envs {
         subcommand_metric!("envs");
 
         let active = activated_environments();
-        let runtime_dir = flox.runtime_dir.clone();
+        let cache_dir = flox.cache_dir.clone();
 
         match self.mode {
             Mode::Active => {
-                tracing::info_span!("active").in_scope(|| self.handle_active(active, runtime_dir))
+                tracing::info_span!("active").in_scope(|| self.handle_active(active, cache_dir))
             },
             Mode::All => tracing::info_span!("all").in_scope(|| {
                 let env_registry = garbage_collect(&flox)?;
                 let registered = get_registered_environments(&env_registry);
 
-                self.handle_all(active, registered, runtime_dir)
+                self.handle_all(active, registered, cache_dir)
             }),
         }
     }
@@ -71,7 +71,7 @@ impl Envs {
     fn handle_active(
         &self,
         active: ActiveEnvironments,
-        runtime_dir: std::path::PathBuf,
+        cache_dir: std::path::PathBuf,
     ) -> Result<()> {
         if self.json {
             println!("{:#}", json!(active));
@@ -87,7 +87,7 @@ impl Envs {
         let envs = indent::indent_all_by(
             2,
             DisplayEnvironments::new(active.iter(), true)
-                .with_runtime_dir(runtime_dir)
+                .with_cache_dir(cache_dir)
                 .to_string(),
         );
         println!("{envs}");
@@ -105,7 +105,7 @@ impl Envs {
         &self,
         active: ActiveEnvironments,
         registered: impl Iterator<Item = UninitializedEnvironment>,
-        runtime_dir: std::path::PathBuf,
+        cache_dir: std::path::PathBuf,
     ) -> Result<()> {
         let inactive = get_inactive_environments(registered, active.iter())?;
 
@@ -129,7 +129,7 @@ impl Envs {
             let envs = indent::indent_all_by(
                 2,
                 DisplayEnvironments::new(active.iter(), true)
-                    .with_runtime_dir(runtime_dir.clone())
+                    .with_cache_dir(cache_dir.clone())
                     .to_string(),
             );
             println!("{envs}");
@@ -140,7 +140,7 @@ impl Envs {
             let envs = indent::indent_all_by(
                 2,
                 DisplayEnvironments::new(inactive.iter(), false)
-                    .with_runtime_dir(runtime_dir)
+                    .with_cache_dir(cache_dir)
                     .to_string(),
             );
             println!("{envs}");
@@ -153,9 +153,9 @@ impl Envs {
 pub(crate) struct DisplayEnvironments<'a> {
     envs: Vec<&'a UninitializedEnvironment>,
     format_active: bool,
-    /// Runtime dir used to check for persistent markers.
+    /// Cache dir used to locate stable persistent markers.
     /// When None, persistent tags are not shown.
-    runtime_dir: Option<std::path::PathBuf>,
+    cache_dir: Option<std::path::PathBuf>,
 }
 
 impl<'a> DisplayEnvironments<'a> {
@@ -166,12 +166,12 @@ impl<'a> DisplayEnvironments<'a> {
         Self {
             envs: envs.into_iter().collect(),
             format_active,
-            runtime_dir: None,
+            cache_dir: None,
         }
     }
 
-    pub(crate) fn with_runtime_dir(mut self, runtime_dir: std::path::PathBuf) -> Self {
-        self.runtime_dir = Some(runtime_dir);
+    pub(crate) fn with_cache_dir(mut self, cache_dir: std::path::PathBuf) -> Self {
+        self.cache_dir = Some(cache_dir);
         self
     }
 }
@@ -218,17 +218,20 @@ impl Display for DisplayEnvironments<'_> {
 }
 
 impl DisplayEnvironments<'_> {
-    /// Return the `[persistent]` tag string if a persistent marker exists
-    /// for this environment, otherwise return `None`.
+    /// Return the `[persistent]` tag string if a stable persistent marker
+    /// exists for this environment, otherwise return `None`.
+    ///
+    /// The marker is written to `{cache_dir}/agent/persistent-markers/{hash}`
+    /// by `flox activate --persistent` so it survives shell exit.
     fn persistent_tag_for(&self, env: &UninitializedEnvironment) -> Option<String> {
-        let runtime_dir = self.runtime_dir.as_ref()?;
+        let cache_dir = self.cache_dir.as_ref()?;
         let dot_flox_path = match env {
             UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => path,
             // Remote envs are not locally persistent.
             UninitializedEnvironment::Remote(_) => return None,
         };
-        let state_dir = activation_state_dir_path(runtime_dir, dot_flox_path);
-        if state_dir.join("persistent").exists() {
+        let marker = persistent_marker_path(cache_dir, dot_flox_path);
+        if marker.exists() {
             Some("  [persistent]".to_string())
         } else {
             None
@@ -342,12 +345,51 @@ mod tests {
         let envs = DisplayEnvironments {
             envs: vec![&path_env, &managed_env, &remote_env],
             format_active: false,
-            runtime_dir: None,
+            cache_dir: None,
         };
         assert_eq!(envs.to_string(), formatdoc! {"
             name_path                  /envs/path
             name_managed               /envs/managed (https://hub.example.com/owner/name_managed)
             name_remote                remote (https://hub.example.com/owner/name_remote)
         "});
+    }
+
+    /// `persistent_tag_for` returns `None` when no marker file exists and
+    /// `Some("  [persistent]")` when `persistent_marker_path` points to an
+    /// existing file — regardless of whether the activation is active or not.
+    #[test]
+    fn persistent_tag_for_marker_present_and_absent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache_dir = tmp.path().to_path_buf();
+
+        let dot_flox_path = PathBuf::from("/envs/myenv/.flox");
+
+        let path_env = UninitializedEnvironment::DotFlox(DotFlox {
+            path: dot_flox_path.clone(),
+            pointer: EnvironmentPointer::Path(PathPointer::new(
+                EnvironmentName::from_str("myenv").unwrap(),
+            )),
+        });
+
+        let display = DisplayEnvironments {
+            envs: vec![&path_env],
+            format_active: false,
+            cache_dir: Some(cache_dir.clone()),
+        };
+
+        // No marker yet — tag should be absent.
+        assert_eq!(display.persistent_tag_for(&path_env), None);
+
+        // Write the stable marker the way activate does.
+        let marker =
+            crate::commands::recap::persistent_marker_path(&cache_dir, &dot_flox_path);
+        std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
+        std::fs::write(&marker, b"1").unwrap();
+
+        // Marker present — tag should appear.
+        assert_eq!(
+            display.persistent_tag_for(&path_env),
+            Some("  [persistent]".to_string())
+        );
     }
 }

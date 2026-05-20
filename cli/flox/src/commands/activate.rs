@@ -51,6 +51,7 @@ use super::{
 };
 use crate::commands::check_for_upgrades::spawn_detached_check_for_upgrades_process;
 use crate::commands::general::update_config;
+use crate::commands::recap::persistent_marker_path;
 use crate::commands::services::ServicesCommandsError;
 use crate::commands::telemetry::{command_started_event, emit, new_session_id, post_to_floxhub};
 use crate::commands::{
@@ -622,12 +623,17 @@ impl ActivateOptions {
         let activation_state_dir = activation_state_dir_path(&flox.runtime_dir, &dot_flox_path);
 
         // Write a persistent marker so 'flox envs' can show [persistent] tag.
+        // The marker lives in cache_dir (stable across reboots and shell exits)
+        // rather than the ephemeral activation_state_dir, which is removed when
+        // all attached PIDs detach at shell exit.
         if self.persistent {
-            let marker = activation_state_dir.join("persistent");
-            if let Err(e) =
-                fs::create_dir_all(&activation_state_dir).and_then(|_| fs::write(&marker, b"1"))
-            {
-                warn!("Could not write persistent marker: {e}");
+            let marker = persistent_marker_path(&flox.cache_dir, &dot_flox_path);
+            if let Some(parent) = marker.parent() {
+                if let Err(e) =
+                    fs::create_dir_all(parent).and_then(|_| fs::write(&marker, b"1"))
+                {
+                    warn!("Could not write persistent marker: {e}");
+                }
             }
         }
 
