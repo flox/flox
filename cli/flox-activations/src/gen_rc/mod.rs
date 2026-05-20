@@ -100,6 +100,7 @@ pub(crate) mod test_helpers {
             auto_activate: false,
             flox_bin: "/flox".to_string(),
             auto_activate_fish_mode: None,
+            persistent: false,
         };
         let start_diff = StartDiff::from_parts(
             HashMap::from([

@@ -112,6 +112,10 @@ pub struct ActivateCtx {
     /// Controls how the fish shell hook responds to directory changes.
     #[serde(default)]
     pub auto_activate_fish_mode: Option<AutoActivateFishMode>,
+
+    /// Whether this activation is persistent (executive survives all shells exiting).
+    #[serde(default)]
+    pub persistent: bool,
 }
 
 /// Fish shell hook mode, matching direnv's `direnv_fish_mode` values.

@@ -653,6 +653,7 @@ impl ActivateOptions {
                 .and_then(|p| p.to_str().map(String::from))
                 .unwrap_or_else(|| "flox".to_string()),
             auto_activate_fish_mode: config.flox.auto_activate_fish_mode,
+            persistent: self.persistent,
         };
 
         let flox_temp_dir = flox.temp_dir.clone();

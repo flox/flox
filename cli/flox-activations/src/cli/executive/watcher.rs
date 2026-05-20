@@ -43,8 +43,19 @@ pub fn cleanup_pid(
     let (empty_start_id, modified) = activations.cleanup_pid(pid, pid_is_running, now);
 
     // If there are no more attached PIDs for any start, return early and
-    // cleanup the entirety of the activation state directory
+    // cleanup the entirety of the activation state directory — unless the
+    // activation is persistent, in which case the executive should keep
+    // running even when all shells have exited.
     if activations.attached_pids_is_empty() {
+        if activations.is_persistent() {
+            // Persistent: keep the executive running. Write updated state
+            // (PIDs removed) and signal no cleanup needed.
+            if modified {
+                trace!(?activations, "writing PID changes to persistent activation");
+                write_activations_json(&activations, state_json_path, lock)?;
+            }
+            return Ok(None);
+        }
         return Ok(Some((activations, lock)));
     }
 
@@ -181,6 +192,42 @@ pub mod test {
             state.attachments_by_start_id(),
             BTreeMap::new(),
             "should return empty state after cleanup"
+        );
+    }
+
+    /// When the activation is persistent, cleanup_pid should return None even
+    /// when all attached PIDs have terminated (i.e., the executive keeps running).
+    #[test]
+    fn persistent_activation_does_not_clean_up_when_all_pids_terminate() {
+        let runtime_dir = tempfile::tempdir().unwrap();
+        let dot_flox_path = PathBuf::from(".flox");
+        let flox_env = dot_flox_path.join("run/test");
+        let store_path = "store_path".to_string();
+
+        let proc1 = start_process();
+        let pid1 = proc1.id() as i32;
+
+        // Create a persistent ActivationState with one PID attached
+        let mut state =
+            ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
+        state.set_persistent(true);
+        let result = state.start_or_attach(pid1, &store_path, InvocationType::Interactive);
+        let StartOrAttachResult::Start { start_id, .. } = result else {
+            panic!("Expected Start")
+        };
+        state.set_ready(&start_id);
+
+        write_activation_state(runtime_dir.path(), &dot_flox_path, state);
+
+        let activation_state_dir = activation_state_dir_path(runtime_dir.path(), &dot_flox_path);
+        let state_json_path = state_json_path(&activation_state_dir);
+
+        // Terminate the only attached PID - persistent activation should NOT trigger cleanup
+        stop_process(proc1);
+        let result = cleanup_pid(&state_json_path, &activation_state_dir, pid1).unwrap();
+        assert!(
+            result.is_none(),
+            "persistent activation should not cleanup when all PIDs terminate"
         );
     }
 

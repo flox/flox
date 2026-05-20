@@ -223,6 +223,11 @@ impl ActivateArgs {
                 ActivationState::new(&context.mode, dot_flox_path, &context.attach_ctx.env);
         }
 
+        // Propagate the persistent flag from the activation context.
+        if context.persistent {
+            activations.set_persistent(true);
+        }
+
         if activations.mode() != &context.mode {
             let running = activations
                 .running_processes()

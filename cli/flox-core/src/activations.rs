@@ -370,6 +370,10 @@ pub struct ActivationState {
     executive_pid: Pid,
     current_process_compose_store_path: Option<StartIdentifier>,
     attached_pids: BTreeMap<Pid, Attachment>,
+    /// When true, the activation is persistent and should not be cleaned up
+    /// when all attached PIDs terminate.
+    #[serde(default)]
+    persistent: bool,
 }
 
 impl ActivationState {
@@ -389,6 +393,7 @@ impl ActivationState {
             executive_pid: EXECUTIVE_NOT_STARTED,
             current_process_compose_store_path: None,
             attached_pids: BTreeMap::new(),
+            persistent: false,
         }
     }
 
@@ -614,6 +619,16 @@ impl ActivationState {
     /// Check if executive was started and is running.
     pub fn executive_running(&self) -> bool {
         self.executive_started() && pid_is_running(self.executive_pid)
+    }
+
+    /// Return true if this activation is persistent (survives all shells exiting).
+    pub fn is_persistent(&self) -> bool {
+        self.persistent
+    }
+
+    /// Set whether this activation is persistent.
+    pub fn set_persistent(&mut self, persistent: bool) {
+        self.persistent = persistent;
     }
 
     /// Get the executive PID.
@@ -887,6 +902,7 @@ mod tests {
             executive_pid: 1, // Not used, but will be running.
             current_process_compose_store_path: None,
             attached_pids: BTreeMap::new(),
+            persistent: false,
         }
     }
 

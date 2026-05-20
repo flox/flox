@@ -20,6 +20,7 @@ use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
 use tracing::debug;
 
+use crate::commands::recap::persistent_marker_path;
 use crate::utils::message;
 
 #[derive(Bpaf, Clone, Debug)]
@@ -94,6 +95,15 @@ impl Deactivate {
 
         kill(Pid::from_raw(exec_pid), Signal::SIGTERM)
             .with_context(|| format!("Could not send SIGTERM to executive (pid {exec_pid})"))?;
+
+        // Remove the persistent marker (if any) so the environment no longer
+        // shows up as [persistent] in `flox envs` after explicit deactivation.
+        let marker = persistent_marker_path(&flox.cache_dir, &dot_flox_path);
+        if marker.exists() {
+            if let Err(e) = std::fs::remove_file(&marker) {
+                message::warning(format!("Could not remove persistent marker: {e}"));
+            }
+        }
 
         message::plain(format!(
             "✅  Environment deactivated (executive pid {exec_pid} terminated)."
