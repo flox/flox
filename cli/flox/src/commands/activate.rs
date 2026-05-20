@@ -52,7 +52,12 @@ use super::{
 use crate::commands::check_for_upgrades::spawn_detached_check_for_upgrades_process;
 use crate::commands::general::update_config;
 use crate::commands::services::ServicesCommandsError;
-use crate::commands::telemetry::{command_started_event, emit, new_session_id};
+use crate::commands::telemetry::{
+    command_finished_event,
+    command_started_event,
+    emit,
+    new_session_id,
+};
 use crate::commands::{
     EnvironmentSelectError,
     SHELL_COMPLETION_COMMAND,
@@ -202,12 +207,6 @@ impl Activate {
             },
         };
 
-        // Prototype telemetry: fire-and-forget, never blocks activation.
-        emit(
-            &flox.cache_dir,
-            command_started_event(&new_session_id(), None, "activate"),
-        );
-
         // --persistent flag: prototype surface for agent-mode persistent environments.
         // The flox-activations executive daemon already stays alive and tracks PIDs;
         // --persistent simply signals intent and suppresses the "already active" error
@@ -251,6 +250,27 @@ impl Activate {
                 .clone()
                 .unwrap_or(ActivateMode::Dev)
                 .to_string()
+        );
+
+        // Prototype telemetry: emit CommandStarted now that env_id is known.
+        // Fire-and-forget — never blocks activation.
+        let session_id = new_session_id();
+        let env_id: Option<String> = match &concrete_environment {
+            ConcreteEnvironment::Remote(env) => Some(env.env_ref().to_string()),
+            ConcreteEnvironment::Managed(env) => Some(env.env_ref().to_string()),
+            ConcreteEnvironment::Path(env) => Some(Environment::name(env).to_string()),
+        };
+        let user_id = flox.auth_context.handle().map(|s| s.to_string());
+        let auth_header = flox
+            .auth_context
+            .authorization_header(flox.floxhub.base_url())
+            .and_then(|r| r.ok());
+        let floxhub_base = flox.floxhub.base_url().clone();
+        emit(
+            &flox.cache_dir,
+            command_started_event(&session_id, env_id.clone(), "activate", user_id.as_deref()),
+            Some(&floxhub_base),
+            auth_header.as_deref(),
         );
 
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment
@@ -314,7 +334,10 @@ impl Activate {
             None,
         )?;
 
-        options
+        // cache_dir needed for CommandFinished emit after flox is moved.
+        let cache_dir = flox.cache_dir.clone();
+
+        let result = options
             .activate(
                 config,
                 flox,
@@ -322,7 +345,17 @@ impl Activate {
                 invocation_type,
                 Vec::new(),
             )
-            .await
+            .await;
+
+        // Prototype telemetry: CommandFinished (best-effort, non-exec paths only).
+        emit(
+            &cache_dir,
+            command_finished_event(&session_id, env_id, "activate", result.is_ok()),
+            Some(&floxhub_base),
+            auth_header.as_deref(),
+        );
+
+        result
     }
 
     async fn handle_auto_activation_subcommand(
