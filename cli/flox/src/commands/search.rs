@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::num::NonZeroU8;
 
@@ -13,7 +14,7 @@ use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::didyoumean::{DidYouMean, SearchSuggestion};
 use crate::utils::message::{self, stderr_supports_color, stdout_supports_color};
-use crate::utils::search::DisplaySearchResults;
+use crate::utils::search::{DisplaySearchResults, format_deprecation_warning};
 use crate::utils::tracing::sentry_set_tag;
 
 pub(crate) const DEFAULT_SEARCH_LIMIT: Option<NonZeroU8> = NonZeroU8::new(10);
@@ -82,10 +83,34 @@ impl Search {
 
         // Render what we have no matter what, then indicate whether we encountered an error.
         if self.json {
+            // JSON consumers should read the `deprecation` field on each result
+            // directly — no stderr warnings are emitted in this mode.
             debug!("printing search results as JSON");
             render_search_results_json(results)?;
         } else {
             debug!("printing search results as user facing");
+
+            // Deduplicate warnings: the same package may appear for multiple
+            // systems, producing identical deprecation messages. String-based
+            // dedup is sufficient because `format_deprecation_warning` is
+            // deterministic for a given (pkg_path, DeprecationInfo) pair.
+            // Note: search deprecation comes per-result (from each
+            // PackageInfoSearch), unlike `show` where it is a top-level
+            // response field.
+            let deprecation_warnings = results
+                .results
+                .iter()
+                .filter_map(|result| {
+                    result.deprecation.as_ref().map(|deprecation| {
+                        format_deprecation_warning(&result.pkg_path, deprecation)
+                    })
+                })
+                .collect::<BTreeSet<_>>();
+
+            let mut stderr = std::io::stderr();
+            for warning in deprecation_warnings {
+                message::warning_to_buffer(&mut stderr, warning);
+            }
 
             let suggestion = DidYouMean::<SearchSuggestion>::new(
                 search_term,

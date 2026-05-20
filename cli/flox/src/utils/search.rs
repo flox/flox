@@ -2,9 +2,35 @@ use std::fmt::Display;
 
 use anyhow::Result;
 use crossterm::style::Stylize;
-use flox_catalog::{SearchResult, SearchResults};
+use flox_catalog::{DeprecationInfo, DeprecationKind, SearchResult, SearchResults};
 
 pub const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
+
+pub fn format_deprecation_warning(pkg_path: &str, deprecation: &DeprecationInfo) -> String {
+    let mut warning = match (deprecation.kind, deprecation.replacement.as_deref()) {
+        (DeprecationKind::Renamed, Some(replacement)) => {
+            format!("'{pkg_path}' has been renamed to '{replacement}'.")
+        },
+        (DeprecationKind::Renamed, None) => format!("'{pkg_path}' has been renamed."),
+        (DeprecationKind::Removed, Some(replacement)) => {
+            format!("'{pkg_path}' has been removed. Use '{replacement}' instead.")
+        },
+        (DeprecationKind::Removed, None) => format!("'{pkg_path}' has been removed."),
+        (DeprecationKind::Deprecated, Some(replacement)) => {
+            format!("'{pkg_path}' is deprecated. Use '{replacement}' instead.")
+        },
+        (DeprecationKind::Deprecated, None) => format!("'{pkg_path}' is deprecated."),
+    };
+
+    if let Some(message) = deprecation.message.as_deref().map(str::trim)
+        && !message.is_empty()
+    {
+        warning.push(' ');
+        warning.push_str(message);
+    }
+
+    warning
+}
 
 /// An intermediate representation of a search result used for rendering
 #[derive(Debug, PartialEq, Clone)]
@@ -160,6 +186,7 @@ impl DisplaySearchResults {
 mod tests {
     use std::str::FromStr;
 
+    use flox_catalog::{DeprecationInfo, DeprecationKind};
     use flox_rust_sdk::providers::catalog::SystemEnum;
     use indoc::indoc;
 
@@ -222,5 +249,75 @@ mod tests {
             pkg2  <no description provided>
             "};
         assert_eq!(expected, format!("{}\n", display));
+    }
+
+    #[test]
+    fn formats_renamed_deprecation_warning() {
+        let deprecation = DeprecationInfo {
+            kind: DeprecationKind::Renamed,
+            message: None,
+            replacement: Some("bar".to_string()),
+        };
+
+        assert_eq!(
+            format_deprecation_warning("foo", &deprecation),
+            "'foo' has been renamed to 'bar'."
+        );
+    }
+
+    #[test]
+    fn formats_removed_deprecation_warning_without_replacement() {
+        let deprecation = DeprecationInfo {
+            kind: DeprecationKind::Removed,
+            message: None,
+            replacement: None,
+        };
+
+        assert_eq!(
+            format_deprecation_warning("foo", &deprecation),
+            "'foo' has been removed."
+        );
+    }
+
+    #[test]
+    fn formats_removed_deprecation_warning_with_replacement() {
+        let deprecation = DeprecationInfo {
+            kind: DeprecationKind::Removed,
+            message: None,
+            replacement: Some("new-foo".to_string()),
+        };
+
+        assert_eq!(
+            format_deprecation_warning("foo", &deprecation),
+            "'foo' has been removed. Use 'new-foo' instead."
+        );
+    }
+
+    #[test]
+    fn appends_catalog_message_to_deprecation_warning() {
+        let deprecation = DeprecationInfo {
+            kind: DeprecationKind::Deprecated,
+            message: Some("This alias will be removed in a future release.".to_string()),
+            replacement: Some("bar".to_string()),
+        };
+
+        assert_eq!(
+            format_deprecation_warning("foo", &deprecation),
+            "'foo' is deprecated. Use 'bar' instead. This alias will be removed in a future release."
+        );
+    }
+
+    #[test]
+    fn ignores_whitespace_only_catalog_message() {
+        let deprecation = DeprecationInfo {
+            kind: DeprecationKind::Deprecated,
+            message: Some("   ".to_string()),
+            replacement: None,
+        };
+
+        assert_eq!(
+            format_deprecation_warning("foo", &deprecation),
+            "'foo' is deprecated."
+        );
     }
 }

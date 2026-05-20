@@ -10,7 +10,8 @@ use flox_rust_sdk::flox::Flox;
 use tracing::instrument;
 
 use crate::subcommand_metric;
-use crate::utils::search::DEFAULT_DESCRIPTION;
+use crate::utils::message;
+use crate::utils::search::{DEFAULT_DESCRIPTION, format_deprecation_warning};
 use crate::utils::tracing::sentry_set_tag;
 
 // Show detailed package information
@@ -29,18 +30,14 @@ impl Show {
         sentry_set_tag("pkg_path", &self.pkg_path);
 
         tracing::debug!("using catalog client for show");
-        let results = match flox.catalog_client.package_versions(&self.pkg_path).await {
-            Ok(results) => results,
-            // Below, results.is_empty() is used to mean the search_term
-            // didn't match a package.
-            // So translate 404 into an empty vec![].
-            // Once we drop the pkgdb code path, we can clean this up.
-            Err(VersionsError::NotFound) => PackageDetails {
-                results: vec![],
-                count: None::<u64>,
-            },
-            Err(e) => Err(e)?,
-        };
+        let results =
+            normalize_not_found(flox.catalog_client.package_versions(&self.pkg_path).await)?;
+        if let Some(deprecation) = results.deprecation.as_ref() {
+            message::warning_to_buffer(
+                &mut std::io::stderr(),
+                format_deprecation_warning(&self.pkg_path, deprecation),
+            );
+        }
         if results.results.is_empty() {
             bail!("no packages matched this pkg-path: '{}'", self.pkg_path);
         }
@@ -56,6 +53,22 @@ impl Show {
         render_show_catalog(&mut std::io::stdout(), &results.results, &expected_systems)?;
 
         Ok(())
+    }
+}
+
+/// Translates a `NotFound` error into an empty result set so the caller can
+/// handle "no matches" uniformly via `results.is_empty()`.
+fn normalize_not_found(
+    results: Result<PackageDetails, VersionsError>,
+) -> Result<PackageDetails, VersionsError> {
+    match results {
+        Ok(results) => Ok(results),
+        Err(VersionsError::NotFound) => Ok(PackageDetails {
+            results: vec![],
+            count: None::<u64>,
+            deprecation: None,
+        }),
+        Err(e) => Err(e),
     }
 }
 

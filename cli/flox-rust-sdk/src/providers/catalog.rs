@@ -419,6 +419,7 @@ impl ClientTrait for MockClient {
             Some(Response::Packages(PackageDetails {
                 results: _,
                 count: Some(0),
+                deprecation: _,
             })) => Ok(SearchResults {
                 results: vec![],
                 count: Some(0),

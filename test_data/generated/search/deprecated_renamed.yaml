@@ -1,0 +1,9 @@
+when:
+  path: /api/v1/catalog/search
+  method: GET
+then:
+  status: 200
+  header:
+  - name: content-type
+    value: application/json
+  body: '{"items":[{"attr_path":"foo","catalog":null,"pkg_path":"foo","name":"foo-1.0","pname":"foo","version":"1.0","description":"Deprecated package alias","stabilities":[],"system":"aarch64-darwin","deprecation":{"kind":"renamed","replacement":"bar","message":"Use the new package path."}}],"total_count":1}'

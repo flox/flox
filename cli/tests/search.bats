@@ -93,6 +93,36 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+@test "'flox search' warns when a package has been renamed" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/search/deprecated_renamed.yaml"
+  run --separate-stderr "$FLOX_BIN" search foo
+  assert_success
+  assert_equal "${lines[0]}" "foo  Deprecated package alias"
+  assert_regex "$stderr" "'foo' has been renamed to 'bar'. Use the new package path."
+}
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' warns when a package is deprecated without a replacement" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/search/deprecated_without_replacement.yaml"
+  run --separate-stderr "$FLOX_BIN" search legacy-tool
+  assert_success
+  assert_regex "$stderr" "'legacy-tool' is deprecated."
+}
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search --json' keeps deprecated results machine-readable" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/search/deprecated_renamed.yaml"
+  run --separate-stderr "$FLOX_BIN" search foo --json
+  assert_success
+  assert_equal "$stderr" ""
+  replacement="$(echo "$output" | jq '.[0].deprecation.replacement')"
+  assert_equal "$replacement" '"bar"'
+}
+
+# ---------------------------------------------------------------------------- #
+
 @test "'flox search' hints at 'flox show'" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/search/hello.yaml"
   run --separate-stderr "$FLOX_BIN" search hello
@@ -143,6 +173,15 @@ EOF
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/search/exactly_ten.yaml"
   run --separate-stderr "$FLOX_BIN" search hello
   assert_equal "$stderr" "$SHOW_HINT"
+}
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox search' does not warn about deprecation for normal packages" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/search/hello.yaml"
+  run --separate-stderr "$FLOX_BIN" search hello
+  assert_success
+  refute_regex "$stderr" "deprecated|removed|renamed"
 }
 
 # ---------------------------------------------------------------------------- #

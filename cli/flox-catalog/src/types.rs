@@ -28,16 +28,28 @@ pub struct ResultsPage<T> {
     pub count: ResultCount,
 }
 
+/// Package details returned by `flox show`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PackageDetails {
+    pub results: Vec<PackageBuild>,
+    pub count: ResultCount,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deprecation: Option<DeprecationInfo>,
+}
+
 pub use api_types::PackageInfoSearch as SearchResult;
 pub type SearchResults = ResultsPage<SearchResult>;
 
-pub use api_types::{PackageOutput, PackageOutputs, PackageResolutionInfo as PackageBuild};
-pub type PackageDetails = ResultsPage<PackageBuild>;
-
+pub use api_types::{
+    DeprecationInfo,
+    DeprecationKind,
+    PackageOutput,
+    PackageOutputs,
+    PackageResolutionInfo as PackageBuild,
+};
 // ---------------------------------------------------------------------------
 // Package descriptors
 // ---------------------------------------------------------------------------
-
 /// Just an alias until the auto-generated PackageDescriptor diverges from what
 /// we need.
 pub use api_types::{
