@@ -958,6 +958,49 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
     Ok(None)
 }
 
+/// Walk the directory ancestry and collect every `.flox` directory found,
+/// returned outermost-first (i.e. in the order they should be activated).
+///
+/// Unlike `find_dot_flox`, this function does not stop at git boundaries —
+/// it walks the full ancestor chain so that auto-activation can discover
+/// all environments the user may have entered.
+pub fn find_all_dot_flox(
+    initial_dir: &Path,
+) -> Result<Vec<DotFlox>, EnvironmentError> {
+    let path =
+        CanonicalPath::new(initial_dir).map_err(EnvironmentError::StartDiscoveryDir)?;
+
+    let mut results = Vec::new();
+    for ancestor in path.ancestors() {
+        let tentative_dot_flox = ancestor.join(DOT_FLOX);
+        debug!(
+            "find_all_dot_flox: looking for .flox: path={}",
+            tentative_dot_flox.display()
+        );
+
+        if tentative_dot_flox.exists() {
+            match DotFlox::open_in(ancestor) {
+                Ok(dot_flox) => {
+                    debug!(
+                        "find_all_dot_flox: .flox found: path={}",
+                        tentative_dot_flox.display()
+                    );
+                    results.push(dot_flox);
+                },
+                Err(err) => {
+                    debug!(
+                        "find_all_dot_flox: skipping invalid .flox at {}: {err}",
+                        tentative_dot_flox.display()
+                    );
+                },
+            }
+        }
+    }
+
+    results.reverse();
+    Ok(results)
+}
+
 /// Return a path to the services socket given a unique identifier
 ///
 /// Socket paths cannot exceed 104 characters on macOS

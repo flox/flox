@@ -111,6 +111,14 @@ impl ActiveEnvironments {
     pub fn iter(&self) -> impl Iterator<Item = &UninitializedEnvironment> {
         self.0.iter().map(|active| &active.environment)
     }
+
+    /// Retain only environments for which the predicate returns true.
+    pub fn retain<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&UninitializedEnvironment) -> bool,
+    {
+        self.0.retain(|active| f(&active.environment));
+    }
 }
 
 impl Display for ActiveEnvironments {

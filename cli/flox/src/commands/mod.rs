@@ -373,7 +373,7 @@ impl FloxArgs {
                 Commands::Admin(args) => args.handle(config, flox).await,
                 Commands::Agent(args) => args.handle(flox),
                 Commands::Deactivate(args) => args.handle(flox).await,
-                Commands::Internal(args) => args.handle(flox).await,
+                Commands::Internal(args) => args.handle(config, flox).await,
             };
 
             // This will print the update notification after output from a successful
@@ -865,7 +865,7 @@ enum InternalCommands {
 }
 
 impl InternalCommands {
-    async fn handle(self, flox: Flox) -> Result<()> {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             InternalCommands::ResetMetrics(args) => args.handle(flox).await?,
             InternalCommands::Upload(args) => args.handle(flox).await?,
@@ -874,7 +874,7 @@ impl InternalCommands {
             InternalCommands::Exit(args) => args.handle(flox)?,
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
-            InternalCommands::HookEnv(args) => args.handle(flox)?,
+            InternalCommands::HookEnv(args) => args.handle(config, flox)?,
         }
         Ok(())
     }
