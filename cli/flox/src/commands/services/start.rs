@@ -64,7 +64,6 @@ impl Start {
                 let names = start_services_with_new_process_compose(
                     config,
                     flox,
-                    self.environment,
                     env.into_inner(),
                     current_mode,
                     &self.names,
