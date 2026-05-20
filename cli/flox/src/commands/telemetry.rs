@@ -84,8 +84,8 @@ pub fn post_to_floxhub(
     //             → https://api.local.flox.dev:8000/web-bff/api/agent/telemetry
     let mut url = base_url.clone();
     if let Some(host) = base_url.host_str() {
-        let api_host = if host.starts_with("hub.") {
-            format!("api.{}", &host[4..])
+        let api_host = if let Some(stripped) = host.strip_prefix("hub.") {
+            format!("api.{stripped}")
         } else {
             host.to_string()
         };
