@@ -344,6 +344,7 @@ mod tests {
         let envs = DisplayEnvironments {
             envs: vec![&path_env, &managed_env, &remote_env],
             format_active: false,
+            runtime_dir: None,
         };
         assert_eq!(envs.to_string(), formatdoc! {"
             name_path                  /envs/path
