@@ -18,9 +18,8 @@ use flox_rust_sdk::models::environment::find_dot_flox;
 use indoc::formatdoc;
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
-use tracing::debug;
-
 use shell_gen::Shell;
+use tracing::debug;
 
 use crate::commands::recap::persistent_marker_path;
 use crate::utils::message;
@@ -141,9 +140,7 @@ pub(crate) fn ps1_restore_code(shell: Shell) -> String {
         Shell::Bash => {
             r#"PS1="${FLOX_SAVE_BASH_PS1:-$PS1}"; unset FLOX_SAVE_BASH_PS1;"#.to_string()
         },
-        Shell::Zsh => {
-            r#"PS1="${FLOX_SAVE_ZSH_PS1:-$PS1}"; unset FLOX_SAVE_ZSH_PS1;"#.to_string()
-        },
+        Shell::Zsh => r#"PS1="${FLOX_SAVE_ZSH_PS1:-$PS1}"; unset FLOX_SAVE_ZSH_PS1;"#.to_string(),
         _ => String::new(),
     }
 }
@@ -155,16 +152,28 @@ mod tests {
     #[test]
     fn ps1_restore_code_bash_restores_from_save_var() {
         let code = ps1_restore_code(Shell::Bash);
-        assert!(code.contains("FLOX_SAVE_BASH_PS1"), "should reference bash save var");
+        assert!(
+            code.contains("FLOX_SAVE_BASH_PS1"),
+            "should reference bash save var"
+        );
         assert!(code.contains("PS1="), "should reassign PS1");
-        assert!(code.contains("unset FLOX_SAVE_BASH_PS1"), "should clean up save var");
+        assert!(
+            code.contains("unset FLOX_SAVE_BASH_PS1"),
+            "should clean up save var"
+        );
     }
 
     #[test]
     fn ps1_restore_code_zsh_restores_from_save_var() {
         let code = ps1_restore_code(Shell::Zsh);
-        assert!(code.contains("FLOX_SAVE_ZSH_PS1"), "should reference zsh save var");
+        assert!(
+            code.contains("FLOX_SAVE_ZSH_PS1"),
+            "should reference zsh save var"
+        );
         assert!(code.contains("PS1="), "should reassign PS1");
-        assert!(code.contains("unset FLOX_SAVE_ZSH_PS1"), "should clean up save var");
+        assert!(
+            code.contains("unset FLOX_SAVE_ZSH_PS1"),
+            "should clean up save var"
+        );
     }
 }

@@ -629,8 +629,7 @@ impl ActivateOptions {
         if self.persistent {
             let marker = persistent_marker_path(&flox.cache_dir, &dot_flox_path);
             if let Some(parent) = marker.parent()
-                && let Err(e) =
-                    fs::create_dir_all(parent).and_then(|_| fs::write(&marker, b"1"))
+                && let Err(e) = fs::create_dir_all(parent).and_then(|_| fs::write(&marker, b"1"))
             {
                 warn!("Could not write persistent marker: {e}");
             }
