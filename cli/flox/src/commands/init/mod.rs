@@ -241,6 +241,10 @@ async fn init_local_environment(
         PathEnvironment::init(path_pointer, dir, &customization, flox)?
     };
 
+    // Auto-trust the newly created local environment so it can be
+    // auto-activated when the user visits the directory again.
+    super::hook_env::trust_or_log(&flox.data_dir, env.dot_flox_path());
+
     let env_in_git_repo = GitCommandProvider::discover(dir).is_ok();
 
     message::created(format!(

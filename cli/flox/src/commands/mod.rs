@@ -1,11 +1,13 @@
 mod activate;
 mod activation_state;
+mod allow;
 mod auth;
 mod build;
 mod check_for_upgrades;
 mod containerize;
 mod deactivate;
 mod delete;
+mod deny;
 mod edit;
 mod envs;
 mod exit;
@@ -578,6 +580,14 @@ enum UseCommands {
         )]
         services::ServicesCommands,
     ),
+
+    /// Allow auto-activation for a Flox environment
+    #[bpaf(command)]
+    Allow(#[bpaf(external(allow::allow))] allow::Allow),
+
+    /// Deny auto-activation for a Flox environment
+    #[bpaf(command)]
+    Deny(#[bpaf(external(deny::deny))] deny::Deny),
 }
 
 impl UseCommands {
@@ -585,6 +595,8 @@ impl UseCommands {
         match self {
             UseCommands::Activate(args) => args.handle(config, flox).await,
             UseCommands::Services(args) => args.handle(config, flox).await,
+            UseCommands::Allow(args) => args.handle(flox),
+            UseCommands::Deny(args) => args.handle(flox),
         }
     }
 }
