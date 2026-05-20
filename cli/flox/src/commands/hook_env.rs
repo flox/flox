@@ -167,8 +167,14 @@ impl HookEnv {
         emit_revert(&state.diff, shell, &mut stdout)?;
 
         // Build new env vars and manage activation lifecycle.
-        let (new_tracking, combined_env, path_additions, env_dirs_additions, new_watches) =
-            manage_activations(&state, &trusted_dot_flox, &flox)?;
+        let (
+            new_tracking,
+            combined_env,
+            path_additions,
+            env_dirs_additions,
+            new_watches,
+            on_activate_deletions,
+        ) = manage_activations(&state, &trusted_dot_flox, &flox)?;
 
         // Merge PATH/FLOX_ENV_DIRS/MANPATH additions and compute diff.
         let (new_diff, combined_env) = compute_new_diff(
@@ -176,6 +182,7 @@ impl HookEnv {
             combined_env,
             path_additions,
             env_dirs_additions,
+            &on_activate_deletions,
         );
 
         // Emit new exports.
@@ -459,13 +466,15 @@ fn emit_eligibility_notice(
 }
 
 /// Result of `manage_activations`: tracking state, combined env vars, PATH
-/// additions, FLOX_ENV_DIRS additions, and updated watch entries.
+/// additions, FLOX_ENV_DIRS additions, updated watch entries, and the
+/// names of env vars deleted by any on-activate hook that ran this cycle.
 type ActivationResult = (
     ActivationTracking,
     HashMap<String, String>,
     Vec<String>,
     Vec<String>,
     Vec<WatchEntry>,
+    Vec<String>,
 );
 
 /// Build new env vars from all trusted environments and manage activation
@@ -483,6 +492,7 @@ fn manage_activations(
     let mut path_additions: Vec<String> = Vec::new();
     let mut env_dirs_additions: Vec<String> = Vec::new();
     let mut new_watches: Vec<WatchEntry> = Vec::new();
+    let mut on_activate_deletions: Vec<String> = Vec::new();
 
     for dot_flox in trusted_dot_flox {
         // Watch the manifest file for changes.
@@ -518,7 +528,11 @@ fn manage_activations(
                     // Case 1: Subsequent prompt, same dir - carry forward existing info
                     let info = prev_tracking.entries[&dot_flox.path].clone();
                     // Re-apply cached on-activate diff
-                    apply_on_activate_diff(&info.on_activate_diff, &mut combined_env);
+                    apply_on_activate_diff(
+                        &info.on_activate_diff,
+                        &mut combined_env,
+                        &mut on_activate_deletions,
+                    );
                     new_tracking.entries.insert(dot_flox.path.clone(), info);
                 } else if let Some(cached_info) = cached {
                     // Case 2: cd-away-and-back - re-attach PID, use cached diff
@@ -528,7 +542,11 @@ fn manage_activations(
                     if auto_result.as_ref().is_some_and(|r| r.is_new) {
                         // Activation was recreated — use fresh result
                         let result = auto_result.as_ref().unwrap();
-                        apply_on_activate_diff(&result.hook_env_diff, &mut combined_env);
+                        apply_on_activate_diff(
+                            &result.hook_env_diff,
+                            &mut combined_env,
+                            &mut on_activate_deletions,
+                        );
                         new_tracking
                             .entries
                             .insert(dot_flox.path.clone(), ActivationInfo {
@@ -539,7 +557,11 @@ fn manage_activations(
                             });
                     } else {
                         // Re-apply cached on-activate diff (hooks don't re-run)
-                        apply_on_activate_diff(&cached_info.on_activate_diff, &mut combined_env);
+                        apply_on_activate_diff(
+                            &cached_info.on_activate_diff,
+                            &mut combined_env,
+                            &mut on_activate_deletions,
+                        );
                         new_tracking
                             .entries
                             .insert(dot_flox.path.clone(), cached_info);
@@ -551,7 +573,11 @@ fn manage_activations(
 
                     let (on_activate_diff, start_state_dir) = if let Some(ref result) = auto_result
                     {
-                        apply_on_activate_diff(&result.hook_env_diff, &mut combined_env);
+                        apply_on_activate_diff(
+                            &result.hook_env_diff,
+                            &mut combined_env,
+                            &mut on_activate_deletions,
+                        );
                         (
                             result.hook_env_diff.clone(),
                             result.start_state_dir.as_ref().map(PathBuf::from),
@@ -626,15 +652,21 @@ fn manage_activations(
         path_additions,
         env_dirs_additions,
         new_watches,
+        on_activate_deletions,
     ))
 }
 
 /// Compute the environment diff as if `emit_revert` had already run.
+///
+/// `on_activate_deletions` lists names that the on-activate hook(s) unset.
+/// Each such name still in the pristine env (per `reverted_env_var`) is
+/// recorded in `HookDiff.removed` so cd-out can restore it.
 fn compute_new_diff(
     old_diff: &HookDiff,
     mut combined_env: HashMap<String, String>,
     path_additions: Vec<String>,
     env_dirs_additions: Vec<String>,
+    on_activate_deletions: &[String],
 ) -> (HookDiff, HashMap<String, String>) {
     // Merge all environment bin/sbin dirs into a single PATH.
     if !path_additions.is_empty() {
@@ -698,19 +730,34 @@ fn compute_new_diff(
         }
     }
 
+    let mut removed = HashMap::new();
+    for name in on_activate_deletions {
+        if combined_env.contains_key(name) {
+            continue;
+        }
+        if let Some(orig_val) = reverted_env_var(name, old_diff) {
+            removed.insert(name.clone(), orig_val);
+        }
+    }
+
     let new_diff = HookDiff {
         added,
         modified,
-        removed: HashMap::new(),
+        removed,
     };
 
     (new_diff, combined_env)
 }
 
 /// Apply cached on-activate hook env diff into the combined environment.
+///
+/// Deletion names from the diff are appended to `deletions_out` so the
+/// caller can record them in the master `HookDiff.removed` (which lets
+/// cd-out restore the pristine value).
 fn apply_on_activate_diff(
     diff: &Option<OnActivateEnvDiff>,
     combined_env: &mut HashMap<String, String>,
+    deletions_out: &mut Vec<String>,
 ) {
     if let Some(diff) = diff {
         for (k, v) in &diff.additions {
@@ -718,6 +765,7 @@ fn apply_on_activate_diff(
         }
         for k in &diff.deletions {
             combined_env.remove(k);
+            deletions_out.push(k.clone());
         }
     }
 }
@@ -879,7 +927,16 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<ResolvedEnv> {
 }
 
 /// Emit shell commands to revert the previous HookDiff.
+///
+/// `emit_prompt_restore` runs first so that any diff-based PS1 restore that
+/// follows wins over `_FLOX_HOOK_SAVE_PS1`. This matters when an on-activate
+/// hook (e.g. a Python venv) modifies exported PS1 between `emit_apply` and
+/// `emit_prompt` — in that case the save captured the venv-decorated PS1
+/// and naive last-wins restore would leak the decoration past cd-out.
 pub(crate) fn emit_revert(diff: &HookDiff, shell: Shell, writer: &mut impl Write) -> Result<()> {
+    // Restore the saved prompt first; the diff-based restores below override
+    // any PS1 also tracked in `modified` or `added`.
+    emit_prompt_restore(shell, writer)?;
     // Unset added vars (they didn't exist before activation).
     for name in &diff.added {
         UnsetVar::new(name).generate_with_newline(shell, writer)?;
@@ -892,8 +949,6 @@ pub(crate) fn emit_revert(diff: &HookDiff, shell: Shell, writer: &mut impl Write
     for (name, orig_val) in &diff.removed {
         SetVar::exported_no_expansion(name, orig_val).generate_with_newline(shell, writer)?;
     }
-    // Restore the saved prompt.
-    emit_prompt_restore(shell, writer)?;
     Ok(())
 }
 
@@ -1380,5 +1435,82 @@ pub(crate) fn spawn_auto_detach(shell_pid: i32, activation_state_dir: &Path) {
         Err(e) => {
             debug!("failed to spawn auto-detach: {e}");
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// On cd-out a venv-leaked `_FLOX_HOOK_SAVE_PS1` must not survive the
+    /// diff-based PS1 restore. The prompt_restore line must therefore appear
+    /// in the output *before* the `export PS1="..."` from `modified`.
+    #[test]
+    fn emit_revert_emits_prompt_restore_before_modified_ps1() {
+        let diff = HookDiff {
+            added: HashSet::new(),
+            modified: HashMap::from([("PS1".to_string(), "pristine".to_string())]),
+            removed: HashMap::new(),
+        };
+
+        let mut buf = Vec::new();
+        emit_revert(&diff, Shell::Bash, &mut buf).expect("emit_revert");
+        let out = String::from_utf8(buf).expect("utf8");
+
+        let restore_idx = out
+            .find("_FLOX_HOOK_SAVE_PS1")
+            .expect("prompt restore line present");
+        let modified_idx = out
+            .find("export PS1=")
+            .expect("modified PS1 export present");
+        assert!(
+            restore_idx < modified_idx,
+            "prompt_restore must precede modified PS1 restore so the diff wins; got:\n{out}"
+        );
+    }
+
+    /// Names deleted by an on-activate hook must end up in `HookDiff.removed`
+    /// with the pristine value so cd-out can re-export them.
+    #[test]
+    fn compute_new_diff_records_on_activate_deletion_in_removed() {
+        let key = "FLOX_TEST_ON_ACTIVATE_DELETION_REMOVED";
+        // SAFETY: single-threaded test; restored on the way out.
+        unsafe { std::env::set_var(key, "pristine") };
+
+        let old_diff = HookDiff::default();
+        let combined_env = HashMap::new();
+        let deletions = vec![key.to_string()];
+
+        let (new_diff, _env) =
+            compute_new_diff(&old_diff, combined_env, vec![], vec![], &deletions);
+
+        unsafe { std::env::remove_var(key) };
+
+        assert_eq!(
+            new_diff.removed.get(key).map(String::as_str),
+            Some("pristine"),
+            "on-activate deletion not recorded in removed: {new_diff:?}"
+        );
+    }
+
+    /// If the on-activate hook deletes a key that has no pristine value
+    /// (never existed), nothing to restore — `removed` stays empty for it.
+    #[test]
+    fn compute_new_diff_skips_deletion_with_no_pristine_value() {
+        let key = "FLOX_TEST_ON_ACTIVATE_DELETION_NEVER_SET";
+        // SAFETY: single-threaded test.
+        unsafe { std::env::remove_var(key) };
+
+        let old_diff = HookDiff::default();
+        let combined_env = HashMap::new();
+        let deletions = vec![key.to_string()];
+
+        let (new_diff, _env) =
+            compute_new_diff(&old_diff, combined_env, vec![], vec![], &deletions);
+
+        assert!(
+            !new_diff.removed.contains_key(key),
+            "removed should skip names with no pristine value: {new_diff:?}"
+        );
     }
 }
