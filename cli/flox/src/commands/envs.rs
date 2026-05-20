@@ -5,6 +5,7 @@ use std::path::Path;
 use anyhow::Result;
 use bpaf::Bpaf;
 use crossterm::style::Stylize;
+use flox_core::activations::activation_state_dir_path;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::env_registry::{EnvRegistry, garbage_collect};
 use flox_rust_sdk::models::environment::{DotFlox, EnvironmentPointer, ManagedPointer};
@@ -47,14 +48,17 @@ impl Envs {
         subcommand_metric!("envs");
 
         let active = activated_environments();
+        let runtime_dir = flox.runtime_dir.clone();
 
         match self.mode {
-            Mode::Active => tracing::info_span!("active").in_scope(|| self.handle_active(active)),
+            Mode::Active => {
+                tracing::info_span!("active").in_scope(|| self.handle_active(active, runtime_dir))
+            },
             Mode::All => tracing::info_span!("all").in_scope(|| {
                 let env_registry = garbage_collect(&flox)?;
                 let registered = get_registered_environments(&env_registry);
 
-                self.handle_all(active, registered)
+                self.handle_all(active, registered, runtime_dir)
             }),
         }
     }
@@ -64,7 +68,11 @@ impl Envs {
     /// If `--json` is passed, print a JSON list with objects for each active environment.
     /// Otherwise, print a list of active environments.
     /// If no environments are active, print an appropriate message.
-    fn handle_active(&self, active: ActiveEnvironments) -> Result<()> {
+    fn handle_active(
+        &self,
+        active: ActiveEnvironments,
+        runtime_dir: std::path::PathBuf,
+    ) -> Result<()> {
         if self.json {
             println!("{:#}", json!(active));
             return Ok(());
@@ -76,8 +84,12 @@ impl Envs {
         }
 
         message::created("Active environments:");
-        let envs =
-            indent::indent_all_by(2, DisplayEnvironments::new(active.iter(), true).to_string());
+        let envs = indent::indent_all_by(
+            2,
+            DisplayEnvironments::new(active.iter(), true)
+                .with_runtime_dir(runtime_dir)
+                .to_string(),
+        );
         println!("{envs}");
 
         Ok(())
@@ -93,6 +105,7 @@ impl Envs {
         &self,
         active: ActiveEnvironments,
         registered: impl Iterator<Item = UninitializedEnvironment>,
+        runtime_dir: std::path::PathBuf,
     ) -> Result<()> {
         let inactive = get_inactive_environments(registered, active.iter())?;
 
@@ -113,8 +126,12 @@ impl Envs {
 
         if active.iter().next().is_some() {
             message::created("Active environments:");
-            let envs =
-                indent::indent_all_by(2, DisplayEnvironments::new(active.iter(), true).to_string());
+            let envs = indent::indent_all_by(
+                2,
+                DisplayEnvironments::new(active.iter(), true)
+                    .with_runtime_dir(runtime_dir.clone())
+                    .to_string(),
+            );
             println!("{envs}");
         }
 
@@ -122,7 +139,9 @@ impl Envs {
             message::plain("Inactive environments:");
             let envs = indent::indent_all_by(
                 2,
-                DisplayEnvironments::new(inactive.iter(), false).to_string(),
+                DisplayEnvironments::new(inactive.iter(), false)
+                    .with_runtime_dir(runtime_dir)
+                    .to_string(),
             );
             println!("{envs}");
         }
@@ -134,6 +153,9 @@ impl Envs {
 pub(crate) struct DisplayEnvironments<'a> {
     envs: Vec<&'a UninitializedEnvironment>,
     format_active: bool,
+    /// Runtime dir used to check for persistent markers.
+    /// When None, persistent tags are not shown.
+    runtime_dir: Option<std::path::PathBuf>,
 }
 
 impl<'a> DisplayEnvironments<'a> {
@@ -144,7 +166,13 @@ impl<'a> DisplayEnvironments<'a> {
         Self {
             envs: envs.into_iter().collect(),
             format_active,
+            runtime_dir: None,
         }
+    }
+
+    pub(crate) fn with_runtime_dir(mut self, runtime_dir: std::path::PathBuf) -> Self {
+        self.runtime_dir = Some(runtime_dir);
+        self
     }
 }
 
@@ -163,16 +191,48 @@ impl Display for DisplayEnvironments<'_> {
             let Some(first) = envs.next() else {
                 return Ok(());
             };
-            let first_formatted =
-                format!("{:<widest$}  {}", first.name(), format_location(first)).bold();
+            let persistent_tag = self.persistent_tag_for(first).unwrap_or_default();
+            let first_formatted = format!(
+                "{:<widest$}  {}{}",
+                first.name(),
+                format_location(first),
+                persistent_tag
+            )
+            .bold();
             writeln!(f, "{first_formatted}")?;
         }
 
         for env in envs {
-            writeln!(f, "{:<widest$}  {}", env.name(), format_location(env))?;
+            let persistent_tag = self.persistent_tag_for(env).unwrap_or_default();
+            writeln!(
+                f,
+                "{:<widest$}  {}{}",
+                env.name(),
+                format_location(env),
+                persistent_tag
+            )?;
         }
 
         Ok(())
+    }
+}
+
+impl DisplayEnvironments<'_> {
+    /// Return the `[persistent]` tag string if a persistent marker exists
+    /// for this environment, otherwise return `None`.
+    fn persistent_tag_for(&self, env: &UninitializedEnvironment) -> Option<String> {
+        let runtime_dir = self.runtime_dir.as_ref()?;
+        let dot_flox_path = match env {
+            UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => path,
+            // Remote envs are not locally persistent.
+            UninitializedEnvironment::Remote(_) => return None,
+        };
+        let state_dir = activation_state_dir_path(runtime_dir, dot_flox_path);
+        if state_dir.join("persistent").exists() {
+            Some("  [persistent]".to_string())
+        } else {
+            None
+        }
     }
 }
 
@@ -282,6 +342,7 @@ mod tests {
         let envs = DisplayEnvironments {
             envs: vec![&path_env, &managed_env, &remote_env],
             format_active: false,
+            runtime_dir: None,
         };
         assert_eq!(envs.to_string(), formatdoc! {"
             name_path                  /envs/path
