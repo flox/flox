@@ -372,6 +372,7 @@ impl FloxArgs {
                 Commands::Share(args) => args.handle(config, flox).await,
                 Commands::Admin(args) => args.handle(config, flox).await,
                 Commands::Agent(args) => args.handle(flox),
+                Commands::Deactivate(args) => args.handle(flox).await,
                 Commands::Internal(args) => args.handle(flox).await,
             };
 
@@ -475,6 +476,13 @@ enum Commands {
     Share(#[bpaf(external(share_commands))] ShareCommands),
     Admin(#[bpaf(external(admin_commands))] AdminCommands),
     Agent(#[bpaf(external(agent_commands))] AgentCommands),
+
+    /// Tear down a persistent Flox Agent environment (Flox Agent prototype)
+    ///
+    /// Alias for 'flox manage deactivate'. Provided as a top-level command
+    /// so 'flox deactivate -d <path>' reads naturally in agent scripts.
+    #[bpaf(command)]
+    Deactivate(#[bpaf(external(deactivate::deactivate))] deactivate::Deactivate),
 
     Internal(#[bpaf(external(internal_commands))] InternalCommands),
 }

@@ -33,7 +33,16 @@ use super::{
     EnvironmentSelect,
     UninitializedEnvironment,
     activated_environments,
+    environment_description,
     environment_select,
+};
+use crate::commands::recap::{AuditEvent, AuditEventType, append_audit_event};
+use crate::commands::telemetry::{
+    TelemetryEvent,
+    TelemetryEventType,
+    command_started_event,
+    emit,
+    new_session_id,
 };
 use crate::commands::{EnvironmentSelectError, SHELL_COMPLETION_FILE, ensure_auth};
 use crate::utils::dialog::{Confirm, Dialog};
@@ -84,6 +93,13 @@ impl Edit {
         // in case we error before then
         subcommand_metric!("edit");
 
+        // Prototype telemetry: fire-and-forget.
+        let session_id = new_session_id();
+        emit(
+            &flox.cache_dir,
+            command_started_event(&session_id, None, "edit"),
+        );
+
         // Ensure the user is logged in for the following remote operations
         if let EnvironmentSelect::Remote(_) = self.environment {
             ensure_auth(&mut flox).await?;
@@ -100,6 +116,8 @@ impl Edit {
         };
         environment_subcommand_metric!("edit", detected_environment);
 
+        let description = environment_description(&detected_environment)?;
+
         match self.action {
             EditAction::EditManifest { file } => {
                 // TODO: differentiate between interactive edits and replacement
@@ -108,7 +126,23 @@ impl Edit {
 
                 let contents = Self::provided_manifest_contents(file)?;
 
-                Self::edit_manifest(&flox, &mut detected_environment, contents).await?
+                Self::edit_manifest(&flox, &mut detected_environment, contents).await?;
+                // Prototype telemetry: record that the manifest was edited.
+                // We optimistically record every successful `flox edit` call;
+                // edit_manifest prints a warning when nothing changed, so the
+                // human-readable recap will be accurate enough for the demo.
+                let _ = append_audit_event(
+                    &flox.cache_dir,
+                    AuditEvent {
+                        session_id: session_id.clone(),
+                        env_id: Some(description.clone()),
+                        event_type: AuditEventType::ManifestDiff,
+                        timestamp: chrono::Utc::now(),
+                        before: None,
+                        after: None,
+                        detail: "flox edit".to_string(),
+                    },
+                );
             },
             EditAction::Rename { name } => {
                 let span = tracing::info_span!("rename");
@@ -193,6 +227,18 @@ impl Edit {
                 message::updated("Environment changes reset to current generation.");
             },
         };
+
+        // Prototype telemetry: command finished.
+        emit(
+            &flox.cache_dir,
+            TelemetryEvent {
+                session_id,
+                env_id: Some(description),
+                event_type: TelemetryEventType::CommandFinished,
+                timestamp: chrono::Utc::now(),
+                payload: serde_json::json!({ "command": "edit", "status": "ok" }),
+            },
+        );
 
         Ok(())
     }

@@ -51,6 +51,7 @@ use super::{
 };
 use crate::commands::check_for_upgrades::spawn_detached_check_for_upgrades_process;
 use crate::commands::services::ServicesCommandsError;
+use crate::commands::telemetry::{command_started_event, emit, new_session_id};
 use crate::commands::{
     EnvironmentSelectError,
     SHELL_COMPLETION_COMMAND,
@@ -157,6 +158,12 @@ impl Activate {
 
     pub async fn handle(self, mut config: Config, mut flox: Flox) -> Result<()> {
         self.validate_service_flags()?;
+
+        // Prototype telemetry: fire-and-forget, never blocks activation.
+        emit(
+            &flox.cache_dir,
+            command_started_event(&new_session_id(), None, "activate"),
+        );
 
         // --persistent flag: prototype surface for agent-mode persistent environments.
         // The flox-activations executive daemon already stays alive and tracks PIDs;
@@ -880,9 +887,14 @@ fn build_sandbox_exec_command(
 }
 
 /// Linux bubblewrap (bwrap) sandbox for Flox Agent default-deny sandboxing.
+///
+/// Profile: Spike A recommended bindings for multi-user Nix on Linux.
+/// The FLOX_SANDBOX_PROFILE env var is set to a human-readable summary
+/// so `flox agent sandbox status` can report what's active inside the
+/// sandboxed process without needing to read a policy file.
 #[cfg(target_os = "linux")]
 fn build_bwrap_command(
-    _temp_dir: &std::path::Path,
+    temp_dir: &std::path::Path,
     activations_bin: &std::path::Path,
     verbosity_num: u32,
     activate_data: &std::path::Path,
@@ -895,37 +907,64 @@ fn build_bwrap_command(
         .to_string();
     let dot_flox = dot_flox_path.to_string_lossy();
 
+    // Write a human-readable profile summary to the launcher's temp dir.
+    // The sandboxed process reads FLOX_SANDBOX_PROFILE — it is NOT a bwrap
+    // policy file, just a human-readable label for `flox agent sandbox status`.
+    let profile_path = temp_dir.join("flox-sandbox-bwrap.profile");
+    let _ = std::fs::write(
+        &profile_path,
+        "bwrap default-deny: nix-store RO, flox-state RW, cwd RW, no-net",
+    );
+
     message::warning(
         "Starting sandboxed activation (Flox Agent prototype).\n  Backend: bwrap (Linux)\n  Posture: default-deny FS/network",
     );
 
     let mut cmd = std::process::Command::new("bwrap");
-    cmd.env("FLOX_SANDBOX_BACKEND", "bwrap")
-        .env("FLOX_SANDBOX_ALLOW_READ", "/nix/store:/nix/var/nix")
-        .env("FLOX_SANDBOX_ALLOW_WRITE", format!("{}/.cache/flox:{}", home, cwd))
+    cmd
+        // Sandbox identity env vars — readable by `flox agent sandbox status`
+        .env("FLOX_SANDBOX_BACKEND", "bwrap")
+        .env("FLOX_SANDBOX_PROFILE", profile_path.to_string_lossy().as_ref())
+        .env("FLOX_SANDBOX_ALLOW_READ", "/nix/store:/nix/var/nix:/etc")
+        .env(
+            "FLOX_SANDBOX_ALLOW_WRITE",
+            format!(
+                "{}/.cache/flox:{}/.local/share/flox:{}/.local/state/flox:{}",
+                home, home, home, cwd
+            ),
+        )
         .env(FLOX_ACTIVATIONS_VERBOSITY_VAR, format!("{verbosity_num}"))
-        // Nix store read-only
+        // Nix store read-only (bind the whole /nix tree, then override daemon socket RW)
         .arg("--ro-bind").arg("/nix").arg("/nix")
-        // Nix daemon socket (multi-user)
+        // Nix daemon socket (multi-user Nix required for Flox Agent alpha)
         .arg("--bind").arg("/nix/var/nix/daemon-socket").arg("/nix/var/nix/daemon-socket")
-        // Flox state dirs
-        .arg("--bind").arg(format!("{home}/.cache/flox")).arg(format!("{home}/.cache/flox"))
-        .arg("--bind").arg(format!("{home}/.local/share/flox")).arg(format!("{home}/.local/share/flox"))
-        .arg("--bind").arg(format!("{home}/.local/state/flox")).arg(format!("{home}/.local/state/flox"))
-        .arg("--ro-bind").arg(format!("{home}/.config/flox")).arg(format!("{home}/.config/flox"))
-        // Per-env .flox dirs
-        .arg("--bind").arg(format!("{dot_flox}/run")).arg(format!("{dot_flox}/run"))
-        .arg("--bind").arg(format!("{dot_flox}/cache")).arg(format!("{dot_flox}/cache"))
-        .arg("--bind").arg(format!("{dot_flox}/log")).arg(format!("{dot_flox}/log"))
-        .arg("--ro-bind").arg(format!("{dot_flox}/env")).arg(format!("{dot_flox}/env"))
-        // CWD
-        .arg("--bind").arg(&cwd).arg(&cwd)
-        // /tmp
+        // /etc read-only (needed for nsswitch.conf, resolv.conf, ssl certs, etc.)
+        .arg("--ro-bind").arg("/etc").arg("/etc")
+        // /proc — required by many tools (nix, curl, etc.)
+        .arg("--proc").arg("/proc")
+        // /dev — minimal device nodes
+        .arg("--dev").arg("/dev")
+        // /tmp as tmpfs
         .arg("--tmpfs").arg("/tmp")
-        // New session and unshare network (default-deny network)
-        .arg("--new-session")
+        // Flox config read-only
+        .arg("--ro-bind-try").arg(format!("{home}/.config/flox")).arg(format!("{home}/.config/flox"))
+        // Flox cache + data + state dirs read-write
+        .arg("--bind-try").arg(format!("{home}/.cache/flox")).arg(format!("{home}/.cache/flox"))
+        .arg("--bind-try").arg(format!("{home}/.local/share/flox")).arg(format!("{home}/.local/share/flox"))
+        .arg("--bind-try").arg(format!("{home}/.local/state/flox")).arg(format!("{home}/.local/state/flox"))
+        // Per-env .flox dirs: run/cache/log/lib RW, env RO
+        .arg("--bind-try").arg(format!("{dot_flox}/run")).arg(format!("{dot_flox}/run"))
+        .arg("--bind-try").arg(format!("{dot_flox}/cache")).arg(format!("{dot_flox}/cache"))
+        .arg("--bind-try").arg(format!("{dot_flox}/log")).arg(format!("{dot_flox}/log"))
+        .arg("--bind-try").arg(format!("{dot_flox}/lib")).arg(format!("{dot_flox}/lib"))
+        .arg("--ro-bind-try").arg(format!("{dot_flox}/env")).arg(format!("{dot_flox}/env"))
+        // Current working directory read-write
+        .arg("--bind").arg(&cwd).arg(&cwd)
+        // Unshare network namespace (default-deny network)
         .arg("--unshare-net")
-        // Execute
+        // New session so signals don't leak out
+        .arg("--new-session")
+        // Execute the activations binary inside the sandbox
         .arg("--")
         .arg(activations_bin)
         .arg("activate")
