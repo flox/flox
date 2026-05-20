@@ -45,18 +45,31 @@ jobs:
       - name: "Determine target branch ( PR )"
         if: ${{ github.event_name == 'pull_request' }}
         # Unlike `github.event.merge_group.base_ref`, `github.base_ref`
-        # only includes the final ref name
-        # prepend `refs/heads/` to match the format of
-        # `github.event.merge_group.base_ref`.
+        # only includes the final ref name; prepend `refs/heads/` to match
+        # the format of `github.event.merge_group.base_ref`.
+        #
+        # The PR head branch may live in a fork, so it is not guaranteed to
+        # exist on `origin`. Fetch it through `refs/pull/<number>/head`, which
+        # GitHub maintains on the base repo for every PR (fork or same-repo).
+        #
+        # Context values are passed via `env:` and referenced as shell
+        # variables rather than interpolated directly into `run:`, to avoid
+        # script injection from attacker-controlled values such as branch names.
+        env:
+          BASE_REF: "${{ github.base_ref }}"
+          PR_NUMBER: "${{ github.event.pull_request.number }}"
         run: |
-          echo 'TARGET_REF=refs/heads/${{ github.base_ref }}' >> "$GITHUB_ENV";
-          echo 'HEAD_REF=refs/heads/${{ github.head_ref }}' >> "$GITHUB_ENV";
+          echo "TARGET_REF=refs/heads/${BASE_REF}" >> "$GITHUB_ENV";
+          echo "HEAD_REF=refs/pull/${PR_NUMBER}/head" >> "$GITHUB_ENV";
 
       - name: "Fetch target branch ( Merge Queue )"
         if: ${{ github.event_name == 'merge_group' }}
+        env:
+          MERGE_GROUP_BASE_REF: "${{ github.event.merge_group.base_ref }}"
+          MERGE_GROUP_HEAD_REF: "${{ github.event.merge_group.head_ref }}"
         run: |
-          echo 'TARGET_REF=${{ github.event.merge_group.base_ref }}' >> "$GITHUB_ENV";
-          echo 'HEAD_REF=${{ github.event.merge_group.head_ref }}' >> "$GITHUB_ENV";
+          echo "TARGET_REF=${MERGE_GROUP_BASE_REF}" >> "$GITHUB_ENV";
+          echo "HEAD_REF=${MERGE_GROUP_HEAD_REF}" >> "$GITHUB_ENV";
 
       - name: "Set merge queue flag"
         if: ${{ github.event_name == 'merge_group' }}
