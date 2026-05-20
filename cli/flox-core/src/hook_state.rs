@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
@@ -56,51 +56,30 @@ pub struct OnActivateEnvDiff {
     pub deletions: Vec<String>,
 }
 
+/// The diff between the pre-activation shell environment and the
+/// post-activation environment, encoded into `_FLOX_HOOK_DIFF`.
+///
+/// Shared between `flox activate` (which writes the diff during attach) and
+/// `flox deactivate` / the auto-activate hook (which read it to restore the
+/// pre-activation environment). See Linear DEV-77.
+///
+/// `modified` and `removed` store the ORIGINAL value so deactivation can
+/// restore it. `added` stores only the name: the var did not exist before, so
+/// deactivation will unset it. When applying the diff, the new values for
+/// `added` keys must be looked up from the surrounding environment.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct HookDiff {
-    pub additions: HashMap<String, String>,
-    pub modifications: HashMap<String, String>,
-    pub deletions: HashMap<String, String>,
+    /// Vars newly set by activation.
+    pub added: HashSet<String>,
+    /// Vars whose value will change (stores *original* value).
+    pub modified: HashMap<String, String>,
+    /// Vars that will be unset (stores *original* value).
+    pub removed: HashMap<String, String>,
 }
 
 impl HookDiff {
-    /// Compute the diff between a pristine environment and a new environment.
-    ///
-    /// - `additions`: keys in `new_env` but not in `pristine`
-    /// - `modifications`: keys in both with different values (stores the ORIGINAL value)
-    /// - `deletions`: keys in `pristine` but not in `new_env` (stores the ORIGINAL value)
-    pub fn compute(pristine: &HashMap<String, String>, new_env: &HashMap<String, String>) -> Self {
-        let mut additions = HashMap::new();
-        let mut modifications = HashMap::new();
-        let mut deletions = HashMap::new();
-
-        for (key, new_val) in new_env {
-            match pristine.get(key) {
-                Some(orig_val) if orig_val != new_val => {
-                    modifications.insert(key.clone(), orig_val.clone());
-                },
-                None => {
-                    additions.insert(key.clone(), new_val.clone());
-                },
-                _ => {},
-            }
-        }
-
-        for (key, orig_val) in pristine {
-            if !new_env.contains_key(key) {
-                deletions.insert(key.clone(), orig_val.clone());
-            }
-        }
-
-        Self {
-            additions,
-            modifications,
-            deletions,
-        }
-    }
-
     pub fn is_empty(&self) -> bool {
-        self.additions.is_empty() && self.modifications.is_empty() && self.deletions.is_empty()
+        self.added.is_empty() && self.modified.is_empty() && self.removed.is_empty()
     }
 
     /// Serialize to JSON, zlib compress, then base64url encode (no padding).
@@ -271,65 +250,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_compute_addition() {
-        let pristine = HashMap::new();
-        let mut new_env = HashMap::new();
-        new_env.insert("FOO".to_string(), "bar".to_string());
-
-        let diff = HookDiff::compute(&pristine, &new_env);
-        assert_eq!(diff, HookDiff {
-            additions: HashMap::from([("FOO".to_string(), "bar".to_string())]),
-            modifications: HashMap::new(),
-            deletions: HashMap::new(),
-        });
-    }
-
-    #[test]
-    fn test_compute_modification() {
-        let mut pristine = HashMap::new();
-        pristine.insert("FOO".to_string(), "old".to_string());
-        let mut new_env = HashMap::new();
-        new_env.insert("FOO".to_string(), "new".to_string());
-
-        let diff = HookDiff::compute(&pristine, &new_env);
-        assert_eq!(diff, HookDiff {
-            additions: HashMap::new(),
-            modifications: HashMap::from([("FOO".to_string(), "old".to_string())]),
-            deletions: HashMap::new(),
-        });
-    }
-
-    #[test]
-    fn test_compute_deletion() {
-        let mut pristine = HashMap::new();
-        pristine.insert("FOO".to_string(), "bar".to_string());
-        let new_env = HashMap::new();
-
-        let diff = HookDiff::compute(&pristine, &new_env);
-        assert_eq!(diff, HookDiff {
-            additions: HashMap::new(),
-            modifications: HashMap::new(),
-            deletions: HashMap::from([("FOO".to_string(), "bar".to_string())]),
-        });
-    }
-
-    #[test]
-    fn test_compute_no_change() {
-        let mut pristine = HashMap::new();
-        pristine.insert("FOO".to_string(), "bar".to_string());
-        let mut new_env = HashMap::new();
-        new_env.insert("FOO".to_string(), "bar".to_string());
-
-        let diff = HookDiff::compute(&pristine, &new_env);
-        assert_eq!(diff, HookDiff::default());
-    }
-
-    #[test]
-    fn test_serialize_deserialize_roundtrip() {
+    fn serialize_deserialize_roundtrip() {
         let diff = HookDiff {
-            additions: HashMap::from([("NEW".to_string(), "val".to_string())]),
-            modifications: HashMap::from([("MOD".to_string(), "orig".to_string())]),
-            deletions: HashMap::from([("DEL".to_string(), "gone".to_string())]),
+            added: HashSet::from(["NEW".to_string()]),
+            modified: HashMap::from([("MOD".to_string(), "orig".to_string())]),
+            removed: HashMap::from([("DEL".to_string(), "gone".to_string())]),
         };
 
         let encoded = diff.serialize().unwrap();
@@ -338,9 +263,23 @@ mod tests {
     }
 
     #[test]
-    fn test_deserialize_empty_string() {
+    fn deserialize_empty_string() {
         let diff = HookDiff::deserialize("").unwrap();
         assert_eq!(diff, HookDiff::default());
+    }
+
+    #[test]
+    fn is_empty_default() {
+        assert!(HookDiff::default().is_empty());
+    }
+
+    #[test]
+    fn is_empty_with_addition() {
+        let diff = HookDiff {
+            added: HashSet::from(["FOO".to_string()]),
+            ..HookDiff::default()
+        };
+        assert!(!diff.is_empty());
     }
 
     #[test]

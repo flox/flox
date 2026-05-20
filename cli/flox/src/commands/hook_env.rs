@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -683,25 +683,25 @@ fn compute_new_diff(
     }
 
     // Compute the new diff against the *reverted* process env.
-    let mut additions = HashMap::new();
-    let mut modifications = HashMap::new();
+    let mut added = HashSet::new();
+    let mut modified = HashMap::new();
 
     for (key, new_val) in &combined_env {
         match reverted_env_var(key, old_diff) {
             Some(orig_val) if orig_val != *new_val => {
-                modifications.insert(key.clone(), orig_val);
+                modified.insert(key.clone(), orig_val);
             },
             None => {
-                additions.insert(key.clone(), new_val.clone());
+                added.insert(key.clone());
             },
             _ => {},
         }
     }
 
     let new_diff = HookDiff {
-        additions,
-        modifications,
-        deletions: HashMap::new(),
+        added,
+        modified,
+        removed: HashMap::new(),
     };
 
     (new_diff, combined_env)
@@ -725,11 +725,11 @@ fn apply_on_activate_diff(
 /// Compute the value an environment variable would have after reverting the
 /// previous diff.
 fn reverted_env_var(key: &str, old_diff: &HookDiff) -> Option<String> {
-    if old_diff.additions.contains_key(key) {
+    if old_diff.added.contains(key) {
         None
-    } else if let Some(orig_val) = old_diff.modifications.get(key) {
+    } else if let Some(orig_val) = old_diff.modified.get(key) {
         Some(orig_val.clone())
-    } else if let Some(orig_val) = old_diff.deletions.get(key) {
+    } else if let Some(orig_val) = old_diff.removed.get(key) {
         Some(orig_val.clone())
     } else {
         std::env::var(key).ok()
@@ -880,16 +880,16 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<ResolvedEnv> {
 
 /// Emit shell commands to revert the previous HookDiff.
 pub(crate) fn emit_revert(diff: &HookDiff, shell: Shell, writer: &mut impl Write) -> Result<()> {
-    // Unset additions (they were added, so remove them).
-    for name in diff.additions.keys() {
+    // Unset added vars (they didn't exist before activation).
+    for name in &diff.added {
         UnsetVar::new(name).generate_with_newline(shell, writer)?;
     }
-    // Restore modifications to their original values.
-    for (name, orig_val) in &diff.modifications {
+    // Restore modified vars to their original values.
+    for (name, orig_val) in &diff.modified {
         SetVar::exported_no_expansion(name, orig_val).generate_with_newline(shell, writer)?;
     }
-    // Restore deletions (they were deleted, so re-export them).
-    for (name, orig_val) in &diff.deletions {
+    // Restore removed vars (they were unset by activation, so re-export them).
+    for (name, orig_val) in &diff.removed {
         SetVar::exported_no_expansion(name, orig_val).generate_with_newline(shell, writer)?;
     }
     // Restore the saved prompt.
@@ -904,10 +904,13 @@ fn emit_apply(
     shell: Shell,
     writer: &mut impl Write,
 ) -> Result<()> {
-    for (name, val) in &diff.additions {
-        SetVar::exported_no_expansion(name, val).generate_with_newline(shell, writer)?;
+    // For added vars, look up the new value from new_env.
+    for name in &diff.added {
+        if let Some(val) = new_env.get(name) {
+            SetVar::exported_no_expansion(name, val).generate_with_newline(shell, writer)?;
+        }
     }
-    for name in diff.modifications.keys() {
+    for name in diff.modified.keys() {
         if let Some(new_val) = new_env.get(name) {
             SetVar::exported_no_expansion(name, new_val).generate_with_newline(shell, writer)?;
         }

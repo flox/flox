@@ -5,6 +5,7 @@ use std::process::Command;
 use anyhow::Result;
 use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
 use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
+use flox_core::hook_state::{HOOK_VAR_DIFF, HookDiff};
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
 use itertools::Itertools;
@@ -13,7 +14,6 @@ use tracing::debug;
 
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
-use crate::diff_serializer::{DiffSerializer, FLOX_HOOK_DIFF_VAR};
 use crate::env_diff::EnvDiff;
 use crate::start_diff::StartDiff;
 use crate::vars_from_env::VarsFromEnvironment;
@@ -130,7 +130,7 @@ impl AttachDiff {
             let intended_removals: HashSet<String> =
                 double_sets.deletions.iter().cloned().collect();
             let diff = diff_env(current_env, &intended_sets, &intended_removals);
-            let encoded = diff.encode()?;
+            let encoded = diff.serialize()?;
             debug!(
                 "captured activation diff: {} added, {} modified, {} removed ({} bytes encoded)",
                 diff.added.len(),
@@ -163,7 +163,7 @@ impl AttachDiff {
             command.env_remove(var);
         }
         if let Some(ref encoded) = self.encoded_diff {
-            command.env(FLOX_HOOK_DIFF_VAR, encoded);
+            command.env(HOOK_VAR_DIFF, encoded);
         }
     }
 
@@ -180,7 +180,7 @@ impl AttachDiff {
                 stmts.push(set_exported_unexpanded(k, v));
             }
             if let Some(ref encoded) = self.encoded_diff {
-                stmts.push(set_exported_unexpanded(FLOX_HOOK_DIFF_VAR, encoded));
+                stmts.push(set_exported_unexpanded(HOOK_VAR_DIFF, encoded));
             }
         }
         for (k, v) in self.double_sets.additions.iter().sorted_by_key(|(k, _)| *k) {
@@ -249,7 +249,7 @@ fn diff_env(
     current_env: &HashMap<String, String>,
     intended_sets: &HashSet<String>,
     intended_removals: &HashSet<String>,
-) -> DiffSerializer {
+) -> HookDiff {
     let mut added = HashSet::new();
     let mut modified = HashMap::new();
     let mut removed = HashMap::new();
@@ -271,7 +271,7 @@ fn diff_env(
         }
     }
 
-    DiffSerializer {
+    HookDiff {
         added,
         modified,
         removed,
