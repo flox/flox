@@ -33,7 +33,6 @@ use flox_core::trust::{TrustManager, TrustStatus};
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::parsed::Inner;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::lock_manifest::LockResult;
 use flox_rust_sdk::models::environment::{
     DotFlox,
     Environment,
@@ -41,6 +40,7 @@ use flox_rust_sdk::models::environment::{
     UninitializedEnvironment,
     find_all_dot_flox,
 };
+use flox_rust_sdk::providers::lock_manifest::LockResult;
 use flox_rust_sdk::providers::services::process_compose::PROCESS_COMPOSE_BIN;
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use regex::Regex;
@@ -244,9 +244,7 @@ fn is_fast_path(
             let preference_changed = state
                 .active_dirs
                 .iter()
-                .any(|dir| {
-                    !matches!(preference_manager.check(dir), Ok(PreferenceStatus::Allowed))
-                });
+                .any(|dir| !matches!(preference_manager.check(dir), Ok(PreferenceStatus::Allowed)));
             (trust_changed, preference_changed)
         },
     };
@@ -321,8 +319,7 @@ fn filter_by_eligibility(
                         if notified_dirs.contains(&dot_flox.path.to_path_buf()) {
                             continue;
                         }
-                        let is_local =
-                            matches!(dot_flox.pointer, EnvironmentPointer::Path(_));
+                        let is_local = matches!(dot_flox.pointer, EnvironmentPointer::Path(_));
                         if prompt_auto_activate(
                             &dot_flox.path,
                             preference_manager,
@@ -775,31 +772,28 @@ fn resolve_env_vars(dot_flox: &DotFlox, flox: &Flox) -> Result<ResolvedEnv> {
         LockResult::Changed(l) => l,
         LockResult::Unchanged(l) => l,
     };
-    let (services_to_start, cuda_detection) =
-        match lockfile.migrated_manifest() {
-            Ok(manifest) => {
-                let latest = manifest.as_latest_schema();
-                let auto_start =
-                    latest.services.auto_start.unwrap_or(false);
-                let services = if auto_start {
-                    let services_for_system =
-                        latest.services.copy_for_system(&flox.system);
-                    services_for_system
-                        .inner()
-                        .keys()
-                        .cloned()
-                        .collect::<Vec<String>>()
-                } else {
-                    Vec::new()
-                };
-                let cuda = latest.options.cuda_detection;
-                (services, cuda)
-            },
-            Err(e) => {
-                debug!("failed to read services from manifest: {e}");
-                (Vec::new(), None)
-            },
-        };
+    let (services_to_start, cuda_detection) = match lockfile.migrated_manifest() {
+        Ok(manifest) => {
+            let latest = manifest.as_latest_schema();
+            let auto_start = latest.services.auto_start.unwrap_or(false);
+            let services = if auto_start {
+                let services_for_system = latest.services.copy_for_system(&flox.system);
+                services_for_system
+                    .inner()
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<String>>()
+            } else {
+                Vec::new()
+            };
+            let cuda = latest.options.cuda_detection;
+            (services, cuda)
+        },
+        Err(e) => {
+            debug!("failed to read services from manifest: {e}");
+            (Vec::new(), None)
+        },
+    };
 
     let cuda_detection_str = match cuda_detection {
         Some(false) => "0".to_string(),

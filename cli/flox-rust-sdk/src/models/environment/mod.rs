@@ -964,11 +964,8 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
 /// Unlike `find_dot_flox`, this function does not stop at git boundaries —
 /// it walks the full ancestor chain so that auto-activation can discover
 /// all environments the user may have entered.
-pub fn find_all_dot_flox(
-    initial_dir: &Path,
-) -> Result<Vec<DotFlox>, EnvironmentError> {
-    let path =
-        CanonicalPath::new(initial_dir).map_err(EnvironmentError::StartDiscoveryDir)?;
+pub fn find_all_dot_flox(initial_dir: &Path) -> Result<Vec<DotFlox>, EnvironmentError> {
+    let path = CanonicalPath::new(initial_dir).map_err(EnvironmentError::StartDiscoveryDir)?;
 
     let mut results = Vec::new();
     for ancestor in path.ancestors() {
