@@ -563,10 +563,9 @@ enum UseCommands {
 impl UseCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
-            UseCommands::Activate(args) => args.handle(config, flox).await?,
-            UseCommands::Services(args) => args.handle(config, flox).await?,
+            UseCommands::Activate(args) => args.handle(config, flox).await,
+            UseCommands::Services(args) => args.handle(config, flox).await,
         }
-        Ok(())
     }
 }
 
