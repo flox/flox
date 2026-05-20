@@ -109,20 +109,19 @@ impl Deactivate {
         // Remove the persistent marker (if any) so the environment no longer
         // shows up as [persistent] in `flox envs` after explicit deactivation.
         let marker = persistent_marker_path(&flox.cache_dir, &dot_flox_path);
-        if marker.exists() {
-            if let Err(e) = std::fs::remove_file(&marker) {
-                message::warning(format!("Could not remove persistent marker: {e}"));
-            }
+        if marker.exists()
+            && let Err(e) = std::fs::remove_file(&marker)
+        {
+            message::warning(format!("Could not remove persistent marker: {e}"));
         }
 
         // Emit shell eval code to restore PS1 if --shell-eval was requested.
-        if self.shell_eval {
-            if let Some(ref shell_str) = self.shell {
-                if let Ok(shell) = shell_str.parse::<Shell>() {
-                    print!("{}", ps1_restore_code(shell));
-                    return Ok(());
-                }
-            }
+        if self.shell_eval
+            && let Some(ref shell_str) = self.shell
+            && let Ok(shell) = shell_str.parse::<Shell>()
+        {
+            print!("{}", ps1_restore_code(shell));
+            return Ok(());
         }
 
         message::plain(format!(
