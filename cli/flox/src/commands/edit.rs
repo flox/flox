@@ -131,18 +131,15 @@ impl Edit {
                 // We optimistically record every successful `flox edit` call;
                 // edit_manifest prints a warning when nothing changed, so the
                 // human-readable recap will be accurate enough for the demo.
-                let _ = append_audit_event(
-                    &flox.cache_dir,
-                    AuditEvent {
-                        session_id: session_id.clone(),
-                        env_id: Some(description.clone()),
-                        event_type: AuditEventType::ManifestDiff,
-                        timestamp: chrono::Utc::now(),
-                        before: None,
-                        after: None,
-                        detail: "flox edit".to_string(),
-                    },
-                );
+                let _ = append_audit_event(&flox.cache_dir, AuditEvent {
+                    session_id: session_id.clone(),
+                    env_id: Some(description.clone()),
+                    event_type: AuditEventType::ManifestDiff,
+                    timestamp: chrono::Utc::now(),
+                    before: None,
+                    after: None,
+                    detail: "flox edit".to_string(),
+                });
             },
             EditAction::Rename { name } => {
                 let span = tracing::info_span!("rename");
@@ -229,16 +226,13 @@ impl Edit {
         };
 
         // Prototype telemetry: command finished.
-        emit(
-            &flox.cache_dir,
-            TelemetryEvent {
-                session_id,
-                env_id: Some(description),
-                event_type: TelemetryEventType::CommandFinished,
-                timestamp: chrono::Utc::now(),
-                payload: serde_json::json!({ "command": "edit", "status": "ok" }),
-            },
-        );
+        emit(&flox.cache_dir, TelemetryEvent {
+            session_id,
+            env_id: Some(description),
+            event_type: TelemetryEventType::CommandFinished,
+            timestamp: chrono::Utc::now(),
+            payload: serde_json::json!({ "command": "edit", "status": "ok" }),
+        });
 
         Ok(())
     }
