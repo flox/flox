@@ -206,7 +206,7 @@ impl Activate {
         // The flox-activations executive daemon already stays alive and tracks PIDs;
         // --persistent simply signals intent and suppresses the "already active" error
         // so multiple agents can attach to the same running environment.
-        if self.persistent {
+        if options.persistent {
             message::warning(
                 "Starting environment as persistent daemon (Flox Agent prototype).\n  Environment will remain active after this shell exits.\n  Attach additional agents with 'flox activate -d <path>'.",
             );
@@ -215,7 +215,7 @@ impl Activate {
         // --frozen / --no-build: refuse activation if it would invoke nix build.
         // For the prototype we check for the presence of a built store path symlink.
         // A missing symlink means the env hasn't been built yet → bail.
-        if self.frozen {
+        if options.frozen {
             // We'll enforce this after resolving the environment below.
         }
 
