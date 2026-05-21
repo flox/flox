@@ -58,9 +58,11 @@ pub fn generate_zsh_profile_commands(
             stmts.push(source_file(args.activate_d.join("zsh")));
         },
         Action::Deactivate { .. } => {
-            // TODO: undo everything in activate_d/zsh
-            // Although note that unsetting the prompt depends on these being
-            // set
+            // Re-enable command hashing (zsh defaults).
+            stmts.push("setopt hashcmds;".to_stmt());
+            stmts.push("setopt hashdirs;".to_stmt());
+            // TODO: undo the rest of activate.d/zsh (FPATH, `_flox_rehash` hook).
+            // Note that unsetting the prompt depends on `_activate_d` being set.
         },
     }
 
@@ -205,6 +207,8 @@ mod tests {
     fn generate_zsh_profile_commands_deactivate() {
         let output = render_deactivate();
         expect![[r#"
+            setopt hashcmds;
+            setopt hashdirs;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
         "#]]
         .assert_eq(&output);
