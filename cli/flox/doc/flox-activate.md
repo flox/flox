@@ -69,6 +69,11 @@ are set to the appropriate values for the environment in which the shell
 hook was defined.
 See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
 
+To reverse activation,
+run [`flox-deactivate(1)`](./flox-deactivate.md).
+Inside a `flox activate` subshell,
+`flox deactivate` is equivalent to `exit`.
+
 # OPTIONS
 
 ## Activate Options
@@ -232,6 +237,7 @@ $ eval "$(flox activate)"
 ```
 
 # SEE ALSO
+[`flox-deactivate(1)`](./flox-deactivate.md),
 [`flox-push(1)`](./flox-push.md),
 [`flox-pull(1)`](./flox-pull.md),
 [`flox-edit(1)`](./flox-edit.md),
