@@ -3,9 +3,11 @@ use std::io::{BufWriter, stdout};
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use indoc::indoc;
 use shell_gen::{Shell, ShellWithPath};
 
+use crate::commands::activate::ActivateOptions;
 use crate::subcommand_metric;
 use crate::utils::message;
 
@@ -27,12 +29,17 @@ impl Deactivate {
         subcommand_metric!("deactivate");
 
         if self.print_script {
-            // Detect the current shell
-            let shell = detect_shell()?;
+            // TODO: might make sense to move detect_shell_for_in_place
+            // off ActivateOptions
+            let shell = ActivateOptions::detect_shell_for_in_place()?;
 
             // Generate and print the deactivation script
             let mut writer = BufWriter::new(stdout());
-            flox_activations::deactivate::generate_deactivate_script(shell, &mut writer)?;
+            flox_activations::deactivate::generate_deactivate_script(
+                shell,
+                &mut writer,
+                &*FLOX_INTERPRETER,
+            )?;
 
             Ok(())
         } else {
@@ -47,29 +54,4 @@ impl Deactivate {
             Ok(())
         }
     }
-}
-
-/// Detect the current shell from the environment
-fn detect_shell() -> Result<ShellWithPath> {
-    // Try FLOX_SHELL first (set during activation)
-    if let Ok(shell_str) = std::env::var("FLOX_SHELL")
-        && let Ok(shell) = shell_str.parse::<Shell>()
-    {
-        // For deactivation, we don't need the exact path, just the shell type
-        let shell_path = std::path::PathBuf::from(shell.to_string());
-        return Ok(match shell {
-            Shell::Bash => ShellWithPath::Bash(shell_path),
-            Shell::Zsh => ShellWithPath::Zsh(shell_path),
-            Shell::Fish => ShellWithPath::Fish(shell_path),
-            Shell::Tcsh => ShellWithPath::Tcsh(shell_path),
-        });
-    }
-
-    // Fallback: try SHELL environment variable
-    if let Ok(shell_path) = std::env::var("SHELL") {
-        return ShellWithPath::try_from(std::path::Path::new(&shell_path))
-            .map_err(|e| anyhow::anyhow!("Unsupported shell: {}", e));
-    }
-
-    anyhow::bail!("Could not detect shell. Set SHELL environment variable.");
 }
