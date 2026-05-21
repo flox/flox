@@ -193,8 +193,8 @@ impl Deactivate {
         let state_path = state_json_path(&activation_state_dir);
 
         // Acquire the lock once; hold it through the write for Inplace.
-        let (state_opt, lock) =
-            read_activations_json(&state_path).context("failed to read state.json")?;
+        let (state_opt, lock) = read_activations_json(&state_path)
+            .with_context(|| format!("failed to read state.json at '{}'", state_path.display()))?;
 
         // Parent PID of `flox deactivate` is the calling shell.
         let shell_pid = std::os::unix::process::parent_id() as i32;

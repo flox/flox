@@ -438,7 +438,7 @@ impl ActivationState {
     /// Returns:
     /// - `None` — the PID is not attached at all (not in `state.json`).
     /// - `Some(None)` — the PID is attached but has no recorded invocation
-    ///   type (pre-DEV-78 `state.json` written before the field existed).
+    ///   type (`state.json` written with a version of Flox before the field existed).
     /// - `Some(Some(t))` — the PID is attached with invocation type `t`.
     pub fn invocation_type_for_pid(&self, pid: Pid) -> Option<Option<&InvocationType>> {
         self.attached_pids
