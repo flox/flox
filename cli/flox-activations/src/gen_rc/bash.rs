@@ -168,7 +168,8 @@ pub fn generate_bash_profile_commands(
             stmts.push("set +h".to_stmt());
         },
         Action::Deactivate { .. } => {
-            // TODO: decide whether to restore prior hashing state.
+            // Re-enable command hashing (bash default).
+            stmts.push("set -h".to_stmt());
         },
     }
 
@@ -313,6 +314,7 @@ mod tests {
         let output = render_deactivate();
         expect![[r#"
             if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
+            set -h
         "#]]
         .assert_eq(&output);
     }

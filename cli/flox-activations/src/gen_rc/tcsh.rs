@@ -161,7 +161,8 @@ pub fn generate_tcsh_profile_commands(
             stmts.push("unhash;".to_stmt());
         },
         Action::Deactivate { .. } => {
-            // TODO: decide whether to restore prior hashing state.
+            // Re-enable command hashing by rebuilding the hash table.
+            stmts.push("rehash;".to_stmt());
         },
     }
 
@@ -311,6 +312,7 @@ mod tests {
         let output = render_deactivate();
         expect![[r#"
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
+            rehash;
         "#]]
         .assert_eq(&output);
     }
