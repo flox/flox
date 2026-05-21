@@ -2662,7 +2662,7 @@
           },
           "derivations": {
             "items": {
-              "$ref": "#/components/schemas/PackageDerivation-Output"
+              "$ref": "#/components/schemas/PackageDerivation"
             },
             "type": "array",
             "title": "Derivations"
@@ -2812,7 +2812,7 @@
             "type": "integer"
           },
           "derivation": {
-            "$ref": "#/components/schemas/PackageDerivation-Output"
+            "$ref": "#/components/schemas/PackageDerivation"
           },
           "cache_uri": {
             "title": "Cache Uri",
@@ -2929,7 +2929,7 @@
             "type": "integer"
           },
           "derivation": {
-            "$ref": "#/components/schemas/PackageDerivation-Input"
+            "$ref": "#/components/schemas/PackageDerivation"
           },
           "cache_uri": {
             "title": "Cache Uri",
@@ -3003,98 +3003,7 @@
           "url": "https://github.com/org/example"
         }
       },
-      "PackageDerivation-Input": {
-        "properties": {
-          "drv_path": {
-            "type": "string",
-            "title": "Drv Path"
-          },
-          "system": {
-            "$ref": "#/components/schemas/PackageSystem"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "outputs": {
-            "$ref": "#/components/schemas/PackageOutputs"
-          },
-          "outputs_to_install": {
-            "title": "Outputs To Install",
-            "nullable": true,
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "description": {
-            "title": "Description",
-            "nullable": true,
-            "type": "string"
-          },
-          "pname": {
-            "title": "Pname",
-            "nullable": true,
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "nullable": true,
-            "type": "string"
-          },
-          "license": {
-            "title": "License",
-            "nullable": true,
-            "type": "string"
-          },
-          "licenses": {
-            "title": "Licenses",
-            "nullable": true,
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "broken": {
-            "title": "Broken",
-            "nullable": true,
-            "type": "boolean"
-          },
-          "unfree": {
-            "title": "Unfree",
-            "nullable": true,
-            "type": "boolean"
-          }
-        },
-        "type": "object",
-        "required": [
-          "drv_path",
-          "system",
-          "name",
-          "outputs"
-        ],
-        "title": "PackageDerivation",
-        "example": {
-          "broken": false,
-          "description": "A command line tool for transferring files with URL syntax",
-          "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
-          "license": "curl",
-          "name": "curl-8.5.0",
-          "outputs": {
-            "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
-            "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-          },
-          "outputs_to_install": [
-            "out",
-            "man"
-          ],
-          "pname": "curl",
-          "system": "x86_64-linux",
-          "unfree": false,
-          "version": "8.5.0"
-        }
-      },
-      "PackageDerivation-Output": {
+      "PackageDerivation": {
         "properties": {
           "drv_path": {
             "type": "string",
