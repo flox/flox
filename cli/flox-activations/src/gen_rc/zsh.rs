@@ -37,7 +37,7 @@ pub fn generate_zsh_profile_commands(
                 args.activate_d.display().to_string(),
             ));
         },
-        Action::Deactivate => {
+        Action::Deactivate { .. } => {
             // TODO: we might not need to set these in the first place
         },
     }
@@ -47,7 +47,7 @@ pub fn generate_zsh_profile_commands(
         Action::Activate { args, attach_diff } => {
             stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
         },
-        Action::Deactivate => {
+        Action::Deactivate { .. } => {
             // TODO: decode `_FLOX_HOOK_DIFF` and emit restores.
         },
     }
@@ -57,29 +57,35 @@ pub fn generate_zsh_profile_commands(
         Action::Activate { args, .. } => {
             stmts.push(source_file(args.activate_d.join("zsh")));
         },
-        Action::Deactivate => {
+        Action::Deactivate { .. } => {
             // TODO: undo everything in activate_d/zsh
+            // Although note that unsetting the prompt depends on these being
+            // set
         },
     }
 
-    // Set the prompt if we're in an interactive shell.
-    match action {
-        Action::Activate { args, .. } => {
-            if args.set_prompt {
-                let set_prompt_path = args.activate_d.join("set-prompt.zsh");
-                stmts.push(
-                    format!(
-                        "if [[ -o interactive ]]; then source '{}'; fi;",
-                        set_prompt_path.display()
-                    )
-                    .to_stmt(),
-                );
-            }
-        },
-        Action::Deactivate => {
-            // TODO: revert the prompt.
-        },
-    }
+    // Source set-prompt.zsh if we're in an interactive shell
+    // set-prompt.zsh handles both setting and unsetting
+    // Note for deactivate this must come after reverting environment
+    // variables (which includes FLOX_PROMPT_ENVIRONMENTS)
+    let set_prompt_path = match action {
+        Action::Activate { args, .. } => args
+            .set_prompt
+            .then(|| args.activate_d.join("set-prompt.zsh")),
+        Action::Deactivate { activate_d } => Some(activate_d.join("set-prompt.zsh")),
+    };
+    if let Some(set_prompt_path) = set_prompt_path {
+        // We could consult set_prompt, but hypothetically that config value
+        // could change between activation and deactivation, and sourcing
+        // set-prompt won't hurt
+        stmts.push(
+            format!(
+                "if [[ -o interactive ]]; then source '{}'; fi;",
+                set_prompt_path.display()
+            )
+            .to_stmt(),
+        );
+    };
 
     // Self-destruct rc file
     match action {
@@ -90,7 +96,7 @@ pub fn generate_zsh_profile_commands(
                 stmts.push(format!("{RM} {};", escaped_path).to_stmt());
             }
         },
-        Action::Deactivate => {
+        Action::Deactivate { .. } => {
             // No-op: deactivate has no rc file to remove.
         },
     }
@@ -114,7 +120,7 @@ pub fn generate_zsh_profile_commands(
                 write!(writer, "{}", crate::hook::zsh_hook(&args.flox_bin))?;
             }
         },
-        Action::Deactivate => {
+        Action::Deactivate { .. } => {
             // TODO: unregister the auto-activate hook
         },
     }
@@ -141,7 +147,9 @@ mod tests {
     }
 
     fn render_deactivate() -> String {
-        let action = Action::<ZshStartupArgs>::Deactivate;
+        let action = Action::<ZshStartupArgs>::Deactivate {
+            activate_d: PathBuf::from("/interpreter/activate.d"),
+        };
         let mut buf = Vec::new();
         generate_zsh_profile_commands(&action, &mut buf).expect("generator should succeed");
         String::from_utf8(buf).expect("output should be utf-8")
@@ -196,6 +204,9 @@ mod tests {
     #[test]
     fn generate_zsh_profile_commands_deactivate() {
         let output = render_deactivate();
-        expect![""].assert_eq(&output);
+        expect![[r#"
+            if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
+        "#]]
+        .assert_eq(&output);
     }
 }

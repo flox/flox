@@ -44,7 +44,7 @@ pub fn generate_fish_profile_commands(
                 stmts.push(todo_drop_set_exported_unexpanded("fish_trace", "1").to_stmt());
             }
         },
-        Action::Deactivate => {
+        Action::Deactivate { .. } => {
             // TODO: emit `set -gx fish_trace 1` when tracelevel >= 2
         },
     }
@@ -59,7 +59,7 @@ pub fn generate_fish_profile_commands(
         Action::Activate { args, attach_diff } => {
             stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
         },
-        Action::Deactivate => {
+        Action::Deactivate { .. } => {
             // TODO: decode `_FLOX_HOOK_DIFF` and emit restores.
         },
     }
@@ -79,25 +79,29 @@ pub fn generate_fish_profile_commands(
                 &args.flox_activate_tracer,
             ));
         },
-        Action::Deactivate => {
+        Action::Deactivate { .. } => {
             // TODO: we shouldn't be exporting these in the first place
+            // Although note that unsetting the prompt depends on these being
+            // set
         },
     }
 
-    // Set the prompt if we're in an interactive shell.
-    match action {
-        Action::Activate { args, .. } => {
-            if args.set_prompt {
-                let set_prompt_path = args.activate_d.join("set-prompt.fish");
-                stmts.push(
-                    format!("if isatty 1; source '{}'; end;", set_prompt_path.display()).to_stmt(),
-                );
-            }
-        },
-        Action::Deactivate => {
-            // TODO: revert the prompt.
-        },
-    }
+    // Source set-prompt.fish if we're in an interactive shell
+    // set-prompt.fish handles both setting and unsetting
+    // Note for deactivate this must come after reverting environment
+    // variables (which includes FLOX_PROMPT_ENVIRONMENTS)
+    let set_prompt_path = match action {
+        Action::Activate { args, .. } => args
+            .set_prompt
+            .then(|| args.activate_d.join("set-prompt.fish")),
+        Action::Deactivate { activate_d } => Some(activate_d.join("set-prompt.fish")),
+    };
+    if let Some(set_prompt_path) = set_prompt_path {
+        // We could consult set_prompt, but hypothetically that config value
+        // could change between activation and deactivation, and sourcing
+        // set-prompt won't hurt
+        stmts.push(format!("if isatty 1; source '{}'; end;", set_prompt_path.display()).to_stmt());
+    };
 
     // We already customized the PATH and MANPATH, but the user and system
     // dotfiles may have changed them, so finish by doing this again.
@@ -130,7 +134,7 @@ pub fn generate_fish_profile_commands(
                 args.flox_activations.display()
             ).to_stmt());
         },
-        Action::Deactivate => {
+        Action::Deactivate { .. } => {
             // No-op: covered by environment restoration above
         },
     }
@@ -146,7 +150,7 @@ pub fn generate_fish_profile_commands(
                 args.flox_activations.display()
             ).to_stmt());
         },
-        Action::Deactivate => {
+        Action::Deactivate { .. } => {
             // TODO: run profile.deactivate.fish
         },
     }
@@ -161,7 +165,7 @@ pub fn generate_fish_profile_commands(
                 stmts.push("set -gx fish_trace 0;".to_stmt());
             }
         },
-        Action::Deactivate => {
+        Action::Deactivate { .. } => {
             // TODO: set -gx fish_trace 0
         },
     }
@@ -175,7 +179,7 @@ pub fn generate_fish_profile_commands(
                 stmts.push(format!("{RM} {};", escaped_path).to_stmt());
             }
         },
-        Action::Deactivate => {
+        Action::Deactivate { .. } => {
             // No-op: deactivate has no rc file to remove.
         },
     }
@@ -199,7 +203,7 @@ pub fn generate_fish_profile_commands(
                 write!(writer, "{}", crate::hook::fish_hook(&args.flox_bin))?;
             }
         },
-        Action::Deactivate => {
+        Action::Deactivate { .. } => {
             // TODO: unregister the auto-activate hook
         },
     }
@@ -226,7 +230,9 @@ mod tests {
     }
 
     fn render_deactivate() -> String {
-        let action = Action::<FishStartupArgs>::Deactivate;
+        let action = Action::<FishStartupArgs>::Deactivate {
+            activate_d: PathBuf::from("/interpreter/activate.d"),
+        };
         let mut buf = Vec::new();
         generate_fish_profile_commands(&action, &mut buf).expect("generator should succeed");
         String::from_utf8(buf).expect("output should be utf-8")
@@ -295,6 +301,9 @@ mod tests {
     #[test]
     fn generate_fish_profile_deactivate() {
         let output = render_deactivate();
-        expect![""].assert_eq(&output);
+        expect![[r#"
+            if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
+        "#]]
+        .assert_eq(&output);
     }
 }
