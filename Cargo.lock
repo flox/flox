@@ -1426,6 +1426,7 @@ dependencies = [
  "crossterm 0.29.0",
  "derive_more",
  "dirs",
+ "flox-activations",
  "flox-catalog",
  "flox-core",
  "flox-manifest",
