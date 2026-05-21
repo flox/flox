@@ -59,9 +59,13 @@ pub fn generate_zsh_profile_commands(
             stmts.push(source_file(args.activate_d.join("zsh")));
         },
         Action::Deactivate { .. } => {
-            // TODO: undo everything in activate_d/zsh
-            // Although note that unsetting the prompt depends on these being
-            // set
+            // Undo the `_flox_rehash` precmd hook installed by activate.d/zsh.
+            stmts.push(
+                "if [[ -o interactive ]]; then autoload -Uz add-zsh-hook; add-zsh-hook -d precmd _flox_rehash; unfunction _flox_rehash 2>/dev/null; fi;"
+                    .to_stmt(),
+            );
+            // TODO: undo the rest of activate.d/zsh (FPATH, hashing setopts).
+            // Note that unsetting the prompt depends on `_activate_d` being set.
         },
     }
 
@@ -206,6 +210,7 @@ mod tests {
     fn generate_zsh_profile_commands_deactivate() {
         let output = render_deactivate();
         expect![[r#"
+            if [[ -o interactive ]]; then autoload -Uz add-zsh-hook; add-zsh-hook -d precmd _flox_rehash; unfunction _flox_rehash 2>/dev/null; fi;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
         "#]]
         .assert_eq(&output);
