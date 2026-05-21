@@ -433,6 +433,19 @@ impl ActivationState {
             .collect()
     }
 
+    /// Returns the invocation type for the given PID, if attached.
+    ///
+    /// Returns:
+    /// - `None` — the PID is not attached at all (not in `state.json`).
+    /// - `Some(None)` — the PID is attached but has no recorded invocation
+    ///   type (`state.json` written with a version of Flox before the field existed).
+    /// - `Some(Some(t))` — the PID is attached with invocation type `t`.
+    pub fn invocation_type_for_pid(&self, pid: Pid) -> Option<Option<&InvocationType>> {
+        self.attached_pids
+            .get(&pid)
+            .map(|a| a.invocation_type.as_ref())
+    }
+
     /// Returns the current activation mode
     pub fn mode(&self) -> &ActivateMode {
         &self.mode
@@ -559,7 +572,7 @@ impl ActivationState {
 
     /// set ready to False if there are no more PIDs attached to the current start
     /// should only be called when there are some attached PIDs
-    fn update_ready_after_detach(&mut self) {
+    pub fn update_ready_after_detach(&mut self) {
         if self.attached_pids.is_empty() {
             unreachable!("should remove all state when there are no more attached PIDs");
         }
