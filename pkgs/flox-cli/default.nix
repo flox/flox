@@ -1,6 +1,7 @@
 {
   bashInteractive,
   cacert,
+  coreutils,
   darwin,
   flox-interpreter,
   flox-src,
@@ -41,6 +42,10 @@ let
       # [sic] nix handles `BASH_` variables specially,
       # so we need to use a different name.
       INTERACTIVE_BASH_BIN = "${bashInteractive}/bin/bash";
+
+      # Required by flox-activations crate
+      X_BASH_BIN = "${bashInteractive}/bin/bash";
+      COREUTILS = "${coreutils}";
 
       # Metrics subsystem configuration
       METRICS_EVENTS_URL = "https://z7qixlmjr3.execute-api.eu-north-1." + "amazonaws.com/prod/capture";
