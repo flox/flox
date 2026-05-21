@@ -4,6 +4,7 @@ mod auth;
 mod build;
 mod check_for_upgrades;
 mod containerize;
+mod deactivate;
 mod delete;
 mod edit;
 mod envs;
@@ -783,8 +784,12 @@ enum InternalCommands {
         check_for_upgrades::CheckForUpgrades,
     ),
 
+    /// Restore environment variables from before activation
+    #[bpaf(command, hide)]
+    Deactivate(#[bpaf(external(deactivate::deactivate))] deactivate::Deactivate),
+
     /// Print information how to exit environment
-    #[bpaf(command, long("exit"), long("deactivate"), hide)]
+    #[bpaf(command, long("exit"), hide)]
     Exit(#[bpaf(external(exit::exit))] exit::Exit),
 
     /// Print the activation state directory path for an environment.
@@ -812,6 +817,7 @@ impl InternalCommands {
             InternalCommands::Upload(args) => args.handle(flox).await?,
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
+            InternalCommands::Deactivate(args) => args.handle(flox)?,
             InternalCommands::Exit(args) => args.handle(flox)?,
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
