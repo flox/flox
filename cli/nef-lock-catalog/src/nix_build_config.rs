@@ -227,10 +227,10 @@ async fn lock_floxhub_catalog(
 
     let mut builder = PackageTreeBuilder::new();
     for item in locked_items.results {
-        if let Some(refs) = referenced_packages {
-            if !refs.contains(&item.attr_path_components.join(".")) {
-                continue;
-            }
+        if let Some(refs) = referenced_packages
+            && !refs.contains(&item.attr_path_components.join("."))
+        {
+            continue;
         }
         let source = NixFlakeref::try_from(serde_json::to_value(item.source)?)?;
         builder.add_package(item.attr_path_components, item.build_type, source)?;
