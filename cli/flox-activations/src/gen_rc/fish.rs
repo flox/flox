@@ -6,7 +6,7 @@ use anyhow::Result;
 use flox_core::activate::context::{AutoActivateFishMode, InvocationType};
 use shell_gen::{GenerateShell, Shell};
 
-use crate::attach_diff::todo_drop_set_exported_unexpanded;
+use crate::attach_diff::{self, todo_drop_set_exported_unexpanded};
 use crate::gen_rc::{Action, RM};
 
 /// Arguments for generating fish startup commands
@@ -60,7 +60,7 @@ pub fn generate_fish_profile_commands(
             stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
         },
         Action::Deactivate { .. } => {
-            // TODO: decode `_FLOX_HOOK_DIFF` and emit restores.
+            stmts.extend(attach_diff::generate_deactivation_statements());
         },
     }
 

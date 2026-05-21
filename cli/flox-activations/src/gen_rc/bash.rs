@@ -6,7 +6,7 @@ use anyhow::Result;
 use flox_core::activate::context::InvocationType;
 use shell_gen::{GenerateShell, Shell, source_file};
 
-use crate::attach_diff::{todo_drop_set_exported_unexpanded, todo_drop_unset};
+use crate::attach_diff::{self, todo_drop_set_exported_unexpanded, todo_drop_unset};
 use crate::gen_rc::{Action, RM};
 
 /// Arguments for generating bash startup commands
@@ -76,9 +76,7 @@ pub fn generate_bash_profile_commands(
             stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
         },
         Action::Deactivate { .. } => {
-            // TODO: decode `_FLOX_HOOK_DIFF` and emit restores — unset
-            // additions, restore prior values for modifications and
-            // removals, then unset `_FLOX_HOOK_DIFF` itself.
+            stmts.extend(attach_diff::generate_deactivation_statements());
         },
     }
 

@@ -6,6 +6,7 @@ use anyhow::Result;
 use flox_core::activate::context::InvocationType;
 use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file};
 
+use crate::attach_diff;
 use crate::gen_rc::{Action, RM};
 
 /// Arguments for generating zsh startup commands
@@ -48,7 +49,7 @@ pub fn generate_zsh_profile_commands(
             stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
         },
         Action::Deactivate { .. } => {
-            // TODO: decode `_FLOX_HOOK_DIFF` and emit restores.
+            stmts.extend(attach_diff::generate_deactivation_statements());
         },
     }
 
