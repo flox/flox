@@ -29,6 +29,7 @@ async fn main() -> Result<()> {
 
     let options = LockOptions {
         nef_base_dir: cli.nef_base_dir,
+        pkgs_dir: None,
     };
 
     let client = {

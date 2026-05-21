@@ -1,0 +1,12 @@
+[package]
+name = "nef-catalog-refs"
+version.workspace = true
+edition.workspace = true
+description = "Static analysis of NEF Nix expressions for catalog attribute-path references"
+
+[dependencies]
+rnix = "0.14"
+rowan = "0.16"
+
+[dev-dependencies]
+expect-test.workspace = true

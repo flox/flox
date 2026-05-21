@@ -1,11 +1,12 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use flox_catalog::ClientTrait;
 use flox_core::Version;
 use indexmap::IndexMap;
+use nef_catalog_refs::{collect_transitive, parse_dir};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use url::Url;
@@ -107,6 +108,10 @@ pub struct LockOptions {
     /// Relative path from source root to nef base directory (containing pkgs/, nix-builds.lock).
     /// Appended after any `dir` prefix from the flakeref.
     pub nef_base_dir: Option<String>,
+    /// Path to scan for catalog attribute-path references (typically the `pkgs/` directory).
+    /// When set, only referenced packages are included in each FloxHub catalog lock.
+    /// None = lock all packages (legacy behavior).
+    pub pkgs_dir: Option<PathBuf>,
 }
 
 /// Lock a [BuildConfig] using the default Flox conventions.
@@ -117,6 +122,7 @@ pub async fn lock_config(
 ) -> Result<BuildLock> {
     lock_config_with_options(config, client, &LockOptions {
         nef_base_dir: Some(".flox".to_string()),
+        pkgs_dir: None,
     })
     .await
 }
@@ -133,6 +139,32 @@ pub async fn lock_config_with_options(
         catalogs: catalog_spec,
     } = config;
 
+    // Scan pkgs_dir once for catalog refs when configured.
+    // Partitioned by catalog ID; the remainder after "catalogs.<id>." is the pkg attr-path.
+    let scanned_refs: Option<HashMap<CatalogId, BTreeSet<String>>> =
+        if let Some(pkgs_dir) = &options.pkgs_dir {
+            let roots = std::iter::once("catalogs".to_string()).collect();
+            let db = parse_dir(pkgs_dir, &roots);
+            let all_refs = collect_transitive(db, pkgs_dir, &roots);
+
+            let mut by_catalog: HashMap<CatalogId, BTreeSet<String>> = HashMap::new();
+            for r in &all_refs {
+                let mut parts = r.splitn(3, '.');
+                if let (Some("catalogs"), Some(catalog_name), Some(pkg_path)) =
+                    (parts.next(), parts.next(), parts.next())
+                {
+                    by_catalog
+                        .entry(CatalogId(catalog_name.to_string()))
+                        .or_default()
+                        .insert(pkg_path.to_string());
+                }
+            }
+            Some(by_catalog)
+        } else {
+            None
+        };
+
+    let empty_refs: BTreeSet<String> = BTreeSet::new();
     let mut locked_catalogs = BTreeMap::new();
 
     for (name, catalog) in catalog_spec {
@@ -143,7 +175,12 @@ pub async fn lock_config_with_options(
         .entered();
 
         let locked_catalog = match catalog {
-            CatalogSpec::FloxHub {} => lock_floxhub_catalog(client, name).await?,
+            CatalogSpec::FloxHub {} => {
+                let referenced = scanned_refs
+                    .as_ref()
+                    .map(|m| m.get(name).unwrap_or(&empty_refs));
+                lock_floxhub_catalog(client, name, referenced).await?
+            },
             CatalogSpec::Full(source_type) => {
                 let prefetch = lock_url_with_options(
                     &serde_json::to_value(source_type)?.try_into()?,
@@ -166,13 +203,17 @@ pub async fn lock_config_with_options(
     })
 }
 
-/// Lock a FloxHub catalog by fetching locked sources and building tree structure
-#[instrument(skip(client))]
+/// Lock a FloxHub catalog by fetching locked sources and building a tree.
+///
+/// `referenced_packages` — when `Some`, only packages whose attr-path (dot-joined)
+/// appears in the set are included in the lock.  `None` includes everything.
+/// When the catalog API gains a targeted-query endpoint, only this function changes.
+#[instrument(skip(client, referenced_packages))]
 async fn lock_floxhub_catalog(
     client: &(impl ClientTrait + Send + Sync),
     catalog_id: &CatalogId,
+    referenced_packages: Option<&BTreeSet<String>>,
 ) -> Result<CatalogLock> {
-    // Fetch locked sources from FloxHub
     let locked_items = client
         .get_catalog_locked_sources(&catalog_id.0)
         .await
@@ -184,10 +225,13 @@ async fn lock_floxhub_catalog(
             )
         })?;
 
-    // Build tree structure from locked items using PackageTreeBuilder
     let mut builder = PackageTreeBuilder::new();
     for item in locked_items.results {
-        // Convert LockedSourceItem to NixFlakeref for the builder
+        if let Some(refs) = referenced_packages
+            && !refs.contains(&item.attr_path_components.join("."))
+        {
+            continue;
+        }
         let source = NixFlakeref::try_from(serde_json::to_value(item.source)?)?;
         builder.add_package(item.attr_path_components, item.build_type, source)?;
     }
