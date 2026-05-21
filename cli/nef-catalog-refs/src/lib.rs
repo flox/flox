@@ -1,11 +1,10 @@
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::fs;
+use std::path::{Path, PathBuf};
+
 use rnix::ast;
 use rnix::ast::HasEntry as _;
 use rowan::ast::AstNode;
-use std::{
-    collections::{BTreeSet, HashMap, HashSet},
-    fs,
-    path::{Path, PathBuf},
-};
 
 #[derive(Debug)]
 pub struct FileInfo {
@@ -30,10 +29,12 @@ pub fn parse_file(path: &Path, roots: &HashSet<String>) -> HashMap<String, FileI
 
 pub fn parse_dir(dir: &Path, roots: &HashSet<String>) -> HashMap<String, FileInfo> {
     let mut db = HashMap::new();
-    let Ok(entries) = fs::read_dir(dir) else { return db };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return db;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().map_or(false, |e| e == "nix") {
+        if path.extension().is_some_and(|e| e == "nix") {
             let stem = path
                 .file_stem()
                 .unwrap_or_default()
@@ -41,7 +42,10 @@ pub fn parse_dir(dir: &Path, roots: &HashSet<String>) -> HashMap<String, FileInf
                 .into_owned();
             if let Ok(content) = fs::read_to_string(&path) {
                 let mut visited = HashSet::new();
-                db.insert(stem, analyze_file_at(&content, roots, path.parent(), &mut visited));
+                db.insert(
+                    stem,
+                    analyze_file_at(&content, roots, path.parent(), &mut visited),
+                );
             }
         }
     }
@@ -64,16 +68,15 @@ pub fn analyze_file_at(
     let mut refs = BTreeSet::new();
     let mut dep_args = Vec::new();
 
-    if let Some(rnix::ast::Expr::Lambda(lambda)) = root.expr() {
-        if let Some(rnix::ast::Param::Pattern(pat)) = lambda.param() {
-            for entry in pat.pat_entries() {
-                if let Some(ident) = entry.ident() {
-                    if let Some(name) = ident.ident_token().map(|t| t.text().to_string()) {
-                        if !roots.contains(&name) {
-                            dep_args.push(name);
-                        }
-                    }
-                }
+    if let Some(rnix::ast::Expr::Lambda(lambda)) = root.expr()
+        && let Some(rnix::ast::Param::Pattern(pat)) = lambda.param()
+    {
+        for entry in pat.pat_entries() {
+            if let Some(ident) = entry.ident()
+                && let Some(name) = ident.ident_token().map(|t| t.text().to_string())
+                && !roots.contains(&name)
+            {
+                dep_args.push(name);
             }
         }
     }
@@ -101,10 +104,10 @@ pub fn collect_transitive(
         if !visited.insert(name.clone()) {
             continue;
         }
-        if !db.contains_key(&name) {
-            if let Some(info) = load_dep(dir, &name, roots) {
-                db.insert(name.clone(), info);
-            }
+        if !db.contains_key(&name)
+            && let Some(info) = load_dep(dir, &name, roots)
+        {
+            db.insert(name.clone(), info);
         }
         let Some(info) = db.get(&name) else { continue };
         result.extend(info.refs.iter().cloned());
@@ -137,13 +140,25 @@ fn gather_let_aliases(
 ) {
     if let Some(let_in) = ast::LetIn::cast(node.clone()) {
         for entry in let_in.attrpath_values() {
-            let Some(lhs) = entry.attrpath() else { continue };
+            let Some(lhs) = entry.attrpath() else {
+                continue;
+            };
             let attrs: Vec<ast::Attr> = lhs.attrs().collect();
-            if attrs.len() != 1 { continue }
-            let ast::Attr::Ident(ref id) = attrs[0] else { continue };
-            let Some(name) = id.ident_token().map(|t| t.text().to_string()) else { continue };
-            if aliases.contains_key(&name) { continue }
-            let Some(ast::Expr::Select(select)) = entry.value() else { continue };
+            if attrs.len() != 1 {
+                continue;
+            }
+            let ast::Attr::Ident(ref id) = attrs[0] else {
+                continue;
+            };
+            let Some(name) = id.ident_token().map(|t| t.text().to_string()) else {
+                continue;
+            };
+            if aliases.contains_key(&name) {
+                continue;
+            }
+            let Some(ast::Expr::Select(select)) = entry.value() else {
+                continue;
+            };
             if let Some(path) = extract_ref_path(&select, roots, aliases) {
                 aliases.insert(name, path);
                 *changed = true;
@@ -163,22 +178,18 @@ fn follow_imports(
     visited: &mut HashSet<PathBuf>,
     refs: &mut BTreeSet<String>,
 ) {
-    if let Some(apply) = ast::Apply::cast(node.clone()) {
-        if let Some((path_str, import_roots)) = try_extract_import(&apply, roots, aliases) {
-            let target = file_dir.join(&path_str);
-            let target = fs::canonicalize(&target).unwrap_or(target);
-            if !visited.contains(&target) {
-                visited.insert(target.clone());
-                if let Ok(content) = fs::read_to_string(&target) {
-                    let import_dir = target.parent().map(Path::to_path_buf);
-                    let imported = analyze_file_at(
-                        &content,
-                        &import_roots,
-                        import_dir.as_deref(),
-                        visited,
-                    );
-                    refs.extend(imported.refs);
-                }
+    if let Some(apply) = ast::Apply::cast(node.clone())
+        && let Some((path_str, import_roots)) = try_extract_import(&apply, roots, aliases)
+    {
+        let target = file_dir.join(&path_str);
+        let target = fs::canonicalize(&target).unwrap_or(target);
+        if !visited.contains(&target) {
+            visited.insert(target.clone());
+            if let Ok(content) = fs::read_to_string(&target) {
+                let import_dir = target.parent().map(Path::to_path_buf);
+                let imported =
+                    analyze_file_at(&content, &import_roots, import_dir.as_deref(), visited);
+                refs.extend(imported.refs);
             }
         }
     }
@@ -196,14 +207,20 @@ fn try_extract_import(
         ast::Expr::Apply(a) => a,
         _ => return None,
     };
-    let ast::Expr::Ident(import_fn) = inner.lambda()? else { return None };
+    let ast::Expr::Ident(import_fn) = inner.lambda()? else {
+        return None;
+    };
     if import_fn.ident_token()?.text() != "import" {
         return None;
     }
     let path_str = static_path_str(&inner.argument()?)?;
-    let ast::Expr::AttrSet(attrset) = apply.argument()? else { return None };
+    let ast::Expr::AttrSet(attrset) = apply.argument()? else {
+        return None;
+    };
     let passed = roots_passed_to_import(&attrset, roots, aliases);
-    if passed.is_empty() { return None; }
+    if passed.is_empty() {
+        return None;
+    }
     Some((path_str, passed))
 }
 
@@ -223,23 +240,29 @@ fn roots_passed_to_import(
 ) -> HashSet<String> {
     let mut passed = HashSet::new();
     for inherit in attrset.inherits() {
-        if inherit.from().is_some() { continue }
+        if inherit.from().is_some() {
+            continue;
+        }
         for attr in inherit.attrs() {
-            if let ast::Attr::Ident(id) = attr {
-                if let Some(name) = id.ident_token().map(|t| t.text().to_string()) {
-                    if roots.contains(&name) { passed.insert(name); }
-                }
+            if let ast::Attr::Ident(id) = attr
+                && let Some(name) = id.ident_token().map(|t| t.text().to_string())
+                && roots.contains(&name)
+            {
+                passed.insert(name);
             }
         }
     }
     for apv in attrset.attrpath_values() {
         let Some(lhs) = apv.attrpath() else { continue };
         let attrs: Vec<ast::Attr> = lhs.attrs().collect();
-        if attrs.len() != 1 { continue }
-        if let ast::Attr::Ident(id) = &attrs[0] {
-            if let Some(name) = id.ident_token().map(|t| t.text().to_string()) {
-                if roots.contains(&name) { passed.insert(name); }
-            }
+        if attrs.len() != 1 {
+            continue;
+        }
+        if let ast::Attr::Ident(id) = &attrs[0]
+            && let Some(name) = id.ident_token().map(|t| t.text().to_string())
+            && roots.contains(&name)
+        {
+            passed.insert(name);
         }
     }
     passed
@@ -251,36 +274,35 @@ fn collect_refs(
     roots: &HashSet<String>,
     aliases: &HashMap<String, String>,
 ) {
-    if let Some(inherit) = ast::Inherit::cast(node.clone()) {
-        if try_handle_inherit(&inherit, refs, roots, aliases) {
-            return;
-        }
+    if let Some(inherit) = ast::Inherit::cast(node.clone())
+        && try_handle_inherit(&inherit, refs, roots, aliases)
+    {
+        return;
     }
 
-    if let Some(with_expr) = ast::With::cast(node.clone()) {
-        if let Some(ns) = with_expr.namespace() {
-            if let Some(path) = namespace_path(&ns, roots, aliases) {
-                refs.insert(format!("{}.*", path));
-                if let Some(body) = with_expr.body() {
-                    collect_refs(body.syntax(), refs, roots, aliases);
-                }
-                return;
-            }
+    if let Some(with_expr) = ast::With::cast(node.clone())
+        && let Some(ns) = with_expr.namespace()
+        && let Some(path) = namespace_path(&ns, roots, aliases)
+    {
+        refs.insert(format!("{}.*", path));
+        if let Some(body) = with_expr.body() {
+            collect_refs(body.syntax(), refs, roots, aliases);
         }
+        return;
     }
 
-    if let Some(apply) = ast::Apply::cast(node.clone()) {
-        if let Some(path) = try_handle_get_attr(&apply, roots, aliases) {
-            refs.insert(path);
-            return;
-        }
+    if let Some(apply) = ast::Apply::cast(node.clone())
+        && let Some(path) = try_handle_get_attr(&apply, roots, aliases)
+    {
+        refs.insert(path);
+        return;
     }
 
-    if let Some(select) = ast::Select::cast(node.clone()) {
-        if let Some(path) = extract_ref_path(&select, roots, aliases) {
-            refs.insert(path);
-            return;
-        }
+    if let Some(select) = ast::Select::cast(node.clone())
+        && let Some(path) = extract_ref_path(&select, roots, aliases)
+    {
+        refs.insert(path);
+        return;
     }
 
     for child in node.children() {
@@ -302,7 +324,7 @@ fn namespace_path(
             } else {
                 aliases.get(&name).cloned()
             }
-        }
+        },
         _ => None,
     }
 }
@@ -329,17 +351,21 @@ fn try_handle_get_attr(
 fn is_get_attr_fn(expr: &ast::Expr) -> bool {
     match expr {
         ast::Expr::Select(sel) => {
-            let Some(ast::Expr::Ident(base)) = sel.expr() else { return false };
-            if base.ident_token().map_or(true, |t| t.text() != "builtins") {
+            let Some(ast::Expr::Ident(base)) = sel.expr() else {
+                return false;
+            };
+            if base.ident_token().is_none_or(|t| t.text() != "builtins") {
                 return false;
             }
-            let Some(path) = sel.attrpath() else { return false };
+            let Some(path) = sel.attrpath() else {
+                return false;
+            };
             let attrs: Vec<ast::Attr> = path.attrs().collect();
             attrs.len() == 1
                 && matches!(&attrs[0], ast::Attr::Ident(id)
-                    if id.ident_token().map_or(false, |t| t.text() == "getAttr"))
-        }
-        ast::Expr::Ident(id) => id.ident_token().map_or(false, |t| t.text() == "getAttr"),
+                    if id.ident_token().is_some_and(|t| t.text() == "getAttr"))
+        },
+        ast::Expr::Ident(id) => id.ident_token().is_some_and(|t| t.text() == "getAttr"),
         _ => false,
     }
 }
@@ -350,10 +376,10 @@ fn static_str(expr: &ast::Expr) -> Option<String> {
         return None;
     }
     s.syntax().children_with_tokens().find_map(|n| {
-        if let rowan::NodeOrToken::Token(t) = n {
-            if t.kind() == rnix::SyntaxKind::TOKEN_STRING_CONTENT {
-                return Some(t.text().to_string());
-            }
+        if let rowan::NodeOrToken::Token(t) = n
+            && t.kind() == rnix::SyntaxKind::TOKEN_STRING_CONTENT
+        {
+            return Some(t.text().to_string());
         }
         None
     })
@@ -365,16 +391,24 @@ fn try_handle_inherit(
     roots: &HashSet<String>,
     aliases: &HashMap<String, String>,
 ) -> bool {
-    let Some(from) = inherit.from() else { return false };
-    let Some(from_expr) = from.expr() else { return false };
-    let ast::Expr::Select(select) = from_expr else { return false };
-    let Some(base_path) = extract_ref_path(&select, roots, aliases) else { return false };
+    let Some(from) = inherit.from() else {
+        return false;
+    };
+    let Some(from_expr) = from.expr() else {
+        return false;
+    };
+    let ast::Expr::Select(select) = from_expr else {
+        return false;
+    };
+    let Some(base_path) = extract_ref_path(&select, roots, aliases) else {
+        return false;
+    };
 
     for attr in inherit.attrs() {
-        if let ast::Attr::Ident(id) = attr {
-            if let Some(token) = id.ident_token() {
-                refs.insert(format!("{}.{}", base_path, token.text()));
-            }
+        if let ast::Attr::Ident(id) = attr
+            && let Some(token) = id.ident_token()
+        {
+            refs.insert(format!("{}.{}", base_path, token.text()));
         }
     }
     true
@@ -386,7 +420,9 @@ fn extract_ref_path(
     aliases: &HashMap<String, String>,
 ) -> Option<String> {
     let expr = select.expr()?;
-    let ast::Expr::Ident(base) = expr else { return None };
+    let ast::Expr::Ident(base) = expr else {
+        return None;
+    };
     let base_name = base.ident_token()?.text().to_string();
 
     let base_path = if roots.contains(&base_name) {
@@ -403,11 +439,11 @@ fn extract_ref_path(
         match attr {
             ast::Attr::Ident(id) => {
                 parts.push(id.ident_token()?.text().to_string());
-            }
+            },
             _ => {
                 parts.push("*".to_string());
                 break;
-            }
+            },
         }
     }
     Some(parts.join("."))
@@ -419,10 +455,10 @@ fn load_dep(dir: &Path, name: &str, roots: &HashSet<String>) -> Option<FileInfo>
         dir.join(name).join("default.nix"),
     ];
     for path in &candidates {
-        if path.is_file() {
-            if let Ok(content) = fs::read_to_string(path) {
-                return Some(analyze_file(&content, roots));
-            }
+        if path.is_file()
+            && let Ok(content) = fs::read_to_string(path)
+        {
+            return Some(analyze_file(&content, roots));
         }
     }
     None
@@ -780,10 +816,7 @@ mod tests {
             "{ catalogs }: let org = catalogs.myorg; in org.toolkit",
             &catalog_roots(),
         );
-        assert_eq!(
-            got,
-            set(&["catalogs.myorg", "catalogs.myorg.toolkit"])
-        );
+        assert_eq!(got, set(&["catalogs.myorg", "catalogs.myorg.toolkit"]));
     }
 
     #[test]
@@ -808,10 +841,7 @@ mod tests {
             "{ catalogs }: let b = a.hello; a = catalogs.myorg; in b",
             &catalog_roots(),
         );
-        assert_eq!(
-            got,
-            set(&["catalogs.myorg", "catalogs.myorg.hello"])
-        );
+        assert_eq!(got, set(&["catalogs.myorg", "catalogs.myorg.hello"]));
     }
 
     #[test]
@@ -825,10 +855,7 @@ mod tests {
 
     #[test]
     fn dynamic_attr_at_first_component_emits_root_sentinel() {
-        let got = refs(
-            "{ catalogs, org }: catalogs.${org}.pkg",
-            &catalog_roots(),
-        );
+        let got = refs("{ catalogs, org }: catalogs.${org}.pkg", &catalog_roots());
         assert_eq!(got, set(&["catalogs.*"]));
     }
 
@@ -888,10 +915,7 @@ mod tests {
 
     #[test]
     fn import_inherit_catalogs_follows_into_helper() {
-        let got = refs_at(
-            "test_data/catalog_refs/import-entry.nix",
-            &catalog_roots(),
-        );
+        let got = refs_at("test_data/catalog_refs/import-entry.nix", &catalog_roots());
         assert_eq!(got, set(&["catalogs.myorg.toolkit.readVersion"]));
     }
 

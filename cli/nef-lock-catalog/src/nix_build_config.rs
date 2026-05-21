@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use flox_catalog::ClientTrait;
-use nef_catalog_refs::{collect_transitive, parse_dir};
 use flox_core::Version;
 use indexmap::IndexMap;
+use nef_catalog_refs::{collect_transitive, parse_dir};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use url::Url;
