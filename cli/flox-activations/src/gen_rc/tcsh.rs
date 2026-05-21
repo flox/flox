@@ -53,7 +53,7 @@ pub fn generate_tcsh_profile_commands(
             stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
         },
         Action::Deactivate { .. } => {
-            // TODO: decode `_FLOX_HOOK_DIFF` and emit restores.
+            stmts.extend(crate::attach_diff::generate_deactivation_statements());
         },
     }
 

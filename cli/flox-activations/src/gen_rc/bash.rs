@@ -76,9 +76,7 @@ pub fn generate_bash_profile_commands(
             stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
         },
         Action::Deactivate { .. } => {
-            // TODO: decode `_FLOX_HOOK_DIFF` and emit restores — unset
-            // additions, restore prior values for modifications and
-            // removals, then unset `_FLOX_HOOK_DIFF` itself.
+            stmts.extend(crate::attach_diff::generate_deactivation_statements());
         },
     }
 

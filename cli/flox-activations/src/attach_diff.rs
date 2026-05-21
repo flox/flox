@@ -212,6 +212,49 @@ fn unset(name: impl AsRef<str>) -> Statement {
     UnsetVar::new(name).to_stmt()
 }
 
+/// Generate deactivation statements by decoding `_FLOX_HOOK_DIFF` from the environment.
+///
+/// This function reads the `_FLOX_HOOK_DIFF` environment variable, decodes it,
+/// and generates shell statements to restore the environment to its pre-activation state:
+/// - Unsets variables that were added during activation
+/// - Restores original values for variables that were modified
+/// - Restores variables that were removed during activation
+/// - Unsets `_FLOX_HOOK_DIFF` itself
+///
+/// If `_FLOX_HOOK_DIFF` is not present or cannot be decoded, returns an empty vector.
+pub(crate) fn generate_deactivation_statements() -> Vec<Statement> {
+    use itertools::Itertools;
+
+    use crate::diff_serializer::{DiffSerializer, FLOX_HOOK_DIFF_VAR};
+
+    let mut stmts = Vec::new();
+
+    // Decode _FLOX_HOOK_DIFF and restore environment variables
+    if let Ok(encoded_diff) = std::env::var(FLOX_HOOK_DIFF_VAR)
+        && let Ok(diff) = DiffSerializer::decode(&encoded_diff)
+    {
+        // Unset variables that were added during activation
+        for var_name in diff.added.iter().sorted() {
+            stmts.push(unset(var_name));
+        }
+
+        // Restore variables that were modified during activation
+        for (var_name, original_value) in diff.modified.iter().sorted_by_key(|(k, _)| *k) {
+            stmts.push(set_exported_unexpanded(var_name, original_value));
+        }
+
+        // Restore variables that were removed during activation
+        for (var_name, original_value) in diff.removed.iter().sorted_by_key(|(k, _)| *k) {
+            stmts.push(set_exported_unexpanded(var_name, original_value));
+        }
+
+        // Unset the diff variable itself
+        stmts.push(unset(FLOX_HOOK_DIFF_VAR));
+    }
+
+    stmts
+}
+
 // ─── Inline set/unset NOT yet folded into AttachDiff ────────────────────────
 // Each call to a `todo_drop_*` helper below is a marker for an emission this
 // refactor deferred. Move each caller into `AttachDiff::generate_statements`
