@@ -8,7 +8,6 @@ mod deactivate;
 mod delete;
 mod edit;
 mod envs;
-mod exit;
 mod gc;
 mod general;
 mod generations;
@@ -784,13 +783,11 @@ enum InternalCommands {
         check_for_upgrades::CheckForUpgrades,
     ),
 
-    /// Restore environment variables from before activation
-    #[bpaf(command, hide)]
+    /// Print information for how to exit environment
+    // TODO: when we flip features.auto_activate we should update this help
+    // message
+    #[bpaf(command, long("deactivate"), long("exit"), hide)]
     Deactivate(#[bpaf(external(deactivate::deactivate))] deactivate::Deactivate),
-
-    /// Print information how to exit environment
-    #[bpaf(command, long("exit"), hide)]
-    Exit(#[bpaf(external(exit::exit))] exit::Exit),
 
     /// Print the activation state directory path for an environment.
     /// Useful for debugging activation state.
@@ -818,7 +815,6 @@ impl InternalCommands {
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
             InternalCommands::Deactivate(args) => args.handle(flox)?,
-            InternalCommands::Exit(args) => args.handle(flox)?,
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
             InternalCommands::HookEnv(args) => args.handle(flox)?,
