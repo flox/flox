@@ -4,9 +4,9 @@ use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
-use indoc::indoc;
-use shell_gen::{Shell, ShellWithPath};
+use indoc::{formatdoc, indoc};
 
+use super::{activated_environments, uninitialized_environment_description};
 use crate::commands::activate::ActivateOptions;
 use crate::subcommand_metric;
 use crate::utils::message;
@@ -44,12 +44,22 @@ impl Deactivate {
             Ok(())
         } else {
             // Interactive mode - print instructions
-            message::info(indoc! {"
-                To deactivate the current environment, type 'exit' to exit your shell.
+            let active_environments = activated_environments();
+            let last_active = active_environments.last_active();
 
-                Alternatively, you can restore environment variables with:
-                  eval \"$(flox deactivate --print-script)\"
-            "});
+            let Some(last_active) = last_active else {
+                message::info(indoc! {"
+                    No environment active!
+                    Exit active environments by typing 'exit' to exit your current shell or close your terminal.
+                    Environments can be activated using `flox activate`.
+                "});
+
+                return Ok(());
+            };
+
+            message::info(formatdoc! {"
+                Exit the currently active environment {} by typing 'exit' to exit your current shell or close your terminal.
+            ", uninitialized_environment_description(&last_active)?});
 
             Ok(())
         }

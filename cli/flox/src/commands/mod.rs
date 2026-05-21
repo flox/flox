@@ -8,7 +8,6 @@ mod deactivate;
 mod delete;
 mod edit;
 mod envs;
-mod exit;
 mod gc;
 mod general;
 mod generations;
@@ -790,7 +789,7 @@ enum InternalCommands {
 
     /// Print information how to exit environment
     #[bpaf(command, long("exit"), hide)]
-    Exit(#[bpaf(external(exit::exit))] exit::Exit),
+    Exit(#[bpaf(external(deactivate::deactivate))] deactivate::Deactivate),
 
     /// Print the activation state directory path for an environment.
     /// Useful for debugging activation state.
