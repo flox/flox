@@ -6,7 +6,7 @@ use anyhow::Result;
 use flox_core::activate::context::InvocationType;
 use shell_gen::{GenerateShell, Shell};
 
-use crate::attach_diff::todo_drop_set_exported_unexpanded;
+use crate::attach_diff::{self, todo_drop_set_exported_unexpanded};
 use crate::gen_rc::{Action, RM};
 
 /// Arguments for generating tcsh startup commands
@@ -53,7 +53,7 @@ pub fn generate_tcsh_profile_commands(
             stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
         },
         Action::Deactivate { .. } => {
-            stmts.extend(crate::attach_diff::generate_deactivation_statements());
+            stmts.extend(attach_diff::generate_deactivation_statements());
         },
     }
 

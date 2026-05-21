@@ -223,10 +223,6 @@ fn unset(name: impl AsRef<str>) -> Statement {
 ///
 /// If `_FLOX_HOOK_DIFF` is not present or cannot be decoded, returns an empty vector.
 pub(crate) fn generate_deactivation_statements() -> Vec<Statement> {
-    use itertools::Itertools;
-
-    use crate::diff_serializer::{DiffSerializer, FLOX_HOOK_DIFF_VAR};
-
     let mut stmts = Vec::new();
 
     // Decode _FLOX_HOOK_DIFF and restore environment variables
