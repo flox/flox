@@ -1292,7 +1292,7 @@ Attributes:
     ///      "title": "Derivations",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageDerivation-Output"
+    ///        "$ref": "#/components/schemas/PackageDerivation"
     ///      }
     ///    },
     ///    "storepath": {
@@ -1305,7 +1305,7 @@ Attributes:
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct NarFileLookup {
-        pub derivations: ::std::vec::Vec<PackageDerivationOutput>,
+        pub derivations: ::std::vec::Vec<PackageDerivation>,
         pub storepath: ::std::string::String,
     }
     impl ::std::convert::From<&NarFileLookup> for NarFileLookup {
@@ -1740,7 +1740,7 @@ Attributes:
     ///      ]
     ///    },
     ///    "derivation": {
-    ///      "$ref": "#/components/schemas/PackageDerivation-Output"
+    ///      "$ref": "#/components/schemas/PackageDerivation"
     ///    },
     ///    "dot_flox_dir": {
     ///      "title": "Dot Flox Dir",
@@ -1794,7 +1794,7 @@ Attributes:
         pub build_type: ::std::option::Option<BuildType>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub cache_uri: ::std::option::Option<::std::string::String>,
-        pub derivation: PackageDerivationOutput,
+        pub derivation: PackageDerivation,
         #[serde(default = "defaults::package_build_dot_flox_dir")]
         pub dot_flox_dir: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -1963,7 +1963,7 @@ Attributes:
     ///      ]
     ///    },
     ///    "derivation": {
-    ///      "$ref": "#/components/schemas/PackageDerivation-Input"
+    ///      "$ref": "#/components/schemas/PackageDerivation"
     ///    },
     ///    "dot_flox_dir": {
     ///      "title": "Dot Flox Dir",
@@ -2034,7 +2034,7 @@ Attributes:
         pub build_type: ::std::option::Option<BuildType>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub cache_uri: ::std::option::Option<::std::string::String>,
-        pub derivation: PackageDerivationInput,
+        pub derivation: PackageDerivation,
         #[serde(default = "defaults::package_build_with_nar_info_dot_flox_dir")]
         pub dot_flox_dir: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -2061,7 +2061,7 @@ Attributes:
             value.clone()
         }
     }
-    ///`PackageDerivationInput`
+    ///`PackageDerivation`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2178,7 +2178,7 @@ Attributes:
     /// ```
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    pub struct PackageDerivationInput {
+    pub struct PackageDerivation {
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub broken: ::std::option::Option<bool>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -2202,154 +2202,8 @@ Attributes:
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub version: ::std::option::Option<::std::string::String>,
     }
-    impl ::std::convert::From<&PackageDerivationInput> for PackageDerivationInput {
-        fn from(value: &PackageDerivationInput) -> Self {
-            value.clone()
-        }
-    }
-    ///`PackageDerivationOutput`
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "PackageDerivation",
-    ///  "examples": [
-    ///    {
-    ///      "broken": false,
-    ///      "description": "A command line tool for transferring files with URL syntax",
-    ///      "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
-    ///      "license": "curl",
-    ///      "name": "curl-8.5.0",
-    ///      "outputs": {
-    ///        "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
-    ///        "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-    ///      },
-    ///      "outputs_to_install": [
-    ///        "out",
-    ///        "man"
-    ///      ],
-    ///      "pname": "curl",
-    ///      "system": "x86_64-linux",
-    ///      "unfree": false,
-    ///      "version": "8.5.0"
-    ///    }
-    ///  ],
-    ///  "type": "object",
-    ///  "required": [
-    ///    "drv_path",
-    ///    "name",
-    ///    "outputs",
-    ///    "system"
-    ///  ],
-    ///  "properties": {
-    ///    "broken": {
-    ///      "title": "Broken",
-    ///      "type": [
-    ///        "boolean",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "description": {
-    ///      "title": "Description",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "drv_path": {
-    ///      "title": "Drv Path",
-    ///      "type": "string"
-    ///    },
-    ///    "license": {
-    ///      "title": "License",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "licenses": {
-    ///      "title": "Licenses",
-    ///      "type": [
-    ///        "array",
-    ///        "null"
-    ///      ],
-    ///      "items": {
-    ///        "type": "string"
-    ///      }
-    ///    },
-    ///    "name": {
-    ///      "title": "Name",
-    ///      "type": "string"
-    ///    },
-    ///    "outputs": {
-    ///      "$ref": "#/components/schemas/PackageOutputs"
-    ///    },
-    ///    "outputs_to_install": {
-    ///      "title": "Outputs To Install",
-    ///      "type": [
-    ///        "array",
-    ///        "null"
-    ///      ],
-    ///      "items": {
-    ///        "type": "string"
-    ///      }
-    ///    },
-    ///    "pname": {
-    ///      "title": "Pname",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "system": {
-    ///      "$ref": "#/components/schemas/PackageSystem"
-    ///    },
-    ///    "unfree": {
-    ///      "title": "Unfree",
-    ///      "type": [
-    ///        "boolean",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "version": {
-    ///      "title": "Version",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    pub struct PackageDerivationOutput {
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub broken: ::std::option::Option<bool>,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub description: ::std::option::Option<::std::string::String>,
-        pub drv_path: ::std::string::String,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub license: ::std::option::Option<::std::string::String>,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub licenses: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
-        pub name: ::std::string::String,
-        pub outputs: PackageOutputs,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub outputs_to_install: ::std::option::Option<
-            ::std::vec::Vec<::std::string::String>,
-        >,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub pname: ::std::option::Option<::std::string::String>,
-        pub system: PackageSystem,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub unfree: ::std::option::Option<bool>,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub version: ::std::option::Option<::std::string::String>,
-    }
-    impl ::std::convert::From<&PackageDerivationOutput> for PackageDerivationOutput {
-        fn from(value: &PackageDerivationOutput) -> Self {
+    impl ::std::convert::From<&PackageDerivation> for PackageDerivation {
+        fn from(value: &PackageDerivation) -> Self {
             value.clone()
         }
     }
