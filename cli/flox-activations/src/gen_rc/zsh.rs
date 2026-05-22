@@ -63,14 +63,6 @@ pub fn generate_zsh_profile_commands(
             // being deactivated. `_FLOX_HOOK_SAVE_FPATH` is captured
             // by `activate.d/zsh`. `_FLOX_ACTIVE_ENVIRONMENTS` is
             // updated by the env-diff restore above (DEV-77).
-            //
-            // Why not the env-diff? FPATH is typically not exported
-            // in zsh — it's tied to the `fpath` array and managed
-            // internally — so `_FLOX_HOOK_DIFF` can't see it.
-            //
-            // Use `fpath=(...)` rather than `FPATH=` per the comment
-            // in `activate.d/zsh` — and because `unset FPATH` would
-            // also unset the tied `fpath` array, breaking completion.
             stmts.push(
                 "if [[ -z \"${_FLOX_ACTIVE_ENVIRONMENTS:-}\" && -n \"${_FLOX_HOOK_SAVE_FPATH+set}\" ]]; then fpath=(${(s/:/)_FLOX_HOOK_SAVE_FPATH}); autoload -U compinit; compinit; unset _FLOX_HOOK_SAVE_FPATH; fi;"
                     .to_stmt(),
