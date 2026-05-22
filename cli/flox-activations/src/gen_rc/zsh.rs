@@ -58,9 +58,25 @@ pub fn generate_zsh_profile_commands(
             stmts.push(source_file(args.activate_d.join("zsh")));
         },
         Action::Deactivate { .. } => {
-            // TODO: undo everything in activate_d/zsh
-            // Although note that unsetting the prompt depends on these being
-            // set
+            // Restore the pre-activation FPATH (and re-run compinit
+            // so completions match) when the outermost flox env is
+            // being deactivated. `_FLOX_HOOK_SAVE_FPATH` is captured
+            // by `activate.d/zsh`. `_FLOX_ACTIVE_ENVIRONMENTS` is
+            // updated by the env-diff restore above (DEV-77).
+            //
+            // Why not the env-diff? FPATH is typically not exported
+            // in zsh — it's tied to the `fpath` array and managed
+            // internally — so `_FLOX_HOOK_DIFF` can't see it.
+            //
+            // Use `fpath=(...)` rather than `FPATH=` per the comment
+            // in `activate.d/zsh` — and because `unset FPATH` would
+            // also unset the tied `fpath` array, breaking completion.
+            stmts.push(
+                "if [[ -z \"${_FLOX_ACTIVE_ENVIRONMENTS:-}\" && -n \"${_FLOX_HOOK_SAVE_FPATH+set}\" ]]; then fpath=(${(s/:/)_FLOX_HOOK_SAVE_FPATH}); autoload -U compinit; compinit; unset _FLOX_HOOK_SAVE_FPATH; fi;"
+                    .to_stmt(),
+            );
+            // TODO: undo the rest of activate.d/zsh (hashing setopts, `_flox_rehash` hook).
+            // Note that unsetting the prompt depends on `_activate_d` being set.
         },
     }
 
@@ -205,6 +221,7 @@ mod tests {
     fn generate_zsh_profile_commands_deactivate() {
         let output = render_deactivate();
         expect![[r#"
+            if [[ -z "${_FLOX_ACTIVE_ENVIRONMENTS:-}" && -n "${_FLOX_HOOK_SAVE_FPATH+set}" ]]; then fpath=(${(s/:/)_FLOX_HOOK_SAVE_FPATH}); autoload -U compinit; compinit; unset _FLOX_HOOK_SAVE_FPATH; fi;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
         "#]]
         .assert_eq(&output);

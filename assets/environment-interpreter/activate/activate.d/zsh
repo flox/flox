@@ -27,6 +27,18 @@ fi
 # reload completions below.
 old_fpath="$FPATH"
 
+# Save the pre-activation FPATH so `flox deactivate` can restore it.
+# Guarded with `+set` so nested activations don't clobber the outermost
+# original (empty FPATH must be preserved as-is).
+#
+# This save mechanism is necessary because FPATH is typically not
+# exported in zsh — it's tied to the `fpath` array and managed by the
+# shell internally — so the `_FLOX_HOOK_DIFF` env-var diff captured by
+# flox can't see it.
+if [ -z "${_FLOX_HOOK_SAVE_FPATH+set}" ]; then
+  export _FLOX_HOOK_SAVE_FPATH="$FPATH"
+fi
+
 # We already customized the PATH and MANPATH, but the user and system
 # dotfiles may have changed them, so finish by doing this again.
 # We need to restore FLOX_ENV_DIRS before fixing fpath since fpath uses
