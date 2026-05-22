@@ -60,7 +60,7 @@ pub fn generate_fish_profile_commands(
             stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
         },
         Action::Deactivate { .. } => {
-            stmts.extend(attach_diff::generate_deactivation_statements());
+            stmts.extend(attach_diff::generate_deactivation_statements()?);
         },
     }
 

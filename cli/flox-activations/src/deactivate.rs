@@ -8,7 +8,7 @@ use std::io::Write;
 use std::path::Path;
 
 use anyhow::Result;
-use shell_gen::{Shell, ShellWithPath};
+use shell_gen::ShellWithPath;
 
 use crate::gen_rc::Action;
 use crate::gen_rc::bash::{BashStartupArgs, generate_bash_profile_commands};
@@ -25,32 +25,29 @@ use crate::gen_rc::zsh::{ZshStartupArgs, generate_zsh_profile_commands};
 /// - Restore variables that were removed during activation
 /// - Unset `_FLOX_HOOK_DIFF` itself
 ///
-/// If `_FLOX_HOOK_DIFF` is not present or cannot be decoded, this function
-/// generates an empty script (no-op), making it safe to call even when not
-/// in an activated environment.
+/// Returns an error if `_FLOX_HOOK_DIFF` is not set in the environment or
+/// cannot be decoded.
 pub fn generate_deactivate_script(
     shell: ShellWithPath,
     writer: &mut impl Write,
     interpreter_path: impl AsRef<Path>,
 ) -> Result<()> {
-    let shell_type = Shell::from(shell);
-
     let activate_d = interpreter_path.as_ref().join("activate.d");
 
-    match shell_type {
-        Shell::Bash => {
+    match shell {
+        ShellWithPath::Bash(_) => {
             let action: Action<BashStartupArgs> = Action::Deactivate { activate_d };
             generate_bash_profile_commands(&action, writer)
         },
-        Shell::Zsh => {
+        ShellWithPath::Zsh(_) => {
             let action: Action<ZshStartupArgs> = Action::Deactivate { activate_d };
             generate_zsh_profile_commands(&action, writer)
         },
-        Shell::Fish => {
+        ShellWithPath::Fish(_) => {
             let action: Action<FishStartupArgs> = Action::Deactivate { activate_d };
             generate_fish_profile_commands(&action, writer)
         },
-        Shell::Tcsh => {
+        ShellWithPath::Tcsh(_) => {
             let action: Action<TcshStartupArgs> = Action::Deactivate { activate_d };
             generate_tcsh_profile_commands(&action, writer)
         },

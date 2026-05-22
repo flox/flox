@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
+use std::env;
 use std::path::Path;
 use std::process::Command;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
 use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
 use flox_core::util::default_nix_env_vars;
@@ -221,34 +222,35 @@ fn unset(name: impl AsRef<str>) -> Statement {
 /// - Restores variables that were removed during activation
 /// - Unsets `_FLOX_HOOK_DIFF` itself
 ///
-/// If `_FLOX_HOOK_DIFF` is not present or cannot be decoded, returns an empty vector.
-pub(crate) fn generate_deactivation_statements() -> Vec<Statement> {
+/// Returns an error if `_FLOX_HOOK_DIFF` is not set in the environment or
+/// cannot be decoded.
+pub(crate) fn generate_deactivation_statements() -> Result<Vec<Statement>> {
     let mut stmts = Vec::new();
 
-    // Decode _FLOX_HOOK_DIFF and restore environment variables
-    if let Ok(encoded_diff) = std::env::var(FLOX_HOOK_DIFF_VAR)
-        && let Ok(diff) = DiffSerializer::decode(&encoded_diff)
-    {
-        // Unset variables that were added during activation
-        for var_name in diff.added.iter().sorted() {
-            stmts.push(unset(var_name));
-        }
+    let encoded_diff = env::var(FLOX_HOOK_DIFF_VAR)
+        .context(format!("{} not set in environment", FLOX_HOOK_DIFF_VAR))?;
+    let diff = DiffSerializer::decode(&encoded_diff)
+        .context(format!("failed to decode {}", FLOX_HOOK_DIFF_VAR))?;
 
-        // Restore variables that were modified during activation
-        for (var_name, original_value) in diff.modified.iter().sorted_by_key(|(k, _)| *k) {
-            stmts.push(set_exported_unexpanded(var_name, original_value));
-        }
-
-        // Restore variables that were removed during activation
-        for (var_name, original_value) in diff.removed.iter().sorted_by_key(|(k, _)| *k) {
-            stmts.push(set_exported_unexpanded(var_name, original_value));
-        }
-
-        // Unset the diff variable itself
-        stmts.push(unset(FLOX_HOOK_DIFF_VAR));
+    // Unset variables that were added during activation
+    for var_name in diff.added.iter().sorted() {
+        stmts.push(unset(var_name));
     }
 
-    stmts
+    // Restore variables that were modified during activation
+    for (var_name, original_value) in diff.modified.iter().sorted_by_key(|(k, _)| *k) {
+        stmts.push(set_exported_unexpanded(var_name, original_value));
+    }
+
+    // Restore variables that were removed during activation
+    for (var_name, original_value) in diff.removed.iter().sorted_by_key(|(k, _)| *k) {
+        stmts.push(set_exported_unexpanded(var_name, original_value));
+    }
+
+    // Unset the diff variable itself
+    stmts.push(unset(FLOX_HOOK_DIFF_VAR));
+
+    Ok(stmts)
 }
 
 // ─── Inline set/unset NOT yet folded into AttachDiff ────────────────────────
