@@ -352,7 +352,9 @@ pub struct BaseCatalogUrl(String);
 
 impl BaseCatalogUrl {
     pub fn as_flake_ref(&self) -> Result<Url, BaseCatalogUrlError> {
-        Url::parse(&format!("git+{}&shallow=1", self.0.as_str())).map_err(BaseCatalogUrlError)
+        let mut url = Url::parse(&format!("git+{}", self.0)).map_err(BaseCatalogUrlError)?;
+        url.query_pairs_mut().append_pair("shallow", "1");
+        Ok(url)
     }
 
     pub fn rev(&self) -> Option<String> {
@@ -529,5 +531,25 @@ mod tests {
         let context = [("valid_systems".to_string(), "".to_string())].into();
         let systems = ResolutionMessage::valid_systems_from_context(&context);
         assert_eq!(systems, Vec::<String>::new());
+    }
+
+    #[test]
+    fn as_flake_ref_with_query_string_appends_ampersand() {
+        let url = BaseCatalogUrl::from("https://github.com/flox/nixpkgs?rev=abc123");
+        let flake_ref = url.as_flake_ref().expect("should parse");
+        assert_eq!(
+            flake_ref.as_str(),
+            "git+https://github.com/flox/nixpkgs?rev=abc123&shallow=1"
+        );
+    }
+
+    #[test]
+    fn as_flake_ref_plain_https_no_query_appends_question_mark() {
+        let url = BaseCatalogUrl::from("https://github.com/NixOS/nixpkgs");
+        let flake_ref = url.as_flake_ref().expect("should parse");
+        assert_eq!(
+            flake_ref.as_str(),
+            "git+https://github.com/NixOS/nixpkgs?shallow=1"
+        );
     }
 }
