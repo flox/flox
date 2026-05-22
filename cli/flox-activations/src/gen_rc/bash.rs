@@ -170,8 +170,14 @@ pub fn generate_bash_profile_commands(
             stmts.push("set +h".to_stmt());
         },
         Action::Deactivate { .. } => {
-            // Re-enable command hashing (bash default).
-            stmts.push("set -h".to_stmt());
+            // Re-enable command hashing (bash default), but only if no
+            // other flox environments remain active — the outer env
+            // still wants hashing off. `_FLOX_ACTIVE_ENVIRONMENTS` is
+            // updated by the env-diff restore above (DEV-77).
+            stmts.push(
+                "if [ -z \"${_FLOX_ACTIVE_ENVIRONMENTS:-}\" ]; then set -h; fi;"
+                    .to_stmt(),
+            );
         },
     }
 
@@ -316,7 +322,7 @@ mod tests {
         let output = render_deactivate();
         expect![[r#"
             if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
-            set -h
+            if [ -z "${_FLOX_ACTIVE_ENVIRONMENTS:-}" ]; then set -h; fi;
         "#]]
         .assert_eq(&output);
     }

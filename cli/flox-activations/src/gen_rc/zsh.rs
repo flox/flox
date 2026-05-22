@@ -58,9 +58,14 @@ pub fn generate_zsh_profile_commands(
             stmts.push(source_file(args.activate_d.join("zsh")));
         },
         Action::Deactivate { .. } => {
-            // Re-enable command hashing (zsh defaults).
-            stmts.push("setopt hashcmds;".to_stmt());
-            stmts.push("setopt hashdirs;".to_stmt());
+            // Re-enable command hashing (zsh defaults), but only if no
+            // other flox environments remain active — the outer env
+            // still wants hashing off. `_FLOX_ACTIVE_ENVIRONMENTS` is
+            // updated by the env-diff restore above (DEV-77).
+            stmts.push(
+                "if [[ -z \"${_FLOX_ACTIVE_ENVIRONMENTS:-}\" ]]; then setopt hashcmds; setopt hashdirs; fi;"
+                    .to_stmt(),
+            );
             // TODO: undo the rest of activate.d/zsh (FPATH, `_flox_rehash` hook).
             // Note that unsetting the prompt depends on `_activate_d` being set.
         },
@@ -207,8 +212,7 @@ mod tests {
     fn generate_zsh_profile_commands_deactivate() {
         let output = render_deactivate();
         expect![[r#"
-            setopt hashcmds;
-            setopt hashdirs;
+            if [[ -z "${_FLOX_ACTIVE_ENVIRONMENTS:-}" ]]; then setopt hashcmds; setopt hashdirs; fi;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
         "#]]
         .assert_eq(&output);

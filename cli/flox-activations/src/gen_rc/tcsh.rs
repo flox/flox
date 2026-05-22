@@ -161,8 +161,12 @@ pub fn generate_tcsh_profile_commands(
             stmts.push("unhash;".to_stmt());
         },
         Action::Deactivate { .. } => {
-            // Re-enable command hashing by rebuilding the hash table.
-            stmts.push("rehash;".to_stmt());
+            // Re-enable command hashing by rebuilding the hash table,
+            // but only if no other flox environments remain active —
+            // the outer env still wants hashing off.
+            // `_FLOX_ACTIVE_ENVIRONMENTS` is updated by the env-diff
+            // restore above (DEV-77).
+            stmts.push("if (! $?_FLOX_ACTIVE_ENVIRONMENTS) rehash;".to_stmt());
         },
     }
 
@@ -312,7 +316,7 @@ mod tests {
         let output = render_deactivate();
         expect![[r#"
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
-            rehash;
+            if (! $?_FLOX_ACTIVE_ENVIRONMENTS) rehash;
         "#]]
         .assert_eq(&output);
     }
