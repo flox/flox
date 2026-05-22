@@ -174,10 +174,7 @@ pub fn generate_bash_profile_commands(
             // other flox environments remain active — the outer env
             // still wants hashing off. `_FLOX_ACTIVE_ENVIRONMENTS` is
             // updated by the env-diff restore above (DEV-77).
-            stmts.push(
-                "if [ -z \"${_FLOX_ACTIVE_ENVIRONMENTS:-}\" ]; then set -h; fi;"
-                    .to_stmt(),
-            );
+            stmts.push("if [ -z \"${_FLOX_ACTIVE_ENVIRONMENTS:-}\" ]; then set -h; fi;".to_stmt());
         },
     }
 
