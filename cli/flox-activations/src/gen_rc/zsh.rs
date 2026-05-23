@@ -6,7 +6,6 @@ use anyhow::Result;
 use flox_core::activate::context::InvocationType;
 use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file};
 
-use crate::attach_diff;
 use crate::gen_rc::{Action, RM};
 
 /// Arguments for generating zsh startup commands
@@ -38,7 +37,7 @@ pub fn generate_zsh_profile_commands(
                 args.activate_d.display().to_string(),
             ));
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: we might not need to set these in the first place
         },
     }
@@ -48,8 +47,8 @@ pub fn generate_zsh_profile_commands(
         Action::Activate { args, attach_diff } => {
             stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
         },
-        Action::Deactivate { .. } => {
-            stmts.extend(attach_diff::generate_deactivation_statements()?);
+        Action::Deactivate(ctx) => {
+            stmts.extend(ctx.restore_diff.generate_deactivation_statements());
         },
     }
 
@@ -58,7 +57,7 @@ pub fn generate_zsh_profile_commands(
         Action::Activate { args, .. } => {
             stmts.push(source_file(args.activate_d.join("zsh")));
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: undo everything in activate_d/zsh
             // Although note that unsetting the prompt depends on these being
             // set
@@ -73,7 +72,7 @@ pub fn generate_zsh_profile_commands(
         Action::Activate { args, .. } => args
             .set_prompt
             .then(|| args.activate_d.join("set-prompt.zsh")),
-        Action::Deactivate { activate_d } => Some(activate_d.join("set-prompt.zsh")),
+        Action::Deactivate(ctx) => Some(ctx.activate_d.join("set-prompt.zsh")),
     };
     if let Some(set_prompt_path) = set_prompt_path {
         // We could consult set_prompt, but hypothetically that config value
@@ -97,7 +96,7 @@ pub fn generate_zsh_profile_commands(
                 stmts.push(format!("{RM} {};", escaped_path).to_stmt());
             }
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // No-op: deactivate has no rc file to remove.
         },
     }
@@ -121,7 +120,7 @@ pub fn generate_zsh_profile_commands(
                 write!(writer, "{}", crate::hook::zsh_hook(&args.flox_bin))?;
             }
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: unregister the auto-activate hook
         },
     }
@@ -135,7 +134,12 @@ mod tests {
     use shell_gen::ShellWithPath;
 
     use super::*;
-    use crate::gen_rc::test_helpers::{render_normalized, test_startup_ctx};
+    use crate::gen_rc::test_helpers::{
+        render_normalized,
+        strip_volatile_deactivate,
+        test_deactivate_ctx,
+        test_startup_ctx,
+    };
 
     // NOTE: For these `expect!` tests, run unit tests with `UPDATE_EXPECT=1`
     //  to have it automatically update the expected value when the implementation
@@ -148,12 +152,12 @@ mod tests {
     }
 
     fn render_deactivate() -> String {
-        let action = Action::<ZshStartupArgs>::Deactivate {
-            activate_d: PathBuf::from("/interpreter/activate.d"),
-        };
+        let shell = ShellWithPath::Zsh(PathBuf::from("/bin/zsh"));
+        let action = Action::<ZshStartupArgs>::Deactivate(test_deactivate_ctx(shell, true));
         let mut buf = Vec::new();
         generate_zsh_profile_commands(&action, &mut buf).expect("generator should succeed");
-        String::from_utf8(buf).expect("output should be utf-8")
+        let output = String::from_utf8(buf).expect("output should be utf-8");
+        strip_volatile_deactivate(&output)
     }
 
     #[test]
@@ -168,6 +172,7 @@ mod tests {
             export FLOX_ENV_CACHE=/flox_env_cache;
             export FLOX_ENV_DESCRIPTION=env_description;
             export FLOX_ENV_PROJECT=/flox_env_project;
+            export MODIFIED_VAR=MODIFIED_VALUE;
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
             source /interpreter/activate.d/zsh;
@@ -193,6 +198,7 @@ mod tests {
             export FLOX_ENV_CACHE=/flox_env_cache;
             export FLOX_ENV_DESCRIPTION=env_description;
             export FLOX_ENV_PROJECT=/flox_env_project;
+            export MODIFIED_VAR=MODIFIED_VALUE;
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
             source /interpreter/activate.d/zsh;
@@ -206,6 +212,23 @@ mod tests {
     fn generate_zsh_profile_commands_deactivate() {
         let output = render_deactivate();
         expect![[r#"
+            unset ADDED_VAR;
+            unset FLOX_ACTIVATE_START_SERVICES;
+            unset FLOX_ENV;
+            unset FLOX_ENV_CACHE;
+            unset FLOX_ENV_DESCRIPTION;
+            unset FLOX_ENV_DIRS;
+            unset FLOX_ENV_PROJECT;
+            unset FLOX_PROMPT_COLOR_1;
+            unset FLOX_PROMPT_COLOR_2;
+            unset FLOX_PROMPT_ENVIRONMENTS;
+            unset MANPATH;
+            unset PATH;
+            unset QUOTED_VAR;
+            unset _FLOX_ACTIVE_ENVIRONMENTS;
+            export MODIFIED_VAR=MODIFIED_ORIGINAL;
+            export DELETED_VAR=DELETED_ORIGINAL;
+            unset _FLOX_HOOK_DIFF;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
         "#]]
         .assert_eq(&output);

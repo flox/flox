@@ -1,9 +1,10 @@
 use std::collections::{HashMap, HashSet};
-use std::env;
 use std::path::Path;
 use std::process::Command;
 
-use anyhow::{Context, Result};
+pub mod diff_serializer;
+
+use anyhow::Result;
 use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
 use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
 use flox_core::util::default_nix_env_vars;
@@ -12,9 +13,9 @@ use itertools::Itertools;
 use shell_gen::{GenerateShell, SetVar, Statement, UnsetVar};
 use tracing::debug;
 
+use crate::attach_diff::diff_serializer::{DiffSerializer, FLOX_HOOK_DIFF_VAR};
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
-use crate::diff_serializer::{DiffSerializer, FLOX_HOOK_DIFF_VAR};
 use crate::env_diff::EnvDiff;
 use crate::start_diff::StartDiff;
 use crate::vars_from_env::VarsFromEnvironment;
@@ -152,6 +153,13 @@ impl AttachDiff {
         })
     }
 
+    /// The encoded `_FLOX_HOOK_DIFF` string, if a pre-activation snapshot
+    /// was available when this `AttachDiff` was constructed.
+    #[cfg(test)]
+    pub fn encoded_diff(&self) -> Option<&str> {
+        self.encoded_diff.as_deref()
+    }
+
     /// Apply the activation environment to a Command.
     ///
     /// Sets all accumulated variables, removes all accumulated unsets,
@@ -211,46 +219,6 @@ fn set_exported_expanded(name: impl AsRef<str>, value: impl AsRef<str>) -> State
 // in gen_rc that we don't capture for `flox deactivate`
 fn unset(name: impl AsRef<str>) -> Statement {
     UnsetVar::new(name).to_stmt()
-}
-
-/// Generate deactivation statements by decoding `_FLOX_HOOK_DIFF` from the environment.
-///
-/// This function reads the `_FLOX_HOOK_DIFF` environment variable, decodes it,
-/// and generates shell statements to restore the environment to its pre-activation state:
-/// - Unsets variables that were added during activation
-/// - Restores original values for variables that were modified
-/// - Restores variables that were removed during activation
-/// - Unsets `_FLOX_HOOK_DIFF` itself
-///
-/// Returns an error if `_FLOX_HOOK_DIFF` is not set in the environment or
-/// cannot be decoded.
-pub(crate) fn generate_deactivation_statements() -> Result<Vec<Statement>> {
-    let mut stmts = Vec::new();
-
-    let encoded_diff = env::var(FLOX_HOOK_DIFF_VAR)
-        .context(format!("{} not set in environment", FLOX_HOOK_DIFF_VAR))?;
-    let diff = DiffSerializer::decode(&encoded_diff)
-        .context(format!("failed to decode {}", FLOX_HOOK_DIFF_VAR))?;
-
-    // Unset variables that were added during activation
-    for var_name in diff.added.iter().sorted() {
-        stmts.push(unset(var_name));
-    }
-
-    // Restore variables that were modified during activation
-    for (var_name, original_value) in diff.modified.iter().sorted_by_key(|(k, _)| *k) {
-        stmts.push(set_exported_unexpanded(var_name, original_value));
-    }
-
-    // Restore variables that were removed during activation
-    for (var_name, original_value) in diff.removed.iter().sorted_by_key(|(k, _)| *k) {
-        stmts.push(set_exported_unexpanded(var_name, original_value));
-    }
-
-    // Unset the diff variable itself
-    stmts.push(unset(FLOX_HOOK_DIFF_VAR));
-
-    Ok(stmts)
 }
 
 // ─── Inline set/unset NOT yet folded into AttachDiff ────────────────────────

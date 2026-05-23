@@ -3,7 +3,11 @@ use std::io::{Read, Write};
 
 use anyhow::Result;
 use base64::Engine as _;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use shell_gen::Statement;
+
+use crate::attach_diff::{set_exported_unexpanded, unset};
 
 pub const FLOX_HOOK_DIFF_VAR: &str = "_FLOX_HOOK_DIFF";
 
@@ -43,6 +47,34 @@ impl DiffSerializer {
         let mut json = Vec::new();
         decoder.read_to_end(&mut json)?;
         Ok(serde_json::from_slice(&json)?)
+    }
+
+    /// Generates shell statements to restore the environment to its pre-activation state:
+    /// - Unsets variables that were added during activation
+    /// - Restores original values for variables that were modified
+    /// - Restores variables that were removed during activation
+    /// - Unsets `_FLOX_HOOK_DIFF` itself
+    pub(crate) fn generate_deactivation_statements(&self) -> Vec<Statement> {
+        let mut stmts = Vec::new();
+        // Unset variables that were added during activation
+        for var_name in self.added.iter().sorted() {
+            stmts.push(unset(var_name));
+        }
+
+        // Restore variables that were modified during activation
+        for (var_name, original_value) in self.modified.iter().sorted_by_key(|(k, _)| *k) {
+            stmts.push(set_exported_unexpanded(var_name, original_value));
+        }
+
+        // Restore variables that were removed during activation
+        for (var_name, original_value) in self.removed.iter().sorted_by_key(|(k, _)| *k) {
+            stmts.push(set_exported_unexpanded(var_name, original_value));
+        }
+
+        // Unset the diff variable itself
+        stmts.push(unset(FLOX_HOOK_DIFF_VAR));
+
+        stmts
     }
 }
 

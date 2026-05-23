@@ -6,7 +6,7 @@ use anyhow::Result;
 use flox_core::activate::context::InvocationType;
 use shell_gen::{GenerateShell, Shell};
 
-use crate::attach_diff::{self, todo_drop_set_exported_unexpanded};
+use crate::attach_diff::todo_drop_set_exported_unexpanded;
 use crate::gen_rc::{Action, RM};
 
 /// Arguments for generating tcsh startup commands
@@ -42,7 +42,7 @@ pub fn generate_tcsh_profile_commands(
                 stmts.push("set verbose".to_stmt());
             }
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: emit `set verbose` when tracelevel >= 2
         },
     }
@@ -52,8 +52,8 @@ pub fn generate_tcsh_profile_commands(
         Action::Activate { args, attach_diff } => {
             stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
         },
-        Action::Deactivate { .. } => {
-            stmts.extend(attach_diff::generate_deactivation_statements()?);
+        Action::Deactivate(ctx) => {
+            stmts.extend(ctx.restore_diff.generate_deactivation_statements());
         },
     }
 
@@ -72,7 +72,7 @@ pub fn generate_tcsh_profile_commands(
                 &args.flox_activate_tracer,
             ));
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: we shouldn't be exporting these in the first place
             // Although note that unsetting the prompt depends on these being
             // set
@@ -87,7 +87,7 @@ pub fn generate_tcsh_profile_commands(
         Action::Activate { args, .. } => args
             .set_prompt
             .then(|| args.activate_d.join("set-prompt.tcsh")),
-        Action::Deactivate { activate_d } => Some(activate_d.join("set-prompt.tcsh")),
+        Action::Deactivate(ctx) => Some(ctx.activate_d.join("set-prompt.tcsh")),
     };
     if let Some(set_prompt_path) = set_prompt_path {
         // We could consult set_prompt, but hypothetically that config value
@@ -124,7 +124,7 @@ pub fn generate_tcsh_profile_commands(
                 args.flox_activations.display()
             ).to_stmt());
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // No-op: covered by environment restoration above
         },
     }
@@ -147,7 +147,7 @@ pub fn generate_tcsh_profile_commands(
                 args.flox_activations.display()
             ).to_stmt());
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: run profile.deactivate.tcsh
         },
     }
@@ -160,7 +160,7 @@ pub fn generate_tcsh_profile_commands(
         Action::Activate { .. } => {
             stmts.push("unhash;".to_stmt());
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: decide whether to restore prior hashing state.
         },
     }
@@ -172,7 +172,7 @@ pub fn generate_tcsh_profile_commands(
                 stmts.push("unset verbose;".to_stmt());
             }
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: unset verbose
         },
     }
@@ -186,7 +186,7 @@ pub fn generate_tcsh_profile_commands(
                 stmts.push(format!("{RM} {};", escaped_path).to_stmt());
             }
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // No-op: deactivate has no rc file to remove.
         },
     }
@@ -207,7 +207,7 @@ pub fn generate_tcsh_profile_commands(
                 write!(writer, "{}", crate::hook::tcsh_hook(&args.flox_bin))?;
             }
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: unregister the auto-activate hook
         },
     }
@@ -221,7 +221,12 @@ mod tests {
     use shell_gen::ShellWithPath;
 
     use super::*;
-    use crate::gen_rc::test_helpers::{render_normalized, test_startup_ctx};
+    use crate::gen_rc::test_helpers::{
+        render_normalized,
+        strip_volatile_deactivate,
+        test_deactivate_ctx,
+        test_startup_ctx,
+    };
 
     // NOTE: For these `expect!` tests, run unit tests with `UPDATE_EXPECT=1`
     //  to have it automatically update the expected value when the implementation
@@ -234,12 +239,12 @@ mod tests {
     }
 
     fn render_deactivate() -> String {
-        let action = Action::<TcshStartupArgs>::Deactivate {
-            activate_d: PathBuf::from("/interpreter/activate.d"),
-        };
+        let shell = ShellWithPath::Tcsh(PathBuf::from("/bin/tcsh"));
+        let action = Action::<TcshStartupArgs>::Deactivate(test_deactivate_ctx(shell, true));
         let mut buf = Vec::new();
         generate_tcsh_profile_commands(&action, &mut buf).expect("generator should succeed");
-        String::from_utf8(buf).expect("output should be utf-8")
+        let output = String::from_utf8(buf).expect("output should be utf-8");
+        strip_volatile_deactivate(&output)
     }
 
     #[test]
@@ -253,6 +258,7 @@ mod tests {
             setenv FLOX_ENV_CACHE /flox_env_cache;
             setenv FLOX_ENV_DESCRIPTION env_description;
             setenv FLOX_ENV_PROJECT /flox_env_project;
+            setenv MODIFIED_VAR MODIFIED_VALUE;
             setenv QUOTED_VAR 'QUOTED'\''VALUE';
             unsetenv DELETED_VAR;
             setenv _activate_d /interpreter/activate.d;
@@ -287,6 +293,7 @@ mod tests {
             setenv FLOX_ENV_CACHE /flox_env_cache;
             setenv FLOX_ENV_DESCRIPTION env_description;
             setenv FLOX_ENV_PROJECT /flox_env_project;
+            setenv MODIFIED_VAR MODIFIED_VALUE;
             setenv QUOTED_VAR 'QUOTED'\''VALUE';
             unsetenv DELETED_VAR;
             setenv _activate_d /interpreter/activate.d;
@@ -310,6 +317,23 @@ mod tests {
     fn generate_tcsh_profile_deactivate() {
         let output = render_deactivate();
         expect![[r#"
+            unsetenv ADDED_VAR;
+            unsetenv FLOX_ACTIVATE_START_SERVICES;
+            unsetenv FLOX_ENV;
+            unsetenv FLOX_ENV_CACHE;
+            unsetenv FLOX_ENV_DESCRIPTION;
+            unsetenv FLOX_ENV_DIRS;
+            unsetenv FLOX_ENV_PROJECT;
+            unsetenv FLOX_PROMPT_COLOR_1;
+            unsetenv FLOX_PROMPT_COLOR_2;
+            unsetenv FLOX_PROMPT_ENVIRONMENTS;
+            unsetenv MANPATH;
+            unsetenv PATH;
+            unsetenv QUOTED_VAR;
+            unsetenv _FLOX_ACTIVE_ENVIRONMENTS;
+            setenv MODIFIED_VAR MODIFIED_ORIGINAL;
+            setenv DELETED_VAR DELETED_ORIGINAL;
+            unsetenv _FLOX_HOOK_DIFF;
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
         "#]]
         .assert_eq(&output);

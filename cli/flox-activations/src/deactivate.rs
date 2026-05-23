@@ -4,22 +4,24 @@
 //! the environment to its pre-activation state by decoding and applying the
 //! `_FLOX_HOOK_DIFF` variable captured during activation.
 
+use std::env;
 use std::io::Write;
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use shell_gen::ShellWithPath;
 
-use crate::gen_rc::Action;
+use crate::attach_diff::diff_serializer::{DiffSerializer, FLOX_HOOK_DIFF_VAR};
 use crate::gen_rc::bash::{BashStartupArgs, generate_bash_profile_commands};
 use crate::gen_rc::fish::{FishStartupArgs, generate_fish_profile_commands};
 use crate::gen_rc::tcsh::{TcshStartupArgs, generate_tcsh_profile_commands};
 use crate::gen_rc::zsh::{ZshStartupArgs, generate_zsh_profile_commands};
+use crate::gen_rc::{Action, DeactivateCtx};
 
 /// Generate a deactivation script for the specified shell.
 ///
-/// This reads the `_FLOX_HOOK_DIFF` environment variable (if present),
-/// decodes it, and generates shell commands to:
+/// This reads the `_FLOX_HOOK_DIFF` environment variable, decodes it,
+/// and generates shell commands to:
 /// - Unset variables that were added during activation
 /// - Restore variables that were modified during activation
 /// - Restore variables that were removed during activation
@@ -27,28 +29,39 @@ use crate::gen_rc::zsh::{ZshStartupArgs, generate_zsh_profile_commands};
 ///
 /// Returns an error if `_FLOX_HOOK_DIFF` is not set in the environment or
 /// cannot be decoded.
+///
+/// This function captures all environment variables so all downstream code is
+/// easily unit testable.
 pub fn generate_deactivate_script(
     shell: ShellWithPath,
     writer: &mut impl Write,
     interpreter_path: impl AsRef<Path>,
 ) -> Result<()> {
     let activate_d = interpreter_path.as_ref().join("activate.d");
+    let encoded_diff = env::var(FLOX_HOOK_DIFF_VAR)
+        .context(format!("{} not set in environment", FLOX_HOOK_DIFF_VAR))?;
+    let restore_diff = DiffSerializer::decode(&encoded_diff)
+        .context(format!("Failed to decode {}", FLOX_HOOK_DIFF_VAR))?;
+    let ctx = DeactivateCtx {
+        activate_d,
+        restore_diff,
+    };
 
     match shell {
         ShellWithPath::Bash(_) => {
-            let action: Action<BashStartupArgs> = Action::Deactivate { activate_d };
+            let action: Action<BashStartupArgs> = Action::Deactivate(ctx);
             generate_bash_profile_commands(&action, writer)
         },
         ShellWithPath::Zsh(_) => {
-            let action: Action<ZshStartupArgs> = Action::Deactivate { activate_d };
+            let action: Action<ZshStartupArgs> = Action::Deactivate(ctx);
             generate_zsh_profile_commands(&action, writer)
         },
         ShellWithPath::Fish(_) => {
-            let action: Action<FishStartupArgs> = Action::Deactivate { activate_d };
+            let action: Action<FishStartupArgs> = Action::Deactivate(ctx);
             generate_fish_profile_commands(&action, writer)
         },
         ShellWithPath::Tcsh(_) => {
-            let action: Action<TcshStartupArgs> = Action::Deactivate { activate_d };
+            let action: Action<TcshStartupArgs> = Action::Deactivate(ctx);
             generate_tcsh_profile_commands(&action, writer)
         },
     }

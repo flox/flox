@@ -6,6 +6,7 @@ use flox_core::activate::context::ActivateCtx;
 const RM: &str = concat!(env!("COREUTILS"), "/bin/rm");
 
 use crate::attach_diff::AttachDiff;
+use crate::attach_diff::diff_serializer::DiffSerializer;
 use crate::gen_rc::bash::BashStartupArgs;
 use crate::gen_rc::fish::FishStartupArgs;
 use crate::gen_rc::tcsh::TcshStartupArgs;
@@ -20,7 +21,15 @@ pub mod zsh;
 #[derive(Debug, Clone)]
 pub enum Action<A> {
     Activate { args: A, attach_diff: AttachDiff },
-    Deactivate { activate_d: PathBuf },
+    Deactivate(DeactivateCtx),
+}
+
+/// Context for shell deactivation, shared across all shell flavors.
+#[derive(Debug, Clone)]
+pub struct DeactivateCtx {
+    pub activate_d: PathBuf,
+    /// Decoded from `_FLOX_HOOK_DIFF`
+    pub restore_diff: DiffSerializer,
 }
 
 #[derive(Debug, Clone)]
@@ -50,8 +59,9 @@ pub(crate) mod test_helpers {
     use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
     use shell_gen::ShellWithPath;
 
-    use super::StartupCtx;
+    use super::{DeactivateCtx, StartupCtx};
     use crate::attach::{startup_ctx, write_to_writer};
+    use crate::attach_diff::diff_serializer::DiffSerializer;
     use crate::start_diff::StartDiff;
     use crate::vars_from_env::VarsFromEnvironment;
 
@@ -101,18 +111,25 @@ pub(crate) mod test_helpers {
             flox_bin: "/flox".to_string(),
             auto_activate_fish_mode: None,
         };
+        let deleted_var = "DELETED_VAR".to_string();
+        let modified_var = "MODIFIED_VAR".to_string();
         let start_diff = StartDiff::from_parts(
             HashMap::from([
                 ("ADDED_VAR".to_string(), "ADDED_VALUE".to_string()),
+                (modified_var.clone(), "MODIFIED_VALUE".to_string()),
                 ("QUOTED_VAR".to_string(), "QUOTED'VALUE".to_string()),
             ]),
-            vec!["DELETED_VAR".to_string()],
+            vec![deleted_var.clone()],
         );
+        let full_env = HashMap::from([
+            (deleted_var.clone(), "DELETED_ORIGINAL".to_string()),
+            (modified_var.clone(), "MODIFIED_ORIGINAL".to_string()),
+        ]);
         let vars_from_env = VarsFromEnvironment {
             flox_env_dirs: None,
             path: None,
             manpath: None,
-            full_env: None,
+            full_env: Some(full_env),
         };
         let rc_path = Some(PathBuf::from("/path/to/rc/file"));
         startup_ctx(
@@ -130,6 +147,48 @@ pub(crate) mod test_helpers {
         .expect("test fixture should build")
     }
 
+    /// Build a `DeactivateCtx` for tests of `gen_rc/*`.
+    ///
+    /// Reuses the encoded `_FLOX_HOOK_DIFF` produced by `test_startup_ctx`
+    /// so the deactivate snapshot reflects exactly what activation would
+    /// have captured.
+    pub fn test_deactivate_ctx(shell: ShellWithPath, is_in_place: bool) -> DeactivateCtx {
+        let startup = test_startup_ctx(shell, is_in_place);
+        let encoded_diff = startup
+            .attach_diff
+            .encoded_diff()
+            .expect("test_startup_ctx should produce an encoded diff")
+            .to_string();
+        let restore_diff =
+            DiffSerializer::decode(&encoded_diff).expect("encoded diff should decode successfully");
+        DeactivateCtx {
+            activate_d: PathBuf::from("/interpreter/activate.d"),
+            restore_diff,
+        }
+    }
+
+    /// Strip lines referencing platform-specific or
+    /// environment-dependent variables from rendered deactivate
+    /// output.
+    pub fn strip_volatile_deactivate(output: &str) -> String {
+        const VOLATILE: &[&str] = &[
+            "LOCALE_ARCHIVE",
+            "NIX_SSL_CERT_FILE",
+            "PATH_LOCALE",
+            "SSL_CERT_FILE",
+        ];
+        let trailing_newline = output.ends_with('\n');
+        let mut filtered = output
+            .lines()
+            .filter(|l| !VOLATILE.iter().any(|v| l.contains(v)))
+            .collect::<Vec<_>>()
+            .join("\n");
+        if trailing_newline {
+            filtered.push('\n');
+        }
+        filtered
+    }
+
     /// Render `ctx` via `write_to_writer`, stripping platform specific lines
     /// and replacing /nix/store hashes
     pub fn render_normalized(ctx: &StartupCtx) -> String {
@@ -137,6 +196,7 @@ pub(crate) mod test_helpers {
         const HASH_LEN: usize = 32;
         let mut buf = Vec::new();
         write_to_writer(ctx, &mut buf).expect("write_to_writer should succeed");
+
         // flox-activations could be cargo compiled rather than a /nix/store path
         let flox_activations_bin = FLOX_ACTIVATIONS_BIN.display().to_string();
         let mut normalized =
@@ -159,12 +219,14 @@ pub(crate) mod test_helpers {
         }
 
         // Drop platform specific or environment variable dependent variables
+        // and the opaque `_FLOX_HOOK_DIFF` blob
         // TODO: should we move those to vars_from_environment?
         const VOLATILE: &[&str] = &[
             "LOCALE_ARCHIVE",
             "NIX_SSL_CERT_FILE",
             "PATH_LOCALE",
             "SSL_CERT_FILE",
+            "_FLOX_HOOK_DIFF",
         ];
         let trailing_newline = normalized.ends_with('\n');
         let mut filtered = normalized
