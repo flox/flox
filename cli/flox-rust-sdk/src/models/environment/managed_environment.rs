@@ -325,8 +325,8 @@ impl Environment for ManagedEnvironment {
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
             self.lock_pointer()?;
         }
-        if let Some(store_paths) = &result.built_environments {
-            self.link(store_paths)?;
+        if result.built_environments.is_some() {
+            self.build(flox)?;
         }
 
         Ok(result)
@@ -368,8 +368,8 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut local_checkout, change)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        if let Some(store_paths) = &result.built_environment_store_paths {
-            self.link(store_paths)?;
+        if result.built_environment_store_paths.is_some() {
+            self.build(flox)?;
         }
 
         Ok(result)
@@ -394,15 +394,12 @@ impl Environment for ManagedEnvironment {
         let result = local_checkout.edit(flox, contents)?;
 
         match &result {
-            EditResult::Changed {
-                built_environment_store_paths,
-                ..
-            } => {
+            EditResult::Changed { .. } => {
                 generations
                     .add_generation(&mut local_checkout, HistoryKind::Edit)
                     .map_err(ManagedEnvironmentError::CommitGeneration)?;
                 self.lock_pointer()?;
-                self.link(built_environment_store_paths)?;
+                self.build(flox)?;
             },
             EditResult::Unchanged => {},
         }
@@ -520,12 +517,10 @@ impl Environment for ManagedEnvironment {
             .map_err(ManagedEnvironmentError::Core)?
             .expect("lockfile presence checked");
 
-        let rendered_env_lockfile_path =
-            self.rendered_env_links.development.join(LOCKFILE_FILENAME);
+        let rendered_env_lockfile_path = self.rendered_env_links.dev.join(LOCKFILE_FILENAME);
 
         let mut build_and_link = || -> Result<(), EnvironmentError> {
-            let store_paths = self.build(flox)?;
-            self.link(&store_paths)?;
+            self.build(flox)?;
             Ok(())
         };
 
@@ -549,17 +544,11 @@ impl Environment for ManagedEnvironment {
     }
 
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
         // todo: ensure lockfile exists?
 
-        Ok(local_checkout.build(flox)?)
-    }
-
-    fn link(&mut self, store_paths: &BuildEnvOutputs) -> Result<(), EnvironmentError> {
-        CoreEnvironment::link(&self.rendered_env_links.development, &store_paths.develop)?;
-        CoreEnvironment::link(&self.rendered_env_links.runtime, &store_paths.runtime)?;
-
-        Ok(())
+        Ok(local_checkout.build(flox, Some(&out_link_prefix))?)
     }
 
     /// Returns .flox/cache
@@ -680,8 +669,7 @@ impl GenerationsExt for ManagedEnvironment {
         // update the rendered environment
         self.lock_pointer()?;
         self.reset_local_env_to_current_generation(flox)?;
-        let buildenv_paths = self.build(flox)?;
-        self.link(&buildenv_paths)?;
+        self.build(flox)?;
 
         Ok(())
     }
@@ -723,8 +711,6 @@ impl GenerationsExt for ManagedEnvironment {
         let mut core_environment =
             generation_rw.get_generation(*generation, self.include_fetcher.clone());
 
-        let store_paths = core_environment.build(flox)?;
-
         let run_dir = &self.path.join(GCROOTS_DIR_NAME);
         if !run_dir.exists() {
             std::fs::create_dir_all(run_dir).map_err(ManagedEnvironmentError::CreateLinksDir)?;
@@ -740,8 +726,8 @@ impl GenerationsExt for ManagedEnvironment {
                 generation,
             );
 
-        CoreEnvironment::link(&rendered_env_links.development, &store_paths.develop)?;
-        CoreEnvironment::link(&rendered_env_links.runtime, &store_paths.runtime)?;
+        let out_link_prefix = rendered_env_links.out_link_prefix();
+        core_environment.build(flox, Some(&out_link_prefix))?;
 
         Ok(rendered_env_links)
     }
@@ -1021,10 +1007,8 @@ impl ManagedEnvironment {
         local_checkout.lock(flox)?;
 
         // Ensure the created generation is valid
-        let store_paths = local_checkout.build(flox)?;
-
-        // TODO: should use self.link but that returns an EnvironmentError
-        self.link(&store_paths)?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        local_checkout.build(flox, Some(&out_link_prefix))?;
 
         let mut generations = self.generations();
         let mut generations = generations
@@ -1283,7 +1267,7 @@ impl ManagedEnvironment {
 
         // Ensure the environment builds before we push it
         core_environment
-            .build(flox)
+            .build(flox, None)
             .map_err(ManagedEnvironmentError::Build)?;
 
         // Ensure that the environment does not include other local ennvironments
@@ -1439,7 +1423,7 @@ impl ManagedEnvironment {
                 .map_err(|_| ManagedEnvironmentError::CheckoutOutOfSync)?
                 .into();
             local_checkout
-                .build(flox)
+                .build(flox, None)
                 .map_err(ManagedEnvironmentError::Build)?;
 
             check_for_local_includes(&lockfile)?;
@@ -1538,8 +1522,7 @@ impl ManagedEnvironment {
 
         if is_uptodate && !checkout_valid && force {
             self.reset_local_env_to_current_generation(flox)?;
-            let store_paths = self.build(flox)?;
-            self.link(&store_paths)?;
+            self.build(flox)?;
 
             return Ok(PullResult::Updated);
         } else if is_uptodate {
@@ -1580,8 +1563,7 @@ impl ManagedEnvironment {
         // update the pointer lockfile and build
         self.lock_pointer()?;
         self.reset_local_env_to_current_generation(flox)?;
-        let store_paths = self.build(flox)?;
-        self.link(&store_paths)?;
+        self.build(flox)?;
 
         Ok(PullResult::Updated)
     }

@@ -1,9 +1,8 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt::Display;
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::thread::ScopedJoinHandle;
 use std::{env, fmt};
@@ -27,9 +26,9 @@ use rsevents_extra::Semaphore;
 use serde::{Deserialize, Serialize};
 use tempfile::TempPath;
 use thiserror::Error;
-use tracing::{Span, debug, info_span, instrument, trace};
+use tracing::{Span, debug, info_span, instrument};
 
-use super::nix::{self, nix_base_command};
+use super::nix::nix_base_command;
 use super::nix_auth::{AuthError, AuthProvider};
 use crate::data::System;
 use crate::models::nix_plugins::NIX_PLUGINS;
@@ -133,9 +132,6 @@ pub enum BuildEnvError {
     #[error("Failed to call 'nix build'")]
     CallNixBuild(#[source] std::io::Error),
 
-    #[error("Failed to write nix arguments to stdin")]
-    WriteNixStdin(#[source] std::io::Error),
-
     /// An error that occurred while deserializing the output of the `nix build` command.
     #[error("Failed to deserialize 'nix build' output:\n{output}\nError: {err}")]
     ReadOutputs {
@@ -184,8 +180,8 @@ pub enum BuildEnvError {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct BuildEnvOutputs {
-    pub develop: BuiltStorePath,
-    pub runtime: BuiltStorePath,
+    pub dev: BuiltStorePath,
+    pub run: BuiltStorePath,
     /// A map of additional built store paths.
     /// These are the runtime environments for each manifest build.
     /// The main consumer of this is [super::build::FloxBuildMk].
@@ -198,8 +194,8 @@ impl BuildEnvOutputs {
     /// Returns the built environment path for an activation mode.
     pub fn for_mode(self, mode: &ActivateMode) -> BuiltStorePath {
         match mode {
-            ActivateMode::Dev => self.develop,
-            ActivateMode::Run => self.runtime,
+            ActivateMode::Dev => self.dev,
+            ActivateMode::Run => self.run,
         }
     }
 }
@@ -215,6 +211,7 @@ pub trait BuildEnv {
         client: &impl ClientTrait,
         lockfile: &Path,
         service_config_path: Option<PathBuf>,
+        out_link_prefix: Option<&Path>,
     ) -> Result<BuildEnvOutputs, BuildEnvError>;
 }
 
@@ -835,7 +832,7 @@ where
     /// the `buildenv.nix` expression.
     ///
     /// The `buildenv.nix` reads the lockfile and composes
-    /// an environment derivation, with outputs for the `develop` and `runtime` modes,
+    /// an environment derivation, with outputs for the `dev` and `run` modes,
     /// as well as additional outputs for each manifest build.
     /// Note that the `buildenv.nix` expression **does not** build any of the packages!
     /// Instead it will exclusively use the store paths of the packages,
@@ -848,9 +845,15 @@ where
         &self,
         lockfile_path: &Path,
         service_config_path: Option<PathBuf>,
+        out_link_prefix: Option<&Path>,
     ) -> Result<BuildEnvOutputs, BuildEnvError> {
         let mut nix_build_command = Self::base_command();
-        nix_build_command.args(["build", "--no-link", "--offline", "--json"]);
+        nix_build_command.args(["build", "--offline", "--json"]);
+        if let Some(prefix) = out_link_prefix {
+            nix_build_command.arg("--out-link").arg(prefix);
+        } else {
+            nix_build_command.arg("--no-link");
+        }
         nix_build_command.arg("--file").arg(&*BUILDENV_NIX);
         nix_build_command
             .arg("--argstr")
@@ -925,6 +928,7 @@ where
         client: &impl ClientTrait,
         lockfile_path: &Path,
         service_config_path: Option<PathBuf>,
+        out_link_prefix: Option<&Path>,
     ) -> Result<BuildEnvOutputs, BuildEnvError> {
         // Note: currently used in a single integration test to verify,
         // that the buildenv is not called a second time for remote environments,
@@ -1001,7 +1005,11 @@ where
                 )));
             }
             // Build the environment from the now-verified store paths.
-            match self.call_buildenv_nix(lockfile_path, service_config_path.clone()) {
+            match self.call_buildenv_nix(
+                lockfile_path,
+                service_config_path.clone(),
+                out_link_prefix,
+            ) {
                 Ok(outputs) => return Ok(outputs),
                 Err(e) if attempt < MAX_RETRIES => {
                     debug!(
@@ -1055,82 +1063,6 @@ pub fn get_installed_outputs(package: &PackageToList) -> Result<Vec<String>, Man
         },
         None => Ok(outputs_to_install.clone().unwrap_or(all_outputs)),
     }
-}
-
-/// Create GC roots for the given store paths.
-/// All provided paths must exist and be valid.
-/// Used by `CoreEnvironment::link()` to protect the final out-link.
-///
-/// Gc roots are created in the provided `gc_root_base_dir`
-/// with a unique prefix _per call_ to this function:
-///
-/// ```text
-/// <basedir>/
-///     gc-root.rqw2rr3-1
-///     gc-root.rqw2rr3-2
-///     gc-root.rqw2rr3-3
-///     gc-root.i1343ca-1   # separate call to create_gc_root_in()
-/// ```
-///
-/// as they would otherwise override exiting roots.
-/// It is advisable to place the <basedir> under `/tmp`
-/// to allow paths to be GC'd eventually if they are otherwise unused.
-pub(crate) fn create_gc_root_in(
-    paths: impl IntoIterator<Item = impl AsRef<Path>>,
-    gc_root_prefix: impl AsRef<Path>,
-) -> Result<(), BuildEnvError> {
-    let paths = paths
-        .into_iter()
-        .map(|p| p.as_ref().to_string_lossy().into_owned())
-        .collect::<HashSet<_>>();
-
-    if paths.is_empty() {
-        debug!("no paths to create gc roots for, skipping");
-        return Ok(());
-    }
-
-    let mut command = nix::nix_base_command();
-    command.stdin(Stdio::piped());
-    command.stderr(Stdio::piped());
-    command.stdout(Stdio::piped());
-    command.args(["build", "--stdin"]);
-    // avoid substitution or builds
-    command.args(["--offline", "-j", "0"]);
-    command.arg("--out-link");
-    command.arg(gc_root_prefix.as_ref());
-
-    let paths_arg = paths
-        .iter()
-        .map(|s| s.as_str())
-        .collect::<Vec<_>>()
-        .join(" ");
-
-    debug!(
-        cmd = format!("echo '{}' | {}", paths_arg, command.display()),
-        "bulk setting gc roots for store_paths"
-    );
-
-    let mut child = command.spawn().map_err(BuildEnvError::CallNixBuild)?;
-    let stdin = child.stdin.as_mut().unwrap();
-
-    for path in paths.iter() {
-        trace!(%path, "setting gc root for store path");
-        writeln!(stdin, "{path}").map_err(BuildEnvError::WriteNixStdin)?;
-    }
-
-    stdin.flush().map_err(BuildEnvError::WriteNixStdin)?;
-
-    let output = child
-        .wait_with_output()
-        .map_err(BuildEnvError::CallNixBuild)?;
-
-    if !output.status.success() {
-        return Err(BuildEnvError::Link(
-            String::from_utf8_lossy(&output.stderr).into_owned(),
-        ));
-    }
-
-    Ok(())
 }
 
 /// Join all realise (download) thread handles, returning the first error encountered.
@@ -1781,17 +1713,17 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/hello/manifest.lock");
         let client = MockClient::new();
-        buildenv.build(&client, &lockfile_path, None).unwrap()
+        buildenv.build(&client, &lockfile_path, None, None).unwrap()
     });
 
     #[test]
     fn build_contains_binaries() {
         let result = &*BUILDENV_RESULT_SIMPLE_PACKAGE;
-        let runtime = &result.runtime;
+        let runtime = &result.run;
         assert!(runtime.join("bin/hello").exists());
         assert!(runtime.join("bin/hello").is_executable_file());
 
-        let develop = result.develop.as_ref();
+        let develop = result.dev.as_ref();
         assert!(develop.join("bin/hello").exists());
         assert!(develop.join("bin/hello").is_executable_file());
     }
@@ -1799,12 +1731,12 @@ mod buildenv_tests {
     #[test]
     fn build_contains_activate_files() {
         let result = &*BUILDENV_RESULT_SIMPLE_PACKAGE;
-        let runtime = &result.runtime;
+        let runtime = &result.run;
         assert!(runtime.join("activate").exists());
         assert!(runtime.join("activate.d/zsh").exists());
         assert!(runtime.join("etc/profile.d").is_dir());
 
-        let develop = &result.develop;
+        let develop = &result.dev;
         assert!(develop.join("activate").exists());
         assert!(develop.join("activate.d/zsh").exists());
         assert!(develop.join("etc/profile.d").is_dir());
@@ -1813,10 +1745,10 @@ mod buildenv_tests {
     #[test]
     fn build_contains_lockfile() {
         let result = &*BUILDENV_RESULT_SIMPLE_PACKAGE;
-        let runtime = &result.runtime;
+        let runtime = &result.run;
         assert!(runtime.join("manifest.lock").exists());
 
-        let develop = &result.develop;
+        let develop = &result.dev;
         assert!(develop.join("manifest.lock").exists());
     }
     #[test]
@@ -1824,10 +1756,10 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/build-noop/manifest.lock");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None, None).unwrap();
 
-        let runtime = result.runtime.as_ref();
-        let develop = result.develop.as_ref();
+        let runtime = result.run.as_ref();
+        let develop = result.dev.as_ref();
         let build_hello = result.manifest_build_runtimes.get("build-hello").unwrap();
 
         assert!(runtime.join("package-builds.d/hello").exists());
@@ -1840,12 +1772,12 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/kitchen_sink/manifest.lock");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None, None).unwrap();
 
-        let runtime = &result.runtime;
+        let runtime = &result.run;
         assert!(runtime.join("activate.d/hook-on-activate").exists());
 
-        let develop = &result.develop;
+        let develop = &result.dev;
         assert!(develop.join("activate.d/hook-on-activate").exists());
     }
 
@@ -1854,9 +1786,9 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/kitchen_sink/manifest.lock");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None, None).unwrap();
 
-        for output in [&result.runtime, &result.develop] {
+        for output in [&result.run, &result.dev] {
             for shell in ["common", "zsh", "fish", "bash", "tcsh"] {
                 assert!(
                     output.join(format!("activate.d/profile-{shell}")).exists(),
@@ -1871,8 +1803,8 @@ mod buildenv_tests {
     fn verify_contents_of_requisites_txt() {
         let result = &*BUILDENV_RESULT_SIMPLE_PACKAGE;
 
-        let runtime = result.runtime.as_ref();
-        let develop = result.develop.as_ref();
+        let runtime = result.run.as_ref();
+        let develop = result.dev.as_ref();
 
         for out_path in [runtime, develop] {
             let requisites_path = out_path.join("requisites.txt");
@@ -1906,7 +1838,7 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict.yaml");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None);
+        let result = buildenv.build(&client, &lockfile_path, None, None);
         let err = result.expect_err("conflicting packages should fail to build");
 
         let BuildEnvError::Build(output) = err else {
@@ -1928,7 +1860,7 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict-resolved.yaml");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None);
+        let result = buildenv.build(&client, &lockfile_path, None, None);
         assert!(
             result.is_ok(),
             "conflicting packages should be resolved by priority: {}",
@@ -1943,7 +1875,7 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/null_fields/manifest.lock");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None);
+        let result = buildenv.build(&client, &lockfile_path, None, None);
         assert!(
             result.is_ok(),
             "environment should render succesfully: {}",
@@ -1964,10 +1896,10 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/vars_escape/manifest.lock");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None, None).unwrap();
 
-        let runtime = result.runtime.as_ref();
-        let develop = result.develop.as_ref();
+        let runtime = result.run.as_ref();
+        let develop = result.dev.as_ref();
 
         for envrc_path in [
             runtime.join("activate.d/envrc"),
@@ -1985,10 +1917,10 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-all-toplevel.yaml");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None, None).unwrap();
 
-        let runtime = result.runtime.as_ref();
-        let develop = result.develop.as_ref();
+        let runtime = result.run.as_ref();
+        let develop = result.dev.as_ref();
         let build_myhello = result.manifest_build_runtimes.get("build-myhello").unwrap();
 
         assert!(runtime.join("bin/hello").is_executable_file());
@@ -2009,10 +1941,10 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-only-hello.yaml");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None, None).unwrap();
 
-        let runtime = result.runtime.as_ref();
-        let develop = result.develop.as_ref();
+        let runtime = result.run.as_ref();
+        let develop = result.dev.as_ref();
         let build_myhello = result.manifest_build_runtimes.get("build-myhello").unwrap();
 
         assert!(runtime.join("bin/hello").is_executable_file());
@@ -2033,7 +1965,7 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-toplevel.yaml");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None);
+        let result = buildenv.build(&client, &lockfile_path, None, None);
         let err = result.expect_err("build should fail if non-toplevel packages are selected");
 
         let BuildEnvError::Build(output) = err else {
@@ -2055,7 +1987,7 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-found.yaml");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None);
+        let result = buildenv.build(&client, &lockfile_path, None, None);
         let err = result.expect_err("build should fail if nonexistent packages are selected");
 
         let BuildEnvError::Build(output) = err else {
@@ -2080,7 +2012,7 @@ mod buildenv_tests {
         // Get a v2 lockfile with no outputs specified (should use outputs_to_install)
         let lockfile_path = GENERATED_DATA.join("envs/bash_v1_10_0_default/manifest.lock");
 
-        let result = buildenv.build(&client, &lockfile_path, None);
+        let result = buildenv.build(&client, &lockfile_path, None, None);
         assert!(
             result.is_ok(),
             "environment should build successfully: {}",
@@ -2088,8 +2020,8 @@ mod buildenv_tests {
         );
 
         let outputs = result.unwrap();
-        let runtime = outputs.runtime.as_ref();
-        let develop = outputs.develop.as_ref();
+        let runtime = outputs.run.as_ref();
+        let develop = outputs.dev.as_ref();
 
         // For the `bash` package the full list of outputs is:
         //
@@ -2156,7 +2088,7 @@ mod buildenv_tests {
         // Get a v2 lockfile with outputs = "all"
         let lockfile_path = GENERATED_DATA.join("envs/bash_v1_10_0_all/manifest.lock");
 
-        let result = buildenv.build(&client, &lockfile_path, None);
+        let result = buildenv.build(&client, &lockfile_path, None, None);
         assert!(
             result.is_ok(),
             "environment should build successfully: {}",
@@ -2164,8 +2096,8 @@ mod buildenv_tests {
         );
 
         let outputs = result.unwrap();
-        let runtime = outputs.runtime.as_ref();
-        let develop = outputs.develop.as_ref();
+        let runtime = outputs.run.as_ref();
+        let develop = outputs.dev.as_ref();
 
         // For the `bash` package the full list of outputs is:
         //
@@ -2224,7 +2156,7 @@ mod buildenv_tests {
         // Get a v2 lockfile with outputs = ["out"]
         let lockfile_path = GENERATED_DATA.join("envs/bash_v1_10_0_out/manifest.lock");
 
-        let result = buildenv.build(&client, &lockfile_path, None);
+        let result = buildenv.build(&client, &lockfile_path, None, None);
         assert!(
             result.is_ok(),
             "environment should build successfully: {}",
@@ -2232,8 +2164,8 @@ mod buildenv_tests {
         );
 
         let outputs = result.unwrap();
-        let runtime = outputs.runtime.as_ref();
-        let develop = outputs.develop.as_ref();
+        let runtime = outputs.run.as_ref();
+        let develop = outputs.dev.as_ref();
 
         // For the `bash` package the full list of outputs is:
         //
