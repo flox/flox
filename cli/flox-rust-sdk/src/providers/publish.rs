@@ -187,6 +187,7 @@ pub struct CheckedEnvironmentMetadata {
 
 impl CheckedEnvironmentMetadata {
     /// Create a canonical flakeref for NEF builds from the metadata collected for the git remote.
+    #[expect(dead_code)]
     fn remote_flakeref(&self) -> Result<NixFlakeref, PublishError> {
         let value = json! ({
           "type": "git",
