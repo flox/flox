@@ -350,8 +350,7 @@ impl Pull {
         } else {
             // The pulled generation already has a lock,
             // so we can skip locking.
-            env.build(flox)
-                .and_then(|store_paths| env.link(&store_paths))
+            env.build(flox).map(|_| ())
         };
 
         let resolution = Self::handle_pull_result(

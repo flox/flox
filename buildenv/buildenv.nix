@@ -68,8 +68,8 @@ let
 
   # Calculate environment outputs.
   environmentOutputs = [
-    "runtime"
-    "develop"
+    "run"
+    "dev"
   ]
   ++ (builtins.map (buildId: "build-${buildId}") (builtins.attrNames buildSection));
 
