@@ -6,7 +6,9 @@ on:
 
 jobs:
   review:
-    if: ${{ !github.event.pull_request.draft }}
+    # Skip on fork PRs: the review needs CLAUDE_CODE_OAUTH_TOKEN, which isn't
+    # available to pull_request runs from forks, so it only fails.
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

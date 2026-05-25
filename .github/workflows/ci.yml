@@ -195,6 +195,11 @@ jobs:
 
   nix-build:
     name: "Nix build"
+    # Fork PRs can't access the AWS OIDC / Tailscale secrets this job needs, so
+    # it can only fail. The required "Nix build (*)" contexts are posted on the
+    # same commit by the maintainer-run community-ci draft PR (CONTRIBUTING.md).
+    # Pushes, merge-queue runs, and same-repo PRs are unaffected.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: "ubuntu-latest"
     timeout-minutes: 120
 
@@ -282,6 +287,9 @@ jobs:
 
   nix-build-kerberos:
     name: "Verify Kerberos CLI build"
+    # Same as nix-build: fork PRs lack the secrets this job needs. The required
+    # "Verify Kerberos CLI build (*)" contexts come from the community-ci draft.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: "ubuntu-latest"
     timeout-minutes: 60
 
