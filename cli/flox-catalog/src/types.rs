@@ -83,7 +83,7 @@ pub use api_types::{
     NarInfo,
     NarInfos,
     PackageBuildWithNarInfo as UserBuildPublish,
-    PackageDerivationInput as UserDerivationInfo,
+    PackageDerivation as UserDerivationInfo,
     PublishInfoResponseCatalog as PublishResponse,
     StoreInfo,
     StoreInfoRequest,
