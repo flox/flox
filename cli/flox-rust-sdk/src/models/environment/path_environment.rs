@@ -1072,19 +1072,13 @@ pub mod tests {
 
         let lockfile_path = env.lockfile_path(&flox).unwrap();
         let bytes_before = fs::read(&lockfile_path).unwrap();
-        let mtime_before = fs::metadata(&lockfile_path)
-            .unwrap()
-            .modified()
-            .unwrap();
+        let mtime_before = fs::metadata(&lockfile_path).unwrap().modified().unwrap();
 
         // Build must not rewrite the lockfile.
         env.build(&flox).unwrap();
 
         let bytes_after = fs::read(&lockfile_path).unwrap();
-        let mtime_after = fs::metadata(&lockfile_path)
-            .unwrap()
-            .modified()
-            .unwrap();
+        let mtime_after = fs::metadata(&lockfile_path).unwrap().modified().unwrap();
 
         assert_eq!(bytes_before, bytes_after, "lockfile bytes changed");
         assert_eq!(mtime_before, mtime_after, "lockfile mtime changed");
@@ -1104,8 +1098,7 @@ pub mod tests {
             included_var = "value"
         "#});
         let included_path = tempdir.path().join("included");
-        let mut included_env =
-            new_path_environment_in(&flox, &included_manifest, &included_path);
+        let mut included_env = new_path_environment_in(&flox, &included_manifest, &included_path);
         included_env.lockfile(&flox).unwrap();
 
         // Create a v1 composer that includes the child.
@@ -1116,27 +1109,20 @@ pub mod tests {
             ]
         "#});
         let composer_path = tempdir.path().join("composer");
-        let mut composer =
-            new_path_environment_in(&flox, &composer_manifest, &composer_path);
+        let mut composer = new_path_environment_in(&flox, &composer_manifest, &composer_path);
 
         // Lock the composer to produce an up-to-date manifest.lock.
         composer.lockfile(&flox).unwrap();
 
         let lockfile_path = composer.lockfile_path(&flox).unwrap();
         let bytes_before = fs::read(&lockfile_path).unwrap();
-        let mtime_before = fs::metadata(&lockfile_path)
-            .unwrap()
-            .modified()
-            .unwrap();
+        let mtime_before = fs::metadata(&lockfile_path).unwrap().modified().unwrap();
 
         // Build must not rewrite the lockfile.
         composer.build(&flox).unwrap();
 
         let bytes_after = fs::read(&lockfile_path).unwrap();
-        let mtime_after = fs::metadata(&lockfile_path)
-            .unwrap()
-            .modified()
-            .unwrap();
+        let mtime_after = fs::metadata(&lockfile_path).unwrap().modified().unwrap();
 
         assert_eq!(bytes_before, bytes_after, "lockfile bytes changed");
         assert_eq!(mtime_before, mtime_after, "lockfile mtime changed");
@@ -1156,19 +1142,13 @@ pub mod tests {
 
         let lockfile_path = env.lockfile_path(&flox).unwrap();
         let bytes_before = fs::read(&lockfile_path).unwrap();
-        let mtime_before = fs::metadata(&lockfile_path)
-            .unwrap()
-            .modified()
-            .unwrap();
+        let mtime_before = fs::metadata(&lockfile_path).unwrap().modified().unwrap();
 
         // Build must not rewrite the lockfile.
         env.build(&flox).unwrap();
 
         let bytes_after = fs::read(&lockfile_path).unwrap();
-        let mtime_after = fs::metadata(&lockfile_path)
-            .unwrap()
-            .modified()
-            .unwrap();
+        let mtime_after = fs::metadata(&lockfile_path).unwrap().modified().unwrap();
 
         assert_eq!(bytes_before, bytes_after, "lockfile bytes changed");
         assert_eq!(mtime_before, mtime_after, "lockfile mtime changed");

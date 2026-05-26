@@ -5422,8 +5422,10 @@ success"
 
   LOCK_HASH_1=$(sha256sum .flox/env/manifest.lock | awk '{print $1}')
 
+  # On Darwin the flox dev shell puts GNU coreutils ahead of /usr/bin/stat
+  # on PATH, so call /usr/bin/stat explicitly to get BSD stat semantics.
   case "$NIX_SYSTEM" in
-    *-darwin) LOCK_MTIME_1=$(stat -f %m .flox/env/manifest.lock) ;;
+    *-darwin) LOCK_MTIME_1=$(/usr/bin/stat -f %m .flox/env/manifest.lock) ;;
     *-linux)  LOCK_MTIME_1=$(stat -c %Y .flox/env/manifest.lock) ;;
   esac
 
@@ -5436,7 +5438,7 @@ success"
   LOCK_HASH_2=$(sha256sum .flox/env/manifest.lock | awk '{print $1}')
 
   case "$NIX_SYSTEM" in
-    *-darwin) LOCK_MTIME_2=$(stat -f %m .flox/env/manifest.lock) ;;
+    *-darwin) LOCK_MTIME_2=$(/usr/bin/stat -f %m .flox/env/manifest.lock) ;;
     *-linux)  LOCK_MTIME_2=$(stat -c %Y .flox/env/manifest.lock) ;;
   esac
 
