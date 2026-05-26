@@ -422,7 +422,7 @@ EOF
   PROJECT_DIR="$(realpath "$PROJECT_DIR")"
   run "$FLOX_BIN" activate -- bash -c 'command -v hello'
   assert_success
-  assert_output "${PROJECT_DIR}/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}.dev/bin/hello"
+  assert_output "${PROJECT_DIR}/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}-dev/bin/hello"
 
   run "$FLOX_BIN" activate -- bash -c 'realpath "$(command -v hello)"'
   assert_success

@@ -235,24 +235,24 @@ impl RemoteEnvironment {
                 let base_dir =
                     CanonicalPath::new(gcroots_dir).expect("gcroots_dir is not a valid path");
 
-                let old_links = RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
-                    &base_dir,
-                    pointer.name.as_ref(),
-                    &flox.system,
-                );
+                // Legacy links used dot separators: <system>.<name>.dev / <system>.<name>.run
+                let old_dev =
+                    base_dir.join(format!("{}.{}.dev", flox.system, pointer.name.as_ref()));
+                let old_run =
+                    base_dir.join(format!("{}.{}.run", flox.system, pointer.name.as_ref()));
 
-                if old_links.dev.is_symlink() {
+                if old_dev.is_symlink() {
                     debug!(
-                        out_link=?old_links.dev,
+                        out_link=?old_dev,
                         "deleting legacy outlink");
-                    std::fs::remove_file(&old_links.dev)
+                    std::fs::remove_file(&old_dev)
                         .map_err(RemoteEnvironmentError::DeleteOldOutLink)?;
                 }
-                if old_links.run.is_symlink() {
+                if old_run.is_symlink() {
                     debug!(
-                        out_link=?old_links.run,
+                        out_link=?old_run,
                         "deleting legacy outlink");
-                    std::fs::remove_file(&old_links.run)
+                    std::fs::remove_file(&old_run)
                         .map_err(RemoteEnvironmentError::DeleteOldOutLink)?;
                 }
 

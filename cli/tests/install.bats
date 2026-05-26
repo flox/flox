@@ -125,8 +125,9 @@ EOF
   run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "✔ 'hello' installed to environment"
-  run [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/hello" ]
-  run [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.run/bin/hello" ]
+  run [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev/bin/hello" ]
+  assert_success
+  run [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-run/bin/hello" ]
   assert_success
 }
 
@@ -226,8 +227,8 @@ EOF
 
   # The composer's dev environment should expose bash's `man` output (from
   # the override) but not its `out` output (which the include provides).
-  [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.composer.dev/share/man/man1/bash.1.gz" ]
-  [ ! -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.composer.dev/bin/bash" ]
+  [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.composer-dev/share/man/man1/bash.1.gz" ]
+  [ ! -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.composer-dev/bin/bash" ]
 
   # Adding `out` on top should merge with the existing `man` override.
   run "$FLOX_BIN" install -i bash "bashNonInteractive^out"
@@ -239,8 +240,8 @@ EOF
   outputs="$(tomlq -r -c '.install.bash.outputs' < "$MANIFEST_PATH")"
   assert_equal "$outputs" '["man","out"]'
 
-  [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.composer.dev/share/man/man1/bash.1.gz" ]
-  [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.composer.dev/bin/bash" ]
+  [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.composer-dev/share/man/man1/bash.1.gz" ]
+  [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.composer-dev/bin/bash" ]
 }
 
 # This is also checking we can build an unfree package
@@ -478,7 +479,7 @@ EOF
 
   run "$FLOX_BIN" activate -- bash -c 'command -v hello'
   assert_success
-  assert_output "${PROJECT_DIR}/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}.dev/bin/hello"
+  assert_output "${PROJECT_DIR}/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}-dev/bin/hello"
 
   run "$FLOX_BIN" activate -- bash -c 'realpath "$(command -v hello)"'
   assert_success
@@ -498,7 +499,7 @@ EOF
 
   run "$FLOX_BIN" activate -- bash -c 'command -v vim'
   assert_success
-  assert_output "${PROJECT_DIR}/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}.dev/bin/vim"
+  assert_output "${PROJECT_DIR}/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}-dev/bin/vim"
 
   run "$FLOX_BIN" activate -- bash -c 'realpath "$(command -v vim)"'
   assert_success
