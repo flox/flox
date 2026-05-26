@@ -17,6 +17,7 @@
 //! └── metadata.json
 //! ```
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -137,12 +138,31 @@ pub struct Generations<State = ReadOnly> {
     /// Should remain private to enforce the invariant that [ReadWrite]
     /// always refers to a cloned branch of a [ReadOnly] instance.
     _state: State,
+
+    /// One-per-instance cache for the metadata file.
+    ///
+    /// `metadata.json` is immutable between commits, so it is safe to cache
+    /// for the lifetime of a [ReadOnly] view and across all reads within a
+    /// [ReadWrite] transaction.  After each mutation commit the cache is
+    /// updated with the new value so the next call returns up-to-date data
+    /// without an extra `git show`.
+    metadata_cache: RefCell<Option<WithOtherFields<AllGenerationsMetadata>>>,
 }
 
 impl<S> Generations<S> {
-    /// Read the generations metadata for an environment
+    /// Read the generations metadata for an environment.
+    ///
+    /// The result is cached for the lifetime of this instance.
+    /// For [ReadWrite] instances the cache is updated after each commit so that
+    /// subsequent calls within the same transaction see the new metadata without
+    /// issuing another `git show`.
     pub fn metadata(&self) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
-        read_metadata(&self.repo, &self.branch)
+        if let Some(cached) = self.metadata_cache.borrow().as_ref() {
+            return Ok(cached.clone());
+        }
+        let m = read_metadata(&self.repo, &self.branch)?;
+        *self.metadata_cache.borrow_mut() = Some(m.clone());
+        Ok(m)
     }
 
     /// Read the manifest of a given generation and return its contents as a string
@@ -263,6 +283,7 @@ impl Generations<ReadOnly> {
             repo,
             branch,
             _state: ReadOnly {},
+            metadata_cache: RefCell::new(None),
         }
     }
 
@@ -282,8 +303,9 @@ impl Generations<ReadOnly> {
         repo.checkout(&branch, true)
             .map_err(GenerationsError::CreateBranch)?;
 
-        let metadata = AllGenerationsMetadata::default();
-        write_metadata_file(metadata.into(), repo.path())?;
+        let metadata: WithOtherFields<AllGenerationsMetadata> =
+            AllGenerationsMetadata::default().into();
+        write_metadata_file(&metadata, repo.path())?;
 
         repo.add(&[Path::new(GENERATIONS_METADATA_FILE)])
             .map_err(GenerationsError::StageChanges)?;
@@ -321,6 +343,10 @@ impl Generations<ReadOnly> {
         let parent_repo_path = self.repo.path().to_path_buf();
         let git_options = self.repo.get_options().clone();
 
+        // Carry any already-populated metadata cache into the ReadWrite instance
+        // so that add_generation / set_current_generation don't need a fresh git show.
+        let inherited_cache = self.metadata_cache.borrow().clone();
+
         let worktree_path = tempfile::tempdir_in(&tempdir)
             .map_err(GenerationsError::CreateTempDir)?
             .keep();
@@ -341,6 +367,7 @@ impl Generations<ReadOnly> {
                 hostname: hostname.into(),
                 argv: argv.to_owned(),
             },
+            metadata_cache: RefCell::new(inherited_cache),
         })
     }
 }
@@ -417,7 +444,7 @@ impl Generations<ReadWrite<'_>> {
         let summary = history_item.summary();
 
         // Write the metadata file with the new generation added
-        write_metadata_file(metadata, self.repo.path())?;
+        write_metadata_file(&metadata, self.repo.path())?;
 
         // copy generation environment files
         let generation_path = self.repo.path().join(generation.to_string());
@@ -440,6 +467,10 @@ impl Generations<ReadWrite<'_>> {
         // The worktree commit advances the branch ref in the parent bare repo
         // directly; no push to a local origin is needed.
 
+        // Keep the cache in sync so subsequent calls within the same transaction
+        // (e.g. a second add_generation) see the updated state without an extra git show.
+        *self.metadata_cache.borrow_mut() = Some(metadata);
+
         Ok(())
     }
 
@@ -461,7 +492,7 @@ impl Generations<ReadWrite<'_>> {
         })?;
         let summary = history_item.summary();
 
-        write_metadata_file(metadata, self.repo.path())?;
+        write_metadata_file(&metadata, self.repo.path())?;
 
         self.repo
             .add(&[Path::new(GENERATIONS_METADATA_FILE)])
@@ -472,6 +503,8 @@ impl Generations<ReadWrite<'_>> {
 
         // The worktree commit advances the branch ref in the parent bare repo
         // directly; no push to a local origin is needed.
+
+        *self.metadata_cache.borrow_mut() = Some(metadata);
 
         Ok(())
     }
@@ -636,11 +669,11 @@ fn parse_metadata<'de>(
 ///
 /// The path is expected to be a realized generations repository.
 fn write_metadata_file(
-    metadata: WithOtherFields<AllGenerationsMetadata>,
+    metadata: &WithOtherFields<AllGenerationsMetadata>,
     realized_path: &Path,
 ) -> Result<(), GenerationsError> {
     let metadata_content =
-        serde_json::to_string(&metadata).map_err(GenerationsError::SerializeMetadata)?;
+        serde_json::to_string(metadata).map_err(GenerationsError::SerializeMetadata)?;
     let metadata_path = realized_path.join(GENERATIONS_METADATA_FILE);
     fs::write(metadata_path, metadata_content).map_err(GenerationsError::WriteMetadata)?;
     Ok(())
