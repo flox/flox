@@ -354,9 +354,11 @@ impl Environment for PathEnvironment {
 
     /// Build the environment
     /// This will lock the environment if it is not already locked.
+    /// Uses `ensure_locked` to skip a catalog round-trip and lockfile
+    /// rewrite when the lockfile is already current.
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;
-        env_view.lock(flox)?;
+        env_view.ensure_locked(flox)?;
         let store_paths = env_view.build(flox)?;
         Ok(store_paths)
     }
@@ -750,12 +752,14 @@ pub mod test_helpers {
 #[cfg(test)]
 pub mod tests {
 
-    use std::fs::OpenOptions;
+    use std::fs::{self, OpenOptions};
     use std::io::Write;
 
     use flox_manifest::interfaces::AsLatestSchema;
     use flox_manifest::parsed::Inner;
+    use flox_manifest::parsed::common::KnownSchemaVersion;
     use flox_manifest::parsed::v1::test_helpers::manifest_without_install_or_include;
+    use flox_manifest::test_helpers::{with_latest_schema, with_schema};
     use flox_test_utils::proptest::{alphanum_string, lowercase_alphanum_string};
     use indoc::indoc;
     use itertools::izip;
@@ -1039,5 +1043,134 @@ pub mod tests {
         writeln!(lockfile, "\n\n\n",).unwrap();
 
         assert!(!environment.needs_rebuild().unwrap());
+    }
+
+    // -------------------------------------------------------------------------
+    // Regression tests: PathEnvironment::build must not rewrite a current lock
+    //
+    // Before AI-159, `build` called `lock()` unconditionally.  Even when the
+    // lockfile was already up-to-date, `lock()` could rewrite it (e.g. due to
+    // formatting normalisation), updating the mtime and triggering a spurious
+    // needs_rebuild() on the next activate.
+    //
+    // After the fix, `build` calls `ensure_locked()`, which skips the catalog
+    // round-trip and the file write when lockfile_if_up_to_date() returns
+    // Some(_).  These tests assert the "no rewrite" invariant on three
+    // environment shapes.
+    // -------------------------------------------------------------------------
+
+    /// Plain environment (latest schema, no packages).
+    /// After locking once, calling build() must not alter manifest.lock.
+    #[test]
+    fn build_does_not_rewrite_current_lockfile_plain() {
+        let (flox, _temp_dir) = flox_instance();
+        let manifest = with_latest_schema("");
+        let mut env = new_path_environment(&flox, &manifest);
+
+        // Lock the environment to produce an up-to-date manifest.lock.
+        env.lockfile(&flox).unwrap();
+
+        let lockfile_path = env.lockfile_path(&flox).unwrap();
+        let bytes_before = fs::read(&lockfile_path).unwrap();
+        let mtime_before = fs::metadata(&lockfile_path)
+            .unwrap()
+            .modified()
+            .unwrap();
+
+        // Build must not rewrite the lockfile.
+        env.build(&flox).unwrap();
+
+        let bytes_after = fs::read(&lockfile_path).unwrap();
+        let mtime_after = fs::metadata(&lockfile_path)
+            .unwrap()
+            .modified()
+            .unwrap();
+
+        assert_eq!(bytes_before, bytes_after, "lockfile bytes changed");
+        assert_eq!(mtime_before, mtime_after, "lockfile mtime changed");
+    }
+
+    /// Composed environment (v1 composer that includes a child environment).
+    /// After locking once, calling build() on the composer must not alter its
+    /// manifest.lock.
+    #[test]
+    fn build_does_not_rewrite_current_lockfile_composed() {
+        let (flox, tempdir) = flox_instance();
+
+        // Set up an included environment with only vars (backwards compatible
+        // with v1, so the composer won't be migrated).
+        let included_manifest = with_latest_schema(indoc! {r#"
+            [vars]
+            included_var = "value"
+        "#});
+        let included_path = tempdir.path().join("included");
+        let mut included_env =
+            new_path_environment_in(&flox, &included_manifest, &included_path);
+        included_env.lockfile(&flox).unwrap();
+
+        // Create a v1 composer that includes the child.
+        let composer_manifest = with_schema(KnownSchemaVersion::V1, indoc! {r#"
+            [include]
+            environments = [
+              { dir = "../included" },
+            ]
+        "#});
+        let composer_path = tempdir.path().join("composer");
+        let mut composer =
+            new_path_environment_in(&flox, &composer_manifest, &composer_path);
+
+        // Lock the composer to produce an up-to-date manifest.lock.
+        composer.lockfile(&flox).unwrap();
+
+        let lockfile_path = composer.lockfile_path(&flox).unwrap();
+        let bytes_before = fs::read(&lockfile_path).unwrap();
+        let mtime_before = fs::metadata(&lockfile_path)
+            .unwrap()
+            .modified()
+            .unwrap();
+
+        // Build must not rewrite the lockfile.
+        composer.build(&flox).unwrap();
+
+        let bytes_after = fs::read(&lockfile_path).unwrap();
+        let mtime_after = fs::metadata(&lockfile_path)
+            .unwrap()
+            .modified()
+            .unwrap();
+
+        assert_eq!(bytes_before, bytes_after, "lockfile bytes changed");
+        assert_eq!(mtime_before, mtime_after, "lockfile mtime changed");
+    }
+
+    /// v1 schema environment (no packages).
+    /// After locking once, calling build() must not alter manifest.lock.
+    /// Exercises the v1 → ensure_locked path in lockfile_if_up_to_date.
+    #[test]
+    fn build_does_not_rewrite_current_lockfile_v1() {
+        let (flox, _temp_dir) = flox_instance();
+        let manifest = with_schema(KnownSchemaVersion::V1, "");
+        let mut env = new_path_environment(&flox, &manifest);
+
+        // Lock the environment to produce an up-to-date manifest.lock.
+        env.lockfile(&flox).unwrap();
+
+        let lockfile_path = env.lockfile_path(&flox).unwrap();
+        let bytes_before = fs::read(&lockfile_path).unwrap();
+        let mtime_before = fs::metadata(&lockfile_path)
+            .unwrap()
+            .modified()
+            .unwrap();
+
+        // Build must not rewrite the lockfile.
+        env.build(&flox).unwrap();
+
+        let bytes_after = fs::read(&lockfile_path).unwrap();
+        let mtime_after = fs::metadata(&lockfile_path)
+            .unwrap()
+            .modified()
+            .unwrap();
+
+        assert_eq!(bytes_before, bytes_after, "lockfile bytes changed");
+        assert_eq!(mtime_before, mtime_after, "lockfile mtime changed");
     }
 }
