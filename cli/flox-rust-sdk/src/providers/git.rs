@@ -618,6 +618,99 @@ impl GitCommandProvider {
         Self::clone_branch_with(GitCommandOptions::default(), origin, path, branch, bare)
     }
 
+    /// Like [`clone_branch_with`] but adds `--shared` so object storage is
+    /// backed by the source rather than copied.  Only safe for local sources.
+    pub fn clone_branch_shared_with(
+        options: GitCommandOptions,
+        origin: impl AsRef<OsStr>,
+        path: impl AsRef<Path>,
+        branch: impl AsRef<OsStr>,
+    ) -> Result<GitCommandProvider, GitRemoteCommandError> {
+        let mut command = options.new_command();
+        command
+            .arg("clone")
+            .arg("--shared")
+            .arg("--quiet")
+            .arg("--single-branch")
+            .arg("--no-tags")
+            .arg("--branch")
+            .arg(branch)
+            .arg(origin)
+            .arg(path.as_ref());
+        GitCommandProvider::run_command(&mut command)?;
+        Ok(GitCommandProvider {
+            options,
+            workdir: Some(path.as_ref().to_path_buf()),
+            path: path.as_ref().into(),
+        })
+    }
+
+    /// Create a linked worktree for `branch` at `worktree_path` inside the
+    /// repository at `repo_path`.
+    ///
+    /// The worktree shares the parent repository's object store in-place; no
+    /// copying occurs.  Commits made inside the worktree advance the branch
+    /// ref directly in the parent repository, so no push back to origin is
+    /// needed after committing.
+    ///
+    /// Only safe for local repositories.  Suitable for ephemeral transaction
+    /// worktrees on bare repositories.
+    pub fn worktree_add_with(
+        options: GitCommandOptions,
+        repo_path: impl AsRef<Path>,
+        worktree_path: impl AsRef<Path>,
+        branch: impl AsRef<OsStr>,
+    ) -> Result<GitCommandProvider, GitCommandError> {
+        let mut command = options.new_command();
+        command
+            .args(["-C", repo_path.as_ref().to_str().unwrap()])
+            .arg("worktree")
+            .arg("add")
+            .arg(worktree_path.as_ref())
+            .arg(branch);
+        GitCommandProvider::run_command(&mut command)?;
+        Ok(GitCommandProvider {
+            options,
+            workdir: Some(worktree_path.as_ref().to_path_buf()),
+            path: worktree_path.as_ref().to_path_buf(),
+        })
+    }
+
+    /// Remove the linked worktree at `worktree_path` and delete its directory.
+    ///
+    /// `--force` is passed so that a worktree with uncommitted changes (e.g.
+    /// from a failed transaction) is still removed.
+    pub fn worktree_remove_with(
+        options: &GitCommandOptions,
+        repo_path: impl AsRef<Path>,
+        worktree_path: impl AsRef<Path>,
+    ) -> Result<(), GitCommandError> {
+        let mut command = options.new_command();
+        command
+            .args(["-C", repo_path.as_ref().to_str().unwrap()])
+            .arg("worktree")
+            .arg("remove")
+            .arg("--force")
+            .arg(worktree_path.as_ref());
+        GitCommandProvider::run_command(&mut command)?;
+        Ok(())
+    }
+
+    /// Remove worktree administrative files for worktrees whose directories
+    /// no longer exist (e.g. left over from a crashed process).
+    pub fn worktree_prune_with(
+        options: &GitCommandOptions,
+        repo_path: impl AsRef<Path>,
+    ) -> Result<(), GitCommandError> {
+        let mut command = options.new_command();
+        command
+            .args(["-C", repo_path.as_ref().to_str().unwrap()])
+            .arg("worktree")
+            .arg("prune");
+        GitCommandProvider::run_command(&mut command)?;
+        Ok(())
+    }
+
     /// Clone a local repository into `dest` using `--shared` so that object
     /// storage is backed by `source` rather than copied, then check out the
     /// specified `rev`.  `dest` must not exist yet; it is created by the clone.

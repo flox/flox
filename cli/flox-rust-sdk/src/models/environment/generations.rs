@@ -35,6 +35,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use serde_with::{DeserializeFromStr, SerializeDisplay, skip_serializing_none};
 use thiserror::Error;
+use tracing::debug;
 
 use super::core_environment::CoreEnvironment;
 use super::fetcher::IncludeFetcher;
@@ -64,20 +65,46 @@ const GENERATIONS_METADATA_FILE: &str = "metadata.json";
 /// See also: [ReadWrite]
 pub struct ReadOnly {}
 
-/// Generations as a checked out branch of a git clone of a [ReadOnly] repo.
+/// RAII guard that removes a git linked worktree when dropped.
+///
+/// Used by [ReadWrite] to ensure the transaction worktree is cleaned up even
+/// if the transaction fails partway through.
+struct WorktreeGuard {
+    options: GitCommandOptions,
+    parent_repo_path: PathBuf,
+    worktree_path: PathBuf,
+}
+
+impl Drop for WorktreeGuard {
+    fn drop(&mut self) {
+        if let Err(e) = GitCommandProvider::worktree_remove_with(
+            &self.options,
+            &self.parent_repo_path,
+            &self.worktree_path,
+        ) {
+            debug!("failed to remove transaction worktree (will be pruned next time): {e}");
+        }
+    }
+}
+
+/// Generations as a linked worktree of a [ReadOnly] repo.
 /// In this state files are read and writeable using the filesystem.
 ///
-/// Mutating commands are committed and pushed to the [ReadOnly] branch.
+/// Mutating commands are committed directly into the [ReadOnly] repo's branch;
+/// no push back to origin is required after committing.
 ///
 /// Instances of this type are created using [Generations::writable].
 ///
 /// Todo: rename to `CheckedOut`, `Filesystem`, ...?
 ///
-/// /// See also: [ReadOnly]
+/// See also: [ReadOnly]
 pub struct ReadWrite<'a> {
     /// A reference to the [ReadOnly] instance that will be released
     /// when this instance is dropped.
     _read_only: &'a mut Generations<ReadOnly>,
+
+    /// Cleans up the linked worktree when this state is dropped.
+    _worktree_guard: WorktreeGuard,
 
     /// The author modifying the generations, usually the current $USER.
     author: String,
@@ -166,6 +193,44 @@ impl<S> Generations<S> {
         Ok(lockfile_osstr.to_string_lossy().to_string())
     }
 
+    /// Copy a generation's env files (manifest and lockfile) into `dest` using
+    /// `git show` on the bare repository — no worktree checkout needed.
+    ///
+    /// Creates `dest` if it does not exist.
+    /// The lockfile is optional; its absence is not an error.
+    pub fn copy_gen_env_to(
+        &self,
+        generation: usize,
+        dest: impl AsRef<Path>,
+    ) -> Result<(), GenerationsError> {
+        fs::create_dir_all(dest.as_ref()).map_err(GenerationsError::WriteManifest)?;
+
+        let manifest = self.manifest_contents(generation)?;
+        fs::write(dest.as_ref().join(MANIFEST_FILENAME), &manifest)
+            .map_err(GenerationsError::WriteManifest)?;
+
+        match self.lockfile_contents(generation) {
+            Ok(lockfile) => {
+                fs::write(dest.as_ref().join(LOCKFILE_FILENAME), &lockfile)
+                    .map_err(GenerationsError::WriteManifest)?;
+            },
+            Err(GenerationsError::ShowLockfile(_)) => {},
+            Err(e) => return Err(e),
+        }
+
+        Ok(())
+    }
+
+    /// Copy the current generation's env files into `dest`.
+    /// See [`copy_gen_env_to`][Self::copy_gen_env_to].
+    pub fn copy_current_gen_env_to(&self, dest: impl AsRef<Path>) -> Result<(), GenerationsError> {
+        let metadata = self.metadata()?;
+        let current = metadata
+            .current_gen()
+            .ok_or(GenerationsError::NoGenerations)?;
+        self.copy_gen_env_to(*current, dest)
+    }
+
     /// Read the manifest of the current generation and return its contents as a string
     pub fn current_gen_manifest_contents(&self) -> Result<String, GenerationsError> {
         let metadata = self.metadata()?;
@@ -240,7 +305,7 @@ impl Generations<ReadOnly> {
         Ok(Self::new(bare, branch))
     }
 
-    /// Create a writable copy of this generations instance
+    /// Create a writable worktree of this generations instance
     /// in a temporary directory.
     pub fn writable(
         &mut self,
@@ -253,19 +318,25 @@ impl Generations<ReadOnly> {
             panic!("Can't create writable generations when _FLOX_TESTING_NO_WRITABLE is set");
         }
 
-        let repo = checkout_to_tempdir(
-            &self.repo,
-            &self.branch,
-            tempfile::tempdir_in(&tempdir)
-                .map_err(GenerationsError::CreateTempDir)?
-                .keep(),
-        )?;
+        let parent_repo_path = self.repo.path().to_path_buf();
+        let git_options = self.repo.get_options().clone();
+
+        let worktree_path = tempfile::tempdir_in(&tempdir)
+            .map_err(GenerationsError::CreateTempDir)?
+            .keep();
+
+        let repo = checkout_to_tempdir(&self.repo, &self.branch, worktree_path.clone())?;
 
         Ok(Generations {
             repo,
             branch: self.branch.clone(),
             _state: ReadWrite {
                 _read_only: self,
+                _worktree_guard: WorktreeGuard {
+                    options: git_options,
+                    parent_repo_path,
+                    worktree_path,
+                },
                 author: author.into(),
                 hostname: hostname.into(),
                 argv: argv.to_owned(),
@@ -359,18 +430,15 @@ impl Generations<ReadWrite<'_>> {
 
         // commit environment and metadata
         self.repo
-            .add(&[&generation_path])
-            .map_err(GenerationsError::StageChanges)?;
-        self.repo
-            .add(&[Path::new(GENERATIONS_METADATA_FILE)])
+            .add(&[&generation_path, Path::new(GENERATIONS_METADATA_FILE)])
             .map_err(GenerationsError::StageChanges)?;
 
         self.repo
             .commit(&format!("Create generation {}\n\n{}", generation, summary))
             .map_err(GenerationsError::CommitChanges)?;
-        self.repo
-            .push("origin", false)
-            .map_err(GenerationsError::CompleteTransaction)?;
+
+        // The worktree commit advances the branch ref in the parent bare repo
+        // directly; no push to a local origin is needed.
 
         Ok(())
     }
@@ -401,9 +469,9 @@ impl Generations<ReadWrite<'_>> {
         self.repo
             .commit(&summary)
             .map_err(GenerationsError::CommitChanges)?;
-        self.repo
-            .push("origin", false)
-            .map_err(GenerationsError::CompleteTransaction)?;
+
+        // The worktree commit advances the branch ref in the parent bare repo
+        // directly; no push to a local origin is needed.
 
         Ok(())
     }
@@ -470,14 +538,12 @@ pub enum GenerationsError {
     // endregion
 
     // region: repo/transaction
-    #[error("could not clone generations branch")]
-    CloneToFS(#[source] GitRemoteCommandError),
+    #[error("could not create transaction worktree for generations branch")]
+    CreateWorktree(#[source] GitCommandError),
     #[error("could not stage changes")]
     StageChanges(#[source] GitCommandError),
     #[error("could not commit changes")]
     CommitChanges(#[source] GitCommandError),
-    #[error("could not complete transaction")]
-    CompleteTransaction(#[source] GitRemoteCommandError),
     // endregion
 
     // region: manifest errors
@@ -501,18 +567,23 @@ pub enum GenerationsError {
     Manifest(#[from] ManifestError),
 }
 
-/// Realize the generations branch into a temporary directory
+/// Create a linked git worktree for `branch` in a temporary directory.
+///
+/// Commits made in the worktree advance the branch ref in the parent bare
+/// repo directly, so no push back to a local origin is needed.
+/// The worktree is removed by the [Drop] impl on [Generations<ReadWrite>].
 fn checkout_to_tempdir(
     repo: &GitCommandProvider,
     branch: &str,
     tempdir: PathBuf,
 ) -> Result<GitCommandProvider, GenerationsError> {
     let git_options = repo.get_options().clone();
-    let repo =
-        GitCommandProvider::clone_branch_with(git_options, repo.path(), tempdir, branch, false)
-            .map_err(GenerationsError::CloneToFS)?;
-
-    Ok(repo)
+    // Remove stale worktree registrations left by previous crashed processes.
+    if let Err(e) = GitCommandProvider::worktree_prune_with(&git_options, repo.path()) {
+        debug!("worktree prune failed (non-fatal): {e}");
+    }
+    GitCommandProvider::worktree_add_with(git_options, repo.path(), tempdir, branch)
+        .map_err(GenerationsError::CreateWorktree)
 }
 
 /// Reads the generations metadata file directly from the repository

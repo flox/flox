@@ -47,7 +47,6 @@ use super::{
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::env_registry::{EnvRegistryError, deregister, ensure_registered};
-use crate::models::environment::copy_dir_recursive;
 use crate::models::environment::floxmeta_branch::{
     BranchOrd,
     FloxmetaBranch,
@@ -1045,55 +1044,39 @@ impl ManagedEnvironment {
     /// Any other files are lost.
     fn reset_local_env_to_current_generation(
         &self,
-        flox: &Flox,
+        _flox: &Flox,
     ) -> Result<CoreEnvironment, ManagedEnvironmentError> {
-        let current_generation = self.get_current_generation(flox)?;
         let env_dir = self.path.join(ENV_DIR_NAME);
 
         if let Err(e) = fs::remove_dir_all(&env_dir) {
             return Err(ManagedEnvironmentError::DeleteEnvironment(env_dir, e));
         }
 
-        fs::create_dir_all(&env_dir)
-            .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
+        self.generations()
+            .copy_current_gen_env_to(&env_dir)
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        copy_dir_recursive(
-            current_generation.path(),
-            self.path.join(ENV_DIR_NAME),
-            true,
-        )
-        .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
-
-        let local_checkout = CoreEnvironment::new(env_dir, self.include_fetcher.clone());
-
-        Ok(local_checkout)
+        Ok(CoreEnvironment::new(env_dir, self.include_fetcher.clone()))
     }
 
     /// Return a [CoreEnvironment] for an existing local checkout
     /// or create one from the current generation.
     ///
-    /// Copies the `env/` directory from the current generation to the `.flox/` directory
-    /// and returns a [CoreEnvironment] for the `.flox/env`.
+    /// Populates `.flox/env` from the current generation via `git show` when
+    /// it does not already exist, then returns a [CoreEnvironment] for it.
     fn local_env_or_copy_current_generation(
         &self,
-        flox: &Flox,
+        _flox: &Flox,
     ) -> Result<CoreEnvironment, ManagedEnvironmentError> {
-        if !self.path.join(ENV_DIR_NAME).exists() {
+        let env_dir = self.path.join(ENV_DIR_NAME);
+        if !env_dir.exists() {
             debug!("creating environment directory");
-            let current_generation = self.get_current_generation(flox)?;
-            fs::create_dir_all(self.path.join(ENV_DIR_NAME))
-                .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
-            copy_dir_recursive(
-                current_generation.path(),
-                self.path.join(ENV_DIR_NAME),
-                true,
-            )
-            .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
+            self.generations()
+                .copy_current_gen_env_to(&env_dir)
+                .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
         }
 
-        let local =
-            CoreEnvironment::new(self.path.join(ENV_DIR_NAME), self.include_fetcher.clone());
-        Ok(local)
+        Ok(CoreEnvironment::new(env_dir, self.include_fetcher.clone()))
     }
 
     /// Validate that the local manifest checkout matches the one in the current generation.
@@ -1166,20 +1149,20 @@ impl ManagedEnvironment {
         self.floxmeta_branch.generations()
     }
 
+    #[cfg(test)]
     fn get_current_generation(
         &self,
         flox: &Flox,
     ) -> Result<CoreEnvironment, ManagedEnvironmentError> {
+        let dest = tempfile::tempdir_in(&flox.temp_dir)
+            .map_err(|e| {
+                ManagedEnvironmentError::CreateGenerationFiles(GenerationsError::CreateTempDir(e))
+            })?
+            .keep();
         self.generations()
-            .writable(
-                &flox.temp_dir,
-                &flox.system_user_name,
-                &flox.system_hostname,
-                &flox.argv,
-            )
-            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?
-            .get_current_generation(self.include_fetcher.clone())
-            .map_err(ManagedEnvironmentError::CreateGenerationFiles)
+            .copy_current_gen_env_to(&dest)
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+        Ok(CoreEnvironment::new(dest, self.include_fetcher.clone()))
     }
 }
 
