@@ -82,7 +82,7 @@ EOF
   # The wrapped program should pass through FLOX_ENV_DIRS
   run "$FLOX_BIN" activate -d consumer -- print-FLOX_ENV_DIRS
   assert_success
-  assert_output --regexp ".*consumer/.flox/run/$NIX_SYSTEM.consumer.dev"
+  assert_output --regexp ".*consumer/.flox/run/$NIX_SYSTEM.consumer-dev"
 }
 
 # Check that
@@ -109,7 +109,7 @@ EOF
   # Double check toml module can be found with environment activated
   run "$FLOX_BIN" activate -d consumer -- python3 -c "import toml; print(toml.__path__)"
   assert_success
-  assert_output --regexp "\['.*consumer/.flox/run/$NIX_SYSTEM.consumer.dev/lib/python3.13/site-packages/toml'\]"
+  assert_output --regexp "\['.*consumer/.flox/run/$NIX_SYSTEM.consumer-dev/lib/python3.13/site-packages/toml'\]"
 
   # Wrapped program can find requests but not toml
   run "$FLOX_BIN" activate -d consumer -- print-modules
