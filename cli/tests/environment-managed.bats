@@ -318,7 +318,7 @@ Upstream:
   export PROJECT_DIR="$(realpath "$PROJECT_DIR")"
   run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c 'command -v hello'
   assert_success
-  assert_output --regexp "${PROJECT_DIR}/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}.dev/bin/hello"
+  assert_output --regexp "${PROJECT_DIR}/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}-dev/bin/hello"
 }
 
 # ---------------------------------------------------------------------------- #

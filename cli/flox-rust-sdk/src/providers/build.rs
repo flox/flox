@@ -316,7 +316,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
 
         command.arg(format!(
             "FLOX_ENV={}",
-            self.built_environments.develop.display()
+            self.built_environments.dev.display()
         ));
         command.arg(format!(
             "FLOX_ENV_OUTPUTS={}",
@@ -435,7 +435,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         // TODO: is this even necessary, or can we detect build outputs instead?
         command.arg(format!(
             "FLOX_ENV={}",
-            self.built_environments.develop.display()
+            self.built_environments.dev.display()
         ));
 
         // TODO: is this even necessary, or can we detect build outputs instead?
@@ -848,7 +848,7 @@ pub mod test_helpers {
         )
         .build(
             &toplevel_or_common_nixpkgs,
-            &env.rendered_env_links(flox).unwrap().development,
+            &env.rendered_env_links(flox).unwrap().dev,
             &[PackageTargetName::new_unchecked(&package)],
             build_cache,
             None,

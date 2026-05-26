@@ -47,7 +47,6 @@ use super::{
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::env_registry::{EnvRegistryError, deregister, ensure_registered};
-use crate::models::environment::copy_dir_recursive;
 use crate::models::environment::floxmeta_branch::{
     BranchOrd,
     FloxmetaBranch,
@@ -325,8 +324,8 @@ impl Environment for ManagedEnvironment {
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
             self.lock_pointer()?;
         }
-        if let Some(store_paths) = &result.built_environments {
-            self.link(store_paths)?;
+        if result.built_environments.is_some() {
+            self.build(flox)?;
         }
 
         Ok(result)
@@ -368,8 +367,8 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut local_checkout, change)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        if let Some(store_paths) = &result.built_environment_store_paths {
-            self.link(store_paths)?;
+        if result.built_environment_store_paths.is_some() {
+            self.build(flox)?;
         }
 
         Ok(result)
@@ -394,15 +393,12 @@ impl Environment for ManagedEnvironment {
         let result = local_checkout.edit(flox, contents)?;
 
         match &result {
-            EditResult::Changed {
-                built_environment_store_paths,
-                ..
-            } => {
+            EditResult::Changed { .. } => {
                 generations
                     .add_generation(&mut local_checkout, HistoryKind::Edit)
                     .map_err(ManagedEnvironmentError::CommitGeneration)?;
                 self.lock_pointer()?;
-                self.link(built_environment_store_paths)?;
+                self.build(flox)?;
             },
             EditResult::Unchanged => {},
         }
@@ -520,12 +516,10 @@ impl Environment for ManagedEnvironment {
             .map_err(ManagedEnvironmentError::Core)?
             .expect("lockfile presence checked");
 
-        let rendered_env_lockfile_path =
-            self.rendered_env_links.development.join(LOCKFILE_FILENAME);
+        let rendered_env_lockfile_path = self.rendered_env_links.dev.join(LOCKFILE_FILENAME);
 
         let mut build_and_link = || -> Result<(), EnvironmentError> {
-            let store_paths = self.build(flox)?;
-            self.link(&store_paths)?;
+            self.build(flox)?;
             Ok(())
         };
 
@@ -549,17 +543,11 @@ impl Environment for ManagedEnvironment {
     }
 
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
         // todo: ensure lockfile exists?
 
-        Ok(local_checkout.build(flox)?)
-    }
-
-    fn link(&mut self, store_paths: &BuildEnvOutputs) -> Result<(), EnvironmentError> {
-        CoreEnvironment::link(&self.rendered_env_links.development, &store_paths.develop)?;
-        CoreEnvironment::link(&self.rendered_env_links.runtime, &store_paths.runtime)?;
-
-        Ok(())
+        Ok(local_checkout.build(flox, Some(&out_link_prefix))?)
     }
 
     /// Returns .flox/cache
@@ -680,8 +668,7 @@ impl GenerationsExt for ManagedEnvironment {
         // update the rendered environment
         self.lock_pointer()?;
         self.reset_local_env_to_current_generation(flox)?;
-        let buildenv_paths = self.build(flox)?;
-        self.link(&buildenv_paths)?;
+        self.build(flox)?;
 
         Ok(())
     }
@@ -723,8 +710,6 @@ impl GenerationsExt for ManagedEnvironment {
         let mut core_environment =
             generation_rw.get_generation(*generation, self.include_fetcher.clone());
 
-        let store_paths = core_environment.build(flox)?;
-
         let run_dir = &self.path.join(GCROOTS_DIR_NAME);
         if !run_dir.exists() {
             std::fs::create_dir_all(run_dir).map_err(ManagedEnvironmentError::CreateLinksDir)?;
@@ -740,8 +725,8 @@ impl GenerationsExt for ManagedEnvironment {
                 generation,
             );
 
-        CoreEnvironment::link(&rendered_env_links.development, &store_paths.develop)?;
-        CoreEnvironment::link(&rendered_env_links.runtime, &store_paths.runtime)?;
+        let out_link_prefix = rendered_env_links.out_link_prefix();
+        core_environment.build(flox, Some(&out_link_prefix))?;
 
         Ok(rendered_env_links)
     }
@@ -1021,10 +1006,8 @@ impl ManagedEnvironment {
         local_checkout.lock(flox)?;
 
         // Ensure the created generation is valid
-        let store_paths = local_checkout.build(flox)?;
-
-        // TODO: should use self.link but that returns an EnvironmentError
-        self.link(&store_paths)?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        local_checkout.build(flox, Some(&out_link_prefix))?;
 
         let mut generations = self.generations();
         let mut generations = generations
@@ -1061,55 +1044,39 @@ impl ManagedEnvironment {
     /// Any other files are lost.
     fn reset_local_env_to_current_generation(
         &self,
-        flox: &Flox,
+        _flox: &Flox,
     ) -> Result<CoreEnvironment, ManagedEnvironmentError> {
-        let current_generation = self.get_current_generation(flox)?;
         let env_dir = self.path.join(ENV_DIR_NAME);
 
         if let Err(e) = fs::remove_dir_all(&env_dir) {
             return Err(ManagedEnvironmentError::DeleteEnvironment(env_dir, e));
         }
 
-        fs::create_dir_all(&env_dir)
-            .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
+        self.generations()
+            .copy_current_gen_env_to(&env_dir)
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        copy_dir_recursive(
-            current_generation.path(),
-            self.path.join(ENV_DIR_NAME),
-            true,
-        )
-        .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
-
-        let local_checkout = CoreEnvironment::new(env_dir, self.include_fetcher.clone());
-
-        Ok(local_checkout)
+        Ok(CoreEnvironment::new(env_dir, self.include_fetcher.clone()))
     }
 
     /// Return a [CoreEnvironment] for an existing local checkout
     /// or create one from the current generation.
     ///
-    /// Copies the `env/` directory from the current generation to the `.flox/` directory
-    /// and returns a [CoreEnvironment] for the `.flox/env`.
+    /// Populates `.flox/env` from the current generation via `git show` when
+    /// it does not already exist, then returns a [CoreEnvironment] for it.
     fn local_env_or_copy_current_generation(
         &self,
-        flox: &Flox,
+        _flox: &Flox,
     ) -> Result<CoreEnvironment, ManagedEnvironmentError> {
-        if !self.path.join(ENV_DIR_NAME).exists() {
+        let env_dir = self.path.join(ENV_DIR_NAME);
+        if !env_dir.exists() {
             debug!("creating environment directory");
-            let current_generation = self.get_current_generation(flox)?;
-            fs::create_dir_all(self.path.join(ENV_DIR_NAME))
-                .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
-            copy_dir_recursive(
-                current_generation.path(),
-                self.path.join(ENV_DIR_NAME),
-                true,
-            )
-            .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
+            self.generations()
+                .copy_current_gen_env_to(&env_dir)
+                .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
         }
 
-        let local =
-            CoreEnvironment::new(self.path.join(ENV_DIR_NAME), self.include_fetcher.clone());
-        Ok(local)
+        Ok(CoreEnvironment::new(env_dir, self.include_fetcher.clone()))
     }
 
     /// Validate that the local manifest checkout matches the one in the current generation.
@@ -1182,20 +1149,20 @@ impl ManagedEnvironment {
         self.floxmeta_branch.generations()
     }
 
+    #[cfg(test)]
     fn get_current_generation(
         &self,
         flox: &Flox,
     ) -> Result<CoreEnvironment, ManagedEnvironmentError> {
+        let dest = tempfile::tempdir_in(&flox.temp_dir)
+            .map_err(|e| {
+                ManagedEnvironmentError::CreateGenerationFiles(GenerationsError::CreateTempDir(e))
+            })?
+            .keep();
         self.generations()
-            .writable(
-                &flox.temp_dir,
-                &flox.system_user_name,
-                &flox.system_hostname,
-                &flox.argv,
-            )
-            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?
-            .get_current_generation(self.include_fetcher.clone())
-            .map_err(ManagedEnvironmentError::CreateGenerationFiles)
+            .copy_current_gen_env_to(&dest)
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+        Ok(CoreEnvironment::new(dest, self.include_fetcher.clone()))
     }
 }
 
@@ -1283,7 +1250,7 @@ impl ManagedEnvironment {
 
         // Ensure the environment builds before we push it
         core_environment
-            .build(flox)
+            .build(flox, None)
             .map_err(ManagedEnvironmentError::Build)?;
 
         // Ensure that the environment does not include other local ennvironments
@@ -1439,7 +1406,7 @@ impl ManagedEnvironment {
                 .map_err(|_| ManagedEnvironmentError::CheckoutOutOfSync)?
                 .into();
             local_checkout
-                .build(flox)
+                .build(flox, None)
                 .map_err(ManagedEnvironmentError::Build)?;
 
             check_for_local_includes(&lockfile)?;
@@ -1538,8 +1505,7 @@ impl ManagedEnvironment {
 
         if is_uptodate && !checkout_valid && force {
             self.reset_local_env_to_current_generation(flox)?;
-            let store_paths = self.build(flox)?;
-            self.link(&store_paths)?;
+            self.build(flox)?;
 
             return Ok(PullResult::Updated);
         } else if is_uptodate {
@@ -1580,8 +1546,7 @@ impl ManagedEnvironment {
         // update the pointer lockfile and build
         self.lock_pointer()?;
         self.reset_local_env_to_current_generation(flox)?;
-        let store_paths = self.build(flox)?;
-        self.link(&store_paths)?;
+        self.build(flox)?;
 
         Ok(PullResult::Updated)
     }

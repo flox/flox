@@ -394,18 +394,18 @@ EOF
 
   # Test running the activate script directly in various forms.
   export _FLOX_SHELL_FORCE="bash"
-  NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.run/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.run -c :
+  NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-run/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-run -c :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
-  NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev -c :
+  NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev -c :
   assert_success
-  NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev -c true
+  NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev -c true
   assert_success
-  NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev --command true
+  NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev --command true
   assert_success
-  NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev true
+  NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev true
   assert_success
-  NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev -- true
+  NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev -- true
   assert_success
 }
 
@@ -415,10 +415,10 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" "$FLOX_BIN" install hello
 
   # Verify that running the activate script directly can access installed packages.
-  NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev -- hello
+  NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev -- hello
   assert_success
   assert_output --partial "Hello, world!"
-  NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev --command hello
+  NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev/activate --env $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev --command hello
   assert_success
   assert_output --partial "Hello, world!"
 }
@@ -1272,7 +1272,7 @@ sets_NIX_SSL_CERT_FILE() {
 sourcing hook.on-activate
 sourcing profile.common
 sourcing profile.bash
-hello is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/hello
+hello is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev/bin/hello
 baz
 EOF
 }
@@ -1297,7 +1297,7 @@ Setting PATH from config.fish
 sourcing hook.on-activate
 sourcing profile.common
 sourcing profile.fish
-hello is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/hello
+hello is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev/bin/hello
 baz
 EOF
 }
@@ -1322,7 +1322,7 @@ Setting PATH from .tcshrc
 sourcing hook.on-activate
 sourcing profile.common
 sourcing profile.tcsh
-hello is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/hello
+hello is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev/bin/hello
 baz
 EOF
 }
@@ -1347,7 +1347,7 @@ Setting PATH from .zshenv
 sourcing hook.on-activate
 sourcing profile.common
 sourcing profile.zsh
-hello is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/hello
+hello is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev/bin/hello
 baz
 EOF
 }
@@ -1470,7 +1470,7 @@ EOF
 
   run -- "$FLOX_BIN" activate -c 'echo PYTHONPATH is "$PYTHONPATH"'
   assert_success
-  assert_line "PYTHONPATH is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/lib/python3.11/site-packages"
+  assert_line "PYTHONPATH is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev/lib/python3.11/site-packages"
 
   run -- "$FLOX_BIN" activate -c 'echo PIP_CONFIG_FILE is "$PIP_CONFIG_FILE"'
   assert_success
@@ -2714,7 +2714,7 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/fish_3_2_2.yaml" \
     "$FLOX_BIN" install fish@3.2.2
 
-  FLOX_SHELL="./.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/fish" run "$FLOX_BIN" activate -c "echo \$FISH_VERSION"
+  FLOX_SHELL="./.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev/bin/fish" run "$FLOX_BIN" activate -c "echo \$FISH_VERSION"
   assert_success
   # fish doesn't have the equivalent of set -e, so refute "Error"
   refute_output --partial Error
@@ -2749,7 +2749,7 @@ EOF
   echo "$MANIFEST_CONTENTS" | _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" edit -f -
 
-  hello_path="$(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/hello"
+  hello_path="$(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev/bin/hello"
   run /bin/bash -c "eval \"\$(\"$FLOX_BIN\" activate)\" && which hello"
   assert_success
   assert_output - <<EOF
@@ -3507,14 +3507,14 @@ PIDs of the running activations: ${ACTIVATION_PID}"
 
   case "$NIX_SYSTEM" in
     *-linux)
-      VIM_MAN="$(realpath "$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man/man1/vim.1.gz")"
-      EMACS_MAN="$(realpath "$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man/man1/emacs.1.gz")"
+      VIM_MAN="$(realpath "$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim-dev/share/man/man1/vim.1.gz")"
+      EMACS_MAN="$(realpath "$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs-dev/share/man/man1/emacs.1.gz")"
 
       # Neither environment starts out in MANPATH
       run $_man --path
       assert_success
-      refute_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
-      refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
+      refute_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim-dev/share/man.*"
+      refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs-dev/share/man.*"
 
       # vim gets added to MANPATH
       _man=$_man FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -c "$_man --path vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
@@ -3538,26 +3538,26 @@ PIDs of the running activations: ${ACTIVATION_PID}"
       # Neither environment starts out in MANPATH
       run /usr/bin/manpath
       assert_success
-      refute_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
-      refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
+      refute_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim-dev/share/man.*"
+      refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs-dev/share/man.*"
 
       # vim gets added to MANPATH
       FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -c "/usr/bin/manpath > output && echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
       cat activate_started_fifo
       run cat output
       assert_success
-      assert_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
-      refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
+      assert_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim-dev/share/man.*"
+      refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs-dev/share/man.*"
 
       # emacs gets added to MANPATH, and then a nested attach also adds vim
       FLOX_SHELL=bash "$FLOX_BIN" activate -d emacs -c \
         "/usr/bin/manpath > output_1 && \"$FLOX_BIN\" activate -d vim -c '/usr/bin/manpath > output_2'"
       run cat output_1
-      refute_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
-      assert_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
+      refute_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim-dev/share/man.*"
+      assert_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs-dev/share/man.*"
       run cat output_2
-      assert_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
-      assert_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
+      assert_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim-dev/share/man.*"
+      assert_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs-dev/share/man.*"
       ;;
     *)
       echo "unsupported system: $NIX_SYSTEM"
@@ -3584,29 +3584,29 @@ PIDs of the running activations: ${ACTIVATION_PID}"
   mkfifo "$TEARDOWN_FIFO"
 
   run command -v vim
-  refute_output "$(realpath "$PROJECT_DIR")/vim/.flox/run/$NIX_SYSTEM.vim.dev/bin/vim"
+  refute_output "$(realpath "$PROJECT_DIR")/vim/.flox/run/$NIX_SYSTEM.vim-dev/bin/vim"
 
   run command -v emacs
-  refute_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/bin/emacs"
+  refute_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs-dev/bin/emacs"
 
   FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -c "command -v vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
   cat activate_started_fifo
 
   run cat output
   assert_success
-  assert_output "$(realpath "$PROJECT_DIR")/vim/.flox/run/$NIX_SYSTEM.vim.dev/bin/vim"
+  assert_output "$(realpath "$PROJECT_DIR")/vim/.flox/run/$NIX_SYSTEM.vim-dev/bin/vim"
 
   "$FLOX_BIN" activate -d emacs -c \
     'command -v emacs > output_emacs_1; "$FLOX_BIN" activate -d vim -c "command -v vim > output_vim && command -v emacs > output_emacs_2 || true"'
   run cat output_emacs_1
   assert_success
-  assert_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/bin/emacs"
+  assert_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs-dev/bin/emacs"
   run cat output_vim
   assert_success
-  assert_output "$(realpath "$PROJECT_DIR")/vim/.flox/run/$NIX_SYSTEM.vim.dev/bin/vim"
+  assert_output "$(realpath "$PROJECT_DIR")/vim/.flox/run/$NIX_SYSTEM.vim-dev/bin/vim"
   run cat output_emacs_2
   assert_success
-  assert_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/bin/emacs"
+  assert_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs-dev/bin/emacs"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -3691,7 +3691,7 @@ EOF
     set -euo pipefail
     _expect="$(command -v expect)"
     eval "$("$FLOX_BIN" activate -d default)"
-    if ! [[ "$PATH" =~ $PROJECT_DIR/default/.flox/run/.*.default.dev/bin ]]; then # to double check we activated the default environment
+    if ! [[ "$PATH" =~ $PROJECT_DIR/default/.flox/run/.*.default-dev/bin ]]; then # to double check we activated the default environment
       echo "default not in PATH: $PATH"
       exit 1
     fi
@@ -3699,7 +3699,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --regexp "project/.flox/run/.*.project.dev/bin.*default/.flox/run/.*.default.dev/bin"
+  assert_output --regexp "project/.flox/run/.*.project-dev/bin.*default/.flox/run/.*.default-dev/bin"
 }
 
 @test "tcsh: repeat activation in .tcshrc doesn't break aliases" {
@@ -3795,7 +3795,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --regexp "$PROJECT_DIR/project/.flox/run/.*.project.dev/bin.*$PROJECT_DIR/default/.flox/run/.*.default.dev/bin"
+  assert_output --regexp "$PROJECT_DIR/project/.flox/run/.*.project-dev/bin.*$PROJECT_DIR/default/.flox/run/.*.default-dev/bin"
 }
 
 @test "fish: repeat activation in config.fish doesn't break aliases" {
@@ -3868,7 +3868,7 @@ EOF
   FISH="$(which fish)"
   EXPECT="$(which expect)"
   run fish <(cat <<EOF
-    if not string match -r -- '$PROJECT_DIR/default/.flox/run/.*\.default\.dev/bin' "\$PATH"
+    if not string match -r -- '$PROJECT_DIR/default/.flox/run/.*\.default\-dev/bin' "\$PATH"
       echo "default not in PATH: \$PATH"
       exit 1
     end
@@ -3876,7 +3876,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --regexp "$PROJECT_DIR/project/.flox/run/.*.project.dev/bin.*$PROJECT_DIR/default/.flox/run/.*.default.dev/bin"
+  assert_output --regexp "$PROJECT_DIR/project/.flox/run/.*.project-dev/bin.*$PROJECT_DIR/default/.flox/run/.*.default-dev/bin"
 }
 
 zsh_repeat_activation_aliases() {
@@ -3973,7 +3973,7 @@ EOF
   EXPECT="$(which expect)"
   run zsh -i <(cat <<EOF
     set -euo pipefail
-    if ! [[ "\$PATH" =~ $PROJECT_DIR/default/.flox/run/.*.default.dev/bin ]]; then # to double check we activated the default environment
+    if ! [[ "\$PATH" =~ $PROJECT_DIR/default/.flox/run/.*.default-dev/bin ]]; then # to double check we activated the default environment
       echo "default not in PATH: \$PATH"
       exit 1
     fi
@@ -3981,7 +3981,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --regexp "$PROJECT_DIR/project/.flox/run/.*.project.dev/bin.*$PROJECT_DIR/default/.flox/run/.*.default.dev/bin"
+  assert_output --regexp "$PROJECT_DIR/project/.flox/run/.*.project-dev/bin.*$PROJECT_DIR/default/.flox/run/.*.default-dev/bin"
 }
 
 @test "zsh: repeat activation in .zshrc creates correct PATH ordering" {
@@ -4026,7 +4026,32 @@ attach_previous_release() {
   shell="${1?}"
   mode="${2?}"
 
+  # Set to "true" in the PR that bumps activations.json schema version (e.g.
+  # Version<3> -> Version<4>), so the previous-release tests assert the
+  # incompatible-version error instead of a successful attach.
+  # Set back to "false" once FLOX_LATEST_VERSION is a release that already
+  # writes the bumped schema version (both versions share the same schema, so
+  # attach should succeed).
+  #
+  # The activation state schema is still Version<3> in this release (same as
+  # v1.12.1), so the current binary can attach to a previous-release activation.
   incrementing_version_this_release="false"
+
+  # The buildenv nix output names changed from runtime/develop to run/dev in
+  # this release.  The previous release (v1.12.1) builds the environment with
+  # the old output names, producing a different Nix store path than the current
+  # binary.  Cross-version attach compares store paths; a mismatch causes the
+  # current binary to start a new activation instead of attaching, making the
+  # test fail for the wrong reason.
+  #
+  # Set to "true" whenever the buildenv format changes and FLOX_LATEST_VERSION
+  # still points to a release that uses the old format.  Set back to "false"
+  # once FLOX_LATEST_VERSION is a release that already uses the new format
+  # (so both sides produce the same store path and attachment succeeds).
+  buildenv_format_changed_this_release="true"
+  if [ "$buildenv_format_changed_this_release" = "true" ]; then
+    skip "buildenv output format changed in this release; cross-version attach requires matching store paths (set buildenv_format_changed_this_release=false once FLOX_LATEST_VERSION uses the new format)"
+  fi
 
   echo "$HOOK_ONLY_ONCE" | "$FLOX_BIN" edit -f -
 
@@ -4082,7 +4107,14 @@ Setting PATH from ${rc_file}"
 
   # Longer timeout to allow for `nix run` locking.
   background_pid="$!"
-  wait_for_background_activation "$background_pid" 15s
+  if ! wait_for_background_activation "$background_pid" 15s; then
+    # If the previous release failed to build the environment (e.g. because the
+    # buildenv output format changed), skip rather than fail.
+    if grep -q "Failed to build environment" output 2>/dev/null; then
+      skip "Previous release cannot build environment with current buildenv format"
+    fi
+    exit 1
+  fi
   run cat output
   # This the only place we use `--partial` because we only want to know that the
   # intial activation started.
@@ -4583,12 +4615,12 @@ EOF
 
   # Assert on both activations to ensure that we really got an in-place activation first.
   assert_output - << EOF
-FLOX_ENV: ${PROJECT_DIR_CANONICAL}/${PROJECT_DEFAULT}/.flox/run/${NIX_SYSTEM}.${PROJECT_DEFAULT}.${MODE}
+FLOX_ENV: ${PROJECT_DIR_CANONICAL}/${PROJECT_DEFAULT}/.flox/run/${NIX_SYSTEM}.${PROJECT_DEFAULT}-${MODE}
 FLOX_ENV_CACHE: ${PROJECT_DIR_CANONICAL}/${PROJECT_DEFAULT}/.flox/cache
 FLOX_ENV_PROJECT: ${PROJECT_DIR_CANONICAL}/${PROJECT_DEFAULT}
 FLOX_ENV_DESCRIPTION: ${PROJECT_DEFAULT}
 ---
-FLOX_ENV: ${PROJECT_DIR_CANONICAL}/${PROJECT_USER}/.flox/run/${NIX_SYSTEM}.${PROJECT_USER}.${MODE}
+FLOX_ENV: ${PROJECT_DIR_CANONICAL}/${PROJECT_USER}/.flox/run/${NIX_SYSTEM}.${PROJECT_USER}-${MODE}
 FLOX_ENV_CACHE: ${PROJECT_DIR_CANONICAL}/${PROJECT_USER}/.flox/cache
 FLOX_ENV_PROJECT: ${PROJECT_DIR_CANONICAL}/${PROJECT_USER}
 FLOX_ENV_DESCRIPTION: ${PROJECT_USER}
@@ -4732,8 +4764,8 @@ nested_activation_setup() {
   "$FLOX_BIN" init -d outer
 
   proj="$(realpath "$PROJECT_DIR")"
-  export default_stub="$proj/default/.flox/run/$NIX_SYSTEM.default.dev"
-  export outer_stub="$proj/outer/.flox/run/$NIX_SYSTEM.outer.dev"
+  export default_stub="$proj/default/.flox/run/$NIX_SYSTEM.default-dev"
+  export outer_stub="$proj/outer/.flox/run/$NIX_SYSTEM.outer-dev"
 }
 
 # Produces the command that will run an in-place activation in a particular

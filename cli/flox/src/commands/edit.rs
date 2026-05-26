@@ -187,8 +187,7 @@ impl Edit {
 
                 // The current generation already has a lock,
                 // so we can skip locking.
-                let store_path = generations_environment.build(&flox)?;
-                generations_environment.link(&store_path)?;
+                generations_environment.build(&flox)?;
 
                 message::updated("Environment changes reset to current generation.");
             },

@@ -187,8 +187,6 @@ pub trait Environment: Send {
     /// This does not link the environment, but may lock the environment, if necessary.
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError>;
 
-    fn link(&mut self, store_paths: &BuildEnvOutputs) -> Result<(), EnvironmentError>;
-
     /// Return a path to store transient data,
     /// such as temporary files created by the environment hooks or the environment itself,
     /// including reproducible data about the environment.
@@ -298,20 +296,20 @@ impl TryFrom<&ConcreteEnvironment> for ActivateEnvironmentRef {
 #[as_ref(forward)]
 pub struct RenderedEnvironmentLink(PathBuf);
 
-/// A pair of links to the development and runtime variants of an environment.
+/// A pair of links to the dev and run variants of an environment.
 /// Refer to the documentation of [RenderedEnvironmentLink] for what guarantees
 /// the existence of these paths provides.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct RenderedEnvironmentLinks {
-    pub development: RenderedEnvironmentLink,
-    pub runtime: RenderedEnvironmentLink,
+    pub dev: RenderedEnvironmentLink,
+    pub run: RenderedEnvironmentLink,
 }
 
 impl RenderedEnvironmentLinks {
-    pub(crate) fn new_unchecked(development: PathBuf, runtime: PathBuf) -> Self {
+    pub(crate) fn new_unchecked(dev: PathBuf, run: PathBuf) -> Self {
         Self {
-            development: RenderedEnvironmentLink(development),
-            runtime: RenderedEnvironmentLink(runtime),
+            dev: RenderedEnvironmentLink(dev),
+            run: RenderedEnvironmentLink(run),
         }
     }
 
@@ -320,11 +318,11 @@ impl RenderedEnvironmentLinks {
         name: impl AsRef<str>,
         system: &System,
     ) -> Self {
-        let development_name = format!("{system}.{name}.dev", name = name.as_ref());
-        let development_path = base_dir.join(development_name);
-        let runtime_name = format!("{system}.{name}.run", name = name.as_ref());
-        let runtime_path = base_dir.join(runtime_name);
-        Self::new_unchecked(development_path, runtime_path)
+        let dev_name = format!("{system}.{name}-dev", name = name.as_ref());
+        let dev_path = base_dir.join(dev_name);
+        let run_name = format!("{system}.{name}-run", name = name.as_ref());
+        let run_path = base_dir.join(run_name);
+        Self::new_unchecked(dev_path, run_path)
     }
 
     pub fn new_in_base_dir_with_name_system_and_generation(
@@ -333,18 +331,32 @@ impl RenderedEnvironmentLinks {
         system: &System,
         generation: GenerationId,
     ) -> Self {
-        let development_name = format!("{system}.{name}.gen{generation}.dev", name = name.as_ref());
-        let development_path = base_dir.join(development_name);
-        let runtime_name = format!("{system}.{name}.gen{generation}.run", name = name.as_ref());
-        let runtime_path = base_dir.join(runtime_name);
-        Self::new_unchecked(development_path, runtime_path)
+        let dev_name = format!("{system}.{name}.gen{generation}-dev", name = name.as_ref());
+        let dev_path = base_dir.join(dev_name);
+        let run_name = format!("{system}.{name}.gen{generation}-run", name = name.as_ref());
+        let run_path = base_dir.join(run_name);
+        Self::new_unchecked(dev_path, run_path)
+    }
+
+    /// Returns the `--out-link` prefix for `nix build`.
+    ///
+    /// With outputs named `"dev"` and `"run"`, nix creates:
+    ///   `<prefix>-dev` and `<prefix>-run`
+    /// which exactly match `self.dev` and `self.run`.
+    pub fn out_link_prefix(&self) -> PathBuf {
+        let dev_path = self.dev.as_path().to_str().expect("paths are UTF-8");
+        PathBuf::from(
+            dev_path
+                .strip_suffix("-dev")
+                .expect("dev link always ends in -dev"),
+        )
     }
 
     /// Returns the built environment path for an activation mode.
     pub fn for_mode(self, mode: &ActivateMode) -> RenderedEnvironmentLink {
         match mode {
-            ActivateMode::Dev => self.development,
-            ActivateMode::Run => self.runtime,
+            ActivateMode::Dev => self.dev,
+            ActivateMode::Run => self.run,
         }
     }
 }
