@@ -8,6 +8,7 @@ ignored = ["sapling-renderdag"]
 
 [dependencies]
 anyhow.workspace = true
+beta.workspace = true
 bpaf.workspace = true
 chrono.workspace = true
 config.workspace = true

@@ -1,6 +1,7 @@
 mod activate;
 mod activation_state;
 mod auth;
+mod beta;
 mod build;
 mod check_for_upgrades;
 mod containerize;
@@ -367,6 +368,14 @@ impl FloxArgs {
                 Commands::Share(args) => args.handle(config, flox).await,
                 Commands::Admin(args) => args.handle(config, flox).await,
                 Commands::Internal(args) => args.handle(flox).await,
+                Commands::Beta(args) => {
+                    if !flox.features.beta {
+                        bail!(indoc! {"
+                        Enable beta features to run this command:
+                          flox config --set features.beta true"});
+                    }
+                    args.handle(flox).await
+                },
             };
 
             // This will print the update notification after output from a successful
@@ -470,6 +479,8 @@ enum Commands {
     Admin(#[bpaf(external(admin_commands))] AdminCommands),
 
     Internal(#[bpaf(external(internal_commands))] InternalCommands),
+
+    Beta(#[bpaf(external(beta::beta_commands))] beta::BetaCommands),
 }
 
 #[derive(Debug, Bpaf, Clone)]
