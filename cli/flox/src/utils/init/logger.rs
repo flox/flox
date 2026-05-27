@@ -1,7 +1,12 @@
-use std::sync::OnceLock;
+use std::fmt;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Instant;
 
+use crossterm::style::{ResetColor, Stylize};
 use tracing::{debug, error};
 use tracing_indicatif::util::FilteredFormatFields;
+use tracing_subscriber::fmt::format::Writer;
+use tracing_subscriber::fmt::time::FormatTime;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::reload::Handle;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -52,6 +57,63 @@ pub fn update_filters(filter_handle: &Handle<EnvFilter, Registry>, log_filter: &
     });
     if let Err(err) = result {
         error!("Updating logger filter failed: {}", err);
+    }
+}
+
+/// A timer for the debug log layer that colours the timestamp based on the
+/// gap since the previous log line:
+///   ≥ 500 ms → red    (significant delay worth investigating)
+///   ≥ 100 ms → yellow (noticeable pause)
+///   < 100 ms → no colour
+///
+/// When ANSI is disabled (piped output) the timestamp is written plain.
+#[derive(Debug, Clone)]
+struct DeltaTimer {
+    // TODO: do we need Arc and Mutex?
+    last: Arc<Mutex<Option<Instant>>>,
+    use_colors: bool,
+}
+
+impl DeltaTimer {
+    fn new(use_colors: bool) -> Self {
+        Self {
+            last: Arc::new(Mutex::new(None)),
+            use_colors,
+        }
+    }
+}
+
+impl FormatTime for DeltaTimer {
+    fn format_time(&self, w: &mut Writer<'_>) -> fmt::Result {
+        let now = Instant::now();
+        let ts = chrono::Local::now().format("%H:%M:%S%.3f");
+        let delta_ms = match self.last.lock() {
+            Ok(mut guard) => {
+                let ms = guard.map(|prev| now.duration_since(prev).as_millis());
+                *guard = Some(now);
+                ms
+            },
+            Err(_) => None,
+        };
+
+        if self.use_colors {
+            // ResetColor clears dim styling applied by tracing-subscriber so
+            // the highlighted timestamps are bright, not faint.
+            // It must be a separate write before the colour — chaining .reset()
+            // on the same StyledContent puts the Reset attribute before the
+            // colour in crossterm's output, which clears the colour.
+            match delta_ms {
+                Some(ms) if ms >= 500 => {
+                    write!(w, "{}{}", ResetColor, ts.to_string().red().bold())
+                },
+                Some(ms) if ms >= 100 => {
+                    write!(w, "{}{}", ResetColor, ts.to_string().yellow().bold())
+                },
+                _ => write!(w, "{}", ts),
+            }
+        } else {
+            write!(w, "{}", ts)
+        }
     }
 }
 
@@ -114,6 +176,7 @@ pub fn create_registry_and_filter_reload_handle() -> (
         // Without this, colored output is broken,
         // see https://github.com/tokio-rs/tracing/issues/3369
         .with_ansi_sanitization(false)
+        .with_timer(DeltaTimer::new(use_colors))
         .map_fmt_fields(|format| {
             FilteredFormatFields::new(format, |field| field.name() != PROGRESS_TAG)
         })
