@@ -6,7 +6,7 @@ use anyhow::Result;
 use flox_core::activate::context::InvocationType;
 use shell_gen::{GenerateShell, Shell, source_file};
 
-use crate::attach_diff::{self, todo_drop_set_exported_unexpanded, todo_drop_unset};
+use crate::attach_diff::{todo_drop_set_exported_unexpanded, todo_drop_unset};
 use crate::gen_rc::{Action, RM};
 
 /// Arguments for generating bash startup commands
@@ -44,7 +44,7 @@ pub fn generate_bash_profile_commands(
                 stmts.push("set -x".to_stmt());
             }
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: emit `set -x` when tracelevel >= 2
         },
     }
@@ -65,7 +65,7 @@ pub fn generate_bash_profile_commands(
                 stmts.push(todo_drop_unset("_flox_sourcing_rc"));
             }
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // No-op: no way to undo bashrc sourcing
         },
     }
@@ -75,8 +75,8 @@ pub fn generate_bash_profile_commands(
         Action::Activate { args, attach_diff } => {
             stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
         },
-        Action::Deactivate { .. } => {
-            stmts.extend(attach_diff::generate_deactivation_statements());
+        Action::Deactivate(ctx) => {
+            stmts.extend(ctx.restore_diff.generate_deactivation_statements());
         },
     }
 
@@ -95,7 +95,7 @@ pub fn generate_bash_profile_commands(
                 &args.flox_activate_tracer,
             ));
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: we shouldn't be exporting these in the first place
             // Although note that unsetting the prompt depends on these being
             // set
@@ -110,7 +110,7 @@ pub fn generate_bash_profile_commands(
         Action::Activate { args, .. } => args
             .set_prompt
             .then(|| args.activate_d.join("set-prompt.bash")),
-        Action::Deactivate { activate_d } => Some(activate_d.join("set-prompt.bash")),
+        Action::Deactivate(ctx) => Some(ctx.activate_d.join("set-prompt.bash")),
     };
     if let Some(set_prompt_path) = set_prompt_path {
         // We could consult set_prompt, but hypothetically that config value
@@ -142,7 +142,7 @@ pub fn generate_bash_profile_commands(
                 args.flox_activations.display()
             ).to_stmt());
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // No-op: covered by environment restoration above
         },
     }
@@ -154,7 +154,7 @@ pub fn generate_bash_profile_commands(
                 args.flox_activations.display()
             ).to_stmt());
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: run profile.deactivate.bash
         },
     }
@@ -167,7 +167,7 @@ pub fn generate_bash_profile_commands(
         Action::Activate { .. } => {
             stmts.push("set +h".to_stmt());
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: decide whether to restore prior hashing state.
         },
     }
@@ -179,7 +179,7 @@ pub fn generate_bash_profile_commands(
                 stmts.push("set +x".to_stmt());
             }
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: set +x
         },
     }
@@ -193,7 +193,7 @@ pub fn generate_bash_profile_commands(
                 stmts.push(format!("{RM} {};", escaped_path).to_stmt());
             }
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // No-op: deactivate has no rc file to remove.
         },
     }
@@ -214,7 +214,7 @@ pub fn generate_bash_profile_commands(
                 write!(writer, "{}", crate::hook::bash_hook(&args.flox_bin))?;
             }
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: unregister the auto-activate hook
         },
     }
@@ -228,7 +228,12 @@ mod tests {
     use shell_gen::ShellWithPath;
 
     use super::*;
-    use crate::gen_rc::test_helpers::{render_normalized, test_startup_ctx};
+    use crate::gen_rc::test_helpers::{
+        render_normalized,
+        strip_volatile_deactivate,
+        test_deactivate_ctx,
+        test_startup_ctx,
+    };
 
     // NOTE: For these `expect!` tests, run unit tests with `UPDATE_EXPECT=1`
     //  to have it automatically update the expected value when the implementation
@@ -241,12 +246,12 @@ mod tests {
     }
 
     fn render_deactivate() -> String {
-        let action = Action::<BashStartupArgs>::Deactivate {
-            activate_d: PathBuf::from("/interpreter/activate.d"),
-        };
+        let shell = ShellWithPath::Bash(PathBuf::from("/bin/bash"));
+        let action = Action::<BashStartupArgs>::Deactivate(test_deactivate_ctx(shell, true));
         let mut buf = Vec::new();
         generate_bash_profile_commands(&action, &mut buf).expect("generator should succeed");
-        String::from_utf8(buf).expect("output should be utf-8")
+        let output = String::from_utf8(buf).expect("output should be utf-8");
+        strip_volatile_deactivate(&output)
     }
 
     #[test]
@@ -263,6 +268,7 @@ mod tests {
             export FLOX_ENV_CACHE=/flox_env_cache;
             export FLOX_ENV_DESCRIPTION=env_description;
             export FLOX_ENV_PROJECT=/flox_env_project;
+            export MODIFIED_VAR=MODIFIED_VALUE;
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
             export _activate_d=/interpreter/activate.d;
@@ -293,6 +299,7 @@ mod tests {
             export FLOX_ENV_CACHE=/flox_env_cache;
             export FLOX_ENV_DESCRIPTION=env_description;
             export FLOX_ENV_PROJECT=/flox_env_project;
+            export MODIFIED_VAR=MODIFIED_VALUE;
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
             export _activate_d=/interpreter/activate.d;
@@ -312,6 +319,23 @@ mod tests {
     fn generate_bash_profile_deactivate() {
         let output = render_deactivate();
         expect![[r#"
+            unset ADDED_VAR;
+            unset FLOX_ACTIVATE_START_SERVICES;
+            unset FLOX_ENV;
+            unset FLOX_ENV_CACHE;
+            unset FLOX_ENV_DESCRIPTION;
+            unset FLOX_ENV_DIRS;
+            unset FLOX_ENV_PROJECT;
+            unset FLOX_PROMPT_COLOR_1;
+            unset FLOX_PROMPT_COLOR_2;
+            unset FLOX_PROMPT_ENVIRONMENTS;
+            unset MANPATH;
+            unset PATH;
+            unset QUOTED_VAR;
+            unset _FLOX_ACTIVE_ENVIRONMENTS;
+            export MODIFIED_VAR=MODIFIED_ORIGINAL;
+            export DELETED_VAR=DELETED_ORIGINAL;
+            unset _FLOX_HOOK_DIFF;
             if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
         "#]]
         .assert_eq(&output);

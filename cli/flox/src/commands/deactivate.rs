@@ -7,8 +7,8 @@ use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use indoc::{formatdoc, indoc};
 
 use super::{activated_environments, uninitialized_environment_description};
-use crate::commands::activate::ActivateOptions;
 use crate::subcommand_metric;
+use crate::utils::detect_shell::detect_shell_for_in_place;
 use crate::utils::message;
 
 #[derive(Bpaf, Clone)]
@@ -27,9 +27,7 @@ impl Deactivate {
         subcommand_metric!("deactivate");
 
         if self.print_script {
-            // TODO: might make sense to move detect_shell_for_in_place
-            // off ActivateOptions
-            let shell = ActivateOptions::detect_shell_for_in_place()?;
+            let shell = detect_shell_for_in_place()?;
 
             // Generate and print the deactivation script
             let mut writer = BufWriter::new(stdout());

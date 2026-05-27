@@ -6,7 +6,7 @@ use anyhow::Result;
 use flox_core::activate::context::{AutoActivateFishMode, InvocationType};
 use shell_gen::{GenerateShell, Shell};
 
-use crate::attach_diff::{self, todo_drop_set_exported_unexpanded};
+use crate::attach_diff::todo_drop_set_exported_unexpanded;
 use crate::gen_rc::{Action, RM};
 
 /// Arguments for generating fish startup commands
@@ -44,7 +44,7 @@ pub fn generate_fish_profile_commands(
                 stmts.push(todo_drop_set_exported_unexpanded("fish_trace", "1").to_stmt());
             }
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: emit `set -gx fish_trace 1` when tracelevel >= 2
         },
     }
@@ -59,8 +59,8 @@ pub fn generate_fish_profile_commands(
         Action::Activate { args, attach_diff } => {
             stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
         },
-        Action::Deactivate { .. } => {
-            stmts.extend(attach_diff::generate_deactivation_statements());
+        Action::Deactivate(ctx) => {
+            stmts.extend(ctx.restore_diff.generate_deactivation_statements());
         },
     }
 
@@ -79,7 +79,7 @@ pub fn generate_fish_profile_commands(
                 &args.flox_activate_tracer,
             ));
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: we shouldn't be exporting these in the first place
             // Although note that unsetting the prompt depends on these being
             // set
@@ -94,7 +94,7 @@ pub fn generate_fish_profile_commands(
         Action::Activate { args, .. } => args
             .set_prompt
             .then(|| args.activate_d.join("set-prompt.fish")),
-        Action::Deactivate { activate_d } => Some(activate_d.join("set-prompt.fish")),
+        Action::Deactivate(ctx) => Some(ctx.activate_d.join("set-prompt.fish")),
     };
     if let Some(set_prompt_path) = set_prompt_path {
         // We could consult set_prompt, but hypothetically that config value
@@ -134,7 +134,7 @@ pub fn generate_fish_profile_commands(
                 args.flox_activations.display()
             ).to_stmt());
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // No-op: covered by environment restoration above
         },
     }
@@ -150,7 +150,7 @@ pub fn generate_fish_profile_commands(
                 args.flox_activations.display()
             ).to_stmt());
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: run profile.deactivate.fish
         },
     }
@@ -165,7 +165,7 @@ pub fn generate_fish_profile_commands(
                 stmts.push("set -gx fish_trace 0;".to_stmt());
             }
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: set -gx fish_trace 0
         },
     }
@@ -179,7 +179,7 @@ pub fn generate_fish_profile_commands(
                 stmts.push(format!("{RM} {};", escaped_path).to_stmt());
             }
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // No-op: deactivate has no rc file to remove.
         },
     }
@@ -203,7 +203,7 @@ pub fn generate_fish_profile_commands(
                 write!(writer, "{}", crate::hook::fish_hook(&args.flox_bin))?;
             }
         },
-        Action::Deactivate { .. } => {
+        Action::Deactivate(_) => {
             // TODO: unregister the auto-activate hook
         },
     }
@@ -217,7 +217,12 @@ mod tests {
     use shell_gen::ShellWithPath;
 
     use super::*;
-    use crate::gen_rc::test_helpers::{render_normalized, test_startup_ctx};
+    use crate::gen_rc::test_helpers::{
+        render_normalized,
+        strip_volatile_deactivate,
+        test_deactivate_ctx,
+        test_startup_ctx,
+    };
 
     // NOTE: For these `expect!` tests, run unit tests with `UPDATE_EXPECT=1`
     //  to have it automatically update the expected value when the implementation
@@ -230,12 +235,12 @@ mod tests {
     }
 
     fn render_deactivate() -> String {
-        let action = Action::<FishStartupArgs>::Deactivate {
-            activate_d: PathBuf::from("/interpreter/activate.d"),
-        };
+        let shell = ShellWithPath::Fish(PathBuf::from("/fish"));
+        let action = Action::<FishStartupArgs>::Deactivate(test_deactivate_ctx(shell, true));
         let mut buf = Vec::new();
         generate_fish_profile_commands(&action, &mut buf).expect("generator should succeed");
-        String::from_utf8(buf).expect("output should be utf-8")
+        let output = String::from_utf8(buf).expect("output should be utf-8");
+        strip_volatile_deactivate(&output)
     }
 
     #[test]
@@ -249,6 +254,7 @@ mod tests {
             set -gx FLOX_ENV_CACHE /flox_env_cache;
             set -gx FLOX_ENV_DESCRIPTION env_description;
             set -gx FLOX_ENV_PROJECT /flox_env_project;
+            set -gx MODIFIED_VAR MODIFIED_VALUE;
             set -gx QUOTED_VAR 'QUOTED'\''VALUE';
             set -e DELETED_VAR;
             set -gx _activate_d /interpreter/activate.d;
@@ -281,6 +287,7 @@ mod tests {
             set -gx FLOX_ENV_CACHE /flox_env_cache;
             set -gx FLOX_ENV_DESCRIPTION env_description;
             set -gx FLOX_ENV_PROJECT /flox_env_project;
+            set -gx MODIFIED_VAR MODIFIED_VALUE;
             set -gx QUOTED_VAR 'QUOTED'\''VALUE';
             set -e DELETED_VAR;
             set -gx _activate_d /interpreter/activate.d;
@@ -302,6 +309,23 @@ mod tests {
     fn generate_fish_profile_deactivate() {
         let output = render_deactivate();
         expect![[r#"
+            set -e ADDED_VAR;
+            set -e FLOX_ACTIVATE_START_SERVICES;
+            set -e FLOX_ENV;
+            set -e FLOX_ENV_CACHE;
+            set -e FLOX_ENV_DESCRIPTION;
+            set -e FLOX_ENV_DIRS;
+            set -e FLOX_ENV_PROJECT;
+            set -e FLOX_PROMPT_COLOR_1;
+            set -e FLOX_PROMPT_COLOR_2;
+            set -e FLOX_PROMPT_ENVIRONMENTS;
+            set -e MANPATH;
+            set -e PATH;
+            set -e QUOTED_VAR;
+            set -e _FLOX_ACTIVE_ENVIRONMENTS;
+            set -gx MODIFIED_VAR MODIFIED_ORIGINAL;
+            set -gx DELETED_VAR DELETED_ORIGINAL;
+            set -e _FLOX_HOOK_DIFF;
             if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
         "#]]
         .assert_eq(&output);

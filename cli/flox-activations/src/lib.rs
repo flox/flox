@@ -2,7 +2,6 @@ pub mod attach;
 pub mod attach_diff;
 pub mod cli;
 pub mod deactivate;
-pub mod diff_serializer;
 pub mod env_diff;
 pub mod gen_rc;
 pub mod hook;
