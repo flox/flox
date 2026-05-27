@@ -143,6 +143,11 @@ nix build
 FLOX_ACTIVATE_TRACE=1 result/bin/flox activate [args]
 ```
 
+## Pull Requests
+
+When opening a PR, consider if the PR has user-facing changes that aren't behind a feature flag.
+If so, add a `## Release Notes` section to the PR description describing the change.
+
 ## Conventions
 
 - **Rust style:**
