@@ -1031,6 +1031,36 @@ EOF
   assert_output --partial "Loading dump file skipped, regenerating"
 }
 
+# bats test_tags=activate,activate:rc:zsh
+@test "zsh: deactivate restores pre-activation completions" {
+  project_setup
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/fd.yaml" \
+    "$FLOX_BIN" install fd
+
+  # A developer-shell auto-activation can leak `_FLOX_HOOK_*` vars into
+  # bats; if they're set, activate.d/zsh treats this as a nested
+  # activation and skips the dumpfile snapshot, so deactivate has
+  # nothing to restore. CI inherits a clean env; clearing here keeps
+  # the test reproducible locally.
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  unset _FLOX_HOOK_SAVE_FPATH _FLOX_HOOK_SAVE_COMPINIT_DUMPFILE _FLOX_HOOK_DIFF
+  run zsh -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(command -v zsh)
+    autoload -Uz compinit
+    compinit
+    print -- \"baseline: \${_comps[fd]:-none}\"
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    print -- \"activated: \${_comps[fd]:-none}\"
+    eval \"\$($FLOX_BIN deactivate --print-script)\"
+    print -- \"deactivated: \${_comps[fd]:-none}\"
+  "
+  assert_success
+  assert_line "baseline: none"
+  assert_line "activated: _fd"
+  assert_line "deactivated: none"
+}
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:envVar:bash

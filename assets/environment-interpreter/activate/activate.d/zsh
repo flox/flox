@@ -57,6 +57,28 @@ source <($_flox_activations fix-fpath --colon-separated-fpath "$FPATH" --env-dir
 new_fpath="$FPATH"
 
 if [ "$old_fpath" != "$new_fpath" ]; then
+  # Snapshot pre-activation state so `flox deactivate` can restore it.
+  # The `+set` guard preserves the outermost activation's snapshot
+  # through nesting (empty FPATH must be preserved as-is).
+  #
+  # Saving FPATH is necessary because zsh ties it to the `fpath` array
+  # internally and doesn't export it, so the `_FLOX_HOOK_DIFF` env-var
+  # diff captured by flox can't see it. We save `$old_fpath` because
+  # `$FPATH` has already been modified by `fix-fpath` above.
+  #
+  # `$_comp_dumpfile` is zsh-internal and set only after compinit has
+  # run, so its presence is a reliable proxy for "user had compinit
+  # initialized." If they didn't, deactivate must skip compinit entirely
+  # — running a bare `compinit` on exit could emit "insecure directories"
+  # prompts they never saw before, or write a dumpfile to a path they
+  # never picked.
+  if [ -z "${_FLOX_HOOK_SAVE_FPATH+set}" ]; then
+    export _FLOX_HOOK_SAVE_FPATH="$old_fpath"
+    if [ -n "${_comp_dumpfile+set}" ]; then
+      export _FLOX_HOOK_SAVE_COMPINIT_DUMPFILE="${_comp_dumpfile:-}"
+    fi
+  fi
+
   autoload -U compinit
   declare -a _flox_compinit_args=()
 

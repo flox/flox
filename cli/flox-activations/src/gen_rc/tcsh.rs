@@ -160,8 +160,13 @@ pub fn generate_tcsh_profile_commands(
         Action::Activate { .. } => {
             stmts.push("unhash;".to_stmt());
         },
-        Action::Deactivate(_) => {
-            // TODO: decide whether to restore prior hashing state.
+        Action::Deactivate(ctx) => {
+            // Re-enable command hashing by rebuilding the hash table,
+            // but only if no other flox environments remain active —
+            // the outer env still wants hashing off.
+            if ctx.restore_diff.is_outermost_deactivate() {
+                stmts.push("rehash;".to_stmt());
+            }
         },
     }
 
@@ -335,6 +340,7 @@ mod tests {
             setenv DELETED_VAR DELETED_ORIGINAL;
             unsetenv _FLOX_HOOK_DIFF;
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
+            rehash;
         "#]]
         .assert_eq(&output);
     }
