@@ -300,10 +300,12 @@ impl Activate {
 
         let verb = match subcommand {
             AutoActivate::Allow => {
+                environment_subcommand_metric!("activate::allow", concrete_environment);
                 allow(&config, &concrete_environment)?;
                 "allowed"
             },
             AutoActivate::Deny => {
+                environment_subcommand_metric!("activate::deny", concrete_environment);
                 deny(&config, &concrete_environment)?;
                 "denied"
             },
