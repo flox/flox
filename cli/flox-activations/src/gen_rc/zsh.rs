@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use flox_core::activate::context::InvocationType;
+use indoc::indoc;
 use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file};
 
 use crate::gen_rc::{Action, RM};
@@ -57,10 +58,62 @@ pub fn generate_zsh_profile_commands(
         Action::Activate { args, .. } => {
             stmts.push(source_file(args.activate_d.join("zsh")));
         },
-        Action::Deactivate(_) => {
-            // TODO: undo everything in activate_d/zsh
-            // Although note that unsetting the prompt depends on these being
-            // set
+        Action::Deactivate(ctx) => {
+            // Teardown happens in inverse order of activate.d/zsh:
+            // (1) drop the `_flox_rehash` precmd hook, (2) restore
+            // hashing setopts, (3) restore FPATH + re-run compinit.
+            if ctx.restore_diff.is_outermost_deactivate() {
+                // Undo the `_flox_rehash` precmd hook installed by activate.d/zsh.
+                // Guard `unfunction` on the function existing so we don't emit
+                // "no such hash table element" if the user removed it
+                // themselves mid-session; `add-zsh-hook -d` is already silent
+                // for an unregistered hook.
+                stmts.push(
+                    indoc! {r#"
+                        if [[ -o interactive ]]; then
+                            autoload -Uz add-zsh-hook;
+                            add-zsh-hook -d precmd _flox_rehash;
+                            if (( ${+functions[_flox_rehash]} )); then
+                                unfunction _flox_rehash;
+                            fi;
+                        fi;"#}
+                    .to_stmt(),
+                );
+                // Re-enable command hashing (zsh defaults).
+                stmts.push("setopt hashcmds; setopt hashdirs;".to_stmt());
+                // Restore the pre-activation FPATH and (if the user had
+                // compinit initialized pre-flox) re-run their compinit so
+                // completions match. Both `_FLOX_HOOK_SAVE_FPATH` and
+                // `_FLOX_HOOK_SAVE_COMPINIT_DUMPFILE` are captured by
+                // `activate.d/zsh` only when fpath actually changed; the
+                // dumpfile is captured only when the user had compinit
+                // initialized pre-flox.
+                //
+                // We honor the user's pre-flox compinit state rather than
+                // running a bare `compinit`, so users with `compinit -u` /
+                // `-d <custom>` / no compinit at all don't see surprising
+                // behavior on deactivate.
+                //
+                // NOTE on cost: `compinit` rebuilds the completion dump,
+                // which can be tens of ms on large `fpath` setups. If
+                // deactivate latency ends up monitored, one option is to
+                // cache the compinit result keyed on an `fpath` hash and
+                // skip the rebuild when the hash matches the activate-time
+                // capture.
+                stmts.push(
+                    indoc! {r#"
+                        if [[ -n "${_FLOX_HOOK_SAVE_FPATH+set}" ]]; then
+                            FPATH="$_FLOX_HOOK_SAVE_FPATH";
+                            if [[ -n "${_FLOX_HOOK_SAVE_COMPINIT_DUMPFILE:-}" ]]; then
+                                autoload -U compinit;
+                                compinit -d "$_FLOX_HOOK_SAVE_COMPINIT_DUMPFILE";
+                            fi;
+                            unset _FLOX_HOOK_SAVE_FPATH _FLOX_HOOK_SAVE_COMPINIT_DUMPFILE;
+                        fi;"#}
+                    .to_stmt(),
+                );
+            }
+            // Note that unsetting the prompt depends on `_activate_d` being set.
         },
     }
 
@@ -229,6 +282,22 @@ mod tests {
             export MODIFIED_VAR=MODIFIED_ORIGINAL;
             export DELETED_VAR=DELETED_ORIGINAL;
             unset _FLOX_HOOK_DIFF;
+            if [[ -o interactive ]]; then
+                autoload -Uz add-zsh-hook;
+                add-zsh-hook -d precmd _flox_rehash;
+                if (( ${+functions[_flox_rehash]} )); then
+                    unfunction _flox_rehash;
+                fi;
+            fi;
+            setopt hashcmds; setopt hashdirs;
+            if [[ -n "${_FLOX_HOOK_SAVE_FPATH+set}" ]]; then
+                FPATH="$_FLOX_HOOK_SAVE_FPATH";
+                if [[ -n "${_FLOX_HOOK_SAVE_COMPINIT_DUMPFILE:-}" ]]; then
+                    autoload -U compinit;
+                    compinit -d "$_FLOX_HOOK_SAVE_COMPINIT_DUMPFILE";
+                fi;
+                unset _FLOX_HOOK_SAVE_FPATH _FLOX_HOOK_SAVE_COMPINIT_DUMPFILE;
+            fi;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
         "#]]
         .assert_eq(&output);

@@ -3,6 +3,7 @@ use std::io::{Read, Write};
 
 use anyhow::Result;
 use base64::Engine as _;
+use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use shell_gen::Statement;
@@ -76,6 +77,26 @@ impl DiffSerializer {
 
         stmts
     }
+
+    /// True when restoring this diff would leave `_FLOX_ACTIVE_ENVIRONMENTS`
+    /// empty or unset — i.e., this deactivate is undoing the outermost
+    /// activation. Per-shell teardown (hashing, FPATH, precmd hook removal)
+    /// is gated on this.
+    ///
+    /// Activation always sets `_FLOX_ACTIVE_ENVIRONMENTS` via
+    /// `single_set_envs`, so the diff will have it in `added` (first
+    /// activation, no prior value) or `modified` (nested, with the prior
+    /// outer value). The trailing `false` covers the logically-impossible
+    /// case that activation didn't set it.
+    pub(crate) fn is_outermost_deactivate(&self) -> bool {
+        if self.added.contains(FLOX_ACTIVE_ENVIRONMENTS_VAR) {
+            return true;
+        }
+        if let Some(active_environments) = self.modified.get(FLOX_ACTIVE_ENVIRONMENTS_VAR) {
+            return active_environments.is_empty();
+        }
+        false
+    }
 }
 
 #[cfg(test)]
@@ -105,5 +126,43 @@ mod tests {
         let decoded = DiffSerializer::decode(&encoded).expect("decode should succeed");
 
         assert_eq!(original, decoded);
+    }
+
+    fn diff_with(
+        added: &[&str],
+        modified: &[(&str, &str)],
+        removed: &[(&str, &str)],
+    ) -> DiffSerializer {
+        DiffSerializer {
+            added: make_keys(added),
+            modified: make_env(modified),
+            removed: make_env(removed),
+        }
+    }
+
+    #[test]
+    fn outermost_on_first_activation() {
+        // First activation: pre-activation env had no `_FLOX_ACTIVE_ENVIRONMENTS`,
+        // so activation puts it in `added`. Post-restore: unset → outermost.
+        let diff = diff_with(&[FLOX_ACTIVE_ENVIRONMENTS_VAR], &[], &[]);
+        assert!(diff.is_outermost_deactivate());
+    }
+
+    #[test]
+    fn not_outermost_on_nested_activation() {
+        // Nested activation: pre-activation env already had an outer
+        // `_FLOX_ACTIVE_ENVIRONMENTS`, so activation puts it in `modified`
+        // with that outer value. Post-restore: outer value → not outermost.
+        let diff = diff_with(&[], &[(FLOX_ACTIVE_ENVIRONMENTS_VAR, "/outer/env")], &[]);
+        assert!(!diff.is_outermost_deactivate());
+    }
+
+    #[test]
+    fn outermost_when_modified_to_empty() {
+        // Pre-activation env had `_FLOX_ACTIVE_ENVIRONMENTS=""` (set but
+        // empty). Activation puts it in `modified` with empty value.
+        // Post-restore: empty string → still outermost.
+        let diff = diff_with(&[], &[(FLOX_ACTIVE_ENVIRONMENTS_VAR, "")], &[]);
+        assert!(diff.is_outermost_deactivate());
     }
 }

@@ -167,8 +167,13 @@ pub fn generate_bash_profile_commands(
         Action::Activate { .. } => {
             stmts.push("set +h".to_stmt());
         },
-        Action::Deactivate(_) => {
-            // TODO: decide whether to restore prior hashing state.
+        Action::Deactivate(ctx) => {
+            // Re-enable command hashing (bash default), but only if no
+            // other flox environments remain active — the outer env
+            // still wants hashing off.
+            if ctx.restore_diff.is_outermost_deactivate() {
+                stmts.push("set -h;".to_stmt());
+            }
         },
     }
 
@@ -337,6 +342,7 @@ mod tests {
             export DELETED_VAR=DELETED_ORIGINAL;
             unset _FLOX_HOOK_DIFF;
             if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
+            set -h;
         "#]]
         .assert_eq(&output);
     }
