@@ -641,9 +641,15 @@ mod test {
 
     /// Test that handle_process_exited is a no-op when the PID is not in state.json.
     ///
-    /// This can happen when --remove-pid removes a PID from state.json, but the
-    /// executive still has a watcher running for that PID. When the process eventually
-    /// exits and the executive receives a ProcessExited event, it should be a no-op.
+    /// This can happen in two cases:
+    /// 1. --remove-pid removes a PID from state.json, but the
+    ///    executive still has a watcher running for that PID.
+    /// 2. `flox-activations detach` removes a PID from state.json
+    ///
+    /// In either case, when the process eventually exits and the executive
+    /// receives a ProcessExited event, it should be a no-op.
+    ///
+    /// We mimic scenario 1 here
     #[test]
     fn process_exited_noop_for_pid_not_in_state() {
         let temp_dir = tempfile::tempdir().unwrap();
