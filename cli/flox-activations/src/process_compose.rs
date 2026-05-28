@@ -131,7 +131,8 @@ pub fn start_process_compose_no_services(
         ?config_file,
         ?socket_path,
         ?log_file,
-        "spawning process-compose without any services",
+        "spawning process-compose without any services: {:?}",
+        command
     );
     command.spawn().context("Failed to spawn process-compose")?;
 

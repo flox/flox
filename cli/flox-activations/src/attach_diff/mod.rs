@@ -167,6 +167,9 @@ impl AttachDiff {
     pub fn apply_to_command(&self, command: &mut Command) {
         command.envs(&self.non_in_place_sets);
         command.envs(&self.single_sets);
+        // double_sets includes user variables which we want to override
+        // single_sets, so set them after single_sets.
+        // TODO: we should keep track of that in a way that's less brittle
         command.envs(&self.double_sets.additions);
         for var in &self.double_sets.deletions {
             command.env_remove(var);
@@ -192,6 +195,9 @@ impl AttachDiff {
                 stmts.push(set_exported_unexpanded(FLOX_HOOK_DIFF_VAR, encoded));
             }
         }
+        // double_sets includes user variables which we want to override
+        // single_sets, so set them after single_sets.
+        // TODO: we should keep track of that in a way that's less brittle
         for (k, v) in self.double_sets.additions.iter().sorted_by_key(|(k, _)| *k) {
             stmts.push(set_exported_unexpanded(k, v));
         }
