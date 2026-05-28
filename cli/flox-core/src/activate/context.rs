@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use shell_gen::ShellWithPath;
@@ -132,17 +133,35 @@ pub enum AutoActivateFishMode {
     DisableArrow,
 }
 
-#[derive(Clone, Debug, Deserialize, derive_more::Display, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InvocationType {
-    #[display("inplace")]
     InPlace,
-    #[display("interactive")]
     Interactive,
-    #[display("command")]
     ShellCommand(String),
-    #[display("execcommand")]
     ExecCommand(Vec<String>),
+}
+
+impl std::fmt::Display for InvocationType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InvocationType::Interactive => write!(f, "interactive"),
+            InvocationType::InPlace
+            | InvocationType::ShellCommand(_)
+            | InvocationType::ExecCommand(_) => write!(f, "inplace"),
+        }
+    }
+}
+
+impl FromStr for InvocationType {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "interactive" => Ok(InvocationType::Interactive),
+            _ => Ok(InvocationType::InPlace),
+        }
+    }
 }
 
 impl InvocationType {
