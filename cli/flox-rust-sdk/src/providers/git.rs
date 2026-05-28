@@ -581,6 +581,56 @@ impl GitCommandProvider {
         })
     }
 
+    /// Clone a local repository into `dest` using `--shared` and check out `rev`.
+    ///
+    /// `--shared` means the clone's object store is backed by `source` via a
+    /// `.git/objects/info/alternates` reference rather than copying or
+    /// hardlinking objects.  This has two advantages over a plain local clone:
+    ///
+    /// * It is fast and space-efficient regardless of whether `source` and
+    ///   `dest` are on the same filesystem (a plain clone falls back to
+    ///   copying all objects when they are not).
+    /// * Build scripts get full access to history, tags, `git describe`, and
+    ///   `git ls-files` because all objects are reachable through the
+    ///   alternates pointer.
+    ///
+    /// The alternates pointer is safe here because this clone is only used
+    /// for `sandbox = "off"` manifest builds, where Nix does not apply
+    /// filesystem namespace isolation.  The build process therefore has
+    /// unrestricted access to the host filesystem and can always follow the
+    /// alternates path back to `source`.  (For `sandbox = "pure"` builds a
+    /// `git+file://` flake ref is used instead so that Nix can import the
+    /// source into the store before applying its sandbox.)
+    pub fn clone_shared_rev(
+        source: impl AsRef<Path>,
+        dest: impl AsRef<Path>,
+        rev: &str,
+    ) -> Result<Self, GitCommandError> {
+        let options = GitCommandOptions::default();
+
+        let mut clone_cmd = options.new_command();
+        clone_cmd
+            .arg("clone")
+            .arg("--quiet")
+            .arg("--shared")
+            .arg("--no-checkout")
+            .arg(source.as_ref())
+            .arg(dest.as_ref());
+        GitCommandProvider::run_command(&mut clone_cmd)?;
+
+        let clone = GitCommandProvider {
+            options,
+            workdir: Some(dest.as_ref().to_path_buf()),
+            path: dest.as_ref().to_path_buf(),
+        };
+
+        let mut checkout_cmd = clone.new_command();
+        checkout_cmd.arg("checkout").arg("--quiet").arg(rev);
+        GitCommandProvider::run_command(&mut checkout_cmd)?;
+
+        Ok(clone)
+    }
+
     /// Clone a branch from a remote repository using default options
     pub fn clone_branch(
         origin: impl AsRef<OsStr>,
