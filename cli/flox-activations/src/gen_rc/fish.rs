@@ -4,9 +4,9 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use flox_core::activate::context::{AutoActivateFishMode, InvocationType};
-use shell_gen::{GenerateShell, Shell};
+use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded};
 
-use crate::attach_diff::todo_drop_set_exported_unexpanded;
+use crate::attach_diff::{todo_drop_set_exported_unexpanded, todo_drop_unset};
 use crate::gen_rc::{Action, RM};
 
 /// Arguments for generating fish startup commands
@@ -83,6 +83,21 @@ pub fn generate_fish_profile_commands(
             // TODO: we shouldn't be exporting these in the first place
             // Although note that unsetting the prompt depends on these being
             // set
+        },
+    }
+
+    // Emit _FLOX_INVOCATION_TYPE as a shell-local (non-exported) variable so
+    // that `flox deactivate --print-script` can distinguish interactive
+    // subshells from in-place activations without reading state.json.
+    match action {
+        Action::Activate { args, .. } => {
+            stmts.push(set_unexported_unexpanded(
+                "_FLOX_INVOCATION_TYPE",
+                format!("{}", args.invocation_type),
+            ));
+        },
+        Action::Deactivate(_) => {
+            stmts.push(todo_drop_unset("_FLOX_INVOCATION_TYPE"));
         },
     }
 
@@ -260,6 +275,7 @@ mod tests {
             set -gx _activate_d /interpreter/activate.d;
             set -gx _flox_activations /flox_activations;
             set -gx _flox_activate_tracer TRACER;
+            set -g _FLOX_INVOCATION_TYPE interactive;
             if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
             set -gx FLOX_ENV_DIRS (if set -q FLOX_ENV_DIRS; echo "$FLOX_ENV_DIRS"; else; echo empty; end);
             /flox_activations set-env-dirs --shell fish --flox-env "/flox_env" --env-dirs "$FLOX_ENV_DIRS" | source;
@@ -293,6 +309,7 @@ mod tests {
             set -gx _activate_d /interpreter/activate.d;
             set -gx _flox_activations /flox_activations;
             set -gx _flox_activate_tracer TRACER;
+            set -g _FLOX_INVOCATION_TYPE inplace;
             if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
             set -gx FLOX_ENV_DIRS (if set -q FLOX_ENV_DIRS; echo "$FLOX_ENV_DIRS"; else; echo empty; end);
             /flox_activations set-env-dirs --shell fish --flox-env "/flox_env" --env-dirs "$FLOX_ENV_DIRS" | source;
@@ -326,6 +343,7 @@ mod tests {
             set -gx MODIFIED_VAR MODIFIED_ORIGINAL;
             set -gx DELETED_VAR DELETED_ORIGINAL;
             set -e _FLOX_HOOK_DIFF;
+            set -e _FLOX_INVOCATION_TYPE;
             if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
         "#]]
         .assert_eq(&output);

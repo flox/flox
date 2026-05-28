@@ -433,6 +433,11 @@ impl ActivationState {
             .collect()
     }
 
+    /// Returns `true` if the given PID is currently attached to this activation.
+    pub fn is_pid_attached(&self, pid: Pid) -> bool {
+        self.attached_pids.contains_key(&pid)
+    }
+
     /// Returns the current activation mode
     pub fn mode(&self) -> &ActivateMode {
         &self.mode
@@ -489,12 +494,27 @@ impl ActivationState {
         self.ready = Ready::True(start_id.clone());
     }
 
-    /// Detach a PID from an activation
+    /// Detach a PID from an activation.
     ///
-    /// update_ready_after_detach must be called after calling detach
-    pub fn detach(&mut self, pid: Pid) {
+    /// Returns `Some(start_id)` if this was the last attachment for that
+    /// `StartIdentifier` (i.e. the caller should clean up the start state
+    /// directory), or `None` if there are still other PIDs attached to the
+    /// same start.
+    ///
+    /// `update_ready_after_detach` must still be called after this when
+    /// there are remaining attached PIDs.
+    pub fn detach(&mut self, pid: Pid) -> Option<StartIdentifier> {
         let removed = self.attached_pids.remove(&pid);
         debug!(pid, ?removed, "detaching from activation");
+
+        let attachment = removed?;
+
+        let start_id = attachment.start_id;
+
+        // Return the start_id only when no remaining attachment references it.
+        let has_remaining = self.attached_pids.values().any(|a| a.start_id == start_id);
+
+        if has_remaining { None } else { Some(start_id) }
     }
 
     /// Clean up a specific terminated PID
@@ -533,21 +553,8 @@ impl ActivationState {
             return (None, false);
         }
 
-        let start_id = attachment.start_id;
-        tracing::info!(pid, ?start_id, "detaching terminated PID");
-        self.detach(pid);
-
-        // Check if this start_id now has no more attachments
-        let has_attachments = self
-            .attached_pids
-            .iter()
-            .any(|(_, attachment)| attachment.start_id == start_id);
-
-        let empty_start_id = if !has_attachments {
-            Some(start_id)
-        } else {
-            None
-        };
+        tracing::info!(pid, "detaching terminated PID");
+        let empty_start_id = self.detach(pid);
 
         // Only update ready state if there are still attached PIDs
         if !self.attached_pids.is_empty() {
@@ -559,7 +566,7 @@ impl ActivationState {
 
     /// set ready to False if there are no more PIDs attached to the current start
     /// should only be called when there are some attached PIDs
-    fn update_ready_after_detach(&mut self) {
+    pub fn update_ready_after_detach(&mut self) {
         if self.attached_pids.is_empty() {
             unreachable!("should remove all state when there are no more attached PIDs");
         }
