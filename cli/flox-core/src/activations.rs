@@ -326,6 +326,26 @@ impl StartIdentifier {
 
         Ok(activation_state_dir.as_ref().join(dir_name))
     }
+
+    /// Remove the start state directory for this identifier if it exists.
+    ///
+    /// Shared cleanup utility used by both `detach` (when PIDs remain for other
+    /// starts) and `watcher::cleanup_pid` (when a process exits). The no-op on
+    /// a missing directory makes this safe to call idempotently.
+    pub fn remove_start_state_dir(
+        &self,
+        activation_state_dir: impl AsRef<Path>,
+    ) -> Result<(), Error> {
+        let state_dir = self
+            .start_state_dir(activation_state_dir)
+            .context("failed to compute start state dir path")?;
+        if state_dir.exists() {
+            std::fs::remove_dir_all(&state_dir).with_context(|| {
+                format!("failed to remove start state dir '{}'", state_dir.display())
+            })?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -1537,6 +1557,41 @@ mod tests {
 
             let attachment: Attachment = serde_json::from_str(&json).unwrap();
             assert_eq!(attachment.invocation_type, None);
+        }
+    }
+
+    mod start_identifier {
+        use super::*;
+
+        /// `remove_start_state_dir` removes the directory when it exists.
+        #[test]
+        fn remove_start_state_dir_removes_existing_dir() {
+            let tmp = TempDir::new().unwrap();
+            let start_id = StartIdentifier::new("/nix/store/test-pkg");
+            let state_dir = start_id.start_state_dir(tmp.path()).unwrap();
+            std::fs::create_dir_all(&state_dir).unwrap();
+            assert!(state_dir.exists(), "directory should exist before removal");
+
+            start_id
+                .remove_start_state_dir(tmp.path())
+                .expect("removal should succeed");
+
+            assert!(
+                !state_dir.exists(),
+                "directory should be gone after removal"
+            );
+        }
+
+        /// `remove_start_state_dir` is a no-op when the directory doesn't exist.
+        #[test]
+        fn remove_start_state_dir_noop_when_absent() {
+            let tmp = TempDir::new().unwrap();
+            let start_id = StartIdentifier::new("/nix/store/test-pkg");
+
+            // Directory was never created.
+            start_id
+                .remove_start_state_dir(tmp.path())
+                .expect("removal should succeed even when dir is absent");
         }
     }
 }
