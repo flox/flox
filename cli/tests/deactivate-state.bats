@@ -2,30 +2,24 @@
 # -*- mode: bats; -*-
 # ============================================================================ #
 #
-# End-to-end state-restoration tests for `flox deactivate --print-script`.
+# End-to-end state-restoration test for `flox deactivate --print-script`.
 #
-# These tests snapshot all shell state (functions, options, unexported
-# variables) before activation and after deactivation, then diff the two.
-# They verify that activation/deactivation is fully reversible — nothing
-# leaks past the deactivate boundary.
+# Snapshots all bash shell state (functions, options, unexported variables)
+# before activation and after deactivation, then diffs the two. Verifies
+# activation/deactivation is fully reversible — nothing leaks past the
+# deactivate boundary.
 #
-# Each shell has its own snapshot helper because the dump commands differ:
-#   - bash: `declare -F` (function names), `declare -f` (bodies),
-#           `compgen -v` (variable names, including unexported),
-#           `set -o` + `shopt -p` (options).
-#   - zsh:  `print -l ${(k)functions}` (names),
-#           `print -l "${(@kv)functions}"` (bodies),
-#           `typeset +` (variable names), `setopt` (options).
-#   - fish: `functions -n` (names), `functions <name>` (bodies),
-#           `set --names` (variable names with all scopes).
-#   - tcsh: `alias` (aliases — tcsh has no functions),
-#           `set` and `setenv` (variables — tcsh has no notion of
-#           "unexported" beyond shell vs. env vars).
+# Bash-only for now. The dump primitives used here (`compgen -A function`,
+# `declare -f`, `compgen -v`, `set -o`, `shopt -p`) are bash-specific.
+# Equivalents exist in zsh (`print -l ${(k)functions}`, `typeset +`,
+# `setopt`), fish (`functions -n`, `set --names`), and tcsh (`alias`,
+# `set` / `setenv`); adding those shells is follow-up work — see
+# https://linear.app/flox/issue/DEV-86.
 #
-# Each helper writes a normalized, sorted snapshot to a file. The test
-# diffs pre vs. post snapshots, filtering shell-internal noise (LINENO,
-# RANDOM, BASH_COMMAND, history vars, etc.). A clean diff means full
-# restoration.
+# The snapshot writes a normalized, sorted view (LC_ALL=C) to a file. The
+# test diffs pre vs. post, filtering shell-internal noise (LINENO, RANDOM,
+# BASH_COMMAND, history vars, etc.) and the test harness's own setup vars.
+# A clean diff means full restoration.
 #
 # ---------------------------------------------------------------------------- #
 
@@ -101,6 +95,25 @@ teardown() {
 _ALLOWED_LEAKS_NAMES='_flox_hook|PROMPT_COMMAND|_FLOX_SOURCED_PROFILE_SCRIPTS|_activate_d|_flox_activate_tracer|_flox_activations'
 _ALLOWED_LEAKS_RE="^(${_ALLOWED_LEAKS_NAMES})\$"
 
+# Names that come from the test harness or the host OS, not from
+# activate/deactivate. Filtered out of both snapshots so the diff
+# only surfaces state that flox itself touched.
+#   __FT_RAN_.*                   — flox-test setup-once flags
+#                                   (HOME_SETUP, GITCONFIG_SETUP, …)
+#   _FLOX_LOCAL_DEV               — bats / dev-shell signal
+#   _FLOX_TEST_SUITE_MODE         — bats signal
+#   _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS
+#                                 — bats signal
+#   _FLOX_USE_CATALOG_MOCK        — bats catalog mock pointer
+#   __CF_USER_TEXT_ENCODING       — macOS process attribute
+#   __NIX_DARWIN_SET_ENVIRONMENT_DONE
+#                                 — nix-darwin marker on macOS runners
+#   PATH_LOCALE                   — set by the activated env's locale
+#                                   archive; orthogonal to the
+#                                   activate/deactivate lifecycle this
+#                                   test guards.
+_TEST_HARNESS_NOISE_RE='^(__FT_RAN_.*|_FLOX_LOCAL_DEV|_FLOX_TEST_SUITE_MODE|_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS|_FLOX_USE_CATALOG_MOCK|__CF_USER_TEXT_ENCODING|__NIX_DARWIN_SET_ENVIRONMENT_DONE|PATH_LOCALE)\$'
+
 # bats test_tags=deactivate,deactivate:state:bash
 @test "bash: deactivate restores pre-activation shell state" {
   project_setup
@@ -123,6 +136,10 @@ _ALLOWED_LEAKS_RE="^(${_ALLOWED_LEAKS_NAMES})\$"
     set +e
     export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\"\$(command -v bash)\"
+    # Stable ordering across platforms — macOS's default locale and Linux's
+    # collate underscores differently, which swaps the position of names
+    # like BASHOPTS / BATS_LIB_PATH between sort runs.
+    export LC_ALL=C
 
     _flox_dump_state() {
       local out=\"\$1\"
@@ -150,7 +167,8 @@ _ALLOWED_LEAKS_RE="^(${_ALLOWED_LEAKS_NAMES})\$"
         compgen -v \
           | sort -u \
           | grep -vE '^(BASH(PID|_LINENO|_SOURCE|_COMMAND|_ARGV|_ARGC|_REMATCH|_SUBSHELL)|FUNCNAME|LINENO|SECONDS|RANDOM|SRANDOM|_|PIPESTATUS|HISTCMD|EPOCHSECONDS|EPOCHREALTIME|COLUMNS|LINES|OPTIND|OPTARG|out)\$' \
-          | grep -vE '${_ALLOWED_LEAKS_RE}'
+          | grep -vE '${_ALLOWED_LEAKS_RE}' \
+          | grep -vE '${_TEST_HARNESS_NOISE_RE}'
       } > \"\$out\"
     }
 
