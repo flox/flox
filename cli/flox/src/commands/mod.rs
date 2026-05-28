@@ -42,6 +42,7 @@ use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::{Manifest, TypedOnly};
 use flox_rust_sdk::flox::{
     AuthContext,
+    AuthnMode,
     DEFAULT_FLOXHUB_URL,
     FLOX_VERSION,
     Flox,
@@ -271,45 +272,7 @@ impl FloxArgs {
             git_url_override,
         )?;
 
-        let floxhub_token = config
-            .flox
-            .floxhub_token
-            .as_deref()
-            .and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(FloxhubToken::from_str(s))
-                }
-            })
-            .transpose();
-
-        let floxhub_token = match floxhub_token {
-            Err(FloxhubTokenError::InvalidToken(token_error)) => {
-                message::error(formatdoc! {"
-                    Your FloxHub token is invalid: {token_error}
-                    You may need to log in again.
-                "});
-                if let Err(e) =
-                    update_config(&config.flox.config_dir, "floxhub_token", None::<String>)
-                {
-                    debug!("Could not remove token from user config: {e}");
-                }
-                None
-            },
-            Ok(Some(token)) if token.is_expired() => {
-                if !matches!(
-                    self.command,
-                    Some(Commands::Admin(AdminCommands::Auth(auth::Auth::Login)))
-                ) {
-                    message::warning(
-                        "Your FloxHub token has expired. Run 'flox auth login' to re-authenticate.",
-                    );
-                }
-                Some(token)
-            },
-            Ok(token) => token,
-        };
+        let floxhub_token = self.resolve_floxhub_token(&config);
 
         let metrics_device_uuid = (!config.flox.disable_metrics)
             .then(|| read_metrics_uuid(&config).ok())
@@ -419,6 +382,59 @@ impl FloxArgs {
         }
 
         result
+    }
+
+    /// Parse and validate the configured `floxhub_token`, returning `None` and
+    /// emitting any user-facing warnings as a side effect.
+    ///
+    /// Returns `None` immediately when the configured authn mode does not use
+    /// the token (e.g. Kerberos) — in that case the token in `flox.toml` is
+    /// not consumed by the auth pipeline, so warning about its state — or
+    /// rewriting the user's config — would be misleading.
+    fn resolve_floxhub_token(&self, config: &Config) -> Option<FloxhubToken> {
+        if !matches!(config.flox.floxhub_authn_mode, AuthnMode::Auth0) {
+            return None;
+        }
+
+        let parsed = config
+            .flox
+            .floxhub_token
+            .as_deref()
+            .and_then(|s| {
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(FloxhubToken::from_str(s))
+                }
+            })
+            .transpose();
+
+        match parsed {
+            Err(FloxhubTokenError::InvalidToken(token_error)) => {
+                message::error(formatdoc! {"
+                    Your FloxHub token is invalid: {token_error}
+                    You may need to log in again.
+                "});
+                if let Err(e) =
+                    update_config(&config.flox.config_dir, "floxhub_token", None::<String>)
+                {
+                    debug!("Could not remove token from user config: {e}");
+                }
+                None
+            },
+            Ok(Some(token)) if token.is_expired() => {
+                if !matches!(
+                    self.command,
+                    Some(Commands::Admin(AdminCommands::Auth(auth::Auth::Login)))
+                ) {
+                    message::warning(
+                        "Your FloxHub token has expired. Run 'flox auth login' to re-authenticate.",
+                    );
+                }
+                Some(token)
+            },
+            Ok(token) => token,
+        }
     }
 }
 
