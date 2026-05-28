@@ -108,7 +108,7 @@ mod test {
 
         let updated = read_activation_state(tmp.path(), &dot_flox_path);
         assert!(
-            !updated.is_pid_attached(pid),
+            updated.attached_pids_is_empty(),
             "PID should be removed from state.json after detach"
         );
     }
