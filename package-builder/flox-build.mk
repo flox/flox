@@ -737,12 +737,17 @@ define NIX_EXPRESSION_BUILD_template =
 
   # Start by evaluating the build
 
+  # TODO(SL-002): point at the per-package in-tree lockfile (follow-up) or
+  # the resolved BuildLock from CLI dispatch (SL-003 follow-up). For now,
+  # `catalogLockfile_<pname>` is supplied by the caller and points at an
+  # empty default lock.
   $($(_pvarname)_evalJSON): $(PROJECT_TMPDIR)/check-build-prerequisites
 	$(_V_) $(_mkdir) -p $$(@D)
 	$(_V_) $(_nix) eval -L --file $(_nef) \
 	  --argstr nixpkgs-url '$(EXPRESSION_BUILD_NIXPKGS_URL)' \
 	  --argstr system $(NIX_SYSTEM) \
 	  $(NIX_EXPRESSION_REF_ARGS) \
+	  --argstr catalog-lockfile $(catalogLockfile_$(_pname)) \
 	  --json \
 	  --apply 'pkg: { \
 	    drvPath = pkg.drvPath; \
