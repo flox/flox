@@ -81,12 +81,29 @@ impl NixFlakeref {
     }
 
     pub fn from_git_with_dir(url: &Url, dir: Option<&Path>) -> Result<Self> {
-        json!({
-            "type": "git",
-            "url": url,
-            "dir": dir,
-        })
-        .try_into()
+        let mut map = serde_json::Map::new();
+        map.insert("type".into(), json!("git"));
+        map.insert("url".into(), json!(url));
+        if let Some(d) = dir {
+            map.insert("dir".into(), json!(d));
+        }
+        Value::Object(map).try_into()
+    }
+
+    /// Build a `git+file://` flake ref pointing at a local repository at a
+    /// specific revision.  Nix resolves this without network access, imports
+    /// the tree into the store, so builds can run with full sandbox isolation.
+    pub fn from_local_git(path: impl AsRef<Path>, rev: &str, dir: Option<&Path>) -> Result<Self> {
+        let url = Url::from_file_path(path.as_ref())
+            .map_err(|()| anyhow::anyhow!("path is not absolute: {}", path.as_ref().display()))?;
+        let mut map = serde_json::Map::new();
+        map.insert("type".into(), json!("git"));
+        map.insert("url".into(), json!(url));
+        map.insert("rev".into(), json!(rev));
+        if let Some(d) = dir {
+            map.insert("dir".into(), json!(d));
+        }
+        Value::Object(map).try_into()
     }
 
     pub fn as_url(&self) -> &Url {

@@ -8,7 +8,7 @@ use flox_catalog::BaseCatalogUrl;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::Inner;
-use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
+use flox_manifest::parsed::common::{BuildSandbox, DEFAULT_GROUP_NAME};
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -626,19 +626,19 @@ pub struct ExpressionBuildMetadata {
 }
 
 /// The kind of a package target,
-/// i.e. whether a pacakge is sourced from the manifest or a nix expression.
+/// i.e. whether a package is sourced from the manifest or a nix expression.
 ///
-/// While not relevant to the build itself,
-/// publishing pacakges may differ depending on the kind.
-/// For example [super::publish::check_package_metadata]
-/// needs to infer the base catalog url
-/// from the installed packages in the  top-level group
-/// for manifest builds, while expression builds
-/// are assigned their base nixpkgs url in coordination with the catalog API
+/// The kind is used during publishing: [super::publish::check_package_metadata]
+/// needs to infer the base catalog url from the installed packages in the
+/// top-level group for manifest builds, while expression builds are assigned
+/// their base nixpkgs url in coordination with the catalog API.
+/// The sandbox mode stored on [PackageTargetKind::ManifestBuild] additionally
+/// controls whether [super::publish::check_build_metadata] runs the build in
+/// an ephemeral clone or the original checkout.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackageTargetKind {
     ExpressionBuild(ExpressionBuildMetadata),
-    ManifestBuild,
+    ManifestBuild { sandbox: Option<BuildSandbox> },
 }
 
 impl PackageTargetKind {
@@ -647,7 +647,7 @@ impl PackageTargetKind {
     }
 
     pub fn is_manifest_build(&self) -> bool {
-        matches!(self, PackageTargetKind::ManifestBuild)
+        matches!(self, PackageTargetKind::ManifestBuild { .. })
     }
 }
 
@@ -729,8 +729,12 @@ impl PackageTargets {
         targets.extend(
             environment_packages
                 .inner()
-                .keys()
-                .map(|name| (name.to_string(), PackageTargetKind::ManifestBuild)),
+                .iter()
+                .map(|(name, descriptor)| {
+                    (name.to_string(), PackageTargetKind::ManifestBuild {
+                        sandbox: descriptor.sandbox.clone(),
+                    })
+                }),
         );
 
         for (expression_build_target, expression_build_metadata) in nix_expression_packages {

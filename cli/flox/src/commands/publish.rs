@@ -394,7 +394,7 @@ mod tests {
             target,
             PackageTarget::new_unchecked(
                 "hello",
-                flox_rust_sdk::providers::build::PackageTargetKind::ManifestBuild
+                flox_rust_sdk::providers::build::PackageTargetKind::ManifestBuild { sandbox: None }
             )
         );
     }
@@ -466,7 +466,7 @@ mod tests {
             target,
             PackageTarget::new_unchecked(
                 "hello2",
-                flox_rust_sdk::providers::build::PackageTargetKind::ManifestBuild
+                flox_rust_sdk::providers::build::PackageTargetKind::ManifestBuild { sandbox: None }
             )
         );
     }
@@ -497,7 +497,7 @@ mod tests {
             target,
             PackageTarget::new_unchecked(
                 "hello",
-                flox_rust_sdk::providers::build::PackageTargetKind::ManifestBuild
+                flox_rust_sdk::providers::build::PackageTargetKind::ManifestBuild { sandbox: None }
             )
         );
     }

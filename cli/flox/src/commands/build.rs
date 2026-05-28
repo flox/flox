@@ -801,7 +801,7 @@ mod test {
     fn manifest_builds_not_allowed_with_stabilities_present() {
         let mut packages = vec![PackageTarget::new_unchecked(
             "manifest",
-            PackageTargetKind::ManifestBuild,
+            PackageTargetKind::ManifestBuild { sandbox: None },
         )];
 
         let result = disallow_base_url_select_for_manifest_builds(&packages, true);
@@ -828,7 +828,7 @@ mod test {
     fn manifest_builds_allowed_with_stabilities_absent() {
         let mut packages = vec![PackageTarget::new_unchecked(
             "manifest",
-            PackageTargetKind::ManifestBuild,
+            PackageTargetKind::ManifestBuild { sandbox: None },
         )];
 
         let result = disallow_base_url_select_for_manifest_builds(&packages, false);
@@ -952,7 +952,7 @@ mod test {
     fn manifest_builds_do_not_require_git_repo() {
         let packages = vec![PackageTarget::new_unchecked(
             "manifest",
-            PackageTargetKind::ManifestBuild,
+            PackageTargetKind::ManifestBuild { sandbox: None },
         )];
         let base_dir = tempfile::tempdir().unwrap();
 
