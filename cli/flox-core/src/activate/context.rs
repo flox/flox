@@ -133,24 +133,17 @@ pub enum AutoActivateFishMode {
     DisableArrow,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, derive_more::Display, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InvocationType {
+    #[display("inplace")]
     InPlace,
+    #[display("interactive")]
     Interactive,
+    #[display("inplace")]
     ShellCommand(String),
+    #[display("inplace")]
     ExecCommand(Vec<String>),
-}
-
-impl std::fmt::Display for InvocationType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            InvocationType::Interactive => write!(f, "interactive"),
-            InvocationType::InPlace
-            | InvocationType::ShellCommand(_)
-            | InvocationType::ExecCommand(_) => write!(f, "inplace"),
-        }
-    }
 }
 
 impl FromStr for InvocationType {
