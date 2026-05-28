@@ -10,7 +10,7 @@
 
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use flox_core::activations::{ActivationState, read_activations_json, write_activations_json};
 use flox_core::proc_status::pid_is_running;
 use fslock::LockFile;
@@ -57,9 +57,7 @@ pub fn cleanup_pid(
     // 2. The environment was not modified
     // But I think for now it's simpler to just treat all start_ids the same.
     if let Some(start_id) = empty_start_id {
-        let state_dir = start_id.start_state_dir(activation_state_dir)?;
-        trace!(?state_dir, "removing empty activation state dir");
-        std::fs::remove_dir_all(state_dir).context("failed to remove start state dir")?;
+        start_id.remove_start_state_dir(activation_state_dir)?;
     }
 
     if modified {

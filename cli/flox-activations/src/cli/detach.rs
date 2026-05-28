@@ -1,14 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, anyhow};
 use clap::Args;
-use flox_core::activations::{
-    StartIdentifier,
-    read_activations_json,
-    state_json_path,
-    write_activations_json,
-};
-use tracing::trace;
+use flox_core::activations::{read_activations_json, state_json_path, write_activations_json};
 
 use crate::Error;
 
@@ -56,44 +50,27 @@ impl DetachArgs {
         // attached PIDs (the function panics on an empty map).
         if !state.attached_pids_is_empty() {
             state.update_ready_after_detach();
+            // Remove the start-state dir only when other PIDs remain.
+            // When PIDs are still present, the executive cannot call
+            // cleanup_all (which renames the parent dir), so there is no
+            // race window here.  When this is the last PID overall,
+            // the executive cleans up everything via StateFileChanged →
+            // cleanup_all after we write below.
+            if let Some(ref start_id) = empty_start_id {
+                start_id
+                    .remove_start_state_dir(&self.activation_state_dir)
+                    .context("failed to remove start state dir after detach")?;
+            }
         }
 
-        // Write back only when there are still attached PIDs or an
-        // executive; otherwise the executive will clean up naturally.
-        if !state.attached_pids_is_empty() || state.executive_started() {
-            write_activations_json(&state, &activations_json_path, lock)
-                .context("failed to write state.json after detach")?;
-        }
-
-        // If this was the last PID for its start, remove the start state dir.
-        // This mirrors watcher::cleanup_pid which does the same cleanup.
-        if let Some(start_id) = empty_start_id {
-            remove_start_state_dir(&start_id, &self.activation_state_dir)?;
-        }
+        // Always write: state.detach() has already mutated in-memory state.
+        // The executive is always running at detach time.  When 0 PIDs remain
+        // it will observe the change via StateFileChanged and call cleanup_all.
+        write_activations_json(&state, &activations_json_path, lock)
+            .context("failed to write state.json after detach")?;
 
         Ok(())
     }
-}
-
-/// Remove the start state directory for the given start identifier if it
-/// exists. Mirrors the cleanup done in `watcher::cleanup_pid` when the last
-/// PID for a start exits via process-exit monitoring.
-fn remove_start_state_dir(
-    start_id: &StartIdentifier,
-    activation_state_dir: &Path,
-) -> Result<(), Error> {
-    let state_dir = start_id
-        .start_state_dir(activation_state_dir)
-        .context("failed to compute start state dir path")?;
-
-    if state_dir.exists() {
-        trace!(?state_dir, "removing empty start state dir after detach");
-        std::fs::remove_dir_all(&state_dir).with_context(|| {
-            format!("failed to remove start state dir '{}'", state_dir.display())
-        })?;
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -103,7 +80,12 @@ mod test {
     use flox_core::activate::context::InvocationType;
     use flox_core::activate::mode::ActivateMode;
     use flox_core::activations::test_helpers::{read_activation_state, write_activation_state};
-    use flox_core::activations::{ActivationState, StartIdentifier, activation_state_dir_path};
+    use flox_core::activations::{
+        ActivationState,
+        StartIdentifier,
+        StartOrAttachResult,
+        activation_state_dir_path,
+    };
     use tempfile::TempDir;
 
     use super::DetachArgs;
@@ -170,37 +152,18 @@ mod test {
         );
     }
 
-    /// When the last PID detaches and there is no executive, state is not
-    /// written (the executive will clean up naturally).
+    /// Detach always writes state.json, even when the last PID is removed.
+    /// The executive observes the change via StateFileChanged and calls cleanup_all.
     #[test]
-    fn last_pid_detach_skips_write() {
+    fn last_pid_detach_writes_state() {
         let tmp = TempDir::new().unwrap();
         let dot_flox_path = tmp.path().join(".flox");
         let pid = 12345_i32;
 
-        // Build a state with an executive_pid but no running executive,
-        // so executive_started() returns true (ensuring the write path).
-        // For this test we want to confirm the *no-executive* path is
-        // skipped, so use a state where executive_started() is false.
-        let mut state = ActivationState::new(
-            &ActivateMode::default(),
-            Some(&dot_flox_path),
-            dot_flox_path.join("run/default"),
-        );
-        // Do NOT set an executive pid — executive_started() will be false.
-        let start_id = StartIdentifier::new("/nix/store/test");
-        state.start_or_attach(pid, &start_id.store_path, InvocationType::InPlace);
+        let state = make_state_with_pid(&dot_flox_path, pid, InvocationType::InPlace);
         write_activation_state(tmp.path(), &dot_flox_path, state);
 
         let activation_state_dir = activation_state_dir_path(tmp.path(), &dot_flox_path);
-
-        let state_json_path = flox_core::activations::state_json_path(&activation_state_dir);
-
-        // Record mtime before detach
-        let before_mtime = std::fs::metadata(&state_json_path)
-            .unwrap()
-            .modified()
-            .unwrap();
 
         let args = DetachArgs {
             activation_state_dir,
@@ -208,55 +171,68 @@ mod test {
         };
         args.handle().expect("detach should succeed");
 
-        // If state.json was NOT rewritten, mtime should be unchanged.
-        // (On fast machines this might be the same second — use file existence
-        //  plus an explicit content check as the signal instead.)
-        let updated_state = read_activation_state(tmp.path(), &dot_flox_path);
+        let updated = read_activation_state(tmp.path(), &dot_flox_path);
         assert!(
-            !updated_state.is_pid_attached(pid),
-            "PID should not appear in state after detach"
+            !updated.is_pid_attached(pid),
+            "PID should be absent from state.json after detach"
         );
-        // The file should still exist (written by write_activation_state above)
-        // but we care mainly that the PID is gone.
-        let _ = before_mtime; // suppress unused-variable warning
     }
 
-    /// When the last PID for a start detaches, the start state directory is removed.
+    /// When the last PID for a start detaches but other PIDs remain (attached
+    /// to different starts), the empty start's state directory is removed.
+    /// When this is the last PID overall, the executive handles dir cleanup via
+    /// StateFileChanged → cleanup_all.
     #[test]
-    fn last_pid_detach_removes_start_state_dir() {
+    fn start_state_dir_removed_when_other_pids_remain() {
         let tmp = TempDir::new().unwrap();
         let dot_flox_path = tmp.path().join(".flox");
-        let pid = 12345_i32;
+        let pid1 = 12345_i32; // will be detached — last PID for start_id1
+        let pid2 = 99999_i32; // stays attached to a different start
 
+        // Build a state with pid1 on start_id1 and pid2 on start_id2 so that
+        // after detaching pid1, attached_pids is not empty (pid2 remains).
         let mut state = ActivationState::new(
             &ActivateMode::default(),
             Some(&dot_flox_path),
             dot_flox_path.join("run/default"),
         );
         state.set_executive_pid(1);
-        let start_id = StartIdentifier::new("/nix/store/test");
-        state.start_or_attach(pid, &start_id.store_path, InvocationType::InPlace);
+
+        // Attach pid1 → starts start_id1, ready becomes Starting(pid1, start_id1)
+        let r1 = state.start_or_attach(pid1, "/nix/store/test1", InvocationType::InPlace);
+        let StartOrAttachResult::Start {
+            start_id: start_id1,
+        } = r1
+        else {
+            panic!("expected Start for pid1");
+        };
+        // Mark ready so pid2 can trigger a fresh Start on a different store path
+        state.set_ready(&start_id1);
+
+        // Attach pid2 with a different store path → starts start_id2
+        state.start_or_attach(pid2, "/nix/store/test2", InvocationType::InPlace);
+
         write_activation_state(tmp.path(), &dot_flox_path, state);
 
         let activation_state_dir = activation_state_dir_path(tmp.path(), &dot_flox_path);
 
-        // Create the start state directory that should be cleaned up.
-        let start_state_dir = start_id.start_state_dir(&activation_state_dir).unwrap();
-        std::fs::create_dir_all(&start_state_dir).unwrap();
+        // Create start_id1's directory on disk (the one that should be removed).
+        let start_state_dir1 = start_id1.start_state_dir(&activation_state_dir).unwrap();
+        std::fs::create_dir_all(&start_state_dir1).unwrap();
         assert!(
-            start_state_dir.exists(),
+            start_state_dir1.exists(),
             "start state dir should exist before detach"
         );
 
         let args = DetachArgs {
             activation_state_dir,
-            pid,
+            pid: pid1,
         };
         args.handle().expect("detach should succeed");
 
         assert!(
-            !start_state_dir.exists(),
-            "start state dir should be removed after the last PID detaches"
+            !start_state_dir1.exists(),
+            "start state dir for detached start should be removed when other PIDs remain"
         );
     }
 }
