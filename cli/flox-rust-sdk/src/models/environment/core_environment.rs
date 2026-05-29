@@ -21,7 +21,6 @@ use flox_manifest::{MANIFEST_FILENAME, Manifest, ManifestError, Migrated, Valida
 use itertools::Itertools;
 use pollster::FutureExt;
 use serde::{Deserialize, Serialize};
-use tempfile::TempDir;
 use thiserror::Error;
 use tracing::debug;
 
@@ -49,8 +48,6 @@ use crate::providers::buildenv::{
 use crate::providers::lock_manifest::{LockManifest, LockResult, ResolutionFailure, ResolveError};
 use crate::providers::nix_auth::{AuthError, NixAuth};
 use crate::providers::services::process_compose::{ServiceError, maybe_make_service_config_file};
-
-const TEMPROOTS_DIR_NAME: &str = "temp-roots";
 
 pub struct ReadOnly {}
 struct ReadWrite {}
@@ -304,9 +301,8 @@ impl<State> CoreEnvironment<State> {
 
         let service_config_path = maybe_make_service_config_file(flox, &lockfile)?;
 
-        let tempdir = TempDir::new().map_err(CoreEnvironmentError::CreateTempdir)?;
         let auth = NixAuth::from_flox(flox).map_err(CoreEnvironmentError::Auth)?;
-        let outputs = BuildEnvNix::new(tempdir, auth).build(
+        let outputs = BuildEnvNix::new(auth).build(
             &flox.catalog_client,
             &lockfile_path,
             service_config_path,
@@ -579,7 +575,7 @@ impl CoreEnvironment<ReadOnly> {
             // We are not interested in the store path here, so we ignore the result
             // Neither do we depend on services, so we pass `None`
             let auth = NixAuth::from_flox(flox).map_err(EnvironmentError::Auth)?;
-            let _ = BuildEnvNix::new(flox.temp_dir.join(TEMPROOTS_DIR_NAME), auth)
+            let _ = BuildEnvNix::new(auth)
                 .build(&flox.catalog_client, tmp_lockfile.path(), None)
                 .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::BuildEnv(e)))?;
         }
@@ -1199,9 +1195,6 @@ pub enum CoreEnvironmentError {
     /// when parsing the contents of a lockfile into a [LockedManifest]
     #[error("could not parse lockfile")]
     ParseLockfile(#[source] serde_json::Error),
-
-    #[error("failed to create temporary directory")]
-    CreateTempdir(#[source] std::io::Error),
 
     #[error("authentication error")]
     Auth(#[source] AuthError),
