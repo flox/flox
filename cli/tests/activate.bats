@@ -5406,3 +5406,36 @@ success"
   assert_success
   assert_output --partial "activated"
 }
+
+# bats test_tags=activate,activate:idempotent
+@test "activate is idempotent for an already-locked already-built environment" {
+  # AI-159: ensure flox activate does not re-lock or re-build when the
+  # lockfile is already current and the rendered link is already valid.
+  project_setup_common
+  "$FLOX_BIN" init
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    "$FLOX_BIN" install hello
+
+  # Snapshot state after first activate (which performs the initial lock+build).
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    "$FLOX_BIN" activate -c true
+
+  LOCK_HASH_1=$(sha256sum .flox/env/manifest.lock | awk '{print $1}')
+  LOCK_MTIME_1=$(stat -c %Y .flox/env/manifest.lock)
+
+  LINK_TARGET_1=$(readlink ".flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev")
+
+  # Second activate — must be a complete no-op.
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    "$FLOX_BIN" activate -c true
+
+  LOCK_HASH_2=$(sha256sum .flox/env/manifest.lock | awk '{print $1}')
+  LOCK_MTIME_2=$(stat -c %Y .flox/env/manifest.lock)
+
+  LINK_TARGET_2=$(readlink ".flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev")
+
+  # All three signals must be identical between activations.
+  assert_equal "$LOCK_HASH_1"    "$LOCK_HASH_2"
+  assert_equal "$LOCK_MTIME_1"   "$LOCK_MTIME_2"
+  assert_equal "$LINK_TARGET_1"  "$LINK_TARGET_2"
+}
