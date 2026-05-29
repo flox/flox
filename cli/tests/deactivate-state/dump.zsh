@@ -52,7 +52,15 @@ _DUMP_HELPERS_RE='^(_flox_dump)$'
 #                             `local`, so they leak into the user's
 #                             shell. Tracked separately in DEV-86; fix
 #                             belongs in activate.d/zsh.
-_ZSH_ALLOWED_LEAKS_RE='^(nohashcmds|nohashdirs|_comp_assocs|chpwd_functions|precmd_functions|new_fpath|old_fpath|profile_script_dirs)$'
+#   MANPATH / manpath       — when MANPATH is set pre-activate (CI
+#                             runners and most interactive shells do
+#                             this), zsh deactivate fails to restore
+#                             it: post has neither MANPATH nor zsh's
+#                             lowercase `manpath` mirror. The bash
+#                             test happens to start without MANPATH
+#                             set, so it doesn't trip the same path.
+#                             Tracked separately in DEV-86.
+_ZSH_ALLOWED_LEAKS_RE='^(nohashcmds|nohashdirs|_comp_assocs|chpwd_functions|precmd_functions|new_fpath|old_fpath|profile_script_dirs|MANPATH|manpath)$'
 
 _flox_dump() {
   local out=$1
