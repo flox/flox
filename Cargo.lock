@@ -1682,6 +1682,8 @@ dependencies = [
  "nix",
  "proptest",
  "tempfile",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

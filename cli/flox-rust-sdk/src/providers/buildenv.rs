@@ -1423,12 +1423,14 @@ fn join_realise_results(
 
 #[cfg(test)]
 mod test_helpers {
+    pub(super) use flox_test_utils::init_tracing;
     use tempfile::TempDir;
 
     use super::*;
     use crate::providers::nix_auth::NixAuth;
 
     pub(super) fn buildenv_instance() -> BuildEnvNix<NixAuth> {
+        init_tracing();
         let auth = NixAuth::from_tempdir_and_token(TempDir::new().unwrap(), None);
         BuildEnvNix::new(auth)
     }
@@ -2748,6 +2750,8 @@ mod materialise_retry_tests {
     use std::collections::HashMap;
     use std::path::PathBuf;
 
+    use test_helpers::init_tracing;
+
     use super::*;
 
     fn fake_outputs() -> BuildEnvOutputs {
@@ -2760,6 +2764,7 @@ mod materialise_retry_tests {
 
     #[test]
     fn succeeds_on_first_attempt_when_paths_present() {
+        init_tracing();
         let result = materialise_with_retry(|| Ok(()), Vec::new, Vec::new, || Ok(fake_outputs()));
         assert_eq!(result.unwrap(), fake_outputs());
     }
@@ -2768,6 +2773,7 @@ mod materialise_retry_tests {
 
     #[test]
     fn retries_when_paths_missing_before_build_env_then_succeeds() {
+        init_tracing();
         // missing_paths call count:
         //   attempt 1: pre-build → missing (GC detected, retry)
         //   attempt 2: pre-build → present
@@ -2799,6 +2805,7 @@ mod materialise_retry_tests {
 
     #[test]
     fn materialisation_failed_when_paths_always_missing_before_build_env() {
+        init_tracing();
         let missing = vec![
             "/nix/store/aaaa-missing".to_string(),
             "/nix/store/bbbb-missing".to_string(),
@@ -2822,6 +2829,7 @@ mod materialise_retry_tests {
 
     #[test]
     fn retries_when_gc_detected_after_build_env_failure() {
+        init_tracing();
         // Sequence:
         //   attempt 1: pre-build → present; build_env → Err; post-build → missing (GC, retry)
         //   attempt 2: pre-build → present; build_env → Ok
@@ -2862,6 +2870,7 @@ mod materialise_retry_tests {
 
     #[test]
     fn materialisation_failed_when_gc_detected_after_build_env_on_final_attempt() {
+        init_tracing();
         // Paths always disappear after build_env fails — exhausts all retries.
         let missing_call = Cell::new(0usize);
         let result = materialise_with_retry(
@@ -2889,6 +2898,7 @@ mod materialise_retry_tests {
 
     #[test]
     fn build_env_error_propagates_immediately_when_paths_still_present() {
+        init_tracing();
         // build_env fails but re-stat shows nothing missing — deterministic
         // failure, must not retry.
         let realise_calls = Cell::new(0usize);
@@ -2921,6 +2931,7 @@ mod materialise_retry_tests {
 
     #[test]
     fn realise_error_propagates_immediately() {
+        init_tracing();
         let build_called = Cell::new(false);
         let result = materialise_with_retry(
             || Err(BuildEnvError::Build("realise failed".to_string())),
