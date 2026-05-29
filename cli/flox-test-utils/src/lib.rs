@@ -26,6 +26,22 @@ pub static GENERATED_DATA: LazyLock<PathBuf> =
 pub static MANUALLY_GENERATED: LazyLock<PathBuf> =
     LazyLock::new(|| PathBuf::from(std::env::var("MANUALLY_GENERATED").unwrap()));
 
+/// Initialise a tracing subscriber for the current test binary.
+///
+/// Routes tracing events (`warn!`, `debug!`, etc.) through Rust's test-capture
+/// infrastructure so they appear in the output of *failing* tests without
+/// cluttering passing ones. Safe to call from any number of tests in the same
+/// binary; `try_init` is a no-op if a subscriber is already installed.
+///
+/// Call this at the top of any test that exercises code paths where tracing
+/// events would aid diagnosis of failures.
+pub fn init_tracing() {
+    let _ = tracing_subscriber::fmt()
+        .with_test_writer()
+        .with_max_level(tracing::Level::DEBUG)
+        .try_init();
+}
+
 // Modifications to `rexpect`:
 // - The built-in reader used by `rexpect` has a hard-coded sleep interval of 100ms,
 //   so a command that's even 1ms later than the `wait_for_prompt` call will take

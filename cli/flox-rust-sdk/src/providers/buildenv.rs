@@ -1369,12 +1369,14 @@ fn join_realise_results(
 
 #[cfg(test)]
 mod test_helpers {
+    pub(super) use flox_test_utils::init_tracing;
     use tempfile::TempDir;
 
     use super::*;
     use crate::providers::nix_auth::NixAuth;
 
     pub(super) fn buildenv_instance() -> BuildEnvNix<TempDir, NixAuth> {
+        init_tracing();
         let tempdir = TempDir::new().unwrap();
         let auth = NixAuth::from_tempdir_and_token(TempDir::new().unwrap(), None);
         BuildEnvNix::new(tempdir, auth)
