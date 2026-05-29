@@ -16,6 +16,7 @@ load test_support.bash
 # ---------------------------------------------------------------------------- #
 
 setup_file() {
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
   common_file_setup
 }
 
@@ -61,7 +62,6 @@ teardown() {
 # bats test_tags=deactivate
 @test "deactivate restores environment variables (bash)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
 
@@ -97,7 +97,6 @@ EOF
 # bats test_tags=deactivate
 @test "deactivate restores environment variables (fish)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
 
@@ -134,7 +133,6 @@ EOF
 @test "deactivate restores environment variables (tcsh)" {
   skip "tcsh fails due to FLOX_PROMPT_ENVIRONMENTS undefined variable issue"
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
 
@@ -170,7 +168,6 @@ EOF
 # bats test_tags=deactivate
 @test "deactivate restores environment variables (zsh)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
 
@@ -206,7 +203,6 @@ EOF
 # bats test_tags=deactivate
 @test "deactivate unsets added variables (bash)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
 
@@ -243,7 +239,6 @@ EOF
 # bats test_tags=deactivate
 @test "deactivate unsets added variables (fish)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
 
@@ -281,7 +276,6 @@ EOF
 @test "deactivate unsets added variables (tcsh)" {
   skip "tcsh fails due to FLOX_PROMPT_ENVIRONMENTS undefined variable issue"
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
 
@@ -318,7 +312,6 @@ EOF
 # bats test_tags=deactivate
 @test "deactivate unsets added variables (zsh)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
 
@@ -356,7 +349,6 @@ EOF
 @test "deactivate is no-op without activation" {
   skip "deactivate --print-script not yet implemented"
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
 
   # What this is testing:
   # - When _FLOX_HOOK_DIFF doesn't exist (no prior activation)
