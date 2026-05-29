@@ -109,10 +109,13 @@ _ALLOWED_LEAKS_RE="^(${_ALLOWED_LEAKS_NAMES})\$"
 #   __NIX_DARWIN_SET_ENVIRONMENT_DONE
 #                                 — nix-darwin marker on macOS runners
 #   PATH_LOCALE                   — set by the activated env's locale
-#                                   archive; orthogonal to the
+#                                   archive on macOS; orthogonal to the
 #                                   activate/deactivate lifecycle this
 #                                   test guards.
-_TEST_HARNESS_NOISE_RE='^(__FT_RAN_.*|_FLOX_LOCAL_DEV|_FLOX_TEST_SUITE_MODE|_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS|_FLOX_USE_CATALOG_MOCK|__CF_USER_TEXT_ENCODING|__NIX_DARWIN_SET_ENVIRONMENT_DONE|PATH_LOCALE)\$'
+#   NIX_SSL_CERT_FILE             — set by the activated env's CA-cert
+#                                   bundle on Linux; same orthogonality
+#                                   as PATH_LOCALE.
+_TEST_HARNESS_NOISE_RE='^(__FT_RAN_.*|_FLOX_LOCAL_DEV|_FLOX_TEST_SUITE_MODE|_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS|_FLOX_USE_CATALOG_MOCK|__CF_USER_TEXT_ENCODING|__NIX_DARWIN_SET_ENVIRONMENT_DONE|PATH_LOCALE|NIX_SSL_CERT_FILE)$'
 
 # bats test_tags=deactivate,deactivate:state:bash
 @test "bash: deactivate restores pre-activation shell state" {
