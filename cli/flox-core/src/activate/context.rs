@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use shell_gen::ShellWithPath;
@@ -133,32 +132,76 @@ pub enum AutoActivateFishMode {
     DisableArrow,
 }
 
-#[derive(Clone, Debug, Deserialize, derive_more::Display, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum InvocationType {
-    #[display("inplace")]
     InPlace,
-    #[display("interactive")]
     Interactive,
-    #[display("inplace")]
     ShellCommand(String),
-    #[display("inplace")]
     ExecCommand(Vec<String>),
-}
-
-impl FromStr for InvocationType {
-    type Err = std::convert::Infallible;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "interactive" => Ok(InvocationType::Interactive),
-            _ => Ok(InvocationType::InPlace),
-        }
-    }
 }
 
 impl InvocationType {
     pub fn is_in_place(&self) -> bool {
         matches!(self, Self::InPlace)
+    }
+
+    pub fn kind(&self) -> InvocationKind {
+        match self {
+            Self::InPlace => InvocationKind::InPlace,
+            Self::Interactive => InvocationKind::Interactive,
+            Self::ShellCommand(_) => InvocationKind::ShellCommand,
+            Self::ExecCommand(_) => InvocationKind::ExecCommand,
+        }
+    }
+}
+
+/// Drops the user command wrapped by `ShellCommand` and `ExecCommand` so we can
+/// roundtrip with InvocationKind
+impl std::fmt::Display for InvocationType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.kind())
+    }
+}
+
+#[derive(Clone, Copy, Debug, derive_more::Display, derive_more::FromStr, Eq, PartialEq)]
+#[display(rename_all = "snake_case")]
+#[from_str(rename_all = "snake_case")]
+pub enum InvocationKind {
+    InPlace,
+    Interactive,
+    ShellCommand,
+    ExecCommand,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invocation_type_display_round_trips_to_kind() {
+        let cases = [
+            (InvocationType::InPlace, InvocationKind::InPlace),
+            (InvocationType::Interactive, InvocationKind::Interactive),
+            (
+                InvocationType::ShellCommand("echo hi".to_string()),
+                InvocationKind::ShellCommand,
+            ),
+            (
+                InvocationType::ExecCommand(vec!["ls".to_string(), "-l".to_string()]),
+                InvocationKind::ExecCommand,
+            ),
+        ];
+
+        for (invocation_type, kind) in cases {
+            assert_eq!(invocation_type.kind(), kind);
+            assert_eq!(
+                invocation_type
+                    .to_string()
+                    .parse::<InvocationKind>()
+                    .unwrap(),
+                kind,
+            );
+        }
     }
 }

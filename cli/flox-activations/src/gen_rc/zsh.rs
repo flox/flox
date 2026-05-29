@@ -272,7 +272,7 @@ mod tests {
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
             source /interpreter/activate.d/zsh;
-            typeset -g _FLOX_INVOCATION_TYPE=inplace;
+            typeset -g _FLOX_INVOCATION_TYPE=in_place;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
         "#]]
