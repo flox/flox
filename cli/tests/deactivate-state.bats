@@ -141,64 +141,13 @@ _assert_state_restored() {
   pre="${BATS_TEST_TMPDIR}/pre.txt"
   post="${BATS_TEST_TMPDIR}/post.txt"
 
-  # Bash dump helper. Captures:
-  #   1. `set -o` options (errexit, pipefail, ...)
-  #   2. `shopt -p` options (extglob, globstar, ...)
-  #   3. Function names (sorted), then full bodies via `declare -f`.
-  #   4. Variable names from `compgen -v`, filtered for shell-internal
-  #      volatiles that change on every command (LINENO, RANDOM, _, ...).
-  # We dump *names*, not values, to avoid noise from values that
-  # legitimately change during the activate→deactivate cycle (e.g. PWD).
-  # We also drop names matching $_ALLOWED_LEAKS_RE before snapshotting;
-  # this keeps the diff sensitive to *new* leaks while ignoring the
-  # ones already cleared as intentional.
-  run bash -c "
-    set +e
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
-    export FLOX_SHELL=\"\$(command -v bash)\"
-    # Stable ordering across platforms — macOS's default locale and Linux's
-    # collate underscores differently, which swaps the position of names
-    # like BASHOPTS / BATS_LIB_PATH between sort runs.
-    export LC_ALL=C
-
-    _flox_dump_state() {
-      local out=\"\$1\"
-      {
-        echo '=== SET_OPTIONS ==='
-        set -o | sort
-        echo '=== SHOPT ==='
-        shopt -p | sort
-        echo '=== FUNCTIONS ==='
-        compgen -A function \
-          | sort \
-          | grep -vE '^(_flox_dump_state|${_ALLOWED_LEAKS_NAMES})\$'
-        echo '=== FUNCTION_BODIES ==='
-        # declare -f dumps all functions; strip the dump helper and
-        # allow-listed names (matched by 'NAME ()' header line).
-        declare -f \
-          | awk -v leaks='${_ALLOWED_LEAKS_NAMES}' '
-              BEGIN{ skip=0 }
-              /^_flox_dump_state \\(\\) *\$/ { skip=1; next }
-              \$0 ~ \"^(\" leaks \") \\\\(\\\\) *\$\" { skip=1; next }
-              skip && /^\\} *\$/ { skip=0; next }
-              !skip
-            '
-        echo '=== VARIABLES ==='
-        compgen -v \
-          | sort -u \
-          | grep -vE '^(BASH(PID|_LINENO|_SOURCE|_COMMAND|_ARGV|_ARGC|_REMATCH|_SUBSHELL)|FUNCNAME|LINENO|SECONDS|RANDOM|SRANDOM|_|PIPESTATUS|HISTCMD|EPOCHSECONDS|EPOCHREALTIME|COLUMNS|LINES|OPTIND|OPTARG|out)\$' \
-          | grep -vE '${_ALLOWED_LEAKS_RE}' \
-          | grep -vE '${_TEST_HARNESS_NOISE_RE}'
-      } > \"\$out\"
-    }
-
-    _flox_dump_state '$pre'
-
-    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
-    eval \"\$($FLOX_BIN deactivate --print-script)\"
-
-    _flox_dump_state '$post'
-  "
+  # bash dump primitives:
+  #   - `set -o` / `shopt -p`   → shell options
+  #   - `compgen -A function` / `declare -f`
+  #                             → function names (sorted) and bodies
+  #   - `compgen -v`            → variable names, including non-exported
+  # The actual filter/dump lives in dump.bash; see comments there.
+  run bash "$TESTS_DIR/deactivate-state/dump.bash" "$pre" "$post"
   assert_success
 
   _assert_state_restored bash "$pre" "$post"
