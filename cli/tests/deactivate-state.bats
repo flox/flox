@@ -92,8 +92,8 @@ teardown() {
 #                    gen_rc/zsh.rs Action::Deactivate("TODO: we might
 #                    not need to set these in the first place").
 #                    Remove from allow-list once that TODO is resolved.
-_ALLOWED_LEAKS_NAMES='_flox_hook|PROMPT_COMMAND|_FLOX_SOURCED_PROFILE_SCRIPTS|_activate_d|_flox_activate_tracer|_flox_activations'
-_ALLOWED_LEAKS_RE="^(${_ALLOWED_LEAKS_NAMES})\$"
+export _ALLOWED_LEAKS_NAMES='_flox_hook|PROMPT_COMMAND|_FLOX_SOURCED_PROFILE_SCRIPTS|_activate_d|_flox_activate_tracer|_flox_activations'
+export _ALLOWED_LEAKS_RE="^(${_ALLOWED_LEAKS_NAMES})\$"
 
 # Names that come from the test harness or the host OS, not from
 # activate/deactivate. Filtered out of both snapshots so the diff
@@ -115,7 +115,24 @@ _ALLOWED_LEAKS_RE="^(${_ALLOWED_LEAKS_NAMES})\$"
 #   NIX_SSL_CERT_FILE             — set by the activated env's CA-cert
 #                                   bundle on Linux; same orthogonality
 #                                   as PATH_LOCALE.
-_TEST_HARNESS_NOISE_RE='^(__FT_RAN_.*|_FLOX_LOCAL_DEV|_FLOX_TEST_SUITE_MODE|_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS|_FLOX_USE_CATALOG_MOCK|__CF_USER_TEXT_ENCODING|__NIX_DARWIN_SET_ENVIRONMENT_DONE|PATH_LOCALE|NIX_SSL_CERT_FILE)$'
+export _TEST_HARNESS_NOISE_RE='^(__FT_RAN_.*|_FLOX_LOCAL_DEV|_FLOX_TEST_SUITE_MODE|_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS|_FLOX_USE_CATALOG_MOCK|__CF_USER_TEXT_ENCODING|__NIX_DARWIN_SET_ENVIRONMENT_DONE|PATH_LOCALE|NIX_SSL_CERT_FILE)$'
+
+# Shared assertion: fail with the diff inline if pre and post snapshots
+# differ. Caller passes a label naming the shell whose state was checked.
+_assert_state_restored() {
+  local shell="$1" pre="$2" post="$3"
+  run diff -u "$pre" "$post"
+  if [ "$status" -ne 0 ]; then
+    {
+      echo "Shell state was not restored after deactivate."
+      echo "If the leak is intentional, add the name to the"
+      echo "_ALLOWED_LEAKS_RE allow-list with a justification."
+      echo
+      echo "$output"
+    } >&2
+    fail "$shell state differs between pre-activate and post-deactivate"
+  fi
+}
 
 # bats test_tags=deactivate,deactivate:state:bash
 @test "bash: deactivate restores pre-activation shell state" {
@@ -184,17 +201,71 @@ _TEST_HARNESS_NOISE_RE='^(__FT_RAN_.*|_FLOX_LOCAL_DEV|_FLOX_TEST_SUITE_MODE|_FLO
   "
   assert_success
 
-  # The diff should be empty modulo $_ALLOWED_LEAKS_RE (already filtered
-  # out of both snapshots). If non-empty, surface it inline.
-  run diff -u "$pre" "$post"
-  if [ "$status" -ne 0 ]; then
-    {
-      echo "Shell state was not restored after deactivate."
-      echo "If the leak is intentional, add the name to the"
-      echo "_ALLOWED_LEAKS_RE allow-list with a justification."
-      echo
-      diff -u "$pre" "$post"
-    } >&2
-    fail "bash state differs between pre-activate and post-deactivate"
-  fi
+  _assert_state_restored bash "$pre" "$post"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=deactivate,deactivate:state:zsh
+@test "zsh: deactivate restores pre-activation shell state" {
+  project_setup
+
+  pre="${BATS_TEST_TMPDIR}/pre.txt"
+  post="${BATS_TEST_TMPDIR}/post.txt"
+
+  # zsh dump primitives differ from bash:
+  #   - `setopt`                 → set options (errexit, pipefail, …)
+  #   - `print -l ${(ko)functions}` / `functions NAME`
+  #                              → function names (sorted) and bodies
+  #   - `print -l ${(ko)parameters}`
+  #                              → variable names (sorted), including
+  #                                non-exported locals.
+  # The actual filter/dump lives in dump.zsh; see comments there.
+  run zsh "$TESTS_DIR/deactivate-state/dump.zsh" "$pre" "$post"
+  assert_success
+
+  _assert_state_restored zsh "$pre" "$post"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=deactivate,deactivate:state:fish
+@test "fish: deactivate restores pre-activation shell state" {
+  project_setup
+
+  pre="${BATS_TEST_TMPDIR}/pre.txt"
+  post="${BATS_TEST_TMPDIR}/post.txt"
+
+  # fish dump primitives:
+  #   - `functions --names`     → function names (comma-separated;
+  #                               split with `string split`)
+  #   - `functions NAME`        → function body
+  #   - `set --names`           → variable names across all scopes
+  # fish has no shopt/setopt equivalent. See dump.fish for details.
+  run fish "$TESTS_DIR/deactivate-state/dump.fish" "$pre" "$post"
+  assert_success
+
+  _assert_state_restored fish "$pre" "$post"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=deactivate,deactivate:state:tcsh
+@test "tcsh: deactivate restores pre-activation shell state" {
+  project_setup
+
+  pre="${BATS_TEST_TMPDIR}/pre.txt"
+  post="${BATS_TEST_TMPDIR}/post.txt"
+
+  # tcsh dump shape differs from the other shells:
+  #   - `alias`                 → alias definitions (csh has no
+  #                               functions)
+  #   - `set`                   → shell-variable names (awk extracts
+  #                               the first whitespace field)
+  #   - `setenv`                → env-variable names (awk splits on `=`)
+  # See dump.tcsh for details.
+  run tcsh "$TESTS_DIR/deactivate-state/dump.tcsh" "$pre" "$post"
+  assert_success
+
+  _assert_state_restored tcsh "$pre" "$post"
 }
