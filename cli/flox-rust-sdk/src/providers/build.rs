@@ -1204,7 +1204,7 @@ mod tests {
 
     use anyhow::Context;
     use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
-    use flox_test_utils::GENERATED_DATA;
+    use flox_test_utils::{GENERATED_DATA, init_tracing};
     use indoc::{formatdoc, indoc};
 
     use super::test_helpers::*;
@@ -3410,6 +3410,7 @@ mod tests {
     /// Test that cmake can make use of the CMAKE_PREFIX_PATH variable as
     /// set by etc-profiles.
     async fn build_can_use_cmake(sandbox: bool) {
+        init_tracing();
         let package_name = String::from("hello-cmake");
         // from: test_data/input_data/build/hello-cmake/HelloTarget/share/hello/HelloTarget.cmake
         let file_name = String::from("hello.txt");
