@@ -1061,6 +1061,38 @@ EOF
   assert_line "deactivated: none"
 }
 
+# bats test_tags=activate,activate:rc:zsh
+@test "zsh: deactivate inner activation cleans up completions" {
+  # PROJECT_DIR (outer env): no packages — fd must NOT be available from
+  # the outer env so we can verify the inner deactivation removes it.
+  project_setup
+
+  # Inner env: install fd so its completions appear when activated.
+  local inner_dir="${BATS_TEST_TMPDIR}/inner-${BATS_TEST_NUMBER}"
+  mkdir -p "$inner_dir"
+  "$FLOX_BIN" init --dir "$inner_dir"
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/fd.yaml" \
+    "$FLOX_BIN" install --dir "$inner_dir" fd
+
+  # Clear any leaked hook vars (same reasoning as the test above).
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  unset _FLOX_HOOK_SAVE_FPATH _FLOX_HOOK_SAVE_COMPINIT_DUMPFILE _FLOX_HOOK_DIFF
+  run zsh -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(command -v zsh)
+    autoload -Uz compinit
+    compinit
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    eval \"\$($FLOX_BIN activate -d $inner_dir)\"
+    print -- \"inner active: \${_comps[fd]:-none}\"
+    eval \"\$($FLOX_BIN deactivate --print-script \"\$_FLOX_INVOCATION_TYPE\")\"
+    print -- \"inner deactivated: \${_comps[fd]:-none}\"
+  "
+  assert_success
+  assert_line "inner active: _fd"
+  assert_line "inner deactivated: none"
+}
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:envVar:bash
