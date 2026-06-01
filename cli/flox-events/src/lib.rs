@@ -3,9 +3,8 @@
 //! Types only. There is no sink, no context, and no emission machinery
 //! in this crate.
 
-use serde::{Serialize, Serializer};
+use serde::Serialize;
 use time::OffsetDateTime;
-use time::format_description::well_known::Iso8601;
 use uuid::Uuid;
 
 /// A single telemetry event in the canonical envelope shape.
@@ -21,7 +20,7 @@ pub struct Event {
     /// Unique id for this event (used downstream for de-duplication).
     pub event_id: Uuid,
     /// When the event occurred.
-    #[serde(serialize_with = "serialize_iso8601")]
+    #[serde(with = "time::serde::iso8601")]
     pub event_timestamp: OffsetDateTime,
     /// The producer. Always `"cli"`.
     pub source: &'static str,
@@ -65,21 +64,17 @@ pub struct CliCommandRunPayload {}
 #[derive(Debug, Clone, Serialize)]
 pub struct CliCommandCompletedPayload {}
 
-fn serialize_iso8601<S: Serializer>(
-    timestamp: &OffsetDateTime,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    let formatted = timestamp
-        .format(&Iso8601::DEFAULT)
-        .map_err(serde::ser::Error::custom)?;
-    serializer.serialize_str(&formatted)
-}
-
 #[cfg(test)]
 mod tests {
     use serde_json::json;
 
     use super::*;
+
+    /// The wire form of `OffsetDateTime::from_unix_timestamp(0)` under
+    /// `time::serde::iso8601` — the 6-digit-signed-year ISO 8601 extended
+    /// representation. Hardcoded so the test fails loudly if the `time`
+    /// crate ever changes its default ISO 8601 config.
+    const EPOCH_ISO8601: &str = "+001970-01-01T00:00:00.000000000Z";
 
     fn fixed_event(kind: EventKind) -> Event {
         Event {
@@ -94,13 +89,6 @@ mod tests {
         }
     }
 
-    fn iso8601_unix_zero() -> String {
-        OffsetDateTime::from_unix_timestamp(0)
-            .expect("0 is a valid unix timestamp")
-            .format(&Iso8601::DEFAULT)
-            .expect("Iso8601::DEFAULT formats successfully")
-    }
-
     #[test]
     fn command_run_serializes_to_canonical_envelope() {
         let value = serde_json::to_value(fixed_event(EventKind::CliCommandRun(
@@ -109,7 +97,7 @@ mod tests {
         .expect("event serializes");
         let expected = json!({
             "event_id": "00000000-0000-0000-0000-000000000000",
-            "event_timestamp": iso8601_unix_zero(),
+            "event_timestamp": EPOCH_ISO8601,
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
@@ -127,7 +115,7 @@ mod tests {
         .expect("event serializes");
         let expected = json!({
             "event_id": "00000000-0000-0000-0000-000000000000",
-            "event_timestamp": iso8601_unix_zero(),
+            "event_timestamp": EPOCH_ISO8601,
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
@@ -144,7 +132,7 @@ mod tests {
         let value = serde_json::to_value(event).expect("event serializes");
         let expected = json!({
             "event_id": "00000000-0000-0000-0000-000000000000",
-            "event_timestamp": iso8601_unix_zero(),
+            "event_timestamp": EPOCH_ISO8601,
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
