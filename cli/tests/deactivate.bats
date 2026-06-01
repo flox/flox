@@ -86,7 +86,7 @@ EOF
     export TEST_VAR=original
     eval "$($FLOX_BIN activate --print-script)"
     echo "during:$TEST_VAR"
-    eval "$($FLOX_BIN deactivate --print-script)"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
     echo "after:$TEST_VAR"
   '
   assert_success
@@ -121,7 +121,7 @@ EOF
     set -gx TEST_VAR original
     eval "$($FLOX_BIN activate --print-script)"
     echo "during:$TEST_VAR"
-    eval "$($FLOX_BIN deactivate --print-script)"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
     echo "after:$TEST_VAR"
   '
   assert_success
@@ -157,7 +157,7 @@ EOF
     setenv TEST_VAR original
     eval "`$FLOX_BIN activate --print-script`"
     echo "during:$TEST_VAR"
-    eval "`$FLOX_BIN deactivate --print-script`"
+    eval "`$FLOX_BIN deactivate --print-script $_FLOX_INVOCATION_TYPE`"
     echo "after:$TEST_VAR"
   '
   assert_success
@@ -192,7 +192,7 @@ EOF
     export TEST_VAR=original
     eval "$($FLOX_BIN activate --print-script)"
     echo "during:$TEST_VAR"
-    eval "$($FLOX_BIN deactivate --print-script)"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
     echo "after:$TEST_VAR"
   '
   assert_success
@@ -226,7 +226,7 @@ EOF
   FLOX_SHELL="bash" run --separate-stderr bash -c '
     eval "$($FLOX_BIN activate --print-script)"
     echo "during:$TEST_NEW_VAR"
-    eval "$($FLOX_BIN deactivate --print-script)"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
     if [ -z "${TEST_NEW_VAR+x}" ]; then
       echo "after:unset"
     fi
@@ -262,7 +262,7 @@ EOF
   SHELL="$(which fish)" run --separate-stderr fish -c '
     eval "$($FLOX_BIN activate --print-script)"
     echo "during:$TEST_NEW_VAR"
-    eval "$($FLOX_BIN deactivate --print-script)"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
     if not set -q TEST_NEW_VAR
       echo "after:unset"
     end
@@ -299,7 +299,7 @@ EOF
   SHELL="$(which tcsh)" run --separate-stderr tcsh -c '
     eval "`$FLOX_BIN activate --print-script`"
     echo "during:$TEST_NEW_VAR"
-    eval "`$FLOX_BIN deactivate --print-script`"
+    eval "`$FLOX_BIN deactivate --print-script $_FLOX_INVOCATION_TYPE`"
     if ( ! $?TEST_NEW_VAR ) then
       echo "after:unset"
     endif
@@ -335,7 +335,7 @@ EOF
   FLOX_SHELL="zsh" run --separate-stderr zsh -c '
     eval "$($FLOX_BIN activate --print-script)"
     echo "during:$TEST_NEW_VAR"
-    eval "$($FLOX_BIN deactivate --print-script)"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
     if [ -z "${TEST_NEW_VAR+x}" ]; then
       echo "after:unset"
     fi
@@ -413,7 +413,7 @@ assert_prompt_round_trip() {
     echo "<before>$PS1</before>"
     eval "$("$FLOX_BIN" activate -d "$PROJECT_DIR")"
     echo "<active>$PS1</active>"
-    eval "$("$FLOX_BIN" deactivate --print-script)"
+    eval "$("$FLOX_BIN" deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
     echo "<after>$PS1</after>"
   '
   assert_success
@@ -428,7 +428,7 @@ assert_prompt_round_trip() {
     echo "<before>$PS1</before>"
     eval "$("$FLOX_BIN" activate -d "$PROJECT_DIR")"
     echo "<active>$PS1</active>"
-    eval "$("$FLOX_BIN" deactivate --print-script)"
+    eval "$("$FLOX_BIN" deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
     echo "<after>$PS1</after>"
   '
   assert_success
@@ -443,7 +443,7 @@ assert_prompt_round_trip() {
     echo "<before>"(fish_prompt)"</before>"
     eval ($FLOX_BIN activate -d $PROJECT_DIR)
     echo "<active>"(fish_prompt)"</active>"
-    eval ($FLOX_BIN deactivate --print-script)
+    eval ($FLOX_BIN deactivate --print-script $_FLOX_INVOCATION_TYPE)
     echo "<after>"(fish_prompt)"</after>"
   '
   assert_success
@@ -458,7 +458,7 @@ assert_prompt_round_trip() {
     echo "<before>$prompt</before>"
     eval "`$FLOX_BIN activate -d $PROJECT_DIR`"
     echo "<active>$prompt</active>"
-    eval "`$FLOX_BIN deactivate --print-script`"
+    eval "`$FLOX_BIN deactivate --print-script $_FLOX_INVOCATION_TYPE`"
     echo "<after>$prompt</after>"
   '
   assert_success
