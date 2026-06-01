@@ -6,7 +6,7 @@ pub mod diff_serializer;
 
 use anyhow::Result;
 use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
-use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
+use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVE_ENVIRONMENTS_VAR};
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
 use itertools::Itertools;
@@ -308,6 +308,15 @@ pub fn single_set_envs(context: &AttachCtx) -> HashMap<&'static str, String> {
         (
             FLOX_PROMPT_ENVIRONMENTS_VAR,
             context.flox_prompt_environments.clone(),
+        ),
+        // Path to the flox-activations binary. Folded in here (rather than
+        // emitted inline by the gen_rc scripts) so it is captured in the
+        // activation diff and unset on deactivate. Runtime profile scripts
+        // re-derive it from `@flox_activations@`, so losing the gen_rc
+        // re-export does not affect them.
+        (
+            "_flox_activations",
+            FLOX_ACTIVATIONS_BIN.to_string_lossy().to_string(),
         ),
     ]);
 

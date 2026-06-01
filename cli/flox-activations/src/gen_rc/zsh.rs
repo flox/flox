@@ -262,6 +262,7 @@ mod tests {
             export FLOX_PROMPT_COLOR_2=2;
             export FLOX_PROMPT_ENVIRONMENTS=prompt_envs;
             export _FLOX_ACTIVE_ENVIRONMENTS=active_envs;
+            export _flox_activations=/flox_activations;
             export ADDED_VAR=ADDED_VALUE;
             export FLOX_ACTIVATE_START_SERVICES=false;
             export FLOX_ENV=/flox_env;
@@ -297,6 +298,7 @@ mod tests {
             unset PATH;
             unset QUOTED_VAR;
             unset _FLOX_ACTIVE_ENVIRONMENTS;
+            unset _flox_activations;
             export MODIFIED_VAR=MODIFIED_ORIGINAL;
             export DELETED_VAR=DELETED_ORIGINAL;
             unset _FLOX_HOOK_DIFF;
