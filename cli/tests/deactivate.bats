@@ -16,6 +16,7 @@ load test_support.bash
 # ---------------------------------------------------------------------------- #
 
 setup_file() {
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
   common_file_setup
 }
 
@@ -61,7 +62,6 @@ teardown() {
 # bats test_tags=deactivate
 @test "deactivate restores environment variables (bash)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
 
@@ -97,7 +97,6 @@ EOF
 # bats test_tags=deactivate
 @test "deactivate restores environment variables (fish)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
 
@@ -134,7 +133,6 @@ EOF
 @test "deactivate restores environment variables (tcsh)" {
   skip "tcsh fails due to FLOX_PROMPT_ENVIRONMENTS undefined variable issue"
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
 
@@ -170,7 +168,6 @@ EOF
 # bats test_tags=deactivate
 @test "deactivate restores environment variables (zsh)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
 
@@ -206,7 +203,6 @@ EOF
 # bats test_tags=deactivate
 @test "deactivate unsets added variables (bash)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
 
@@ -243,7 +239,6 @@ EOF
 # bats test_tags=deactivate
 @test "deactivate unsets added variables (fish)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
 
@@ -281,7 +276,6 @@ EOF
 @test "deactivate unsets added variables (tcsh)" {
   skip "tcsh fails due to FLOX_PROMPT_ENVIRONMENTS undefined variable issue"
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
 
@@ -318,7 +312,6 @@ EOF
 # bats test_tags=deactivate
 @test "deactivate unsets added variables (zsh)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
 
@@ -356,7 +349,6 @@ EOF
 @test "deactivate is no-op without activation" {
   skip "deactivate --print-script not yet implemented"
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
 
   # What this is testing:
   # - When _FLOX_HOOK_DIFF doesn't exist (no prior activation)
@@ -371,3 +363,108 @@ EOF
   assert_success
   assert_line "after:unchanged"
 }
+
+# ---------------------------------------------------------------------------- #
+# Prompt tests
+# ---------------------------------------------------------------------------- #
+
+# Extract content from the first match for <tag>...content...</tag>
+extract_tagged_content() {
+  local output="${1?}"
+  shift
+  local tag="${1?}"
+  shift
+  local match
+  match=$(grep -o -m1 "<${tag}>.*</${tag}>" <<< "$output")
+  match=${match#"<${tag}>"}
+  match=${match%"</${tag}>"}
+  echo -n "$match"
+}
+
+# Each test's inner shell wraps the prompt observed at each phase of the
+# round-trip in tags:
+#
+#     <before>PROMPT</before>
+#     <active>PROMPT</active>
+#     <after>PROMPT</after>
+assert_prompt_round_trip() {
+  local output="${1?}"
+  shift
+
+  local before active after
+  before=$(extract_tagged_content "$output" before)
+  active=$(extract_tagged_content "$output" active)
+  after=$(extract_tagged_content "$output" after)
+
+  [ -n "$before" ]
+  [ -n "$active" ]
+  [ -n "$after" ]
+
+  assert_not_equal "$before" "$active"
+  assert_equal "$before" "$after"
+}
+
+
+# bats test_tags=deactivate,deactivate:prompt,deactivate:prompt:bash
+@test "bash: deactivate --print-script restores prompt" {
+  project_setup
+  run unbuffer bash --norc --noprofile -c '
+    export PS1="knownPrompt> "
+    echo "<before>$PS1</before>"
+    eval "$("$FLOX_BIN" activate -d "$PROJECT_DIR")"
+    echo "<active>$PS1</active>"
+    eval "$("$FLOX_BIN" deactivate --print-script)"
+    echo "<after>$PS1</after>"
+  '
+  assert_success
+  assert_prompt_round_trip "$output"
+}
+
+# bats test_tags=deactivate,deactivate:prompt,deactivate:prompt:zsh
+@test "zsh: deactivate --print-script restores prompt" {
+  project_setup
+  run unbuffer zsh -f -i -c '
+    export PS1="knownPrompt> "
+    echo "<before>$PS1</before>"
+    eval "$("$FLOX_BIN" activate -d "$PROJECT_DIR")"
+    echo "<active>$PS1</active>"
+    eval "$("$FLOX_BIN" deactivate --print-script)"
+    echo "<after>$PS1</after>"
+  '
+  assert_success
+  assert_prompt_round_trip "$output"
+}
+
+# bats test_tags=deactivate,deactivate:prompt,deactivate:prompt:fish
+@test "fish: deactivate --print-script restores prompt" {
+  project_setup
+  run unbuffer fish -c '
+    function fish_prompt; echo -n "knownPrompt> "; end
+    echo "<before>"(fish_prompt)"</before>"
+    eval ($FLOX_BIN activate -d $PROJECT_DIR)
+    echo "<active>"(fish_prompt)"</active>"
+    eval ($FLOX_BIN deactivate --print-script)
+    echo "<after>"(fish_prompt)"</after>"
+  '
+  assert_success
+  assert_prompt_round_trip "$output"
+}
+
+# bats test_tags=deactivate,deactivate:prompt,deactivate:prompt:tcsh
+@test "tcsh: deactivate --print-script restores prompt" {
+  project_setup
+  run unbuffer tcsh -c '
+    set prompt = "knownPrompt> "
+    echo "<before>$prompt</before>"
+    eval "`$FLOX_BIN activate -d $PROJECT_DIR`"
+    echo "<active>$prompt</active>"
+    eval "`$FLOX_BIN deactivate --print-script`"
+    echo "<after>$prompt</after>"
+  '
+  assert_success
+  assert_prompt_round_trip "$output"
+}
+
+# ---------------------------------------------------------------------------- #
+# end prompt tests
+# ---------------------------------------------------------------------------- #
