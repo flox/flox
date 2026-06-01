@@ -4,6 +4,7 @@
 //! in this crate.
 
 use serde::Serialize;
+use serde_with::{TimestampMilliSeconds, serde_as};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -15,12 +16,18 @@ use uuid::Uuid;
 /// auth_subject?, event_type, payload}`.
 ///
 /// Serialize-only: the CLI produces events, it never reads them back.
+#[serde_as]
 #[derive(Debug, Clone, Serialize)]
 pub struct Event {
     /// Unique id for this event (used downstream for de-duplication).
     pub event_id: Uuid,
-    /// When the event occurred.
-    #[serde(with = "time::serde::iso8601")]
+    /// When the event occurred. Serialized as an integer millisecond
+    /// count since the Unix epoch — matches the downstream
+    /// `DateTime64(3, 'UTC')` storage granularity, avoids the
+    /// `f64`-mantissa precision loss that bites nanosecond timestamps
+    /// when consumers parse JSON numbers as floats, and avoids the
+    /// timezone-ambiguity class entirely (no offset, no DST gaps).
+    #[serde_as(as = "TimestampMilliSeconds<i64>")]
     pub event_timestamp: OffsetDateTime,
     /// The producer. Always `"cli"`.
     pub source: &'static str,
@@ -72,10 +79,9 @@ mod tests {
     use super::*;
 
     /// The wire form of `OffsetDateTime::from_unix_timestamp(0)` under
-    /// `time::serde::iso8601` — the 6-digit-signed-year ISO 8601 extended
-    /// representation. Hardcoded so the test fails loudly if the `time`
-    /// crate ever changes its default ISO 8601 config.
-    const EPOCH_ISO8601: &str = "+001970-01-01T00:00:00.000000000Z";
+    /// `TimestampMilliSeconds<i64>` — milliseconds since the Unix
+    /// epoch, where 1970-01-01T00:00:00Z is exactly 0.
+    const EPOCH_UNIX_MS: i64 = 0;
 
     fn fixed_event(kind: EventKind) -> Event {
         Event {
@@ -98,7 +104,7 @@ mod tests {
         .expect("event serializes");
         let expected = json!({
             "event_id": "00000000-0000-0000-0000-000000000000",
-            "event_timestamp": EPOCH_ISO8601,
+            "event_timestamp": EPOCH_UNIX_MS,
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
@@ -116,7 +122,7 @@ mod tests {
         .expect("event serializes");
         let expected = json!({
             "event_id": "00000000-0000-0000-0000-000000000000",
-            "event_timestamp": EPOCH_ISO8601,
+            "event_timestamp": EPOCH_UNIX_MS,
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
@@ -133,7 +139,7 @@ mod tests {
         let value = serde_json::to_value(event).expect("event serializes");
         let expected = json!({
             "event_id": "00000000-0000-0000-0000-000000000000",
-            "event_timestamp": EPOCH_ISO8601,
+            "event_timestamp": EPOCH_UNIX_MS,
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",

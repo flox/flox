@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 derive_more.workspace = true
 serde.workspace = true
+serde_with.workspace = true
 time.workspace = true
 uuid.workspace = true
 
