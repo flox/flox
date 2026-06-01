@@ -37,14 +37,7 @@ use super::{
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::install::compute_install_modifications;
-use crate::providers::buildenv::{
-    self,
-    BuildEnv,
-    BuildEnvError,
-    BuildEnvNix,
-    BuildEnvOutputs,
-    BuiltStorePath,
-};
+use crate::providers::buildenv::{BuildEnv, BuildEnvError, BuildEnvNix, BuildEnvOutputs};
 use crate::providers::lock_manifest::{LockManifest, LockResult, ResolutionFailure, ResolveError};
 use crate::providers::nix_auth::{AuthError, NixAuth};
 use crate::providers::services::process_compose::{ServiceError, maybe_make_service_config_file};
@@ -277,24 +270,20 @@ impl<State> CoreEnvironment<State> {
     /// It's included in the [ReadOnly] struct for ergonomic reasons
     /// and because it doesn't modify the manifest.
     ///
-    /// Does not lock the manifest or link the environment to an out path.
-    /// Each should be done explicitly if necessary by the caller
-    /// using [Self::lock] and [Self::link]:
+    /// Does not lock the manifest.
+    /// Call [Self::lock] explicitly before building if the lockfile may be stale.
     ///
-    /// ```ignore
-    /// # use flox_rust_sdk::models::environment::CoreEnvironment;
-    /// # use flox_rust_sdk::flox::Flox;
-    /// let flox: Flox = unimplemented!();
-    /// let core_env: CoreEnvironment = unimplemented!();
-    ///
-    /// core_env.lock(&flox).unwrap();
-    /// let store_path = core_env.build(&flox).unwrap();
-    /// core_env
-    ///     .link(&flox, "/path/to/out-link", &Some(store_path))
-    ///     .unwrap();
-    /// ```
+    /// Pass `out_link_prefix` to have `nix build` register GC roots and write
+    /// the activation symlinks atomically as part of the build.  The prefix
+    /// must be `<run_dir>/<system>.<name>`; nix appends `-dev` and `-run` to
+    /// produce the two output symlinks.  Pass `None` for validate-only or
+    /// pre-flight builds where no symlinks or GC roots are needed.
     #[must_use = "don't discard the store paths of built environments"]
-    pub fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, CoreEnvironmentError> {
+    pub fn build(
+        &mut self,
+        flox: &Flox,
+        out_link_prefix: Option<&Path>,
+    ) -> Result<BuildEnvOutputs, CoreEnvironmentError> {
         let lockfile_path = CanonicalPath::new(self.lockfile_path())
             .map_err(CoreEnvironmentError::BadLockfilePath)?;
         let lockfile = Lockfile::read_from_file(&lockfile_path)?;
@@ -302,31 +291,19 @@ impl<State> CoreEnvironment<State> {
         let service_config_path = maybe_make_service_config_file(flox, &lockfile)?;
 
         let auth = NixAuth::from_flox(flox).map_err(CoreEnvironmentError::Auth)?;
+
         let outputs = BuildEnvNix::new(auth).build(
             &flox.catalog_client,
             &lockfile_path,
             service_config_path,
+            out_link_prefix,
         )?;
         debug!(?outputs, "built environment");
         Ok(outputs)
     }
 }
 
-impl CoreEnvironment<()> {
-    /// Create a new out-link for the environment at the given path with a
-    /// store-path obtained from [Self::build].
-    pub fn link(
-        out_link_path: impl AsRef<Path>,
-        store_path: &BuiltStorePath,
-    ) -> Result<(), CoreEnvironmentError> {
-        buildenv::create_gc_root_in([store_path.as_path()], out_link_path)?;
-
-        Ok(())
-    }
-}
-
 /// Environment modifying methods do not link the new environment to an out path.
-/// Linking should be done by the caller.
 /// Since files referenced by the environment are ingested into the nix store,
 /// the same [CoreEnvironment] instance can be used
 /// even if the concrete [super::Environment] tracks the files in a different way
@@ -516,7 +493,7 @@ impl CoreEnvironment<ReadOnly> {
             },
         };
 
-        let build_attempt = temp_env.build(flox);
+        let build_attempt = temp_env.build(flox, None);
 
         debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
@@ -576,7 +553,7 @@ impl CoreEnvironment<ReadOnly> {
             // Neither do we depend on services, so we pass `None`
             let auth = NixAuth::from_flox(flox).map_err(EnvironmentError::Auth)?;
             let _ = BuildEnvNix::new(auth)
-                .build(&flox.catalog_client, tmp_lockfile.path(), None)
+                .build(&flox.catalog_client, tmp_lockfile.path(), None, None)
                 .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::BuildEnv(e)))?;
         }
 
@@ -855,7 +832,7 @@ impl CoreEnvironment<ReadOnly> {
         temp_env.write_manifest_lockfile_pair(&writable_manifest, &lockfile)?;
 
         debug!("transaction: building environment");
-        let store_path = temp_env.build(flox)?;
+        let store_path = temp_env.build(flox, None)?;
 
         debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
@@ -887,7 +864,7 @@ impl CoreEnvironment<ReadOnly> {
         temp_env.update_lockfile_with_contents(&lockfile_contents)?;
 
         debug!("transaction: building environment");
-        let store_path = temp_env.build(flox)?;
+        let store_path = temp_env.build(flox, None)?;
 
         debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
@@ -1423,7 +1400,7 @@ mod tests {
         temp_env.lock(&flox).unwrap();
         env_view.replace_with(temp_env).unwrap();
 
-        let result = env_view.build(&flox).unwrap_err();
+        let result = env_view.build(&flox, None).unwrap_err();
 
         assert!(result.is_incompatible_system_error());
     }
@@ -1444,8 +1421,8 @@ mod tests {
         env.lock(&flox).unwrap();
 
         // Build the environment and verify that the config file exists
-        let store_path = env.build(&flox).unwrap();
-        let config_path = store_path.develop.join(SERVICE_CONFIG_FILENAME);
+        let store_path = env.build(&flox, None).unwrap();
+        let config_path = store_path.dev.join(SERVICE_CONFIG_FILENAME);
         assert!(config_path.exists());
     }
 
@@ -1592,23 +1569,20 @@ mod tests {
         flox.catalog_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
+        let out_link = env_path.path().with_extension("out-link");
+        std::fs::create_dir_all(&out_link).expect("create out-link dir");
+        let out_link = CanonicalPath::new(&out_link).expect("canonicalize out-link dir");
+
         env_view.lock(&flox).expect("locking should succeed");
-        let store_path = env_view.build(&flox).expect("build should succeed");
-        CoreEnvironment::link(
-            env_path.path().with_extension("out-link"),
-            &store_path.develop,
-        )
-        .expect("link should succeed");
+        // Use a prefix so nix writes <prefix>-dev and <prefix>-run symlinks.
+        let prefix = out_link.join("env");
+        env_view
+            .build(&flox, Some(&prefix))
+            .expect("build should succeed");
 
         // very rudimentary check that the environment manifest built correctly
         // and linked to the out-link.
-        assert!(
-            env_path
-                .path()
-                .with_extension("out-link")
-                .join("bin/hello")
-                .exists()
-        );
+        assert!(out_link.join("env-dev").join("bin/hello").exists());
     }
 
     #[test]

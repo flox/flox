@@ -180,14 +180,12 @@ pub trait Environment: Send {
         flox: &Flox,
     ) -> Result<RenderedEnvironmentLinks, EnvironmentError>;
 
-    /// Build the environment and return the built store paths
-    /// for the development and runtime variants,
+    /// Build the environment, write the activation symlinks, register GC roots,
+    /// and return the built store paths for the development and runtime variants,
     /// as well as runtime environments of the manifest builds defined in this environment.
     ///
-    /// This does not link the environment, but may lock the environment, if necessary.
+    /// May lock the environment if necessary.
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError>;
-
-    fn link(&mut self, store_paths: &BuildEnvOutputs) -> Result<(), EnvironmentError>;
 
     /// Return a path to store transient data,
     /// such as temporary files created by the environment hooks or the environment itself,
@@ -298,20 +296,20 @@ impl TryFrom<&ConcreteEnvironment> for ActivateEnvironmentRef {
 #[as_ref(forward)]
 pub struct RenderedEnvironmentLink(PathBuf);
 
-/// A pair of links to the development and runtime variants of an environment.
+/// A pair of links to the dev and run variants of an environment.
 /// Refer to the documentation of [RenderedEnvironmentLink] for what guarantees
 /// the existence of these paths provides.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct RenderedEnvironmentLinks {
-    pub development: RenderedEnvironmentLink,
-    pub runtime: RenderedEnvironmentLink,
+    pub dev: RenderedEnvironmentLink,
+    pub run: RenderedEnvironmentLink,
 }
 
 impl RenderedEnvironmentLinks {
-    pub(crate) fn new_unchecked(development: PathBuf, runtime: PathBuf) -> Self {
+    pub(crate) fn new_unchecked(dev: PathBuf, run: PathBuf) -> Self {
         Self {
-            development: RenderedEnvironmentLink(development),
-            runtime: RenderedEnvironmentLink(runtime),
+            dev: RenderedEnvironmentLink(dev),
+            run: RenderedEnvironmentLink(run),
         }
     }
 
@@ -320,11 +318,11 @@ impl RenderedEnvironmentLinks {
         name: impl AsRef<str>,
         system: &System,
     ) -> Self {
-        let development_name = format!("{system}.{name}.dev", name = name.as_ref());
-        let development_path = base_dir.join(development_name);
-        let runtime_name = format!("{system}.{name}.run", name = name.as_ref());
-        let runtime_path = base_dir.join(runtime_name);
-        Self::new_unchecked(development_path, runtime_path)
+        let dev_name = format!("{system}.{name}-dev", name = name.as_ref());
+        let dev_path = base_dir.join(dev_name);
+        let run_name = format!("{system}.{name}-run", name = name.as_ref());
+        let run_path = base_dir.join(run_name);
+        Self::new_unchecked(dev_path, run_path)
     }
 
     pub fn new_in_base_dir_with_name_system_and_generation(
@@ -333,18 +331,87 @@ impl RenderedEnvironmentLinks {
         system: &System,
         generation: GenerationId,
     ) -> Self {
-        let development_name = format!("{system}.{name}.gen{generation}.dev", name = name.as_ref());
-        let development_path = base_dir.join(development_name);
-        let runtime_name = format!("{system}.{name}.gen{generation}.run", name = name.as_ref());
-        let runtime_path = base_dir.join(runtime_name);
-        Self::new_unchecked(development_path, runtime_path)
+        let dev_name = format!("{system}.{name}.gen{generation}-dev", name = name.as_ref());
+        let dev_path = base_dir.join(dev_name);
+        let run_name = format!("{system}.{name}.gen{generation}-run", name = name.as_ref());
+        let run_path = base_dir.join(run_name);
+        Self::new_unchecked(dev_path, run_path)
+    }
+
+    /// Returns the `--out-link` prefix for `nix build`.
+    ///
+    /// With outputs named `"dev"` and `"run"`, nix creates:
+    ///   `<prefix>-dev` and `<prefix>-run`
+    /// which exactly match `self.dev` and `self.run`.
+    pub fn out_link_prefix(&self) -> PathBuf {
+        let dev_path = self.dev.as_path().to_str().expect("paths are UTF-8");
+        PathBuf::from(
+            dev_path
+                .strip_suffix("-dev")
+                .expect("dev link always ends in -dev"),
+        )
+    }
+
+    /// Replace legacy dot-separator symlinks with redirect symlinks to the
+    /// new dash-separator ones.
+    ///
+    /// Previous versions of Flox used `<system>.<name>.dev` and
+    /// `<system>.<name>.run` as activation symlink names.  This method checks
+    /// for those old names in the same directory and, if found, replaces them
+    /// with symlinks that point to the current `<system>.<name>-dev` /
+    /// `<system>.<name>-run` names so that scripts or tooling holding old
+    /// paths continue to resolve correctly.
+    ///
+    /// Errors are logged at debug level and do not propagate; this is a
+    /// best-effort compatibility shim and must not fail the build.
+    pub fn replace_legacy_links(&self) {
+        for (new_link, suffix) in [(self.dev.as_path(), "dev"), (self.run.as_path(), "run")] {
+            let Some(parent) = new_link.parent() else {
+                continue;
+            };
+            let Some(new_name) = new_link.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let Some(stem) = new_name.strip_suffix(&format!("-{suffix}")) else {
+                continue;
+            };
+            let old_path = parent.join(format!("{stem}.{suffix}"));
+            if !old_path.is_symlink() {
+                continue;
+            }
+            // Only replace symlinks that point into the Nix store.  Relative
+            // redirect symlinks created by a previous run of this function
+            // already point to the correct dash-separator name and must not be
+            // deleted and recreated on every build.
+            let points_to_store = std::fs::read_link(&old_path)
+                .ok()
+                .and_then(|t| t.into_os_string().into_string().ok())
+                .is_some_and(|t| t.starts_with("/nix/store/"));
+            if !points_to_store {
+                continue;
+            }
+            if let Err(e) = std::fs::remove_file(&old_path) {
+                debug!(path=?old_path, error=%e, "failed to remove legacy environment link");
+                continue;
+            }
+            if new_link.is_symlink()
+                && let Err(e) = std::os::unix::fs::symlink(new_name, &old_path)
+            {
+                debug!(
+                    path=?old_path,
+                    target=new_name,
+                    error=%e,
+                    "failed to create legacy compatibility link"
+                );
+            }
+        }
     }
 
     /// Returns the built environment path for an activation mode.
     pub fn for_mode(self, mode: &ActivateMode) -> RenderedEnvironmentLink {
         match mode {
-            ActivateMode::Dev => self.development,
-            ActivateMode::Run => self.runtime,
+            ActivateMode::Dev => self.dev,
+            ActivateMode::Run => self.run,
         }
     }
 }

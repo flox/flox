@@ -316,7 +316,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
 
         command.arg(format!(
             "FLOX_ENV={}",
-            self.built_environments.develop.display()
+            self.built_environments.dev.display()
         ));
         command.arg(format!(
             "FLOX_ENV_OUTPUTS={}",
@@ -435,7 +435,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         // TODO: is this even necessary, or can we detect build outputs instead?
         command.arg(format!(
             "FLOX_ENV={}",
-            self.built_environments.develop.display()
+            self.built_environments.dev.display()
         ));
 
         // TODO: is this even necessary, or can we detect build outputs instead?
@@ -852,7 +852,7 @@ pub mod test_helpers {
         )
         .build(
             &toplevel_or_common_nixpkgs,
-            &env.rendered_env_links(flox).unwrap().development,
+            &env.rendered_env_links(flox).unwrap().dev,
             &[PackageTargetName::new_unchecked(&package)],
             build_cache,
             None,
@@ -3273,12 +3273,12 @@ mod tests {
               # shell tracing so that all we get from the build is the output.
               set +x
               # Report where we find a representative executable from each pkg.
-              # Print this to stdout so that we can assert it in the test, but
-              # do not embed these paths in the output because those packages
-              # are not expected to be present in the final closure.
+              # Write to stderr so that all diagnostic output shares one fd with
+              # the shell-tracing output (set +x also writes to stderr); mixing
+              # stdout and stderr produces a non-deterministic ordering.
               for i in bash cat find grep sed; do
                 path="$(type -p $i)"
-                echo "found $i in $path"
+                echo "found $i in $path" >&2
               done
               # Create a valid executable in $out/bin for a clean build.
               mkdir -p $out/bin
@@ -3311,13 +3311,9 @@ mod tests {
         let re = regex::Regex::new(&expected_pattern).unwrap();
 
         // Assert that the expected output is present in the build output.
-        // Note that this output will appear in the stdout for the local
-        // build and stderr for the sandbox build.
-        let output_stream = if sandbox {
-            output.stderr
-        } else {
-            output.stdout
-        };
+        // The echo statements write to stderr, so the output is always in
+        // output.stderr regardless of sandbox mode.
+        let output_stream = output.stderr;
         if !re.is_match(&output_stream) {
             pretty_assertions::assert_eq!(
                 output_stream,
