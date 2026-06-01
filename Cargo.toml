@@ -3,6 +3,7 @@ members = [
     "cli/beta",
     "cli/catalog-api-v1",
     "cli/flox",
+    "cli/flox-events",
     "cli/flox-rust-sdk",
     "cli/flox-activations",
     "cli/flox-catalog",
@@ -42,6 +43,7 @@ enum_dispatch = "0.3.13"
 flate2 = "1.0"
 flox-activations = { path = "cli/flox-activations" }
 flox-core = { path = "cli/flox-core" }
+flox-events = { path = "cli/flox-events" }
 flox-rust-sdk = { path = "cli/flox-rust-sdk" }
 flox-test-utils = { path = "cli/flox-test-utils" }
 flox-manifest = { path = "cli/flox-manifest" }
