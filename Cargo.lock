@@ -1589,6 +1589,7 @@ dependencies = [
 name = "flox-events"
 version = "0.0.0"
 dependencies = [
+ "derive_more",
  "serde",
  "serde_json",
  "time",

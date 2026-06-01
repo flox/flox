@@ -46,8 +46,9 @@ pub struct Event {
 ///
 /// The dotted wire name on `#[serde(rename)]` is the single source of
 /// truth for each variant; call sites use the enum, never a string
-/// literal.
-#[derive(Debug, Clone, Serialize)]
+/// literal. `derive_more::From` is derived so a call site can pass a
+/// payload value directly to anything accepting `impl Into<EventKind>`.
+#[derive(Debug, Clone, Serialize, derive_more::From)]
 #[serde(tag = "event_type", content = "payload")]
 pub enum EventKind {
     #[serde(rename = "cli.command_run")]
