@@ -51,6 +51,7 @@ pub fn generate_deactivate_script(
         activate_d,
         flox_env: flox_env.to_path_buf(),
         restore_diff,
+        flox_activations_bin: flox_activations_bin.to_path_buf(),
     };
 
     // Capture the shell variant before consuming `shell` in the match below.

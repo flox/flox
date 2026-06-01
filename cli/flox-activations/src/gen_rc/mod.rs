@@ -35,6 +35,9 @@ pub struct DeactivateCtx {
     pub flox_env: PathBuf,
     /// Decoded from `_FLOX_HOOK_DIFF`
     pub restore_diff: DiffSerializer,
+    /// Path to the `flox-activations` binary, embedded in generated shell
+    /// for inner-deactivation `fix-fpath` calls.
+    pub flox_activations_bin: PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -56,12 +59,12 @@ pub struct StartupCtx {
 
 #[cfg(test)]
 pub(crate) mod test_helpers {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
     use std::path::PathBuf;
 
     use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx, InvocationType};
     use flox_core::activate::mode::ActivateMode;
-    use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
+    use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVE_ENVIRONMENTS_VAR};
     use shell_gen::ShellWithPath;
 
     use super::{DeactivateCtx, StartupCtx};
@@ -170,6 +173,37 @@ pub(crate) mod test_helpers {
             activate_d: PathBuf::from("/interpreter/activate.d"),
             flox_env: PathBuf::from("/flox_env"),
             restore_diff,
+            flox_activations_bin: PathBuf::from("/flox_activations"),
+        }
+    }
+
+    /// Build a `DeactivateCtx` that represents deactivating an *inner*
+    /// (non-outermost) activation for tests of `gen_rc/*`.
+    ///
+    /// Constructs a diff where `_FLOX_ACTIVE_ENVIRONMENTS` is in `modified`
+    /// with a non-empty prior value so that `is_outermost_deactivate()`
+    /// returns `false`, triggering the inner-deactivation FPATH path.
+    pub fn test_deactivate_ctx_inner(shell: ShellWithPath) -> DeactivateCtx {
+        let restore_diff = DiffSerializer {
+            added: HashSet::from(["ADDED_VAR".to_string()]),
+            modified: HashMap::from([
+                ("MODIFIED_VAR".to_string(), "MODIFIED_ORIGINAL".to_string()),
+                // Non-empty outer value → inner activation → not outermost.
+                (
+                    FLOX_ACTIVE_ENVIRONMENTS_VAR.to_string(),
+                    "/outer/env".to_string(),
+                ),
+            ]),
+            removed: HashMap::from([(
+                "DELETED_VAR".to_string(),
+                "DELETED_ORIGINAL".to_string(),
+            )]),
+        };
+        let _ = shell; // shell type doesn't affect deactivation output
+        DeactivateCtx {
+            activate_d: PathBuf::from("/interpreter/activate.d"),
+            restore_diff,
+            flox_activations_bin: PathBuf::from("/flox_activations"),
         }
     }
 

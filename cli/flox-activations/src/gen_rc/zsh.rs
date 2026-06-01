@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use flox_core::activate::context::InvocationType;
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file};
 
 use crate::attach_diff::todo_drop_unset;
@@ -62,14 +62,26 @@ pub fn generate_zsh_profile_commands(
         },
         Action::Deactivate(ctx) => {
             // Teardown happens in inverse order of activate.d/zsh:
-            // (1) drop the `_flox_rehash` precmd hook, (2) restore
-            // hashing setopts, (3) restore FPATH + re-run compinit.
+            // (1) drop the `_flox_rehash` precmd hook [outermost only],
+            // (2) restore hashing setopts [outermost only],
+            // (3) restore FPATH + re-run compinit [every deactivation].
+            //
+            // Hashing is a global property — it must only be touched on
+            // the outermost deactivation.  FPATH/compinit must be
+            // recomputed at every deactivation level so that completions
+            // from the inner env are immediately removed.
+            //
+            // Key invariant: `generate_deactivation_statements()` has
+            // already restored `FLOX_ENV_DIRS` to its pre-inner-activation
+            // value by the time this block runs, so `fix-fpath` sees the
+            // remaining active envs and can recompute FPATH correctly.
             if ctx.restore_diff.is_outermost_deactivate() {
-                // Undo the `_flox_rehash` precmd hook installed by activate.d/zsh.
-                // Guard `unfunction` on the function existing so we don't emit
-                // "no such hash table element" if the user removed it
-                // themselves mid-session; `add-zsh-hook -d` is already silent
-                // for an unregistered hook.
+                // Block A — outermost only: undo the `_flox_rehash` precmd
+                // hook installed by activate.d/zsh.  Guard `unfunction` on
+                // the function existing so we don't emit "no such hash table
+                // element" if the user removed it themselves mid-session;
+                // `add-zsh-hook -d` is already silent for an unregistered
+                // hook.
                 stmts.push(
                     indoc! {r#"
                         if [[ -o interactive ]]; then
@@ -83,25 +95,30 @@ pub fn generate_zsh_profile_commands(
                 );
                 // Re-enable command hashing (zsh defaults).
                 stmts.push("setopt hashcmds; setopt hashdirs;".to_stmt());
-                // Restore the pre-activation FPATH and (if the user had
-                // compinit initialized pre-flox) re-run their compinit so
-                // completions match. Both `_FLOX_HOOK_SAVE_FPATH` and
-                // `_FLOX_HOOK_SAVE_COMPINIT_DUMPFILE` are captured by
-                // `activate.d/zsh` only when fpath actually changed; the
-                // dumpfile is captured only when the user had compinit
-                // initialized pre-flox.
-                //
-                // We honor the user's pre-flox compinit state rather than
-                // running a bare `compinit`, so users with `compinit -u` /
-                // `-d <custom>` / no compinit at all don't see surprising
-                // behavior on deactivate.
-                //
-                // NOTE on cost: `compinit` rebuilds the completion dump,
-                // which can be tens of ms on large `fpath` setups. If
-                // deactivate latency ends up monitored, one option is to
-                // cache the compinit result keyed on an `fpath` hash and
-                // skip the rebuild when the hash matches the activate-time
-                // capture.
+            }
+
+            // Block B — every deactivation: restore FPATH and re-run
+            // compinit so completions from this env are removed.
+            //
+            // Outermost case: restore the user's original FPATH directly
+            // from the saved value, then re-run compinit.
+            //
+            // Inner case: call `fix-fpath` to recompute FPATH from the
+            // user's saved base plus any remaining active envs.  Re-run
+            // compinit only when FPATH actually changed so we avoid an
+            // unnecessary rebuild when the inner env had no completions.
+            // The save vars are kept (not unset) because the outer
+            // activation still needs them for its own deactivation.
+            //
+            // We honor the user's pre-flox compinit state rather than
+            // running a bare `compinit`, so users with `compinit -u` /
+            // `-d <custom>` / no compinit at all don't see surprising
+            // behavior on deactivate.
+            //
+            // NOTE on cost: `compinit` rebuilds the completion dump, which
+            // can be tens of ms on large `fpath` setups.  For the inner
+            // case we skip the rebuild when FPATH is unchanged.
+            if ctx.restore_diff.is_outermost_deactivate() {
                 stmts.push(
                     indoc! {r#"
                         if [[ -n "${_FLOX_HOOK_SAVE_FPATH+set}" ]]; then
@@ -112,6 +129,26 @@ pub fn generate_zsh_profile_commands(
                             fi;
                             unset _FLOX_HOOK_SAVE_FPATH _FLOX_HOOK_SAVE_COMPINIT_DUMPFILE;
                         fi;"#}
+                    .to_stmt(),
+                );
+            } else {
+                stmts.push(
+                    formatdoc! {r#"
+                        if [[ -n "${{_FLOX_HOOK_SAVE_FPATH+set}}" ]]; then
+                            _flox_deactivate_old_fpath="$FPATH";
+                            source <("{flox_activations_bin}" fix-fpath \
+                                --colon-separated-fpath "$_FLOX_HOOK_SAVE_FPATH" \
+                                --env-dirs "${{FLOX_ENV_DIRS:-}}");
+                            if [[ "$FPATH" != "$_flox_deactivate_old_fpath" ]]; then
+                                if [[ -n "${{_FLOX_HOOK_SAVE_COMPINIT_DUMPFILE:-}}" ]]; then
+                                    autoload -U compinit;
+                                    compinit -d "$_FLOX_HOOK_SAVE_COMPINIT_DUMPFILE";
+                                fi;
+                            fi;
+                            unset _flox_deactivate_old_fpath;
+                        fi;"#,
+                        flox_activations_bin = ctx.flox_activations_bin.display(),
+                    }
                     .to_stmt(),
                 );
             }
@@ -227,6 +264,7 @@ mod tests {
         render_normalized,
         strip_volatile_deactivate,
         test_deactivate_ctx,
+        test_deactivate_ctx_inner,
         test_startup_ctx,
     };
 
@@ -243,6 +281,16 @@ mod tests {
     fn render_deactivate() -> String {
         let shell = ShellWithPath::Zsh(PathBuf::from("/bin/zsh"));
         let action = Action::<ZshStartupArgs>::Deactivate(test_deactivate_ctx(shell, true));
+        let mut buf = Vec::new();
+        generate_zsh_profile_commands(&action, &mut buf).expect("generator should succeed");
+        let output = String::from_utf8(buf).expect("output should be utf-8");
+        strip_volatile_deactivate(&output)
+    }
+
+    fn render_deactivate_inner() -> String {
+        let shell = ShellWithPath::Zsh(PathBuf::from("/bin/zsh"));
+        let action =
+            Action::<ZshStartupArgs>::Deactivate(test_deactivate_ctx_inner(shell));
         let mut buf = Vec::new();
         generate_zsh_profile_commands(&action, &mut buf).expect("generator should succeed");
         let output = String::from_utf8(buf).expect("output should be utf-8");
@@ -341,5 +389,35 @@ mod tests {
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
         "#]]
         .assert_eq(&output);
+    }
+
+    /// Verify the inner-deactivation path emits `fix-fpath` (not a direct
+    /// FPATH restore), does not emit the outermost-only hashing teardown,
+    /// and keeps the save vars for the remaining outer activation.
+    #[test]
+    fn generate_zsh_profile_commands_deactivate_inner() {
+        let output = render_deactivate_inner();
+        expect![[r#"
+            unset ADDED_VAR;
+            export MODIFIED_VAR=MODIFIED_ORIGINAL;
+            export _FLOX_ACTIVE_ENVIRONMENTS=/outer/env;
+            export DELETED_VAR=DELETED_ORIGINAL;
+            unset _FLOX_HOOK_DIFF;
+            if [[ -n "${_FLOX_HOOK_SAVE_FPATH+set}" ]]; then
+                _flox_deactivate_old_fpath="$FPATH";
+                source <("/flox_activations" fix-fpath \
+                    --colon-separated-fpath "$_FLOX_HOOK_SAVE_FPATH" \
+                    --env-dirs "${FLOX_ENV_DIRS:-}");
+                if [[ "$FPATH" != "$_flox_deactivate_old_fpath" ]]; then
+                    if [[ -n "${_FLOX_HOOK_SAVE_COMPINIT_DUMPFILE:-}" ]]; then
+                        autoload -U compinit;
+                        compinit -d "$_FLOX_HOOK_SAVE_COMPINIT_DUMPFILE";
+                    fi;
+                fi;
+                unset _flox_deactivate_old_fpath;
+            fi;
+            unset _FLOX_INVOCATION_TYPE;
+            if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
+        "#]].assert_eq(&output);
     }
 }
