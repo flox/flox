@@ -7,6 +7,7 @@ use flox_core::activate::context::InvocationType;
 use indoc::indoc;
 use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file};
 
+use crate::attach_diff::todo_drop_unset;
 use crate::gen_rc::{Action, RM};
 
 /// Arguments for generating zsh startup commands
@@ -114,6 +115,21 @@ pub fn generate_zsh_profile_commands(
                 );
             }
             // Note that unsetting the prompt depends on `_activate_d` being set.
+        },
+    }
+
+    // Emit _FLOX_INVOCATION_TYPE as a shell-local (non-exported) variable so
+    // that `flox deactivate --print-script` can distinguish interactive
+    // subshells from in-place activations without reading state.json.
+    match action {
+        Action::Activate { args, .. } => {
+            stmts.push(set_unexported_unexpanded(
+                "_FLOX_INVOCATION_TYPE",
+                format!("{}", args.invocation_type),
+            ));
+        },
+        Action::Deactivate(_) => {
+            stmts.push(todo_drop_unset("_FLOX_INVOCATION_TYPE"));
         },
     }
 
@@ -229,6 +245,7 @@ mod tests {
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
             source /interpreter/activate.d/zsh;
+            typeset -g _FLOX_INVOCATION_TYPE=interactive;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
         "#]]
@@ -255,6 +272,7 @@ mod tests {
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
             source /interpreter/activate.d/zsh;
+            typeset -g _FLOX_INVOCATION_TYPE=in_place;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
         "#]]
@@ -298,6 +316,7 @@ mod tests {
                 fi;
                 unset _FLOX_HOOK_SAVE_FPATH _FLOX_HOOK_SAVE_COMPINIT_DUMPFILE;
             fi;
+            unset _FLOX_INVOCATION_TYPE;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
         "#]]
         .assert_eq(&output);

@@ -1052,7 +1052,7 @@ EOF
     print -- \"baseline: \${_comps[fd]:-none}\"
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     print -- \"activated: \${_comps[fd]:-none}\"
-    eval \"\$($FLOX_BIN deactivate --print-script)\"
+    eval \"\$($FLOX_BIN deactivate --print-script \"\$_FLOX_INVOCATION_TYPE\")\"
     print -- \"deactivated: \${_comps[fd]:-none}\"
   "
   assert_success
