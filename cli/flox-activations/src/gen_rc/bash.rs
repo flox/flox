@@ -87,10 +87,9 @@ pub fn generate_bash_profile_commands(
                 "_activate_d",
                 args.activate_d.display().to_string(),
             ));
-            stmts.push(todo_drop_set_exported_unexpanded(
-                "_flox_activations",
-                args.flox_activations.display().to_string(),
-            ));
+            // `_flox_activations` is now folded into the activation diff via
+            // `single_set_envs`, so it is set on the exec'd env / emitted as a
+            // single_set and unset on deactivate. Do not re-export it here.
             stmts.push(todo_drop_set_exported_unexpanded(
                 "_flox_activate_tracer",
                 &args.flox_activate_tracer,
@@ -312,7 +311,6 @@ mod tests {
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
             export _activate_d=/interpreter/activate.d;
-            export _flox_activations=/flox_activations;
             export _flox_activate_tracer=TRACER;
             _FLOX_INVOCATION_TYPE=interactive;
             if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
@@ -334,6 +332,7 @@ mod tests {
             export FLOX_PROMPT_COLOR_2=2;
             export FLOX_PROMPT_ENVIRONMENTS=prompt_envs;
             export _FLOX_ACTIVE_ENVIRONMENTS=active_envs;
+            export _flox_activations=/flox_activations;
             export ADDED_VAR=ADDED_VALUE;
             export FLOX_ACTIVATE_START_SERVICES=false;
             export FLOX_ENV=/flox_env;
@@ -344,7 +343,6 @@ mod tests {
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
             export _activate_d=/interpreter/activate.d;
-            export _flox_activations=/flox_activations;
             export _flox_activate_tracer=TRACER;
             _FLOX_INVOCATION_TYPE=inplace;
             if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
@@ -375,6 +373,7 @@ mod tests {
             unset PATH;
             unset QUOTED_VAR;
             unset _FLOX_ACTIVE_ENVIRONMENTS;
+            unset _flox_activations;
             export MODIFIED_VAR=MODIFIED_ORIGINAL;
             export DELETED_VAR=DELETED_ORIGINAL;
             unset _FLOX_HOOK_DIFF;
