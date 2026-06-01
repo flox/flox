@@ -289,8 +289,7 @@ mod tests {
 
     fn render_deactivate_inner() -> String {
         let shell = ShellWithPath::Zsh(PathBuf::from("/bin/zsh"));
-        let action =
-            Action::<ZshStartupArgs>::Deactivate(test_deactivate_ctx_inner(shell));
+        let action = Action::<ZshStartupArgs>::Deactivate(test_deactivate_ctx_inner(shell));
         let mut buf = Vec::new();
         generate_zsh_profile_commands(&action, &mut buf).expect("generator should succeed");
         let output = String::from_utf8(buf).expect("output should be utf-8");
@@ -418,6 +417,7 @@ mod tests {
             fi;
             unset _FLOX_INVOCATION_TYPE;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
-        "#]].assert_eq(&output);
+        "#]]
+        .assert_eq(&output);
     }
 }

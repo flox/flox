@@ -194,10 +194,7 @@ pub(crate) mod test_helpers {
                     "/outer/env".to_string(),
                 ),
             ]),
-            removed: HashMap::from([(
-                "DELETED_VAR".to_string(),
-                "DELETED_ORIGINAL".to_string(),
-            )]),
+            removed: HashMap::from([("DELETED_VAR".to_string(), "DELETED_ORIGINAL".to_string())]),
         };
         let _ = shell; // shell type doesn't affect deactivation output
         DeactivateCtx {
