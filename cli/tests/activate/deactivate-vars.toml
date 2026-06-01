@@ -1,0 +1,9 @@
+version = 1
+
+[vars]
+TEST_VAR = "modified"
+
+[hook]
+on-activate = """
+  export TEST_NEW_VAR="newly_added"
+"""
