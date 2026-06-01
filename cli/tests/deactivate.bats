@@ -601,12 +601,31 @@ EOF
 }
 
 # Subshell-mode counterparts: `flox activate -c "..."` runs the body in
-# the activated subshell. Here the body deactivates in-place inside that
-# subshell and dumps env. The diff against the parent's pre-activation
-# env therefore shows everything flox added during activation that
-# in-place deactivate did NOT unset -- including vars inherited from
-# the flox process itself (e.g. _FLOX_SUBSYSTEM_VERBOSITY), which the
-# in-place tests above cannot see.
+# the activated subshell. The body deactivates in-place inside that
+# subshell and dumps env, which is captured as `after`; `before` is the
+# PARENT shell's pre-activation env.
+#
+# IMPORTANT — read the expected blocks below with care. These compare TWO
+# DIFFERENT shells (parent's pre-activation env vs. the flox-spawned child
+# subshell's env), NOT the same shell before and after deactivate. As a
+# result the diff is NOT a clean leak list: it also surfaces
+#   - vars flox legitimately sets for the activated session (e.g.
+#     SSL_CERT_FILE) — correct while activated, not a leak,
+#   - vars from the flox process itself that bleed into the capture (e.g.
+#     FLOX_VERSION, FLOX_SHELL, _FLOX_*_VERBOSITY) — never reach the user's
+#     real shell,
+#   - benign parent/child differences (SHLVL, etc.).
+# None of FLOX_VERSION / FLOX_SHELL / SSL_CERT_FILE actually leak into the
+# user's shell: after a real in-place deactivate, and in the parent shell
+# after `flox activate -c` returns, they are all clean/unchanged. The
+# in-place env-diff tests above are the trustworthy same-shell leak
+# detectors; use THOSE when shrinking leaks.
+#
+# These subshell tests are therefore kept mainly to exercise the
+# `flox activate -c` entry path and pin its current behavior. They add
+# little leak-detection value over the in-place tests and are a candidate
+# for deletion — if they start churning on unrelated parent/child env
+# differences, prefer removing them over expanding the expected blocks.
 #
 # The outer shell is always bash; FLOX_SHELL/SHELL controls the
 # activated shell. Running `flox activate -c` from inside a zsh `-c`
