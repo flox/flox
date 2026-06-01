@@ -131,7 +131,6 @@ EOF
 
 # bats test_tags=deactivate
 @test "deactivate restores environment variables (tcsh)" {
-  skip "tcsh fails due to FLOX_PROMPT_ENVIRONMENTS undefined variable issue"
   project_setup
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
@@ -274,7 +273,6 @@ EOF
 
 # bats test_tags=deactivate
 @test "deactivate unsets added variables (tcsh)" {
-  skip "tcsh fails due to FLOX_PROMPT_ENVIRONMENTS undefined variable issue"
   project_setup
   MANIFEST_CONTENTS="$(cat << "EOF"
 version = 1
