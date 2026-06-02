@@ -10,7 +10,7 @@ flox-gc - Garbage collection
 
 # SYNOPSIS
 
-```
+```text
 flox [<general options>] gc
 ```
 
@@ -27,4 +27,4 @@ This both deletes data managed by Flox and runs garbage collection on the Nix st
 ```
 
 # SEE ALSO
-[`flox-envs(1)`](./flox-envs.md),
+[`flox-envs(1)`](./flox-envs.md)

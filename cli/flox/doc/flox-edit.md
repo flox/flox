@@ -11,7 +11,7 @@ flox-edit - edit the declarative environment configuration
 
 # SYNOPSIS
 
-```
+```text
 flox [<general options>] edit
      [-d=<path> | -r=<owner/name>]
      [[-f=<file>] | -n=<name> | --sync | --reset]
@@ -32,7 +32,7 @@ format.
 
 Once the editor is closed the environment is built in order to validate the
 edit.
-If the build fails you are given a change to continue editing the manifest,
+If the build fails you are given a chance to continue editing the manifest,
 and if you decline, the edit is discarded.
 This transactional editing prevents an edit from leaving the environment in a
 broken state.
@@ -68,7 +68,7 @@ will block the use of the environment commands
 :   Create a new generation from the current local environment
     (Only available for managed environments)
 
-`-r`, `--reset`
+`--reset`
 :   Reset the environment to the current generation
     (Only available for managed environments)
 

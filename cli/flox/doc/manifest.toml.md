@@ -97,7 +97,7 @@ ripgrep = { pkg-path = "ripgrep" }
 pip = { pkg-path = "python310Packages.pip" }
 ```
 or
-```
+```toml
 [install.ripgrep]
 pkg-path = "ripgrep"
 
@@ -108,8 +108,6 @@ Flox will use the first format by default when automatically editing
 the manifest.
 
 ### Package names
-
-<!-- Copied from package-names.md because it has the wrong header depth -->
 
 Packages are organized in a hierarchical structure such that certain packages
 are found at the top level (e.g. `ripgrep`),
@@ -153,7 +151,7 @@ software to install from an arbitrary Nix flake.
 #### Catalog descriptors
 
 The full list of catalog descriptor options is:
-```
+```text
 Descriptor ::= {
   pkg-group          = null | <STRING>
 , version            = null | <STRING>
@@ -267,7 +265,7 @@ Each option is described below:
 Flake descriptors allow installing software from an arbitrary Nix flake.
 
 The full list of flake descriptor options is:
-```
+```text
 Descriptor ::= {
   flake              = <STRING>
 , systems            = null | [<STRING>, ...]
@@ -300,7 +298,7 @@ and `flake` is described below:
 Store path descriptors allow installing software from an arbitrary Nix store path.
 
 The full list of store path descriptor options is:
-```
+```text
 Descriptor ::= {
   store-path         = STRING
 , systems            = null | [<STRING>, ...]
@@ -480,7 +478,7 @@ Top-level options for the `[services]` block are:
     Can be suppressed with `--no-start-services`.
 
 The full set of options for an individual service descriptor is:
-```
+```text
 ServiceDescriptor ::= {
   command    = STRING
 , vars       = null | Map[STRING, STRING]
@@ -560,28 +558,27 @@ environments = [
 ]
 ```
 
-As mentioned above, you include other environments my listing them as an array
+As mentioned above, you include other environments by listing them as an array
 of tables in the `include.environments` array. The schema for these "include
 descriptors" is shown below:
 
-```
+```text
 IncludeDescriptor ::= LocalIncludeDescriptor
                     | FloxHubIncludeDescriptor
                     | RemoteIncludeDescriptor (deprecated)
 
-
-LocalIncludeDescriptor :: = {
+LocalIncludeDescriptor ::= {
   dir  = STRING
 , name = null | STRING
 }
 
-FloxHubIncludeDescriptor :: = {
+FloxHubIncludeDescriptor ::= {
   remote = STRING
 , name   = null | STRING
 }
 
 # Deprecated, will be removed in a future release
-RemoteIncludeDescriptor :: = {
+RemoteIncludeDescriptor ::= {
   remote = STRING
 , name   = null | STRING
 }
@@ -593,7 +590,7 @@ The fields in these include descriptors are as follows:
 : The local path to the environment to include. This has the same semantics as
   the `--dir` flag passed to many Flox commands.
 
-`reference`
+`remote`
 : The FloxHub reference of an environment to include. This has the same
   semantics as the `--reference <env-ref> --upstream` flag passed to
   many Flox commands. That is, Flox will include the referenced environment
@@ -692,7 +689,7 @@ This would define a package called `hello` that produces a single file
 See `flox-build(1)` for more details.
 
 The full set of options is shown below:
-```
+```text
 BuildDescriptor ::= {
   command          = STRING
 , sandbox          = null | ("off" | "pure")
@@ -727,7 +724,7 @@ VersionCommand ::= {
 
 `version`
 :   The version to attach to this build artifact.
-    This may be specifed in one of the following ways:
+    This may be specified in one of the following ways:
 
     1. **as a string**: `version = "0.0.1"`
     1. **as read from a file**: `version.file = "<path>"`
@@ -749,7 +746,7 @@ The `[options]` section of the manifest details settings for the environment
 itself.
 
 The full set of options are listed below:
-```
+```text
 Options ::= {
   systems                   = null | [<STRING>, ...]
 , activate                  = null | Activate
@@ -790,7 +787,7 @@ Semver ::= {
 
     In "dev" mode a package, all of its development dependencies, and language
     specific environment variables are made available. As the name implies, this
-    is useful at development time. However, this may causes unexpected failures
+    is useful at development time. However, this may cause unexpected failures
     when layering environments or when activating an environment system-wide.
 
     In "run" mode only the requested packages are made available in `PATH` (and

@@ -10,7 +10,7 @@ flox-generations-list - show all environment generations that you can switch to
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] generations list
      [-d=<path> | -r=<owner/name>]
      [-u]
@@ -34,8 +34,8 @@ which generation is currently live.
 :   Render generations as a tree
 
 `--json`
-:   Render generations as json (mutually exclusive with `-t`)
-    Attention: the output is not guaranteed to be stable.
+:   Render generations as JSON (mutually exclusive with `-t`). **Attention:**
+    the output is not guaranteed to be stable.
 
 `--no-pager`
 :   Explicitly disable paged output
@@ -47,6 +47,6 @@ which generation is currently live.
 ```
 
 # SEE ALSO
-[`flox-generations-history(1)`](./flox-generations-history.md)
-[`flox-generations-rollback(1)`](./flox-generations-rollback.md)
+[`flox-generations-history(1)`](./flox-generations-history.md),
+[`flox-generations-rollback(1)`](./flox-generations-rollback.md),
 [`flox-generations-switch(1)`](./flox-generations-switch.md)

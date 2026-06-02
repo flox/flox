@@ -11,7 +11,7 @@ flox-delete - delete an environment
 
 # SYNOPSIS
 
-```
+```text
 flox [<general options>] delete
      [-f]
      [-d=<path>]
@@ -35,10 +35,6 @@ use.
 `-f`, `--force`
 :   Delete the environment without confirmation.
 
-<!-- Copied from ./include/environment-options.md
-     `flox delete` deos not currently handle remote environments
-     Replace with an include once support is added.
- -->
 ## Environment Options
 
 If no environment is specified for an environment command,
@@ -52,7 +48,7 @@ or the active environment that was last activated is used.
 ./include/general-options.md
 ```
 
-# See Also
-[`flox-init(1)`](./flox-init.md)
+# SEE ALSO
+[`flox-init(1)`](./flox-init.md),
 [`flox-push(1)`](./flox-push.md),
 [`flox-pull(1)`](./flox-pull.md)

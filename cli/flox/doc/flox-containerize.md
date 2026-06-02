@@ -10,7 +10,7 @@ flox-containerize - export an environment as a container image
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] containerize
      [-d=<path> | -r=<owner/name>]
      [-f=<file>] [--runtime=<runtime>]
@@ -76,7 +76,7 @@ Configuration for the container image produced by `flox containerize` may be spe
 The following options from the OCI spec are supported, specified in `kebab-case` rather than `PascalCase`.
 Some options are passed through directly as container image config, while others are also used at container build time.
 See details below.
-```
+```text
 ContainerizeConfig ::= {
   user                      = null | <STRING>
 , exposed-ports             = null | [<STRING>, ...]
@@ -120,25 +120,23 @@ ContainerizeConfig ::= {
     If both `user` and `working-dir` are specified, `working-dir` will be created with `user` as owner.
 
 `labels`
-:   This field contains arbitrary metadata for the container.
-    This property MUST use the [annotation rules](https://github.com/opencontainers/image-spec/blob/main/annotations.md#rules).
+:   This field contains arbitrary metadata for the container, as a map of string keys to string values following the OCI [annotation rules](https://github.com/opencontainers/image-spec/blob/main/annotations.md#rules).
 
 `stop-signal`
-:   This field contains arbitrary metadata for the container.
-    This property MUST use the [annotation rules](https://github.com/opencontainers/image-spec/blob/main/annotations.md#rules).
+:   The signal to send to the main process to stop the container (e.g., `SIGTERM`).
+    Must follow the container runtime's signal-name conventions.
 
 # EXAMPLES
 
 Create a container image file and load it into Docker:
 
-```
-$ flox containerize -f ./mycontainer.tar
-$ docker load -i ./mycontainer.tar
+```bash
+flox containerize -f ./mycontainer.tar && docker load -i ./mycontainer.tar
 ```
 
 Load the image into Docker:
 
-```
+```console
 $ flox containerize --runtime docker
 
 # or through stdout e.g. if `docker` is not in `PATH`:
@@ -148,7 +146,7 @@ $ flox containerize -f - | /path/to/docker
 
 Run the container interactively:
 
-```
+```console
 $ flox init
 $ flox install hello
 $ flox containerize -f - | docker load
@@ -160,7 +158,7 @@ Hello, world!
 Run a specific command from within the container,
 but do not launch a subshell.
 
-```
+```console
 $ flox init
 $ flox install hello
 $ flox containerize -f - | docker load
@@ -170,7 +168,7 @@ Hello, world
 
 Create a container with a specific tag:
 
-```
+```console
 $ flox init
 $ flox install hello
 $ flox containerize --tag 'v1' -f - | docker load
@@ -181,5 +179,5 @@ Hello, world!
 
 # SEE ALSO
 
-[`flox-activate(1)`](./flox-activate.md)
-[`docker-load(1)`]
+[`flox-activate(1)`](./flox-activate.md),
+[`docker-load(1)`](https://docs.docker.com/reference/cli/docker/image/load/)

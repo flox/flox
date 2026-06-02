@@ -10,7 +10,7 @@ flox-build-clean - Clean the build directory
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] build clean
      [-d=<path>]
      [<package>]...

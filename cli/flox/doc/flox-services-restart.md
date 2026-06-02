@@ -10,7 +10,7 @@ flox-services-restart - restart running services
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] services restart
      [-d=<path> | -r=<owner/name>]
      [<name>] ...
@@ -24,9 +24,6 @@ If no services are specified, stops all running services and starts new
 services using the latest build of the environment. If one or more services
 are running, then the specified services are started using the service config
 that the running services were started with.
-
-If one or more services are running, the specified services will be started
-using the service config that the running services were started with.
 
 When all services are restarted, they are started from an ephemeral activation
 that uses the latest build of the environment. This may not be the build of the
@@ -47,16 +44,16 @@ An error is displayed if the specified service does not exist.
 ./include/general-options.md
 ```
 
-# EXAMPLES:
+# EXAMPLES
 
 Restart a single service:
-```
+```console
 $ flox services restart myservice
 ✔ Service 'myservice' restarted.
 ```
 
 Restart all services:
-```
+```console
 $ flox services restart
 ✔ Service 'service1' restarted.
 ✔ Service 'service2' restarted.

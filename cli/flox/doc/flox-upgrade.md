@@ -11,7 +11,7 @@ flox-upgrade - upgrade packages in an environment
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] upgrade
      [-d=<path> | -r=<owner>/<name>]
      [--dry-run]

@@ -11,7 +11,7 @@ flox-init - initialize a Flox environment
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] init
      [-n <name>]
      [-d <path>]
@@ -46,7 +46,7 @@ and it will prompt with suggestions for packages or activation scripts to be
 added to the environment.
 These suggestions can be taken without prompting by passing `--auto-setup`.
 The suggestions can be accepted but then edited using `flox edit`.
-Currently, suggestions are made for Python and Nodejs.
+Currently, suggestions are made for Python and Node.js.
 
 With `--reference` Flox will create a FloxHub environment which can
 subsequently be used by other commands using the `--reference` flag.
@@ -90,4 +90,4 @@ on the current directory.
 
 # SEE ALSO
 [`flox-activate(1)`](./flox-activate.md),
-[`flox-install(1)`](./flox-install.md),
+[`flox-install(1)`](./flox-install.md)

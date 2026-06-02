@@ -10,7 +10,7 @@ flox-activate - activate environments
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] activate
      [-d=<path> | -r=<owner>/<name>]
      [-t]
@@ -37,7 +37,7 @@ Configures a shell with everything defined by the environment:
   The shell to be launched is determined by `$FLOX_SHELL` or `$SHELL`.
 * shell command: `flox activate -c CMD`\
   Runs `CMD` in the same environment as if run inside an interactive shell
-  produced by an interactive `flox activate`
+  produced by an interactive `flox activate`.
   The shell `CMD` is run by is determined by `$FLOX_SHELL` or `$SHELL`.
   Because `CMD` is passed to a shell, shell features like running multiple
   commands with `&&` can be used.
@@ -45,7 +45,7 @@ Configures a shell with everything defined by the environment:
   Execs `CMD` directly after performing all parts of activation except for
   running scripts in `[profile]`.
 * in-place: `flox activate` when invoked from a non-interactive shell
-  with it's `stdout` redirected e.g. `eval "$(flox activate)"`\
+  with its `stdout` redirected e.g. `eval "$(flox activate)"`\
   Produces commands to be sourced by the parent shell.
   Flox will determine the parent shell from `$FLOX_SHELL` or otherwise
   automatically determine the parent shell and fall back to `$SHELL`.
@@ -56,7 +56,7 @@ for any of the detection mechanisms described above.
 When invoked interactively,
 the shell prompt will be modified to display the active environments,
 as shown below:
-```
+```text
 flox [env1 env2 env3] <normal prompt>
 ```
 
@@ -102,7 +102,7 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
 `-s`, `--start-services`
 :  Start the services listed in the manifest when activating the environment.
    If no services are running, the services from the manifest will be started,
-   otherwise a warning will displayed and activation will continue.
+   otherwise a warning will be displayed and activation will continue.
 
    To start services by default without requiring `-s`, set
    `services.auto-start = true` in the manifest.
@@ -114,7 +114,7 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
    regardless of how many times the environment is activated concurrently.
 
 `--no-start-services`
-:  Don't start services even if configured in manifest with `auto-start = true`.
+:  Don't start services even if configured in the manifest with `auto-start = true`.
 
 `-m (dev|run)`, `--mode (dev|run)`
 :  Activate the environment in either "dev" or "run" mode.
@@ -142,7 +142,7 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
 `$FLOX_PROMPT_ENVIRONMENTS`
 :   Contains a space-delimited list of the active environments,
     e.g. `owner1/foo owner2/bar local_env`.
-    If, `hide_default_prompt` is set to `true`, environments named `default` are
+    If `hide_default_prompt` is set to `true`, environments named `default` are
     excluded.
 
 `$FLOX_ENV_CACHE`
@@ -186,7 +186,6 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
          Flox will invoke
          the shell specified in `$FLOX_SHELL` if set
          or fall back to invoke `$SHELL` by default.
-
        * in-place mode: When performing an "in place" activation
          Flox will attempt to detect its parent shell type unless overridden by
          the `$FLOX_SHELL` variable,
@@ -204,31 +203,31 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
     chosen from the 256-color palette as described in the
     [xterm-256color chart](https://upload.wikimedia.org/wikipedia/commons/1/15/Xterm_256color_chart.svg).
 
-# EXAMPLES:
+# EXAMPLES
 
 Activate an environment stored in the current directory:
 
-```
-$ flox activate
+```bash
+flox activate
 ```
 
 Activate an environment `some_user/myenv` that's been pushed to FloxHub:
 
-```
-$ flox activate -r some_user/myenv
+```bash
+flox activate -r some_user/myenv
 ```
 
 Invoke a command inside an environment without entering its subshell:
 
-```
-$ flox activate -- cmd --some-arg arg1 arg2
+```bash
+flox activate -- cmd --some-arg arg1 arg2
 ```
 
 Activate `default` Flox environment only within the current shell
 (add to the relevant "rc" file, e.g. `~/.bashrc` or `~/.zprofile`):
 
-```
-$ eval "$(flox activate)"
+```bash
+eval "$(flox activate)"
 ```
 
 # SEE ALSO

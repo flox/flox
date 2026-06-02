@@ -11,11 +11,10 @@ flox-uninstall - remove packages from an environment
 
 # SYNOPSIS
 
-```
+```text
 flox [<general options>] (uninstall|rm)
      [-d=<path> | -r=<owner/name>]
      <packages>
-
 ```
 
 # DESCRIPTION

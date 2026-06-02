@@ -10,7 +10,7 @@ flox-services-logs - show logs of services
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] services logs
      [-d=<path> | -r=<owner/name>]
      [--follow]
@@ -53,10 +53,10 @@ An error will be returned if a specified service does not exist.
 ./include/general-options.md
 ```
 
-# EXAMPLES:
+# EXAMPLES
 
 Follow logs for all services:
-```
+```console
 $ flox services logs --follow
 service1: hello
 service2: hello
@@ -64,7 +64,7 @@ service2: hello
 ```
 
 Follow logs for a subset of services:
-```
+```console
 $ flox services logs --follow service1 service3
 service1: hello
 service3: hello
@@ -72,7 +72,7 @@ service3: hello
 ```
 
 Display all available logs for a single service:
-```
+```console
 $ flox services logs myservice
 starting...
 running...

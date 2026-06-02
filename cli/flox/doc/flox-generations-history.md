@@ -10,7 +10,7 @@ flox-generations-history - Show the change log for the current environment
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] generations history
      [-d=<path> | -r=<owner/name>]
      [-u]
@@ -34,8 +34,7 @@ generation over time.
 
 
 `--json`
-:   Render generations as json
-    Attention: the output is not guaranteed to be stable.
+:   Render generations as JSON. **Attention:** the output is not guaranteed to be stable.
 
 `--no-pager`
 :   Explicitly disable paged output
@@ -47,6 +46,6 @@ generation over time.
 ```
 
 # SEE ALSO
-[`flox-generations-list(1)`](./flox-generations-list.md)
-[`flox-generations-rollback(1)`](./flox-generations-rollback.md)
+[`flox-generations-list(1)`](./flox-generations-list.md),
+[`flox-generations-rollback(1)`](./flox-generations-rollback.md),
 [`flox-generations-switch(1)`](./flox-generations-switch.md)

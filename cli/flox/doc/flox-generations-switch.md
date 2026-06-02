@@ -10,7 +10,7 @@ flox-generations-switch - switch to the provided generation
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] generations switch
      [-d=<path> | -r=<owner/name>]
      <generation>
@@ -36,13 +36,15 @@ generation 2.
 [`flox-generations-history(1)`](./flox-generations-history.md) can be used to
 see the relationships between generations.
 
+# OPTIONS
+
 ```{.include}
 ./include/environment-options.md
 ./include/general-options.md
 ```
 
 # SEE ALSO
-[`flox-generations-history(1)`](./flox-generations-history.md)
-[`flox-generations-list(1)`](./flox-generations-list.md)
+[`flox-generations-history(1)`](./flox-generations-history.md),
+[`flox-generations-list(1)`](./flox-generations-list.md),
 [`flox-generations-rollback(1)`](./flox-generations-rollback.md)
 
