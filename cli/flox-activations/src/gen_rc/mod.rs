@@ -173,7 +173,7 @@ pub(crate) mod test_helpers {
             activate_d: PathBuf::from("/interpreter/activate.d"),
             flox_env: PathBuf::from("/flox_env"),
             restore_diff,
-            flox_activations: PathBuf::from("/flox_activations"),
+            flox_activations: PathBuf::from("/flox-activations"),
         }
     }
 
@@ -199,8 +199,9 @@ pub(crate) mod test_helpers {
         let _ = shell; // shell type doesn't affect deactivation output
         DeactivateCtx {
             activate_d: PathBuf::from("/interpreter/activate.d"),
+            flox_env: PathBuf::from("/flox_env"),
             restore_diff,
-            flox_activations: PathBuf::from("/flox_activations"),
+            flox_activations: PathBuf::from("/flox-activations"),
         }
     }
 

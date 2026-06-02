@@ -1078,7 +1078,6 @@ EOF
   export FLOX_FEATURES_AUTO_ACTIVATE=true
   unset _FLOX_HOOK_SAVE_FPATH _FLOX_HOOK_SAVE_COMPINIT_DUMPFILE _FLOX_HOOK_DIFF
   run zsh -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(command -v zsh)
     autoload -Uz compinit
     compinit

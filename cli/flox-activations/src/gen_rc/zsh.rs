@@ -411,7 +411,7 @@ mod tests {
             unset _FLOX_HOOK_DIFF;
             if [[ -n "${_FLOX_HOOK_SAVE_FPATH+set}" ]]; then
                 _flox_deactivate_old_fpath="$FPATH";
-                source <("/flox_activations" fix-fpath \
+                source <("/flox-activations" fix-fpath \
                     --colon-separated-fpath "$_FLOX_HOOK_SAVE_FPATH" \
                     --env-dirs "${FLOX_ENV_DIRS:-}");
                 if [[ "$FPATH" != "$_flox_deactivate_old_fpath" ]]; then
@@ -424,6 +424,7 @@ mod tests {
                 fi;
                 unset _flox_deactivate_old_fpath;
             fi;
+            eval "$('/flox_activations' profile-scripts-deactivate --shell zsh --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
             unset _FLOX_INVOCATION_TYPE;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
         "#]]
