@@ -729,6 +729,12 @@ if ($manifest) {
             };
         }
 
+        # Filter to only outputs declared in the derivation.  When the caller
+        # supplies a restricted `environmentOutputs` argument (e.g. for
+        # env-rendering builds that only need "run" and "dev"), build-* entries
+        # will not appear in $nix_attrs->{"outputs"} and must be skipped.
+        @outputData = grep { defined $nix_attrs->{"outputs"}{$_->{"name"}} } @outputData;
+
         return \@outputData;
     }
 

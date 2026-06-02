@@ -8,6 +8,7 @@
   manifestLock,
   name ? "environment",
   serviceConfigYaml ? null,
+  environmentOutputs ? null,
 }:
 let
   outdentScript = (import ./buildenvLib/default.nix).outdentText;
@@ -66,12 +67,20 @@ let
     else
       null;
 
-  # Calculate environment outputs.
-  environmentOutputs = [
-    "run"
-    "dev"
-  ]
-  ++ (builtins.map (buildId: "build-${buildId}") (builtins.attrNames buildSection));
+  # Calculate environment outputs. The caller may supply a restricted list via
+  # the `environmentOutputs` argument (e.g. `[ "run" "dev" ]`) to avoid
+  # declaring build-* outputs as derivation outputs and thereby suppress the
+  # `<prefix>-build-*` out-link symlinks that `nix build --out-link` would
+  # otherwise create.
+  environmentOutputs =
+    if environmentOutputs != null then
+      environmentOutputs
+    else
+      [
+        "run"
+        "dev"
+      ]
+      ++ (builtins.map (buildId: "build-${buildId}") (builtins.attrNames buildSection));
 
   createRenderedEnvironmentChunks = [
     # static chunks
