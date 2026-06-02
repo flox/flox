@@ -4,7 +4,8 @@ use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::LazyLock;
-use std::thread::ScopedJoinHandle;
+use std::thread::{ScopedJoinHandle, sleep};
+use std::time::Duration;
 use std::{env, fmt};
 
 use flox_catalog::{CatalogClientError, ClientTrait, StoreInfo};
@@ -1106,22 +1107,31 @@ fn nix_path_info_null_paths(paths: &[String]) -> Result<Vec<String>, std::io::Er
 /// `expected_paths` returns the full list of store paths the environment
 /// depends on. It is called once per attempt for diagnostic logging and
 /// for the `nix path-info` store-database check on failure.
+///
+/// `backoff` is called with the retry number (1 on the first retry, 2 on the
+/// second, etc.) before each retry.  Production callers pass an exponential
+/// sleep; tests pass a no-op.
 fn materialise_with_retry(
     mut realise: impl FnMut() -> Result<(), BuildEnvError>,
     mut missing_paths: impl FnMut() -> Vec<String>,
     expected_paths: impl Fn() -> Vec<String>,
     mut build_env: impl FnMut() -> Result<BuildEnvOutputs, BuildEnvError>,
+    max_attempts: usize,
+    mut backoff: impl FnMut(usize),
 ) -> Result<BuildEnvOutputs, BuildEnvError> {
-    const MAX_RETRIES: usize = 3;
-    for attempt in 1..=MAX_RETRIES {
+    assert!(max_attempts >= 1, "max_attempts must be at least 1");
+    for attempt in 1..=max_attempts {
+        if attempt > 1 {
+            backoff(attempt - 1);
+        }
         realise()?;
         let missing = missing_paths();
         if !missing.is_empty() {
-            if attempt < MAX_RETRIES {
+            if attempt < max_attempts {
                 debug!(
                     ?missing,
                     attempt,
-                    MAX_RETRIES,
+                    max_attempts,
                     "store paths missing after materialisation, GC suspected — retrying"
                 );
                 continue;
@@ -1139,14 +1149,14 @@ fn materialise_with_retry(
             };
             debug!(paths = ?missing, "full list of missing store paths after exhausting retries");
             return Err(BuildEnvError::MaterialisationFailed {
-                attempts: MAX_RETRIES,
+                attempts: max_attempts,
                 paths: display,
             });
         }
         let confirmed = expected_paths();
         debug!(
             attempt,
-            MAX_RETRIES,
+            max_attempts,
             paths = ?confirmed,
             "all store paths present per stat(), calling buildenv.nix"
         );
@@ -1177,11 +1187,11 @@ fn materialise_with_retry(
                             // Allow remaining retries to resolve that window;
                             // only treat it as deterministic once retries are
                             // exhausted.
-                            if attempt < MAX_RETRIES {
+                            if attempt < max_attempts {
                                 warn!(
                                     error = %e,
                                     attempt,
-                                    MAX_RETRIES,
+                                    max_attempts,
                                     "buildenv.nix failed with all paths confirmed in Nix store — possible DB-registration race, retrying"
                                 );
                                 continue;
@@ -1189,7 +1199,7 @@ fn materialise_with_retry(
                             warn!(
                                 error = %e,
                                 attempt,
-                                MAX_RETRIES,
+                                max_attempts,
                                 "buildenv.nix failed with all paths confirmed in Nix store after all retries — treating as deterministic"
                             );
                             return Err(e);
@@ -1200,7 +1210,7 @@ fn materialise_with_retry(
                             warn!(
                                 ?null_paths,
                                 attempt,
-                                MAX_RETRIES,
+                                max_attempts,
                                 "buildenv.nix failed: paths present on filesystem but \
                                 not registered in Nix store — force-registering and retrying"
                             );
@@ -1223,7 +1233,7 @@ fn materialise_with_retry(
                                 );
                                 return Err(e);
                             }
-                            if attempt < MAX_RETRIES {
+                            if attempt < max_attempts {
                                 continue;
                             }
                             // Last attempt: paths are now registered, try
@@ -1236,7 +1246,7 @@ fn materialise_with_retry(
                                 error = %e,
                                 path_info_error = %path_info_err,
                                 attempt,
-                                MAX_RETRIES,
+                                max_attempts,
                                 "buildenv.nix failed and nix path-info check errored \
                                 — treating as deterministic"
                             );
@@ -1244,12 +1254,12 @@ fn materialise_with_retry(
                         },
                     }
                 }
-                if attempt < MAX_RETRIES {
+                if attempt < max_attempts {
                     debug!(
                         ?missing_after,
                         error = %e,
                         attempt,
-                        MAX_RETRIES,
+                        max_attempts,
                         "store paths went missing during buildenv.nix, GC suspected — retrying"
                     );
                     continue;
@@ -1267,7 +1277,7 @@ fn materialise_with_retry(
                 };
                 debug!(paths = ?missing_after, "full list of missing store paths after exhausting retries");
                 return Err(BuildEnvError::MaterialisationFailed {
-                    attempts: MAX_RETRIES,
+                    attempts: max_attempts,
                     paths: display,
                 });
             },
@@ -1362,6 +1372,27 @@ where
             },
             || all_env_paths.clone(),
             || self.call_buildenv_nix(lockfile_path, service_config_path.clone(), out_link_prefix),
+            3,
+            // The delay targets the DB-registration race (milliseconds to
+            // seconds) rather than full GC sweeps; the retry budget is not
+            // large enough to outlast an active gc run.
+            |retry| {
+                // checked_shl / min(30_000) are dead at max_attempts=3 (max
+                // shift is 1); they guard against a future caller raising
+                // max_attempts substantially.
+                let delay = Duration::from_millis(
+                    250u64
+                        .checked_shl(retry.saturating_sub(1) as u32)
+                        .unwrap_or(u64::MAX)
+                        .min(30_000),
+                );
+                debug!(
+                    retry,
+                    delay_ms = delay.as_millis(),
+                    "materialisation failed, backing off before retry"
+                );
+                sleep(delay);
+            },
         )
     }
 }
@@ -2779,7 +2810,14 @@ mod materialise_retry_tests {
     #[test]
     fn succeeds_on_first_attempt_when_paths_present() {
         init_tracing();
-        let result = materialise_with_retry(|| Ok(()), Vec::new, Vec::new, || Ok(fake_outputs()));
+        let result = materialise_with_retry(
+            || Ok(()),
+            Vec::new,
+            Vec::new,
+            || Ok(fake_outputs()),
+            3,
+            |_| {},
+        );
         assert_eq!(result.unwrap(), fake_outputs());
     }
 
@@ -2808,6 +2846,8 @@ mod materialise_retry_tests {
             },
             Vec::new,
             || Ok(fake_outputs()),
+            3,
+            |_| {},
         );
         assert_eq!(result.unwrap(), fake_outputs());
         assert_eq!(
@@ -2829,6 +2869,8 @@ mod materialise_retry_tests {
             || missing.clone(),
             Vec::new,
             || Ok(fake_outputs()),
+            3,
+            |_| {},
         );
         match result.unwrap_err() {
             BuildEnvError::MaterialisationFailed { attempts, paths } => {
@@ -2872,6 +2914,8 @@ mod materialise_retry_tests {
                     Ok(fake_outputs())
                 }
             },
+            3,
+            |_| {},
         );
         assert_eq!(result.unwrap(), fake_outputs());
         assert_eq!(
@@ -2900,6 +2944,8 @@ mod materialise_retry_tests {
             },
             Vec::new,
             || Err(BuildEnvError::Build("nix build failed".to_string())),
+            3,
+            |_| {},
         );
         match result.unwrap_err() {
             BuildEnvError::MaterialisationFailed { attempts, paths } => {
@@ -2931,6 +2977,8 @@ mod materialise_retry_tests {
                 build_calls.set(build_calls.get() + 1);
                 Err(BuildEnvError::Build("deterministic failure".to_string()))
             },
+            3,
+            |_| {},
         );
         match result.unwrap_err() {
             BuildEnvError::Build(msg) => assert_eq!(msg, "deterministic failure"),
@@ -2947,6 +2995,34 @@ mod materialise_retry_tests {
     // --- realise errors ---
 
     #[test]
+    fn backoff_called_once_per_retry_with_1based_retry_number() {
+        init_tracing();
+        // 3 attempts total: backoff should be called before attempts 2 and 3,
+        // with retry numbers 1 and 2 respectively (not on the first attempt).
+        let backoff_args: std::cell::RefCell<Vec<usize>> = std::cell::RefCell::new(Vec::new());
+        let result = materialise_with_retry(
+            || Ok(()),
+            || {
+                // Always report a missing path so the loop retries to exhaustion.
+                vec!["/nix/store/aaaa-missing".to_string()]
+            },
+            Vec::new,
+            || Ok(fake_outputs()),
+            3,
+            |n| backoff_args.borrow_mut().push(n),
+        );
+        assert!(matches!(
+            result.unwrap_err(),
+            BuildEnvError::MaterialisationFailed { attempts: 3, .. }
+        ));
+        assert_eq!(
+            *backoff_args.borrow(),
+            vec![1, 2],
+            "backoff must be called once per retry with 1-based retry number, never on first attempt"
+        );
+    }
+
+    #[test]
     fn realise_error_propagates_immediately() {
         init_tracing();
         let build_called = Cell::new(false);
@@ -2958,6 +3034,8 @@ mod materialise_retry_tests {
                 build_called.set(true);
                 Ok(fake_outputs())
             },
+            3,
+            |_| {},
         );
         assert!(matches!(result.unwrap_err(), BuildEnvError::Build(_)));
         assert!(
