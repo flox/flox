@@ -59,11 +59,11 @@ function set_manifest_mode() {
 }
 
 function assert_dev_mode() {
-  assert_output --partial "${NIX_SYSTEM}.${PROJECT_NAME}.dev"
+  assert_output --partial "${NIX_SYSTEM}.${PROJECT_NAME}-dev"
 }
 
 function assert_run_mode() {
-  assert_output --partial "${NIX_SYSTEM}.${PROJECT_NAME}.run"
+  assert_output --partial "${NIX_SYSTEM}.${PROJECT_NAME}-run"
 }
 
 @test "activate defaults to dev mode" {
@@ -146,7 +146,7 @@ EOF
   "$FLOX_BIN" edit -n "runtime_project" # give it a stable name
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/almonds.yaml" "$FLOX_BIN" install almonds
   run "$FLOX_BIN" activate -m run -c "which almonds"
-  assert_output --partial ".flox/run/$NIX_SYSTEM.runtime_project.run/bin/almonds"
+  assert_output --partial ".flox/run/$NIX_SYSTEM.runtime_project-run/bin/almonds"
 }
 
 @test "runtime: remains in runtime mode as bottom layer" {

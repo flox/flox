@@ -902,7 +902,7 @@ pub fn check_build_metadata(
 
     let build_results = builder.build(
         &base_nixpkgs_url.as_flake_ref()?,
-        &built_environments.develop,
+        &built_environments.dev,
         &[pkg.name()],
         Some(false),
         system_override,

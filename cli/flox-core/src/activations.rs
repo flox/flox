@@ -4,7 +4,7 @@ use std::ops::Deref;
 use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
 
-use anyhow::Context;
+use anyhow::{Context, bail};
 use fslock::LockFile;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -326,6 +326,21 @@ impl StartIdentifier {
 
         Ok(activation_state_dir.as_ref().join(dir_name))
     }
+
+    /// Remove the start state directory for this identifier if it exists.
+    pub fn remove_start_state_dir(
+        &self,
+        activation_state_dir: impl AsRef<Path>,
+    ) -> Result<(), Error> {
+        let state_dir = self
+            .start_state_dir(activation_state_dir)
+            .context("failed to compute start state dir path")?;
+        trace!(?state_dir, "removing empty activation state dir");
+        std::fs::remove_dir_all(&state_dir).with_context(|| {
+            format!("failed to remove start state dir '{}'", state_dir.display())
+        })?;
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -489,12 +504,35 @@ impl ActivationState {
         self.ready = Ready::True(start_id.clone());
     }
 
-    /// Detach a PID from an activation
+    /// Detach a PID from an activation, updating ready as needed.
     ///
-    /// update_ready_after_detach must be called after calling detach
-    pub fn detach(&mut self, pid: Pid) {
+    /// Returns `Some(start_id)` if this was the last attachment for that
+    /// `StartIdentifier` (i.e. the caller should clean up the start state
+    /// directory), or `None` if there are still other PIDs attached to the
+    /// same start.
+    pub fn detach(&mut self, pid: Pid) -> Result<Option<StartIdentifier>, Error> {
         let removed = self.attached_pids.remove(&pid);
         debug!(pid, ?removed, "detaching from activation");
+
+        let Some(attachment) = removed else {
+            bail!("PID {} is not attached to the activation", pid);
+        };
+
+        let start_id = attachment.start_id;
+
+        // Return the start_id only when no remaining attachment references it.
+        let has_remaining = self.attached_pids.values().any(|a| a.start_id == start_id);
+
+        // Only update ready state if there are still attached PIDs
+        if !self.attached_pids.is_empty() {
+            self.update_ready_after_detach();
+        }
+
+        if has_remaining {
+            Ok(None)
+        } else {
+            Ok(Some(start_id))
+        }
     }
 
     /// Clean up a specific terminated PID
@@ -533,32 +571,20 @@ impl ActivationState {
             return (None, false);
         }
 
-        let start_id = attachment.start_id;
-        tracing::info!(pid, ?start_id, "detaching terminated PID");
-        self.detach(pid);
-
-        // Check if this start_id now has no more attachments
-        let has_attachments = self
-            .attached_pids
-            .iter()
-            .any(|(_, attachment)| attachment.start_id == start_id);
-
-        let empty_start_id = if !has_attachments {
-            Some(start_id)
-        } else {
-            None
+        tracing::info!(pid, "detaching terminated PID");
+        let Ok(empty_start_id) = self.detach(pid) else {
+            debug!(
+                pid,
+                "PID not found in attached_pids, this should be unreachable"
+            );
+            return (None, false);
         };
-
-        // Only update ready state if there are still attached PIDs
-        if !self.attached_pids.is_empty() {
-            self.update_ready_after_detach();
-        }
 
         (empty_start_id, true)
     }
 
-    /// set ready to False if there are no more PIDs attached to the current start
-    /// should only be called when there are some attached PIDs
+    /// Set ready to False if there are no more PIDs attached to the current start
+    /// Should only be called when there are some attached PIDs
     fn update_ready_after_detach(&mut self) {
         if self.attached_pids.is_empty() {
             unreachable!("should remove all state when there are no more attached PIDs");

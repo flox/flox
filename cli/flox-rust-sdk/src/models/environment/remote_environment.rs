@@ -46,7 +46,6 @@ use crate::models::environment::floxmeta_branch::{
 use crate::models::environment::generations::SyncToGenerationResult;
 use crate::models::environment::managed_environment::GENERATION_LOCK_FILENAME;
 use crate::models::environment::path_environment::{InitCustomization, PathEnvironment};
-use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::lock_manifest::LockResult;
 
 const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
@@ -236,24 +235,24 @@ impl RemoteEnvironment {
                 let base_dir =
                     CanonicalPath::new(gcroots_dir).expect("gcroots_dir is not a valid path");
 
-                let old_links = RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
-                    &base_dir,
-                    pointer.name.as_ref(),
-                    &flox.system,
-                );
+                // Legacy links used dot separators: <system>.<name>.dev / <system>.<name>.run
+                let old_dev =
+                    base_dir.join(format!("{}.{}.dev", flox.system, pointer.name.as_ref()));
+                let old_run =
+                    base_dir.join(format!("{}.{}.run", flox.system, pointer.name.as_ref()));
 
-                if old_links.development.is_symlink() {
+                if old_dev.is_symlink() {
                     debug!(
-                        out_link=?old_links.development,
+                        out_link=?old_dev,
                         "deleting legacy outlink");
-                    std::fs::remove_file(&old_links.development)
+                    std::fs::remove_file(&old_dev)
                         .map_err(RemoteEnvironmentError::DeleteOldOutLink)?;
                 }
-                if old_links.runtime.is_symlink() {
+                if old_run.is_symlink() {
                     debug!(
-                        out_link=?old_links.runtime,
+                        out_link=?old_run,
                         "deleting legacy outlink");
-                    std::fs::remove_file(&old_links.runtime)
+                    std::fs::remove_file(&old_run)
                         .map_err(RemoteEnvironmentError::DeleteOldOutLink)?;
                 }
 
@@ -456,10 +455,6 @@ impl Environment for RemoteEnvironment {
         flox: &Flox,
     ) -> Result<crate::providers::buildenv::BuildEnvOutputs, EnvironmentError> {
         self.inner.build(flox)
-    }
-
-    fn link(&mut self, store_paths: &BuildEnvOutputs) -> Result<(), EnvironmentError> {
-        self.inner.link(store_paths)
     }
 
     fn cache_path(&self) -> Result<CanonicalPath, EnvironmentError> {

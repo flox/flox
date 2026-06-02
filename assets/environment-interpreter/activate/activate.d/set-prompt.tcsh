@@ -1,7 +1,15 @@
 $_flox_activate_tracer $_activate_d/set-prompt.tcsh START
 
 # Tweak the (already customized) prompt: add a flox indicator.
-if ( $?prompt && "$FLOX_PROMPT_ENVIRONMENTS" != "" ) then
+
+# Handle both unset (which is what we expect after deactivating) and empty
+# string
+set _flox_have_envs = 0
+if ( $?FLOX_PROMPT_ENVIRONMENTS ) then
+    if ( "$FLOX_PROMPT_ENVIRONMENTS" != "" ) set _flox_have_envs = 1
+endif
+
+if ( $?prompt && $_flox_have_envs ) then
     if ( ! $?FLOX_PROMPT ) then
         set FLOX_PROMPT = "flox"
     endif
@@ -31,5 +39,7 @@ else if ( $?FLOX_SAVE_TCSH_PROMPT ) then
     set prompt = "$FLOX_SAVE_TCSH_PROMPT"
     unsetenv FLOX_SAVE_TCSH_PROMPT
 endif
+
+unset _flox_have_envs
 
 $_flox_activate_tracer $_activate_d/set-prompt.tcsh END

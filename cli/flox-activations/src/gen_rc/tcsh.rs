@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use flox_core::activate::context::InvocationType;
-use shell_gen::{GenerateShell, Shell};
+use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded};
 
 use crate::attach_diff::todo_drop_set_exported_unexpanded;
 use crate::gen_rc::{Action, RM};
@@ -76,6 +76,23 @@ pub fn generate_tcsh_profile_commands(
             // TODO: we shouldn't be exporting these in the first place
             // Although note that unsetting the prompt depends on these being
             // set
+        },
+    }
+
+    // Emit _FLOX_INVOCATION_TYPE as a shell-local (non-exported) variable so
+    // that `flox deactivate --print-script` can distinguish interactive
+    // subshells from in-place activations without reading state.json.
+    match action {
+        Action::Activate { args, .. } => {
+            stmts.push(set_unexported_unexpanded(
+                "_FLOX_INVOCATION_TYPE",
+                format!("{}", args.invocation_type),
+            ));
+        },
+        Action::Deactivate(_) => {
+            // tcsh uses `set` (not setenv) for shell-local vars, so the
+            // corresponding teardown is `unset` (not `unsetenv`).
+            stmts.push("unset _FLOX_INVOCATION_TYPE;".to_stmt());
         },
     }
 
@@ -269,6 +286,7 @@ mod tests {
             setenv _activate_d /interpreter/activate.d;
             setenv _flox_activations /flox_activations;
             setenv _flox_activate_tracer TRACER;
+            set _FLOX_INVOCATION_TYPE = interactive;
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
             if (! $?FLOX_ENV_DIRS) setenv FLOX_ENV_DIRS "empty";
             eval "`'/flox_activations' set-env-dirs --shell tcsh --flox-env '/flox_env' --env-dirs $FLOX_ENV_DIRS:q`";
@@ -304,6 +322,7 @@ mod tests {
             setenv _activate_d /interpreter/activate.d;
             setenv _flox_activations /flox_activations;
             setenv _flox_activate_tracer TRACER;
+            set _FLOX_INVOCATION_TYPE = in_place;
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
             if (! $?FLOX_ENV_DIRS) setenv FLOX_ENV_DIRS "empty";
             eval "`'/flox_activations' set-env-dirs --shell tcsh --flox-env '/flox_env' --env-dirs $FLOX_ENV_DIRS:q`";
@@ -339,6 +358,7 @@ mod tests {
             setenv MODIFIED_VAR MODIFIED_ORIGINAL;
             setenv DELETED_VAR DELETED_ORIGINAL;
             unsetenv _FLOX_HOOK_DIFF;
+            unset _FLOX_INVOCATION_TYPE;
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
             rehash;
         "#]]

@@ -1586,6 +1586,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "flox-events"
+version = "0.0.0"
+dependencies = [
+ "derive_more",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "time",
+ "uuid",
+]
+
+[[package]]
 name = "flox-manifest"
 version = "0.0.0"
 dependencies = [
@@ -1682,6 +1694,8 @@ dependencies = [
  "nix",
  "proptest",
  "tempfile",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

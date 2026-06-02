@@ -24,7 +24,8 @@ if set -q FLOX_PROMPT_ENVIRONMENTS && test -n "$FLOX_PROMPT_ENVIRONMENTS"
         printf "%s %s\n" $_flox $original_prompt
     end
 else if functions -q flox_saved_fish_prompt
-    # Restore the prompt when no environments should be in the prompt
+    # `functions --copy SRC DST` requires DST to not exist, so erase first
+    functions --erase fish_prompt
     functions --copy flox_saved_fish_prompt fish_prompt
     functions --erase flox_saved_fish_prompt
 end

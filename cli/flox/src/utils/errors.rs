@@ -312,7 +312,6 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
 
             This is likely due to a corrupt environment.
         "},
-        CoreEnvironmentError::CreateTempdir(_) => display_chain(err),
         CoreEnvironmentError::Auth(err) => display_chain(err),
         CoreEnvironmentError::Manifest(manifest_err) => format_manifest_error(manifest_err),
         CoreEnvironmentError::Lockfile(err) => display_chain(err),

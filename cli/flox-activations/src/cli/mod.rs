@@ -6,6 +6,7 @@ use flox_core::vars::FLOX_VERSION_STRING;
 
 pub mod activate;
 pub mod attach;
+pub mod detach;
 pub mod executive;
 mod fix_fpath;
 pub mod fix_paths;
@@ -14,6 +15,7 @@ mod profile_scripts;
 pub mod set_env_dirs;
 
 use activate::ActivateArgs;
+use detach::DetachArgs;
 use executive::ExecutiveArgs;
 use fix_fpath::FixFpathArgs;
 use fix_paths::FixPathsArgs;
@@ -47,6 +49,8 @@ pub enum Command {
     Attach(AttachArgs),
     #[command(about = "Activate a Flox environment.")]
     Activate(ActivateArgs),
+    #[command(about = "Detach a PID from an activation, updating state.json.")]
+    Detach(DetachArgs),
     #[command(about = "Start an activation and then run the executive")]
     Executive(ExecutiveArgs),
     #[command(about = "Print sourceable output fixing PATH and MANPATH for a shell.")]
