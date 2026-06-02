@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use flox_core::activate::context::{AutoActivateFishMode, InvocationType};
+use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded};
 
 use crate::attach_diff::{todo_drop_set_exported_unexpanded, todo_drop_unset};
@@ -132,8 +133,9 @@ pub fn generate_fish_profile_commands(
 
             stmts.push(
                 format!(
-                    r#"{} set-env-dirs --shell fish --flox-env "{}" --env-dirs "$FLOX_ENV_DIRS" | source;"#,
+                    r#"{} set-env-dirs --shell {} --flox-env "{}" --env-dirs "$FLOX_ENV_DIRS" | source;"#,
                     args.flox_activations.display(),
+                    Shell::Fish,
                     args.flox_env.display()
                 )
                 .to_stmt(),
@@ -145,8 +147,9 @@ pub fn generate_fish_profile_commands(
             );
 
             stmts.push(format!(
-                r#"{} fix-paths --shell fish --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "$MANPATH" | source;"#,
-                args.flox_activations.display()
+                r#"{} fix-paths --shell {} --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "$MANPATH" | source;"#,
+                args.flox_activations.display(),
+                Shell::Fish,
             ).to_stmt());
         },
         Action::Deactivate(_) => {
@@ -161,12 +164,30 @@ pub fn generate_fish_profile_commands(
             .to_stmt());
 
             stmts.push(format!(
-                r#"{} profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source;"#,
-                args.flox_activations.display()
+                r#"{} profile-scripts --shell {} --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source;"#,
+                args.flox_activations.display(),
+                Shell::Fish,
             ).to_stmt());
         },
-        Action::Deactivate(_) => {
-            // TODO: run profile.deactivate.fish
+        Action::Deactivate(ctx) => {
+            // Source the user's profile.deactivate.{common,fish} scripts
+            // for the env being torn down, and remove it from
+            // _FLOX_SOURCED_PROFILE_SCRIPTS so stacked activations stay
+            // consistent. We bake in the env path at generation time
+            // because by now `restore_diff` has either unset `FLOX_ENV`
+            // (outermost deactivate) or restored it to the outer env's
+            // value (nested), so runtime `$FLOX_ENV` is not a reliable
+            // handle on the env we're tearing down. The fallback below
+            // mirrors the activate-side initializer for unset vars.
+            stmts.push(
+                format!(
+                    r#"{} profile-scripts-deactivate --shell {} --env '{}' --already-sourced-env-dirs (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end) | source;"#,
+                    FLOX_ACTIVATIONS_BIN.display(),
+                    Shell::Fish,
+                    ctx.flox_env.display()
+                )
+                .to_stmt(),
+            );
         },
     }
 
@@ -345,6 +366,7 @@ mod tests {
             set -e _FLOX_HOOK_DIFF;
             set -e _FLOX_INVOCATION_TYPE;
             if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
+            /flox_activations profile-scripts-deactivate --shell fish --env '/flox_env' --already-sourced-env-dirs (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end) | source;
         "#]]
         .assert_eq(&output);
     }
