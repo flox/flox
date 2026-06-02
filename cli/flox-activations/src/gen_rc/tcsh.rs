@@ -322,7 +322,7 @@ mod tests {
             setenv _activate_d /interpreter/activate.d;
             setenv _flox_activations /flox_activations;
             setenv _flox_activate_tracer TRACER;
-            set _FLOX_INVOCATION_TYPE = in_place;
+            set _FLOX_INVOCATION_TYPE = inplace;
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
             if (! $?FLOX_ENV_DIRS) setenv FLOX_ENV_DIRS "empty";
             eval "`'/flox_activations' set-env-dirs --shell tcsh --flox-env '/flox_env' --env-dirs $FLOX_ENV_DIRS:q`";
