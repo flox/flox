@@ -540,8 +540,33 @@ FLOX_COLD_START_UNSET=(
   -u _FLOX_HOOK_SAVE_FPATH
 )
 
+# Print the value of $2 from the null-delimited env dump file $1.
+# Exits 0 with the value on stdout if found, 1 if the var is unset.
+# Preserves multi-line values (awk handles NUL records natively).
+env_var_value() {
+  awk -v RS='\0' -v var="$2" '
+    {
+      eq = index($0, "=")
+      if (eq > 0 && substr($0, 1, eq - 1) == var) {
+        printf "%s", substr($0, eq + 1)
+        found = 1
+        exit
+      }
+    }
+    END { if (!found) exit 1 }
+  ' "$1"
+}
+
 # Print the set of env vars whose value changed (or were added/removed)
-# between two raw null-delimited env dumps.
+# between two raw null-delimited env dumps. The diff'd names go to stdout
+# (one per line, sorted ASCII). A pretty per-var BEFORE vs AFTER block
+# also goes to stderr for debugging when the assertion fails. Tests
+# should capture stdout manually so stderr flows through to bats:
+#
+#   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
+#
+# With `run --separate-stderr` the verbose block would be captured into
+# $stderr and hidden by bats on failure.
 diff_env_dumps() {
   local before="${1:?}"
   shift
@@ -596,15 +621,39 @@ diff_env_dumps() {
   local noise_pattern="^(${noise[*]})"
   local ok_to_unset_pattern="^(${ok_to_unset[*]})="
 
-  {
-    # Records only in BEFORE -- strip OK_TO_UNSET names from this stream.
-    LC_ALL=C comm -z -23 <(LC_ALL=C sort -z "$before") <(LC_ALL=C sort -z "$after") |
-      LC_ALL=C grep -z -v -E "$ok_to_unset_pattern"
-    # Records only in AFTER -- no OK_TO_UNSET filter.
-    LC_ALL=C comm -z -13 <(LC_ALL=C sort -z "$before") <(LC_ALL=C sort -z "$after")
-  } |
-    cut -z -d= -f1 | tr -d "\t" | LC_ALL=C sort -uz | tr "\0" "\n" |
-    grep -v -E "$noise_pattern"
+  local names
+  names=$(
+    {
+      # Records only in BEFORE -- strip OK_TO_UNSET names from this stream.
+      LC_ALL=C comm -z -23 <(LC_ALL=C sort -z "$before") <(LC_ALL=C sort -z "$after") |
+        LC_ALL=C grep -z -v -E "$ok_to_unset_pattern"
+      # Records only in AFTER -- no OK_TO_UNSET filter.
+      LC_ALL=C comm -z -13 <(LC_ALL=C sort -z "$before") <(LC_ALL=C sort -z "$after")
+    } |
+      cut -z -d= -f1 | tr -d "\t" | LC_ALL=C sort -uz | tr "\0" "\n" |
+      grep -v -E "$noise_pattern"
+  )
+
+  if [[ -n "$names" ]]; then
+    {
+      printf -- '--- env diff (BEFORE vs AFTER) ---\n'
+      local name b_val a_val
+      while IFS= read -r name; do
+        printf '%s\n' "$name"
+        if b_val=$(env_var_value "$before" "$name"); then
+          printf '  before: %s\n' "$b_val"
+        else
+          printf '  before: <unset>\n'
+        fi
+        if a_val=$(env_var_value "$after" "$name"); then
+          printf '  after:  %s\n' "$a_val"
+        else
+          printf '  after:  <unset>\n'
+        fi
+      done <<<"$names"
+    } >&2
+    printf '%s\n' "$names"
+  fi
 }
 
 # bats test_tags=activate,deactivate
@@ -624,7 +673,7 @@ diff_env_dumps() {
     "$ENV_BIN" -0 > "$AFTER"
   '
 
-  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
+  output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
   assert_output - <<EOF
 _activate_d
@@ -648,7 +697,7 @@ EOF
     "$ENV_BIN" -0 > "$AFTER"
   '
 
-  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
+  output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
   assert_output - <<EOF
 _activate_d
@@ -672,7 +721,7 @@ EOF
     "$ENV_BIN" -0 > "$AFTER"
   '
 
-  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
+  output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
   assert_output - <<EOF
 _activate_d
@@ -696,7 +745,7 @@ EOF
     "$ENV_BIN" -0 > "$AFTER"
   '
 
-  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
+  output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
  if [[ "$OSTYPE" == darwin* ]]; then
     assert_output - <<EOF
@@ -728,7 +777,7 @@ EOF
   env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
   FLOX_SHELL="bash" env "${FLOX_COLD_START_UNSET[@]}" "$FLOX_BIN" activate -c "$COMMAND" > "$AFTER"
 
-  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
+  output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
 
   if [[ "$OSTYPE" == darwin* ]]; then
@@ -764,7 +813,7 @@ EOF
   env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
   SHELL="$(which fish)" env "${FLOX_COLD_START_UNSET[@]}" "$FLOX_BIN" activate -c "$COMMAND" > "$AFTER"
 
-  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
+  output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
 
   if [[ "$OSTYPE" == darwin* ]]; then
@@ -800,7 +849,7 @@ EOF
   env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
   SHELL="$(which tcsh)" env "${FLOX_COLD_START_UNSET[@]}" "$FLOX_BIN" activate -c "$COMMAND" > "$AFTER"
 
-  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
+  output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
   if [[ "$OSTYPE" == darwin* ]]; then
     assert_output - <<EOF
@@ -852,7 +901,7 @@ EOF
   env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
   FLOX_SHELL="zsh" env "${FLOX_COLD_START_UNSET[@]}" "$FLOX_BIN" activate -c "$COMMAND" > "$AFTER"
 
-  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
+  output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
   if [[ "$OSTYPE" == darwin* ]]; then
     assert_output - <<EOF
@@ -908,7 +957,7 @@ EOF
   FLOX_SHELL="bash" run -0 \
     env "${FLOX_COLD_START_UNSET[@]}" expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
 
-  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
+  output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
   if [[ "$OSTYPE" == darwin* ]]; then
     assert_output - <<EOF
@@ -953,7 +1002,7 @@ EOF
   FLOX_SHELL="fish" run -0 \
     env "${FLOX_COLD_START_UNSET[@]}" expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
 
-  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
+  output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
   if [[ "$OSTYPE" == darwin* ]]; then
     assert_output - <<EOF
@@ -1000,7 +1049,7 @@ EOF
   FLOX_SHELL="tcsh" run -0 \
     env "${FLOX_COLD_START_UNSET[@]}" expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
 
-  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
+  output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
   # FLOX_SAVE_TCSH_PROMPT is a macOS-only tcsh interactive leak.
   if [[ "$OSTYPE" == darwin* ]]; then
@@ -1063,7 +1112,7 @@ EOF
   FLOX_SHELL="zsh" run -0 \
     env "${FLOX_COLD_START_UNSET[@]}" expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
 
-  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
+  output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
   if [[ "$OSTYPE" == darwin* ]]; then
     assert_output - <<EOF
