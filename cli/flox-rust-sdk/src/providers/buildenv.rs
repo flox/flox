@@ -1089,12 +1089,16 @@ fn nix_path_info_null_paths(paths: &[String]) -> Result<Vec<String>, std::io::Er
 ///   [`BuildEnvError::MaterialisationFailed`].
 /// - All paths still present per stat: `nix path-info --json` is run to
 ///   check the Nix daemon's store database.  If the daemon confirms all
-///   paths are registered this is a deterministic failure (bad lockfile,
-///   spawn error, etc.) — propagate immediately.  If the daemon returns
-///   `null` for any paths they are present on the filesystem but not
-///   registered (e.g. a CI cache that bypassed the daemon).  Those paths
-///   are force-registered with `nix build --no-link --keep-going` and the
-///   attempt is retried.
+///   paths are registered, retrying is still allowed because there is a
+///   race window: a path can arrive on disk (passing stat()) before the
+///   Nix daemon records it in its SQLite database (causing
+///   `builtins.storePath` to fail), then the DB registration completes
+///   before `nix path-info` runs.  Remaining retries are used to resolve
+///   that window; the error is only propagated once retries are exhausted.
+///   If the daemon returns `null` for any paths they are present on the
+///   filesystem but not registered (e.g. a CI cache that bypassed the
+///   daemon).  Those paths are force-registered with
+///   `nix build --no-link --keep-going` and the attempt is retried.
 ///
 /// `realise` errors always propagate immediately; a path that never appeared
 /// in the store is not a GC race.
@@ -1152,8 +1156,10 @@ fn materialise_with_retry(
                 // Re-stat to distinguish a GC race from a deterministic
                 // failure. A path that was present before build_env but is
                 // gone afterwards means GC swept it during the run — retry.
-                // If all paths are still present the error is not GC-related
-                // and retrying materialisation cannot help.
+                // If all paths are still present, check nix path-info to
+                // determine whether a DB-registration race or a genuinely
+                // deterministic failure (bad lockfile, spawn error) is the
+                // cause.
                 let missing_after = missing_paths();
                 if missing_after.is_empty() {
                     // All paths still present per stat() — check whether the
@@ -1162,14 +1168,29 @@ fn materialise_with_retry(
                     // daemon, leaving paths on disk but unregistered.
                     match nix_path_info_null_paths(&confirmed) {
                         Ok(null_paths) if null_paths.is_empty() => {
-                            // Daemon confirms all paths — genuine deterministic
-                            // failure, retrying cannot help.
+                            // Daemon confirms all paths are registered. This is
+                            // usually a genuine deterministic failure, but there
+                            // is a race: a path can arrive on disk (passing
+                            // stat()) before the Nix daemon records it in its DB
+                            // (causing builtins.storePath to fail), then the DB
+                            // registration completes before nix path-info runs.
+                            // Allow remaining retries to resolve that window;
+                            // only treat it as deterministic once retries are
+                            // exhausted.
+                            if attempt < MAX_RETRIES {
+                                warn!(
+                                    error = %e,
+                                    attempt,
+                                    MAX_RETRIES,
+                                    "buildenv.nix failed with all paths confirmed in Nix store — possible DB-registration race, retrying"
+                                );
+                                continue;
+                            }
                             warn!(
                                 error = %e,
                                 attempt,
                                 MAX_RETRIES,
-                                "buildenv.nix failed with all paths confirmed in Nix \
-                                store — treating as deterministic"
+                                "buildenv.nix failed with all paths confirmed in Nix store after all retries — treating as deterministic"
                             );
                             return Err(e);
                         },
@@ -2890,10 +2911,13 @@ mod materialise_retry_tests {
     }
 
     #[test]
-    fn build_env_error_propagates_immediately_when_paths_still_present() {
+    fn build_env_error_exhausts_retries_when_paths_confirmed_present() {
         init_tracing();
-        // build_env fails but re-stat shows nothing missing — deterministic
-        // failure, must not retry.
+        // build_env always fails and re-stat always shows nothing missing.
+        // nix path-info (called with an empty expected_paths list) returns no
+        // null paths, so we cannot distinguish a genuine deterministic failure
+        // from the DB-registration race window.  The loop must use all retries
+        // before propagating the error.
         let realise_calls = Cell::new(0usize);
         let build_calls = Cell::new(0usize);
         let result = materialise_with_retry(
@@ -2914,10 +2938,10 @@ mod materialise_retry_tests {
         }
         assert_eq!(
             realise_calls.get(),
-            1,
-            "must not retry on deterministic failure"
+            3,
+            "must exhaust all retries before propagating"
         );
-        assert_eq!(build_calls.get(), 1, "build_env must not be retried");
+        assert_eq!(build_calls.get(), 3, "build_env must be retried");
     }
 
     // --- realise errors ---
