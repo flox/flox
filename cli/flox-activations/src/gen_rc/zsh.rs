@@ -110,14 +110,14 @@ pub fn generate_zsh_profile_commands(
             // Inner case: call `fix-fpath` to recompute FPATH from the
             // user's saved base plus the remaining active envs (FLOX_ENV_DIRS
             // has already been restored by the env diff above).  Re-run
-            // compinit only when FPATH actually changed.  Dumpfile
-            // priority: (1) `$FLOX_ENV_CACHE/.zcompdump` — after env diff
-            // restoration, FLOX_ENV_CACHE points to the outer env's cache
-            // dir, so this is likely a cache hit from the outer activation;
-            // (2) `$_FLOX_HOOK_SAVE_COMPINIT_DUMPFILE` — the user's
-            // pre-flox dumpfile, if available; (3) bare `compinit`.
-            // The save vars are kept (not unset) because the outer
-            // activation still needs them for its own deactivation.
+            // compinit only when FPATH actually changed.  Dumpfile: prefer
+            // `$FLOX_ENV_CACHE/.zcompdump` (outer env's cache, likely a hit
+            // from the outer activation); fall back to bare `compinit`.
+            // `_FLOX_HOOK_SAVE_COMPINIT_DUMPFILE` is intentionally NOT used
+            // here — writing intermediate FPATH state to the user's personal
+            // dumpfile would corrupt it.  The save vars are kept (not unset)
+            // because the outer activation still needs them for its own
+            // deactivation.
             //
             // NOTE on cost: `compinit` rebuilds the completion dump, which
             // can be tens of ms on large `fpath` setups.  For the inner
@@ -141,22 +141,20 @@ pub fn generate_zsh_profile_commands(
                     formatdoc! {r#"
                         if [[ -n "${{_FLOX_HOOK_SAVE_FPATH+set}}" ]]; then
                             _flox_deactivate_old_fpath="$FPATH";
-                            source <("{flox_activations_bin}" fix-fpath \
+                            source <("{flox_activations}" fix-fpath \
                                 --colon-separated-fpath "$_FLOX_HOOK_SAVE_FPATH" \
                                 --env-dirs "${{FLOX_ENV_DIRS:-}}");
                             if [[ "$FPATH" != "$_flox_deactivate_old_fpath" ]]; then
                                 autoload -U compinit;
                                 if [[ -n "${{FLOX_ENV_CACHE:-}}" && -d "${{FLOX_ENV_CACHE}}" ]]; then
                                     compinit -d "${{FLOX_ENV_CACHE}}/.zcompdump";
-                                elif [[ -n "${{_FLOX_HOOK_SAVE_COMPINIT_DUMPFILE:-}}" ]]; then
-                                    compinit -d "$_FLOX_HOOK_SAVE_COMPINIT_DUMPFILE";
                                 else
                                     compinit;
                                 fi;
                             fi;
                             unset _flox_deactivate_old_fpath;
                         fi;"#,
-                        flox_activations_bin = ctx.flox_activations_bin.display(),
+                        flox_activations = ctx.flox_activations.display(),
                     }
                     .to_stmt(),
                 );
@@ -420,8 +418,6 @@ mod tests {
                     autoload -U compinit;
                     if [[ -n "${FLOX_ENV_CACHE:-}" && -d "${FLOX_ENV_CACHE}" ]]; then
                         compinit -d "${FLOX_ENV_CACHE}/.zcompdump";
-                    elif [[ -n "${_FLOX_HOOK_SAVE_COMPINIT_DUMPFILE:-}" ]]; then
-                        compinit -d "$_FLOX_HOOK_SAVE_COMPINIT_DUMPFILE";
                     else
                         compinit;
                     fi;

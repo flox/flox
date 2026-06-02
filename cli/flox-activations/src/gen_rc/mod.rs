@@ -37,7 +37,7 @@ pub struct DeactivateCtx {
     pub restore_diff: DiffSerializer,
     /// Path to the `flox-activations` binary, embedded in generated shell
     /// for inner-deactivation `fix-fpath` calls.
-    pub flox_activations_bin: PathBuf,
+    pub flox_activations: PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -173,7 +173,7 @@ pub(crate) mod test_helpers {
             activate_d: PathBuf::from("/interpreter/activate.d"),
             flox_env: PathBuf::from("/flox_env"),
             restore_diff,
-            flox_activations_bin: PathBuf::from("/flox_activations"),
+            flox_activations: PathBuf::from("/flox_activations"),
         }
     }
 
@@ -200,7 +200,7 @@ pub(crate) mod test_helpers {
         DeactivateCtx {
             activate_d: PathBuf::from("/interpreter/activate.d"),
             restore_diff,
-            flox_activations_bin: PathBuf::from("/flox_activations"),
+            flox_activations: PathBuf::from("/flox_activations"),
         }
     }
 
