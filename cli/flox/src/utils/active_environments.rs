@@ -71,6 +71,13 @@ impl ActiveEnvironments {
         self.0.front().map(|active| &active.environment).cloned()
     }
 
+    /// Read the last active environment along with its activation metadata
+    /// (mode, generation). Needed when callers must know how the env was
+    /// activated, e.g. to pick the matching rendered-env link for deactivation.
+    pub fn last_active_full(&self) -> Option<ActiveEnvironment> {
+        self.0.front().cloned()
+    }
+
     /// Set the last active environment.
     pub fn set_last_active(
         &mut self,

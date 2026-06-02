@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use flox_core::activate::context::InvocationType;
+use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded};
 
 use crate::attach_diff::todo_drop_set_exported_unexpanded;
@@ -129,16 +130,18 @@ pub fn generate_tcsh_profile_commands(
             stmts.push(r#"if (! $?FLOX_ENV_DIRS) setenv FLOX_ENV_DIRS "empty";"#.to_stmt());
 
             stmts.push(format!(
-                r#"eval "`'{}' set-env-dirs --shell tcsh --flox-env '{}' --env-dirs $FLOX_ENV_DIRS:q`";"#,
+                r#"eval "`'{}' set-env-dirs --shell {} --flox-env '{}' --env-dirs $FLOX_ENV_DIRS:q`";"#,
                 args.flox_activations.display(),
+                Shell::Tcsh,
                 args.flox_env.display(),
             ).to_stmt());
 
             stmts.push(r#"if (! $?MANPATH) setenv MANPATH "empty";"#.to_stmt());
 
             stmts.push(format!(
-                r#"eval "`'{}' fix-paths --shell tcsh --env-dirs $FLOX_ENV_DIRS:q --path $PATH:q --manpath $MANPATH:q`";"#,
-                args.flox_activations.display()
+                r#"eval "`'{}' fix-paths --shell {} --env-dirs $FLOX_ENV_DIRS:q --path $PATH:q --manpath $MANPATH:q`";"#,
+                args.flox_activations.display(),
+                Shell::Tcsh,
             ).to_stmt());
         },
         Action::Deactivate(_) => {
@@ -160,12 +163,37 @@ pub fn generate_tcsh_profile_commands(
             );
 
             stmts.push(format!(
-                r#"eval "`'{}' profile-scripts --shell tcsh --env-dirs $FLOX_ENV_DIRS:q $_already_sourced_args:q`";"#,
-                args.flox_activations.display()
+                r#"eval "`'{}' profile-scripts --shell {} --env-dirs $FLOX_ENV_DIRS:q $_already_sourced_args:q`";"#,
+                args.flox_activations.display(),
+                Shell::Tcsh,
             ).to_stmt());
         },
-        Action::Deactivate(_) => {
-            // TODO: run profile.deactivate.tcsh
+        Action::Deactivate(ctx) => {
+            // Source the user's profile.deactivate.{common,tcsh} scripts
+            // for the env being torn down, and remove it from
+            // _FLOX_SOURCED_PROFILE_SCRIPTS so stacked activations stay
+            // consistent. We bake in the env path at generation time —
+            // using runtime `$FLOX_ENV:q` here would be fatal in tcsh
+            // once `restore_diff` has unset FLOX_ENV (referencing an
+            // undefined variable aborts the script). `_already_sourced_args`
+            // is reused from the activate branch above so older tcsh
+            // (pre-6.23) can omit `--already-sourced-env-dirs` entirely
+            // when the var is unset.
+            stmts.push("set _already_sourced_args = ();".to_stmt());
+
+            stmts.push(
+                r#"if ($?_FLOX_SOURCED_PROFILE_SCRIPTS) set _already_sourced_args = ( --already-sourced-env-dirs `echo $_FLOX_SOURCED_PROFILE_SCRIPTS:q` );"#.to_stmt()
+            );
+
+            stmts.push(
+                format!(
+                    r#"eval "`'{}' profile-scripts-deactivate --shell {} --env '{}' $_already_sourced_args:q`";"#,
+                    FLOX_ACTIVATIONS_BIN.display(),
+                    Shell::Tcsh,
+                    ctx.flox_env.display()
+                )
+                .to_stmt(),
+            );
         },
     }
 
@@ -360,6 +388,9 @@ mod tests {
             unsetenv _FLOX_HOOK_DIFF;
             unset _FLOX_INVOCATION_TYPE;
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
+            set _already_sourced_args = ();
+            if ($?_FLOX_SOURCED_PROFILE_SCRIPTS) set _already_sourced_args = ( --already-sourced-env-dirs `echo $_FLOX_SOURCED_PROFILE_SCRIPTS:q` );
+            eval "`'/flox_activations' profile-scripts-deactivate --shell tcsh --env '/flox_env' $_already_sourced_args:q`";
             rehash;
         "#]]
         .assert_eq(&output);

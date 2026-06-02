@@ -73,16 +73,26 @@ impl Deactivate {
     fn handle_print_script(self, flox: Flox, invocation_type: String) -> Result<()> {
         let shell = detect_shell_for_in_place()?;
 
-        // Get the .flox directory path from the active environment, opening
-        // the concrete environment so managed and remote environments are
-        // also supported (not just local path environments).
+        // Open the concrete environment for the env at the front of the
+        // active-environment stack — the one being torn down. Managed and
+        // remote envs are supported here, not just local path envs.
         let last_active = activated_environments()
-            .last_active()
+            .last_active_full()
             .ok_or_else(|| anyhow!("No environment active."))?;
-        let dot_flox_path = last_active
+        let mode = last_active.mode;
+        let mut concrete_env = last_active
+            .environment
             .into_concrete_environment(&flox, None)
-            .context("failed to open active environment for deactivation")?
-            .dot_flox_path()
+            .context("failed to open active environment for deactivation")?;
+        let dot_flox_path = concrete_env.dot_flox_path().to_path_buf();
+        // Use the same rendered-env link the activate path used to set
+        // `$FLOX_ENV` — picking it from the active-stack entry rather than
+        // reading `$FLOX_ENV` at runtime is what lets us deactivate an env
+        // that isn't the most recently activated one.
+        let flox_env = concrete_env
+            .rendered_env_links(&flox)
+            .context("failed to read rendered env links for active environment")?
+            .for_mode(&mode)
             .to_path_buf();
 
         let activation_state_dir = activation_state_dir_path(&flox.runtime_dir, &dot_flox_path);
@@ -114,6 +124,7 @@ impl Deactivate {
                     &*FLOX_INTERPRETER,
                     &FLOX_ACTIVATIONS_BIN,
                     &activation_state_dir,
+                    &flox_env,
                 )
                 .context("failed to generate deactivation script")
             },

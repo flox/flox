@@ -40,6 +40,7 @@ pub fn generate_deactivate_script(
     interpreter_path: impl AsRef<Path>,
     flox_activations_bin: &Path,
     activation_state_dir: &Path,
+    flox_env: &Path,
 ) -> Result<()> {
     let activate_d = interpreter_path.as_ref().join("activate.d");
     let encoded_diff = env::var(FLOX_HOOK_DIFF_VAR)
@@ -48,6 +49,7 @@ pub fn generate_deactivate_script(
         .context(format!("Failed to decode {}", FLOX_HOOK_DIFF_VAR))?;
     let ctx = DeactivateCtx {
         activate_d,
+        flox_env: flox_env.to_path_buf(),
         restore_diff,
     };
 

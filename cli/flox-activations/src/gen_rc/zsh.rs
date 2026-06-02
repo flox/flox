@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use flox_core::activate::context::InvocationType;
+use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use indoc::indoc;
 use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file};
 
@@ -114,6 +115,25 @@ pub fn generate_zsh_profile_commands(
                     .to_stmt(),
                 );
             }
+            // Source the user's profile.deactivate.{common,zsh} scripts
+            // for the env being torn down, and remove it from
+            // _FLOX_SOURCED_PROFILE_SCRIPTS so stacked activations stay
+            // consistent. We bake in the env path at generation time
+            // because by now `restore_diff` has either unset `FLOX_ENV`
+            // (outermost deactivate) or restored it to the outer env's
+            // value (nested), so runtime `$FLOX_ENV` is not a reliable
+            // handle on the env we're tearing down. Runs per-env (not
+            // gated on outermost) so each env's deactivate hooks fire
+            // when that env is torn down.
+            stmts.push(
+                format!(
+                    r#"eval "$('{}' profile-scripts-deactivate --shell {} --env '{}' --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}")";"#,
+                    FLOX_ACTIVATIONS_BIN.display(),
+                    Shell::Zsh,
+                    ctx.flox_env.display()
+                )
+                .to_stmt(),
+            );
             // Note that unsetting the prompt depends on `_activate_d` being set.
         },
     }
@@ -316,6 +336,7 @@ mod tests {
                 fi;
                 unset _FLOX_HOOK_SAVE_FPATH _FLOX_HOOK_SAVE_COMPINIT_DUMPFILE;
             fi;
+            eval "$('/flox_activations' profile-scripts-deactivate --shell zsh --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
             unset _FLOX_INVOCATION_TYPE;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
         "#]]

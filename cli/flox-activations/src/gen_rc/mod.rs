@@ -28,6 +28,11 @@ pub enum Action<A> {
 #[derive(Debug, Clone)]
 pub struct DeactivateCtx {
     pub activate_d: PathBuf,
+    /// The env being torn down. Supplied by the caller (derived from the
+    /// active-environment stack and that env's `ConcreteEnvironment`) so the
+    /// emitted script does not depend on runtime `$FLOX_ENV` — which is the
+    /// most-recently activated env, not necessarily the one being torn down.
+    pub flox_env: PathBuf,
     /// Decoded from `_FLOX_HOOK_DIFF`
     pub restore_diff: DiffSerializer,
 }
@@ -163,13 +168,15 @@ pub(crate) mod test_helpers {
             DiffSerializer::decode(&encoded_diff).expect("encoded diff should decode successfully");
         DeactivateCtx {
             activate_d: PathBuf::from("/interpreter/activate.d"),
+            flox_env: PathBuf::from("/flox_env"),
             restore_diff,
         }
     }
 
     /// Strip lines referencing platform-specific or
     /// environment-dependent variables from rendered deactivate
-    /// output.
+    /// output. Also normalizes the absolute `FLOX_ACTIVATIONS_BIN`
+    /// path to `/flox_activations` so snapshots are portable.
     pub fn strip_volatile_deactivate(output: &str) -> String {
         const VOLATILE: &[&str] = &[
             "LOCALE_ARCHIVE",
@@ -177,8 +184,10 @@ pub(crate) mod test_helpers {
             "PATH_LOCALE",
             "SSL_CERT_FILE",
         ];
-        let trailing_newline = output.ends_with('\n');
-        let mut filtered = output
+        let bin = FLOX_ACTIVATIONS_BIN.display().to_string();
+        let normalized = output.replace(&bin, "/flox_activations");
+        let trailing_newline = normalized.ends_with('\n');
+        let mut filtered = normalized
             .lines()
             .filter(|l| !VOLATILE.iter().any(|v| l.contains(v)))
             .collect::<Vec<_>>()
