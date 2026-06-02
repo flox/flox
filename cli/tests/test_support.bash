@@ -163,6 +163,72 @@ setup() { common_test_setup; }
 
 # ---------------------------------------------------------------------------- #
 
+# Create a set of dotfiles to simulate the sorts of things users can do that
+# disrupt flox's attempts to configure the environment. Please append to this
+# growing list of nightmare scenarios as you encounter them in the wild.
+user_dotfiles_setup() {
+  # Make sure FLOX_BIN is set to an absolute PATH so that setting BADPATH
+  # doesn't cause `flox` to be found in e.g. `/usr/local/bin`
+  export FLOX_BIN="$(which "$FLOX_BIN")"
+  # N.B. $HOME is set to a test-isolated directory by `common_file_setup`,
+  # `home_setup`, and `flox_vars_setup` so none of the files below should exist
+  # and we abort if we find otherwise.
+  set -o noclobber
+
+  BADPATH="/usr/local/bin:/usr/bin:/bin:/nix/var/nix/profiles/default/bin:/run/current-system/sw/bin"
+
+  # Allow predictable output from interactive tests that use expect.
+  export KNOWN_PROMPT="myprompt> "
+  # This isn't honoured by zsh or fish.
+  cat >"${HOME}/.inputrc" <<EOF
+set enable-bracketed-paste off
+EOF
+
+  # Posix-compliant shells
+  for i in "profile" "bashrc" "zshrc" "zshenv" "zlogin" "zlogout" "zprofile"; do
+    cat >"$HOME/.$i" <<EOF
+echo "Sourcing .$i" >&2
+echo "Setting PATH from .$i" >&2
+export PATH="$BADPATH"
+export PS1="$KNOWN_PROMPT"
+if [ -f "$HOME/.$i.extra" ]; then
+  source "$HOME/.$i.extra";
+fi
+EOF
+  done
+
+  # Fish
+  mkdir -p "$HOME/.config/fish"
+  cat >"$HOME/.config/fish/config.fish" <<EOF
+echo "Sourcing config.fish" >&2
+echo "Setting PATH from config.fish" >&2
+set -gx PATH "$BADPATH"
+function fish_prompt
+  echo -n "$KNOWN_PROMPT"
+end
+if test -e "$HOME/.config/fish/config.fish.extra"
+  source "$HOME/.config/fish/config.fish.extra"
+end
+EOF
+
+  # Csh-based shells
+  for i in "cshrc" "tcshrc" "login" "logout"; do
+    cat >"$HOME/.$i" <<EOF
+sh -c "echo 'Sourcing .$i' >&2"
+sh -c "echo 'Setting PATH from .$i' >&2"
+setenv PATH "$BADPATH"
+set prompt = "$KNOWN_PROMPT"
+if ( -e "$HOME/.$i.extra" ) then
+  source "$HOME/.$i.extra"
+endif
+EOF
+  done
+
+  set +o noclobber
+}
+
+# ---------------------------------------------------------------------------- #
+
 common_file_teardown() {
   # Delete file tmpdir and env unless the user requests to preserve them.
   if [[ -z "${FLOX_TEST_KEEP_TMP:-}" ]]; then

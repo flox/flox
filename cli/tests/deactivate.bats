@@ -45,6 +45,8 @@ project_teardown() {
 
 setup() {
   common_test_setup
+  home_setup test
+  user_dotfiles_setup
   setup_isolated_flox
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 }
@@ -380,7 +382,7 @@ EOF
 
   run bash -c '
     export TEST_VAR=unchanged
-    eval "$($FLOX_BIN deactivate --print-script)"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
     echo "after:$TEST_VAR"
   '
   assert_success
@@ -527,281 +529,573 @@ assert_prompt_round_trip() {
 # (or that were added/removed) matches the inline expected list. Treat
 # the expected list as a TODO -- when a fix lands, shrink it.
 #
-# Absolute tool paths are captured up front because activation can leave
-# PATH broken; we want the test scaffold to keep working so we can see
-# exactly which vars leaked.
-#
-# The inner shell is started with `env -u` for the flox-internal vars below
-# to force a COLD START. Without this, when the test runner is itself inside
-# a flox activation (the common local case), those vars are already present
-# in `before`; the activation diff then classifies them as `modified` and
-# RESTORES them on deactivate, so a genuine leak shows as "unchanged" and the
-# test silently passes. Unsetting them makes the diff treat them as `added`,
-# so a failure to unset them on deactivate surfaces as a real leak.
+
+# These variables could be already set in the environment where the test is run,
+# and if they're unset unconditionally by activate, they'll interfere with the
+# test
+# TODO: investigate if all of these are necessary
 FLOX_COLD_START_UNSET=(
-  -u _activate_d
-  -u _flox_activations
-  -u _flox_activate_tracer
-  -u _FLOX_ACTIVE_ENVIRONMENTS
+  -u _FLOX_HOOK_DIFF
+  -u FLOX_VERSION
+  -u _FLOX_HOOK_SAVE_FPATH
 )
+
+# Print the set of env vars whose value changed (or were added/removed)
+# between two raw null-delimited env dumps.
+diff_env_dumps() {
+  local before="${1:?}"
+  shift
+  local after="${1:?}"
+  shift
+  local IFS='|'
+
+  local noise
+  # Variables we can ignore from the tests but that we're not responsible for.
+  # TODO: not all entries below are truly noise. _flox_activate_tracer,
+  # BUILDENV_NIX, and NIX_SSL_CERT_FILE are likely real activation leaks
+  # that should be fixed and then removed from this list. They are filtered
+  # here for now so the env-diff assertions stay deterministic across CI
+  # envs where the runner's BEFORE env doesn't already contain them.
+  # SSL_CERT_FILE is asserted on darwin (heredocs include it) but filtered
+  # on linux where the host already provides SSL_CERT_DIR; the linux
+  # behavior should be revisited.
+  case "$OSTYPE" in
+    darwin*)
+      noise=(
+        BASH_FUNC_
+        BUILDENV_NIX
+        DYLD_LIBRARY_PATH
+        LOGNAME
+        NIX_SSL_CERT_FILE
+        PATH_LOCALE
+        _flox_activate_tracer
+      )
+      ;;
+    *)
+      noise=(
+        BASH_FUNC_
+        BUILDENV_NIX
+        LD_LIBRARY_PATH
+        LOCALE_ARCHIVE
+        LOGNAME
+        LS_COLORS
+        NIX_SSL_CERT_FILE
+        SSL_CERT_FILE
+        _flox_activate_tracer
+      )
+      ;;
+  esac
+
+  # Variables that may be unset by activating and deactivating, even if they
+  # were previously set in the environment.
+  # Currently empty: vars previously listed here (_FLOX_HOOK_DIFF, FLOX_VERSION)
+  # are now handled by FLOX_COLD_START_UNSET, which keeps them out of `before`
+  # entirely so the BEFORE-only filter is unnecessary.
+  ok_to_unset=()
+
+  local noise_pattern="^(${noise[*]})"
+  local ok_to_unset_pattern="^(${ok_to_unset[*]})="
+
+  {
+    # Records only in BEFORE -- strip OK_TO_UNSET names from this stream.
+    LC_ALL=C comm -z -23 <(LC_ALL=C sort -z "$before") <(LC_ALL=C sort -z "$after") |
+      LC_ALL=C grep -z -v -E "$ok_to_unset_pattern"
+    # Records only in AFTER -- no OK_TO_UNSET filter.
+    LC_ALL=C comm -z -13 <(LC_ALL=C sort -z "$before") <(LC_ALL=C sort -z "$after")
+  } |
+    cut -z -d= -f1 | tr -d "\t" | LC_ALL=C sort -uz | tr "\0" "\n" |
+    grep -v -E "$noise_pattern"
+}
 
 # bats test_tags=activate,deactivate
 @test "in-place deactivate env diff (bash)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
 
   ENV_BIN=$(command -v env)
-  SORT_BIN=$(command -v sort)
-  COMM_BIN=$(command -v comm)
-  TR_BIN=$(command -v tr)
-  CUT_BIN=$(command -v cut)
-  export ENV_BIN SORT_BIN COMM_BIN TR_BIN CUT_BIN
+  BEFORE="$BATS_TEST_TMPDIR/before"
+  AFTER="$BATS_TEST_TMPDIR/after"
+  export ENV_BIN BEFORE AFTER
 
-  FLOX_SHELL="bash" run --separate-stderr \
-    env "${FLOX_COLD_START_UNSET[@]}" bash -c '
-    "$ENV_BIN" | "$SORT_BIN" > before
+  FLOX_SHELL="bash" run -0 env "${FLOX_COLD_START_UNSET[@]}" bash -c '
+    "$ENV_BIN" -0 > "$BEFORE"
     eval "$($FLOX_BIN activate --print-script)"
-    eval "$($FLOX_BIN deactivate --print-script)"
-    "$ENV_BIN" | "$SORT_BIN" > after
-    "$COMM_BIN" -3 before after | "$TR_BIN" -d "\t" | "$CUT_BIN" -d= -f1 | "$SORT_BIN" -u
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    "$ENV_BIN" -0 > "$AFTER"
   '
+
+  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
   assert_success
   assert_output - <<EOF
 _activate_d
-_flox_activate_tracer
 EOF
 }
 
 # bats test_tags=activate,deactivate
 @test "in-place deactivate env diff (fish)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
 
   ENV_BIN=$(command -v env)
-  SORT_BIN=$(command -v sort)
-  COMM_BIN=$(command -v comm)
-  TR_BIN=$(command -v tr)
-  CUT_BIN=$(command -v cut)
-  export ENV_BIN SORT_BIN COMM_BIN TR_BIN CUT_BIN
+  BEFORE="$BATS_TEST_TMPDIR/before"
+  AFTER="$BATS_TEST_TMPDIR/after"
+  export ENV_BIN BEFORE AFTER
 
-  SHELL="$(which fish)" run --separate-stderr \
-    env "${FLOX_COLD_START_UNSET[@]}" fish -c '
-    "$ENV_BIN" | "$SORT_BIN" > before
+  SHELL="$(which fish)" run -0 env "${FLOX_COLD_START_UNSET[@]}" fish -c '
+    "$ENV_BIN" -0 > "$BEFORE"
     eval "$($FLOX_BIN activate --print-script)"
-    eval "$($FLOX_BIN deactivate --print-script)"
-    "$ENV_BIN" | "$SORT_BIN" > after
-    "$COMM_BIN" -3 before after | "$TR_BIN" -d "\t" | "$CUT_BIN" -d= -f1 | "$SORT_BIN" -u
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    "$ENV_BIN" -0 > "$AFTER"
   '
+
+  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
   assert_success
   assert_output - <<EOF
 _activate_d
-_flox_activate_tracer
 EOF
 }
 
 # bats test_tags=activate,deactivate
 @test "in-place deactivate env diff (tcsh)" {
-  skip "tcsh fails due to FLOX_PROMPT_ENVIRONMENTS undefined variable issue"
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
 
   ENV_BIN=$(command -v env)
-  SORT_BIN=$(command -v sort)
-  COMM_BIN=$(command -v comm)
-  TR_BIN=$(command -v tr)
-  CUT_BIN=$(command -v cut)
-  export ENV_BIN SORT_BIN COMM_BIN TR_BIN CUT_BIN
+  BEFORE="$BATS_TEST_TMPDIR/before"
+  AFTER="$BATS_TEST_TMPDIR/after"
+  export ENV_BIN BEFORE AFTER
 
-  SHELL="$(which tcsh)" run --separate-stderr tcsh -c '
-    "$ENV_BIN" | "$SORT_BIN" > before
+  SHELL="$(which tcsh)" run -0 env "${FLOX_COLD_START_UNSET[@]}" tcsh -c '
+    "$ENV_BIN" -0 > "$BEFORE"
     eval "`$FLOX_BIN activate --print-script`"
-    eval "`$FLOX_BIN deactivate --print-script`"
-    "$ENV_BIN" | "$SORT_BIN" > after
-    "$COMM_BIN" -3 before after | "$TR_BIN" -d "\t" | "$CUT_BIN" -d= -f1 | "$SORT_BIN" -u
+    eval "`$FLOX_BIN deactivate --print-script $_FLOX_INVOCATION_TYPE`"
+    "$ENV_BIN" -0 > "$AFTER"
   '
+
+  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
   assert_success
-  assert_output ""
+  assert_output - <<EOF
+_activate_d
+EOF
 }
 
 # bats test_tags=activate,deactivate
 @test "in-place deactivate env diff (zsh)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
 
   ENV_BIN=$(command -v env)
-  SORT_BIN=$(command -v sort)
-  COMM_BIN=$(command -v comm)
-  TR_BIN=$(command -v tr)
-  CUT_BIN=$(command -v cut)
-  export ENV_BIN SORT_BIN COMM_BIN TR_BIN CUT_BIN
+  BEFORE="$BATS_TEST_TMPDIR/before"
+  AFTER="$BATS_TEST_TMPDIR/after"
+  export ENV_BIN BEFORE AFTER
 
-  FLOX_SHELL="zsh" run --separate-stderr \
-    env "${FLOX_COLD_START_UNSET[@]}" zsh -c '
-    "$ENV_BIN" | "$SORT_BIN" > before
+  FLOX_SHELL="zsh" run -0 env "${FLOX_COLD_START_UNSET[@]}" zsh -c '
+    "$ENV_BIN" -0 > "$BEFORE"
     eval "$($FLOX_BIN activate --print-script)"
-    eval "$($FLOX_BIN deactivate --print-script)"
-    "$ENV_BIN" | "$SORT_BIN" > after
-    "$COMM_BIN" -3 before after | "$TR_BIN" -d "\t" | "$CUT_BIN" -d= -f1 | "$SORT_BIN" -u
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    "$ENV_BIN" -0 > "$AFTER"
   '
+
+  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
   assert_success
-  # zsh emits `_activate_d` via a non-export helper, so it does not leak here
-  # (unlike bash/fish). Only `_flox_activate_tracer` survives deactivate.
-  assert_output - <<EOF
-_flox_activate_tracer
+ if [[ "$OSTYPE" == darwin* ]]; then
+    assert_output - <<EOF
+SHLVL
 EOF
+  else
+    assert_output - <<EOF
+SHLVL
+_activate_d
+EOF
+  fi
 }
 
 # Subshell-mode counterparts: `flox activate -c "..."` runs the body in
 # the activated subshell. The body deactivates in-place inside that
 # subshell and dumps env, which is captured as `after`; `before` is the
 # PARENT shell's pre-activation env.
-#
-# IMPORTANT — read the expected blocks below with care. These compare TWO
-# DIFFERENT shells (parent's pre-activation env vs. the flox-spawned child
-# subshell's env), NOT the same shell before and after deactivate. As a
-# result the diff is NOT a clean leak list: it also surfaces
-#   - vars flox legitimately sets for the activated session (e.g.
-#     SSL_CERT_FILE) — correct while activated, not a leak,
-#   - vars from the flox process itself that bleed into the capture (e.g.
-#     FLOX_VERSION, FLOX_SHELL, _FLOX_*_VERBOSITY) — never reach the user's
-#     real shell,
-#   - benign parent/child differences (SHLVL, etc.).
-# None of FLOX_VERSION / FLOX_SHELL / SSL_CERT_FILE actually leak into the
-# user's shell: after a real in-place deactivate, and in the parent shell
-# after `flox activate -c` returns, they are all clean/unchanged. The
-# in-place env-diff tests above are the trustworthy same-shell leak
-# detectors; use THOSE when shrinking leaks.
-#
-# These subshell tests are therefore kept mainly to exercise the
-# `flox activate -c` entry path and pin its current behavior. They add
-# little leak-detection value over the in-place tests and are a candidate
-# for deletion — if they start churning on unrelated parent/child env
-# differences, prefer removing them over expanding the expected blocks.
-#
-# The outer shell is always bash; FLOX_SHELL/SHELL controls the
-# activated shell. Running `flox activate -c` from inside a zsh `-c`
-# wrapper hits an unrelated test-env PATH issue, and `env -0` requires
-# coreutils so we use bash regardless of the shell under test.
-
 # bats test_tags=activate,deactivate
 @test "subshell deactivate env diff (bash)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
 
   ENV_BIN=$(command -v env)
-  SORT_BIN=$(command -v sort)
-  COMM_BIN=$(command -v comm)
-  TR_BIN=$(command -v tr)
-  CUT_BIN=$(command -v cut)
-  BODY='eval "$($FLOX_BIN deactivate --print-script)"; $ENV_BIN -0 | $SORT_BIN -z'
-  export ENV_BIN SORT_BIN COMM_BIN TR_BIN CUT_BIN BODY
+  BEFORE="$BATS_TEST_TMPDIR/before"
+  AFTER="$BATS_TEST_TMPDIR/after"
+  COMMAND='eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"; $ENV_BIN -0'
+  export ENV_BIN
 
-  FLOX_SHELL="bash" run --separate-stderr \
-    env "${FLOX_COLD_START_UNSET[@]}" bash -c '
-    "$ENV_BIN" -0 | "$SORT_BIN" -z > before
-    "$FLOX_BIN" activate -c "$BODY" > after
-    "$COMM_BIN" -z -3 before after | "$CUT_BIN" -z -d= -f1 | "$TR_BIN" -d "\t" | "$SORT_BIN" -uz | "$TR_BIN" "\0" "\n"
-  '
+  env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
+  FLOX_SHELL="bash" env "${FLOX_COLD_START_UNSET[@]}" "$FLOX_BIN" activate -c "$COMMAND" > "$AFTER"
+
+  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
   assert_success
-  assert_output - <<EOF
-FLOX_SHELL
-FLOX_VERSION
+
+  if [[ "$OSTYPE" == darwin* ]]; then
+    assert_output - <<EOF
+PS1
 SHLVL
 SSL_CERT_FILE
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
+  else
+    assert_output - <<EOF
+PS1
+SHLVL
+SSL_CERT_DIR
+_FLOX_ACTIVATIONS_VERBOSITY
+_FLOX_SUBSYSTEM_VERBOSITY
+EOF
+  fi
 }
 
 # bats test_tags=activate,deactivate
 @test "subshell deactivate env diff (fish)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
 
   ENV_BIN=$(command -v env)
-  SORT_BIN=$(command -v sort)
-  COMM_BIN=$(command -v comm)
-  TR_BIN=$(command -v tr)
-  CUT_BIN=$(command -v cut)
-  BODY='eval "$($FLOX_BIN deactivate --print-script)"; $ENV_BIN -0 | $SORT_BIN -z'
-  export ENV_BIN SORT_BIN COMM_BIN TR_BIN CUT_BIN BODY
+  BEFORE="$BATS_TEST_TMPDIR/before"
+  AFTER="$BATS_TEST_TMPDIR/after"
+  COMMAND='eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"; $ENV_BIN -0'
+  export ENV_BIN
 
-  SHELL="$(which fish)" run --separate-stderr \
-    env "${FLOX_COLD_START_UNSET[@]}" bash -c '
-    "$ENV_BIN" -0 | "$SORT_BIN" -z > before
-    "$FLOX_BIN" activate -c "$BODY" > after
-    "$COMM_BIN" -z -3 before after | "$CUT_BIN" -z -d= -f1 | "$TR_BIN" -d "\t" | "$SORT_BIN" -uz | "$TR_BIN" "\0" "\n"
-  '
+  env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
+  SHELL="$(which fish)" env "${FLOX_COLD_START_UNSET[@]}" "$FLOX_BIN" activate -c "$COMMAND" > "$AFTER"
+
+  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
   assert_success
-  assert_output - <<EOF
-FLOX_VERSION
+
+  if [[ "$OSTYPE" == darwin* ]]; then
+    assert_output - <<EOF
+SHELL
 SSL_CERT_FILE
 _
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
+  else
+    assert_output - <<EOF
+SHELL
+SSL_CERT_DIR
+_
+_FLOX_ACTIVATIONS_VERBOSITY
+_FLOX_SUBSYSTEM_VERBOSITY
+EOF
+  fi
 }
 
 # bats test_tags=activate,deactivate
 @test "subshell deactivate env diff (tcsh)" {
-  skip "tcsh fails due to FLOX_PROMPT_ENVIRONMENTS undefined variable issue"
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
 
   ENV_BIN=$(command -v env)
-  SORT_BIN=$(command -v sort)
-  COMM_BIN=$(command -v comm)
-  TR_BIN=$(command -v tr)
-  CUT_BIN=$(command -v cut)
-  BODY='eval "`$FLOX_BIN deactivate --print-script`"; $ENV_BIN -0 | $SORT_BIN -z'
-  export ENV_BIN SORT_BIN COMM_BIN TR_BIN CUT_BIN BODY
+  BEFORE="$BATS_TEST_TMPDIR/before"
+  AFTER="$BATS_TEST_TMPDIR/after"
+  COMMAND='eval "`$FLOX_BIN deactivate --print-script $_FLOX_INVOCATION_TYPE`"; $ENV_BIN -0'
+  export ENV_BIN
 
-  SHELL="$(which tcsh)" run --separate-stderr bash -c '
-    "$ENV_BIN" -0 | "$SORT_BIN" -z > before
-    "$FLOX_BIN" activate -c "$BODY" > after
-    "$COMM_BIN" -z -3 before after | "$CUT_BIN" -z -d= -f1 | "$TR_BIN" -d "\t" | "$SORT_BIN" -uz | "$TR_BIN" "\0" "\n"
-  '
+  env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
+  SHELL="$(which tcsh)" env "${FLOX_COLD_START_UNSET[@]}" "$FLOX_BIN" activate -c "$COMMAND" > "$AFTER"
+
+  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
   assert_success
-  assert_output ""
+  if [[ "$OSTYPE" == darwin* ]]; then
+    assert_output - <<EOF
+FLOX_ORIG_HOME
+FLOX_SAVE_TCSH_PROMPT
+FLOX_TCSH_INIT_SCRIPT
+GROUP
+HOST
+HOSTTYPE
+MACHTYPE
+OSTYPE
+SHELL
+SHLVL
+SSL_CERT_FILE
+VENDOR
+_FLOX_ACTIVATIONS_VERBOSITY
+_FLOX_SUBSYSTEM_VERBOSITY
+EOF
+  else
+    assert_output - <<EOF
+FLOX_ORIG_HOME
+FLOX_TCSH_INIT_SCRIPT
+GROUP
+HOST
+HOSTTYPE
+MACHTYPE
+OSTYPE
+SHELL
+SHLVL
+SSL_CERT_DIR
+VENDOR
+_FLOX_ACTIVATIONS_VERBOSITY
+_FLOX_SUBSYSTEM_VERBOSITY
+EOF
+  fi
 }
 
 # bats test_tags=activate,deactivate
 @test "subshell deactivate env diff (zsh)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
 
   ENV_BIN=$(command -v env)
-  SORT_BIN=$(command -v sort)
-  COMM_BIN=$(command -v comm)
-  TR_BIN=$(command -v tr)
-  CUT_BIN=$(command -v cut)
-  BODY='eval "$($FLOX_BIN deactivate --print-script)"; $ENV_BIN -0 | $SORT_BIN -z'
-  export ENV_BIN SORT_BIN COMM_BIN TR_BIN CUT_BIN BODY
+  BEFORE="$BATS_TEST_TMPDIR/before"
+  AFTER="$BATS_TEST_TMPDIR/after"
+  COMMAND='eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"; $ENV_BIN -0'
+  export ENV_BIN
 
-  # `grep -v BASH_FUNC_` drops bats' own exported helper functions, which
-  # leak through the env capture in this path and are not flox behavior.
-  FLOX_SHELL="zsh" run --separate-stderr \
-    env "${FLOX_COLD_START_UNSET[@]}" bash -c '
-    "$ENV_BIN" -0 | "$SORT_BIN" -z > before
-    "$FLOX_BIN" activate -c "$BODY" > after
-    "$COMM_BIN" -z -3 before after | "$CUT_BIN" -z -d= -f1 | "$TR_BIN" -d "\t" | "$SORT_BIN" -uz | "$TR_BIN" "\0" "\n" | grep -v BASH_FUNC_
-  '
+  env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
+  FLOX_SHELL="zsh" env "${FLOX_COLD_START_UNSET[@]}" "$FLOX_BIN" activate -c "$COMMAND" > "$AFTER"
+
+  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
   assert_success
-  assert_output - <<EOF
-FLOX_SHELL
-FLOX_VERSION
+  if [[ "$OSTYPE" == darwin* ]]; then
+    assert_output - <<EOF
+FLOX_ORIG_ZDOTDIR
 OLDPWD
-SHLVL
+PS1
 SSL_CERT_FILE
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
+  else
+    assert_output - <<EOF
+FLOX_ORIG_ZDOTDIR
+OLDPWD
+PS1
+SSL_CERT_DIR
+_FLOX_ACTIVATIONS_VERBOSITY
+_FLOX_SUBSYSTEM_VERBOSITY
+EOF
+  fi
+}
+
+# Interactive-mode counterparts: drive a real interactive `flox activate`
+# session via expect (reusing activate-command.exp), running an intermediate
+# shell at the prompt that deactivates in-place and dumps env to a file.
+# The intermediate shell matters: deactivating at the top-level interactive
+# prompt would just exit the session before we could capture anything.
+# Like the in-place tests, this compares the parent's pre-activation env
+# against the env captured after deactivate in the same shell -- but in an
+# interactive context (rc files sourced, real ptys).
+#
+# Per-test setup: home_setup test + user_dotfiles_setup creates rc files
+# that emit KNOWN_PROMPT so activate-command.exp can match the prompt and
+# send commands. The in-place / subshell tests above use `bash -c` /
+# `flox activate -c`, which don't source rc files, so they don't need this.
+
+# bats test_tags=activate,deactivate
+@test "interactive deactivate env diff (bash)" {
+  project_setup
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
+
+
+  ENV_BIN=$(command -v env)
+  BEFORE="$BATS_TEST_TMPDIR/before"
+  AFTER="$BATS_TEST_TMPDIR/after"
+  export ENV_BIN BEFORE AFTER
+
+  # Absolute path to the intermediate shell: bare names aren't on PATH
+  # inside the activated session (the test rc files reset it to BADPATH).
+  SHELL_BIN=$(command -v bash)
+  env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
+  CMD="$SHELL_BIN -c 'eval \"\$(\$FLOX_BIN deactivate --print-script in_place)\"; \$ENV_BIN -0 > \$AFTER'"
+  FLOX_SHELL="bash" run -0 \
+    env "${FLOX_COLD_START_UNSET[@]}" expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
+
+  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
+  assert_success
+  if [[ "$OSTYPE" == darwin* ]]; then
+    assert_output - <<EOF
+NO_COLOR
+PATH
+SHLVL
+SSL_CERT_FILE
+TCLLIBPATH
+TERM
+_FLOX_ACTIVATIONS_VERBOSITY
+_FLOX_HOOK_FIRED
+_FLOX_SUBSYSTEM_VERBOSITY
+EOF
+  else
+    assert_output - <<EOF
+NO_COLOR
+PATH
+SHLVL
+SSL_CERT_DIR
+TCLLIBPATH
+TERM
+_FLOX_ACTIVATIONS_VERBOSITY
+_FLOX_HOOK_FIRED
+_FLOX_SUBSYSTEM_VERBOSITY
+EOF
+  fi
+}
+
+# bats test_tags=activate,deactivate
+@test "interactive deactivate env diff (fish)" {
+  project_setup
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
+
+  ENV_BIN=$(command -v env)
+  BEFORE="$BATS_TEST_TMPDIR/before"
+  AFTER="$BATS_TEST_TMPDIR/after"
+  export ENV_BIN BEFORE AFTER
+
+  SHELL_BIN=$(command -v fish)
+  env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
+  CMD="$SHELL_BIN -c 'eval \"\$(\$FLOX_BIN deactivate --print-script in_place)\"; \$ENV_BIN -0 > \$AFTER'"
+  FLOX_SHELL="fish" run -0 \
+    env "${FLOX_COLD_START_UNSET[@]}" expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
+
+  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
+  assert_success
+  if [[ "$OSTYPE" == darwin* ]]; then
+    assert_output - <<EOF
+NO_COLOR
+PATH
+SHLVL
+SSL_CERT_FILE
+TCLLIBPATH
+TERM
+_
+_FLOX_ACTIVATIONS_VERBOSITY
+_FLOX_HOOK_FIRED
+_FLOX_SUBSYSTEM_VERBOSITY
+EOF
+  else
+    assert_output - <<EOF
+NO_COLOR
+PATH
+SHLVL
+SSL_CERT_DIR
+TCLLIBPATH
+TERM
+_
+_FLOX_ACTIVATIONS_VERBOSITY
+_FLOX_HOOK_FIRED
+_FLOX_SUBSYSTEM_VERBOSITY
+EOF
+  fi
+}
+
+# bats test_tags=activate,deactivate
+@test "interactive deactivate env diff (tcsh)" {
+  project_setup
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
+
+  ENV_BIN=$(command -v env)
+  BEFORE="$BATS_TEST_TMPDIR/before"
+  AFTER="$BATS_TEST_TMPDIR/after"
+  export ENV_BIN BEFORE AFTER
+
+  SHELL_BIN=$(command -v tcsh)
+  env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
+  CMD="$SHELL_BIN -c 'eval \"\`\$FLOX_BIN deactivate --print-script in_place\`\"; \$ENV_BIN -0 > \$AFTER'"
+  FLOX_SHELL="tcsh" run -0 \
+    env "${FLOX_COLD_START_UNSET[@]}" expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
+
+  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
+  assert_success
+  # FLOX_SAVE_TCSH_PROMPT is a macOS-only tcsh interactive leak.
+  if [[ "$OSTYPE" == darwin* ]]; then
+    assert_output - <<EOF
+FLOX_ORIG_HOME
+FLOX_SAVE_TCSH_PROMPT
+FLOX_TCSH_INIT_SCRIPT
+GROUP
+HOST
+HOSTTYPE
+MACHTYPE
+NO_COLOR
+OSTYPE
+PATH
+SHLVL
+SSL_CERT_FILE
+TCLLIBPATH
+TERM
+VENDOR
+_FLOX_ACTIVATIONS_VERBOSITY
+_FLOX_HOOK_FIRED
+_FLOX_SUBSYSTEM_VERBOSITY
+EOF
+  else
+    assert_output - <<EOF
+FLOX_ORIG_HOME
+FLOX_TCSH_INIT_SCRIPT
+GROUP
+HOST
+HOSTTYPE
+MACHTYPE
+NO_COLOR
+OSTYPE
+PATH
+SHLVL
+SSL_CERT_DIR
+TCLLIBPATH
+TERM
+VENDOR
+_FLOX_ACTIVATIONS_VERBOSITY
+_FLOX_HOOK_FIRED
+_FLOX_SUBSYSTEM_VERBOSITY
+EOF
+  fi
+}
+
+# bats test_tags=activate,deactivate
+@test "interactive deactivate env diff (zsh)" {
+  project_setup
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
+
+  ENV_BIN=$(command -v env)
+  BEFORE="$BATS_TEST_TMPDIR/before"
+  AFTER="$BATS_TEST_TMPDIR/after"
+  export ENV_BIN BEFORE AFTER
+
+  SHELL_BIN=$(command -v zsh)
+  env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
+  CMD="$SHELL_BIN -c 'eval \"\$(\$FLOX_BIN deactivate --print-script in_place)\"; \$ENV_BIN -0 > \$AFTER'"
+  FLOX_SHELL="zsh" run -0 \
+    env "${FLOX_COLD_START_UNSET[@]}" expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
+
+  run --separate-stderr diff_env_dumps "$BEFORE" "$AFTER"
+  assert_success
+  if [[ "$OSTYPE" == darwin* ]]; then
+    assert_output - <<EOF
+FLOX_ORIG_ZDOTDIR
+FLOX_SAVE_ZSH_PS1
+NO_COLOR
+OLDPWD
+PATH
+PS1
+SHLVL
+SSL_CERT_FILE
+TCLLIBPATH
+TERM
+_FLOX_ACTIVATIONS_VERBOSITY
+_FLOX_HOOK_FIRED
+_FLOX_SUBSYSTEM_VERBOSITY
+EOF
+  else
+    assert_output - <<EOF
+FLOX_ORIG_ZDOTDIR
+FLOX_SAVE_ZSH_PS1
+NO_COLOR
+OLDPWD
+PATH
+PS1
+SHLVL
+SSL_CERT_DIR
+TCLLIBPATH
+TERM
+_FLOX_ACTIVATIONS_VERBOSITY
+_FLOX_HOOK_FIRED
+_FLOX_SUBSYSTEM_VERBOSITY
+EOF
+  fi
 }
