@@ -541,6 +541,20 @@ FLOX_COLD_START_UNSET=(
   -u _activate_d
 )
 
+# Wrapper for the cold-start env prefix. In addition to unsetting the
+# vars in FLOX_COLD_START_UNSET, it overrides PATH with a copy that has
+# empty entries stripped. Some shells (fish in particular) rewrite empty
+# PATH entries to the literal `.` on subshell launch, which would surface
+# PATH as a value-changed record in the env-diff even though no real leak
+# occurred.
+flox_cold_start() {
+  local p="$PATH"
+  while [[ "$p" == *::* ]]; do p="${p//::/:}"; done
+  p="${p#:}"
+  p="${p%:}"
+  env "${FLOX_COLD_START_UNSET[@]}" PATH="$p" "$@"
+}
+
 # Print the value of $2 from the null-delimited env dump file $1.
 # Exits 0 with the value on stdout if found, 1 if the var is unset.
 # Preserves multi-line values (awk handles NUL records natively).
@@ -667,7 +681,7 @@ diff_env_dumps() {
   AFTER="$BATS_TEST_TMPDIR/after"
   export ENV_BIN BEFORE AFTER
 
-  FLOX_SHELL="bash" run -0 env "${FLOX_COLD_START_UNSET[@]}" bash -c '
+  FLOX_SHELL="bash" run -0 flox_cold_start bash -c '
     "$ENV_BIN" -0 > "$BEFORE"
     eval "$($FLOX_BIN activate --print-script)"
     eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
@@ -691,7 +705,7 @@ EOF
   AFTER="$BATS_TEST_TMPDIR/after"
   export ENV_BIN BEFORE AFTER
 
-  SHELL="$(which fish)" run -0 env "${FLOX_COLD_START_UNSET[@]}" fish -c '
+  SHELL="$(which fish)" run -0 flox_cold_start fish -c '
     "$ENV_BIN" -0 > "$BEFORE"
     eval "$($FLOX_BIN activate --print-script)"
     eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
@@ -715,7 +729,7 @@ EOF
   AFTER="$BATS_TEST_TMPDIR/after"
   export ENV_BIN BEFORE AFTER
 
-  SHELL="$(which tcsh)" run -0 env "${FLOX_COLD_START_UNSET[@]}" tcsh -c '
+  SHELL="$(which tcsh)" run -0 flox_cold_start tcsh -c '
     "$ENV_BIN" -0 > "$BEFORE"
     eval "`$FLOX_BIN activate --print-script`"
     eval "`$FLOX_BIN deactivate --print-script $_FLOX_INVOCATION_TYPE`"
@@ -739,7 +753,7 @@ EOF
   AFTER="$BATS_TEST_TMPDIR/after"
   export ENV_BIN BEFORE AFTER
 
-  FLOX_SHELL="zsh" run -0 env "${FLOX_COLD_START_UNSET[@]}" zsh -c '
+  FLOX_SHELL="zsh" run -0 flox_cold_start zsh -c '
     "$ENV_BIN" -0 > "$BEFORE"
     eval "$($FLOX_BIN activate --print-script)"
     eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
@@ -768,8 +782,8 @@ EOF
   COMMAND='eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"; $ENV_BIN -0'
   export ENV_BIN
 
-  env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
-  FLOX_SHELL="bash" env "${FLOX_COLD_START_UNSET[@]}" "$FLOX_BIN" activate -c "$COMMAND" > "$AFTER"
+  flox_cold_start "$ENV_BIN" -0 > "$BEFORE"
+  FLOX_SHELL="bash" flox_cold_start "$FLOX_BIN" activate -c "$COMMAND" > "$AFTER"
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
@@ -804,8 +818,8 @@ EOF
   COMMAND='eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"; $ENV_BIN -0'
   export ENV_BIN
 
-  env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
-  SHELL="$(which fish)" env "${FLOX_COLD_START_UNSET[@]}" "$FLOX_BIN" activate -c "$COMMAND" > "$AFTER"
+  flox_cold_start "$ENV_BIN" -0 > "$BEFORE"
+  SHELL="$(which fish)" flox_cold_start "$FLOX_BIN" activate -c "$COMMAND" > "$AFTER"
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
@@ -840,8 +854,8 @@ EOF
   COMMAND='eval "`$FLOX_BIN deactivate --print-script $_FLOX_INVOCATION_TYPE`"; $ENV_BIN -0'
   export ENV_BIN
 
-  env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
-  SHELL="$(which tcsh)" env "${FLOX_COLD_START_UNSET[@]}" "$FLOX_BIN" activate -c "$COMMAND" > "$AFTER"
+  flox_cold_start "$ENV_BIN" -0 > "$BEFORE"
+  SHELL="$(which tcsh)" flox_cold_start "$FLOX_BIN" activate -c "$COMMAND" > "$AFTER"
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
@@ -865,6 +879,7 @@ EOF
   else
     assert_output - <<EOF
 FLOX_ORIG_HOME
+FLOX_SAVE_TCSH_PROMPT
 FLOX_TCSH_INIT_SCRIPT
 GROUP
 HOST
@@ -892,8 +907,8 @@ EOF
   COMMAND='eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"; $ENV_BIN -0'
   export ENV_BIN
 
-  env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
-  FLOX_SHELL="zsh" env "${FLOX_COLD_START_UNSET[@]}" "$FLOX_BIN" activate -c "$COMMAND" > "$AFTER"
+  flox_cold_start "$ENV_BIN" -0 > "$BEFORE"
+  FLOX_SHELL="zsh" flox_cold_start "$FLOX_BIN" activate -c "$COMMAND" > "$AFTER"
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
@@ -946,10 +961,10 @@ EOF
   # Absolute path to the intermediate shell: bare names aren't on PATH
   # inside the activated session (the test rc files reset it to BADPATH).
   SHELL_BIN=$(command -v bash)
-  env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
+  flox_cold_start "$ENV_BIN" -0 > "$BEFORE"
   CMD="$SHELL_BIN -c 'eval \"\$(\$FLOX_BIN deactivate --print-script in_place)\"; \$ENV_BIN -0 > \$AFTER'"
   FLOX_SHELL="bash" run -0 \
-    env "${FLOX_COLD_START_UNSET[@]}" expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
+    flox_cold_start expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
@@ -991,10 +1006,10 @@ EOF
   export ENV_BIN BEFORE AFTER
 
   SHELL_BIN=$(command -v fish)
-  env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
+  flox_cold_start "$ENV_BIN" -0 > "$BEFORE"
   CMD="$SHELL_BIN -c 'eval \"\$(\$FLOX_BIN deactivate --print-script in_place)\"; \$ENV_BIN -0 > \$AFTER'"
   FLOX_SHELL="fish" run -0 \
-    env "${FLOX_COLD_START_UNSET[@]}" expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
+    flox_cold_start expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
@@ -1038,10 +1053,10 @@ EOF
   export ENV_BIN BEFORE AFTER
 
   SHELL_BIN=$(command -v tcsh)
-  env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
+  flox_cold_start "$ENV_BIN" -0 > "$BEFORE"
   CMD="$SHELL_BIN -c 'eval \"\`\$FLOX_BIN deactivate --print-script in_place\`\"; \$ENV_BIN -0 > \$AFTER'"
   FLOX_SHELL="tcsh" run -0 \
-    env "${FLOX_COLD_START_UNSET[@]}" expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
+    flox_cold_start expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
@@ -1070,6 +1085,7 @@ EOF
   else
     assert_output - <<EOF
 FLOX_ORIG_HOME
+FLOX_SAVE_TCSH_PROMPT
 FLOX_TCSH_INIT_SCRIPT
 GROUP
 HOST
@@ -1101,10 +1117,10 @@ EOF
   export ENV_BIN BEFORE AFTER
 
   SHELL_BIN=$(command -v zsh)
-  env "${FLOX_COLD_START_UNSET[@]}" "$ENV_BIN" -0 > "$BEFORE"
+  flox_cold_start "$ENV_BIN" -0 > "$BEFORE"
   CMD="$SHELL_BIN -c 'eval \"\$(\$FLOX_BIN deactivate --print-script in_place)\"; \$ENV_BIN -0 > \$AFTER'"
   FLOX_SHELL="zsh" run -0 \
-    env "${FLOX_COLD_START_UNSET[@]}" expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
+    flox_cold_start expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
