@@ -649,9 +649,9 @@ where
         span: Span,
         semaphore: &Semaphore,
     ) -> Result<(), BuildEnvError> {
-        let _guard = semaphore.wait();
-
-        // Fast path: all outputs already present on disk.
+        // Fast path: all outputs already present on disk.  Stat checks are
+        // cheap and don't need concurrency limiting, so check before acquiring
+        // a semaphore slot.
         if locked_pkg
             .outputs
             .values()
@@ -659,6 +659,8 @@ where
         {
             return Ok(());
         }
+
+        let _guard = semaphore.wait();
 
         // Attempt to download the store paths associated with the package outputs.
         let all_valid_after_build_or_substitution = {
@@ -820,12 +822,14 @@ where
         parent_span: Span,
         semaphore: &Semaphore,
     ) -> Result<(), BuildEnvError> {
-        let _guard = semaphore.wait();
-
-        // Fast path: already present on disk.
+        // Fast path: already present on disk.  Stat checks are cheap and
+        // don't need concurrency limiting, so check before acquiring a
+        // semaphore slot.
         if path_is_present(locked.store_path.as_str()) {
             return Ok(());
         }
+
+        let _guard = semaphore.wait();
 
         let valid = {
             let span = info_span!(
