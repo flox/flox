@@ -57,6 +57,31 @@ teardown() {
   common_test_teardown
 }
 
+# Assert that a user-controlled variable keeps its user-set value across an
+# activate/deactivate round-trip. flox may read such variables but must not
+# overwrite a value the user set, and must restore it on deactivate.
+#
+# $1: variable name
+# $2: the user-set value
+#
+# Runs under zsh (FLOX_SHELL=zsh selects the shell; for the FLOX_SHELL case the
+# variable under test and the shell selector coincide, which is fine). The
+# complementary "must not be leaked when the user did not set it" guarantee is
+# already covered by the in-place env-diff tests below, whose expected blocks
+# would fail if such a variable started surviving deactivate.
+assert_user_var_preserved() {
+  local var="$1" value="$2"
+  run --separate-stderr env FLOX_SHELL=zsh "$var=$value" zsh -c "
+    eval \"\$(\$FLOX_BIN activate --print-script)\"
+    echo \"during:\$$var\"
+    eval \"\$(\$FLOX_BIN deactivate --print-script)\"
+    echo \"after:\$$var\"
+  "
+  assert_success
+  assert_line "during:$value"
+  assert_line "after:$value"
+}
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=deactivate
@@ -467,9 +492,15 @@ assert_prompt_round_trip() {
 # end prompt tests
 # ---------------------------------------------------------------------------- #
 
-# FLOX_SHELL is user-controlled: flox reads it to pick the shell but never sets
-# it on the activated shell. Deactivate must therefore leave the user's
-# pre-activation state exactly as it was.
+# User-controlled variables: flox may read these but must not overwrite a value
+# the user set, and must restore it on deactivate. We assert the user's value
+# survives the round-trip; the complementary "not leaked when the user did not
+# set it" guarantee is already covered by the in-place env-diff tests below
+# (their expected blocks would fail if one of these started surviving).
+#
+# NOTE: NIX_SSL_CERT_FILE is NOT yet in this set — it is set unconditionally,
+# leaks, and overwrites a user value. Add it here once fixed; see
+# NIX_SSL_CERT_FILE-findings.md.
 
 # bats test_tags=deactivate
 @test "deactivate preserves a user-set FLOX_SHELL (zsh)" {
@@ -477,38 +508,16 @@ assert_prompt_round_trip() {
   export FLOX_FEATURES_AUTO_ACTIVATE=true
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
 
-  # The user explicitly set FLOX_SHELL=zsh before activating; after
-  # deactivation it must still be "zsh".
-  run --separate-stderr zsh -c '
-    export FLOX_SHELL=zsh
-    eval "$($FLOX_BIN activate --print-script)"
-    echo "during:$FLOX_SHELL"
-    eval "$($FLOX_BIN deactivate --print-script)"
-    echo "after:$FLOX_SHELL"
-  '
-  assert_success
-  assert_line "during:zsh"
-  assert_line "after:zsh"
+  assert_user_var_preserved FLOX_SHELL zsh
 }
 
 # bats test_tags=deactivate
-@test "deactivate does not leak FLOX_SHELL when user did not set it (zsh)" {
+@test "deactivate preserves a user-set SSL_CERT_FILE (zsh)" {
   project_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
 
-  # The user never set FLOX_SHELL (shell selection is driven by SHELL); after
-  # deactivation FLOX_SHELL must remain unset rather than leak in.
-  SHELL="$(command -v zsh)" run --separate-stderr zsh -c '
-    unset FLOX_SHELL
-    eval "$($FLOX_BIN activate --print-script)"
-    if [ -z "${FLOX_SHELL+x}" ]; then echo "during:unset"; else echo "during:$FLOX_SHELL"; fi
-    eval "$($FLOX_BIN deactivate --print-script)"
-    if [ -z "${FLOX_SHELL+x}" ]; then echo "after:unset"; else echo "after:$FLOX_SHELL"; fi
-  '
-  assert_success
-  assert_line "during:unset"
-  assert_line "after:unset"
+  assert_user_var_preserved SSL_CERT_FILE /user/cert
 }
 
 # ---------------------------------------------------------------------------- #
