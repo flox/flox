@@ -538,6 +538,7 @@ FLOX_COLD_START_UNSET=(
   -u _FLOX_HOOK_DIFF
   -u FLOX_VERSION
   -u _FLOX_HOOK_SAVE_FPATH
+  -u _activate_d
 )
 
 # Print the value of $2 from the null-delimited env dump file $1.
@@ -747,16 +748,9 @@ EOF
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
- if [[ "$OSTYPE" == darwin* ]]; then
-    assert_output - <<EOF
+  assert_output - <<EOF
 SHLVL
 EOF
-  else
-    assert_output - <<EOF
-SHLVL
-_activate_d
-EOF
-  fi
 }
 
 # Subshell-mode counterparts: `flox activate -c "..."` runs the body in
