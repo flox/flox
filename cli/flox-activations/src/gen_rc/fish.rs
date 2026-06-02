@@ -309,7 +309,7 @@ mod tests {
             set -gx _activate_d /interpreter/activate.d;
             set -gx _flox_activations /flox_activations;
             set -gx _flox_activate_tracer TRACER;
-            set -g _FLOX_INVOCATION_TYPE in_place;
+            set -g _FLOX_INVOCATION_TYPE inplace;
             if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
             set -gx FLOX_ENV_DIRS (if set -q FLOX_ENV_DIRS; echo "$FLOX_ENV_DIRS"; else; echo empty; end);
             /flox_activations set-env-dirs --shell fish --flox-env "/flox_env" --env-dirs "$FLOX_ENV_DIRS" | source;

@@ -133,7 +133,7 @@ pub enum AutoActivateFishMode {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "lowercase")]
 pub enum InvocationType {
     InPlace,
     Interactive,
@@ -165,8 +165,8 @@ impl std::fmt::Display for InvocationType {
 }
 
 #[derive(Clone, Copy, Debug, derive_more::Display, derive_more::FromStr, Eq, PartialEq)]
-#[display(rename_all = "snake_case")]
-#[from_str(rename_all = "snake_case")]
+#[display(rename_all = "lowercase")]
+#[from_str(rename_all = "lowercase")]
 pub enum InvocationKind {
     InPlace,
     Interactive,

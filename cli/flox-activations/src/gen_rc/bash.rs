@@ -326,7 +326,7 @@ mod tests {
             export _activate_d=/interpreter/activate.d;
             export _flox_activations=/flox_activations;
             export _flox_activate_tracer=TRACER;
-            _FLOX_INVOCATION_TYPE=in_place;
+            _FLOX_INVOCATION_TYPE=inplace;
             if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
             eval "$('/flox_activations' set-env-dirs --shell bash --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}")";
             eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")";
