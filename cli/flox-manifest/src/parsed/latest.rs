@@ -11,7 +11,7 @@ pub use crate::parsed::v1_10_0::{
 };
 pub use crate::parsed::v1_11_0::MinimumCliVersion;
 use crate::{Manifest, ManifestError, TypedOnly};
-pub type ManifestLatest = crate::parsed::v1_12_0::ManifestV1_12_0;
+pub type ManifestLatest = crate::parsed::v1_13_0::ManifestV1_13_0;
 
 impl ManifestLatest {
     /// Try to return a manifest in it's original schema
@@ -55,6 +55,15 @@ impl ManifestLatest {
                 untyped
             },
             KnownSchemaVersion::V1_12_0 => {
+                let mut untyped =
+                    serde_json::to_value(self).map_err(ManifestError::SerializeJson)?;
+                let map = untyped
+                    .as_object_mut()
+                    .expect("all valid manifests should serialize to JSON objects");
+                map.insert("schema-version".into(), "1.12.0".into());
+                untyped
+            },
+            KnownSchemaVersion::V1_13_0 => {
                 return Ok(Some(self.as_typed_only()));
             },
         };
@@ -111,8 +120,8 @@ mod tests {
         Hook,
         IncludeDescriptor,
         PackageDescriptorStorePath,
-        Profile,
     };
+    use crate::parsed::v1_13_0::Profile;
     use crate::test_helpers::with_latest_schema;
 
     #[test]

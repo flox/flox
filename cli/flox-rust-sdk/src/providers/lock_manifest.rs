@@ -1417,7 +1417,7 @@ mod tests {
         "#};
 
     static TEST_MANIFEST_LATEST_CONTENTS: &str = indoc! {r#"
-          schema-version = "1.12.0"
+          schema-version = "1.13.0"
 
           [install]
           hello_install_id.pkg-path = "hello"
