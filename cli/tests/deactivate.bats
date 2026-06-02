@@ -467,6 +467,52 @@ assert_prompt_round_trip() {
 # end prompt tests
 # ---------------------------------------------------------------------------- #
 
+# FLOX_SHELL is user-controlled: flox reads it to pick the shell but never sets
+# it on the activated shell. Deactivate must therefore leave the user's
+# pre-activation state exactly as it was.
+
+# bats test_tags=deactivate
+@test "deactivate preserves a user-set FLOX_SHELL (zsh)" {
+  project_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
+
+  # The user explicitly set FLOX_SHELL=zsh before activating; after
+  # deactivation it must still be "zsh".
+  run --separate-stderr zsh -c '
+    export FLOX_SHELL=zsh
+    eval "$($FLOX_BIN activate --print-script)"
+    echo "during:$FLOX_SHELL"
+    eval "$($FLOX_BIN deactivate --print-script)"
+    echo "after:$FLOX_SHELL"
+  '
+  assert_success
+  assert_line "during:zsh"
+  assert_line "after:zsh"
+}
+
+# bats test_tags=deactivate
+@test "deactivate does not leak FLOX_SHELL when user did not set it (zsh)" {
+  project_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
+
+  # The user never set FLOX_SHELL (shell selection is driven by SHELL); after
+  # deactivation FLOX_SHELL must remain unset rather than leak in.
+  SHELL="$(command -v zsh)" run --separate-stderr zsh -c '
+    unset FLOX_SHELL
+    eval "$($FLOX_BIN activate --print-script)"
+    if [ -z "${FLOX_SHELL+x}" ]; then echo "during:unset"; else echo "during:$FLOX_SHELL"; fi
+    eval "$($FLOX_BIN deactivate --print-script)"
+    if [ -z "${FLOX_SHELL+x}" ]; then echo "after:unset"; else echo "after:$FLOX_SHELL"; fi
+  '
+  assert_success
+  assert_line "during:unset"
+  assert_line "after:unset"
+}
+
+# ---------------------------------------------------------------------------- #
+
 # Full-environment diff tests. These capture `env` before activation and
 # after deactivation, then assert the set of vars whose value changed
 # (or that were added/removed) matches the inline expected list. Treat
