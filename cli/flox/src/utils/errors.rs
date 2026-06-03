@@ -244,15 +244,13 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         CoreEnvironmentError::WriteLockfileAtomically(_) => display_chain(err),
         CoreEnvironmentError::MakeTemporaryEnv(_) => display_chain(err),
         CoreEnvironmentError::PriorTransaction(backup) => {
-            let mut env_path = backup.clone();
-            env_path.set_file_name("env");
+            let original = backup.with_extension("");
             formatdoc! {"
-                Found a transaction backup at {backup:?}.
+                Found a leftover transaction backup at {backup:?}.
 
                 This indicates that a previous transaction was interrupted.
-
-                Please restore the backup by moving {backup:?} -> {env_path:?}
-                or delete the {backup:?} directory.
+                If {original:?} is present, delete the backup to proceed: rm {backup:?}
+                If {original:?} is missing, restore it instead: mv {backup:?} {original:?}
             "}
         },
         CoreEnvironmentError::BackupTransaction(err) => formatdoc! {"
@@ -273,7 +271,8 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         CoreEnvironmentError::RemoveBackup(err) => formatdoc! {"
             Failed to remove transaction backup: {err}
 
-            Please ensure that you have write permissions to '.flox/*'.
+            The transaction completed successfully — the environment is in a working state.
+            Delete the '.bak' file in '.flox/env/' to allow future transactions to proceed.
         "},
         CoreEnvironmentError::OpenManifest(err) => formatdoc! {"
             Failed to open manifest for reading: {err}
@@ -315,6 +314,10 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         CoreEnvironmentError::Auth(err) => display_chain(err),
         CoreEnvironmentError::Manifest(manifest_err) => format_manifest_error(manifest_err),
         CoreEnvironmentError::Lockfile(err) => display_chain(err),
+        CoreEnvironmentError::AcquireTransactionLock(err) => formatdoc! {"
+            Could not acquire transaction lock: {err}
+        "},
+        CoreEnvironmentError::TransactionLockHeld(msg) => msg.clone(),
         CoreEnvironmentError::EnvError(err) => display_chain(err),
     }
 }

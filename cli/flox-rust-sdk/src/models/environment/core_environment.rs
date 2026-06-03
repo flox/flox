@@ -45,6 +45,41 @@ use crate::providers::services::process_compose::{ServiceError, maybe_make_servi
 pub struct ReadOnly {}
 struct ReadWrite {}
 
+/// Identifies the holder of an in-progress environment transaction.
+///
+/// Written as JSON to the transaction lock file so that users sharing an
+/// environment over NFS can identify which host and process is editing.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct TransactionLockInfo {
+    pid: u32,
+    hostname: String,
+    username: String,
+}
+
+/// RAII guard that removes the transaction lock file when dropped.
+///
+/// Stores the inode of the lock file at acquisition time and only removes the
+/// file if its inode still matches — protecting against the race where a user
+/// manually deletes a stale lock while the original holder is still running and
+/// a second process creates a new lock at the same path.
+#[derive(Debug)]
+struct TransactionLock {
+    lock_path: PathBuf,
+    /// Inode of lock_path at acquisition time, used to verify ownership on drop.
+    inode: u64,
+}
+
+impl Drop for TransactionLock {
+    fn drop(&mut self) {
+        use std::os::unix::fs::MetadataExt as _;
+        if let Ok(meta) = fs::metadata(&self.lock_path)
+            && meta.ino() == self.inode
+        {
+            let _ = fs::remove_file(&self.lock_path);
+        }
+    }
+}
+
 /// A view of an environment directory
 /// that can be used to build, link, and edit the environment.
 ///
@@ -303,12 +338,14 @@ impl<State> CoreEnvironment<State> {
     }
 }
 
-/// Environment modifying methods accept an optional `out_link_prefix` and,
-/// when supplied, write activation symlinks as part of the in-transaction build.
+/// Core environment mutation methods.
+///
 /// Since files referenced by the environment are ingested into the nix store,
-/// the same [CoreEnvironment] instance can be used
-/// even if the concrete [super::Environment] tracks the files in a different way
-/// such as a git repository or a database.
+/// the same [CoreEnvironment] instance can be used even if the concrete
+/// [super::Environment] tracks the files in a different way (e.g. a git
+/// repository or a database).  Callers may supply `out_link_prefix` to have
+/// activation symlinks created as part of the transaction build; passing `None`
+/// skips out-link creation.
 impl CoreEnvironment<ReadOnly> {
     /// Create a new environment view given the path to a directory that
     /// contains a valid manifest.
@@ -461,6 +498,11 @@ impl CoreEnvironment<ReadOnly> {
         flox: &Flox,
         contents: String,
     ) -> Result<Result<EditResult, EnvironmentError>, CoreEnvironmentError> {
+        // Intentionally does not acquire the transaction lock: edit_unsafe is a
+        // migration path that uses the old temp-dir + replace_with model rather
+        // than the in-place transaction model. Concurrent unsafe-edits can still
+        // race, as they could before the transaction lock was introduced.
+
         // skip the edit if the contents are unchanged
         // note: consumers of this function may call [Self::link] separately,
         //       causing an evaluation/build of the environment.
@@ -807,17 +849,129 @@ impl CoreEnvironment<ReadOnly> {
         Ok(())
     }
 
+    /// Returns the canonical path to the transaction lock file for this environment.
+    fn transaction_lock_path(&self) -> PathBuf {
+        self.env_dir.join("transaction.lock")
+    }
+
+    /// Acquires an NFS-safe exclusive transaction lock on the environment directory.
+    ///
+    /// Uses the hard-link trick: writes a unique per-process claim file, then
+    /// atomically hard-links it to the canonical lock path and verifies ownership
+    /// by checking the link count.  `link(2)` is atomic on both local filesystems
+    /// and NFS (where `open(O_CREAT|O_EXCL)` is not reliable across NFS clients).
+    ///
+    /// The lock file contains the PID, hostname, and username of the holder so
+    /// that users sharing an environment over NFS can identify who is editing.
+    ///
+    /// Returns a guard that removes the lock when dropped.  Returns
+    /// [`CoreEnvironmentError::TransactionLockHeld`] if another process holds
+    /// the lock.
+    fn acquire_transaction_lock(&self) -> Result<TransactionLock, CoreEnvironmentError> {
+        use std::os::unix::fs::MetadataExt as _;
+
+        use nix::unistd::{Uid, User, gethostname};
+
+        let lock_path = self.transaction_lock_path();
+        let pid = std::process::id();
+
+        let hostname = gethostname()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| "unknown".to_string());
+
+        let username = User::from_uid(Uid::current())
+            .ok()
+            .flatten()
+            .map(|u| u.name)
+            .unwrap_or_else(|| format!("uid:{}", Uid::current()));
+
+        let info = TransactionLockInfo {
+            pid,
+            hostname: hostname.clone(),
+            username,
+        };
+        let info_json =
+            serde_json::to_string_pretty(&info).expect("TransactionLockInfo is JSON-serializable");
+
+        // One unique claim file per (host, process) so multiple hosts on NFS
+        // can contend without clobbering each other's claim files.
+        let claim_path = self
+            .env_dir
+            .join(format!("transaction.lock.{hostname}.{pid}"));
+        fs::write(&claim_path, &info_json).map_err(CoreEnvironmentError::AcquireTransactionLock)?;
+
+        // hard_link(claim, lock) is atomic on both local filesystems and NFS.
+        // After the attempt we check nlink on claim_path: if it is 2, both
+        // claim_path and lock_path reference the same inode, meaning we hold
+        // the lock.  We check nlink rather than trusting the return value of
+        // hard_link because some NFS servers return EEXIST even when the link
+        // succeeded (a known NFS consistency quirk).
+        let link_result = fs::hard_link(&claim_path, &lock_path);
+        let nlink = fs::metadata(&claim_path).map(|m| m.nlink()).unwrap_or(0);
+        let _ = fs::remove_file(&claim_path);
+
+        if nlink >= 2 {
+            // nlink is the authoritative signal: we own the lock.
+            // Record the inode so Drop can verify ownership before removing.
+            let inode = match fs::metadata(&lock_path) {
+                Ok(m) => m.ino(),
+                Err(e) => {
+                    // Couldn't stat our own lock; remove it best-effort and fail.
+                    let _ = fs::remove_file(&lock_path);
+                    return Err(CoreEnvironmentError::AcquireTransactionLock(e));
+                },
+            };
+            debug!(path = %lock_path.display(), "acquired transaction lock");
+            Ok(TransactionLock { lock_path, inode })
+        } else if let Err(e) = link_result {
+            if e.kind() == std::io::ErrorKind::AlreadyExists {
+                let owner = Self::read_lock_info(&lock_path);
+                Err(CoreEnvironmentError::transaction_lock_held(
+                    lock_path, owner,
+                ))
+            } else {
+                // Genuine I/O failure (permission denied, read-only FS, etc.),
+                // not a lock contention — surface it as AcquireTransactionLock.
+                Err(CoreEnvironmentError::AcquireTransactionLock(e))
+            }
+        } else {
+            // hard_link returned Ok but nlink < 2 — unexpected; treat conservatively
+            // as lock held.
+            let owner = Self::read_lock_info(&lock_path);
+            Err(CoreEnvironmentError::transaction_lock_held(
+                lock_path, owner,
+            ))
+        }
+    }
+
+    /// Read and parse the lock owner info from a transaction lock file.
+    ///
+    /// Returns `None` silently on any I/O or parse error.  Callers have already
+    /// established that a lock contention exists; this is used only to enrich
+    /// the error message with who holds the lock.
+    fn read_lock_info(lock_path: &Path) -> Option<TransactionLockInfo> {
+        fs::read_to_string(lock_path)
+            .ok()
+            .and_then(|s| serde_json::from_str::<TransactionLockInfo>(&s).ok())
+    }
+
+    /// Append `.bak` to `path`, returning the backup path.
+    fn backup_path(path: &Path) -> PathBuf {
+        let mut bak = path.to_owned();
+        bak.add_extension("bak");
+        bak
+    }
+
     /// Attempt to transactionally replace the manifest contents.
     ///
-    /// Passes `out_link_prefix` to the nix build so activation symlinks are
-    /// created as part of the single build inside this transaction rather than
-    /// requiring a second `build()` call from the caller.
-    ///
-    /// Note: symlinks are created during the temp-dir build before the directory
-    /// swap completes.  If `replace_with` fails after a successful build the
-    /// symlinks will have been updated to point at the new store path.  A
-    /// follow-up (#4339) replaces the directory-swap model with a file-level
-    /// transaction that eliminates this window.
+    /// The transaction is file-level rather than directory-level:
+    /// - `manifest.toml` and `manifest.lock` are renamed aside to `*.bak`
+    ///   before new versions are written.
+    /// - `nix build` runs against the real environment path, so activation
+    ///   out-link symlinks are written atomically as part of the build and are
+    ///   never left pointing at a partially-committed state.
+    /// - On build failure the backups are renamed back (preserving inode and
+    ///   mtime); on success they are removed.
     #[must_use = "don't discard the store path of built environments"]
     fn transact_with_manifest(
         &mut self,
@@ -825,22 +979,16 @@ impl CoreEnvironment<ReadOnly> {
         flox: &Flox,
         out_link_prefix: Option<&Path>,
     ) -> Result<(BuildEnvOutputs, Lockfile), EnvironmentError> {
+        let _lock = self
+            .acquire_transaction_lock()
+            .map_err(EnvironmentError::Core)?;
+
         debug!("transaction: validating services block");
         manifest.as_latest_schema().services.validate()?;
 
-        let tempdir = tempfile::tempdir_in(&flox.temp_dir)
-            .map_err(CoreEnvironmentError::MakeSandbox)?
-            .keep();
-
-        debug!(
-            "transaction: making temporary environment in {}",
-            tempdir.display()
-        );
-        let mut temp_env = self.writable(&tempdir)?;
-
         debug!("transaction: locking environment");
-        let existing_lockfile = temp_env.existing_lockfile()?;
-        let mut lockfile: Lockfile = temp_env
+        let existing_lockfile = self.existing_lockfile()?;
+        let mut lockfile: Lockfile = self
             .lock_without_writing(flox, manifest, existing_lockfile.as_ref())?
             .into();
 
@@ -851,22 +999,105 @@ impl CoreEnvironment<ReadOnly> {
             compose.composer = manifest.as_migrated_typed_only().as_typed_only();
         }
 
-        debug!("transaction: writing manifest and lockfile");
         let writable_manifest =
             manifest.as_writable_maybe_in_original_schema_with_lockfile(Some(&lockfile))?;
-        temp_env.write_manifest_lockfile_pair(&writable_manifest, &lockfile)?;
 
-        debug!("transaction: building environment");
-        let store_path = temp_env.build(flox, out_link_prefix)?;
+        let manifest_path = self.manifest_path();
+        let lockfile_path = self.lockfile_path();
+        let manifest_bak = Self::backup_path(&manifest_path);
+        let lockfile_bak = Self::backup_path(&lockfile_path);
+        let lockfile_existed = lockfile_path.exists();
 
-        debug!("transaction: replacing environment");
-        self.replace_with(temp_env)?;
-        Ok((store_path, lockfile))
+        if manifest_bak.exists() {
+            return Err(EnvironmentError::Core(
+                CoreEnvironmentError::PriorTransaction(manifest_bak),
+            ));
+        }
+        if lockfile_bak.exists() {
+            return Err(EnvironmentError::Core(
+                CoreEnvironmentError::PriorTransaction(lockfile_bak),
+            ));
+        }
+
+        debug!(
+            manifest = %manifest_path.display(),
+            lockfile = %lockfile_path.display(),
+            "transaction: backing up manifest files"
+        );
+        fs::rename(&manifest_path, &manifest_bak)
+            .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::BackupTransaction(e)))?;
+        if lockfile_existed && let Err(e) = fs::rename(&lockfile_path, &lockfile_bak) {
+            let _ = fs::rename(&manifest_bak, &manifest_path);
+            return Err(EnvironmentError::Core(
+                CoreEnvironmentError::BackupTransaction(e),
+            ));
+        }
+
+        debug!("transaction: writing new manifest and lockfile");
+        let write_result: Result<(), EnvironmentError> = (|| {
+            writable_manifest
+                .write_to_file(&manifest_path)
+                .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Manifest(e)))?;
+            let mut lockfile_json =
+                serde_json::to_string_pretty(&lockfile).expect("lockfile is valid JSON");
+            lockfile_json.push('\n');
+            write_atomically(&lockfile_path, lockfile_json).map_err(|e| {
+                EnvironmentError::Core(CoreEnvironmentError::WriteLockfileAtomically(e))
+            })?;
+            Ok(())
+        })();
+        if let Err(e) = write_result {
+            let _ = fs::remove_file(&manifest_path);
+            let _ = fs::rename(&manifest_bak, &manifest_path);
+            if lockfile_existed {
+                let _ = fs::remove_file(&lockfile_path);
+                let _ = fs::rename(&lockfile_bak, &lockfile_path);
+            } else {
+                // No prior lockfile: remove the newly-created one so the
+                // transaction leaves no trace.
+                let _ = fs::remove_file(&lockfile_path);
+            }
+            return Err(e);
+        }
+
+        debug!("transaction: building environment in-place");
+        match self.build(flox, out_link_prefix) {
+            Ok(store_path) => {
+                debug!("transaction: removing backups");
+                fs::remove_file(&manifest_bak)
+                    .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::RemoveBackup(e)))?;
+                if lockfile_existed {
+                    fs::remove_file(&lockfile_bak).map_err(|e| {
+                        EnvironmentError::Core(CoreEnvironmentError::RemoveBackup(e))
+                    })?;
+                }
+                Ok((store_path, lockfile))
+            },
+            Err(build_err) => {
+                debug!("transaction: build failed, restoring backups");
+                let _ = fs::remove_file(&manifest_path);
+                let _ = fs::rename(&manifest_bak, &manifest_path);
+                if lockfile_existed {
+                    let _ = fs::remove_file(&lockfile_path);
+                    let _ = fs::rename(&lockfile_bak, &lockfile_path);
+                } else {
+                    // No prior lockfile: remove the newly-created one so the
+                    // transaction leaves no trace.
+                    let _ = fs::remove_file(&lockfile_path);
+                }
+                Err(EnvironmentError::Core(build_err))
+            },
+        }
     }
 
-    /// Attempt to transactionally replace the lockfile contents
+    /// Attempt to transactionally replace the lockfile contents.
     ///
-    /// TODO: this is separate from transact_with_manifest_contents because it
+    /// Uses the same file-level backup strategy as [`Self::transact_with_manifest`]:
+    /// `manifest.lock` is renamed aside to `manifest.lock.bak`, the new
+    /// lockfile is written in-place, the environment is built at its real path,
+    /// and the backup is restored on build failure or removed on success.
+    ///
+    /// TODO: this is separate from transact_with_manifest because it
     /// shouldn't have to call lock. Currently build calls lock, but we
     /// shouldn't have to lock a second time.
     #[must_use = "don't discard the store path of built environments"]
@@ -876,25 +1107,57 @@ impl CoreEnvironment<ReadOnly> {
         flox: &Flox,
         out_link_prefix: Option<&Path>,
     ) -> Result<BuildEnvOutputs, CoreEnvironmentError> {
-        let tempdir = tempfile::tempdir_in(&flox.temp_dir)
-            .map_err(CoreEnvironmentError::MakeSandbox)?
-            .keep();
+        let _lock = self.acquire_transaction_lock()?;
 
-        debug!(
-            "transaction: making temporary environment in {}",
-            tempdir.display()
-        );
-        let mut temp_env = self.writable(&tempdir)?;
+        let lockfile_path = self.lockfile_path();
+        let lockfile_bak = Self::backup_path(&lockfile_path);
+        let lockfile_existed = lockfile_path.exists();
 
-        debug!("transaction: updating lockfile");
-        temp_env.update_lockfile_with_contents(&lockfile_contents)?;
+        if lockfile_bak.exists() {
+            return Err(CoreEnvironmentError::PriorTransaction(lockfile_bak));
+        }
 
-        debug!("transaction: building environment");
-        let store_path = temp_env.build(flox, out_link_prefix)?;
+        if lockfile_existed {
+            debug!(lockfile = %lockfile_path.display(), "transaction: backing up lockfile");
+            fs::rename(&lockfile_path, &lockfile_bak)
+                .map_err(CoreEnvironmentError::BackupTransaction)?;
+        }
 
-        debug!("transaction: replacing environment");
-        self.replace_with(temp_env)?;
-        Ok(store_path)
+        debug!("transaction: writing new lockfile");
+        let mut contents_with_newline = lockfile_contents.as_ref().to_string();
+        contents_with_newline.push('\n');
+        if let Err(e) = write_atomically(&lockfile_path, contents_with_newline)
+            .map_err(CoreEnvironmentError::WriteLockfileAtomically)
+        {
+            if lockfile_existed {
+                let _ = fs::remove_file(&lockfile_path);
+                let _ = fs::rename(&lockfile_bak, &lockfile_path);
+            } else {
+                let _ = fs::remove_file(&lockfile_path);
+            }
+            return Err(e);
+        }
+
+        debug!("transaction: building environment in-place");
+        match self.build(flox, out_link_prefix) {
+            Ok(store_path) => {
+                debug!("transaction: removing lockfile backup");
+                if lockfile_existed {
+                    fs::remove_file(&lockfile_bak).map_err(CoreEnvironmentError::RemoveBackup)?;
+                }
+                Ok(store_path)
+            },
+            Err(build_err) => {
+                debug!("transaction: build failed, restoring lockfile backup");
+                if lockfile_existed {
+                    let _ = fs::remove_file(&lockfile_path);
+                    let _ = fs::rename(&lockfile_bak, &lockfile_path);
+                } else {
+                    let _ = fs::remove_file(&lockfile_path);
+                }
+                Err(build_err)
+            },
+        }
     }
 }
 
@@ -910,41 +1173,6 @@ impl CoreEnvironment<ReadWrite> {
     ) -> Result<(), CoreEnvironmentError> {
         debug!("writing new manifest to {}", self.manifest_path().display());
         manifest.write_to_file(self.manifest_path())?;
-        Ok(())
-    }
-
-    /// Updates the environment lockfile with the provided contents
-    fn update_lockfile_with_contents(
-        &mut self,
-        contents: impl AsRef<str>,
-    ) -> Result<(), CoreEnvironmentError> {
-        debug!("writing lockfile to {}", self.lockfile_path().display());
-        let mut contents_with_newline = contents.as_ref().to_string();
-        contents_with_newline.push('\n');
-        std::fs::write(self.lockfile_path(), contents_with_newline)
-            .map_err(CoreEnvironmentError::WriteLockfile)?;
-        Ok(())
-    }
-
-    /// Updates the environment lockfile with the provided contents
-    fn update_lockfile(&mut self, lockfile: &Lockfile) -> Result<(), CoreEnvironmentError> {
-        debug!("writing lockfile to {}", self.lockfile_path().display());
-        let mut contents =
-            serde_json::to_string_pretty(lockfile).expect("lockfile contents should be valid JSON");
-        contents.push('\n');
-        write_atomically(self.lockfile_path(), contents)
-            .map_err(CoreEnvironmentError::WriteLockfileAtomically)?;
-        Ok(())
-    }
-
-    fn write_manifest_lockfile_pair(
-        &mut self,
-        manifest: &Manifest<Writable>,
-        lockfile: &Lockfile,
-    ) -> Result<(), CoreEnvironmentError> {
-        self.update_manifest(manifest)?;
-        self.update_lockfile(lockfile)?;
-
         Ok(())
     }
 }
@@ -1161,6 +1389,13 @@ pub enum CoreEnvironmentError {
     #[error("Failed to remove transaction backup")]
     RemoveBackup(#[source] std::io::Error),
 
+    #[error("could not acquire transaction lock")]
+    AcquireTransactionLock(#[source] std::io::Error),
+    /// Another process holds the transaction lock.
+    /// The message is pre-formatted with PID/user/host from the lock file.
+    #[error("{0}")]
+    TransactionLockHeld(String),
+
     // endregion
 
     // region: mutable manifest errors
@@ -1207,6 +1442,17 @@ pub enum CoreEnvironmentError {
 }
 
 impl CoreEnvironmentError {
+    fn transaction_lock_held(lock_path: PathBuf, owner: Option<TransactionLockInfo>) -> Self {
+        let owner_desc = owner
+            .map(|o| format!(" (pid {}, user {}, host {})", o.pid, o.username, o.hostname))
+            .unwrap_or_default();
+        CoreEnvironmentError::TransactionLockHeld(format!(
+            "Another process is already editing this environment{owner_desc}.\n\
+             Delete {} to proceed if the process is no longer running.",
+            lock_path.display()
+        ))
+    }
+
     pub fn is_incompatible_system_error(&self) -> bool {
         // incomaptible system errors during resolution
         let is_lock_incompatible_system_error = matches!(
@@ -1542,6 +1788,73 @@ mod tests {
             .expect_err("Should fail if backup exists");
 
         assert!(matches!(err, CoreEnvironmentError::PriorTransaction(_)));
+    }
+
+    /// A pre-existing transaction lock file causes `TransactionLockHeld`
+    #[test]
+    fn detects_concurrent_transaction() {
+        let (_flox, tempdir) = flox_instance();
+        let env_path = tempfile::tempdir_in(&tempdir).unwrap();
+
+        let lock_info = TransactionLockInfo {
+            pid: 99999,
+            hostname: "other-host".to_string(),
+            username: "alice".to_string(),
+        };
+        let lock_path = env_path.path().join("transaction.lock");
+        fs::write(
+            &lock_path,
+            serde_json::to_string_pretty(&lock_info).unwrap(),
+        )
+        .unwrap();
+
+        let env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
+            base_directory: None,
+        });
+        let err = env_view
+            .acquire_transaction_lock()
+            .expect_err("should fail when lock file exists");
+
+        assert!(
+            matches!(err, CoreEnvironmentError::TransactionLockHeld(_)),
+            "unexpected error: {err}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("pid 99999"),
+            "message should include pid: {msg}"
+        );
+        assert!(
+            msg.contains("alice"),
+            "message should include username: {msg}"
+        );
+        assert!(
+            msg.contains("other-host"),
+            "message should include hostname: {msg}"
+        );
+    }
+
+    /// The transaction lock file is removed after a successful lock acquisition
+    #[test]
+    fn transaction_lock_released_on_drop() {
+        let (_flox, tempdir) = flox_instance();
+        let env_path = tempfile::tempdir_in(&tempdir).unwrap();
+
+        let env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
+            base_directory: None,
+        });
+        let lock_path = env_view.transaction_lock_path();
+
+        let guard = env_view
+            .acquire_transaction_lock()
+            .expect("should acquire lock");
+        assert!(lock_path.exists(), "lock file should exist while held");
+
+        drop(guard);
+        assert!(
+            !lock_path.exists(),
+            "lock file should be removed after drop"
+        );
     }
 
     /// creating backup should fail if env is readonly

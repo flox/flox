@@ -21,7 +21,7 @@ indoc.workspace = true
 itertools.workspace = true
 jsonwebtoken.workspace = true
 nef-lock-catalog.workspace = true
-nix = { workspace = true, features = ["signal"] }
+nix = { workspace = true, features = ["hostname", "signal"] }
 pollster.workspace = true
 regex.workspace = true
 reqwest.workspace = true
