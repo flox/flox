@@ -64,10 +64,9 @@ pub fn generate_tcsh_profile_commands(
                 "_activate_d",
                 args.activate_d.display().to_string(),
             ));
-            stmts.push(todo_drop_set_exported_unexpanded(
-                "_flox_activations",
-                args.flox_activations.display().to_string(),
-            ));
+            // `_flox_activations` is now folded into the activation diff via
+            // `single_set_envs`, so it is set on the exec'd env / emitted as a
+            // single_set and unset on deactivate. Do not re-export it here.
             stmts.push(todo_drop_set_exported_unexpanded(
                 "_flox_activate_tracer",
                 &args.flox_activate_tracer,
@@ -312,7 +311,6 @@ mod tests {
             setenv QUOTED_VAR 'QUOTED'\''VALUE';
             unsetenv DELETED_VAR;
             setenv _activate_d /interpreter/activate.d;
-            setenv _flox_activations /flox_activations;
             setenv _flox_activate_tracer TRACER;
             set _FLOX_INVOCATION_TYPE = interactive;
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
@@ -338,6 +336,7 @@ mod tests {
             setenv FLOX_PROMPT_COLOR_2 2;
             setenv FLOX_PROMPT_ENVIRONMENTS prompt_envs;
             setenv _FLOX_ACTIVE_ENVIRONMENTS active_envs;
+            setenv _flox_activations /flox_activations;
             setenv ADDED_VAR ADDED_VALUE;
             setenv FLOX_ACTIVATE_START_SERVICES false;
             setenv FLOX_ENV /flox_env;
@@ -348,7 +347,6 @@ mod tests {
             setenv QUOTED_VAR 'QUOTED'\''VALUE';
             unsetenv DELETED_VAR;
             setenv _activate_d /interpreter/activate.d;
-            setenv _flox_activations /flox_activations;
             setenv _flox_activate_tracer TRACER;
             set _FLOX_INVOCATION_TYPE = inplace;
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
@@ -383,6 +381,7 @@ mod tests {
             unsetenv PATH;
             unsetenv QUOTED_VAR;
             unsetenv _FLOX_ACTIVE_ENVIRONMENTS;
+            unsetenv _flox_activations;
             setenv MODIFIED_VAR MODIFIED_ORIGINAL;
             setenv DELETED_VAR DELETED_ORIGINAL;
             unsetenv _FLOX_HOOK_DIFF;

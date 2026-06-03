@@ -23,6 +23,9 @@ else
   unset ZDOTDIR
 fi
 
+# FLOX_ZSH_INIT_SCRIPT has done its job by now, so unset it to keep it from leaking into the user's shell.
+unset FLOX_ZSH_INIT_SCRIPT
+
 # Save FPATH before and after rearranging it so we know whether we need to
 # reload completions below.
 old_fpath="$FPATH"

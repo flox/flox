@@ -71,10 +71,9 @@ pub fn generate_fish_profile_commands(
                 "_activate_d",
                 args.activate_d.display().to_string(),
             ));
-            stmts.push(todo_drop_set_exported_unexpanded(
-                "_flox_activations",
-                args.flox_activations.display().to_string(),
-            ));
+            // `_flox_activations` is now folded into the activation diff via
+            // `single_set_envs`, so it is set on the exec'd env / emitted as a
+            // single_set and unset on deactivate. Do not re-export it here.
             stmts.push(todo_drop_set_exported_unexpanded(
                 "_flox_activate_tracer",
                 &args.flox_activate_tracer,
@@ -294,7 +293,6 @@ mod tests {
             set -gx QUOTED_VAR 'QUOTED'\''VALUE';
             set -e DELETED_VAR;
             set -gx _activate_d /interpreter/activate.d;
-            set -gx _flox_activations /flox_activations;
             set -gx _flox_activate_tracer TRACER;
             set -g _FLOX_INVOCATION_TYPE interactive;
             if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
@@ -318,6 +316,7 @@ mod tests {
             set -gx FLOX_PROMPT_COLOR_2 2;
             set -gx FLOX_PROMPT_ENVIRONMENTS prompt_envs;
             set -gx _FLOX_ACTIVE_ENVIRONMENTS active_envs;
+            set -gx _flox_activations /flox_activations;
             set -gx ADDED_VAR ADDED_VALUE;
             set -gx FLOX_ACTIVATE_START_SERVICES false;
             set -gx FLOX_ENV /flox_env;
@@ -328,7 +327,6 @@ mod tests {
             set -gx QUOTED_VAR 'QUOTED'\''VALUE';
             set -e DELETED_VAR;
             set -gx _activate_d /interpreter/activate.d;
-            set -gx _flox_activations /flox_activations;
             set -gx _flox_activate_tracer TRACER;
             set -g _FLOX_INVOCATION_TYPE inplace;
             if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
@@ -361,6 +359,7 @@ mod tests {
             set -e PATH;
             set -e QUOTED_VAR;
             set -e _FLOX_ACTIVE_ENVIRONMENTS;
+            set -e _flox_activations;
             set -gx MODIFIED_VAR MODIFIED_ORIGINAL;
             set -gx DELETED_VAR DELETED_ORIGINAL;
             set -e _FLOX_HOOK_DIFF;
