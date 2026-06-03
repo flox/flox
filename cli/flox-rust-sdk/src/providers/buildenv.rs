@@ -202,12 +202,19 @@ impl BuildEnvError {
     /// cannot help (bad lockfile, missing package, auth failures, spawn
     /// errors, etc.).
     fn is_transient(&self) -> bool {
+        // BuildPublishedPackage: all download locations exhausted; the failure
+        // may be transient (network glitch, substituter hiccup). Note that
+        // this also covers substituter-side auth rejections (403/401), which
+        // are deterministic but cheap to retry (3 attempts, ~750 ms total).
+        // Distinguishing auth rejections from network failures would require
+        // HTTP-status-aware error variants, tracked in a follow-up issue.
+        //
+        // NixCopyError has no current production constructors (all former
+        // construction sites now return more-specific variants) but is kept
+        // transient for any future producer.
         matches!(
             self,
-            // NixCopyError: direct nix copy execution failures.
-            // BuildPublishedPackage: all download locations exhausted; the
-            // failure may be transient (network glitch, substituter hiccup).
-            BuildEnvError::NixCopyError(_) | BuildEnvError::BuildPublishedPackage { .. }
+            BuildEnvError::BuildPublishedPackage { .. } | BuildEnvError::NixCopyError(_)
         )
     }
 }
@@ -1144,6 +1151,9 @@ fn materialise_with_retry(
         if attempt > 1 {
             backoff(attempt - 1);
         }
+        // Note: transient realise retries and GC-race retries share the same
+        // attempt budget. A transient download failure on attempt 1 leaves
+        // fewer attempts for GC-race recovery, and vice versa.
         match realise() {
             Ok(()) => {},
             Err(e) if e.is_transient() && attempt < max_attempts => {
@@ -1408,6 +1418,13 @@ where
             // The delay targets the DB-registration race (milliseconds to
             // seconds) rather than full GC sweeps; the retry budget is not
             // large enough to outlast an active gc run.
+            //
+            // For transient realise retries: each retry re-runs the full
+            // multi-location download (all locations + cache.nixos.org
+            // fallback) before returning BuildPublishedPackage. On a
+            // hard-down substituter the dominant cost is subprocess timeouts,
+            // not this sleep — callers should ensure nix copy timeouts are
+            // reasonable.
             |retry| {
                 let delay = backoff_delay(retry);
                 debug!(
@@ -2832,6 +2849,36 @@ mod materialise_retry_tests {
         assert_eq!(backoff_delay(8), Duration::from_millis(30_000));
         assert_eq!(backoff_delay(64), Duration::from_millis(30_000));
         assert_eq!(backoff_delay(1_000), Duration::from_millis(30_000));
+    }
+
+    #[test]
+    fn is_transient_classification() {
+        let transient = [
+            BuildEnvError::BuildPublishedPackage {
+                install_id: "pkg".to_string(),
+                attempts: DownloadAttempts(vec![]),
+            },
+            BuildEnvError::NixCopyError("timeout".to_string()),
+        ];
+        for e in &transient {
+            assert!(e.is_transient(), "{e:?} should be transient");
+        }
+
+        let deterministic: &[BuildEnvError] = &[
+            BuildEnvError::Realise2 {
+                install_id: "pkg".to_string(),
+                message: "not found".to_string(),
+            },
+            BuildEnvError::CacheError("spawn failed".to_string()),
+            BuildEnvError::Auth(AuthError::NoToken),
+            BuildEnvError::Build("nix build failed".to_string()),
+            BuildEnvError::NoPackageStoreLocation("pkg".to_string()),
+            BuildEnvError::LockfileContents("bad data".to_string()),
+            BuildEnvError::UntrustedPackage("pkg".to_string()),
+        ];
+        for e in deterministic {
+            assert!(!e.is_transient(), "{e:?} should not be transient");
+        }
     }
 
     fn fake_outputs() -> BuildEnvOutputs {
