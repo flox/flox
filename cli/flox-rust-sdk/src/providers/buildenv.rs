@@ -196,6 +196,22 @@ pub enum BuildEnvError {
     MaterialisationFailed { attempts: usize, paths: String },
 }
 
+impl BuildEnvError {
+    /// Returns `true` for errors that may resolve on retry (transient network
+    /// failures). Returns `false` for deterministic errors where retrying
+    /// cannot help (bad lockfile, missing package, auth failures, spawn
+    /// errors, etc.).
+    fn is_transient(&self) -> bool {
+        matches!(
+            self,
+            // NixCopyError: direct nix copy execution failures.
+            // BuildPublishedPackage: all download locations exhausted; the
+            // failure may be transient (network glitch, substituter hiccup).
+            BuildEnvError::NixCopyError(_) | BuildEnvError::BuildPublishedPackage { .. }
+        )
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct BuildEnvOutputs {
     pub dev: BuiltStorePath,
@@ -421,7 +437,6 @@ where
     ) -> Result<(), BuildEnvError> {
         let _sem_guard = semaphore.wait();
 
-        let mut auth_error = None;
         // The way the data structures are written it's possible to have
         // different package outputs come from different store locations. That's
         // not *really* possible though, so we're going to grab the store
@@ -446,7 +461,7 @@ where
             let location_url = match &location.url {
                 Some(url) => url,
                 None => {
-                    return Err(BuildEnvError::NixCopyError(format!(
+                    return Err(BuildEnvError::LockfileContents(format!(
                         "Missing store location URL for package '{}'",
                         locked_pkg.install_id
                     )));
@@ -488,11 +503,6 @@ where
                     return Err(BuildEnvError::UntrustedPackage(
                         locked_pkg.install_id.to_string(),
                     ));
-                }
-                // We're expecting errors for netrc type auth, but not for
-                // catalog provided auth.
-                if location.auth.is_some() {
-                    auth_error = Some(BuildEnvError::NixCopyError(stderr.to_string()));
                 }
 
                 download_attempts.0.push(DownloadAttempt {
@@ -548,11 +558,7 @@ where
             }
         }
 
-        if let Some(err) = auth_error {
-            Err(err)
-        } else {
-            Ok(())
-        }
+        Ok(())
     }
 
     /// Substitute all base catalog and store path packages in a single
@@ -1114,8 +1120,9 @@ fn backoff_delay(retry: usize) -> Duration {
 ///   daemon).  Those paths are force-registered with
 ///   `nix build --no-link --keep-going` and the attempt is retried.
 ///
-/// `realise` errors always propagate immediately; a path that never appeared
-/// in the store is not a GC race.
+/// Transient `realise` errors ([`BuildEnvError::is_transient`]) are retried
+/// up to `max_attempts` times; all other `realise` errors propagate
+/// immediately.
 ///
 /// `expected_paths` returns the full list of store paths the environment
 /// depends on. It is called once per attempt for diagnostic logging and
@@ -1137,7 +1144,19 @@ fn materialise_with_retry(
         if attempt > 1 {
             backoff(attempt - 1);
         }
-        realise()?;
+        match realise() {
+            Ok(()) => {},
+            Err(e) if e.is_transient() && attempt < max_attempts => {
+                warn!(
+                    error = %e,
+                    attempt,
+                    max_attempts,
+                    "transient realise error — retrying"
+                );
+                continue;
+            },
+            Err(e) => return Err(e),
+        }
         let missing = missing_paths();
         if !missing.is_empty() {
             if attempt < max_attempts {
@@ -3058,5 +3077,84 @@ mod materialise_retry_tests {
             !build_called.get(),
             "build_env must not be called if realise fails"
         );
+    }
+
+    fn transient_download_error() -> BuildEnvError {
+        BuildEnvError::BuildPublishedPackage {
+            install_id: "pkg".to_string(),
+            attempts: DownloadAttempts(vec![DownloadAttempt {
+                location: "https://cache.example.com".to_string(),
+                error: "connection timed out".to_string(),
+            }]),
+        }
+    }
+
+    #[test]
+    fn transient_realise_error_is_retried_and_succeeds() {
+        init_tracing();
+        let call = Cell::new(0usize);
+        let result = materialise_with_retry(
+            || {
+                call.set(call.get() + 1);
+                if call.get() == 1 {
+                    Err(transient_download_error())
+                } else {
+                    Ok(())
+                }
+            },
+            Vec::new,
+            Vec::new,
+            || Ok(fake_outputs()),
+            3,
+            |_| {},
+        );
+        assert_eq!(result.unwrap(), fake_outputs());
+        assert_eq!(
+            call.get(),
+            2,
+            "realise must be retried after transient error"
+        );
+    }
+
+    #[test]
+    fn transient_realise_error_exhausts_retries() {
+        init_tracing();
+        let result = materialise_with_retry(
+            || Err(transient_download_error()),
+            Vec::new,
+            Vec::new,
+            || Ok(fake_outputs()),
+            3,
+            |_| {},
+        );
+        assert!(matches!(
+            result.unwrap_err(),
+            BuildEnvError::BuildPublishedPackage { .. }
+        ));
+    }
+
+    #[test]
+    fn deterministic_realise_error_propagates_immediately() {
+        init_tracing();
+        let call = Cell::new(0usize);
+        let result = materialise_with_retry(
+            || {
+                call.set(call.get() + 1);
+                Err(BuildEnvError::Realise2 {
+                    install_id: "pkg".to_string(),
+                    message: "not found".to_string(),
+                })
+            },
+            Vec::new,
+            Vec::new,
+            || Ok(fake_outputs()),
+            3,
+            |_| {},
+        );
+        assert!(matches!(
+            result.unwrap_err(),
+            BuildEnvError::Realise2 { .. }
+        ));
+        assert_eq!(call.get(), 1, "must not retry deterministic realise errors");
     }
 }
