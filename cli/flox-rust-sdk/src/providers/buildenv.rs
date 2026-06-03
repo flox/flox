@@ -1075,6 +1075,19 @@ fn nix_path_info_null_paths(paths: &[String]) -> Result<Vec<String>, std::io::Er
         .collect())
 }
 
+/// Exponential backoff delay for the Nth retry (1-based):
+/// 250ms × 2^(retry−1), capped at 30s.
+fn backoff_delay(retry: usize) -> Duration {
+    const BASE_MS: u64 = 250;
+    const MAX_MS: u64 = 30_000;
+    // Cap the shift at 63 so `1u64 << shift` can never panic, and use
+    // saturating_mul so a large retry saturates to the cap instead of
+    // wrapping to 0.
+    let shift = retry.saturating_sub(1).min(63) as u32;
+    let ms = BASE_MS.saturating_mul(1u64 << shift).min(MAX_MS);
+    Duration::from_millis(ms)
+}
+
 /// Retry loop for materialisation and environment construction.
 ///
 /// Calls `realise` to materialise store paths, then `missing_paths` to detect
@@ -1377,15 +1390,7 @@ where
             // seconds) rather than full GC sweeps; the retry budget is not
             // large enough to outlast an active gc run.
             |retry| {
-                // checked_shl / min(30_000) are dead at max_attempts=3 (max
-                // shift is 1); they guard against a future caller raising
-                // max_attempts substantially.
-                let delay = Duration::from_millis(
-                    250u64
-                        .checked_shl(retry.saturating_sub(1) as u32)
-                        .unwrap_or(u64::MAX)
-                        .min(30_000),
-                );
+                let delay = backoff_delay(retry);
                 debug!(
                     retry,
                     delay_ms = delay.as_millis(),
@@ -2798,6 +2803,17 @@ mod materialise_retry_tests {
     use test_helpers::init_tracing;
 
     use super::*;
+
+    #[test]
+    fn backoff_delay_doubles_up_to_cap() {
+        assert_eq!(backoff_delay(1), Duration::from_millis(250));
+        assert_eq!(backoff_delay(2), Duration::from_millis(500));
+        assert_eq!(backoff_delay(3), Duration::from_millis(1_000));
+        assert_eq!(backoff_delay(4), Duration::from_millis(2_000));
+        assert_eq!(backoff_delay(8), Duration::from_millis(30_000));
+        assert_eq!(backoff_delay(64), Duration::from_millis(30_000));
+        assert_eq!(backoff_delay(1_000), Duration::from_millis(30_000));
+    }
 
     fn fake_outputs() -> BuildEnvOutputs {
         BuildEnvOutputs {
