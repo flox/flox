@@ -18,7 +18,7 @@ pub struct ZshStartupArgs {
     pub activate_d: PathBuf,
     pub invocation_type: InvocationType,
     pub clean_up: Option<PathBuf>,
-    pub auto_activate: bool,
+    pub register_hook: bool,
     pub flox_bin: String,
     pub set_prompt: bool,
 }
@@ -244,7 +244,7 @@ pub fn generate_zsh_profile_commands(
     // Auto-activate hook registration
     match action {
         Action::Activate { args, .. } => {
-            if args.auto_activate
+            if args.register_hook
                 && matches!(
                     args.invocation_type,
                     InvocationType::Interactive | InvocationType::InPlace

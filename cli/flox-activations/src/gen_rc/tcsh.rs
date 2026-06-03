@@ -22,7 +22,7 @@ pub struct TcshStartupArgs {
     pub flox_activate_tracer: String,
     pub flox_sourcing_rc: bool,
     pub flox_activations: PathBuf,
-    pub auto_activate: bool,
+    pub register_hook: bool,
     pub flox_bin: String,
     pub set_prompt: bool,
 }
@@ -247,7 +247,7 @@ pub fn generate_tcsh_profile_commands(
     // Auto-activate hook registration
     match action {
         Action::Activate { args, .. } => {
-            if args.auto_activate
+            if args.register_hook
                 && matches!(
                     args.invocation_type,
                     InvocationType::Interactive | InvocationType::InPlace

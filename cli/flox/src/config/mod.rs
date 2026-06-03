@@ -132,6 +132,11 @@ pub struct FloxConfig {
     /// Maps absolute paths to explicit allow/deny decisions.
     #[serde(default)]
     pub auto_activate_environments: HashMap<PathBuf, AutoActivationPreference>,
+
+    /// Don't setup the Flox prompt hook as part of activation.
+    /// This disables auto-activation as well as features like `flox deactivate`
+    /// without `--print-script` (default: false)
+    pub disable_hook: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
