@@ -137,12 +137,7 @@ impl ActivateArgs {
         let mut last_warning: Option<Instant> = None;
 
         loop {
-            match self.try_start_or_attach(
-                context,
-                invocation_type,
-                subsystem_verbosity,
-                vars_from_env,
-            )? {
+            match self.try_start_or_attach(context, subsystem_verbosity, vars_from_env)? {
                 StartOrAttachResult::Start { start_id, .. } => {
                     if *invocation_type == InvocationType::Interactive {
                         updated(
@@ -194,7 +189,6 @@ impl ActivateArgs {
     fn try_start_or_attach(
         &self,
         context: &ActivateCtx,
-        invocation_type: &InvocationType,
         subsystem_verbosity: u32,
         vars_from_env: &VarsFromEnvironment,
     ) -> Result<StartOrAttachResult, anyhow::Error> {
@@ -238,11 +232,7 @@ impl ActivateArgs {
         }
 
         let pid = std::process::id() as i32;
-        match activations.start_or_attach(
-            pid,
-            &context.flox_activate_store_path,
-            invocation_type.clone(),
-        ) {
+        match activations.start_or_attach(pid, &context.flox_activate_store_path) {
             StartOrAttachResult::Start { start_id } => start(
                 context,
                 subsystem_verbosity,
