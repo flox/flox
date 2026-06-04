@@ -11,7 +11,7 @@ flox-install - install packages to an environment
 
 # SYNOPSIS
 
-```
+```text
 flox [<general options>] install
      [-i <id>] <package>[@<version>]
      [-i <id>] <package>[^<outputs>]
@@ -39,7 +39,7 @@ long as the build succeeds.
 You may also specify packages to be installed via
 [`flox-edit(1)`](./flox-edit.md),
 which allows specifying a variety of options for package installation.
-See [`manifest-toml(1)`](./manifest.toml.md) for more details on the available
+See [`manifest.toml(5)`](./manifest.toml.md) for more details on the available
 options.
 
 ## Install ID
@@ -85,7 +85,7 @@ reference.
 
     Alternatively, an arbitrary Nix flake installable,
     or store path may be specified.
-    See [`manifest-toml(1)`](./manifest.toml.md) for more details.
+    See [`manifest.toml(5)`](./manifest.toml.md) for more details.
 
 
 ```{.include}

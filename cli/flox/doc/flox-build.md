@@ -12,7 +12,7 @@ flox-build - Build packages with Flox
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] build
      [-d=<path>]
      [--stability <stability>]
@@ -78,7 +78,7 @@ Upon completion of the build, the build result will be symlinked to
 
 ### Metadata
 
-Specifying the `build.<package>.description>` and `build.<package>.version`
+Specifying the `build.<package>.description` and `build.<package>.version`
 fields of the build provide extra metadata that can be used by `flox install`,
 `flox search`, and `flox show` commands if the build is later published.
 
@@ -147,19 +147,19 @@ version = "0.0.0"
 
 2. Build the package and verify its contents:
 
-```
+```console
 $ flox build hello
 $ ls ./result-hello
 hello.txt
 $ cat ./result-hello/hello.txt
-hello, world
+hello world
 ```
 
 ## Building a simple multi-stage app
 
 Assume a simple `nodejs` project
 
-```
+```text
 .
 ├── .git/
 ├── package-lock.json
@@ -172,8 +172,8 @@ Assume a simple `nodejs` project
 
 1. Initialize a Flox environment
 
-```shell
-$ flox init
+```bash
+flox init
 ```
 
 2. Install dependencies and add build instructions
@@ -206,8 +206,8 @@ mv dist $out/
 
 3. Verify the result
 
-```shell
-$ npx serve result-app
+```bash
+npx serve result-app
 ```
 
 # SEE ALSO

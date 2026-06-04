@@ -10,7 +10,7 @@ flox-services-status - display the status of services
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] services status
      [-d=<path> | -r=<owner/name>]
      [--json]
@@ -37,10 +37,10 @@ does not exist.
 ./include/general-options.md
 ```
 
-# EXAMPLES:
+# EXAMPLES
 
 Display statuses for all services:
-```
+```console
 $ flox services status
 NAME       STATUS            PID
 sleeping   Running         89718
@@ -48,7 +48,7 @@ myservice  Running         12345
 ```
 
 Display the status of a single service:
-```
+```console
 $ flox services status myservice
 NAME       STATUS            PID
 myservice  Running         12345

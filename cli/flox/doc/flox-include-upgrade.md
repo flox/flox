@@ -11,7 +11,7 @@ included environments
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] include upgrade
      [-d=<path> | -r=<owner/name>]
      [<included environment>]...
@@ -37,4 +37,4 @@ fetched for all included environments.
 ```
 
 # SEE ALSO
-[`manifest-toml`(5)](./manifest.toml.md),
+[`manifest.toml(5)`](./manifest.toml.md)

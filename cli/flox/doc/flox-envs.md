@@ -10,7 +10,7 @@ flox-envs - show active and available environments
 
 # SYNOPSIS
 
-```
+```text
 flox [<general options>] envs
      [--active]
      [--json]
@@ -33,7 +33,7 @@ the change may not show until the new environment is used.
 
 # OPTIONS
 
-## Edit Options
+## Envs Options
 
 `--active`
 :   Show only active environments

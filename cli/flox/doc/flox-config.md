@@ -11,7 +11,7 @@ flox-config - view and set configuration options
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] config
      [-l |
       -r |
@@ -28,7 +28,7 @@ Config values are read from the following sources in order of descending priorit
 
 1. Environment variables.
    All config options may be set by prefixing with `FLOX_` and using
-   SCREAMING_SNAKE_CASE.
+   `SCREAMING_SNAKE_CASE`.
    For example, `disable_metrics` may be set with `FLOX_DISABLE_METRICS=true`.
 2. User customizations from `$FLOX_CONFIG_DIR/flox.toml` if set,
    otherwise `flox/flox.toml` in `$XDG_CONFIG_HOME` or any of `$XDG_CONFIG_DIRS`,
@@ -44,7 +44,7 @@ determined in step 2.
 
 `<key>` supports dot-separated queries for nested values, for example:
 
-```
+```bash
 flox config --set 'trusted_environments."owner/name"' trust
 ```
 
@@ -107,12 +107,13 @@ flox config --set 'trusted_environments."owner/name"' trust
 
 `shell_prompt` - DEPRECATED
 :   Rule whether to change the shell prompt in activated environments
-    (default: "show-all").
+    (default: `show-all`).
     This has been deprecated in favor of `set_prompt` and `hide_default_prompt`.
-    Possible values are
-    * "show-all": shows all active environments
-    * "hide-all": disables the modification of the shell prompt
-    * "hide-default": filters out environments named 'default' from the shell prompt
+    Possible values are:
+
+    * `show-all`: shows all active environments
+    * `hide-all`: disables the modification of the shell prompt
+    * `hide-default`: filters out environments named `default` from the shell prompt
 
 `state_dir`
 :   Directory where Flox should store data that's not critical but also
@@ -127,7 +128,7 @@ flox config --set 'trusted_environments."owner/name"' trust
 `upgrade_notifications`
 :   Print notification if upgrades are available on `flox activate`.
     The notification message is:
-    ```
+    ```console
     Upgrades are available for packages in 'environment-name'.
     Use 'flox upgrade --dry-run' for details.
     ```

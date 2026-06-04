@@ -10,7 +10,7 @@ flox-generations-rollback - switch to the previous live generation
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] generations rollback
      [-d=<path> | -r=<owner/name>]
 ```
@@ -36,13 +36,15 @@ generation 2.
 [`flox-generations-history(1)`](./flox-generations-history.md) can be used to
 see the relationships between generations.
 
+# OPTIONS
+
 ```{.include}
 ./include/environment-options.md
 ./include/general-options.md
 ```
 
 # SEE ALSO
-[`flox-generations-history(1)`](./flox-generations-history.md)
-[`flox-generations-list(1)`](./flox-generations-list.md)
+[`flox-generations-history(1)`](./flox-generations-history.md),
+[`flox-generations-list(1)`](./flox-generations-list.md),
 [`flox-generations-switch(1)`](./flox-generations-switch.md)
 

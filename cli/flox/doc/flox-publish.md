@@ -12,7 +12,7 @@ flox-publish - Publish packages for Flox
 
 # SYNOPSIS
 
-``` bash
+```text
 flox [<general-options>] publish
      [-d=<path>]
      [-o=<org>]
@@ -91,10 +91,10 @@ packages directly from `.nix` expressions under `.flox/pkgs/`.
 
 ## Sharing published packages
 
-a package published to an individual user's Catalog may only be seen and
+A package published to an individual user's Catalog may only be seen and
 installed by that user.
 In order to share packages with other users you must create an organization.
-See https://flox.dev/docs/concepts/organizations/ for more details on
+See [the organizations concept page](https://flox.dev/docs/concepts/organizations/) for more details on
 organizations and how to create them.
 Note that this is a paid feature available with Flox for Teams.
 
