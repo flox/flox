@@ -1657,7 +1657,7 @@
           "info"
         ],
         "summary": "Look up derivation info by NAR file name",
-        "description": "Look up derivation information by NAR file name.\n\nPath Parameters:\n- **nar_file**: The NAR file name to look up\n\nReturns:\n- **NarFileLookup**: Derivation info including attr_path, system, and\n  outputs for the package associated with this NAR file.\n\nNote: Requires authentication and flox organization membership.",
+        "description": "Look up derivation information by NAR file name.\n\nPath Parameters:\n- **nar_file**: The NAR file name to look up\n\nReturns:\n- **NarFileLookup**: Derivation info including attr_path, system, and\n  outputs for the package associated with this NAR file.\n\nNote: Requires authentication and superuser (flox staff) access.",
         "operationId": "nar_file_lookup_api_v1_catalog_info_nar__nar_file__get",
         "security": [
           {
@@ -1718,7 +1718,7 @@
           "info"
         ],
         "summary": "Get a raw dependency report for a storepath (excluding /nix/store/ prefix)",
-        "description": "Get a raw dependency report for a store path.\n\nPath Parameters:\n- **storepath**: The store path to analyze (excluding /nix/store/ prefix)\n\nReturns:\n- **RawDependencyReport**: Dependency graph with all transitive dependencies,\n  including store paths, derivation info, and dependency relationships.\n\nNote: Requires authentication and flox organization membership.",
+        "description": "Get a raw dependency report for a store path.\n\nPath Parameters:\n- **storepath**: The store path to analyze (excluding /nix/store/ prefix)\n\nReturns:\n- **RawDependencyReport**: Dependency graph with all transitive dependencies,\n  including store paths, derivation info, and dependency relationships.\n\nNote: Requires authentication and superuser (flox staff) access.",
         "operationId": "raw_dependency_report_api_v1_catalog_info_dependencies__storepath__raw_get",
         "security": [
           {
@@ -1769,7 +1769,7 @@
           "info"
         ],
         "summary": "Get an SPDX report for a storepath (excluding /nix/store/ prefix)",
-        "description": "Get an SPDX 2.3 format dependency report for a store path.\n\nPath Parameters:\n- **storepath**: The store path to analyze (excluding /nix/store/ prefix)\n\nReturns:\n- **dict**: SPDX 2.3 JSON document containing package information and\n  dependency relationships in standard SBOM format.\n\nNote: Requires authentication and flox organization membership.",
+        "description": "Get an SPDX 2.3 format dependency report for a store path.\n\nPath Parameters:\n- **storepath**: The store path to analyze (excluding /nix/store/ prefix)\n\nReturns:\n- **dict**: SPDX 2.3 JSON document containing package information and\n  dependency relationships in standard SBOM format.\n\nNote: Requires authentication and superuser (flox staff) access.",
         "operationId": "spdx_report_api_v1_catalog_info_dependencies__storepath__spdx_get",
         "security": [
           {
@@ -2573,6 +2573,46 @@
         ],
         "title": "HealthCheck"
       },
+      "LockedInputEntry": {
+        "properties": {
+          "catalog": {
+            "type": "string",
+            "title": "Catalog"
+          },
+          "attr_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Attr Path"
+          },
+          "build_type": {
+            "$ref": "#/components/schemas/BuildType"
+          },
+          "source": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Source"
+          },
+          "inputs": {
+            "title": "Inputs",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object",
+        "required": [
+          "catalog",
+          "attr_path",
+          "build_type",
+          "source"
+        ],
+        "title": "LockedInputEntry",
+        "description": "A single entry in the flat locked-inputs map.\n\nOn the publish request side: catalog, attr_path, build_type, source are\nrequired.  inputs is left null (inputs null = \"unknown\").\n\nOn the lookup response side: all fields may be present.  inputs expresses\nthe DAG edges using the tri-state SBOM convention:\n  inputs: [k, ...]  \u2014 known direct inputs (by key)\n  inputs: []        \u2014 explicitly no dependencies\n  inputs null       \u2014 unknown / not stated\n\nattr_path is a list of components, e.g. [\"python3Packages\", \"boolex\"].\nA flat catalog entry collapses what the CLI lockfile represents as a\nhierarchy of single-component package-set / package nodes.  Giving the\nCLI the components lets it re-expand that hierarchy.  A list is also\nunambiguous where a dot-joined string is not \u2014 Nix attr paths may\ncontain quoted dotted components, e.g. python3Packages.\"foo.bar\".\n\nWire behavior: inputs defaults to None and serializes as explicit JSON\nnull \u2014 it is not dropped.  \"Unknown\" is encoded as null on the wire,\nnever as an absent key (do not add exclude_none).\n\nUse key() to build the canonical flat-map key for this entry."
+      },
       "LockedSourceItem": {
         "properties": {
           "attr_path": {
@@ -2963,6 +3003,14 @@
             "title": "Narinfos Source Version",
             "nullable": true,
             "type": "integer"
+          },
+          "locked_inputs": {
+            "title": "Locked Inputs",
+            "nullable": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/LockedInputEntry"
+            },
+            "type": "object"
           }
         },
         "type": "object",
