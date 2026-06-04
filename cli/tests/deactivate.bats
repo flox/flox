@@ -605,6 +605,7 @@ diff_env_dumps() {
         LOGNAME
         NIX_SSL_CERT_FILE
         PATH_LOCALE
+        REMOTEHOST
         _flox_activate_tracer
       )
       ;;
@@ -617,6 +618,7 @@ diff_env_dumps() {
         LOGNAME
         LS_COLORS
         NIX_SSL_CERT_FILE
+        REMOTEHOST
         SSL_CERT_FILE
         _flox_activate_tracer
       )
