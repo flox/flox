@@ -33,6 +33,10 @@ pub struct DeactivateCtx {
     /// emitted script does not depend on runtime `$FLOX_ENV` — which is the
     /// most-recently activated env, not necessarily the one being torn down.
     pub flox_env: PathBuf,
+    /// Verbosity passed through from `_FLOX_SUBSYSTEM_VERBOSITY`; when
+    /// `>= 2` each shell wraps its deactivate output in a trace mode
+    /// (`set -x`, `set verbose`, `set -gx fish_trace 1`).
+    pub flox_activate_tracelevel: u32,
     /// Decoded from `_FLOX_HOOK_DIFF`
     pub restore_diff: DiffSerializer,
     /// Path to the `flox-activations` binary, embedded in generated shell
@@ -173,6 +177,7 @@ pub(crate) mod test_helpers {
         DeactivateCtx {
             activate_d: PathBuf::from("/interpreter/activate.d"),
             flox_env: PathBuf::from("/flox_env"),
+            flox_activate_tracelevel: 0,
             restore_diff,
             flox_activations: PathBuf::from("/flox-activations"),
         }
@@ -201,6 +206,7 @@ pub(crate) mod test_helpers {
         DeactivateCtx {
             activate_d: PathBuf::from("/interpreter/activate.d"),
             flox_env: PathBuf::from("/flox_env"),
+            flox_activate_tracelevel: 0,
             restore_diff,
             flox_activations: PathBuf::from("/flox-activations"),
         }

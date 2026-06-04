@@ -29,6 +29,12 @@ pub fn generate_zsh_profile_commands(
 ) -> Result<()> {
     let mut stmts = vec![];
 
+    // Trace mode (`set -x` / `set +x`) for zsh activate AND deactivate
+    // lives inside `assets/environment-interpreter/activate/activate.d/zsh`,
+    // not in this generator (bash/fish/tcsh do it inline here). If we ever
+    // introduce sibling `deactivate.d/*` scripts, deactivate-side trace
+    // wrap belongs there too — revisit then.
+
     match action {
         Action::Activate { args, .. } => {
             stmts.push(set_unexported_unexpanded(
@@ -41,7 +47,9 @@ pub fn generate_zsh_profile_commands(
             ));
         },
         Action::Deactivate(_) => {
-            // TODO: we might not need to set these in the first place
+            // No-op here — these are unset further down (after
+            // set-prompt and profile.deactivate, both of which still
+            // read `_activate_d`).
         },
     }
 
@@ -220,6 +228,28 @@ pub fn generate_zsh_profile_commands(
         );
     };
 
+    // Unset the helpers set above and in activate.d/zsh. Delayed until
+    // after set-prompt and profile.deactivate, which read `_activate_d`.
+    // Three vars:
+    // - `_activate_d`: set by this file's activate arm.
+    // - `_flox_activate_tracer`: inherited from the parent env (the flox
+    //   CLI exports it before exec); cleared here for parity with the
+    //   bash/fish/tcsh deactivate paths so post-deactivate state is clean.
+    // - `_flox_activate_tracelevel`: also unset by `activate.d/zsh` at end
+    //   of activation, but only the outermost activation reaches that
+    //   line — a nested activation followed by deactivation can leave it
+    //   lingering, so we re-unset defensively.
+    // `_flox_activations` is unset by the activation diff (it is folded
+    // into `single_set_envs`), so it is not listed here.
+    match action {
+        Action::Activate { .. } => {},
+        Action::Deactivate(_) => {
+            stmts.push(
+                "unset _activate_d _flox_activate_tracer _flox_activate_tracelevel;".to_stmt(),
+            );
+        },
+    }
+
     // Self-destruct rc file
     match action {
         Action::Activate { args, .. } => {
@@ -395,6 +425,7 @@ mod tests {
             eval "$('/flox_activations' profile-scripts-deactivate --shell zsh --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
             unset _FLOX_INVOCATION_TYPE;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
+            unset _activate_d _flox_activate_tracer _flox_activate_tracelevel;
         "#]]
         .assert_eq(&output);
     }
@@ -429,6 +460,7 @@ mod tests {
             eval "$('/flox_activations' profile-scripts-deactivate --shell zsh --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
             unset _FLOX_INVOCATION_TYPE;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
+            unset _activate_d _flox_activate_tracer _flox_activate_tracelevel;
         "#]]
         .assert_eq(&output);
     }

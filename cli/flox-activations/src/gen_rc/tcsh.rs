@@ -43,8 +43,10 @@ pub fn generate_tcsh_profile_commands(
                 stmts.push("set verbose".to_stmt());
             }
         },
-        Action::Deactivate(_) => {
-            // TODO: emit `set verbose` when tracelevel >= 2
+        Action::Deactivate(ctx) => {
+            if ctx.flox_activate_tracelevel >= 2 {
+                stmts.push("set verbose".to_stmt());
+            }
         },
     }
 
@@ -73,9 +75,9 @@ pub fn generate_tcsh_profile_commands(
             ));
         },
         Action::Deactivate(_) => {
-            // TODO: we shouldn't be exporting these in the first place
-            // Although note that unsetting the prompt depends on these being
-            // set
+            // No-op here — these are unset further down (after
+            // set-prompt and profile.deactivate, both of which still
+            // read `_activate_d` and `_flox_activate_tracer`).
         },
     }
 
@@ -196,6 +198,18 @@ pub fn generate_tcsh_profile_commands(
         },
     }
 
+    // Unset the helpers exported above. Delayed until after set-prompt
+    // and profile.deactivate, both of which read `_activate_d` and
+    // `_flox_activate_tracer`.
+    // `_flox_activations` is unset by the activation diff (it is folded
+    // into `single_set_envs`), so it is not listed here.
+    match action {
+        Action::Activate { .. } => {},
+        Action::Deactivate(_) => {
+            stmts.push("unsetenv _activate_d; unsetenv _flox_activate_tracer;".to_stmt());
+        },
+    }
+
     // Disable command hashing to allow for newly installed flox packages
     // to be found immediately. We do this as the very last thing because
     // python venv activations can otherwise return nonzero return codes
@@ -221,8 +235,10 @@ pub fn generate_tcsh_profile_commands(
                 stmts.push("unset verbose;".to_stmt());
             }
         },
-        Action::Deactivate(_) => {
-            // TODO: unset verbose
+        Action::Deactivate(ctx) => {
+            if ctx.flox_activate_tracelevel >= 2 {
+                stmts.push("unset verbose;".to_stmt());
+            }
         },
     }
 
@@ -287,9 +303,11 @@ mod tests {
         render_normalized(&ctx)
     }
 
-    fn render_deactivate() -> String {
+    fn render_deactivate(flox_activate_tracelevel: u32) -> String {
         let shell = ShellWithPath::Tcsh(PathBuf::from("/bin/tcsh"));
-        let action = Action::<TcshStartupArgs>::Deactivate(test_deactivate_ctx(shell, true));
+        let mut ctx = test_deactivate_ctx(shell, true);
+        ctx.flox_activate_tracelevel = flox_activate_tracelevel;
+        let action = Action::<TcshStartupArgs>::Deactivate(ctx);
         let mut buf = Vec::new();
         generate_tcsh_profile_commands(&action, &mut buf).expect("generator should succeed");
         let output = String::from_utf8(buf).expect("output should be utf-8");
@@ -365,7 +383,7 @@ mod tests {
 
     #[test]
     fn generate_tcsh_profile_deactivate() {
-        let output = render_deactivate();
+        let output = render_deactivate(0);
         expect![[r#"
             unsetenv ADDED_VAR;
             unsetenv FLOX_ACTIVATE_START_SERVICES;
@@ -390,8 +408,19 @@ mod tests {
             set _already_sourced_args = ();
             if ($?_FLOX_SOURCED_PROFILE_SCRIPTS) set _already_sourced_args = ( --already-sourced-env-dirs `echo $_FLOX_SOURCED_PROFILE_SCRIPTS:q` );
             eval "`'/flox_activations' profile-scripts-deactivate --shell tcsh --env '/flox_env' $_already_sourced_args:q`";
+            unsetenv _activate_d; unsetenv _flox_activate_tracer;
             rehash;
         "#]]
         .assert_eq(&output);
+    }
+
+    #[test]
+    fn generate_tcsh_profile_deactivate_traced() {
+        // The traced variant is the untraced body wrapped in
+        // `set verbose` / `unset verbose;`. The body itself is
+        // snapshotted by `generate_tcsh_profile_deactivate`.
+        let traced = render_deactivate(2);
+        let untraced = render_deactivate(0);
+        assert_eq!(traced, format!("set verbose\n{untraced}unset verbose;\n"));
     }
 }

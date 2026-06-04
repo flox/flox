@@ -41,6 +41,7 @@ pub fn generate_deactivate_script(
     flox_activations_bin: &Path,
     activation_state_dir: &Path,
     flox_env: &Path,
+    flox_activate_tracelevel: u32,
 ) -> Result<()> {
     let activate_d = interpreter_path.as_ref().join("activate.d");
     let encoded_diff = env::var(FLOX_HOOK_DIFF_VAR)
@@ -50,6 +51,7 @@ pub fn generate_deactivate_script(
     let ctx = DeactivateCtx {
         activate_d,
         flox_env: flox_env.to_path_buf(),
+        flox_activate_tracelevel,
         restore_diff,
         flox_activations: flox_activations_bin.to_path_buf(),
     };

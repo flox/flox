@@ -689,9 +689,7 @@ diff_env_dumps() {
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
-  assert_output - <<EOF
-_activate_d
-EOF
+  refute_output
 }
 
 # bats test_tags=activate,deactivate
@@ -713,9 +711,7 @@ EOF
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
-  assert_output - <<EOF
-_activate_d
-EOF
+  refute_output
 }
 
 # bats test_tags=activate,deactivate
@@ -737,9 +733,7 @@ EOF
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
-  assert_output - <<EOF
-_activate_d
-EOF
+  refute_output
 }
 
 # bats test_tags=activate,deactivate
