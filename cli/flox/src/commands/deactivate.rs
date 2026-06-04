@@ -115,6 +115,11 @@ impl Deactivate {
                 Ok(())
             },
             InvocationKind::InPlace | InvocationKind::ShellCommand => {
+                let flox_activate_tracelevel = std::env::var("_FLOX_SUBSYSTEM_VERBOSITY")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(0);
+
                 // In-place activation: restore env vars first, then emit a shell
                 // command that calls `flox-activations detach` so state.json is
                 // updated after the script is eval'd by the caller.
@@ -125,6 +130,7 @@ impl Deactivate {
                     &FLOX_ACTIVATIONS_BIN,
                     &activation_state_dir,
                     &flox_env,
+                    flox_activate_tracelevel,
                 )
                 .context("failed to generate deactivation script")
             },

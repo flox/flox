@@ -45,8 +45,10 @@ pub fn generate_fish_profile_commands(
                 stmts.push(todo_drop_set_exported_unexpanded("fish_trace", "1").to_stmt());
             }
         },
-        Action::Deactivate(_) => {
-            // TODO: emit `set -gx fish_trace 1` when tracelevel >= 2
+        Action::Deactivate(ctx) => {
+            if ctx.flox_activate_tracelevel >= 2 {
+                stmts.push(todo_drop_set_exported_unexpanded("fish_trace", "1").to_stmt());
+            }
         },
     }
 
@@ -80,9 +82,9 @@ pub fn generate_fish_profile_commands(
             ));
         },
         Action::Deactivate(_) => {
-            // TODO: we shouldn't be exporting these in the first place
-            // Although note that unsetting the prompt depends on these being
-            // set
+            // No-op here — these are unset further down (after
+            // set-prompt and profile.deactivate, both of which still
+            // read `_activate_d` and `_flox_activate_tracer`).
         },
     }
 
@@ -190,6 +192,18 @@ pub fn generate_fish_profile_commands(
         },
     }
 
+    // Unset the helpers exported above. Delayed until after set-prompt
+    // and profile.deactivate, both of which read `_activate_d` and
+    // `_flox_activate_tracer`.
+    // `_flox_activations` is unset by the activation diff (it is folded
+    // into `single_set_envs`), so it is not listed here.
+    match action {
+        Action::Activate { .. } => {},
+        Action::Deactivate(_) => {
+            stmts.push("set -e _activate_d _flox_activate_tracer;".to_stmt());
+        },
+    }
+
     // fish does not use hashing in the same way bash does, so there's
     // nothing to be done here by way of that requirement.
 
@@ -200,8 +214,10 @@ pub fn generate_fish_profile_commands(
                 stmts.push("set -gx fish_trace 0;".to_stmt());
             }
         },
-        Action::Deactivate(_) => {
-            // TODO: set -gx fish_trace 0
+        Action::Deactivate(ctx) => {
+            if ctx.flox_activate_tracelevel >= 2 {
+                stmts.push("set -gx fish_trace 0;".to_stmt());
+            }
         },
     }
 
@@ -269,9 +285,11 @@ mod tests {
         render_normalized(&ctx)
     }
 
-    fn render_deactivate() -> String {
+    fn render_deactivate(flox_activate_tracelevel: u32) -> String {
         let shell = ShellWithPath::Fish(PathBuf::from("/fish"));
-        let action = Action::<FishStartupArgs>::Deactivate(test_deactivate_ctx(shell, true));
+        let mut ctx = test_deactivate_ctx(shell, true);
+        ctx.flox_activate_tracelevel = flox_activate_tracelevel;
+        let action = Action::<FishStartupArgs>::Deactivate(ctx);
         let mut buf = Vec::new();
         generate_fish_profile_commands(&action, &mut buf).expect("generator should succeed");
         let output = String::from_utf8(buf).expect("output should be utf-8");
@@ -343,7 +361,7 @@ mod tests {
 
     #[test]
     fn generate_fish_profile_deactivate() {
-        let output = render_deactivate();
+        let output = render_deactivate(0);
         expect![[r#"
             set -e ADDED_VAR;
             set -e FLOX_ACTIVATE_START_SERVICES;
@@ -366,7 +384,21 @@ mod tests {
             set -e _FLOX_INVOCATION_TYPE;
             if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
             /flox_activations profile-scripts-deactivate --shell fish --env '/flox_env' --already-sourced-env-dirs (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end) | source;
+            set -e _activate_d _flox_activate_tracer;
         "#]]
         .assert_eq(&output);
+    }
+
+    #[test]
+    fn generate_fish_profile_deactivate_traced() {
+        // The traced variant is the untraced body wrapped in
+        // `set -gx fish_trace 1;` / `set -gx fish_trace 0;`. The body
+        // itself is snapshotted by `generate_fish_profile_deactivate`.
+        let traced = render_deactivate(2);
+        let untraced = render_deactivate(0);
+        assert_eq!(
+            traced,
+            format!("set -gx fish_trace 1;\n{untraced}set -gx fish_trace 0;\n")
+        );
     }
 }
