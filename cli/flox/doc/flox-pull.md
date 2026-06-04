@@ -112,7 +112,7 @@ environments.
 `-r <owner>/<name>`, `--reference <owner>/<name>`
 :   Pull updates for a local copy of a FloxHub environment
 
-    The pulled environment can be used by passing '\-\-reference' to other
+    The pulled environment can be used by passing `--reference` to other
     subcommands.
 
     This updates a FloxHub environment that has been activated or pulled

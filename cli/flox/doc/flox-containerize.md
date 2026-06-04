@@ -120,11 +120,12 @@ ContainerizeConfig ::= {
     If both `user` and `working-dir` are specified, `working-dir` will be created with `user` as owner.
 
 `labels`
-:   This field contains arbitrary metadata for the container, as a map of string keys to string values following the OCI [annotation rules](https://github.com/opencontainers/image-spec/blob/main/annotations.md#rules).
+:   This field contains arbitrary metadata for the container.
+    This property MUST use the [annotation rules](https://github.com/opencontainers/image-spec/blob/main/annotations.md#rules).
 
 `stop-signal`
-:   The signal to send to the main process to stop the container (e.g., `SIGTERM`).
-    Must follow the container runtime's signal-name conventions.
+:   This field contains the system call signal that will be sent to the container to exit.
+    The signal can be a signal name in the format `SIGNAME`, for instance `SIGKILL` or `SIGRTMIN+3`.
 
 # EXAMPLES
 

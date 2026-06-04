@@ -35,6 +35,10 @@ use.
 `-f`, `--force`
 :   Delete the environment without confirmation.
 
+<!-- Copied from ./include/environment-options.md
+     `flox delete` does not currently handle remote environments
+     Replace with an include once support is added.
+ -->
 ## Environment Options
 
 If no environment is specified for an environment command,
