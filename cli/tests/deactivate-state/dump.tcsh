@@ -80,7 +80,9 @@ echo '=== ENV_VARS ===' >> $1
 setenv | awk -F= '{print $1}' | sort -u | grep -vE "$_ALLOWED_LEAKS_RE" | grep -vE "$_TEST_HARNESS_NOISE_RE" >> $1
 
 eval "`$FLOX_BIN activate -d $PROJECT_DIR`"
-eval "`$FLOX_BIN deactivate --print-script`"
+# `--print-script` requires the invocation type; `activate` sets
+# `_FLOX_INVOCATION_TYPE` (here: in-place). See deactivate.bats.
+eval "`$FLOX_BIN deactivate --print-script $_FLOX_INVOCATION_TYPE`"
 
 # Post snapshot
 echo -n '' > $2
