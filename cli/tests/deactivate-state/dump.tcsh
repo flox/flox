@@ -33,7 +33,9 @@ setenv FLOX_SHELL `which tcsh`
 # unlike bash. Pre-seeding to empty keeps the snapshot symmetric (the
 # placeholders appear in both pre and post) and lets the deactivate
 # script run to completion. A proper fix belongs in the tcsh
-# deactivate generator — track separately.
+# deactivate generator — track separately. deactivate.bats skips its tcsh
+# value-restoration tests for this same root cause; both the skip there and
+# this pre-seed should go once the generator guards the variable.
 setenv FLOX_ENV ""
 setenv FLOX_PROMPT_ENVIRONMENTS ""
 

@@ -4,22 +4,31 @@
 #
 # End-to-end state-restoration test for `flox deactivate --print-script`.
 #
-# Snapshots all bash shell state (functions, options, unexported variables)
-# before activation and after deactivation, then diffs the two. Verifies
-# activation/deactivation is fully reversible — nothing leaks past the
+# Snapshots the full shell state — functions/aliases, shell options, and
+# all variable *names* (including non-exported locals) — before activation
+# and after deactivation, then diffs the two. A clean diff means
+# activate/deactivate is fully reversible: nothing leaks past the
 # deactivate boundary.
 #
-# Bash-only for now. The dump primitives used here (`compgen -A function`,
-# `declare -f`, `compgen -v`, `set -o`, `shopt -p`) are bash-specific.
-# Equivalents exist in zsh (`print -l ${(k)functions}`, `typeset +`,
-# `setopt`), fish (`functions -n`, `set --names`), and tcsh (`alias`,
-# `set` / `setenv`); adding those shells is follow-up work — see
-# https://linear.app/flox/issue/DEV-86.
+# Covers bash, zsh, fish, and tcsh. The dump primitives are shell-specific
+# (bash `compgen`/`declare -f`/`shopt`, zsh `${(ko)functions}`/`setopt`,
+# fish `functions --names`/`set --names`, tcsh `alias`/`set`/`setenv`), so
+# each shell has its own helper under deactivate-state/dump.<shell>.
 #
 # The snapshot writes a normalized, sorted view (LC_ALL=C) to a file. The
 # test diffs pre vs. post, filtering shell-internal noise (LINENO, RANDOM,
 # BASH_COMMAND, history vars, etc.) and the test harness's own setup vars.
-# A clean diff means full restoration.
+#
+# Division of labor with deactivate.bats:
+#   - deactivate.bats owns *exported environment* restoration: it diffs
+#     `env` *values* (not just names) before/after, across the in-place,
+#     subshell, and interactive (pty) invocation modes, and also checks
+#     prompt and individual user-set variables.
+#   - this file owns *full shell-state* restoration by *name* (functions,
+#     aliases, options, non-exported vars) — the surface `env` cannot see
+#     — for the in-place invocation mode only.
+# Neither subsumes the other; keep both. See DEV-86:
+# https://linear.app/flox/issue/DEV-86.
 #
 # ---------------------------------------------------------------------------- #
 
@@ -74,6 +83,14 @@ teardown() {
 
 # ---------------------------------------------------------------------------- #
 
+# NOTE: deactivate.bats keeps a parallel, env-diff version of these filters
+# (`noise` and `FLOX_COLD_START_UNSET`). That suite compares exported-env
+# *values*; this one compares state *names*, so the lists differ in shape
+# and can't be shared verbatim. The names common to both —
+# NIX_SSL_CERT_FILE, PATH_LOCALE, _activate_d, _flox_activate_tracer — must
+# stay in sync: if one is reclassified (real leak vs. noise) in one file,
+# update the other too.
+#
 # Names that are intentionally allowed to differ between pre-activate
 # and post-deactivate snapshots. Each entry has a one-line justification.
 # Removing an entry here means we believe the leak should be cleaned up.
