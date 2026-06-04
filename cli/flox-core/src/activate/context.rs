@@ -105,6 +105,10 @@ pub struct ActivateCtx {
     #[serde(default)]
     pub auto_activate: bool,
 
+    /// Passthrough for config.disable_hook.unwrap_or(false)
+    #[serde(default)]
+    pub disable_hook: bool,
+
     /// Path to the flox binary, used for generating hook code.
     #[serde(default)]
     pub flox_bin: String,

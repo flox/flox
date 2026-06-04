@@ -136,6 +136,9 @@ pub(crate) fn startup_ctx(
 
     let set_prompt = ctx.attach_ctx.set_prompt;
 
+    // Respect both the feature flag and the config option
+    let register_hook = ctx.auto_activate && !ctx.disable_hook;
+
     let args = match ctx.shell {
         ShellWithPath::Bash(_) => ShellStartupArgs::Bash(BashStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
@@ -147,7 +150,7 @@ pub(crate) fn startup_ctx(
             flox_activate_tracer: activate_tracer.to_string(),
             flox_activations,
             clean_up,
-            auto_activate: ctx.auto_activate,
+            register_hook,
             flox_bin: ctx.flox_bin.clone(),
             set_prompt,
         }),
@@ -160,7 +163,7 @@ pub(crate) fn startup_ctx(
             flox_activate_tracer: activate_tracer.to_string(),
             flox_activations,
             clean_up,
-            auto_activate: ctx.auto_activate,
+            register_hook,
             flox_bin: ctx.flox_bin.clone(),
             auto_activate_fish_mode: ctx.auto_activate_fish_mode,
             set_prompt,
@@ -174,7 +177,7 @@ pub(crate) fn startup_ctx(
             flox_activate_tracer: activate_tracer.to_string(),
             flox_activations,
             clean_up,
-            auto_activate: ctx.auto_activate,
+            register_hook,
             flox_bin: ctx.flox_bin.clone(),
             set_prompt,
         }),
@@ -183,7 +186,7 @@ pub(crate) fn startup_ctx(
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             invocation_type,
             clean_up,
-            auto_activate: ctx.auto_activate,
+            register_hook,
             flox_bin: ctx.flox_bin.clone(),
             set_prompt,
         }),

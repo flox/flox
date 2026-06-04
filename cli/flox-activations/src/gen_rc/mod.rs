@@ -116,6 +116,7 @@ pub(crate) mod test_helpers {
             remove_after_reading: false,
             metrics_uuid: None,
             auto_activate: false,
+            disable_hook: false,
             flox_bin: "/flox".to_string(),
             auto_activate_fish_mode: None,
         };

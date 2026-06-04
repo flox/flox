@@ -108,6 +108,11 @@ flox config --set 'trusted_environments."owner/name"' trust
 :   Directory where Flox should store persistent data
     (default: `$XDG_DATA_HOME/flox`).
 
+`disable_hook`
+:   Don't setup the Flox prompt hook as part of activation.
+    This disables auto-activation as well as features like `flox deactivate`
+    without `--print-script` (default: false)
+
 `disable_metrics`
 :   Disable collecting and sending usage metrics.
 
