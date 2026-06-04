@@ -11,7 +11,6 @@ use serde_json::{Value, json};
 use time::OffsetDateTime;
 use tracing::{debug, trace};
 
-use crate::activate::context::InvocationType;
 use crate::activate::mode::ActivateMode;
 use crate::proc_status::pid_is_running;
 use crate::{Version, path_hash};
@@ -347,11 +346,6 @@ impl StartIdentifier {
 pub struct Attachment {
     start_id: StartIdentifier,
     expiration: Option<OffsetDateTime>,
-    // Optional until the V4 schema bump ships alongside the consumer
-    // (DEV-82); a missing field deserializes to `None` so old state.json
-    // files written before this field existed round-trip cleanly.
-    #[serde(default)]
-    invocation_type: Option<InvocationType>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -427,7 +421,6 @@ impl ActivationState {
                 let Attachment {
                     expiration,
                     start_id,
-                    invocation_type: _,
                 } = attachment;
                 acc.entry(start_id.clone())
                     .or_default()
@@ -464,7 +457,6 @@ impl ActivationState {
         &mut self,
         pid: Pid,
         store_path: impl AsRef<Path>,
-        invocation_type: InvocationType,
     ) -> StartOrAttachResult {
         if let Ready::Starting(starting_pid, ref start_id) = self.ready
             && pid_is_running(starting_pid)
@@ -481,12 +473,11 @@ impl ActivationState {
                 self.attach(pid, Attachment {
                     start_id: start_id.clone(),
                     expiration: None,
-                    invocation_type: Some(invocation_type),
                 });
                 StartOrAttachResult::Attach { start_id }
             },
             Ready::False | Ready::True(_) | Ready::Starting(_, _) => {
-                let start_id = self.start(pid, &store_path, invocation_type);
+                let start_id = self.start(pid, &store_path);
                 StartOrAttachResult::Start { start_id }
             },
         }
@@ -603,17 +594,11 @@ impl ActivationState {
         }
     }
 
-    fn start(
-        &mut self,
-        pid: Pid,
-        store_path: impl AsRef<Path>,
-        invocation_type: InvocationType,
-    ) -> StartIdentifier {
+    fn start(&mut self, pid: Pid, store_path: impl AsRef<Path>) -> StartIdentifier {
         let start_id = StartIdentifier::new(store_path);
         let attachment = Attachment {
             start_id: start_id.clone(),
             expiration: None,
-            invocation_type: Some(invocation_type),
         };
 
         debug!(pid, ?start_id, "starting new activation");
@@ -718,7 +703,6 @@ impl ActivationState {
         let new_attachment = Attachment {
             start_id,
             expiration,
-            invocation_type: old_attachment.invocation_type,
         };
 
         self.attached_pids.insert(new_pid, new_attachment);
@@ -920,7 +904,6 @@ mod tests {
         Attachment {
             start_id,
             expiration: None,
-            invocation_type: Some(InvocationType::Interactive),
         }
     }
 
@@ -987,11 +970,7 @@ mod tests {
             let store_path = PathBuf::from("/nix/store/test");
 
             // Start activation with first PID
-            let result = activations.start_or_attach(
-                proc_running.id() as i32,
-                &store_path,
-                InvocationType::Interactive,
-            );
+            let result = activations.start_or_attach(proc_running.id() as i32, &store_path);
             let start_id = match result {
                 StartOrAttachResult::Start { start_id, .. } => start_id,
                 _ => panic!("Expected Start"),
@@ -1001,11 +980,7 @@ mod tests {
             activations.set_ready(&start_id);
 
             // Attach second PID
-            activations.start_or_attach(
-                proc_stopped.id() as i32,
-                &store_path,
-                InvocationType::Interactive,
-            );
+            activations.start_or_attach(proc_stopped.id() as i32, &store_path);
 
             stop_process(proc_stopped);
 
@@ -1026,8 +1001,7 @@ mod tests {
             let store_path2 = PathBuf::from("/nix/store/path2");
 
             // Start activation with first store path
-            let result =
-                activations.start_or_attach(100, &store_path1, InvocationType::Interactive);
+            let result = activations.start_or_attach(100, &store_path1);
             let start_id1 = match result {
                 StartOrAttachResult::Start { start_id, .. } => start_id,
                 _ => panic!("Expected Start"),
@@ -1037,11 +1011,10 @@ mod tests {
             activations.set_ready(&start_id1);
 
             // Attach second PID to same start_id
-            activations.start_or_attach(200, &store_path1, InvocationType::Interactive);
+            activations.start_or_attach(200, &store_path1);
 
             // Start activation with second store path (creates new start_id)
-            let result =
-                activations.start_or_attach(300, &store_path2, InvocationType::Interactive);
+            let result = activations.start_or_attach(300, &store_path2);
             let start_id2 = match result {
                 StartOrAttachResult::Start { start_id, .. } => start_id,
                 _ => panic!("Expected Start"),
@@ -1068,7 +1041,7 @@ mod tests {
             let mut activations = make_activations(Ready::False);
 
             let pid = 123;
-            let result = activations.start_or_attach(pid, &store_path, InvocationType::Interactive);
+            let result = activations.start_or_attach(pid, &store_path);
 
             let start_id = match result {
                 StartOrAttachResult::Start { start_id } => start_id,
@@ -1094,8 +1067,7 @@ mod tests {
             let mut activations = make_activations(Ready::True(start_id.clone()));
 
             let pid = 123;
-            let result =
-                activations.start_or_attach(pid, &start_id.store_path, InvocationType::Interactive);
+            let result = activations.start_or_attach(pid, &start_id.store_path);
 
             match result {
                 StartOrAttachResult::Attach { start_id: id } => {
@@ -1118,7 +1090,7 @@ mod tests {
             let mut activations = make_activations(Ready::True(existing));
 
             let pid = 123;
-            let result = activations.start_or_attach(pid, &new_path, InvocationType::Interactive);
+            let result = activations.start_or_attach(pid, &new_path);
 
             let start_id = match result {
                 StartOrAttachResult::Start { start_id } => start_id,
@@ -1145,8 +1117,7 @@ mod tests {
             let start_id = StartIdentifier::new("/nix/store/path1");
             let mut activations = make_activations(Ready::Starting(pid, start_id.clone()));
 
-            let result =
-                activations.start_or_attach(123, &start_id.store_path, InvocationType::Interactive);
+            let result = activations.start_or_attach(123, &start_id.store_path);
 
             match result {
                 StartOrAttachResult::AlreadyStarting {
@@ -1179,11 +1150,7 @@ mod tests {
                 make_activations(Ready::Starting(stopped_pid, old_start_id.clone()));
 
             let pid = 123;
-            let result = activations.start_or_attach(
-                pid,
-                &old_start_id.store_path,
-                InvocationType::Interactive,
-            );
+            let result = activations.start_or_attach(pid, &old_start_id.store_path);
 
             let new_start_id = match result {
                 StartOrAttachResult::Start { start_id } => start_id,
@@ -1209,11 +1176,7 @@ mod tests {
             let mut activations = make_activations(Ready::True(start_id.clone()));
 
             for pid in [100, 200, 300].iter() {
-                let result = activations.start_or_attach(
-                    *pid,
-                    &start_id.store_path,
-                    InvocationType::Interactive,
-                );
+                let result = activations.start_or_attach(*pid, &start_id.store_path);
                 match result {
                     StartOrAttachResult::Attach { start_id: id } => {
                         assert_eq!(id, start_id);
@@ -1242,7 +1205,7 @@ mod tests {
             let store_path = PathBuf::from("/nix/store/path1");
 
             let pid = 123;
-            let result = activations.start_or_attach(pid, &store_path, InvocationType::Interactive);
+            let result = activations.start_or_attach(pid, &store_path);
             let start_id = match result {
                 StartOrAttachResult::Start { start_id, .. } => start_id,
                 _ => panic!("Expected Start"),
@@ -1255,8 +1218,7 @@ mod tests {
             activations.set_ready(&start_id);
 
             // Attach same PID again - should replace existing attachment
-            let result =
-                activations.start_or_attach(pid, &start_id.store_path, InvocationType::Interactive);
+            let result = activations.start_or_attach(pid, &start_id.store_path);
 
             match result {
                 StartOrAttachResult::Attach { start_id: id } => {
@@ -1285,7 +1247,6 @@ mod tests {
         let attachment = Attachment {
             start_id: start_id.clone(),
             expiration: Some(expiration),
-            invocation_type: Some(InvocationType::Interactive),
         };
         activations.attach(pid, attachment);
 
@@ -1308,7 +1269,6 @@ mod tests {
         let attachment = Attachment {
             start_id: start_id.clone(),
             expiration: Some(expiration),
-            invocation_type: Some(InvocationType::Interactive),
         };
         activations.attach(pid, attachment);
 
@@ -1487,75 +1447,20 @@ mod tests {
     mod invocation_type {
         use super::*;
 
+        /// Confirms that state.json files written by CLI 1.12.2 (which included
+        /// `invocation_type`) still deserialize cleanly after the field was
+        /// removed. Serde ignores unknown fields by default; this test is a
+        /// regression guard against accidentally adding `deny_unknown_fields`.
         #[test]
-        fn replace_attachment_preserves_invocation_type_with_expiration() {
-            let start_id = StartIdentifier::new("/nix/store/path1");
-            let mut activations = make_activations(Ready::True(start_id.clone()));
-            let pid = 123;
-            activations.attach(pid, Attachment {
-                start_id: start_id.clone(),
-                expiration: None,
-                invocation_type: Some(InvocationType::ExecCommand(vec!["ls".to_string()])),
-            });
-
-            let now = OffsetDateTime::now_utc();
-            let expiration = now + Duration::from_secs(60);
-            activations
-                .replace_attachment(start_id.clone(), pid, pid, Some(expiration))
-                .unwrap();
-
-            let expected = Attachment {
-                start_id,
-                expiration: Some(expiration),
-                invocation_type: Some(InvocationType::ExecCommand(vec!["ls".to_string()])),
-            };
-            assert_eq!(activations.attached_pids, BTreeMap::from([(pid, expected)]));
-        }
-
-        #[test]
-        fn replace_attachment_preserves_invocation_type_on_pid_swap() {
-            let start_id = StartIdentifier::new("/nix/store/path1");
-            let mut activations = make_activations(Ready::True(start_id.clone()));
-            let old_pid = 123;
-            let new_pid = 456;
-            activations.attach(old_pid, Attachment {
-                start_id: start_id.clone(),
-                expiration: None,
-                invocation_type: Some(InvocationType::InPlace),
-            });
-
-            activations
-                .replace_attachment(start_id.clone(), old_pid, new_pid, None)
-                .unwrap();
-
-            let expected = Attachment {
-                start_id,
-                expiration: None,
-                invocation_type: Some(InvocationType::InPlace),
-            };
-            assert_eq!(
-                activations.attached_pids,
-                BTreeMap::from([(new_pid, expected)])
-            );
-        }
-
-        /// Forward-compat with V3 state.json written by older flox binaries
-        /// (pre-DEV-78) that did not include `invocation_type` on attachments.
-        /// Delete this test when the V4 schema bump lands and the field becomes
-        /// required.
-        #[test]
-        fn deserialize_attachment_without_invocation_type_yields_none() {
-            let json = json!({
-                "start_id": {
-                    "store_path": "/nix/store/path1",
-                    "timestamp": 0,
-                },
+        fn deserialize_attachment_with_legacy_invocation_type_field() {
+            let json = serde_json::json!({
+                "start_id": { "store_path": "/nix/store/path1", "timestamp": 0 },
                 "expiration": null,
+                "invocation_type": "interactive",
             })
             .to_string();
-
-            let attachment: Attachment = serde_json::from_str(&json).unwrap();
-            assert_eq!(attachment.invocation_type, None);
+            // Must not error — unknown fields are silently ignored
+            let _: Attachment = serde_json::from_str(&json).unwrap();
         }
     }
 }

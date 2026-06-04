@@ -65,7 +65,6 @@ impl DetachArgs {
 
 #[cfg(test)]
 mod test {
-    use flox_core::activate::context::InvocationType;
     use flox_core::activate::mode::ActivateMode;
     use flox_core::activations::test_helpers::{read_activation_state, write_activation_state};
     use flox_core::activations::{
@@ -92,7 +91,7 @@ mod test {
         );
         state.set_executive_pid(1);
         let start_id = StartIdentifier::new("/nix/store/test");
-        state.start_or_attach(pid, &start_id.store_path, InvocationType::InPlace);
+        state.start_or_attach(pid, &start_id.store_path);
         write_activation_state(tmp.path(), &dot_flox_path, state);
         let activation_state_dir = activation_state_dir_path(tmp.path(), &dot_flox_path);
         let start_state_dir = start_id.start_state_dir(&activation_state_dir).unwrap();
@@ -128,8 +127,7 @@ mod test {
             dot_flox_path.join("run/default"),
         );
         state.set_executive_pid(1);
-        let StartOrAttachResult::Start { start_id } =
-            state.start_or_attach(pid, "/nix/store/test", InvocationType::InPlace)
+        let StartOrAttachResult::Start { start_id } = state.start_or_attach(pid, "/nix/store/test")
         else {
             panic!("expected Start for pid");
         };

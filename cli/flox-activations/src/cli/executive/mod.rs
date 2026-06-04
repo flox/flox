@@ -484,7 +484,6 @@ fn cleanup_all(
 mod test {
     use std::collections::BTreeMap;
 
-    use flox_core::activate::context::InvocationType;
     use flox_core::activate::mode::ActivateMode;
     use flox_core::activations::test_helpers::{read_activation_state, write_activation_state};
     use flox_core::activations::{ActivationState, StartOrAttachResult, activation_state_dir_path};
@@ -533,7 +532,7 @@ mod test {
         // Create an ActivationState with one PID attached
         let mut state =
             ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
-        let result = state.start_or_attach(pid, &store_path, InvocationType::Interactive);
+        let result = state.start_or_attach(pid, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
         };
@@ -589,7 +588,7 @@ mod test {
         // Create an ActivationState with one PID attached
         let mut state =
             ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
-        let result = state.start_or_attach(pid, &store_path, InvocationType::Interactive);
+        let result = state.start_or_attach(pid, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
         };
@@ -667,7 +666,7 @@ mod test {
         // Create an ActivationState with pid1 attached
         let mut state =
             ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
-        let result = state.start_or_attach(pid1, &store_path, InvocationType::Interactive);
+        let result = state.start_or_attach(pid1, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
         };
@@ -766,7 +765,7 @@ mod test {
         // Create state with this PID attached
         let mut state =
             ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
-        let result = state.start_or_attach(pid, &store_path, InvocationType::Interactive);
+        let result = state.start_or_attach(pid, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
         };
@@ -834,7 +833,7 @@ mod test {
         // the last PID while the process is still running).
         let mut state =
             ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
-        let result = state.start_or_attach(1, &store_path, InvocationType::Interactive);
+        let result = state.start_or_attach(1, &store_path);
         let StartOrAttachResult::Start { start_id, .. } = result else {
             panic!("Expected Start")
         };
