@@ -20,6 +20,7 @@ use flox_manifest::lockfile::{
     Lockfile,
     PackageToList,
 };
+use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::latest::SelectedOutputs;
 use pollster::FutureExt as _;
 use rsevents_extra::Semaphore;
@@ -29,6 +30,7 @@ use tracing::{Span, debug, info_span, instrument, warn};
 
 use super::nix::nix_base_command;
 use super::nix_auth::{AuthError, AuthProvider};
+use super::vars_order;
 use crate::data::System;
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::providers::nix_auth::{catalog_auth_to_envs, store_needs_auth};
@@ -123,6 +125,12 @@ pub enum BuildEnvError {
         "Lockfile is not compatible with the current system\n\
         Supported systems: {0}", systems.join(", "))]
     LockfileIncompatible { systems: Vec<String> },
+
+    #[error(
+        "Found a reference cycle in the '[vars]' section: {cycle}.\n\
+        Remove one of these references so the variables no longer form a loop."
+    )]
+    VarsCycle { cycle: String },
 
     /// An error that occurred while creating GC roots via `create_gc_root_in`.
     #[error("Failed to link environment: {0}")]
@@ -890,6 +898,7 @@ where
         &self,
         lockfile_path: &Path,
         service_config_path: Option<PathBuf>,
+        vars_order: &[String],
         out_link_prefix: Option<&Path>,
     ) -> Result<BuildEnvOutputs, BuildEnvError> {
         let mut nix_build_command = Self::base_command();
@@ -904,6 +913,12 @@ where
             .arg("--argstr")
             .arg("manifestLock")
             .arg(lockfile_path);
+        // Emit `[vars]` in dependency order so a value referencing another
+        // `[vars]` entry resolves regardless of the entries' alphabetical order.
+        nix_build_command
+            .arg("--argstr")
+            .arg("varsOrder")
+            .arg(serde_json::to_string(vars_order).expect("var names serialize to JSON"));
         if let Some(service_config_path) = &service_config_path {
             nix_build_command
                 .arg("--argstr")
@@ -1316,6 +1331,14 @@ where
             });
         }
 
+        // Order `[vars]` so each entry is rendered after the entries it
+        // references. Reject reference cycles here, before any build work,
+        // rather than letting bash fail opaquely at activation time.
+        let vars_order = vars_order::render_order(manifest.as_latest_schema().vars.inner())
+            .map_err(|cycle| BuildEnvError::VarsCycle {
+                cycle: cycle.to_string(),
+            })?;
+
         // Realise the packages in the lockfile, for the current system.
         // "Realising" a package means to check if the associated store paths are valid
         // and otherwise building the package to _create_ valid store paths.
@@ -1361,7 +1384,14 @@ where
                     .collect()
             },
             || all_env_paths.clone(),
-            || self.call_buildenv_nix(lockfile_path, service_config_path.clone(), out_link_prefix),
+            || {
+                self.call_buildenv_nix(
+                    lockfile_path,
+                    service_config_path.clone(),
+                    &vars_order,
+                    out_link_prefix,
+                )
+            },
         )
     }
 }
@@ -2372,6 +2402,50 @@ mod buildenv_tests {
             assert!(content.contains(r#"export singlequotes="'bar'""#));
             assert!(content.contains(r#"export singlequoteescaped="\'baz""#));
         }
+    }
+
+    /// A variable that references another `[vars]` entry must be exported after
+    /// the entry it references, even when it sorts alphabetically before it.
+    #[test]
+    fn renders_vars_in_dependency_order() {
+        let buildenv = buildenv_instance();
+        let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/vars_order/manifest.lock");
+        let client = MockClient::new();
+        let result = buildenv.build(&client, &lockfile_path, None, None).unwrap();
+
+        let runtime = result.run.as_ref();
+        let develop = result.dev.as_ref();
+
+        for envrc_path in [
+            runtime.join("activate.d/envrc"),
+            develop.join("activate.d/envrc"),
+        ] {
+            let content = std::fs::read_to_string(&envrc_path).unwrap();
+            let omega = content
+                .find(r#"export omega="base""#)
+                .expect("omega is exported");
+            let alpha = content
+                .find(r#"export alpha="${omega}-x""#)
+                .expect("alpha is exported");
+            assert!(
+                omega < alpha,
+                "omega must be exported before alpha:\n{content}"
+            );
+        }
+    }
+
+    /// A reference cycle in `[vars]` is rejected before any build work, with a
+    /// dedicated error rather than an opaque activation-time failure.
+    #[test]
+    fn rejects_vars_reference_cycle() {
+        let buildenv = buildenv_instance();
+        let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/vars_cycle/manifest.lock");
+        let client = MockClient::new();
+        let result = buildenv.build(&client, &lockfile_path, None, None);
+        assert!(
+            matches!(result, Err(BuildEnvError::VarsCycle { .. })),
+            "expected a vars cycle error, got: {result:?}"
+        );
     }
 
     #[test]

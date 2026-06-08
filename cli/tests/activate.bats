@@ -112,6 +112,24 @@ foo = "baz"
 EOF
 )
 
+# `alpha` references `omega`, which sorts after it. The reference must resolve
+# regardless of the entries' alphabetical order.
+export VARS_INTERPOLATED=$(
+  cat <<'EOF'
+[vars]
+alpha = "${omega}-suffix"
+omega = "base"
+EOF
+)
+
+export VARS_CYCLE=$(
+  cat <<'EOF'
+[vars]
+foo = "${bar}"
+bar = "${foo}"
+EOF
+)
+
 export HELLO_PROFILE_SCRIPT=$(
   cat <<-EOF
 [profile]
@@ -1081,6 +1099,26 @@ EOF
   FLOX_SHELL="zsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c 'echo "$foo"'
   assert_success
   assert_output --partial "baz"
+}
+
+# bats test_tags=activate,activate:envVar:order
+@test "bash: vars resolve regardless of definition order" {
+  project_setup
+  sed -i -e "s/^\[vars\]/${VARS_INTERPOLATED//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+
+  FLOX_SHELL="bash" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c 'echo "$alpha"'
+  assert_success
+  assert_output --partial "base-suffix"
+}
+
+# bats test_tags=activate,activate:envVar:cycle
+@test "vars reference cycle fails with a clear error" {
+  project_setup
+  sed -i -e "s/^\[vars\]/${VARS_CYCLE//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+
+  NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c true
+  assert_failure
+  assert_output --partial "reference cycle in the '[vars]' section"
 }
 
 # ---------------------------------------------------------------------------- #
