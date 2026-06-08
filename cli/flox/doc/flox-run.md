@@ -4,104 +4,64 @@ section: 1
 header: "Flox User Manuals"
 ...
 
-
 # NAME
 
-flox-run - run a command from a Flox Catalog package
+flox-run - run a command without installing it
 
 # SYNOPSIS
 
-```text
-flox [<general options>] run
-     [-p=<package[@version]>]
-     <executable> [-- | <arguments>...]
+```
+flox [<general-options>] run
+     -p=<package>
+     <binary>
+     [--] [<arguments>...]
 ```
 
 # DESCRIPTION
 
-Run an executable from a package in the Flox Catalog
-without creating a persistent environment.
-The package is resolved, its store paths are downloaded,
-and the executable is run via `exec` — replacing the
-`flox` process entirely.
+Run a binary from a Nix package without installing it to an
+environment.
 
-The package name defaults to the executable name.
-For example, `flox run curl http://example.com` resolves
-the `curl` package and runs the `curl` executable with
-the given arguments.
-Use `-p` when the package and executable names differ
-(`flox run -p binutils readelf -a /bin/ls`).
+`flox run` is designed for one-off invocations.
+Instead of requiring the overhead of an environment,
+it fetches the required package and executes the binary,
+all in one command.
 
-## Argument Parsing
+## Specifying the Package
 
-`flox run` uses POSIXLY_CORRECT (getopt-style) argument parsing:
-argument processing stops at the first positional argument
-(the executable name).
-All arguments that follow the executable are forwarded to
-the executable verbatim.
-This means `flox run curl -v http://example.com` passes
-`-v` and the URL to `curl` without requiring `--`.
+You must specify which package provides the binary using
+`--package`.
+For example,
+`flox run --package gnugrep grep` will run the `grep` binary from
+the `gnugrep` package.
 
-Use `--` before the executable name only when the executable
-name itself starts with `-`:
-`flox run -- -weirdname`.
+## Passing Arguments
 
-## Version Constraints
-
-Append `@<version>` to the executable name or package spec
-to request a specific version:
-
-- `flox run curl@8.0` — resolves `curl` at version 8.0
-- `flox run -p python@3.11 python3` — resolves `python`
-  at version 3.11 and runs `python3`
-
-When `@version` is used without `-p`, the executable name
-is derived by stripping the version suffix
-(`flox run curl@8.0` looks for the `curl` executable).
-
-## Custom Catalogs
-
-Use `-p <catalog>/<pkg>` to install from a custom catalog:
-
-```
-flox run -p mycatalog/vim vi
-```
-
-## Process Semantics
-
-`flox run` replaces the `flox` process via `exec`.
-This provides:
-
-- **Clean exit codes** — the shell sees the target's exit code.
-- **Signal handling** — signals go directly to the target process.
-- **Piped stdin** — stdin is forwarded to the target unchanged.
-
-## Non-interactive Use
-
-`flox run` never prompts the user.
-In scripts, CI pipelines, or when stdin is not a terminal,
-it either succeeds immediately or fails with a clear error.
+Arguments after the binary name are passed to the invoked
+binary.
+Use `--` when passing option-style arguments (e.g. `-s`, `--verbose`)
+to the binary so they are not interpreted by `flox run`.
+Bare arguments such as URLs, filenames, and strings do not
+require `--`.
 
 # OPTIONS
 
-`<executable>`
-:   The name of the executable to run.
-    If `-p` is not specified, this also determines the package
-    to resolve (`flox run curl` resolves the `curl` package).
-    Append `@<version>` to request a specific version
-    (`flox run curl@8.0`).
+## Run Options
 
-`-p`, `--package`
-:   Override the package to resolve.
-    Accepts the same syntax as `flox install`:
-    a package attribute path, optionally with `@<version>`
-    or a `<catalog>/<pkg>` prefix for custom catalogs.
-    The executable name is always the positional argument.
+`<binary>`
+:   Required. The name of the binary to run.
+    `flox run` runs this binary from the package given with
+    `--package`.
 
-`[--] <arguments>...`
-:   Arguments forwarded verbatim to the executable.
-    `--` is required only when the executable name itself
-    starts with `-`.
+`-p <package>`, `--package <package>`
+:   Required. The package that provides the binary.
+
+`[--] <arguments>`
+:   Arguments passed to the invoked binary.
+    The `--` separator is optional for bare arguments but
+    required when passing option-style arguments (e.g. `-f`,
+    `--verbose`) to prevent them from being interpreted by
+    `flox run`.
 
 ```{.include}
 ./include/general-options.md
@@ -109,45 +69,32 @@ it either succeeds immediately or fails with a clear error.
 
 # EXAMPLES
 
-Run `cowsay`:
+Run a command with a bare argument (no `--` needed):
 
-```console
-$ flox run cowsay "Hello, world"
- _____________
-< Hello, world >
- -------------
-        \   ^__^
-         \  (oo)\_______
+```
+$ flox run --package cowsay cowsay "Hello, world\!"
 ```
 
-Run `readelf` (executable in `binutils` package):
+Run a binary whose name differs from its package
+(`grep` is provided by `gnugrep`):
 
-```console
-$ flox run -p binutils readelf -a /bin/ls
+```
+$ flox run --package gnugrep grep -- --color=auto -r "pattern" .
 ```
 
-Run a specific version of `curl`:
+Use `--` to pass option-style arguments to the binary:
 
-```console
-$ flox run curl@8.0 --version
-curl 8.0.1 ...
+```
+$ flox run --package curl curl -- -sL http://example.com
 ```
 
-Forward stdin through `cat`:
+Pipe input to a command:
 
-```console
-$ echo test | flox run cat
-test
 ```
-
-Exit code is forwarded:
-
-```console
-$ flox run false; echo $?
-1
+$ echo '{"name":"Flox"}' | flox run --package jq jq -- '.name'
 ```
 
 # SEE ALSO
-
 [`flox-activate(1)`](./flox-activate.md),
-[`flox-install(1)`](./flox-install.md)
+[`flox-install(1)`](./flox-install.md),
+[`flox-search(1)`](./flox-search.md)
