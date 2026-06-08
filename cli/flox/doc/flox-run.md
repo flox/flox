@@ -13,8 +13,9 @@ flox-run - run a command without installing it
 ```
 flox [<general-options>] run
      -p=<package>
+     [--]
      <command>
-     [--] [<arguments>...]
+     [<arguments>...]
 ```
 
 # DESCRIPTION
@@ -79,19 +80,19 @@ Run a command whose name differs from its package
 (`grep` is provided by `gnugrep`):
 
 ```
-$ flox run --package gnugrep grep -- --color=auto -r "pattern" .
+$ flox run --package gnugrep grep "pattern"
 ```
 
 Use `--` to pass option-style arguments to the command:
 
 ```
-$ flox run --package curl curl -- -sL http://example.com
+$ flox run --package curl -- curl -sL http://example.com
 ```
 
 Pipe input to a command:
 
 ```
-$ echo '{"name":"Flox"}' | flox run --package jq jq -- '.name'
+$ echo '{"name":"Flox"}' | flox run --package jq -- jq '.name'
 ```
 
 # SEE ALSO
