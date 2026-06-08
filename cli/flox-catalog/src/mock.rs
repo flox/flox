@@ -25,7 +25,7 @@ impl MockGuard {
             CatalogMockMode::None => None,
             CatalogMockMode::Record(path) => {
                 let server = MockServer::start();
-                server.forward_to(&config.catalog_url, |rule| {
+                server.forward_to(&config.base_url, |rule| {
                     rule.filter(|when| {
                         when.any_request();
                     });
@@ -39,7 +39,7 @@ impl MockGuard {
                 debug!(?path, server = server.base_url(), "mock server recording");
                 let recorder = MockRecorder {
                     path: path.to_path_buf(),
-                    catalog_url: config.catalog_url.clone(),
+                    base_url: config.base_url.clone(),
                     server,
                     recording,
                 };
@@ -71,13 +71,13 @@ impl MockGuard {
     pub fn reset_recording(&mut self) {
         if let MockGuard::Record(MockRecorder {
             server,
-            catalog_url,
+            base_url,
             recording,
             ..
         }) = self
         {
             server.reset();
-            server.forward_to(catalog_url.as_str(), |rule| {
+            server.forward_to(base_url.as_str(), |rule| {
                 rule.filter(|when| {
                     when.any_request();
                 });
@@ -107,7 +107,7 @@ impl Debug for MockGuard {
 /// requests to a file when dropped.
 pub(crate) struct MockRecorder {
     pub(crate) path: PathBuf,
-    pub(crate) catalog_url: String,
+    pub(crate) base_url: String,
     pub(crate) server: MockServer,
     pub(crate) recording: RecordingID,
 }

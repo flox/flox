@@ -48,7 +48,7 @@ pub struct CatalogClient {
 impl Debug for CatalogClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CatalogClient")
-            .field("catalog_url", &self.config.catalog_url)
+            .field("base_url", &self.config.base_url)
             .finish_non_exhaustive()
     }
 }
@@ -60,7 +60,7 @@ impl CatalogClient {
         let mock_guard = MockGuard::new(&config);
         let effective_url = match mock_guard {
             Some(ref mock) => mock.url(),
-            None => config.catalog_url.clone(),
+            None => config.base_url.clone(),
         };
 
         let hooks = Self::build_request_hooks(config.auth_context.clone());
@@ -80,9 +80,9 @@ impl CatalogClient {
         &self.client
     }
 
-    /// Get the configured catalog URL.
-    pub fn catalog_url(&self) -> &str {
-        &self.config.catalog_url
+    /// Get the configured base URL.
+    pub fn base_url(&self) -> &str {
+        &self.config.base_url
     }
 
     /// Clear mock recording state if in recording mode.
@@ -719,7 +719,7 @@ fn build_http_client(config: &CatalogClientConfig) -> Result<reqwest::Client, Ca
     }
 
     debug!(
-        catalog_url = %config.catalog_url,
+        base_url = %config.base_url,
         handle = ?config.auth_context.handle(),
         extra_headers = config.extra_headers.len(),
         "building catalog HTTP client"
@@ -778,7 +778,7 @@ pub mod tests {
 
     fn client_config(url: &str) -> CatalogClientConfig {
         CatalogClientConfig {
-            catalog_url: url.to_string(),
+            base_url: url.to_string(),
             extra_headers: Default::default(),
             mock_mode: Default::default(),
             auth_context: AuthContext::from_mode(&Default::default(), None),

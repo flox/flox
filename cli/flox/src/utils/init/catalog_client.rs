@@ -41,7 +41,7 @@ pub fn init_catalog_client(
     let mock_mode = CatalogMockMode::default_from_env();
 
     let client_config = CatalogClientConfig {
-        catalog_url: config
+        base_url: config
             .flox
             .catalog_url
             .clone()
@@ -61,9 +61,6 @@ pub fn init_catalog_client(
         user_agent: Some(format!("flox-cli/{}", &*FLOX_VERSION)),
     };
 
-    debug!(
-        "using catalog client with url: {}",
-        client_config.catalog_url
-    );
+    debug!("using catalog client with url: {}", client_config.base_url);
     Ok(CatalogClient::new(client_config)?.into())
 }

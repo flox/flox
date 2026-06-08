@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
             flox_catalog::AuthContext::from_mode(&flox_catalog::AuthnMode::Auth0, floxhub_token);
 
         let config = CatalogClientConfig {
-            catalog_url,
+            base_url: catalog_url,
             extra_headers: Default::default(),
             mock_mode: CatalogMockMode::default_from_env(),
             auth_context,
