@@ -1151,3 +1151,67 @@ _FLOX_SUBSYSTEM_VERBOSITY
 EOF
   fi
 }
+
+# ---------------------------------------------------------------------------- #
+# Layered in-place activation / deactivation tests
+#
+# These verify that stacking two in-place activations and then performing two
+# deactivations leaves the environment identical to the pre-activation state.
+# The key invariant: _FLOX_HOOK_DIFF and _FLOX_INVOCATION_TYPE must be
+# restored to their outer values (or unset, for the outermost activation)
+# rather than unconditionally cleared on the first deactivation.
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,deactivate
+@test "layered in-place deactivate env diff (bash)" {
+  export PROJECT_DIR1="${BATS_TEST_TMPDIR}/project1"
+  export PROJECT_DIR2="${BATS_TEST_TMPDIR}/project2"
+  mkdir -p "$PROJECT_DIR1" "$PROJECT_DIR2"
+  "$FLOX_BIN" init -d "$PROJECT_DIR1"
+  "$FLOX_BIN" init -d "$PROJECT_DIR2"
+
+  ENV_BIN=$(command -v env)
+  BEFORE="$BATS_TEST_TMPDIR/before"
+  AFTER="$BATS_TEST_TMPDIR/after"
+  export ENV_BIN BEFORE AFTER PROJECT_DIR1 PROJECT_DIR2
+
+  FLOX_SHELL="bash" run -0 flox_cold_start bash -c '
+    "$ENV_BIN" -0 > "$BEFORE"
+    eval "$($FLOX_BIN activate -d "$PROJECT_DIR1" --print-script)"
+    eval "$($FLOX_BIN activate -d "$PROJECT_DIR2" --print-script)"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    # After first deactivate: env2 removed, env1 still active
+    echo "$_FLOX_ACTIVE_ENVIRONMENTS" | grep -qF "$PROJECT_DIR1" \
+      || { echo "env1 not active after first deactivate: $_FLOX_ACTIVE_ENVIRONMENTS"; exit 1; }
+    echo "$_FLOX_ACTIVE_ENVIRONMENTS" | grep -qvF "$PROJECT_DIR2" \
+      || { echo "env2 still active after first deactivate: $_FLOX_ACTIVE_ENVIRONMENTS"; exit 1; }
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    "$ENV_BIN" -0 > "$AFTER"
+  '
+
+  output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
+  assert_success
+  refute_output
+
+  wait_for_activations "$PROJECT_DIR1" || true
+  wait_for_activations "$PROJECT_DIR2" || true
+  rm -rf "$PROJECT_DIR1" "$PROJECT_DIR2"
+  unset PROJECT_DIR
+}
+
+# bats test_tags=activate,deactivate
+@test "in-place deactivate restores outer invocation type (zsh)" {
+  project_setup
+
+  FLOX_SHELL="zsh" run --separate-stderr zsh -c '
+    # Simulate an outer interactive shell that set _FLOX_INVOCATION_TYPE
+    export _FLOX_INVOCATION_TYPE=interactive
+    eval "$($FLOX_BIN activate -d "$PROJECT_DIR" --print-script)"
+    # After in-place activation the type must be "inplace"
+    [[ "$_FLOX_INVOCATION_TYPE" == "inplace" ]] || { echo "expected inplace, got: $_FLOX_INVOCATION_TYPE"; exit 1; }
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    # After deactivation the outer interactive type must be restored
+    [[ "$_FLOX_INVOCATION_TYPE" == "interactive" ]] || { echo "expected interactive restored, got: $_FLOX_INVOCATION_TYPE"; exit 1; }
+  '
+  assert_success
+}
