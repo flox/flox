@@ -11,6 +11,7 @@ use shell_gen::Statement;
 use crate::attach_diff::{set_exported_unexpanded, unset};
 
 pub const FLOX_HOOK_DIFF_VAR: &str = "_FLOX_HOOK_DIFF";
+pub const FLOX_INVOCATION_TYPE_VAR: &str = "_FLOX_INVOCATION_TYPE";
 
 /// The diff between the pre-activation shell environment and the intended
 /// post-activation environment, captured at attach time.
@@ -54,7 +55,12 @@ impl DiffSerializer {
     /// - Unsets variables that were added during activation
     /// - Restores original values for variables that were modified
     /// - Restores variables that were removed during activation
-    /// - Unsets `_FLOX_HOOK_DIFF` itself
+    ///
+    /// For in-place activations, `_FLOX_HOOK_DIFF` and `_FLOX_INVOCATION_TYPE`
+    /// are included in `added` (first activation) or `modified` (nested), so the
+    /// loops above handle them — restoring the outer value rather than clearing it.
+    /// For non-in-place (subshell) activations they are not in the diff, so they
+    /// are unset unconditionally here instead.
     pub(crate) fn generate_deactivation_statements(&self) -> Vec<Statement> {
         let mut stmts = Vec::new();
         // Unset variables that were added during activation
@@ -72,8 +78,13 @@ impl DiffSerializer {
             stmts.push(set_exported_unexpanded(var_name, original_value));
         }
 
-        // Unset the diff variable itself
-        stmts.push(unset(FLOX_HOOK_DIFF_VAR));
+        // Non-in-place activations don't include these in the diff (set on the
+        // subprocess directly); in-place activations already handle them above.
+        for var in [FLOX_HOOK_DIFF_VAR, FLOX_INVOCATION_TYPE_VAR] {
+            if !self.added.contains(var) && !self.modified.contains_key(var) {
+                stmts.push(unset(var));
+            }
+        }
 
         stmts
     }

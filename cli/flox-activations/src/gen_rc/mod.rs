@@ -73,7 +73,7 @@ pub(crate) mod test_helpers {
 
     use super::{DeactivateCtx, StartupCtx};
     use crate::attach::{startup_ctx, write_to_writer};
-    use crate::attach_diff::diff_serializer::DiffSerializer;
+    use crate::attach_diff::diff_serializer::{DiffSerializer, FLOX_HOOK_DIFF_VAR};
     use crate::start_diff::StartDiff;
     use crate::vars_from_env::VarsFromEnvironment;
 
@@ -199,6 +199,13 @@ pub(crate) mod test_helpers {
                     FLOX_ACTIVE_ENVIRONMENTS_VAR.to_string(),
                     "/outer/env".to_string(),
                 ),
+                // Outer diff value to restore when deactivating the inner env.
+                (
+                    FLOX_HOOK_DIFF_VAR.to_string(),
+                    "outer_encoded_diff_placeholder".to_string(),
+                ),
+                // Outer invocation type to restore when deactivating the inner env.
+                ("_FLOX_INVOCATION_TYPE".to_string(), "inplace".to_string()),
             ]),
             removed: HashMap::from([("DELETED_VAR".to_string(), "DELETED_ORIGINAL".to_string())]),
         };

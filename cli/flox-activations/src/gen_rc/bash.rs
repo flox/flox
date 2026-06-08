@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use flox_core::activate::context::InvocationType;
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
-use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file};
+use shell_gen::{GenerateShell, Shell, source_file};
 
 use crate::attach_diff::{todo_drop_set_exported_unexpanded, todo_drop_unset};
 use crate::gen_rc::{Action, RM};
@@ -104,18 +104,19 @@ pub fn generate_bash_profile_commands(
         },
     }
 
-    // Emit _FLOX_INVOCATION_TYPE as a shell-local (non-exported) variable so
-    // that `flox deactivate --print-script` can distinguish interactive
-    // subshells from in-place activations without reading state.json.
+    // Export _FLOX_INVOCATION_TYPE so it is visible to std::env::vars() when
+    // computing the activation diff for stacked in-place activations. The diff
+    // then handles cleanup (unset on outermost deactivate, restore outer value
+    // on nested deactivate) without requiring an explicit unset here.
     match action {
         Action::Activate { args, .. } => {
-            stmts.push(set_unexported_unexpanded(
+            stmts.push(todo_drop_set_exported_unexpanded(
                 "_FLOX_INVOCATION_TYPE",
                 format!("{}", args.invocation_type),
             ));
         },
         Action::Deactivate(_) => {
-            stmts.push(todo_drop_unset("_FLOX_INVOCATION_TYPE"));
+            // Handled by the activation diff (added → unset, modified → restore).
         },
     }
 
@@ -330,7 +331,7 @@ mod tests {
             unset DELETED_VAR;
             export _activate_d=/interpreter/activate.d;
             export _flox_activate_tracer=TRACER;
-            _FLOX_INVOCATION_TYPE=interactive;
+            export _FLOX_INVOCATION_TYPE=interactive;
             if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
             eval "$('/flox_activations' set-env-dirs --shell bash --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}")";
             eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")";
@@ -362,7 +363,7 @@ mod tests {
             unset DELETED_VAR;
             export _activate_d=/interpreter/activate.d;
             export _flox_activate_tracer=TRACER;
-            _FLOX_INVOCATION_TYPE=inplace;
+            export _FLOX_INVOCATION_TYPE=inplace;
             if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
             eval "$('/flox_activations' set-env-dirs --shell bash --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}")";
             eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")";
@@ -391,11 +392,11 @@ mod tests {
             unset PATH;
             unset QUOTED_VAR;
             unset _FLOX_ACTIVE_ENVIRONMENTS;
+            unset _FLOX_HOOK_DIFF;
+            unset _FLOX_INVOCATION_TYPE;
             unset _flox_activations;
             export MODIFIED_VAR=MODIFIED_ORIGINAL;
             export DELETED_VAR=DELETED_ORIGINAL;
-            unset _FLOX_HOOK_DIFF;
-            unset _FLOX_INVOCATION_TYPE;
             if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
             eval "$('/flox_activations' profile-scripts-deactivate --shell bash --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
             unset _activate_d _flox_activate_tracer;
