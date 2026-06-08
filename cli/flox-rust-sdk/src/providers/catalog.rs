@@ -758,7 +758,7 @@ pub mod test_helpers {
     /// In general, auto_recording_catalog_client is preferred.
     pub async fn catalog_replay_client(path: impl AsRef<Path>) -> Client {
         let catalog_config = CatalogClientConfig {
-            catalog_url: "https://not_used".to_string(),
+            base_url: "https://not_used".to_string(),
             extra_headers: Default::default(),
             mock_mode: CatalogMockMode::Replay(path.as_ref().to_path_buf()),
             auth_context: AuthContext::from_mode(&AuthnMode::Auth0, None),
@@ -819,7 +819,7 @@ pub mod test_helpers {
     ) -> Client {
         let mut path = UNIT_TEST_GENERATED.join(filename);
         path.set_extension("yaml");
-        let (mock_mode, catalog_url) = match record {
+        let (mock_mode, base_url_str) = match record {
             RecordMockData::Missing => {
                 // TODO(zmitchell, 2025-07-23): it would be convenient if we
                 // also detected empty mock files as "missing" since a failed
@@ -851,7 +851,7 @@ pub mod test_helpers {
         };
 
         let catalog_config = CatalogClientConfig {
-            catalog_url: catalog_url.clone(),
+            base_url: base_url_str.clone(),
             extra_headers: Default::default(),
             mock_mode: mock_mode.clone(),
             auth_context: AuthContext::from_mode(&AuthnMode::Auth0, auth.token().cloned()),

@@ -8,8 +8,8 @@ use crate::AuthContext;
 /// Configuration for catalog client construction.
 #[derive(Debug, Clone)]
 pub struct CatalogClientConfig {
-    /// Base URL for the catalog API.
-    pub catalog_url: String,
+    /// Base URL for the catalog and factory APIs.
+    pub base_url: String,
     /// Additional headers to include in requests.
     pub extra_headers: BTreeMap<String, String>,
     /// Mock mode for testing.

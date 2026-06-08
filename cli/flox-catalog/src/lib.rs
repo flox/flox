@@ -18,7 +18,7 @@
 //! };
 //!
 //! let config = CatalogClientConfig {
-//!     catalog_url: "https://api.flox.dev".to_string(),
+//!     base_url: "https://api.flox.dev".to_string(),
 //!     extra_headers: BTreeMap::new(),
 //!     mock_mode: CatalogMockMode::None,
 //!     auth_context: AuthContext::from_mode(&Default::default(), floxhub_token),
