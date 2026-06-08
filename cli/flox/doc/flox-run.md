@@ -13,34 +13,34 @@ flox-run - run a command without installing it
 ```
 flox [<general-options>] run
      -p=<package>
-     <binary>
+     <command>
      [--] [<arguments>...]
 ```
 
 # DESCRIPTION
 
-Run a binary from a Nix package without installing it to an
+Run a command from a Nix package without installing it to an
 environment.
 
 `flox run` is designed for one-off invocations.
 Instead of requiring the overhead of an environment,
-it fetches the required package and executes the binary,
-all in one command.
+it fetches the required package and executes the command,
+all in one step.
 
 ## Specifying the Package
 
-You must specify which package provides the binary using
+You must specify which package provides the command using
 `--package`.
 For example,
-`flox run --package gnugrep grep` will run the `grep` binary from
+`flox run --package gnugrep grep` will run the `grep` command from
 the `gnugrep` package.
 
 ## Passing Arguments
 
-Arguments after the binary name are passed to the invoked
-binary.
+Arguments after the command name are passed to the invoked
+command.
 Use `--` when passing option-style arguments (e.g. `-s`, `--verbose`)
-to the binary so they are not interpreted by `flox run`.
+to the command so they are not interpreted by `flox run`.
 Bare arguments such as URLs, filenames, and strings do not
 require `--`.
 
@@ -48,16 +48,16 @@ require `--`.
 
 ## Run Options
 
-`<binary>`
-:   Required. The name of the binary to run.
-    `flox run` runs this binary from the package given with
+`<command>`
+:   Required. The name of the command to run.
+    `flox run` runs this command from the package given with
     `--package`.
 
 `-p <package>`, `--package <package>`
-:   Required. The package that provides the binary.
+:   Required. The package that provides the command.
 
 `[--] <arguments>`
-:   Arguments passed to the invoked binary.
+:   Arguments passed to the invoked command.
     The `--` separator is optional for bare arguments but
     required when passing option-style arguments (e.g. `-f`,
     `--verbose`) to prevent them from being interpreted by
@@ -75,14 +75,14 @@ Run a command with a bare argument (no `--` needed):
 $ flox run --package cowsay cowsay "Hello, world\!"
 ```
 
-Run a binary whose name differs from its package
+Run a command whose name differs from its package
 (`grep` is provided by `gnugrep`):
 
 ```
 $ flox run --package gnugrep grep -- --color=auto -r "pattern" .
 ```
 
-Use `--` to pass option-style arguments to the binary:
+Use `--` to pass option-style arguments to the command:
 
 ```
 $ flox run --package curl curl -- -sL http://example.com
