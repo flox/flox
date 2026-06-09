@@ -296,18 +296,38 @@ impl TryFrom<&ConcreteEnvironment> for ActivateEnvironmentRef {
 #[as_ref(forward)]
 pub struct RenderedEnvironmentLink(PathBuf);
 
+/// Append `suffix` to the final component of `prefix`, mirroring how
+/// `nix build` names an output link: `<out-link prefix><suffix>`
+/// (e.g. `…/system.name` + `-dev` -> `…/system.name-dev`).
+fn append_output_suffix(prefix: &Path, suffix: &str) -> PathBuf {
+    let mut name = prefix.as_os_str().to_os_string();
+    name.push(suffix);
+    PathBuf::from(name)
+}
+
 /// A pair of links to the dev and run variants of an environment.
 /// Refer to the documentation of [RenderedEnvironmentLink] for what guarantees
 /// the existence of these paths provides.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct RenderedEnvironmentLinks {
+    /// The `--out-link` prefix passed to `nix build`. With outputs named
+    /// `"dev"` and `"run"`, nix creates `<prefix>-dev` and `<prefix>-run`,
+    /// which are exactly `dev` and `run` below. Stored rather than re-derived
+    /// from `dev` so the prefix is always available and unambiguous.
+    out_link_prefix: PathBuf,
     pub dev: RenderedEnvironmentLink,
     pub run: RenderedEnvironmentLink,
 }
 
 impl RenderedEnvironmentLinks {
-    pub(crate) fn new_unchecked(dev: PathBuf, run: PathBuf) -> Self {
+    /// Construct from a `--out-link` prefix, deriving the dev and run links the
+    /// same way `nix build` does: by appending the output names `-dev` and
+    /// `-run` to the prefix.
+    pub(crate) fn new_unchecked(out_link_prefix: PathBuf) -> Self {
+        let dev = append_output_suffix(&out_link_prefix, "-dev");
+        let run = append_output_suffix(&out_link_prefix, "-run");
         Self {
+            out_link_prefix,
             dev: RenderedEnvironmentLink(dev),
             run: RenderedEnvironmentLink(run),
         }
@@ -318,11 +338,8 @@ impl RenderedEnvironmentLinks {
         name: impl AsRef<str>,
         system: &System,
     ) -> Self {
-        let dev_name = format!("{system}.{name}-dev", name = name.as_ref());
-        let dev_path = base_dir.join(dev_name);
-        let run_name = format!("{system}.{name}-run", name = name.as_ref());
-        let run_path = base_dir.join(run_name);
-        Self::new_unchecked(dev_path, run_path)
+        let prefix = base_dir.join(format!("{system}.{name}", name = name.as_ref()));
+        Self::new_unchecked(prefix)
     }
 
     pub fn new_in_base_dir_with_name_system_and_generation(
@@ -331,25 +348,19 @@ impl RenderedEnvironmentLinks {
         system: &System,
         generation: GenerationId,
     ) -> Self {
-        let dev_name = format!("{system}.{name}.gen{generation}-dev", name = name.as_ref());
-        let dev_path = base_dir.join(dev_name);
-        let run_name = format!("{system}.{name}.gen{generation}-run", name = name.as_ref());
-        let run_path = base_dir.join(run_name);
-        Self::new_unchecked(dev_path, run_path)
+        let prefix = base_dir.join(format!(
+            "{system}.{name}.gen{generation}",
+            name = name.as_ref()
+        ));
+        Self::new_unchecked(prefix)
     }
 
     /// Returns the `--out-link` prefix for `nix build`.
     ///
-    /// With outputs named `"dev"` and `"run"`, nix creates:
-    ///   `<prefix>-dev` and `<prefix>-run`
-    /// which exactly match `self.dev` and `self.run`.
-    pub fn out_link_prefix(&self) -> PathBuf {
-        let dev_path = self.dev.as_path().to_str().expect("paths are UTF-8");
-        PathBuf::from(
-            dev_path
-                .strip_suffix("-dev")
-                .expect("dev link always ends in -dev"),
-        )
+    /// With outputs named `"dev"` and `"run"`, nix creates `<prefix>-dev` and
+    /// `<prefix>-run`, which exactly match `self.dev` and `self.run`.
+    pub fn out_link_prefix(&self) -> &Path {
+        &self.out_link_prefix
     }
 
     /// Replace legacy dot-separator symlinks with redirect symlinks to the
@@ -1402,6 +1413,24 @@ mod test {
             err,
             EnvironmentError::ServicesSocketPathTooLong(_)
         ));
+    }
+
+    /// The dev and run links are the `--out-link` prefix with the nix output
+    /// names appended, and `out_link_prefix()` returns that prefix verbatim
+    /// rather than re-deriving it from the dev link.
+    #[test]
+    fn rendered_env_links_derives_dev_and_run_from_out_link_prefix() {
+        let prefix = PathBuf::from("/base/x86_64-linux.name");
+        let links = RenderedEnvironmentLinks::new_unchecked(prefix.clone());
+        assert_eq!(links.out_link_prefix(), prefix);
+        assert_eq!(
+            links.dev.as_path(),
+            Path::new("/base/x86_64-linux.name-dev")
+        );
+        assert_eq!(
+            links.run.as_path(),
+            Path::new("/base/x86_64-linux.name-run")
+        );
     }
 }
 

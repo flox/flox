@@ -303,7 +303,8 @@ impl<State> CoreEnvironment<State> {
     }
 }
 
-/// Environment modifying methods do not link the new environment to an out path.
+/// Environment modifying methods accept an optional `out_link_prefix` and,
+/// when supplied, write activation symlinks as part of the in-transaction build.
 /// Since files referenced by the environment are ingested into the nix store,
 /// the same [CoreEnvironment] instance can be used
 /// even if the concrete [super::Environment] tracks the files in a different way
@@ -333,6 +334,7 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         packages: &[PackageToInstall],
         flox: &Flox,
+        out_link_prefix: Option<&Path>,
     ) -> Result<InstallationAttempt, EnvironmentError> {
         let manifest = self.manifest(flox)?;
         // TODO: this could lead to double resolution and surprising errors
@@ -346,7 +348,8 @@ impl CoreEnvironment<ReadOnly> {
             None
         } else {
             let new_manifest = manifest.modify_packages(&modifications)?;
-            let (built_environments, _) = self.transact_with_manifest(&new_manifest, flox)?;
+            let (built_environments, _) =
+                self.transact_with_manifest(&new_manifest, flox, out_link_prefix)?;
             Some(built_environments)
         };
 
@@ -365,6 +368,7 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         uninstall_specs: Vec<UninstallSpec>,
         flox: &Flox,
+        out_link_prefix: Option<&Path>,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         // TODO: this could lead to double resolution and surprising errors
         // (e.g. if you try to uninstall a package and we fail to resolve that package)
@@ -378,7 +382,7 @@ impl CoreEnvironment<ReadOnly> {
         let modifications = resolve_specs_to_modifications(&uninstall_specs, &manifest, &lockfile)?;
 
         let new_manifest = manifest.modify_packages(&modifications)?;
-        let (store_path, _) = self.transact_with_manifest(&new_manifest, flox)?;
+        let (store_path, _) = self.transact_with_manifest(&new_manifest, flox, out_link_prefix)?;
 
         // Collect the modified install ids that are still installed through includes
         let still_included = if let Some(compose) = &lockfile.compose {
@@ -401,7 +405,12 @@ impl CoreEnvironment<ReadOnly> {
     }
 
     /// Atomically edit this environment, ensuring that it still builds
-    pub fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError> {
+    pub fn edit(
+        &mut self,
+        flox: &Flox,
+        contents: String,
+        out_link_prefix: Option<&Path>,
+    ) -> Result<EditResult, EnvironmentError> {
         let maybe_up_to_date_lockfile = self.lockfile_if_up_to_date()?;
 
         // skip the edit if the contents are unchanged
@@ -425,7 +434,8 @@ impl CoreEnvironment<ReadOnly> {
                 (None, migrated)
             };
 
-        let (store_path, new_lockfile) = self.transact_with_manifest(&migrated_manifest, flox)?;
+        let (store_path, new_lockfile) =
+            self.transact_with_manifest(&migrated_manifest, flox, out_link_prefix)?;
 
         Ok(EditResult::Changed {
             old_lockfile: Box::new(old_lockfile),
@@ -522,6 +532,7 @@ impl CoreEnvironment<ReadOnly> {
         flox: &Flox,
         groups_or_iids: &[&str],
         write_lockfile: bool,
+        out_link_prefix: Option<&Path>,
     ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let manifest = self.manifest(flox)?;
@@ -541,7 +552,8 @@ impl CoreEnvironment<ReadOnly> {
                 return Ok(result);
             }
 
-            let store_path = self.transact_with_lockfile_contents(lockfile_contents, flox)?;
+            let store_path =
+                self.transact_with_lockfile_contents(lockfile_contents, flox, out_link_prefix)?;
             result.store_path = Some(store_path);
         } else {
             let tmp_lockfile = tempfile::NamedTempFile::new_in(&flox.temp_dir)
@@ -669,6 +681,7 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         flox: &Flox,
         to_upgrade: Vec<String>,
+        out_link_prefix: Option<&Path>,
     ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(
             includes = to_upgrade.iter().join(","),
@@ -724,7 +737,8 @@ impl CoreEnvironment<ReadOnly> {
             return Ok(result);
         }
 
-        let store_path = self.transact_with_lockfile_contents(lockfile_contents, flox)?;
+        let store_path =
+            self.transact_with_lockfile_contents(lockfile_contents, flox, out_link_prefix)?;
         result.store_path = Some(store_path);
 
         Ok(result)
@@ -793,12 +807,23 @@ impl CoreEnvironment<ReadOnly> {
         Ok(())
     }
 
-    /// Attempt to transactionally replace the manifest contents
+    /// Attempt to transactionally replace the manifest contents.
+    ///
+    /// Passes `out_link_prefix` to the nix build so activation symlinks are
+    /// created as part of the single build inside this transaction rather than
+    /// requiring a second `build()` call from the caller.
+    ///
+    /// Note: symlinks are created during the temp-dir build before the directory
+    /// swap completes.  If `replace_with` fails after a successful build the
+    /// symlinks will have been updated to point at the new store path.  A
+    /// follow-up (#4339) replaces the directory-swap model with a file-level
+    /// transaction that eliminates this window.
     #[must_use = "don't discard the store path of built environments"]
     fn transact_with_manifest(
         &mut self,
         manifest: &Manifest<Migrated>,
         flox: &Flox,
+        out_link_prefix: Option<&Path>,
     ) -> Result<(BuildEnvOutputs, Lockfile), EnvironmentError> {
         debug!("transaction: validating services block");
         manifest.as_latest_schema().services.validate()?;
@@ -832,7 +857,7 @@ impl CoreEnvironment<ReadOnly> {
         temp_env.write_manifest_lockfile_pair(&writable_manifest, &lockfile)?;
 
         debug!("transaction: building environment");
-        let store_path = temp_env.build(flox, None)?;
+        let store_path = temp_env.build(flox, out_link_prefix)?;
 
         debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
@@ -849,6 +874,7 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         lockfile_contents: impl AsRef<str>,
         flox: &Flox,
+        out_link_prefix: Option<&Path>,
     ) -> Result<BuildEnvOutputs, CoreEnvironmentError> {
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
             .map_err(CoreEnvironmentError::MakeSandbox)?
@@ -864,7 +890,7 @@ impl CoreEnvironment<ReadOnly> {
         temp_env.update_lockfile_with_contents(&lockfile_contents)?;
 
         debug!("transaction: building environment");
-        let store_path = temp_env.build(flox, None)?;
+        let store_path = temp_env.build(flox, out_link_prefix)?;
 
         debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
@@ -1333,7 +1359,7 @@ mod tests {
 
         flox.catalog_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
-        env_view.edit(&flox, new_env_str.to_string()).unwrap();
+        env_view.edit(&flox, new_env_str.to_string(), None).unwrap();
 
         assert_eq!(
             env_view
@@ -1355,7 +1381,7 @@ mod tests {
         let mut env_view = new_core_environment(&flox, &same_manifest);
         env_view.lock(&flox).unwrap(); // Explicit lock
 
-        let result = env_view.edit(&flox, same_manifest).unwrap();
+        let result = env_view.edit(&flox, same_manifest, None).unwrap();
         assert_eq!(result, EditResult::Unchanged);
     }
 
@@ -1369,7 +1395,9 @@ mod tests {
         let mut env_view = new_core_environment(&flox, same_manifest);
         env_view.lock(&flox).unwrap(); // Explicit lock
 
-        let result = env_view.edit(&flox, same_manifest.to_string()).unwrap();
+        let result = env_view
+            .edit(&flox, same_manifest.to_string(), None)
+            .unwrap();
         assert_eq!(result, EditResult::Unchanged);
     }
 
@@ -1381,7 +1409,9 @@ mod tests {
         let same_manifest = "version = 1";
         let mut env_view = new_core_environment(&flox, same_manifest);
 
-        let result = env_view.edit(&flox, same_manifest.to_string()).unwrap();
+        let result = env_view
+            .edit(&flox, same_manifest.to_string(), None)
+            .unwrap();
         assert!(matches!(result, EditResult::Changed { .. }));
     }
 
@@ -1441,7 +1471,7 @@ mod tests {
 
         flox.catalog_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
-        let result = env_view.edit(&flox, new_env_str.to_string()).unwrap();
+        let result = env_view.edit(&flox, new_env_str.to_string(), None).unwrap();
 
         assert!(matches!(result, EditResult::Changed { .. }));
         assert!(!result.reactivate_required().unwrap());
@@ -1459,7 +1489,7 @@ mod tests {
         on-activate = ""
         "#;
 
-        let result = env_view.edit(&flox, new_env_str.to_string()).unwrap();
+        let result = env_view.edit(&flox, new_env_str.to_string(), None).unwrap();
 
         assert!(result.reactivate_required().unwrap());
     }
@@ -1477,6 +1507,7 @@ mod tests {
                     CatalogPackage::from_str("hello").unwrap(),
                 )],
                 &flox,
+                None,
             )
             .unwrap();
 
@@ -1732,7 +1763,7 @@ mod tests {
             .get_mut("bad")
             .unwrap()
             .shutdown = None;
-        let res = env.transact_with_manifest(&manifest, &flox);
+        let res = env.transact_with_manifest(&manifest, &flox, None);
         assert!(matches!(
             res,
             Err(EnvironmentError::ManifestError(
