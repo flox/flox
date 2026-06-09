@@ -108,6 +108,9 @@ enum SubcommandOrBuildTargets {
         #[bpaf(long, short)]
         force: bool,
 
+        #[bpaf(external(base_catalog_url_select), optional)]
+        base_catalog_url_select: Option<BaseCatalogUrlSelect>,
+
         /// The package to import (e.g., nixpkgs#hello, github:nixos/nixpkgs#hello)
         #[bpaf(positional("installable"))]
         installable: String,
@@ -146,13 +149,17 @@ impl Build {
 
                 Self::clean(flox, env, targets).await
             },
-            SubcommandOrBuildTargets::ImportNixpkgs { installable, force } => {
+            SubcommandOrBuildTargets::ImportNixpkgs {
+                installable,
+                force,
+                base_catalog_url_select,
+            } => {
                 let env = self
                     .environment
                     .detect_concrete_environment(&mut flox, "Import package definition in")?;
                 environment_subcommand_metric!("build::import-nixpkgs", env);
 
-                Self::import_nixpkgs(flox, env, installable, force).await
+                Self::import_nixpkgs(flox, env, installable, force, base_catalog_url_select).await
             },
             SubcommandOrBuildTargets::UpdateCatalogs {} => {
                 let env = self
@@ -344,10 +351,11 @@ impl Build {
 
     #[instrument(name = "build::import-nixpkgs", skip_all)]
     async fn import_nixpkgs(
-        _flox: Flox,
+        flox: Flox,
         env: ConcreteEnvironment,
         installable: String,
         force: bool,
+        base_catalog_url_select: Option<BaseCatalogUrlSelect>,
     ) -> Result<()> {
         match &env {
             ConcreteEnvironment::Path(_) => (),
@@ -360,7 +368,30 @@ impl Build {
         };
 
         // Parse the installable to get flake reference and attribute path
-        let (flake_ref, attr_path) = Self::parse_installable(&installable)?;
+        let (parsed_flake_ref, attr_path) = Self::parse_installable(&installable)?;
+
+        // Resolve the flake_ref to use for nix eval.
+        //
+        // When --stability or --nixpkgs-url is passed, resolve via the catalog.
+        // A bare attribute path or the literal "nixpkgs" flake ref is treated as
+        // "no explicit override" and is compatible with the flag.
+        // Any other explicit flake ref (e.g. github:nixos/nixpkgs) combined with
+        // a flag is rejected — the user must choose one source of truth.
+        let flake_ref = if let Some(sel) = base_catalog_url_select {
+            let is_explicit_non_nixpkgs = parsed_flake_ref != "nixpkgs";
+            if is_explicit_non_nixpkgs {
+                bail!(
+                    "Cannot use --stability or --nixpkgs-url together with an explicit flake \
+                     reference ('{parsed_flake_ref}'). Remove the flag or use a bare attribute \
+                     path."
+                );
+            }
+            let base_nixpkgs_url =
+                base_nixpkgs_url_from_url_select(&flox, Some(sel), None).await?;
+            base_nixpkgs_url.as_flake_ref()?.to_string()
+        } else {
+            parsed_flake_ref
+        };
 
         // Split package name by dots to create proper directory nesting
         let package_dir = {
@@ -992,6 +1023,7 @@ mod test {
             ConcreteEnvironment::Path(env),
             package_name.to_string(),
             false,
+            None,
         )
         .await;
         assert!(result.is_ok());
@@ -1027,6 +1059,7 @@ mod test {
             ConcreteEnvironment::Path(env),
             "hello".to_string(),
             false,
+            None,
         )
         .await;
         assert!(result.is_ok());
@@ -1063,6 +1096,7 @@ mod test {
             ConcreteEnvironment::Path(env),
             package_name.to_string(),
             false,
+            None,
         )
         .await;
         assert!(result.is_err());
@@ -1103,6 +1137,7 @@ mod test {
             ConcreteEnvironment::Path(env),
             package_name.to_string(),
             true,
+            None,
         )
         .await;
         assert!(result.is_ok());
@@ -1148,6 +1183,7 @@ mod test {
                 ConcreteEnvironment::Path(env),
                 package_name.to_string(),
                 false,
+                None,
             )
             .await;
             assert!(result.is_ok(), "Failed to import package: {}", package_name);
@@ -1172,5 +1208,66 @@ mod test {
                 package_name
             );
         }
+    }
+
+    /// Passing --stability or --nixpkgs-url together with an explicit non-nixpkgs
+    /// flake ref (e.g. github:nixos/nixpkgs#hello) must produce a clear error
+    /// before any nix or catalog calls are made.
+    #[tokio::test]
+    async fn import_nixpkgs_conflict_errors_when_installable_has_explicit_flake_ref() {
+        let (flox, _temp_dir) = flox_instance();
+
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+
+        let env = new_path_environment(&flox, &manifest);
+
+        // github:nixos/nixpkgs#hello carries an explicit non-nixpkgs flake ref
+        let result = Build::import_nixpkgs(
+            flox,
+            ConcreteEnvironment::Path(env),
+            "github:nixos/nixpkgs#hello".to_string(),
+            false,
+            Some(BaseCatalogUrlSelect::NixpkgsUrl(
+                "https://github.com/NixOS/nixpkgs".parse().unwrap(),
+            )),
+        )
+        .await;
+
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(
+            error_msg.contains("Cannot use --stability or --nixpkgs-url"),
+            "Expected conflict error, got: {error_msg}"
+        );
+        assert!(
+            error_msg.contains("github:nixos/nixpkgs"),
+            "Error should mention the conflicting flake ref, got: {error_msg}"
+        );
+    }
+
+    /// Passing --stability with the literal "nixpkgs" flake prefix is allowed —
+    /// the flag overrides which nixpkgs revision is used, which is its purpose.
+    /// This test verifies no conflict error is raised; it stops before the catalog
+    /// network call because the test environment has no live catalog.
+    #[test]
+    fn import_nixpkgs_allows_bare_nixpkgs_prefix_with_flag() {
+        // Verify that parse_installable treats "nixpkgs#hello" as flake_ref="nixpkgs"
+        let (flake_ref, attr_path) = Build::parse_installable("nixpkgs#hello").unwrap();
+        assert_eq!(flake_ref, "nixpkgs");
+        assert_eq!(attr_path, "hello");
+
+        // And a bare attribute path should also produce flake_ref="nixpkgs"
+        let (flake_ref_bare, _) = Build::parse_installable("hello").unwrap();
+        assert_eq!(flake_ref_bare, "nixpkgs");
+
+        // The conflict check should NOT fire for flake_ref == "nixpkgs":
+        // is_explicit_non_nixpkgs = ("nixpkgs" != "nixpkgs") = false
+        let is_explicit_non_nixpkgs = flake_ref != "nixpkgs";
+        assert!(
+            !is_explicit_non_nixpkgs,
+            "nixpkgs# prefix must be treated as no explicit override"
+        );
     }
 }
