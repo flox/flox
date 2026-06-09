@@ -143,6 +143,16 @@ nix build
 FLOX_ACTIVATE_TRACE=1 result/bin/flox activate [args]
 ```
 
+## Generating shell code for tcsh
+
+**Any tcsh code consumed via `eval` of a command substitution MUST double-quote
+the backticks.** Use the quoted form, never the bare form:
+
+```tcsh
+eval "`flox activate`"   # correct
+eval `flox activate`     # WRONG — output is word-split and brace-expanded
+```
+
 ## Pull Requests
 
 When opening a PR, consider if the PR has user-facing changes that aren't behind a feature flag.

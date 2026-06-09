@@ -114,7 +114,7 @@ teardown() {
 
   run tcsh -c "
     setenv FLOX_FEATURES_AUTO_ACTIVATE true
-    eval \`$FLOX_BIN activate -d $PROJECT_DIR\`
+    eval \"\`$FLOX_BIN activate -d $PROJECT_DIR\`\"
     precmd
     printenv _FLOX_HOOK_FIRED
   "
