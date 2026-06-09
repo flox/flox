@@ -231,11 +231,11 @@ impl Environment for PathEnvironment {
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;
-        let result = env_view.install(packages, flox)?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        let result = env_view.install(packages, flox, Some(out_link_prefix))?;
         if result.built_environments.is_some() {
-            self.build(flox)?;
+            self.rendered_env_links.replace_legacy_links();
         }
-
         Ok(result)
     }
 
@@ -250,20 +250,21 @@ impl Environment for PathEnvironment {
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;
-        let result = env_view.uninstall(specs, flox)?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        let result = env_view.uninstall(specs, flox, Some(out_link_prefix))?;
         if result.built_environment_store_paths.is_some() {
-            self.build(flox)?;
+            self.rendered_env_links.replace_legacy_links();
         }
-
         Ok(result)
     }
 
     /// Atomically edit this environment, ensuring that it still builds
     fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;
-        let result = env_view.edit(flox, contents)?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        let result = env_view.edit(flox, contents, Some(out_link_prefix))?;
         if matches!(&result, EditResult::Changed { .. }) {
-            self.build(flox)?;
+            self.rendered_env_links.replace_legacy_links();
         }
         Ok(result)
     }
@@ -275,7 +276,7 @@ impl Environment for PathEnvironment {
         groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;
-        let result = env_view.upgrade(flox, groups_or_iids, false)?;
+        let result = env_view.upgrade(flox, groups_or_iids, false, None)?; // dry-run: no out-link
         Ok(result)
     }
 
@@ -287,11 +288,11 @@ impl Environment for PathEnvironment {
     ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let mut env_view = self.as_core_environment_mut()?;
-        let result = env_view.upgrade(flox, groups_or_iids, true)?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        let result = env_view.upgrade(flox, groups_or_iids, true, Some(out_link_prefix))?;
         if result.store_path.is_some() {
-            self.build(flox)?;
+            self.rendered_env_links.replace_legacy_links();
         }
-
         Ok(result)
     }
 
@@ -306,11 +307,11 @@ impl Environment for PathEnvironment {
             "upgrading included environments"
         );
         let mut env_view = self.as_core_environment_mut()?;
-        let result = env_view.include_upgrade(flox, to_upgrade)?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        let result = env_view.include_upgrade(flox, to_upgrade, Some(out_link_prefix))?;
         if result.store_path.is_some() {
-            self.build(flox)?;
+            self.rendered_env_links.replace_legacy_links();
         }
-
         Ok(result)
     }
 
@@ -350,10 +351,10 @@ impl Environment for PathEnvironment {
     /// Uses `ensure_locked` to skip a catalog round-trip and lockfile
     /// rewrite when the lockfile is already current.
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
-        let out_link_prefix = self.rendered_env_links.out_link_prefix();
         let mut env_view = self.as_core_environment_mut()?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
         env_view.ensure_locked(flox)?;
-        let store_paths = env_view.build(flox, Some(&out_link_prefix))?;
+        let store_paths = env_view.build(flox, Some(out_link_prefix))?;
         self.rendered_env_links.replace_legacy_links();
         Ok(store_paths)
     }
@@ -525,7 +526,7 @@ impl PathEnvironment {
         // symlinks via --out-link, so no separate link step is needed.
         if matches!(customization.packages.as_deref(), Some([_, ..])) {
             let out_link_prefix = environment.rendered_env_links.out_link_prefix();
-            env_view.build(flox, Some(&out_link_prefix))?;
+            env_view.build(flox, Some(out_link_prefix))?;
         }
 
         Ok(environment)
@@ -859,7 +860,7 @@ pub mod tests {
         let mut env_view =
             CoreEnvironment::new(env.path.join(ENV_DIR_NAME), env.include_fetcher().unwrap());
         let out_link_prefix = env.rendered_env_links.out_link_prefix();
-        env_view.build(&flox, Some(&out_link_prefix)).unwrap();
+        env_view.build(&flox, Some(out_link_prefix)).unwrap();
 
         assert!(!env.needs_rebuild().unwrap());
 
