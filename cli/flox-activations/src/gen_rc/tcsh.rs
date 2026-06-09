@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use flox_core::activate::context::InvocationType;
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
+use flox_core::hook_actions::PROMPT_HOOK_VERSION_ENV;
 use shell_gen::{GenerateShell, Shell};
 
 use crate::attach_diff::todo_drop_set_exported_unexpanded;
@@ -96,6 +97,16 @@ pub fn generate_tcsh_profile_commands(
         Action::Deactivate(_) => {
             // Handled by the activation diff (added → unset, modified → restore).
         },
+    }
+
+    // The prompt hook exports `_FLOX_PROMPT_HOOK_VERSION` at registration (see
+    // hook.rs) so a subprocess like `flox deactivate` can detect a compatible
+    // hook. It is set shell-side, so it isn't part of the env-var diff; unset it
+    // on deactivation so it doesn't leak into the restored environment.
+    // Unconditional: a no-op when no hook was registered. The marker is exported
+    // (`setenv`), so tear it down with `unsetenv`.
+    if let Action::Deactivate(_) = action {
+        stmts.push(format!("unsetenv {PROMPT_HOOK_VERSION_ENV};").to_stmt());
     }
 
     // Source set-prompt.tcsh if we're in an interactive shell
@@ -404,6 +415,7 @@ mod tests {
             unsetenv _flox_activations;
             setenv MODIFIED_VAR MODIFIED_ORIGINAL;
             setenv DELETED_VAR DELETED_ORIGINAL;
+            unsetenv _FLOX_PROMPT_HOOK_VERSION;
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
             set _already_sourced_args = ();
             if ($?_FLOX_SOURCED_PROFILE_SCRIPTS) set _already_sourced_args = ( --already-sourced-env-dirs `echo $_FLOX_SOURCED_PROFILE_SCRIPTS:q` );

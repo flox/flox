@@ -5,10 +5,11 @@ use std::path::PathBuf;
 use anyhow::Result;
 use flox_core::activate::context::InvocationType;
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
+use flox_core::hook_actions::PROMPT_HOOK_VERSION_ENV;
 use indoc::{formatdoc, indoc};
 use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file};
 
-use crate::attach_diff::todo_drop_set_exported_unexpanded;
+use crate::attach_diff::{todo_drop_set_exported_unexpanded, todo_drop_unset};
 use crate::gen_rc::{Action, RM};
 
 /// Arguments for generating zsh startup commands
@@ -204,6 +205,15 @@ pub fn generate_zsh_profile_commands(
         Action::Deactivate(_) => {
             // Handled by the activation diff (added → unset, modified → restore).
         },
+    }
+
+    // The prompt hook exports `_FLOX_PROMPT_HOOK_VERSION` at registration (see
+    // hook.rs) so a subprocess like `flox deactivate` can detect a compatible
+    // hook. It is set shell-side, so it isn't part of the env-var diff; unset it
+    // on deactivation so it doesn't leak into the restored environment.
+    // Unconditional: a no-op when no hook was registered.
+    if let Action::Deactivate(_) = action {
+        stmts.push(todo_drop_unset(PROMPT_HOOK_VERSION_ENV));
     }
 
     // Source set-prompt.zsh if we're in an interactive shell
@@ -425,6 +435,7 @@ mod tests {
                 unset _FLOX_HOOK_SAVE_FPATH _FLOX_HOOK_SAVE_COMPINIT_DUMPFILE;
             fi;
             eval "$('/flox_activations' profile-scripts-deactivate --shell zsh --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
+            unset _FLOX_PROMPT_HOOK_VERSION;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
             unset _activate_d _flox_activate_tracer _flox_activate_tracelevel;
         "#]]
@@ -460,6 +471,7 @@ mod tests {
                 unset _flox_deactivate_old_fpath;
             fi;
             eval "$('/flox_activations' profile-scripts-deactivate --shell zsh --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
+            unset _FLOX_PROMPT_HOOK_VERSION;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
             unset _activate_d _flox_activate_tracer _flox_activate_tracelevel;
         "#]]

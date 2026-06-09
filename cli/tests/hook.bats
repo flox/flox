@@ -48,7 +48,7 @@ teardown() {
 # bats test_tags=hook:hook-env
 @test "'flox hook-env' fails without auto_activate feature flag" {
   unset FLOX_FEATURES_AUTO_ACTIVATE
-  run "$FLOX_BIN" hook-env --shell bash
+  run "$FLOX_BIN" hook-env --shell bash --shell-pid "$$" --invocation-type inplace
   assert_failure
   assert_output --partial "auto_activate feature flag"
 }
@@ -149,4 +149,162 @@ EOF
   local count
   count=$(sed 's/^[[:space:]]*//;s/[[:space:]]*$//' <<< "$output" | grep -cFx "$expected")
   assert_equal "$count" "3"
+}
+
+# ---------------------------------------------------------------------------- #
+# Plain `flox deactivate` is serviced by the prompt hook
+# ---------------------------------------------------------------------------- #
+#
+# `flox deactivate` (no `--print-script`) writes a prompt-hook action file; the
+# next time the prompt hook runs `flox hook-env`, it restores the environment in
+# place. We fire `_flox_hook` manually to stand in for the next prompt.
+
+set_test_var_manifest() {
+  cat << "EOF" | "$FLOX_BIN" edit -f -
+version = 1
+
+[vars]
+TEST_VAR = "modified"
+EOF
+}
+
+# bats test_tags=hook:deactivate:bash
+@test "bash: plain 'flox deactivate' restores env via the prompt hook" {
+  project_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  set_test_var_manifest
+
+  run --separate-stderr bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    export TEST_VAR=original
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    echo \"during:\$TEST_VAR\"
+    $FLOX_BIN deactivate
+    _flox_hook
+    echo \"after:\$TEST_VAR\"
+  "
+  assert_success
+  assert_output --partial "during:modified"
+  assert_output --partial "after:original"
+}
+
+# bats test_tags=hook:deactivate:zsh
+@test "zsh: plain 'flox deactivate' restores env via the prompt hook" {
+  project_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  set_test_var_manifest
+
+  run --separate-stderr zsh -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which zsh)
+    export TEST_VAR=original
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    echo \"during:\$TEST_VAR\"
+    $FLOX_BIN deactivate
+    _flox_hook
+    echo \"after:\$TEST_VAR\"
+  "
+  assert_success
+  assert_output --partial "during:modified"
+  assert_output --partial "after:original"
+}
+
+# bats test_tags=hook:deactivate:fish
+@test "fish: plain 'flox deactivate' restores env via the prompt hook" {
+  project_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  set_test_var_manifest
+
+  run --separate-stderr fish -c "
+    set -gx FLOX_FEATURES_AUTO_ACTIVATE true
+    set -gx TEST_VAR original
+    eval ($FLOX_BIN activate -d $PROJECT_DIR)
+    echo \"during:\$TEST_VAR\"
+    $FLOX_BIN deactivate
+    _flox_hook
+    echo \"after:\$TEST_VAR\"
+  "
+  assert_success
+  assert_output --partial "during:modified"
+  assert_output --partial "after:original"
+}
+
+# bats test_tags=hook:deactivate:tcsh
+@test "tcsh: plain 'flox deactivate' restores env via the prompt hook" {
+  project_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  set_test_var_manifest
+
+  run --separate-stderr tcsh -c "
+    setenv FLOX_FEATURES_AUTO_ACTIVATE true
+    setenv TEST_VAR original
+    eval \"\`$FLOX_BIN activate -d $PROJECT_DIR\`\"
+    echo \"during:\$TEST_VAR\"
+    $FLOX_BIN deactivate
+    precmd
+    echo \"after:\$TEST_VAR\"
+  "
+  assert_success
+  assert_output --partial "during:modified"
+  assert_output --partial "after:original"
+}
+
+# ---------------------------------------------------------------------------- #
+# Plain `flox deactivate` errors when no compatible prompt hook will consume it
+# ---------------------------------------------------------------------------- #
+#
+# Writing the action file is only useful if this shell has a compatible prompt
+# hook to read it. `flox deactivate` checks the exported _FLOX_PROMPT_HOOK_VERSION
+# (and the disable_hook config) and errors rather than claiming success for a
+# deactivation that would never happen.
+
+# bats test_tags=hook:deactivate:not-set-up
+@test "plain 'flox deactivate' errors when the prompt hook is not set up" {
+  project_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  # Activate (which exports the version marker), then clear the marker to
+  # simulate a shell with no prompt hook registered.
+  run bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    unset _FLOX_PROMPT_HOOK_VERSION
+    $FLOX_BIN deactivate
+  "
+  assert_failure
+  assert_output --partial "is not set up in this shell"
+}
+
+# bats test_tags=hook:deactivate:incompatible
+@test "plain 'flox deactivate' errors when the prompt hook version is incompatible" {
+  project_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  run bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    export _FLOX_PROMPT_HOOK_VERSION=99
+    $FLOX_BIN deactivate
+  "
+  assert_failure
+  assert_output --partial "incompatible version of Flox"
+}
+
+# bats test_tags=hook:deactivate:disabled
+@test "plain 'flox deactivate' errors when the prompt hook is disabled in config" {
+  project_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  "$FLOX_BIN" config --set disable_hook true
+
+  run bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    $FLOX_BIN deactivate
+  "
+  assert_failure
+  assert_output --partial "prompt hook is disabled"
 }

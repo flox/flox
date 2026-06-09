@@ -330,7 +330,7 @@ impl FloxArgs {
                 Commands::Modify(args) => args.handle(config, flox).await,
                 Commands::Share(args) => args.handle(config, flox).await,
                 Commands::Admin(args) => args.handle(config, flox).await,
-                Commands::Internal(args) => args.handle(flox).await,
+                Commands::Internal(args) => args.handle(config, flox).await,
                 Commands::Beta(args) => {
                     if !flox.features.beta {
                         bail!(indoc! {"
@@ -835,13 +835,13 @@ enum InternalCommands {
 }
 
 impl InternalCommands {
-    async fn handle(self, flox: Flox) -> Result<()> {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             InternalCommands::ResetMetrics(args) => args.handle(flox).await?,
             InternalCommands::Upload(args) => args.handle(flox).await?,
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
-            InternalCommands::Deactivate(args) => args.handle(flox)?,
+            InternalCommands::Deactivate(args) => args.handle(config, flox)?,
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
             InternalCommands::HookEnv(args) => args.handle(flox)?,

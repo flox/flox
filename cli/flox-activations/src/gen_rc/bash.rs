@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use flox_core::activate::context::InvocationType;
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
+use flox_core::hook_actions::PROMPT_HOOK_VERSION_ENV;
 use shell_gen::{GenerateShell, Shell, source_file};
 
 use crate::attach_diff::{todo_drop_set_exported_unexpanded, todo_drop_unset};
@@ -118,6 +119,15 @@ pub fn generate_bash_profile_commands(
         Action::Deactivate(_) => {
             // Handled by the activation diff (added → unset, modified → restore).
         },
+    }
+
+    // The prompt hook exports `_FLOX_PROMPT_HOOK_VERSION` at registration (see
+    // hook.rs) so a subprocess like `flox deactivate` can detect a compatible
+    // hook. It is set shell-side, so it isn't part of the env-var diff; unset it
+    // on deactivation so it doesn't leak into the restored environment.
+    // Unconditional: a no-op when no hook was registered.
+    if let Action::Deactivate(_) = action {
+        stmts.push(todo_drop_unset(PROMPT_HOOK_VERSION_ENV));
     }
 
     // Source set-prompt.bash if we're in an interactive shell
@@ -289,6 +299,7 @@ mod tests {
         strip_volatile_deactivate,
         test_deactivate_ctx,
         test_startup_ctx,
+        test_startup_ctx_hook,
     };
 
     // NOTE: For these `expect!` tests, run unit tests with `UPDATE_EXPECT=1`
@@ -310,6 +321,30 @@ mod tests {
         generate_bash_profile_commands(&action, &mut buf).expect("generator should succeed");
         let output = String::from_utf8(buf).expect("output should be utf-8");
         strip_volatile_deactivate(&output)
+    }
+
+    // The auto-activation prompt hook (the `_flox_hook` function and its
+    // PROMPT_COMMAND registration) is emitted only when auto-activation is on
+    // and `disable_hook` is not set. This replaces an integration test that
+    // activated a real shell to check the same gating.
+    #[test]
+    fn disable_hook_suppresses_prompt_hook_registration() {
+        let shell = ShellWithPath::Bash(PathBuf::from("/bin/bash"));
+
+        // Auto-activation on, hook not disabled: the hook is registered.
+        let with_hook =
+            render_normalized(&test_startup_ctx_hook(shell.clone(), false, true, false));
+        assert!(
+            with_hook.contains("_flox_hook"),
+            "expected the prompt hook to be registered:\n{with_hook}"
+        );
+
+        // disable_hook = true: no hook is registered, even with auto-activation on.
+        let without_hook = render_normalized(&test_startup_ctx_hook(shell, false, true, true));
+        assert!(
+            !without_hook.contains("_flox_hook"),
+            "expected no prompt hook when disable_hook is set:\n{without_hook}"
+        );
     }
 
     #[test]
@@ -397,6 +432,7 @@ mod tests {
             unset _flox_activations;
             export MODIFIED_VAR=MODIFIED_ORIGINAL;
             export DELETED_VAR=DELETED_ORIGINAL;
+            unset _FLOX_PROMPT_HOOK_VERSION;
             if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
             eval "$('/flox_activations' profile-scripts-deactivate --shell bash --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
             unset _activate_d _flox_activate_tracer;
