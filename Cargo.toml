@@ -2,6 +2,7 @@
 members = [
     "cli/beta",
     "cli/catalog-api-v1",
+    "cli/factory-api-v1",
     "cli/flox",
     "cli/flox-events",
     "cli/flox-rust-sdk",
@@ -31,6 +32,7 @@ blake3 = "1.8.2"
 beta = { path = "cli/beta" }
 bpaf = { version = "0.9.24", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "cli/catalog-api-v1" }
+factory-api-v1 = { path = "cli/factory-api-v1" }
 floxhub-client = { path = "cli/floxhub-client" }
 chrono = { version = "0.4.43", features = ["serde"] }
 clap = { version = "4.5.56", features = ["derive"] }

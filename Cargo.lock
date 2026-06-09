@@ -1370,6 +1370,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "factory-api-v1"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "openapiv3",
+ "prettyplease",
+ "progenitor",
+ "progenitor-client",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "syn 2.0.114",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
