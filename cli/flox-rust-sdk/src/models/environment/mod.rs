@@ -362,6 +362,13 @@ impl RenderedEnvironmentLinks {
     ///
     /// Errors are logged at debug level and do not propagate; this is a
     /// best-effort compatibility shim and must not fail the build.
+    ///
+    /// Under the two-level GC-root model (flox#4332) this still operates only on
+    /// the current activation pointer (`self.dev` / `self.run`), whose names are
+    /// unchanged — the pointer is now itself a redirect to a `-N-link`
+    /// generation link, so the legacy `.dev` / `.run` redirect resolves through
+    /// it. It is never called on a generation GC-root link, so the
+    /// `-{dev,run}`-suffix matching cannot misfire on the `-N-link` layer.
     pub fn replace_legacy_links(&self) {
         for (new_link, suffix) in [(self.dev.as_path(), "dev"), (self.run.as_path(), "run")] {
             let Some(parent) = new_link.parent() else {
