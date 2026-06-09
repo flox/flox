@@ -2,8 +2,8 @@ use std::fmt::Display;
 use std::num::NonZeroU8;
 
 use anyhow::Result;
-use flox_catalog::{ClientTrait, SearchResults};
 use flox_rust_sdk::flox::Flox;
+use floxhub_client::{CatalogClientTrait, SearchResults};
 use pollster::FutureExt;
 use tracing::{debug, instrument};
 
@@ -61,7 +61,7 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
     /// Collects installation suggestions for a given query using the catalog
     #[instrument(skip(client), fields(progress = "Looking for alternative suggestions"))]
     fn suggest_searched_packages_catalog(
-        client: &impl ClientTrait,
+        client: &impl CatalogClientTrait,
         term: &str,
         system: String,
     ) -> Result<SearchResults> {
@@ -161,7 +161,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
 
     #[instrument(skip(client), fields(progress = "Looking for alternative suggestions"))]
     fn suggest_searched_packages_catalog(
-        client: &impl ClientTrait,
+        client: &impl CatalogClientTrait,
         term: &str,
         system: String,
     ) -> Result<SearchResults> {
@@ -183,7 +183,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
     /// and log the error.
     pub fn new(
         term: &'a str,
-        catalog_client: &impl ClientTrait,
+        catalog_client: &impl CatalogClientTrait,
         system: String,
         use_bold_fmt: bool,
     ) -> Self {

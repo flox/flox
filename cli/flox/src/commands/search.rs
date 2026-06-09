@@ -3,9 +3,9 @@ use std::num::NonZeroU8;
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
-use flox_catalog::{ClientTrait, SearchResults};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::catalog::SearchTerm;
+use floxhub_client::{CatalogClientTrait, SearchResults};
 use indoc::{formatdoc, indoc};
 use tracing::{debug, instrument};
 

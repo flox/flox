@@ -10,9 +10,9 @@ use std::path::PathBuf;
 use httpmock::{MockServer, RecordingID};
 use tracing::debug;
 
-use crate::config::{CatalogClientConfig, CatalogMockMode};
+use crate::config::{FloxhubClientConfig, FloxhubMockMode};
 
-/// Guard to keep a `MockServer` running until the `CatalogClient` is dropped.
+/// Guard to keep a `MockServer` running until the `FloxhubClient` is dropped.
 #[allow(dead_code)] // https://github.com/rust-lang/rust/issues/122833
 pub(crate) enum MockGuard {
     Record(MockRecorder),
@@ -20,10 +20,10 @@ pub(crate) enum MockGuard {
 }
 
 impl MockGuard {
-    pub(crate) fn new(config: &CatalogClientConfig) -> Option<Self> {
+    pub(crate) fn new(config: &FloxhubClientConfig) -> Option<Self> {
         match &config.mock_mode {
-            CatalogMockMode::None => None,
-            CatalogMockMode::Record(path) => {
+            FloxhubMockMode::None => None,
+            FloxhubMockMode::Record(path) => {
                 let server = MockServer::start();
                 server.forward_to(&config.base_url, |rule| {
                     rule.filter(|when| {
@@ -46,7 +46,7 @@ impl MockGuard {
 
                 Some(MockGuard::Record(recorder))
             },
-            CatalogMockMode::Replay(path) => {
+            FloxhubMockMode::Replay(path) => {
                 let server = MockServer::start();
                 server.playback(path);
                 debug!(?path, server = server.base_url(), "mock server replaying");

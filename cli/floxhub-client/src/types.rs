@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
-use crate::error::CatalogClientError;
+use crate::error::FloxhubClientError;
 
 // ---------------------------------------------------------------------------
 // Result / pagination types (from models/search.rs)
@@ -54,9 +54,9 @@ pub struct PackageGroup {
 }
 
 impl TryFrom<PackageGroup> for api_types::PackageGroup {
-    type Error = CatalogClientError;
+    type Error = FloxhubClientError;
 
-    fn try_from(package_group: PackageGroup) -> Result<Self, CatalogClientError> {
+    fn try_from(package_group: PackageGroup) -> Result<Self, FloxhubClientError> {
         Ok(Self {
             descriptors: package_group.descriptors,
             name: package_group.name,

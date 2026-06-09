@@ -4,13 +4,13 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::LazyLock;
 
-use flox_catalog::BaseCatalogUrl;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
 use flox_manifest::parsed::latest::BuildSandbox;
 use flox_manifest::{Manifest, MigratedTypedOnly};
+use floxhub_client::BaseCatalogUrl;
 use indoc::formatdoc;
 use itertools::Itertools;
 use nef_lock_catalog::lock::NixFlakeref;

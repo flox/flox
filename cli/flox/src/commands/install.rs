@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
-use flox_catalog::{MsgAttrPathNotFoundNotFoundForAllSystems, MsgAttrPathNotFoundNotInCatalog};
 use flox_core::data::environment_ref::DEFAULT_NAME;
 use flox_manifest::compose::{
     COMPOSER_MANIFEST_ID,
@@ -42,6 +41,7 @@ use flox_rust_sdk::providers::lock_manifest::{
     ResolutionFailures,
     ResolveError,
 };
+use floxhub_client::{MsgAttrPathNotFoundNotFoundForAllSystems, MsgAttrPathNotFoundNotInCatalog};
 use indoc::formatdoc;
 use itertools::Itertools;
 use shell_gen::ShellWithPath;

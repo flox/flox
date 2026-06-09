@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use enum_dispatch::enum_dispatch;
-use flox_catalog::ResolveError;
 use flox_core::activate::mode::ActivateMode;
 use flox_core::data::environment_ref::{
     ActivateEnvironmentRef,
@@ -15,6 +14,7 @@ pub use flox_core::{Version, path_hash};
 use flox_manifest::lockfile::{LockedInclude, Lockfile, LockfileError};
 use flox_manifest::raw::{PackageToInstall, PackageToModify};
 use flox_manifest::{Manifest, ManifestError, Migrated, Validated};
+use floxhub_client::ResolveError;
 use generations::{GenerationId, GenerationsError};
 use indoc::formatdoc;
 use managed_environment::ManagedEnvironment;

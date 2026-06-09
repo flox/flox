@@ -4,14 +4,16 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
-use flox_catalog::{
+use flox_manifest::lockfile::Lockfile;
+use flox_manifest::parsed::latest::BuildSandbox;
+use floxhub_client::{
     BaseCatalogUrl,
     BaseCatalogUrlError,
     BuildType,
-    CatalogClientError,
+    CatalogClientTrait,
     CatalogStoreConfig,
     CatalogStoreConfigNixCopy,
-    ClientTrait,
+    FloxhubClientError,
     NarInfos,
     PackageOutput,
     PackageOutputs,
@@ -20,8 +22,6 @@ use flox_catalog::{
     UserBuildPublish,
     UserDerivationInfo,
 };
-use flox_manifest::lockfile::Lockfile;
-use flox_manifest::parsed::latest::BuildSandbox;
 use git_url_parse::GitUrl;
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
@@ -67,7 +67,7 @@ pub enum PublishError {
     ManifestBuildError(#[from] ManifestBuilderError),
 
     #[error(transparent)]
-    CatalogError(CatalogClientError),
+    CatalogError(FloxhubClientError),
 
     #[error("invalid nixpkgs base url")]
     InvalidNixpkgsBaseUrl(
@@ -114,7 +114,7 @@ pub enum PublishError {
 pub trait Publisher {
     async fn create_package_and_possibly_user_catalog(
         &self,
-        client: &impl ClientTrait,
+        client: &impl CatalogClientTrait,
         catalog_name: &str,
     ) -> Result<PackageCreatedGuard, PublishError>;
     /// Publish a built package.
@@ -125,7 +125,7 @@ pub trait Publisher {
     /// (NixCopy and MetadataOnly modes).
     async fn publish(
         &self,
-        client: &impl ClientTrait,
+        client: &impl CatalogClientTrait,
         catalog_name: &str,
         package_created: PackageCreatedGuard,
         build_metadata: &CheckedBuildMetadata,
@@ -134,7 +134,7 @@ pub trait Publisher {
     ) -> Result<bool, PublishError>;
     async fn wait_for_publish_completion(
         &self,
-        client: &impl ClientTrait,
+        client: &impl CatalogClientTrait,
         build_metadata: &CheckedBuildMetadata,
         poll_interval_millis: u64,
         timeout_millis: u64,
@@ -580,7 +580,7 @@ where
     /// permission to publish it.
     async fn create_package_and_possibly_user_catalog(
         &self,
-        client: &impl ClientTrait,
+        client: &impl CatalogClientTrait,
         catalog_name: &str,
     ) -> Result<PackageCreatedGuard, PublishError> {
         // Step 1 hit /packages
@@ -609,7 +609,7 @@ where
     /// `false` when the CLI already populated the catalog (NixCopy/MetadataOnly).
     async fn publish(
         &self,
-        client: &impl ClientTrait,
+        client: &impl CatalogClientTrait,
         catalog_name: &str,
         _package_created: PackageCreatedGuard,
         build_metadata: &CheckedBuildMetadata,
@@ -706,7 +706,7 @@ where
     /// or errors on timeout.
     async fn wait_for_publish_completion(
         &self,
-        client: &impl ClientTrait,
+        client: &impl CatalogClientTrait,
         build_metadata: &CheckedBuildMetadata,
         poll_interval_millis: u64,
         timeout_millis: u64,
@@ -1288,9 +1288,9 @@ pub mod tests {
     use std::sync::LazyLock;
 
     use chrono::Utc;
-    use flox_catalog::AuthContext;
     use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
     use flox_test_utils::GENERATED_DATA;
+    use floxhub_client::AuthContext;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -2006,7 +2006,7 @@ pub mod tests {
     //         then.unprocessable_entity(&ErrorResponse { detail: "Some\nlong\nresponse\nfrom\nthe\nserver".to_string() });
     //     });
 
-    //     let client = Client::Catalog(CatalogClient::new(CatalogClientConfig {
+    //     let client = Client::Catalog(FloxhubClient::new(FloxhubClientConfig {
     //         catalog_url: server.base_url(),
     //         floxhub_token: Some(token.secret().to_string()),
     //         extra_headers: Default::default(),
