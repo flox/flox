@@ -105,6 +105,22 @@ impl From<ShellWithPath> for Shell {
     }
 }
 
+impl From<Shell> for ShellWithPath {
+    /// Build a [ShellWithPath] from a bare [Shell], using the shell's name as
+    /// the (non-absolute) executable path. Useful when only the shell kind is
+    /// known (e.g. from a `--shell` argument) and the absolute path isn't
+    /// needed.
+    fn from(value: Shell) -> Self {
+        let path = PathBuf::from(value.to_string());
+        match value {
+            Shell::Bash => ShellWithPath::Bash(path),
+            Shell::Zsh => ShellWithPath::Zsh(path),
+            Shell::Tcsh => ShellWithPath::Tcsh(path),
+            Shell::Fish => ShellWithPath::Fish(path),
+        }
+    }
+}
+
 impl Display for Shell {
     // This trait requires `fmt` with this exact signature.
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {

@@ -5,9 +5,10 @@ use std::path::PathBuf;
 use anyhow::Result;
 use flox_core::activate::context::{AutoActivateFishMode, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
+use flox_core::hook_actions::PROMPT_HOOK_VERSION_ENV;
 use shell_gen::{GenerateShell, Shell};
 
-use crate::attach_diff::todo_drop_set_exported_unexpanded;
+use crate::attach_diff::{todo_drop_set_exported_unexpanded, todo_drop_unset};
 use crate::gen_rc::{Action, RM};
 
 /// Arguments for generating fish startup commands
@@ -102,6 +103,15 @@ pub fn generate_fish_profile_commands(
         Action::Deactivate(_) => {
             // Handled by the activation diff (added → unset, modified → restore).
         },
+    }
+
+    // The prompt hook exports `_FLOX_PROMPT_HOOK_VERSION` at registration (see
+    // hook.rs) so a subprocess like `flox deactivate` can detect a compatible
+    // hook. It is set shell-side, so it isn't part of the env-var diff; unset it
+    // on deactivation so it doesn't leak into the restored environment.
+    // Unconditional: a no-op when no hook was registered.
+    if let Action::Deactivate(_) = action {
+        stmts.push(todo_drop_unset(PROMPT_HOOK_VERSION_ENV));
     }
 
     // Source set-prompt.fish if we're in an interactive shell
@@ -383,6 +393,7 @@ mod tests {
             set -e _flox_activations;
             set -gx MODIFIED_VAR MODIFIED_ORIGINAL;
             set -gx DELETED_VAR DELETED_ORIGINAL;
+            set -e _FLOX_PROMPT_HOOK_VERSION;
             if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
             /flox_activations profile-scripts-deactivate --shell fish --env '/flox_env' --already-sourced-env-dirs (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end) | source;
             set -e _activate_d _flox_activate_tracer;
