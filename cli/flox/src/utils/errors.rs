@@ -343,6 +343,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
         "},
         ManagedEnvironmentError::ReverseLink(_) => display_chain(err),
         ManagedEnvironmentError::CreateLinksDir(_) => display_chain(err),
+        ManagedEnvironmentError::FlipActivationLinks(_) => display_chain(err),
         ManagedEnvironmentError::CreateLocalEnvironmentView(err) => formatdoc! {"
             Failed to create the local environment from the current generation: {err}
 

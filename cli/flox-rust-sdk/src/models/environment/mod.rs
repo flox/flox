@@ -342,19 +342,6 @@ impl RenderedEnvironmentLinks {
         Self::new_unchecked(prefix)
     }
 
-    pub fn new_in_base_dir_with_name_system_and_generation(
-        base_dir: &CanonicalPath,
-        name: impl AsRef<str>,
-        system: &System,
-        generation: GenerationId,
-    ) -> Self {
-        let prefix = base_dir.join(format!(
-            "{system}.{name}.gen{generation}",
-            name = name.as_ref()
-        ));
-        Self::new_unchecked(prefix)
-    }
-
     /// Returns the `--out-link` prefix for `nix build`.
     ///
     /// With outputs named `"dev"` and `"run"`, nix creates `<prefix>-dev` and
@@ -511,6 +498,16 @@ impl GenerationLink {
     /// links.
     pub fn out_link_prefix(&self) -> &Path {
         &self.out_link_prefix
+    }
+
+    /// Activation links that resolve directly to this generation's GC-root
+    /// links (its own `dev`/`run`).
+    ///
+    /// Used to activate a *specific* generation without flipping the current
+    /// pointer — e.g. `flox activate --generation N`, which must not change
+    /// which generation is current.
+    pub fn activation_links(&self) -> RenderedEnvironmentLinks {
+        RenderedEnvironmentLinks::new_unchecked(self.out_link_prefix.clone())
     }
 }
 
