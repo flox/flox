@@ -108,7 +108,6 @@ impl Upgrade {
         let diff_for_system = result.diff_for_system(&flox.system);
 
         let rendered_diff = render_diff(&diff_for_system);
-        let num_changes_for_system = diff_for_system.len();
 
         if dry_run {
             if diff_for_system.is_empty() {
@@ -123,8 +122,10 @@ impl Upgrade {
                 }
                 return Ok(());
             }
+            let (version_changes, rebuilds) = count_upgrade_categories(&diff_for_system);
+            let summary = format_upgrade_summary(version_changes, rebuilds);
             message::plain(formatdoc! {"
-                Dry run: Upgrades available for {num_changes_for_system} package(s) in {description}:
+                Dry run: {summary} in {description}:
                 {rendered_diff}
             "});
 
@@ -152,6 +153,7 @@ impl Upgrade {
             Upgrades were not available for this system, but upgrades were applied for other
             systems supported by this environment."});
         } else {
+            let num_changes_for_system = diff_for_system.len();
             message::plain(formatdoc! {"
             {icon} Upgraded {num_changes_for_system} package(s) in {description}:
             {rendered_diff}
@@ -181,7 +183,7 @@ fn render_diff(diff: &SingleSystemUpgradeDiff) -> String {
             }
 
             // Same version — build-only change. Try to show rev info.
-            let build_detail = build_update_detail(before, after);
+            let build_detail = rebuild_detail(before, after);
             match build_detail {
                 Some(detail) => format!("- {install_id}: {old_version} (rebuild, {detail})"),
                 None => format!("- {install_id}: {old_version} (rebuild)"),
@@ -194,7 +196,7 @@ fn render_diff(diff: &SingleSystemUpgradeDiff) -> String {
 ///
 /// Tries rev_date first, then rev hash (truncated to 7 chars).
 /// Returns `None` if no rev info is available (e.g. flake packages).
-fn build_update_detail(
+fn rebuild_detail(
     before: &flox_rust_sdk::models::lockfile::LockedPackage,
     after: &flox_rust_sdk::models::lockfile::LockedPackage,
 ) -> Option<String> {
@@ -220,20 +222,40 @@ fn build_update_detail(
     }
 }
 
+/// Format a human-readable summary like "2 version changes and 1 rebuild".
+pub(crate) fn format_upgrade_summary(version_changes: usize, rebuilds: usize) -> String {
+    let version_part = match version_changes {
+        0 => None,
+        1 => Some("1 version change".to_string()),
+        n => Some(format!("{n} version changes")),
+    };
+    let rebuild_part = match rebuilds {
+        0 => None,
+        1 => Some("1 rebuild".to_string()),
+        n => Some(format!("{n} rebuilds")),
+    };
+    match (version_part, rebuild_part) {
+        (Some(v), Some(b)) => format!("{v} and {b}"),
+        (Some(v), None) => v,
+        (None, Some(b)) => b,
+        (None, None) => "Upgrades".to_string(),
+    }
+}
+
 /// Count how many entries in a diff are version changes vs rebuilds.
 pub(crate) fn count_upgrade_categories(diff: &SingleSystemUpgradeDiff) -> (usize, usize) {
-    let mut version_upgrades = 0;
-    let mut build_updates = 0;
+    let mut version_changes = 0;
+    let mut rebuilds = 0;
     for (_, (before, after)) in diff.iter() {
         let old_version = before.version().unwrap_or("unknown");
         let new_version = after.version().unwrap_or("unknown");
         if new_version != old_version {
-            version_upgrades += 1;
+            version_changes += 1;
         } else {
-            build_updates += 1;
+            rebuilds += 1;
         }
     }
-    (version_upgrades, build_updates)
+    (version_changes, rebuilds)
 }
 
 #[cfg(test)]
@@ -530,9 +552,54 @@ mod tests {
             diff.insert("curl".to_string(), (before_curl, after_curl));
             diff.insert("terraform-docs".to_string(), (before_tf, after_tf));
 
-            let (version_upgrades, build_updates) = count_upgrade_categories(&diff);
-            assert_eq!(version_upgrades, 1);
-            assert_eq!(build_updates, 1);
+            let (version_changes, rebuilds) = count_upgrade_categories(&diff);
+            assert_eq!(version_changes, 1);
+            assert_eq!(rebuilds, 1);
+        }
+    }
+
+    mod format_upgrade_summary_tests {
+        use super::super::format_upgrade_summary;
+
+        #[test]
+        fn version_change_singular() {
+            assert_eq!(format_upgrade_summary(1, 0), "1 version change");
+        }
+
+        #[test]
+        fn version_changes_plural() {
+            assert_eq!(format_upgrade_summary(3, 0), "3 version changes");
+        }
+
+        #[test]
+        fn rebuild_singular() {
+            assert_eq!(format_upgrade_summary(0, 1), "1 rebuild");
+        }
+
+        #[test]
+        fn rebuilds_plural() {
+            assert_eq!(format_upgrade_summary(0, 4), "4 rebuilds");
+        }
+
+        #[test]
+        fn mixed() {
+            assert_eq!(
+                format_upgrade_summary(2, 1),
+                "2 version changes and 1 rebuild"
+            );
+        }
+
+        #[test]
+        fn mixed_plural() {
+            assert_eq!(
+                format_upgrade_summary(3, 5),
+                "3 version changes and 5 rebuilds"
+            );
+        }
+
+        #[test]
+        fn fallback_when_zero() {
+            assert_eq!(format_upgrade_summary(0, 0), "Upgrades");
         }
     }
 }

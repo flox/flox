@@ -660,36 +660,15 @@ fn notify_package_upgrades(
         return Ok(());
     }
     let description = environment_description(environment)?;
-    let (version_upgrades, build_updates) =
-        super::upgrade::count_upgrade_categories(&diff_for_system);
+    let (version_changes, rebuilds) = super::upgrade::count_upgrade_categories(&diff_for_system);
 
-    let summary = format_upgrade_summary(version_upgrades, build_updates);
+    let summary = super::upgrade::format_upgrade_summary(version_changes, rebuilds);
     let message = formatdoc! {"
         {summary} available in {description}.
         Use 'flox upgrade --dry-run' for details.
     "};
     message::info(message);
     Ok(())
-}
-
-/// Format a human-readable summary like "2 version changes and 1 rebuild".
-fn format_upgrade_summary(version_upgrades: usize, build_updates: usize) -> String {
-    let version_part = match version_upgrades {
-        0 => None,
-        1 => Some("1 version change".to_string()),
-        n => Some(format!("{n} version changes")),
-    };
-    let build_part = match build_updates {
-        0 => None,
-        1 => Some("1 rebuild".to_string()),
-        n => Some(format!("{n} rebuilds")),
-    };
-    match (version_part, build_part) {
-        (Some(v), Some(b)) => format!("{v} and {b}"),
-        (Some(v), None) => v,
-        (None, Some(b)) => b,
-        (None, None) => "Upgrades".to_string(),
-    }
 }
 
 /// For remote environments only; check whether the environment state is equal
@@ -1129,51 +1108,5 @@ mod upgrade_notification_tests {
 
         let printed = writer.to_string();
         assert!(printed.is_empty(), "printed: {printed}");
-    }
-}
-
-#[cfg(test)]
-mod format_upgrade_summary_tests {
-    use super::format_upgrade_summary;
-
-    #[test]
-    fn only_version_upgrades_singular() {
-        assert_eq!(format_upgrade_summary(1, 0), "1 version change");
-    }
-
-    #[test]
-    fn only_version_upgrades_plural() {
-        assert_eq!(format_upgrade_summary(3, 0), "3 version changes");
-    }
-
-    #[test]
-    fn only_build_updates_singular() {
-        assert_eq!(format_upgrade_summary(0, 1), "1 rebuild");
-    }
-
-    #[test]
-    fn only_build_updates_plural() {
-        assert_eq!(format_upgrade_summary(0, 4), "4 rebuilds");
-    }
-
-    #[test]
-    fn mixed_upgrades() {
-        assert_eq!(
-            format_upgrade_summary(2, 1),
-            "2 version changes and 1 rebuild"
-        );
-    }
-
-    #[test]
-    fn mixed_all_plural() {
-        assert_eq!(
-            format_upgrade_summary(3, 5),
-            "3 version changes and 5 rebuilds"
-        );
-    }
-
-    #[test]
-    fn fallback_when_both_zero() {
-        assert_eq!(format_upgrade_summary(0, 0), "Upgrades");
     }
 }
