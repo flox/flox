@@ -49,20 +49,15 @@ require `--`.
 
 ## Run Options
 
-`<command>`
-:   Required. The name of the command to run.
-    `flox run` runs this command from the package given with
-    `--package`.
-
 `-p <package>`, `--package <package>`
 :   Required. The package that provides the command.
 
-`[--] <arguments>`
-:   Arguments passed to the invoked command.
-    The `--` separator is optional for bare arguments but
-    required when passing option-style arguments (e.g. `-f`,
-    `--verbose`) to prevent them from being interpreted by
-    `flox run`.
+`[ -- ] <command> <arguments>`
+:   `flox run` runs the provided command and arguments
+    from the package given with `--package`.
+    The `--` separator is required when invoking commands with
+    option-style arguments to prevent them from being interpreted
+    by the `flox` command.
 
 ```{.include}
 ./include/general-options.md
