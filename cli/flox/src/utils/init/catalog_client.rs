@@ -1,17 +1,17 @@
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
-use flox_catalog::{
-    AuthContext,
-    CatalogClient,
-    CatalogClientConfig,
-    CatalogMockMode,
-    DEFAULT_CATALOG_URL,
-    FloxhubToken,
-};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::providers::catalog::Client;
 use flox_rust_sdk::utils::{HEADER_DEVICE_UUID, INVOCATION_SOURCES};
+use floxhub_client::{
+    AuthContext,
+    DEFAULT_CATALOG_URL,
+    FloxhubClient,
+    FloxhubClientConfig,
+    FloxhubMockMode,
+    FloxhubToken,
+};
 use tracing::debug;
 use uuid::Uuid;
 
@@ -38,9 +38,9 @@ pub fn init_catalog_client(
         extra_headers.insert("flox-invocation-source".to_string(), sources_str);
     };
 
-    let mock_mode = CatalogMockMode::default_from_env();
+    let mock_mode = FloxhubMockMode::default_from_env();
 
-    let client_config = CatalogClientConfig {
+    let client_config = FloxhubClientConfig {
         base_url: config
             .flox
             .catalog_url
@@ -62,5 +62,5 @@ pub fn init_catalog_client(
     };
 
     debug!("using catalog client with url: {}", client_config.base_url);
-    Ok(CatalogClient::new(client_config)?.into())
+    Ok(FloxhubClient::new(client_config)?.into())
 }

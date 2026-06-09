@@ -1,4 +1,4 @@
-use flox_catalog::AuthContext;
+use floxhub_client::AuthContext;
 use url::Url;
 
 use crate::models::floxmeta::FLOXHUB_TOKEN_ENV_VAR;
@@ -110,7 +110,7 @@ mod tests {
 
     #[test]
     fn kerberos_with_material_sets_empty_auth() {
-        let auth = AuthContext::Kerberos(Some(flox_catalog::KerberosMaterial {
+        let auth = AuthContext::Kerberos(Some(floxhub_client::KerberosMaterial {
             principal: "user@REALM".to_string(),
             generate_token: std::sync::Arc::new(|_| Ok("token".to_string())),
         }));

@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
-use flox_catalog::ClientTrait;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
@@ -17,6 +16,7 @@ use flox_rust_sdk::providers::publish::{
     check_environment_metadata,
     check_package_metadata,
 };
+use floxhub_client::CatalogClientTrait;
 use indoc::formatdoc;
 use nef_lock_catalog::lock::NixFlakeref;
 use tracing::{debug, info_span, instrument, warn};

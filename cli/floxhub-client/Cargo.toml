@@ -1,5 +1,5 @@
 [package]
-name = "flox-catalog"
+name = "floxhub-client"
 version.workspace = true
 edition.workspace = true
 

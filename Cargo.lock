@@ -1438,11 +1438,11 @@ dependencies = [
  "derive_more",
  "dirs",
  "flox-activations",
- "flox-catalog",
  "flox-core",
  "flox-manifest",
  "flox-rust-sdk",
  "flox-test-utils",
+ "floxhub-client",
  "fslock",
  "futures",
  "indent",
@@ -1528,34 +1528,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "flox-catalog"
-version = "0.0.0"
-dependencies = [
- "async-stream",
- "base64",
- "catalog-api-v1",
- "derive_more",
- "futures",
- "http 1.4.0",
- "httpmock",
- "itertools 0.14.0",
- "jsonwebtoken",
- "libgssapi",
- "proptest",
- "reqwest",
- "sentry",
- "serde",
- "serde_json",
- "serde_with",
- "serde_yaml",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "url",
-]
-
-[[package]]
 name = "flox-core"
 version = "0.0.0"
 dependencies = [
@@ -1637,10 +1609,10 @@ dependencies = [
  "derive_more",
  "enum_dispatch",
  "expect-test",
- "flox-catalog",
  "flox-core",
  "flox-manifest",
  "flox-test-utils",
+ "floxhub-client",
  "fslock",
  "futures",
  "git-url-parse",
@@ -1696,6 +1668,34 @@ dependencies = [
  "tempfile",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "floxhub-client"
+version = "0.0.0"
+dependencies = [
+ "async-stream",
+ "base64",
+ "catalog-api-v1",
+ "derive_more",
+ "futures",
+ "http 1.4.0",
+ "httpmock",
+ "itertools 0.14.0",
+ "jsonwebtoken",
+ "libgssapi",
+ "proptest",
+ "reqwest",
+ "sentry",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "serde_yaml",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "url",
 ]
 
 [[package]]
@@ -2922,8 +2922,8 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
- "flox-catalog",
  "flox-core",
+ "floxhub-client",
  "indexmap 2.13.0",
  "serde",
  "serde_json",

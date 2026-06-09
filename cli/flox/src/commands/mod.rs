@@ -1393,7 +1393,7 @@ pub(super) async fn ensure_environment_trust(
 /// If the credential is expired/missing and we can prompt interactively,
 /// triggers the login flow as a fallback.
 pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
-    use flox_catalog::AuthFailure;
+    use floxhub_client::AuthFailure;
 
     match flox.auth_context.authenticated_handle() {
         Ok(handle) => Ok(handle.to_string()),

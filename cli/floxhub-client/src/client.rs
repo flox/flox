@@ -20,8 +20,8 @@ use url::Url;
 
 use crate::MapApiErrorExt;
 use crate::auth::AuthContext;
-use crate::config::CatalogClientConfig;
-use crate::error::{CatalogClientError, ResolveError, SearchError, VersionsError};
+use crate::config::FloxhubClientConfig;
+use crate::error::{FloxhubClientError, ResolveError, SearchError, VersionsError};
 use crate::mock::MockGuard;
 use crate::types::*;
 
@@ -38,24 +38,24 @@ pub const EMPTY_SEARCH_RESPONSE: &api_types::PackageSearchResult =
 /// - HTTP client configuration with timeouts
 /// - Bearer token authentication for FloxHub
 /// - Mock server recording/replay for testing (feature-gated)
-pub struct CatalogClient {
+pub struct FloxhubClient {
     client: APIClient,
-    config: CatalogClientConfig,
+    config: FloxhubClientConfig,
 
     _mock_guard: Option<MockGuard>,
 }
 
-impl Debug for CatalogClient {
+impl Debug for FloxhubClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CatalogClient")
+        f.debug_struct("FloxhubClient")
             .field("base_url", &self.config.base_url)
             .finish_non_exhaustive()
     }
 }
 
-impl CatalogClient {
+impl FloxhubClient {
     /// Create a new catalog client from configuration.
-    pub fn new(config: CatalogClientConfig) -> Result<Self, CatalogClientError> {
+    pub fn new(config: FloxhubClientConfig) -> Result<Self, FloxhubClientError> {
         // create a mock server if configured
         let mock_guard = MockGuard::new(&config);
         let effective_url = match mock_guard {
@@ -97,8 +97,8 @@ impl CatalogClient {
     /// Update the client configuration and recreate the client.
     pub fn update_config(
         &mut self,
-        update: impl FnOnce(&mut CatalogClientConfig),
-    ) -> Result<(), CatalogClientError> {
+        update: impl FnOnce(&mut FloxhubClientConfig),
+    ) -> Result<(), FloxhubClientError> {
         let mut modified_config = self.config.clone();
         update(&mut modified_config);
         *self = Self::new(modified_config)?;
@@ -152,11 +152,11 @@ const RESPONSE_PAGE_SIZE: NonZeroU32 = NonZeroU32::new(1000).unwrap();
 /// The complete catalog API interface.
 ///
 /// This trait enables alternate implementations:
-/// - **HTTP** (current): REST calls to FloxHub catalog API via [`CatalogClient`]
+/// - **HTTP** (current): REST calls to FloxHub catalog API via [`FloxhubClient`]
 /// - **Mock** (SDK tests): Canned responses without HTTP
 /// - **Direct** (future): FloxHub server calls catalog logic in-process
 #[allow(async_fn_in_trait)]
-pub trait ClientTrait {
+pub trait CatalogClientTrait {
     /// Resolve a list of [`PackageGroup`]s into [`ResolvedPackageGroup`]s.
     async fn resolve(
         &self,
@@ -192,13 +192,13 @@ pub trait ClientTrait {
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<PublishResponse, CatalogClientError>;
+    ) -> Result<PublishResponse, FloxhubClientError>;
 
     /// Get all locked sources for a catalog.
     async fn get_catalog_locked_sources(
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<ResultsPage<LockedSourceItem>, CatalogClientError>;
+    ) -> Result<ResultsPage<LockedSourceItem>, FloxhubClientError>;
 
     /// Create a package within a user catalog.
     async fn create_package(
@@ -206,7 +206,7 @@ pub trait ClientTrait {
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
         original_url: impl AsRef<str> + Send + Sync,
-    ) -> Result<(), CatalogClientError>;
+    ) -> Result<(), FloxhubClientError>;
 
     /// Publish a build of a user package.
     async fn publish_build(
@@ -214,21 +214,21 @@ pub trait ClientTrait {
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
         build_info: &UserBuildPublish,
-    ) -> Result<(), CatalogClientError>;
+    ) -> Result<(), FloxhubClientError>;
 
     /// Get store info for a list of derivations.
     async fn get_store_info(
         &self,
         derivations: Vec<String>,
-    ) -> Result<HashMap<String, Vec<StoreInfo>>, CatalogClientError>;
+    ) -> Result<HashMap<String, Vec<StoreInfo>>, FloxhubClientError>;
 
     /// Checks whether the provided store paths have been successfully
     /// published.
     async fn is_publish_complete(&self, store_paths: &[String])
-    -> Result<bool, CatalogClientError>;
+    -> Result<bool, FloxhubClientError>;
 
     /// Get information about the base catalog and available stabilities.
-    async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, CatalogClientError>;
+    async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, FloxhubClientError>;
 
     /// Query the catalog to check whether a build matching the given source
     /// tuple (source URL, source rev, nixpkgs rev, system, package name) has
@@ -245,14 +245,14 @@ pub trait ClientTrait {
         source_rev: &str,
         nixpkgs_rev: &str,
         system: api_types::PackageSystem,
-    ) -> Result<CheckBuildResponse, CatalogClientError>;
+    ) -> Result<CheckBuildResponse, FloxhubClientError>;
 }
 
 // ---------------------------------------------------------------------------
-// ClientTrait implementation for CatalogClient
+// CatalogClientTrait implementation for FloxhubClient
 // ---------------------------------------------------------------------------
 
-impl ClientTrait for CatalogClient {
+impl CatalogClientTrait for FloxhubClient {
     #[instrument(skip_all, fields(progress = "Resolving packages from catalog"))]
     async fn resolve(
         &self,
@@ -370,7 +370,7 @@ impl ClientTrait for CatalogClient {
                     .map_api_error()
                     .await
                     .map_err(|e| match e {
-                        CatalogClientError::APIError(APIError::ErrorResponse(response))
+                        FloxhubClientError::APIError(APIError::ErrorResponse(response))
                             if response.status() == StatusCode::NOT_FOUND =>
                         {
                             VersionsError::NotFound
@@ -394,7 +394,7 @@ impl ClientTrait for CatalogClient {
     async fn get_catalog_locked_sources(
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<ResultsPage<LockedSourceItem>, CatalogClientError> {
+    ) -> Result<ResultsPage<LockedSourceItem>, FloxhubClientError> {
         let catalog_name = catalog_name.as_ref();
         tracing::debug!(catalog_name, "fetching locked sources");
 
@@ -413,7 +413,7 @@ impl ClientTrait for CatalogClient {
                     .await?
                     .into_inner();
 
-                Ok::<_, CatalogClientError>((response.total_count, response.items))
+                Ok::<_, FloxhubClientError>((response.total_count, response.items))
             },
             RESPONSE_PAGE_SIZE,
         );
@@ -430,7 +430,7 @@ impl ClientTrait for CatalogClient {
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<PublishResponse, CatalogClientError> {
+    ) -> Result<PublishResponse, FloxhubClientError> {
         let catalog = str_to_catalog_name(catalog_name)?;
         let package = str_to_package_name(package_name)?;
         let body = api_types::PublishInfoRequest(serde_json::Map::new());
@@ -449,7 +449,7 @@ impl ClientTrait for CatalogClient {
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
         original_url: impl AsRef<str> + Send + Sync,
-    ) -> Result<(), CatalogClientError> {
+    ) -> Result<(), FloxhubClientError> {
         let body = api_types::UserPackageCreate {
             original_url: Some(original_url.as_ref().to_string()),
         };
@@ -472,7 +472,7 @@ impl ClientTrait for CatalogClient {
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
         build_info: &UserBuildPublish,
-    ) -> Result<(), CatalogClientError> {
+    ) -> Result<(), FloxhubClientError> {
         let catalog = str_to_catalog_name(catalog_name)?;
         let package = str_to_package_name(package_name)?;
         self.client
@@ -488,7 +488,7 @@ impl ClientTrait for CatalogClient {
     async fn get_store_info(
         &self,
         derivations: Vec<String>,
-    ) -> Result<HashMap<String, Vec<StoreInfo>>, CatalogClientError> {
+    ) -> Result<HashMap<String, Vec<StoreInfo>>, FloxhubClientError> {
         let body = StoreInfoRequest {
             outpaths: derivations.iter().map(|s| s.to_string()).collect(),
         };
@@ -505,7 +505,7 @@ impl ClientTrait for CatalogClient {
     async fn is_publish_complete(
         &self,
         store_paths: &[String],
-    ) -> Result<bool, CatalogClientError> {
+    ) -> Result<bool, FloxhubClientError> {
         let req = StoreInfoRequest {
             outpaths: store_paths.to_vec(),
         };
@@ -524,7 +524,7 @@ impl ClientTrait for CatalogClient {
     }
 
     #[instrument(skip_all)]
-    async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, CatalogClientError> {
+    async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, FloxhubClientError> {
         self.client
             .get_base_catalog_api_v1_catalog_info_base_catalog_get()
             .await
@@ -541,7 +541,7 @@ impl ClientTrait for CatalogClient {
         source_rev: &str,
         nixpkgs_rev: &str,
         system: api_types::PackageSystem,
-    ) -> Result<CheckBuildResponse, CatalogClientError> {
+    ) -> Result<CheckBuildResponse, FloxhubClientError> {
         let catalog = str_to_catalog_name(catalog_name)?;
         let package = str_to_package_name(package_name)?;
         let body = api_types::CheckBuildRequest {
@@ -570,9 +570,9 @@ impl ClientTrait for CatalogClient {
 /// Converts a catalog name to a semantic type with API format validation.
 pub fn str_to_catalog_name(
     name: impl AsRef<str>,
-) -> Result<api_types::CatalogName, CatalogClientError> {
+) -> Result<api_types::CatalogName, FloxhubClientError> {
     api_types::CatalogName::from_str(name.as_ref()).map_err(|_e| {
-        CatalogClientError::APIError(APIError::InvalidRequest(format!(
+        FloxhubClientError::APIError(APIError::InvalidRequest(format!(
             "catalog name {} does not meet API requirements.",
             name.as_ref()
         )))
@@ -582,9 +582,9 @@ pub fn str_to_catalog_name(
 /// Converts a package name to a semantic type with API format validation.
 pub fn str_to_package_name(
     name: impl AsRef<str>,
-) -> Result<api_types::PackageName, CatalogClientError> {
+) -> Result<api_types::PackageName, FloxhubClientError> {
     api_types::PackageName::from_str(name.as_ref()).map_err(|_e| {
-        CatalogClientError::APIError(APIError::InvalidRequest(format!(
+        FloxhubClientError::APIError(APIError::InvalidRequest(format!(
             "package name {} does not meet API requirements.",
             name.as_ref()
         )))
@@ -620,7 +620,7 @@ async fn collect_search_results<T, E>(
 }
 
 /// Collects all results from a stream, returning the total count and all items.
-async fn collect_all_results<T, E: std::convert::From<CatalogClientError>>(
+async fn collect_all_results<T, E: std::convert::From<FloxhubClientError>>(
     stream: impl Stream<Item = Result<StreamItem<T>, E>>,
 ) -> Result<(u64, Vec<T>), E> {
     let mut count = None;
@@ -639,7 +639,7 @@ async fn collect_all_results<T, E: std::convert::From<CatalogClientError>>(
         .await?;
 
     let count = count
-        .ok_or_else(|| CatalogClientError::Other("Missing total count in response".to_string()))
+        .ok_or_else(|| FloxhubClientError::Other("Missing total count in response".to_string()))
         .map_err(|e| E::from(e))?;
 
     Ok((count, results))
@@ -703,17 +703,17 @@ where
 
 /// Build HTTP client for FloxHub catalog API.
 /// Authentication headers are injected per-request via `register_auth_hook`.
-fn build_http_client(config: &CatalogClientConfig) -> Result<reqwest::Client, CatalogClientError> {
+fn build_http_client(config: &FloxhubClientConfig) -> Result<reqwest::Client, FloxhubClientError> {
     let mut headers = build_header_map(config);
 
     // Extra headers (SDK can add invocation-source, QoS, etc.)
     for (key, value) in &config.extra_headers {
         headers.insert(
             header::HeaderName::from_str(key).map_err(
-                |e: reqwest::header::InvalidHeaderName| CatalogClientError::Other(e.to_string()),
+                |e: reqwest::header::InvalidHeaderName| FloxhubClientError::Other(e.to_string()),
             )?,
             header::HeaderValue::from_str(value).map_err(
-                |e: reqwest::header::InvalidHeaderValue| CatalogClientError::Other(e.to_string()),
+                |e: reqwest::header::InvalidHeaderValue| FloxhubClientError::Other(e.to_string()),
             )?,
         );
     }
@@ -740,14 +740,14 @@ fn build_http_client(config: &CatalogClientConfig) -> Result<reqwest::Client, Ca
 
     client_builder
         .build()
-        .map_err(|e| CatalogClientError::Other(e.to_string()))
+        .map_err(|e| FloxhubClientError::Other(e.to_string()))
 }
 
 /// Build the default header map for the HTTP client.
 ///
 /// Authentication headers are NOT included here — they are injected
 /// per-request via the pre_hook registered by `register_auth_hook`.
-fn build_header_map(config: &CatalogClientConfig) -> HeaderMap {
+fn build_header_map(config: &FloxhubClientConfig) -> HeaderMap {
     let mut header_map = HeaderMap::new();
 
     for (key, value) in &config.extra_headers {
@@ -776,8 +776,8 @@ pub mod tests {
     use super::*;
     const SENTRY_TRACE_HEADER: &str = "sentry-trace";
 
-    fn client_config(url: &str) -> CatalogClientConfig {
-        CatalogClientConfig {
+    fn client_config(url: &str) -> FloxhubClientConfig {
+        FloxhubClientConfig {
             base_url: url.to_string(),
             extra_headers: Default::default(),
             mock_mode: Default::default(),
@@ -816,7 +816,7 @@ pub mod tests {
             then.status(200).json_body(json_response);
         });
 
-        let client = CatalogClient::new(client_config(server.base_url().as_str())).unwrap();
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
         let res = client.resolve(resolve_req).await.unwrap();
         match &res[0].msgs[0] {
             ResolutionMessage::Unknown(msg_struct) => {
@@ -843,12 +843,12 @@ pub mod tests {
             then.status(200).json_body_obj(EMPTY_SEARCH_RESPONSE);
         });
 
-        let config = CatalogClientConfig {
+        let config = FloxhubClientConfig {
             extra_headers,
             ..client_config(&server.base_url())
         };
 
-        let client = CatalogClient::new(config).unwrap();
+        let client = FloxhubClient::new(config).unwrap();
         let _ = client.package_versions("some-package").await;
         mock.assert();
     }
@@ -863,12 +863,12 @@ pub mod tests {
             then.status(200).json_body_obj(EMPTY_SEARCH_RESPONSE);
         });
 
-        let config = CatalogClientConfig {
+        let config = FloxhubClientConfig {
             user_agent: Some(expected_agent.to_owned()),
             ..client_config(&server.base_url())
         };
 
-        let client = CatalogClient::new(config).unwrap();
+        let client = FloxhubClient::new(config).unwrap();
         let _ = client.package_versions("some-package").await;
         mock.assert();
     }
@@ -876,7 +876,7 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn tracing_headers_present_when_sentry_enabled() {
         let server = MockServer::start_async().await;
-        let client = CatalogClient::new(client_config(server.base_url().as_str())).unwrap();
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
 
         // The following are needed, in this order, for headers to be added:
         //
@@ -917,7 +917,7 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn tracing_headers_absent_when_sentry_disabled() {
         let server = MockServer::start_async().await;
-        let client = CatalogClient::new(client_config(server.base_url().as_str())).unwrap();
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
 
         let subscriber =
             tracing_subscriber::Registry::default().with(sentry::integrations::tracing::layer());
@@ -964,7 +964,7 @@ pub mod tests {
                 .json_body(json! ({"detail" : "(╯°□°)╯︵ ┻━┻ "}));
         });
 
-        let client = CatalogClient::new(client_config(server.base_url().as_str())).unwrap();
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
         let result = client.package_versions("some-package").await;
         assert!(
             matches!(result, Err(VersionsError::NotFound)),
@@ -984,13 +984,13 @@ pub mod tests {
                 .json_body(json! ({"detail" : "(╯°□°)╯︵ ┻━┻ "}));
         });
 
-        let client = CatalogClient::new(client_config(server.base_url().as_str())).unwrap();
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
         let result = client.package_versions("some-package").await;
         assert!(
             matches!(
                 result,
-                Err(VersionsError::CatalogClientError(
-                    CatalogClientError::APIError(APIError::ErrorResponse(_))
+                Err(VersionsError::FloxhubClientError(
+                    FloxhubClientError::APIError(APIError::ErrorResponse(_))
                 ))
             ),
             "expected ErrorResponse, found: {result:?}"
@@ -1009,13 +1009,13 @@ pub mod tests {
                 .json_body(json! ({"unknown" : "ceramic"}));
         });
 
-        let client = CatalogClient::new(client_config(server.base_url().as_str())).unwrap();
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
         let result = client.package_versions("some-package").await;
         assert!(
             matches!(
                 result,
-                Err(VersionsError::CatalogClientError(
-                    CatalogClientError::APIError(APIError::UnexpectedResponse(_))
+                Err(VersionsError::FloxhubClientError(
+                    FloxhubClientError::APIError(APIError::UnexpectedResponse(_))
                 ))
             ),
             "expected APIError::UnexpectedResponse, found: {result:?}"

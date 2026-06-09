@@ -7,7 +7,6 @@ use std::sync::LazyLock;
 use std::thread::ScopedJoinHandle;
 use std::{env, fmt};
 
-use flox_catalog::{CatalogClientError, ClientTrait, StoreInfo};
 use flox_core::activate::mode::ActivateMode;
 use flox_core::canonical_path::CanonicalPath;
 use flox_manifest::ManifestError;
@@ -21,6 +20,7 @@ use flox_manifest::lockfile::{
     PackageToList,
 };
 use flox_manifest::parsed::latest::SelectedOutputs;
+use floxhub_client::{CatalogClientTrait, FloxhubClientError, StoreInfo};
 use pollster::FutureExt as _;
 use rsevents_extra::Semaphore;
 use serde::{Deserialize, Serialize};
@@ -130,7 +130,7 @@ pub enum BuildEnvError {
 
     /// An error that occurred while calling the client
     #[error("Unexpected error calling the catalog client")]
-    CatalogError(#[source] CatalogClientError),
+    CatalogError(#[source] FloxhubClientError),
 
     /// An error that occurred while accessing the cache
     #[error("Unexpected error accessing cache: {0}")]
@@ -225,7 +225,7 @@ pub struct BuiltStorePath(PathBuf);
 pub trait BuildEnv {
     fn build(
         &self,
-        client: &impl ClientTrait,
+        client: &impl CatalogClientTrait,
         lockfile: &Path,
         service_config_path: Option<PathBuf>,
         out_link_prefix: Option<&Path>,
@@ -266,7 +266,7 @@ where
     /// See the individual realisation functions for more details.
     fn realise_lockfile(
         &self,
-        client: &impl ClientTrait,
+        client: &impl CatalogClientTrait,
         lockfile: &Lockfile,
         system: &System,
     ) -> Result<(), BuildEnvError> {
@@ -1283,7 +1283,7 @@ where
     #[instrument(skip_all, fields(progress = "Building environment"))]
     fn build(
         &self,
-        client: &impl ClientTrait,
+        client: &impl CatalogClientTrait,
         lockfile_path: &Path,
         service_config_path: Option<PathBuf>,
         out_link_prefix: Option<&Path>,

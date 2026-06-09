@@ -2,9 +2,9 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
-use flox_catalog::CatalogClientError;
-pub use flox_catalog::{AuthContext, AuthnMode, FloxhubToken, FloxhubTokenError};
 use flox_core::vars::FLOX_VERSION_STRING;
+use floxhub_client::FloxhubClientError;
+pub use floxhub_client::{AuthContext, AuthnMode, FloxhubToken, FloxhubTokenError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -78,7 +78,7 @@ impl Flox {
     pub fn set_auth_context(
         &mut self,
         auth_context: AuthContext,
-    ) -> Result<(), CatalogClientError> {
+    ) -> Result<(), FloxhubClientError> {
         self.auth_context = auth_context.clone();
         if let catalog::Client::Catalog(client) = &mut self.catalog_client {
             client.update_config(|config| {

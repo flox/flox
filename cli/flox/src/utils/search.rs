@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use anyhow::Result;
 use crossterm::style::Stylize;
-use flox_catalog::{SearchResult, SearchResults};
+use floxhub_client::{SearchResult, SearchResults};
 
 pub const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
 
