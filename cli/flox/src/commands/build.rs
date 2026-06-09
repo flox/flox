@@ -386,8 +386,7 @@ impl Build {
                      path."
                 );
             }
-            let base_nixpkgs_url =
-                base_nixpkgs_url_from_url_select(&flox, Some(sel), None).await?;
+            let base_nixpkgs_url = base_nixpkgs_url_from_url_select(&flox, Some(sel), None).await?;
             base_nixpkgs_url.as_flake_ref()?.to_string()
         } else {
             parsed_flake_ref
