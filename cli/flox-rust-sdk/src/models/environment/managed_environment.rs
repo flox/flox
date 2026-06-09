@@ -1047,11 +1047,6 @@ impl ManagedEnvironment {
         // but we don't need to support pushing old manifests.
         local_checkout.lock(flox)?;
 
-        // Ensure the created generation is valid
-        let out_link_prefix = self.rendered_env_links.out_link_prefix();
-        local_checkout.build(flox, Some(out_link_prefix))?;
-        self.rendered_env_links.replace_legacy_links();
-
         let mut generations = self.generations();
         let mut generations = generations
             .writable(
@@ -1062,11 +1057,20 @@ impl ManagedEnvironment {
             )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
+        // Build the new generation to its GC-root link (which also validates
+        // that it builds), commit it, then flip the activation pointer to it.
+        let generation_id = generations
+            .next_generation_id()
+            .map_err(ManagedEnvironmentError::Generations)?;
+        let generation_link = self.rendered_env_links.generation_link(generation_id);
+        local_checkout.build(flox, Some(generation_link.out_link_prefix()))?;
+
         generations
             .add_generation(&mut local_checkout, HistoryKind::Edit)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
         self.lock_pointer()?;
+        self.flip_to_generation(&generation_link)?;
         Ok(SyncToGenerationResult::Synced)
     }
 
