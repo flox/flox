@@ -33,35 +33,47 @@ use crate::utils::message;
 /// Errors specific to `flox run`.
 #[derive(Debug, Error)]
 pub enum RunError {
-    /// No executable was specified on the command line.
-    #[error("no executable specified")]
+    /// No command was specified on the command line.
+    #[error("no command specified")]
     NoExecutable,
 
-    /// An unrecognised flag appeared before the executable name.
+    /// `-p`/`--package` was not provided.
+    #[error(
+        "no package specified\n\
+         Use '-p <package>' / '--package <package>' to specify the package \
+         that provides the command."
+    )]
+    MissingPackage,
+
+    /// The package value used extended syntax that `flox run` does not accept.
+    #[error(
+        "unsupported package '{0}'\n\
+         'flox run' accepts a plain package name; version constraints (@), \
+         output selectors (^), and custom catalogs (/) are not supported."
+    )]
+    UnsupportedPackageSpec(String),
+
+    /// An unrecognised flag appeared before the command name.
     ///
-    /// Suggests `--` as a way to pass a dash-prefixed executable name.
+    /// Suggests `--` as a way to pass a dash-prefixed command name.
     #[error(
         "unknown flag '{0}'\n\
-         Use '--' before the executable name if it starts with '-'."
+         Use '--' before the command name if it starts with '-'."
     )]
     UnknownFlag(String),
 
-    /// The package resolved successfully but the named executable was not
+    /// The package resolved successfully but the named command was not
     /// found in any of the installed outputs' `bin/` directories.
     #[error(
-        "package '{package}' resolved but executable '{executable}' \
-         was not found in bin/.\n\
-         Try 'flox run -p <package> {executable}' \
-         if the executable has a different name than the package."
+        "package '{package}' resolved but command '{executable}' \
+         was not found in bin/."
     )]
     ExecutableNotFound { package: String, executable: String },
 
     /// The catalog resolver returned no results for the package.
     #[error(
         "package '{0}' was not found in the Flox Catalog.\n\
-         Use 'flox search' to find available packages, \
-         or 'flox run -p <package> <executable>' \
-         to specify the package name explicitly."
+         Use 'flox search' to find available packages."
     )]
     ResolutionFailed(String),
 
@@ -81,11 +93,11 @@ pub enum RunError {
 /// Pre-processed arguments produced by the POSIXLY_CORRECT state machine.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RunArgs {
-    /// Package spec from `-p`/`--package`, if provided.
-    pub package: Option<String>,
-    /// Executable name (first positional argument).
+    /// Package spec from `-p`/`--package` (required).
+    pub package: String,
+    /// Command name (first positional argument).
     pub executable: String,
-    /// Remaining arguments forwarded verbatim to the executable.
+    /// Remaining arguments forwarded verbatim to the command.
     pub args: Vec<String>,
 }
 
@@ -93,31 +105,28 @@ pub struct RunArgs {
 // bpaf registration struct
 // ---------------------------------------------------------------------------
 
-/// Run an executable from a package in the Flox Catalog.
+/// Run a command from a package without installing it.
 ///
-/// The package name defaults to the executable name.
-/// Use `-p` when the package and executable names differ.
+/// The package must be specified with `--package`.
 ///
-/// Arguments after the executable are forwarded verbatim to the
-/// executable (POSIXLY_CORRECT / getopt-style parsing).
+/// Arguments after the command are forwarded verbatim to the
+/// command (POSIXLY_CORRECT / getopt-style parsing).
 ///
 /// Options:
-///   -p, --package <PACKAGE>   Package to resolve (defaults to executable name)
+///   -p, --package <PACKAGE>   (required) Package that provides the command
 ///
 /// Examples:
-///   flox run cowsay "Hello, world"
-///   flox run -p binutils readelf -a /bin/ls
-///   flox run curl@8.0 --version
-///   echo test | flox run cat
+///   flox run --package cowsay cowsay "Hello, world!"
+///   flox run --package gnugrep grep "pattern"
+///   flox run --package curl -- curl -sL http://example.com
 #[derive(Bpaf, Clone, Debug)]
 #[bpaf(
     command("run"),
     header(
-        "Resolve a catalog package and execute a command from it.\n\
+        "Run a command from a Nix package without installing it.\n\
          \n\
-         The package name defaults to the executable name.\n\
-         Use '-p' when the package and executable names differ.\n\
-         Arguments after the executable are passed through verbatim."
+         The package must be specified with '--package' / '-p'.\n\
+         Arguments after the command are passed through verbatim."
     ),
     footer("Run 'man flox-run' for more details.")
 )]
@@ -164,7 +173,7 @@ impl Run {
 
         debug!(
             executable = %run_args.executable,
-            package = ?run_args.package,
+            package = %run_args.package,
             args = ?run_args.args,
             "parsed run args"
         );
@@ -180,16 +189,19 @@ impl Run {
 /// Parse the arguments that follow `flox run` using POSIXLY_CORRECT semantics.
 ///
 /// Rules:
-/// - `-p`/`--package` consumes the next argument as the package spec.
-/// - `-h`/`--help`/`--version` are handled by bpaf before we reach here,
-///   so we do not need to handle them ourselves; but we treat them as known
-///   flags and pass them through so that bpaf can respond.
-/// - `--` ends flag processing; the next argument becomes the executable even
+/// - `-p`/`--package` (space form only) consumes the next argument as the
+///   package spec. Bundled forms (`-pbinutils`) and equals forms
+///   (`--package=binutils`, `-p=binutils`) fall through to the unknown-flag
+///   handler and are rejected — the man page documents only the space form.
+/// - `-h`/`--help`/`--version` are handled by bpaf before we reach here.
+/// - `--` ends flag processing; the next argument becomes the command even
 ///   if it starts with `-`.
-/// - Any other flag-like argument (`-foo`, `--foo`) before the executable is
+/// - Any other flag-like argument (`-foo`, `--foo`) before the command is
 ///   an error.
-/// - The first non-flag positional argument is the executable name.
-/// - All remaining arguments (after the executable) are passthrough args.
+/// - The first non-flag positional argument is the command name.
+/// - All remaining arguments (after the command) are passthrough args.
+/// - After the loop, `-p`/`--package` is required; a missing package is
+///   reported before a missing command.
 pub fn parse_run_args(args: Vec<String>) -> Result<RunArgs, RunError> {
     let mut package: Option<String> = None;
     let mut executable: Option<String> = None;
@@ -200,14 +212,14 @@ pub fn parse_run_args(args: Vec<String>) -> Result<RunArgs, RunError> {
 
     while let Some(arg) = iter.next() {
         if force_positional {
-            // We have consumed `--`; next arg is the executable.
+            // We have consumed `--`; next arg is the command.
             executable = Some(arg);
             passthrough.extend(iter);
             break;
         }
 
         if executable.is_some() {
-            // Executable already set; accumulate passthrough args.
+            // Command already set; accumulate passthrough args.
             passthrough.push(arg);
             passthrough.extend(iter);
             break;
@@ -223,10 +235,6 @@ pub fn parse_run_args(args: Vec<String>) -> Result<RunArgs, RunError> {
                     .next()
                     .ok_or_else(|| RunError::UnknownFlag(format!("{arg}: missing argument")))?;
                 package = Some(value);
-            },
-            s if s.starts_with("-p") && s.len() > 2 => {
-                // Handle `-pbinutils` style (uncommon but valid).
-                package = Some(s[2..].to_string());
             },
             // bpaf handles -h/--help/--version before we get here, but
             // recognise them so they don't trigger UnknownFlag.
@@ -246,6 +254,11 @@ pub fn parse_run_args(args: Vec<String>) -> Result<RunArgs, RunError> {
         }
     }
 
+    // Report missing package before missing command so that a bare
+    // `flox run` reports the missing package, not the missing command.
+    let package = package
+        .filter(|p| !p.trim().is_empty())
+        .ok_or(RunError::MissingPackage)?;
     let executable = executable.ok_or(RunError::NoExecutable)?;
 
     Ok(RunArgs {
@@ -256,57 +269,42 @@ pub fn parse_run_args(args: Vec<String>) -> Result<RunArgs, RunError> {
 }
 
 // ---------------------------------------------------------------------------
-// Derive the actual executable name from the raw positional argument
+// Package spec validation
 // ---------------------------------------------------------------------------
 
-/// Strip the `@version` suffix from an executable name.
+/// Validate that a parsed `CatalogPackage` is a plain package name.
 ///
-/// `curl@8.0` → `("curl@8.0", "curl")`
-/// `curl` → `("curl", "curl")`
-///
-/// Returns `(raw_spec, executable_name)`.
-fn split_version_from_executable(raw: &str) -> (&str, String) {
-    // We reuse the CatalogPackage parsing logic: if `@` appears (not at the
-    // start and not preceded by `.`) it separates name from version.
-    // For the executable derivation, we only need the attr_path part.
-    // A simple split at the last non-scoped `@` suffices for phase 1.
-    //
-    // Edge cases handled: `nodePackages.@angular/cli` (the `@` is part of
-    // the package name, not a version delimiter). We rely on CatalogPackage
-    // to do the real parsing; here we only derive the executable name.
-    let executable = match raw.find('@') {
-        Some(pos) if pos > 0 && !raw[..pos].ends_with('.') => raw[..pos].to_string(),
-        _ => raw.to_string(),
-    };
-    (raw, executable)
+/// `flox run` accepts only a plain attr-path (e.g. `cowsay`,
+/// `python3Packages.requests`). Extended syntax — version constraints (`@`),
+/// output selectors (`^`), and custom catalogs (`/`) — is not supported.
+pub fn validate_plain_package(pkg: &CatalogPackage, raw: &str) -> Result<(), RunError> {
+    if pkg.version.is_some() || pkg.outputs.is_some() || pkg.is_custom_catalog() {
+        return Err(RunError::UnsupportedPackageSpec(raw.to_string()));
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
 // Core pipeline
 // ---------------------------------------------------------------------------
 
-/// Resolve, download, and exec the requested executable.
+/// Resolve, download, and exec the requested command.
 async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
     // -----------------------------------------------------------------------
-    // 1. Determine the package spec and the executable name.
+    // 1. Determine the package spec and the command name.
     // -----------------------------------------------------------------------
-    let (pkg_spec, executable_name) = if let Some(ref pkg) = run_args.package {
-        // `-p <pkg>` was given — parse it as a CatalogPackage.
-        // The executable is the positional argument as-is.
-        (pkg.clone(), run_args.executable.clone())
-    } else {
-        // Default: package name = executable name (stripping @version).
-        let (spec, exec) = split_version_from_executable(&run_args.executable);
-        (spec.to_string(), exec)
-    };
+    let pkg_spec = run_args.package.clone();
+    let executable_name = run_args.executable.clone();
 
     // -----------------------------------------------------------------------
-    // 2. Parse the package spec via CatalogPackage::from_str.
-    //    This handles attr_path, @version, and custom catalog detection.
+    // 2. Parse the package spec via CatalogPackage::from_str and reject
+    //    any extended syntax that the man page does not document.
     // -----------------------------------------------------------------------
     let catalog_pkg: CatalogPackage = pkg_spec
         .parse()
         .with_context(|| format!("invalid package spec '{pkg_spec}'"))?;
+
+    validate_plain_package(&catalog_pkg, &pkg_spec)?;
 
     let install_id = catalog_pkg.id.clone();
     let attr_path = catalog_pkg.pkg_path.clone();
@@ -400,7 +398,7 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
     download_store_paths(&store_paths, &gc_root, &pkg_spec)?;
 
     // -----------------------------------------------------------------------
-    // 7. Locate the executable in the downloaded store paths.
+    // 7. Locate the command in the downloaded store paths.
     // -----------------------------------------------------------------------
     let executable_path = find_executable(&store_paths, &executable_name, &pkg_spec)?;
 
@@ -526,14 +524,11 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn simple_executable_and_args() {
+    fn no_package_returns_error() {
+        // A bare command with no -p/--package must report MissingPackage.
         let args = vec!["curl".to_string(), "http://example.com".to_string()];
-        let result = parse_run_args(args).unwrap();
-        assert_eq!(result, RunArgs {
-            package: None,
-            executable: "curl".to_string(),
-            args: vec!["http://example.com".to_string()],
-        });
+        let result = parse_run_args(args);
+        assert!(matches!(result, Err(RunError::MissingPackage)));
     }
 
     #[test]
@@ -547,7 +542,7 @@ mod tests {
         ];
         let result = parse_run_args(args).unwrap();
         assert_eq!(result, RunArgs {
-            package: Some("binutils".to_string()),
+            package: "binutils".to_string(),
             executable: "readelf".to_string(),
             args: vec!["-a".to_string(), "/bin/ls".to_string()],
         });
@@ -562,34 +557,24 @@ mod tests {
         ];
         let result = parse_run_args(args).unwrap();
         assert_eq!(result, RunArgs {
-            package: Some("binutils".to_string()),
+            package: "binutils".to_string(),
             executable: "readelf".to_string(),
             args: vec![],
         });
     }
 
     #[test]
-    fn version_in_executable_name() {
-        // `flox run curl@8.0` — no -p, exec=curl, version handled by parser
-        let args = vec!["curl@8.0".to_string()];
-        let result = parse_run_args(args).unwrap();
-        assert_eq!(result, RunArgs {
-            package: None,
-            executable: "curl@8.0".to_string(),
-            args: vec![],
-        });
-        // The executable field holds the raw spec; split_version strips it.
-        let (spec, exec) = split_version_from_executable(&result.executable);
-        assert_eq!(spec, "curl@8.0");
-        assert_eq!(exec, "curl");
-    }
-
-    #[test]
     fn double_dash_before_executable() {
-        let args = vec!["--".to_string(), "-weirdname".to_string()];
+        // -p is required; provide it along with the -- separator.
+        let args = vec![
+            "-p".to_string(),
+            "somepkg".to_string(),
+            "--".to_string(),
+            "-weirdname".to_string(),
+        ];
         let result = parse_run_args(args).unwrap();
         assert_eq!(result, RunArgs {
-            package: None,
+            package: "somepkg".to_string(),
             executable: "-weirdname".to_string(),
             args: vec![],
         });
@@ -597,6 +582,7 @@ mod tests {
 
     #[test]
     fn custom_catalog_package() {
+        // parse_run_args is spec-agnostic; validation happens in exec_run.
         let args = vec![
             "-p".to_string(),
             "mycatalog/vim".to_string(),
@@ -604,17 +590,17 @@ mod tests {
         ];
         let result = parse_run_args(args).unwrap();
         assert_eq!(result, RunArgs {
-            package: Some("mycatalog/vim".to_string()),
+            package: "mycatalog/vim".to_string(),
             executable: "vi".to_string(),
             args: vec![],
         });
     }
 
     #[test]
-    fn no_args_returns_no_executable_error() {
+    fn no_args_returns_missing_package_error() {
         let args: Vec<String> = vec![];
         let result = parse_run_args(args);
-        assert!(matches!(result, Err(RunError::NoExecutable)));
+        assert!(matches!(result, Err(RunError::MissingPackage)));
     }
 
     #[test]
@@ -622,6 +608,67 @@ mod tests {
         let args = vec!["--unknown".to_string(), "curl".to_string()];
         let result = parse_run_args(args);
         assert!(matches!(result, Err(RunError::UnknownFlag(_))));
+    }
+
+    #[test]
+    fn bundled_short_form_rejected() {
+        // `-pbinutils` is not the space form; falls through to UnknownFlag.
+        let args = vec!["-pbinutils".to_string(), "readelf".to_string()];
+        let result = parse_run_args(args);
+        assert!(matches!(result, Err(RunError::UnknownFlag(_))));
+    }
+
+    #[test]
+    fn equals_form_long_rejected() {
+        // `--package=binutils` is not the space form; falls through to UnknownFlag.
+        let args = vec!["--package=binutils".to_string(), "readelf".to_string()];
+        let result = parse_run_args(args);
+        assert!(matches!(result, Err(RunError::UnknownFlag(_))));
+    }
+
+    #[test]
+    fn equals_form_short_rejected() {
+        // `-p=binutils` is not the space form; falls through to UnknownFlag.
+        let args = vec!["-p=binutils".to_string(), "readelf".to_string()];
+        let result = parse_run_args(args);
+        assert!(matches!(result, Err(RunError::UnknownFlag(_))));
+    }
+
+    // -----------------------------------------------------------------------
+    // validate_plain_package tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn validate_plain_package_accepts_simple() {
+        let pkg: CatalogPackage = "cowsay".parse().unwrap();
+        assert!(validate_plain_package(&pkg, "cowsay").is_ok());
+    }
+
+    #[test]
+    fn validate_plain_package_accepts_dotted() {
+        let pkg: CatalogPackage = "python3Packages.requests".parse().unwrap();
+        assert!(validate_plain_package(&pkg, "python3Packages.requests").is_ok());
+    }
+
+    #[test]
+    fn validate_plain_package_rejects_version() {
+        let pkg: CatalogPackage = "curl@8.0".parse().unwrap();
+        let result = validate_plain_package(&pkg, "curl@8.0");
+        assert!(matches!(result, Err(RunError::UnsupportedPackageSpec(_))));
+    }
+
+    #[test]
+    fn validate_plain_package_rejects_outputs() {
+        let pkg: CatalogPackage = "foo^bin".parse().unwrap();
+        let result = validate_plain_package(&pkg, "foo^bin");
+        assert!(matches!(result, Err(RunError::UnsupportedPackageSpec(_))));
+    }
+
+    #[test]
+    fn validate_plain_package_rejects_custom_catalog() {
+        let pkg: CatalogPackage = "mycatalog/vim".parse().unwrap();
+        let result = validate_plain_package(&pkg, "mycatalog/vim");
+        assert!(matches!(result, Err(RunError::UnsupportedPackageSpec(_))));
     }
 
     // -----------------------------------------------------------------------
@@ -669,33 +716,6 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // split_version_from_executable tests
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn split_version_simple() {
-        let (spec, exec) = split_version_from_executable("curl@8.0");
-        assert_eq!(spec, "curl@8.0");
-        assert_eq!(exec, "curl");
-    }
-
-    #[test]
-    fn split_version_no_version() {
-        let (spec, exec) = split_version_from_executable("curl");
-        assert_eq!(spec, "curl");
-        assert_eq!(exec, "curl");
-    }
-
-    #[test]
-    fn split_version_scoped_package() {
-        // `nodePackages.@angular/cli` — the `@` is part of the name, not a version.
-        let (spec, exec) = split_version_from_executable("nodePackages.@angular/cli");
-        assert_eq!(spec, "nodePackages.@angular/cli");
-        // The `@` is preceded by `.`, so no version split.
-        assert_eq!(exec, "nodePackages.@angular/cli");
-    }
-
-    // -----------------------------------------------------------------------
     // Integration-style tests (require mock catalog client)
     // -----------------------------------------------------------------------
 
@@ -710,9 +730,9 @@ mod tests {
         flox.catalog_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
-        // Build the args as if the user typed `flox run hello`
+        // Build the args as if the user typed `flox run -p hello hello`
         let run_args = RunArgs {
-            package: None,
+            package: "hello".to_string(),
             executable: "hello".to_string(),
             args: vec![],
         };

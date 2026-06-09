@@ -577,7 +577,7 @@ enum UseCommands {
     )]
     Activate(#[bpaf(external(activate::activate))] activate::Activate),
 
-    /// Run an executable from a package in the Flox Catalog
+    /// Run a command from a package without installing it
     Run(#[bpaf(external(run::run))] run::Run),
 
     /// Manage services in an environment

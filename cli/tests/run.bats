@@ -42,8 +42,14 @@ teardown() {
 @test "'flox run' with no args shows error" {
   run "$FLOX_BIN" run
   assert_failure
-  # Should mention that no executable was specified
-  assert_output --partial "executable"
+  # Should mention that no package was specified
+  assert_output --partial "package"
+}
+
+@test "'flox run <command>' without -p errors" {
+  run "$FLOX_BIN" run cowsay
+  assert_failure
+  assert_output --partial "package"
 }
 
 # ---------------------------------------------------------------------------
@@ -72,10 +78,32 @@ teardown() {
 
 @test "'flox run' nonexistent package shows helpful error" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/failed_resolution.yaml"
-  run "$FLOX_BIN" run nonexistent-package-that-does-not-exist
+  run "$FLOX_BIN" run -p nonexistent-package-that-does-not-exist nonexistent-package-that-does-not-exist
   assert_failure
-  # Should suggest '-p' or 'flox search'
+  # Should suggest 'flox search'
   assert_output --partial "not found"
+}
+
+# ---------------------------------------------------------------------------
+# Strict-rejection tests (no store needed)
+# ---------------------------------------------------------------------------
+
+@test "'flox run' rejects version constraint in package spec" {
+  run "$FLOX_BIN" run -p hello@2.12 hello
+  assert_failure
+  assert_output --partial "unsupported"
+}
+
+@test "'flox run' rejects custom catalog in package spec" {
+  run "$FLOX_BIN" run -p mycat/vim vi
+  assert_failure
+  assert_output --partial "unsupported"
+}
+
+@test "'flox run' rejects output selector in package spec" {
+  run "$FLOX_BIN" run -p 'foo^bin' foo
+  assert_failure
+  assert_output --partial "unsupported"
 }
 
 # ---------------------------------------------------------------------------
@@ -98,7 +126,7 @@ teardown() {
 # If the tests cannot be executed, the reason is documented inline.
 # ---------------------------------------------------------------------------- #
 
-@test "flox run hello resolves and runs 'hello' [needs_store]" {
+@test "flox run -p hello hello resolves and runs 'hello' [needs_store]" {
   # bats file_tags=needs_store
 
   if [[ -z "${_FLOX_RUN_STORE_TESTS:-}" ]]; then
@@ -106,22 +134,7 @@ teardown() {
   fi
 
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  run "$FLOX_BIN" run hello
-  assert_success
-  assert_output --partial "Hello"
-}
-
-@test "flox run hello@2.12 version constraint works [needs_store]" {
-  # bats file_tags=needs_store
-
-  if [[ -z "${_FLOX_RUN_STORE_TESTS:-}" ]]; then
-    skip "skipping store-access test (set _FLOX_RUN_STORE_TESTS=1 to enable)"
-  fi
-
-  # NOTE: Requires a fixture with version constraint in the request.
-  # hello.yaml can be used for now since the resolver selects a version.
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  run "$FLOX_BIN" run hello@2.12
+  run "$FLOX_BIN" run -p hello hello
   assert_success
   assert_output --partial "Hello"
 }
@@ -152,7 +165,7 @@ teardown() {
   skip "requires 'false' package fixture — generate with mk_data"
 }
 
-@test "piped stdin forwarded: echo test | flox run cat [needs_store]" {
+@test "piped stdin forwarded: echo test | flox run -p coreutils cat [needs_store]" {
   # bats file_tags=needs_store
 
   if [[ -z "${_FLOX_RUN_STORE_TESTS:-}" ]]; then
@@ -164,7 +177,7 @@ teardown() {
   skip "requires 'cat' package fixture — generate with mk_data"
 }
 
-@test "arg passthrough: curl args reach curl [needs_store]" {
+@test "arg passthrough: flox run --package curl -- curl args reach curl [needs_store]" {
   # bats file_tags=needs_store
 
   if [[ -z "${_FLOX_RUN_STORE_TESTS:-}" ]]; then
