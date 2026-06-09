@@ -22,7 +22,7 @@ use itertools::Itertools;
 use pollster::FutureExt;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use super::fetcher::IncludeFetcher;
 use super::uninstall::{UninstallSpec, resolve_specs_to_modifications};
@@ -44,6 +44,10 @@ use crate::providers::services::process_compose::{ServiceError, maybe_make_servi
 
 pub struct ReadOnly {}
 struct ReadWrite {}
+
+/// Name of the exclusive transaction lock file, kept inside the environment
+/// directory while a mutation transaction is in progress.
+const TRANSACTION_LOCK_FILENAME: &str = "transaction.lock";
 
 /// Identifies the holder of an in-progress environment transaction.
 ///
@@ -795,6 +799,11 @@ impl CoreEnvironment<ReadOnly> {
         copy_dir_recursive(&self.env_dir, tempdir.as_ref(), true)
             .map_err(CoreEnvironmentError::MakeTemporaryEnv)?;
 
+        // Never carry the transaction lock into the temporary copy: `replace_with`
+        // moves this copy back over `env_dir`, which would re-instate a stale lock
+        // and block every future transaction until it is deleted by hand.
+        let _ = fs::remove_file(tempdir.as_ref().join(TRANSACTION_LOCK_FILENAME));
+
         Ok(CoreEnvironment {
             env_dir: tempdir.as_ref().to_path_buf(),
             include_fetcher: self.include_fetcher.clone(),
@@ -851,7 +860,7 @@ impl CoreEnvironment<ReadOnly> {
 
     /// Returns the canonical path to the transaction lock file for this environment.
     fn transaction_lock_path(&self) -> PathBuf {
-        self.env_dir.join("transaction.lock")
+        self.env_dir.join(TRANSACTION_LOCK_FILENAME)
     }
 
     /// Acquires an NFS-safe exclusive transaction lock on the environment directory.
@@ -962,6 +971,24 @@ impl CoreEnvironment<ReadOnly> {
         bak
     }
 
+    /// Remove a transaction backup after the transaction has committed.
+    ///
+    /// Removal is best-effort: the build has already succeeded and the real
+    /// files are in their final state, so a failure here must not fail the
+    /// transaction. A leftover backup would, however, make the next mutation
+    /// fail with [`CoreEnvironmentError::PriorTransaction`], so warn with the
+    /// path to let the user clear it by hand.
+    fn remove_committed_backup(backup: &Path) {
+        if let Err(err) = fs::remove_file(backup) {
+            warn!(
+                path = %backup.display(),
+                %err,
+                "failed to remove transaction backup after a successful transaction; \
+                 delete it manually to unblock future edits"
+            );
+        }
+    }
+
     /// Attempt to transactionally replace the manifest contents.
     ///
     /// The transaction is file-level rather than directory-level:
@@ -1064,12 +1091,15 @@ impl CoreEnvironment<ReadOnly> {
         match self.build(flox, out_link_prefix) {
             Ok(store_path) => {
                 debug!("transaction: removing backups");
-                fs::remove_file(&manifest_bak)
-                    .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::RemoveBackup(e)))?;
+                // The transaction has committed: the build succeeded and the new
+                // manifest and lockfile are in place. Removing the backups is
+                // best-effort cleanup — a failure here must neither fail the
+                // transaction nor leave a backup that the guards above would later
+                // mistake for an interrupted transaction. Warn so a genuinely
+                // stuck backup can be cleared by hand.
+                Self::remove_committed_backup(&manifest_bak);
                 if lockfile_existed {
-                    fs::remove_file(&lockfile_bak).map_err(|e| {
-                        EnvironmentError::Core(CoreEnvironmentError::RemoveBackup(e))
-                    })?;
+                    Self::remove_committed_backup(&lockfile_bak);
                 }
                 Ok((store_path, lockfile))
             },
@@ -1142,8 +1172,9 @@ impl CoreEnvironment<ReadOnly> {
         match self.build(flox, out_link_prefix) {
             Ok(store_path) => {
                 debug!("transaction: removing lockfile backup");
+                // Committed: best-effort cleanup only (see transact_with_manifest).
                 if lockfile_existed {
-                    fs::remove_file(&lockfile_bak).map_err(CoreEnvironmentError::RemoveBackup)?;
+                    Self::remove_committed_backup(&lockfile_bak);
                 }
                 Ok(store_path)
             },
@@ -1855,6 +1886,54 @@ mod tests {
             !lock_path.exists(),
             "lock file should be removed after drop"
         );
+    }
+
+    /// `writable` must not copy the transaction lock into the temporary
+    /// environment: otherwise `replace_with` would move a stale lock back into
+    /// the environment directory and block every future transaction.
+    #[test]
+    fn writable_strips_transaction_lock() {
+        let (_flox, tempdir) = flox_instance();
+
+        let env_path = tempfile::tempdir_in(&tempdir).unwrap();
+        let sandbox_path = tempfile::tempdir_in(&tempdir).unwrap();
+
+        let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
+            base_directory: None,
+        });
+
+        // Simulate a stranded lock left in the environment directory.
+        fs::write(env_view.transaction_lock_path(), "{}").unwrap();
+
+        let temp_env = env_view.writable(&sandbox_path).unwrap();
+        assert!(
+            !sandbox_path.path().join(TRANSACTION_LOCK_FILENAME).exists(),
+            "writable copy must not contain the transaction lock"
+        );
+
+        env_view.replace_with(temp_env).unwrap();
+        assert!(
+            !env_path.path().join(TRANSACTION_LOCK_FILENAME).exists(),
+            "replace_with must not re-instate the stale transaction lock"
+        );
+    }
+
+    /// Removing a committed backup is best-effort: it deletes an existing
+    /// backup and is a no-op when the backup is already gone, so a successful
+    /// transaction is never turned into a failure or left blocking the next one.
+    #[test]
+    fn remove_committed_backup_is_best_effort() {
+        let (_flox, tempdir) = flox_instance();
+        let dir = tempfile::tempdir_in(&tempdir).unwrap();
+        let backup = dir.path().join("manifest.toml.bak");
+
+        fs::write(&backup, "stale").unwrap();
+        CoreEnvironment::<ReadOnly>::remove_committed_backup(&backup);
+        assert!(!backup.exists(), "existing backup should be removed");
+
+        // Already absent: must not panic.
+        CoreEnvironment::<ReadOnly>::remove_committed_backup(&backup);
+        assert!(!backup.exists());
     }
 
     /// creating backup should fail if env is readonly
