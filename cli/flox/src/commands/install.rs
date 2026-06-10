@@ -6,6 +6,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_catalog::{MsgAttrPathNotFoundNotFoundForAllSystems, MsgAttrPathNotFoundNotInCatalog};
 use flox_core::data::environment_ref::DEFAULT_NAME;
+use flox_events::{EventsHub, PackageOutcome};
 use flox_manifest::compose::{
     COMPOSER_MANIFEST_ID,
     new_package_overrides,
@@ -292,18 +293,42 @@ impl Install {
             warn_manifest_changes_for_services(&flox, &concrete_environment);
         }
 
+        // Per-package success events on the new pipeline. The legacy path
+        // emits nothing per-package on success; this is the intended
+        // net-new signal called out in PR 6 Merge gate #2's enumerated
+        // correction list. Dispatched before the dispatcher's
+        // `command_completed` (cli_worker emits that after this `handle`
+        // returns), so the per-package events correlate with the same
+        // invocation downstream.
+        let hub = EventsHub::global();
+        for package in &packages_to_install {
+            if let Err(err) = hub.record_package_install(
+                Install::package_identifier(package),
+                PackageOutcome::Success,
+            ) {
+                debug!(error = %err, "Failed to record canonical event");
+            }
+        }
+
         Ok(())
     }
 
     fn format_packages_for_tracing(packages: &[PackageToInstall]) -> String {
         packages
             .iter()
-            .map(|p| match p {
-                PackageToInstall::Catalog(pkg) => pkg.pkg_path.clone(),
-                PackageToInstall::Flake(pkg) => pkg.url.to_string(),
-                PackageToInstall::StorePath(pkg) => pkg.store_path.display().to_string(),
-            })
+            .map(|p| Install::package_identifier(p))
             .join(",")
+    }
+
+    /// Per-package identifier emitted on `cli.package.install` events.
+    /// Same source values as [`Install::format_packages_for_tracing`]
+    /// joins into the legacy `failed_packages` string.
+    fn package_identifier(p: &PackageToInstall) -> String {
+        match p {
+            PackageToInstall::Catalog(pkg) => pkg.pkg_path.clone(),
+            PackageToInstall::Flake(pkg) => pkg.url.to_string(),
+            PackageToInstall::StorePath(pkg) => pkg.store_path.display().to_string(),
+        }
     }
 
     fn partition_installed_packages(
@@ -470,6 +495,21 @@ impl Install {
             "install",
             "failed_packages" = Install::format_packages_for_tracing(packages)
         );
+
+        // Per-package failure events on the new pipeline. Mirrors the legacy
+        // packed `failed_packages` string above, unpacked into one event
+        // per attempted package so the consumer can count failures by
+        // package rather than parse a comma-joined string (intended
+        // correction per PR 6 Merge gate #2).
+        let hub = EventsHub::global();
+        for package in packages {
+            if let Err(err) = hub.record_package_install(
+                Install::package_identifier(package),
+                PackageOutcome::Failed,
+            ) {
+                debug!(error = %err, "Failed to record canonical event");
+            }
+        }
 
         match err {
             // Try to make suggestions when a package isn't found

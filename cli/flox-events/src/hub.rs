@@ -5,7 +5,7 @@ use anyhow::Result;
 use tracing::debug;
 
 use crate::client::EventsClient;
-use crate::{CliEnvironmentActivatePayload, EnvDetail, EventKind};
+use crate::{CliEnvironmentActivatePayload, EnvDetail, EventKind, PackageOutcome};
 
 static EVENTS_HUB: LazyLock<EventsHub> = LazyLock::new(EventsHub::new);
 
@@ -172,6 +172,42 @@ impl EventsHub {
                 return Ok(());
             };
             client.record_environment_pull(env_detail)
+        })
+    }
+
+    /// Record a `cli.package.install` event for one package + its outcome.
+    /// No-op when no client is installed.
+    pub fn record_package_install(&self, package: String, outcome: PackageOutcome) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!("No canonical events client configured, skipping package.install record");
+                return Ok(());
+            };
+            client.record_package_install(package, outcome)
+        })
+    }
+
+    /// Record a `cli.package.upgrade` event for one package + its outcome.
+    /// No-op when no client is installed.
+    pub fn record_package_upgrade(&self, package: String, outcome: PackageOutcome) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!("No canonical events client configured, skipping package.upgrade record");
+                return Ok(());
+            };
+            client.record_package_upgrade(package, outcome)
+        })
+    }
+
+    /// Record a `cli.package.uninstall` event for one package + its outcome.
+    /// No-op when no client is installed.
+    pub fn record_package_uninstall(&self, package: String, outcome: PackageOutcome) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!("No canonical events client configured, skipping package.uninstall record");
+                return Ok(());
+            };
+            client.record_package_uninstall(package, outcome)
         })
     }
 

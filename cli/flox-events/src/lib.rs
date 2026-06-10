@@ -127,6 +127,12 @@ pub enum EventKind {
     CliEnvironmentPush(CliEnvironmentPushPayload),
     #[serde(rename = "cli.environment.pull")]
     CliEnvironmentPull(CliEnvironmentPullPayload),
+    #[serde(rename = "cli.package.install")]
+    CliPackageInstall(CliPackageInstallPayload),
+    #[serde(rename = "cli.package.upgrade")]
+    CliPackageUpgrade(CliPackageUpgradePayload),
+    #[serde(rename = "cli.package.uninstall")]
+    CliPackageUninstall(CliPackageUninstallPayload),
 }
 
 /// Shared metadata fields stamped onto every `cli.*` command event payload.
@@ -342,6 +348,88 @@ impl CliEnvironmentPullPayload {
         Self {
             command,
             env_detail,
+        }
+    }
+}
+
+/// Outcome of an individual package's install / upgrade / uninstall
+/// attempt within a single `flox <command>` invocation.
+///
+/// `Failed` is recorded on a best-effort basis from a single error-handling
+/// site (e.g. `Install::handle_error` in `cli/flox/src/commands/install.rs`).
+/// On a `?`-propagated mid-pipeline failure the consumer should not treat
+/// the absence of a `Success` event as proof of failure — only the explicit
+/// `Failed` event is authoritative.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PackageOutcome {
+    Success,
+    Failed,
+}
+
+/// Payload for [`EventKind::CliPackageInstall`]. One event is emitted per
+/// package on the success branch (with `PackageOutcome::Success`) and per
+/// package on the failure branch (with `PackageOutcome::Failed`) — see
+/// the `cli/flox/src/commands/install.rs` call sites for the emission
+/// points.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliPackageInstallPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    /// Per-package identifier matching what
+    /// `Install::format_packages_for_tracing` joins into the legacy
+    /// `failed_packages` string (catalog `pkg_path`, flake URL, or store
+    /// path).
+    pub package: String,
+    pub outcome: PackageOutcome,
+}
+
+impl CliPackageInstallPayload {
+    pub fn new(command: CommandPayload, package: String, outcome: PackageOutcome) -> Self {
+        Self {
+            command,
+            package,
+            outcome,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliPackageUpgrade`]. One event per
+/// upgraded package on the success branch.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliPackageUpgradePayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    pub package: String,
+    pub outcome: PackageOutcome,
+}
+
+impl CliPackageUpgradePayload {
+    pub fn new(command: CommandPayload, package: String, outcome: PackageOutcome) -> Self {
+        Self {
+            command,
+            package,
+            outcome,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliPackageUninstall`]. One event per
+/// removed package on the success branch.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliPackageUninstallPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    pub package: String,
+    pub outcome: PackageOutcome,
+}
+
+impl CliPackageUninstallPayload {
+    pub fn new(command: CommandPayload, package: String, outcome: PackageOutcome) -> Self {
+        Self {
+            command,
+            package,
+            outcome,
         }
     }
 }
@@ -612,6 +700,80 @@ mod tests {
             "event_type": "cli.environment.pull",
             "payload": payload_json,
         });
+        assert_eq!(value, expected);
+    }
+
+    fn package_envelope_json(
+        event_type: &str,
+        subcommand: &str,
+        package: &str,
+        outcome: &str,
+    ) -> serde_json::Value {
+        let mut payload_json = expected_payload_json(subcommand);
+        let payload_obj = payload_json.as_object_mut().expect("payload object");
+        payload_obj.insert("package".to_string(), json!(package));
+        payload_obj.insert("outcome".to_string(), json!(outcome));
+        json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": event_type,
+            "payload": payload_json,
+        })
+    }
+
+    #[test]
+    fn cli_package_install_success_envelope_golden() {
+        let payload = CliPackageInstallPayload::new(
+            command_payload("install"),
+            "hello".to_string(),
+            PackageOutcome::Success,
+        );
+        let value = serde_json::to_value(fixed_event(EventKind::CliPackageInstall(payload)))
+            .expect("event serializes");
+        let expected = package_envelope_json("cli.package.install", "install", "hello", "success");
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_package_install_failure_envelope_golden() {
+        let payload = CliPackageInstallPayload::new(
+            command_payload("install"),
+            "nope".to_string(),
+            PackageOutcome::Failed,
+        );
+        let value = serde_json::to_value(fixed_event(EventKind::CliPackageInstall(payload)))
+            .expect("event serializes");
+        let expected = package_envelope_json("cli.package.install", "install", "nope", "failed");
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_package_upgrade_envelope_golden() {
+        let payload = CliPackageUpgradePayload::new(
+            command_payload("upgrade"),
+            "hello".to_string(),
+            PackageOutcome::Success,
+        );
+        let value = serde_json::to_value(fixed_event(EventKind::CliPackageUpgrade(payload)))
+            .expect("event serializes");
+        let expected = package_envelope_json("cli.package.upgrade", "upgrade", "hello", "success");
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_package_uninstall_envelope_golden() {
+        let payload = CliPackageUninstallPayload::new(
+            command_payload("uninstall"),
+            "hello".to_string(),
+            PackageOutcome::Success,
+        );
+        let value = serde_json::to_value(fixed_event(EventKind::CliPackageUninstall(payload)))
+            .expect("event serializes");
+        let expected =
+            package_envelope_json("cli.package.uninstall", "uninstall", "hello", "success");
         assert_eq!(value, expected);
     }
 }
@@ -920,5 +1082,84 @@ mod pipeline_tests {
                 .sum::<usize>(),
             1
         );
+    }
+
+    /// Mirrors the spec's "install pkgA pkgB (all succeed)" partial-
+    /// success case: one `cli.package.install` event per package with
+    /// `outcome = success`, all sharing one `invocation_id`.
+    #[test]
+    fn package_install_all_succeed_one_event_per_package() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let connection = MockEventsConnection::default();
+        let sent_batches = connection.sent_batches();
+        let hub = EventsHub::new();
+        hub.set_client(client_with_connection(&tempdir, connection));
+
+        hub.record_package_install("pkgA".to_string(), PackageOutcome::Success)
+            .expect("record pkgA");
+        hub.record_package_install("pkgB".to_string(), PackageOutcome::Success)
+            .expect("record pkgB");
+        hub.flush(true).expect("flush events");
+
+        let events: Vec<_> = sent_batches
+            .lock()
+            .unwrap()
+            .clone()
+            .into_iter()
+            .flatten()
+            .collect();
+        assert_eq!(events.len(), 2);
+        let mut packages = Vec::new();
+        for event in &events {
+            match &event.kind {
+                EventKind::CliPackageInstall(p) => {
+                    assert_eq!(p.outcome, PackageOutcome::Success);
+                    packages.push(p.package.clone());
+                },
+                other => panic!("expected CliPackageInstall, got {other:?}"),
+            }
+            assert_eq!(event.invocation_id, INVOCATION_ID);
+        }
+        packages.sort();
+        assert_eq!(packages, vec!["pkgA".to_string(), "pkgB".to_string()]);
+    }
+
+    /// Mirrors the spec's "install pkgA nope" partial-failure case: the
+    /// new pipeline's failure-path emit records every attempted package
+    /// (the `?`-propagated equivalent the spec calls out), not just the
+    /// one that failed.
+    #[test]
+    fn package_install_failure_path_records_every_attempted_package() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let connection = MockEventsConnection::default();
+        let sent_batches = connection.sent_batches();
+        let hub = EventsHub::new();
+        hub.set_client(client_with_connection(&tempdir, connection));
+
+        // Simulating `Install::handle_error` calling
+        // `record_package_install` for every attempted package on a
+        // mid-pipeline failure.
+        for package in ["pkgA", "nope"] {
+            hub.record_package_install(package.to_string(), PackageOutcome::Failed)
+                .expect("record failure");
+        }
+        hub.flush(true).expect("flush events");
+
+        let events: Vec<_> = sent_batches
+            .lock()
+            .unwrap()
+            .clone()
+            .into_iter()
+            .flatten()
+            .collect();
+        assert_eq!(events.len(), 2);
+        for event in &events {
+            match &event.kind {
+                EventKind::CliPackageInstall(p) => {
+                    assert_eq!(p.outcome, PackageOutcome::Failed);
+                },
+                other => panic!("expected CliPackageInstall, got {other:?}"),
+            }
+        }
     }
 }

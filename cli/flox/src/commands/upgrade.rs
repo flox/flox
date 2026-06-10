@@ -1,11 +1,12 @@
 use anyhow::Result;
 use bpaf::Bpaf;
 use crossterm::style::Stylize;
+use flox_events::{EventsHub, PackageOutcome};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{Environment, SingleSystemUpgradeDiff};
 use indoc::formatdoc;
 use itertools::Itertools;
-use tracing::{info_span, instrument};
+use tracing::{debug, info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
@@ -143,6 +144,20 @@ impl Upgrade {
         }
 
         warn_manifest_changes_for_services(&flox, &concrete_environment);
+
+        // Per-package success events on the new pipeline. One event per
+        // package that was actually upgraded on the current system —
+        // dry-run paths and "no upgrades available" returns earlier never
+        // reach here, so they never emit. Net-new signal per PR 6 Merge
+        // gate #2.
+        let hub = EventsHub::global();
+        for (_, (before, _after)) in diff_for_system.iter() {
+            if let Err(err) =
+                hub.record_package_upgrade(before.install_id().to_string(), PackageOutcome::Success)
+            {
+                debug!(error = %err, "Failed to record canonical event");
+            }
+        }
 
         Ok(())
     }

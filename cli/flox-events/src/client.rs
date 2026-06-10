@@ -12,9 +12,13 @@ use crate::{
     CliEnvironmentActivatePayload,
     CliEnvironmentPullPayload,
     CliEnvironmentPushPayload,
+    CliPackageInstallPayload,
+    CliPackageUninstallPayload,
+    CliPackageUpgradePayload,
     EnvDetail,
     Event,
     EventKind,
+    PackageOutcome,
     SharedMetadataTemplate,
 };
 
@@ -142,6 +146,36 @@ impl EventsClient {
             env_detail,
         );
         self.record_event(EventKind::CliEnvironmentPull(payload))
+    }
+
+    /// Record a `cli.package.install` event for one package + its outcome.
+    pub fn record_package_install(&self, package: String, outcome: PackageOutcome) -> Result<()> {
+        let payload = CliPackageInstallPayload::new(
+            self.shared_metadata.into_payload("install".to_string()),
+            package,
+            outcome,
+        );
+        self.record_event(EventKind::CliPackageInstall(payload))
+    }
+
+    /// Record a `cli.package.upgrade` event for one package + its outcome.
+    pub fn record_package_upgrade(&self, package: String, outcome: PackageOutcome) -> Result<()> {
+        let payload = CliPackageUpgradePayload::new(
+            self.shared_metadata.into_payload("upgrade".to_string()),
+            package,
+            outcome,
+        );
+        self.record_event(EventKind::CliPackageUpgrade(payload))
+    }
+
+    /// Record a `cli.package.uninstall` event for one package + its outcome.
+    pub fn record_package_uninstall(&self, package: String, outcome: PackageOutcome) -> Result<()> {
+        let payload = CliPackageUninstallPayload::new(
+            self.shared_metadata.into_payload("uninstall".to_string()),
+            package,
+            outcome,
+        );
+        self.record_event(EventKind::CliPackageUninstall(payload))
     }
 
     pub fn record_event(&self, kind: impl Into<EventKind>) -> Result<()> {
