@@ -1,5 +1,6 @@
 use anyhow::Result;
 use bpaf::Bpaf;
+use flox_events::EventsHub;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::{
     GenerationId,
@@ -10,6 +11,7 @@ use tracing::{debug, instrument};
 
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 
 /// Arguments for the `flox generations switch` command
@@ -31,6 +33,11 @@ impl Switch {
             .await?;
 
         environment_subcommand_metric!("generations::switch", env);
+        if let Err(err) = EventsHub::global()
+            .record_environment_generations_switch(env_detail_from_concrete(&env))
+        {
+            debug!(error = %err, "Failed to record canonical event");
+        }
         let mut env: GenerationsEnvironment = env.try_into()?;
 
         let to = self.target_generation;

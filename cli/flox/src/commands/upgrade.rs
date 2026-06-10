@@ -11,6 +11,7 @@ use tracing::{debug, info_span, instrument};
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::{ensure_auth, environment_description};
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message::{self, stderr_supports_color};
 use crate::{environment_subcommand_metric, subcommand_metric};
 
@@ -49,6 +50,11 @@ impl Upgrade {
             .detect_concrete_environment(&mut flox, "Upgrade")
             .await?;
         environment_subcommand_metric!("upgrade", concrete_environment);
+        if let Err(err) = EventsHub::global()
+            .record_environment_upgrade(env_detail_from_concrete(&concrete_environment))
+        {
+            debug!(error = %err, "Failed to record canonical event");
+        }
 
         let description = environment_description(&concrete_environment)?;
 

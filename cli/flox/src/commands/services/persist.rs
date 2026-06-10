@@ -4,17 +4,19 @@ use std::fs::File;
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_core::data::environment_ref::ActivateEnvironmentRef;
+use flox_events::EventsHub;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::ServiceDescriptor;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::services::systemd::render_systemd_unit_file;
-use tracing::instrument;
+use tracing::{debug, instrument};
 use xdg::BaseDirectories;
 
 use crate::commands::services::{ServicesEnvironment, guard_service_commands_available};
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 
 // TODO: Allow output directory to be configurable? But consider whether it
@@ -35,6 +37,11 @@ impl Persist {
         let env =
             ServicesEnvironment::from_environment_selection(&mut flox, &self.environment).await?;
         environment_subcommand_metric!("services::persist", env.environment);
+        if let Err(err) = EventsHub::global()
+            .record_environment_services_persist(env_detail_from_concrete(&env.environment))
+        {
+            debug!(error = %err, "Failed to record canonical event");
+        }
         guard_service_commands_available(&env, &flox.system)?;
 
         let manifest_services = &env.manifest.as_latest_schema().services;

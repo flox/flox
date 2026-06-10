@@ -60,6 +60,7 @@ use crate::utils::detect_shell::detect_shell_for_in_place;
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::format_error;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message::{self};
 use crate::utils::tracing::sentry_set_tag;
 use crate::{Exit, environment_subcommand_metric, subcommand_metric};
@@ -186,6 +187,11 @@ impl Install {
             Err(e) => Err(e)?,
         };
         environment_subcommand_metric!("install", concrete_environment);
+        if let Err(err) = EventsHub::global()
+            .record_environment_install(env_detail_from_concrete(&concrete_environment))
+        {
+            debug!(error = %err, "Failed to record canonical event");
+        }
 
         let description = environment_description(&concrete_environment)?;
 

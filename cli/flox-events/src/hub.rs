@@ -5,7 +5,15 @@ use anyhow::Result;
 use tracing::debug;
 
 use crate::client::EventsClient;
-use crate::{CliEnvironmentActivatePayload, EnvDetail, EventKind, PackageOutcome};
+use crate::{
+    CliEnvironmentActivatePayload,
+    CliEnvironmentEditPayload,
+    CliEnvironmentGenerationsListPayload,
+    CliEnvironmentPublishPayload,
+    EnvDetail,
+    EventKind,
+    PackageOutcome,
+};
 
 static EVENTS_HUB: LazyLock<EventsHub> = LazyLock::new(EventsHub::new);
 
@@ -208,6 +216,334 @@ impl EventsHub {
                 return Ok(());
             };
             client.record_package_uninstall(package, outcome)
+        })
+    }
+
+    /// Record a `cli.environment.containerize` event. No-op when no
+    /// client is installed.
+    pub fn record_environment_containerize(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!(
+                    "No canonical events client configured, skipping environment.containerize record"
+                );
+                return Ok(());
+            };
+            client.record_environment_containerize(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.delete` event. No-op when no client
+    /// is installed.
+    pub fn record_environment_delete(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!("No canonical events client configured, skipping environment.delete record");
+                return Ok(());
+            };
+            client.record_environment_delete(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.include` event. No-op when no client
+    /// is installed.
+    pub fn record_environment_include(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!(
+                    "No canonical events client configured, skipping environment.include record"
+                );
+                return Ok(());
+            };
+            client.record_environment_include(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.install` event (env-detail row). The
+    /// per-package detail rides on `cli.package.install` (PR 4). No-op
+    /// when no client is installed.
+    pub fn record_environment_install(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!(
+                    "No canonical events client configured, skipping environment.install record"
+                );
+                return Ok(());
+            };
+            client.record_environment_install(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.list` event. No-op when no client is
+    /// installed.
+    pub fn record_environment_list(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!("No canonical events client configured, skipping environment.list record");
+                return Ok(());
+            };
+            client.record_environment_list(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.uninstall` event (env-detail row).
+    /// The per-package detail rides on `cli.package.uninstall` (PR 4).
+    /// No-op when no client is installed.
+    pub fn record_environment_uninstall(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!(
+                    "No canonical events client configured, skipping environment.uninstall record"
+                );
+                return Ok(());
+            };
+            client.record_environment_uninstall(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.upgrade` event (env-detail row). The
+    /// per-package detail rides on `cli.package.upgrade` (PR 4). No-op
+    /// when no client is installed.
+    pub fn record_environment_upgrade(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!(
+                    "No canonical events client configured, skipping environment.upgrade record"
+                );
+                return Ok(());
+            };
+            client.record_environment_upgrade(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.services.start` event. No-op when no
+    /// client is installed.
+    pub fn record_environment_services_start(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!(
+                    "No canonical events client configured, skipping environment.services.start record"
+                );
+                return Ok(());
+            };
+            client.record_environment_services_start(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.services.stop` event. No-op when no
+    /// client is installed.
+    pub fn record_environment_services_stop(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!(
+                    "No canonical events client configured, skipping environment.services.stop record"
+                );
+                return Ok(());
+            };
+            client.record_environment_services_stop(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.services.restart` event. No-op when
+    /// no client is installed.
+    pub fn record_environment_services_restart(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!(
+                    "No canonical events client configured, skipping environment.services.restart record"
+                );
+                return Ok(());
+            };
+            client.record_environment_services_restart(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.services.status` event. No-op when
+    /// no client is installed.
+    pub fn record_environment_services_status(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!(
+                    "No canonical events client configured, skipping environment.services.status record"
+                );
+                return Ok(());
+            };
+            client.record_environment_services_status(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.services.logs` event. No-op when no
+    /// client is installed.
+    pub fn record_environment_services_logs(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!(
+                    "No canonical events client configured, skipping environment.services.logs record"
+                );
+                return Ok(());
+            };
+            client.record_environment_services_logs(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.services.persist` event. No-op when
+    /// no client is installed.
+    pub fn record_environment_services_persist(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!(
+                    "No canonical events client configured, skipping environment.services.persist record"
+                );
+                return Ok(());
+            };
+            client.record_environment_services_persist(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.generations.history` event. No-op
+    /// when no client is installed.
+    pub fn record_environment_generations_history(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!(
+                    "No canonical events client configured, skipping environment.generations.history record"
+                );
+                return Ok(());
+            };
+            client.record_environment_generations_history(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.generations.rollback` event. No-op
+    /// when no client is installed.
+    pub fn record_environment_generations_rollback(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!(
+                    "No canonical events client configured, skipping environment.generations.rollback record"
+                );
+                return Ok(());
+            };
+            client.record_environment_generations_rollback(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.generations.switch` event. No-op
+    /// when no client is installed.
+    pub fn record_environment_generations_switch(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!(
+                    "No canonical events client configured, skipping environment.generations.switch record"
+                );
+                return Ok(());
+            };
+            client.record_environment_generations_switch(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.edit` event with just env detail
+    /// (eager call site). No-op when no client is installed.
+    pub fn record_environment_edit(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!("No canonical events client configured, skipping environment.edit record");
+                return Ok(());
+            };
+            client.record_environment_edit(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.edit` event populated by `extras`
+    /// (result-known call site). No-op when no client is installed —
+    /// the `extras` closure is not invoked in that case.
+    pub fn record_environment_edit_with(
+        &self,
+        env_detail: EnvDetail,
+        extras: impl FnOnce(CliEnvironmentEditPayload) -> CliEnvironmentEditPayload,
+    ) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!("No canonical events client configured, skipping environment.edit record");
+                return Ok(());
+            };
+            client.record_environment_edit_with(env_detail, extras)
+        })
+    }
+
+    /// Record a `cli.environment.publish` event with just env detail
+    /// (eager call site). No-op when no client is installed.
+    pub fn record_environment_publish(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!(
+                    "No canonical events client configured, skipping environment.publish record"
+                );
+                return Ok(());
+            };
+            client.record_environment_publish(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.publish` event populated by `extras`
+    /// (result-known call site). No-op when no client is installed.
+    pub fn record_environment_publish_with(
+        &self,
+        env_detail: EnvDetail,
+        extras: impl FnOnce(CliEnvironmentPublishPayload) -> CliEnvironmentPublishPayload,
+    ) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!(
+                    "No canonical events client configured, skipping environment.publish record"
+                );
+                return Ok(());
+            };
+            client.record_environment_publish_with(env_detail, extras)
+        })
+    }
+
+    /// Record a `cli.environment.generations.list` event populated by
+    /// `extras`. No-op when no client is installed.
+    pub fn record_environment_generations_list_with(
+        &self,
+        env_detail: EnvDetail,
+        extras: impl FnOnce(
+            CliEnvironmentGenerationsListPayload,
+        ) -> CliEnvironmentGenerationsListPayload,
+    ) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!(
+                    "No canonical events client configured, skipping environment.generations.list record"
+                );
+                return Ok(());
+            };
+            client.record_environment_generations_list_with(env_detail, extras)
+        })
+    }
+
+    /// Record a `cli.build` event carrying build-kind detection
+    /// flags. No-op when no client is installed.
+    pub fn record_build(&self, has_expression_build: bool, has_manifest_build: bool) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!("No canonical events client configured, skipping build record");
+                return Ok(());
+            };
+            client.record_build(has_expression_build, has_manifest_build)
+        })
+    }
+
+    /// Record a `cli.search` event carrying the search term. No-op
+    /// when no client is installed.
+    pub fn record_search(&self, search_term: String) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!("No canonical events client configured, skipping search record");
+                return Ok(());
+            };
+            client.record_search(search_term)
         })
     }
 

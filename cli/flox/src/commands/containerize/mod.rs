@@ -8,6 +8,7 @@ use std::{fs, io};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use flox_events::EventsHub;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::common::ContainerizeConfig;
@@ -22,6 +23,7 @@ use tracing::{debug, info, instrument};
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::SHELL_COMPLETION_FILE;
 use crate::environment_subcommand_metric;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 use crate::utils::openers::first_in_path;
 
@@ -62,6 +64,11 @@ impl Containerize {
             .detect_concrete_environment(&mut flox, "Containerize")
             .await?;
         environment_subcommand_metric!("containerize", env);
+        if let Err(err) =
+            EventsHub::global().record_environment_containerize(env_detail_from_concrete(&env))
+        {
+            debug!(error = %err, "Failed to record canonical event");
+        }
 
         // Check that a specified runtime exists.
         if let Some(runtime) = &self.runtime {

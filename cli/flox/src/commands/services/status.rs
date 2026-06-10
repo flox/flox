@@ -3,6 +3,7 @@ use std::fmt::Display;
 
 use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
+use flox_events::EventsHub;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::parsed::Inner;
 use flox_rust_sdk::flox::Flox;
@@ -14,11 +15,12 @@ use flox_rust_sdk::providers::services::process_compose::{
 };
 use itertools::Itertools;
 use serde::Serialize;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use crate::commands::services::{ServicesEnvironment, guard_service_commands_available};
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
+use crate::utils::events::env_detail_from_concrete;
 
 #[derive(Bpaf, Debug, Clone)]
 pub struct Status {
@@ -40,6 +42,11 @@ impl Status {
         let env =
             ServicesEnvironment::from_environment_selection(&mut flox, &self.environment).await?;
         environment_subcommand_metric!("services::status", env.environment);
+        if let Err(err) = EventsHub::global()
+            .record_environment_services_status(env_detail_from_concrete(&env.environment))
+        {
+            debug!(error = %err, "Failed to record canonical event");
+        }
         guard_service_commands_available(&env, &flox.system)?;
 
         let processes = ProcessStates::read(env.socket());

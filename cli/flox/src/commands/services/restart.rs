@@ -3,6 +3,7 @@ use std::path::Path;
 use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
 use flox_core::data::System;
+use flox_events::EventsHub;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::parsed::common::Services;
 use flox_rust_sdk::flox::Flox;
@@ -25,6 +26,7 @@ use crate::commands::services::{
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::config::Config;
 use crate::environment_subcommand_metric;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 
 #[derive(Bpaf, Debug, Clone)]
@@ -43,6 +45,11 @@ impl Restart {
         let mut env =
             ServicesEnvironment::from_environment_selection(&mut flox, &self.environment).await?;
         environment_subcommand_metric!("services::restart", env.environment);
+        if let Err(err) = EventsHub::global()
+            .record_environment_services_restart(env_detail_from_concrete(&env.environment))
+        {
+            debug!(error = %err, "Failed to record canonical event");
+        }
         let (current_mode, generation) = guard_is_within_activation(&env, "restart")?;
         guard_service_commands_available(&env, &flox.system)?;
 

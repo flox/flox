@@ -7,6 +7,7 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_core::data::environment_ref::EnvironmentName;
+use flox_events::EventsHub;
 use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::{
@@ -38,6 +39,7 @@ use super::{
 use crate::commands::{EnvironmentSelectError, SHELL_COMPLETION_FILE, ensure_auth};
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::errors::format_error;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
 
@@ -99,6 +101,11 @@ impl Edit {
             Err(e) => Err(e)?,
         };
         environment_subcommand_metric!("edit", detected_environment);
+        if let Err(err) = EventsHub::global()
+            .record_environment_edit(env_detail_from_concrete(&detected_environment))
+        {
+            debug!(error = %err, "Failed to record canonical event");
+        }
 
         match self.action {
             EditAction::EditManifest { file } => {
@@ -262,6 +269,13 @@ impl Edit {
                     .map(|compose| &compose.include);
                 let edited_includes = old_includes != new_includes;
                 subcommand_metric!("edit", "edited_includes" = edited_includes);
+                if let Err(err) = EventsHub::global()
+                    .record_environment_edit_with(env_detail_from_concrete(environment), |p| {
+                        p.with_edited_includes(edited_includes)
+                    })
+                {
+                    debug!(error = %err, "Failed to record canonical event");
+                }
             },
         }
 

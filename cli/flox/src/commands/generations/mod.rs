@@ -50,6 +50,16 @@ impl GenerationsCommands {
 
         Ok(())
     }
+
+    pub fn subcommand_name(&self) -> &'static str {
+        match self {
+            GenerationsCommands::Help => "generations::help",
+            GenerationsCommands::List(_) => "generations::list",
+            GenerationsCommands::History(_) => "generations::history",
+            GenerationsCommands::Rollback(_) => "generations::rollback",
+            GenerationsCommands::Switch(_) => "generations::switch",
+        }
+    }
 }
 
 #[cfg(test)]

@@ -4,6 +4,7 @@ use std::num::NonZeroU8;
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_catalog::{ClientTrait, SearchResults};
+use flox_events::EventsHub;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::catalog::SearchTerm;
 use indoc::{formatdoc, indoc};
@@ -53,6 +54,9 @@ impl Search {
         sentry_set_tag("show_all", self.all);
         sentry_set_tag("search_term", search_term);
         subcommand_metric!("search", search_term = search_term);
+        if let Err(err) = EventsHub::global().record_search(search_term.clone()) {
+            debug!(error = %err, "Failed to record canonical event");
+        }
 
         debug!("performing search for term: {}", search_term);
 
