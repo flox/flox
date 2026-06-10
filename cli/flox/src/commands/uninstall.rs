@@ -125,10 +125,6 @@ impl Uninstall {
 
         warn_manifest_changes_for_services(&flox, &concrete_environment);
 
-        // Per-package success events on the new pipeline. One event per
-        // package the uninstall actually touched (the iteration above
-        // already gates on the same `attempt.modifications` set). Net-
-        // new signal per PR 6 Merge gate #2.
         let hub = EventsHub::global();
         for modification in attempt.modifications.iter() {
             if let Err(err) = hub

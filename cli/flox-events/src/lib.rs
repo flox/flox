@@ -355,21 +355,30 @@ impl CliEnvironmentPullPayload {
 /// Outcome of an individual package's install / upgrade / uninstall
 /// attempt within a single `flox <command>` invocation.
 ///
-/// `Failed` is recorded on a best-effort basis from a single error-handling
-/// site (e.g. `Install::handle_error` in `cli/flox/src/commands/install.rs`).
-/// On a `?`-propagated mid-pipeline failure the consumer should not treat
-/// the absence of a `Success` event as proof of failure — only the explicit
-/// `Failed` event is authoritative.
+/// Recorded best-effort from a single error-handling site (e.g.
+/// `Install::handle_error` in `cli/flox/src/commands/install.rs`); the
+/// outcome value is ambiguous in two directions and consumers must
+/// account for both:
+///
+/// - **Absence of `Success` is not proof of failure.** A `?`-propagated
+///   early exit from inside the install pipeline skips the success-branch
+///   emit; no per-package record is written for any package the
+///   invocation attempted.
+/// - **Presence of `Failure` is not proof that *that specific package*
+///   failed.** On a partial-failure invocation the failure-branch emit
+///   marks every attempted package `Failure` because the partition of
+///   succeeded vs failed packages has not been computed at that site —
+///   matching the legacy packed `failed_packages` string's semantics.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum PackageOutcome {
     Success,
-    Failed,
+    Failure,
 }
 
 /// Payload for [`EventKind::CliPackageInstall`]. One event is emitted per
 /// package on the success branch (with `PackageOutcome::Success`) and per
-/// package on the failure branch (with `PackageOutcome::Failed`) — see
+/// package on the failure branch (with `PackageOutcome::Failure`) — see
 /// the `cli/flox/src/commands/install.rs` call sites for the emission
 /// points.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -742,11 +751,11 @@ mod tests {
         let payload = CliPackageInstallPayload::new(
             command_payload("install"),
             "nope".to_string(),
-            PackageOutcome::Failed,
+            PackageOutcome::Failure,
         );
         let value = serde_json::to_value(fixed_event(EventKind::CliPackageInstall(payload)))
             .expect("event serializes");
-        let expected = package_envelope_json("cli.package.install", "install", "nope", "failed");
+        let expected = package_envelope_json("cli.package.install", "install", "nope", "failure");
         assert_eq!(value, expected);
     }
 
@@ -1140,7 +1149,7 @@ mod pipeline_tests {
         // `record_package_install` for every attempted package on a
         // mid-pipeline failure.
         for package in ["pkgA", "nope"] {
-            hub.record_package_install(package.to_string(), PackageOutcome::Failed)
+            hub.record_package_install(package.to_string(), PackageOutcome::Failure)
                 .expect("record failure");
         }
         hub.flush(true).expect("flush events");
@@ -1156,7 +1165,7 @@ mod pipeline_tests {
         for event in &events {
             match &event.kind {
                 EventKind::CliPackageInstall(p) => {
-                    assert_eq!(p.outcome, PackageOutcome::Failed);
+                    assert_eq!(p.outcome, PackageOutcome::Failure);
                 },
                 other => panic!("expected CliPackageInstall, got {other:?}"),
             }

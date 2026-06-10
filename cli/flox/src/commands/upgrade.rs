@@ -145,13 +145,8 @@ impl Upgrade {
 
         warn_manifest_changes_for_services(&flox, &concrete_environment);
 
-        // Per-package success events on the new pipeline. One event per
-        // package that was actually upgraded on the current system —
-        // dry-run paths and "no upgrades available" returns earlier never
-        // reach here, so they never emit. Net-new signal per PR 6 Merge
-        // gate #2.
         let hub = EventsHub::global();
-        for (_, (before, _after)) in diff_for_system.iter() {
+        for (_, (before, _)) in diff_for_system.iter() {
             if let Err(err) =
                 hub.record_package_upgrade(before.install_id().to_string(), PackageOutcome::Success)
             {

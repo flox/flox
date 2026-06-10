@@ -293,13 +293,11 @@ impl Install {
             warn_manifest_changes_for_services(&flox, &concrete_environment);
         }
 
-        // Per-package success events on the new pipeline. The legacy path
-        // emits nothing per-package on success; this is the intended
-        // net-new signal called out in PR 6 Merge gate #2's enumerated
-        // correction list. Dispatched before the dispatcher's
-        // `command_completed` (cli_worker emits that after this `handle`
-        // returns), so the per-package events correlate with the same
-        // invocation downstream.
+        // Both telemetry stacks emit in parallel through the dormant
+        // phase; the new-pipeline per-package mirrors in this PR are
+        // no-ops in production until the cutover installs an
+        // `EventsHub` client. Net-new on this branch: legacy emits
+        // nothing per-package on success.
         let hub = EventsHub::global();
         for package in &packages_to_install {
             if let Err(err) = hub.record_package_install(
@@ -314,10 +312,7 @@ impl Install {
     }
 
     fn format_packages_for_tracing(packages: &[PackageToInstall]) -> String {
-        packages
-            .iter()
-            .map(|p| Install::package_identifier(p))
-            .join(",")
+        packages.iter().map(Install::package_identifier).join(",")
     }
 
     /// Per-package identifier emitted on `cli.package.install` events.
@@ -496,16 +491,11 @@ impl Install {
             "failed_packages" = Install::format_packages_for_tracing(packages)
         );
 
-        // Per-package failure events on the new pipeline. Mirrors the legacy
-        // packed `failed_packages` string above, unpacked into one event
-        // per attempted package so the consumer can count failures by
-        // package rather than parse a comma-joined string (intended
-        // correction per PR 6 Merge gate #2).
         let hub = EventsHub::global();
         for package in packages {
             if let Err(err) = hub.record_package_install(
                 Install::package_identifier(package),
-                PackageOutcome::Failed,
+                PackageOutcome::Failure,
             ) {
                 debug!(error = %err, "Failed to record canonical event");
             }
