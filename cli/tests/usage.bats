@@ -83,7 +83,8 @@ Manage environments
     delete         Delete an environment
 
 Use environments
-    activate       Enter the environment, type 'exit' to leave
+    activate       Enter the environment, run 'flox deactivate' to leave
+    deactivate     Deactivate the current environment
     services       Manage services in an environment
 
 Discover packages

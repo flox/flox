@@ -84,7 +84,6 @@ EOF
 # bats test_tags=deactivate-profile-e2e,deactivate-profile-e2e:bash
 @test "bash: profile.deactivate unsets a shell variable on deactivate" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   _write_profile_deactivate_manifest bash "FOO=bar" "unset FOO"
   FLOX_SHELL="bash" run --separate-stderr bash -c '
     eval "$($FLOX_BIN activate --print-script)"
@@ -100,7 +99,6 @@ EOF
 # bats test_tags=deactivate-profile-e2e,deactivate-profile-e2e:zsh
 @test "zsh: profile.deactivate unsets a shell variable on deactivate" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   _write_profile_deactivate_manifest zsh "FOO=bar" "unset FOO"
   FLOX_SHELL="zsh" run --separate-stderr zsh -c '
     eval "$($FLOX_BIN activate --print-script)"
@@ -116,7 +114,6 @@ EOF
 # bats test_tags=deactivate-profile-e2e,deactivate-profile-e2e:fish
 @test "fish: profile.deactivate unsets a shell variable on deactivate" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   _write_profile_deactivate_manifest fish "set FOO bar" "set -e FOO"
   FLOX_SHELL="fish" run --separate-stderr fish -c '
     eval "$($FLOX_BIN activate --print-script)"
@@ -140,7 +137,6 @@ EOF
 # bats test_tags=deactivate-profile-e2e,deactivate-profile-e2e:tcsh
 @test "tcsh: profile.deactivate unsets a shell variable on deactivate" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   _write_profile_deactivate_manifest tcsh "set FOO=bar" "unset FOO"
   FLOX_SHELL="tcsh" run --separate-stderr tcsh -c '
     eval "`$FLOX_BIN activate --print-script`"

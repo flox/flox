@@ -51,7 +51,10 @@ sharing environments, and administration.
 :   Create an environment in the current directory.
 
 `activate`
-:   Enter the environment, type `exit` to leave.
+:   Enter the environment, run `flox deactivate` to leave.
+
+`deactivate`
+:   Deactivate the current environment.
 
 `search`
 :   Search for system or library packages to install.

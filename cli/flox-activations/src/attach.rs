@@ -136,8 +136,8 @@ pub(crate) fn startup_ctx(
 
     let set_prompt = ctx.attach_ctx.set_prompt;
 
-    // Respect both the feature flag and the config option
-    let register_hook = ctx.auto_activate && !ctx.disable_hook;
+    // Respect the disable_hook config option
+    let register_hook = !ctx.disable_hook;
 
     let args = match ctx.shell {
         ShellWithPath::Bash(_) => ShellStartupArgs::Bash(BashStartupArgs {

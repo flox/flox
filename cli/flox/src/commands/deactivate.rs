@@ -19,7 +19,7 @@ use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use indoc::{formatdoc, indoc};
 use shell_gen::ShellWithPath;
 
-use super::{activated_environments, uninitialized_environment_description};
+use super::activated_environments;
 use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::active_environments::ActiveEnvironment;
@@ -40,10 +40,6 @@ pub struct Deactivate {
 
 impl Deactivate {
     pub fn handle(self, config: Config, flox: Flox) -> Result<()> {
-        if !flox.features.auto_activate {
-            return self.old_exit(flox);
-        }
-
         subcommand_metric!("deactivate");
 
         if let Some(invocation_type) = self.print_script.clone() {
@@ -123,29 +119,6 @@ impl Deactivate {
             flox_activate_tracelevel(),
             &mut writer,
         )
-    }
-
-    pub fn old_exit(self, _flox: Flox) -> Result<()> {
-        subcommand_metric!("exit");
-
-        let active_environments = activated_environments();
-        let last_active = active_environments.last_active();
-
-        let Some(last_active) = last_active else {
-            message::info(indoc! {"
-                No environment active!
-                Exit active environments by typing 'exit' to exit your current shell or close your terminal.
-                Environments can be activated using `flox activate`.
-            "});
-
-            return Ok(());
-        };
-
-        message::info(formatdoc! {"
-            Exit the currently active environment {} by typing 'exit' to exit your current shell or close your terminal.
-        ", uninitialized_environment_description(&last_active)?});
-
-        Ok(())
     }
 }
 

@@ -16,7 +16,6 @@ load test_support.bash
 # ---------------------------------------------------------------------------- #
 
 setup_file() {
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   common_file_setup
 }
 
@@ -509,7 +508,6 @@ assert_prompt_round_trip() {
 # bats test_tags=deactivate
 @test "deactivate preserves a user-set FLOX_SHELL (zsh)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
 
   assert_user_var_preserved FLOX_SHELL zsh
@@ -518,7 +516,6 @@ assert_prompt_round_trip() {
 # bats test_tags=deactivate
 @test "deactivate preserves a user-set SSL_CERT_FILE (zsh)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
 
   assert_user_var_preserved SSL_CERT_FILE /user/cert
@@ -970,7 +967,6 @@ SSL_CERT_FILE
 TCLLIBPATH
 TERM
 _FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_HOOK_FIRED
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
   else
@@ -982,7 +978,6 @@ SSL_CERT_DIR
 TCLLIBPATH
 TERM
 _FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_HOOK_FIRED
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
   fi
@@ -1016,7 +1011,6 @@ TCLLIBPATH
 TERM
 _
 _FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_HOOK_FIRED
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
   else
@@ -1029,7 +1023,6 @@ TCLLIBPATH
 TERM
 _
 _FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_HOOK_FIRED
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
   fi
@@ -1072,7 +1065,6 @@ TCLLIBPATH
 TERM
 VENDOR
 _FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_HOOK_FIRED
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
   else
@@ -1093,7 +1085,6 @@ TCLLIBPATH
 TERM
 VENDOR
 _FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_HOOK_FIRED
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
   fi
@@ -1130,7 +1121,6 @@ SSL_CERT_FILE
 TCLLIBPATH
 TERM
 _FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_HOOK_FIRED
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
   else
@@ -1146,7 +1136,6 @@ SSL_CERT_DIR
 TCLLIBPATH
 TERM
 _FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_HOOK_FIRED
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
   fi
