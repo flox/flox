@@ -704,7 +704,7 @@ where
 /// Build HTTP client for FloxHub catalog API.
 /// Authentication headers are injected per-request via `register_auth_hook`.
 fn build_http_client(config: &FloxhubClientConfig) -> Result<reqwest::Client, FloxhubClientError> {
-    let mut headers = build_header_map(config);
+    let mut headers = build_header_map(config).map_err(FloxhubClientError::Other)?;
 
     // Extra headers (SDK can add invocation-source, QoS, etc.)
     for (key, value) in &config.extra_headers {
@@ -747,17 +747,18 @@ fn build_http_client(config: &FloxhubClientConfig) -> Result<reqwest::Client, Fl
 ///
 /// Authentication headers are NOT included here — they are injected
 /// per-request via the pre_hook registered by `register_auth_hook`.
-fn build_header_map(config: &FloxhubClientConfig) -> HeaderMap {
+fn build_header_map(config: &FloxhubClientConfig) -> Result<HeaderMap, String> {
     let mut header_map = HeaderMap::new();
 
     for (key, value) in &config.extra_headers {
-        header_map.insert(
-            header::HeaderName::from_str(key).unwrap(),
-            header::HeaderValue::from_str(value).unwrap(),
-        );
+        let name = header::HeaderName::from_str(key)
+            .map_err(|_| format!("invalid extra header name '{key}'"))?;
+        let value = header::HeaderValue::from_str(value)
+            .map_err(|_| format!("invalid value for extra header '{key}'"))?;
+        header_map.insert(name, value);
     }
 
-    header_map
+    Ok(header_map)
 }
 
 #[cfg(test)]
