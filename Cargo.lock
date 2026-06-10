@@ -1440,6 +1440,7 @@ dependencies = [
  "flox-activations",
  "flox-catalog",
  "flox-core",
+ "flox-events",
  "flox-manifest",
  "flox-rust-sdk",
  "flox-test-utils",

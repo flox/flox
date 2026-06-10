@@ -187,6 +187,92 @@ impl fmt::Debug for Commands {
     }
 }
 
+impl Commands {
+    /// Centrally-derived subcommand name stamped onto canonical
+    /// `cli.command_run` / `cli.command_completed` events.
+    ///
+    /// Nested commands use the `parent::child` join convention (see
+    /// `services::start`, `generations::switch`, etc.) — PR 5 pins this
+    /// convention against the consumer-side classifiers. The `auth`
+    /// command's downstream classifier needs the literal `auth2` —
+    /// the special-case rewrite is deferred to PR 5 per spec.
+    pub fn subcommand_name(&self) -> String {
+        match self {
+            Commands::Help(_) => "help".to_string(),
+            Commands::Manage(c) => match c {
+                ManageCommands::Init(_) => "init".to_string(),
+                ManageCommands::Envs(_) => "envs".to_string(),
+                ManageCommands::Delete(_) => "delete".to_string(),
+            },
+            Commands::Use(c) => match c {
+                UseCommands::Activate(_) => "activate".to_string(),
+                UseCommands::Services(sub) => match sub {
+                    services::ServicesCommands::Help => "services".to_string(),
+                    services::ServicesCommands::Restart(_) => "services::restart".to_string(),
+                    services::ServicesCommands::Start(_) => "services::start".to_string(),
+                    services::ServicesCommands::Status(_) => "services::status".to_string(),
+                    services::ServicesCommands::Stop(_) => "services::stop".to_string(),
+                    services::ServicesCommands::Logs(_) => "services::logs".to_string(),
+                    services::ServicesCommands::Persist(_) => "services::persist".to_string(),
+                },
+            },
+            Commands::Discover(c) => match c {
+                DiscoverCommands::Search(_) => "search".to_string(),
+                DiscoverCommands::Show(_) => "show".to_string(),
+            },
+            Commands::Modify(c) => match c {
+                ModifyCommands::Install(_) => "install".to_string(),
+                ModifyCommands::List(_) => "list".to_string(),
+                ModifyCommands::Edit(_) => "edit".to_string(),
+                ModifyCommands::Include(sub) => match sub {
+                    include::IncludeCommands::Help => "include".to_string(),
+                    include::IncludeCommands::Upgrade(_) => "include::upgrade".to_string(),
+                },
+                ModifyCommands::Upgrade(_) => "upgrade".to_string(),
+                ModifyCommands::Uninstall(_) => "uninstall".to_string(),
+                ModifyCommands::Generations(sub) => match sub {
+                    generations::GenerationsCommands::Help => "generations".to_string(),
+                    generations::GenerationsCommands::List(_) => "generations::list".to_string(),
+                    generations::GenerationsCommands::History(_) => {
+                        "generations::history".to_string()
+                    },
+                    generations::GenerationsCommands::Rollback(_) => {
+                        "generations::rollback".to_string()
+                    },
+                    generations::GenerationsCommands::Switch(_) => {
+                        "generations::switch".to_string()
+                    },
+                },
+            },
+            Commands::Share(c) => match c {
+                ShareCommands::Build(_) => "build".to_string(),
+                ShareCommands::Publish(_) => "publish".to_string(),
+                ShareCommands::Push(_) => "push".to_string(),
+                ShareCommands::Pull(_) => "pull".to_string(),
+                ShareCommands::Containerize(_) => "containerize".to_string(),
+            },
+            Commands::Admin(c) => match c {
+                AdminCommands::Auth(_) => "auth".to_string(),
+                AdminCommands::Config(_) => "config".to_string(),
+                AdminCommands::Gc(_) => "gc".to_string(),
+            },
+            Commands::Internal(c) => match c {
+                InternalCommands::ResetMetrics(_) => "reset-metrics".to_string(),
+                InternalCommands::Upload(_) => "upload".to_string(),
+                InternalCommands::LockManifest(_) => "lock-manifest".to_string(),
+                InternalCommands::CheckForUpgrades(_) => "check-for-upgrades".to_string(),
+                InternalCommands::Deactivate(_) => "deactivate".to_string(),
+                InternalCommands::ActivationState(_) => "activation-state".to_string(),
+                InternalCommands::ServicesSocket(_) => "services-socket".to_string(),
+                InternalCommands::HookEnv(_) => "hook-env".to_string(),
+            },
+            Commands::Beta(c) => match c {
+                beta::BetaCommands::BetaEnabled(_) => "beta-enabled".to_string(),
+            },
+        }
+    }
+}
+
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
     pub async fn handle(self, config: crate::config::Config) -> Result<()> {
@@ -248,6 +334,25 @@ impl FloxArgs {
             unsafe {
                 env::set_var(FLOX_DISABLE_METRICS_VAR, "true");
             }
+        }
+
+        // Emit the canonical `cli.command_run` exactly once at dispatch
+        // start. The flox-events `EventsHub` was installed in `main.rs`
+        // and short-circuits in production until the cutover PR. The
+        // matching `cli.command_completed` is emitted at the end of
+        // `cli_worker` below (or immediately before `activate.rs`'s
+        // `command.exec()` call when activate replaces the parent
+        // process) — the hub's idempotent flag ensures only one of the
+        // two paths actually records the completed event.
+        let canonical_subcommand = self
+            .command
+            .as_ref()
+            .map(Commands::subcommand_name)
+            .unwrap_or_else(|| "help".to_string());
+        if let Err(err) =
+            flox_events::EventsHub::global().record_command_run(canonical_subcommand.clone())
+        {
+            debug!(error = %err, "Failed to record canonical cli.command_run event");
         }
 
         let git_url_override = {
@@ -317,6 +422,7 @@ impl FloxArgs {
         let signal_handler = async { tokio::signal::ctrl_c().await.unwrap() };
         let keep_tempfiles = config.flox.keep_tempdir.unwrap_or_default();
 
+        let canonical_subcommand_for_completion = canonical_subcommand.clone();
         let cli_worker = async move {
             // command handled above
             let result = match self.command.unwrap() {
@@ -350,6 +456,16 @@ impl FloxArgs {
                     UpdateNotification::handle_update_result(update_notification, &update_channel);
                 },
                 Err(e) => debug!("Failed to check for CLI update: {}", display_chain(&e)),
+            }
+
+            // Emit the canonical `cli.command_completed`. When `activate.rs`
+            // has already recorded its own completion before `command.exec()`
+            // replaces the parent process, the hub's idempotent flag silently
+            // turns this call into a no-op.
+            if let Err(err) = flox_events::EventsHub::global()
+                .record_command_completed(canonical_subcommand_for_completion)
+            {
+                debug!(error = %err, "Failed to record canonical cli.command_completed event");
             }
 
             result

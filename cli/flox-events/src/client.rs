@@ -6,7 +6,13 @@ use uuid::Uuid;
 
 use crate::buffer::EventsBuffer;
 use crate::connection::{CanonicalEventsConnection, EventsConnection};
-use crate::{Event, EventKind};
+use crate::{
+    CliCommandCompletedPayload,
+    CliCommandRunPayload,
+    Event,
+    EventKind,
+    SharedMetadataTemplate,
+};
 
 const DEFAULT_BUFFER_EXPIRY: Duration = Duration::minutes(2);
 pub const BATCH_SIZE: usize = 100;
@@ -15,7 +21,8 @@ pub const BATCH_SIZE: usize = 100;
 /// them through an [`EventsConnection`].
 ///
 /// The connection owns the endpoint URL and credential; the client itself
-/// holds only the per-invocation metadata stamped onto each [`Event`].
+/// holds the per-invocation identity (`device_id`, `invocation_id`) and the
+/// static shared metadata template stamped onto every command event payload.
 #[derive(Debug)]
 pub struct EventsClient {
     pub device_id: Uuid,
@@ -23,6 +30,7 @@ pub struct EventsClient {
     pub invocation_id: Uuid,
     pub max_age: Duration,
     pub connection: Box<dyn EventsConnection>,
+    shared_metadata: SharedMetadataTemplate,
 }
 
 impl EventsClient {
@@ -32,15 +40,23 @@ impl EventsClient {
         endpoint_url: impl Into<String>,
         api_key: impl Into<String>,
         invocation_id: Uuid,
+        shared_metadata: SharedMetadataTemplate,
     ) -> Self {
         let connection = CanonicalEventsConnection::new(endpoint_url, api_key);
-        Self::new_with_connection(device_id, data_dir, invocation_id, connection)
+        Self::new_with_connection(
+            device_id,
+            data_dir,
+            invocation_id,
+            shared_metadata,
+            connection,
+        )
     }
 
     pub fn new_with_connection(
         device_id: Uuid,
         data_dir: impl AsRef<Path>,
         invocation_id: Uuid,
+        shared_metadata: SharedMetadataTemplate,
         connection: impl EventsConnection + 'static,
     ) -> Self {
         Self {
@@ -49,7 +65,21 @@ impl EventsClient {
             invocation_id,
             max_age: DEFAULT_BUFFER_EXPIRY,
             connection: connection.boxed(),
+            shared_metadata,
         }
+    }
+
+    /// Record a `cli.command_run` event for `subcommand`.
+    pub fn record_command_run(&self, subcommand: String) -> Result<()> {
+        let payload = CliCommandRunPayload::new(self.shared_metadata.into_payload(subcommand));
+        self.record_event(EventKind::CliCommandRun(payload))
+    }
+
+    /// Record a `cli.command_completed` event for `subcommand`.
+    pub fn record_command_completed(&self, subcommand: String) -> Result<()> {
+        let payload =
+            CliCommandCompletedPayload::new(self.shared_metadata.into_payload(subcommand));
+        self.record_event(EventKind::CliCommandCompleted(payload))
     }
 
     pub fn record_event(&self, kind: impl Into<EventKind>) -> Result<()> {
