@@ -225,21 +225,23 @@ impl EventsHub {
         })
     }
 
-    /// Record a `cli.environment.include` event. No-op when no client
-    /// is installed.
-    pub fn record_environment_include(&self, env_detail: EnvDetail) -> Result<()> {
+    /// Record a `cli.environment.include.upgrade` event. No-op when
+    /// no client is installed.
+    pub fn record_environment_include_upgrade(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!("No v2 events client configured, skipping environment.include record");
+                debug!(
+                    "No v2 events client configured, skipping environment.include.upgrade record"
+                );
                 return Ok(());
             };
-            client.record_environment_include(env_detail)
+            client.record_environment_include_upgrade(env_detail)
         })
     }
 
     /// Record a `cli.environment.install` event (env-detail row). The
-    /// per-package detail rides on `cli.package.install` (PR 4). No-op
-    /// when no client is installed.
+    /// per-package detail rides on `cli.package.install`. No-op when
+    /// no client is installed.
     pub fn record_environment_install(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
@@ -263,8 +265,8 @@ impl EventsHub {
     }
 
     /// Record a `cli.environment.uninstall` event (env-detail row).
-    /// The per-package detail rides on `cli.package.uninstall` (PR 4).
-    /// No-op when no client is installed.
+    /// The per-package detail rides on `cli.package.uninstall`. No-op
+    /// when no client is installed.
     pub fn record_environment_uninstall(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
@@ -276,8 +278,8 @@ impl EventsHub {
     }
 
     /// Record a `cli.environment.upgrade` event (env-detail row). The
-    /// per-package detail rides on `cli.package.upgrade` (PR 4). No-op
-    /// when no client is installed.
+    /// per-package detail rides on `cli.package.upgrade`. No-op when
+    /// no client is installed.
     pub fn record_environment_upgrade(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {

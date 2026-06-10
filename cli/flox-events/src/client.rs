@@ -18,7 +18,7 @@ use crate::{
     CliEnvironmentGenerationsListPayload,
     CliEnvironmentGenerationsRollbackPayload,
     CliEnvironmentGenerationsSwitchPayload,
-    CliEnvironmentIncludePayload,
+    CliEnvironmentIncludeUpgradePayload,
     CliEnvironmentInstallPayload,
     CliEnvironmentListPayload,
     CliEnvironmentPublishPayload,
@@ -199,8 +199,6 @@ impl EventsClient {
         self.record_event(EventKind::CliPackageUninstall(payload))
     }
 
-    // -------- PR 5: env-detail-only commands --------
-
     /// Record a `cli.environment.containerize` event with env detail.
     pub fn record_environment_containerize(&self, env_detail: EnvDetail) -> Result<()> {
         let payload = CliEnvironmentContainerizePayload::new(
@@ -220,18 +218,19 @@ impl EventsClient {
         self.record_event(EventKind::CliEnvironmentDelete(payload))
     }
 
-    /// Record a `cli.environment.include` event with env detail.
-    pub fn record_environment_include(&self, env_detail: EnvDetail) -> Result<()> {
-        let payload = CliEnvironmentIncludePayload::new(
+    /// Record a `cli.environment.include.upgrade` event with env
+    /// detail.
+    pub fn record_environment_include_upgrade(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentIncludeUpgradePayload::new(
             self.shared_metadata
                 .into_payload("include::upgrade".to_string()),
             env_detail,
         );
-        self.record_event(EventKind::CliEnvironmentInclude(payload))
+        self.record_event(EventKind::CliEnvironmentIncludeUpgrade(payload))
     }
 
     /// Record a `cli.environment.install` event with env detail.
-    /// The per-package detail rides on `cli.package.install` (PR 4).
+    /// The per-package detail rides on `cli.package.install`.
     pub fn record_environment_install(&self, env_detail: EnvDetail) -> Result<()> {
         let payload = CliEnvironmentInstallPayload::new(
             self.shared_metadata.into_payload("install".to_string()),
@@ -250,7 +249,7 @@ impl EventsClient {
     }
 
     /// Record a `cli.environment.uninstall` event with env detail.
-    /// The per-package detail rides on `cli.package.uninstall` (PR 4).
+    /// The per-package detail rides on `cli.package.uninstall`.
     pub fn record_environment_uninstall(&self, env_detail: EnvDetail) -> Result<()> {
         let payload = CliEnvironmentUninstallPayload::new(
             self.shared_metadata.into_payload("uninstall".to_string()),
@@ -260,7 +259,7 @@ impl EventsClient {
     }
 
     /// Record a `cli.environment.upgrade` event with env detail.
-    /// The per-package detail rides on `cli.package.upgrade` (PR 4).
+    /// The per-package detail rides on `cli.package.upgrade`.
     pub fn record_environment_upgrade(&self, env_detail: EnvDetail) -> Result<()> {
         let payload = CliEnvironmentUpgradePayload::new(
             self.shared_metadata.into_payload("upgrade".to_string()),
@@ -359,8 +358,6 @@ impl EventsClient {
         self.record_event(EventKind::CliEnvironmentGenerationsSwitch(payload))
     }
 
-    // -------- PR 5: env-detail + Optional extras commands --------
-
     /// Record a `cli.environment.edit` event with just env detail.
     /// Used at the eager call site (before the edit operation runs);
     /// the `edited_includes` field is left unpopulated and the
@@ -428,8 +425,6 @@ impl EventsClient {
         );
         self.record_event(EventKind::CliEnvironmentGenerationsList(extras(payload)))
     }
-
-    // -------- PR 5: no-env extras commands --------
 
     /// Record a `cli.build` event carrying build-kind detection flags.
     pub fn record_build(&self, has_expression_build: bool, has_manifest_build: bool) -> Result<()> {

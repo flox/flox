@@ -136,6 +136,21 @@ enum SubcommandOrBuildTargets {
 }
 
 impl Build {
+    /// Centrally-derived subcommand string for this invocation.
+    /// Returns the `build::clean` / `build::import-nixpkgs` /
+    /// `build::update-catalogs` form for the build pseudo-subcommands,
+    /// preserving the join-key continuity the legacy
+    /// `environment_subcommand_metric!` stream already used at
+    /// `cli/flox/src/commands/build.rs:146,154,162`.
+    pub fn subcommand_name(&self) -> &'static str {
+        match &self.subcommand_or_targets {
+            SubcommandOrBuildTargets::Clean { .. } => "build::clean",
+            SubcommandOrBuildTargets::ImportNixpkgs { .. } => "build::import-nixpkgs",
+            SubcommandOrBuildTargets::UpdateCatalogs {} => "build::update-catalogs",
+            SubcommandOrBuildTargets::BuildTargets { .. } => "build",
+        }
+    }
+
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         match self.subcommand_or_targets {
             SubcommandOrBuildTargets::Clean { targets } => {

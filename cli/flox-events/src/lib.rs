@@ -139,8 +139,8 @@ pub enum EventKind {
     CliEnvironmentDelete(CliEnvironmentDeletePayload),
     #[serde(rename = "cli.environment.edit")]
     CliEnvironmentEdit(CliEnvironmentEditPayload),
-    #[serde(rename = "cli.environment.include")]
-    CliEnvironmentInclude(CliEnvironmentIncludePayload),
+    #[serde(rename = "cli.environment.include.upgrade")]
+    CliEnvironmentIncludeUpgrade(CliEnvironmentIncludeUpgradePayload),
     #[serde(rename = "cli.environment.install")]
     CliEnvironmentInstall(CliEnvironmentInstallPayload),
     #[serde(rename = "cli.environment.list")]
@@ -187,7 +187,8 @@ pub enum EventKind {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CommandPayload {
     /// Subcommand name derived from the parsed bpaf command (e.g. `install`,
-    /// `activate`, or nested `services::start` under PR 5's encoding).
+    /// `activate`, or nested `services::start` using the `parent::child`
+    /// join encoding).
     pub subcommand: String,
     /// Flox CLI version string.
     pub flox_version: String,
@@ -485,15 +486,11 @@ impl CliPackageUninstallPayload {
     }
 }
 
-// -------- PR 5: env-detail-only payloads --------
-//
-// The 16 commands below carry `CommandPayload` + `EnvDetail` and
-// nothing more. The payload structs are byte-identical to
+// The env-detail-only payloads below carry `CommandPayload` +
+// `EnvDetail` and nothing more. The structs are byte-identical to
 // `CliEnvironmentPushPayload`; they exist as separate types so each
-// `EventKind` variant owns a distinct payload — matching the PR 3
-// pattern. PR 7's in-PR-collapse section already records a
-// follow-up to consider sharing a single `EnvCommandPayload` if no
-// per-command extras have emerged by then.
+// `EventKind` variant owns a distinct payload type. A future cleanup
+// may collapse them into a shared `EnvCommandPayload`.
 
 /// Payload for [`EventKind::CliEnvironmentContainerize`].
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -531,16 +528,16 @@ impl CliEnvironmentDeletePayload {
     }
 }
 
-/// Payload for [`EventKind::CliEnvironmentInclude`].
+/// Payload for [`EventKind::CliEnvironmentIncludeUpgrade`].
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CliEnvironmentIncludePayload {
+pub struct CliEnvironmentIncludeUpgradePayload {
     #[serde(flatten)]
     pub command: CommandPayload,
     #[serde(flatten)]
     pub env_detail: EnvDetail,
 }
 
-impl CliEnvironmentIncludePayload {
+impl CliEnvironmentIncludeUpgradePayload {
     pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
         Self {
             command,
@@ -551,7 +548,7 @@ impl CliEnvironmentIncludePayload {
 
 /// Payload for [`EventKind::CliEnvironmentInstall`]. Carries the
 /// env-detail row of a `flox install` invocation; the per-package
-/// detail rides on [`EventKind::CliPackageInstall`] (PR 4).
+/// detail rides on [`EventKind::CliPackageInstall`].
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliEnvironmentInstallPayload {
     #[serde(flatten)]
@@ -589,7 +586,7 @@ impl CliEnvironmentListPayload {
 
 /// Payload for [`EventKind::CliEnvironmentUninstall`]. Carries the
 /// env-detail row of a `flox uninstall` invocation; the per-package
-/// detail rides on [`EventKind::CliPackageUninstall`] (PR 4).
+/// detail rides on [`EventKind::CliPackageUninstall`].
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliEnvironmentUninstallPayload {
     #[serde(flatten)]
@@ -609,7 +606,7 @@ impl CliEnvironmentUninstallPayload {
 
 /// Payload for [`EventKind::CliEnvironmentUpgrade`]. Carries the
 /// env-detail row of a `flox upgrade` invocation; the per-package
-/// detail rides on [`EventKind::CliPackageUpgrade`] (PR 4).
+/// detail rides on [`EventKind::CliPackageUpgrade`].
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliEnvironmentUpgradePayload {
     #[serde(flatten)]
@@ -789,16 +786,13 @@ impl CliEnvironmentGenerationsSwitchPayload {
     }
 }
 
-// -------- PR 5: env-detail + Optional extras payloads --------
-//
-// Three commands carry both env-detail and per-command extras and
-// have two distinct legacy emission sites in the same handler (an
-// eager env-detail emit before the operation runs + an extras emit
-// after the operation result is known). The new path mirrors that
-// structure via PR 3's sparse-merge contract: both sites emit a
-// payload with the same `EventKind` and same `invocation_id`, each
-// populating only what it knows. The consumer
-// `COALESCE`s Optional fields across the rows.
+// The payloads below carry both env-detail and per-command extras,
+// and have two distinct legacy emission sites in the same handler
+// (an eager env-detail emit before the operation runs + an extras
+// emit after the operation result is known). The new path follows a
+// sparse-merge contract: both sites emit a payload with the same
+// `EventKind` and same `invocation_id`, each populating only what it
+// knows. The consumer `COALESCE`s Optional fields across the rows.
 
 /// Payload for [`EventKind::CliEnvironmentEdit`]. Emitted twice per
 /// `flox edit` invocation: once eagerly with env detail, once after
@@ -901,8 +895,6 @@ impl CliEnvironmentGenerationsListPayload {
     }
 }
 
-// -------- PR 5: no-env extras-only payloads --------
-//
 // `flox build` and `flox search` carry per-command extras but no
 // environment context (build operates on the manifest's `build`
 // table; search hits the catalog without a resolved environment).
@@ -933,7 +925,7 @@ impl CliBuildPayload {
 
 /// Payload for [`EventKind::CliSearch`]. Carries the user-supplied
 /// search term verbatim, matching the legacy `subcommand_metric!(
-/// "search", "search_term" = …)` extras (D3, 2026-05-30).
+/// "search", "search_term" = …)` extras.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliSearchPayload {
     #[serde(flatten)]
@@ -1293,7 +1285,7 @@ mod tests {
         assert_eq!(value, expected);
     }
 
-    /// Common helper for PR 5's env-detail-only envelope goldens.
+    /// Common helper for the env-detail-only envelope goldens.
     /// Builds an `Event` from `subcommand` + v2 env-detail
     /// fields and the expected JSON shape it should serialize to.
     fn env_envelope_json(event_type: &str, subcommand: &str) -> serde_json::Value {
@@ -1336,6 +1328,26 @@ mod tests {
             serde_json::to_value(fixed_event(EventKind::CliEnvironmentContainerize(payload)))
                 .expect("event serializes");
         let expected = env_envelope_json("cli.environment.containerize", "containerize");
+        assert_eq!(value, expected);
+    }
+
+    /// `cli.environment.include.upgrade` — the only `flox include`
+    /// sub-command currently wiring a per-command event. The `.upgrade`
+    /// suffix on `event_type` matches the `parent.child` shape used by
+    /// every other nested-command event_type so a consumer
+    /// `s/::/./g` between `subcommand` and `event_type` lines up
+    /// element-for-element.
+    #[test]
+    fn cli_environment_include_upgrade_envelope_golden() {
+        let payload = CliEnvironmentIncludeUpgradePayload::new(
+            command_payload("include::upgrade"),
+            managed_env_detail(),
+        );
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentIncludeUpgrade(
+            payload,
+        )))
+        .expect("event serializes");
+        let expected = env_envelope_json("cli.environment.include.upgrade", "include::upgrade");
         assert_eq!(value, expected);
     }
 
@@ -1481,7 +1493,7 @@ mod tests {
     }
 
     /// `cli.search` carries the user-supplied search term verbatim
-    /// (D3, 2026-05-30) and no env detail.
+    /// and no env detail.
     #[test]
     fn cli_search_envelope_golden() {
         let payload = CliSearchPayload::new(command_payload("search"), "ripgrep".to_string());
@@ -1930,7 +1942,7 @@ mod pipeline_tests {
         }
     }
 
-    /// `cli.environment.edit` follows PR 3's sparse-merge contract:
+    /// `cli.environment.edit` follows the sparse-merge contract:
     /// the eager call site emits with env-detail only; the result-
     /// known site emits with `edited_includes` populated. Both events
     /// share `invocation_id` and `event_type` so the consumer's
