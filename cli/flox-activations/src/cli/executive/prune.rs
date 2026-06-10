@@ -11,13 +11,14 @@
 //! executive the same binary as the CLI, this would be a direct function call.
 
 use std::fs::{self, File};
+use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread::{sleep, spawn};
 use std::time::{Duration, SystemTime};
 
 use anyhow::Result;
-use tracing::error;
+use tracing::{debug, error};
 
 /// How often the executive fires a generation-link prune.
 const GENERATION_PRUNE_INTERVAL: Duration = Duration::from_secs(3600);
@@ -25,7 +26,17 @@ const GENERATION_PRUNE_INTERVAL: Duration = Duration::from_secs(3600);
 /// Starts a background thread that periodically prunes aged generation GC-root
 /// links by spawning `<flox_bin> prune-generation-links`. Best-effort: failures
 /// are logged and the thread keeps looping until the executive exits.
+///
+/// A no-op when `flox_bin` is empty, which happens only when the executive
+/// context was written by an older `flox-activations` that did not record it.
 pub(super) fn spawn_generation_prune_thread(flox_bin: String, log_dir: PathBuf) {
+    if flox_bin.is_empty() {
+        debug!(
+            "no flox binary path in executive context; skipping background generation-link prune"
+        );
+        return;
+    }
+
     spawn(move || {
         loop {
             // Wait first so the prune never competes with activation startup.
@@ -47,14 +58,35 @@ fn spawn_prune_process(flox_bin: &str, log_dir: &Path) -> Result<()> {
 
     fs::create_dir_all(log_dir)?;
     let log_file = File::create(log_dir.join(format!("generation-prune.{timestamp}.log")))?;
+    let log_file_fd = log_file.as_raw_fd();
 
-    Command::new(flox_bin)
+    let mut command = Command::new(flox_bin);
+    command
         .arg("prune-generation-links")
         .arg("-vv") // enable debug logging into the log file
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(log_file)
-        .spawn()?;
+        .stderr(log_file);
+
+    // Close inherited file descriptors (except the log file) and detach into a
+    // new session before exec, mirroring the check-for-upgrades background
+    // process. The executive inherits fds from the activation chain (e.g.
+    // direnv's fd-4); leaking them into this subprocess would hold them open
+    // until it exits and can block shells (see flox/flox#2716). Limiting the
+    // unsafe work to closing fds + setsid keeps `pre_exec` safe.
+    let keep_fds = [log_file_fd];
+    unsafe {
+        use std::os::unix::process::CommandExt as _;
+        command.pre_exec(move || {
+            close_fds::CloseFdsBuilder::new()
+                .keep_fds(&keep_fds)
+                .cloexecfrom(3);
+            nix::unistd::setsid()?;
+            Ok(())
+        });
+    }
+
+    command.spawn()?;
 
     Ok(())
 }

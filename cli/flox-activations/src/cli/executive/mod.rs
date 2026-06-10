@@ -52,6 +52,12 @@ pub struct ExecutiveCtx {
     /// prune because the executive is a separate binary that cannot link
     /// flox-rust-sdk. Were the executive the same binary as the CLI, it could
     /// call the prune directly instead.
+    ///
+    /// `#[serde(default)]` so a context file written by an older
+    /// `flox-activations` (without this field) still deserializes during an
+    /// upgrade; an empty value just disables the background prune for that
+    /// activation.
+    #[serde(default)]
     pub flox_bin: String,
 }
 

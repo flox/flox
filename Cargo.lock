@@ -1497,6 +1497,7 @@ dependencies = [
  "anyhow",
  "base64",
  "clap",
+ "close_fds",
  "dirs",
  "expect-test",
  "flate2",
