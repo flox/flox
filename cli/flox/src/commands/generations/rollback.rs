@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use flox_events::EventsHub;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::{
     AllGenerationsMetadata,
@@ -13,6 +14,7 @@ use tracing::{debug, instrument};
 
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 
 /// Arguments for the `flox generations rollback` command
@@ -35,6 +37,11 @@ impl Rollback {
             .await?;
 
         environment_subcommand_metric!("generations::rollback", env);
+        if let Err(err) = EventsHub::global()
+            .record_environment_generations_rollback(env_detail_from_concrete(&env))
+        {
+            debug!(error = %err, "Failed to record v2 event");
+        }
         let mut env: GenerationsEnvironment = env.try_into()?;
 
         debug!("determining previous generation");

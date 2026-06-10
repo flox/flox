@@ -3,6 +3,7 @@ use std::fmt::Display;
 use anyhow::Result;
 use bpaf::Bpaf;
 use crossterm::style::Stylize;
+use flox_events::EventsHub;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::{
     self,
@@ -11,10 +12,11 @@ use flox_rust_sdk::models::environment::generations::{
     HistorySpec,
 };
 use indoc::formatdoc;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message::{page_output, stdout_supports_color};
 
 /// Arguments for the `flox generations history` command
@@ -52,6 +54,11 @@ impl History {
             .detect_concrete_environment(&mut flox, "Show history for")
             .await?;
         environment_subcommand_metric!("generations::history", env);
+        if let Err(err) = EventsHub::global()
+            .record_environment_generations_history(env_detail_from_concrete(&env))
+        {
+            debug!(error = %err, "Failed to record v2 event");
+        }
 
         let env: GenerationsEnvironment = env.try_into()?;
         let metadata = if self.upstream {

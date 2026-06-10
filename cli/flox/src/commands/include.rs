@@ -1,13 +1,15 @@
 use anyhow::Result;
 use bpaf::Bpaf;
+use flox_events::EventsHub;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use indoc::indoc;
-use tracing::{info_span, instrument};
+use tracing::{debug, info_span, instrument};
 
 use super::EnvironmentSelect;
 use crate::commands::{display_help, environment_description, environment_select};
 use crate::environment_subcommand_metric;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message::{self, print_overridden_manifest_fields};
 
 /// Include Commands.
@@ -53,6 +55,13 @@ impl IncludeCommands {
 
         Ok(())
     }
+
+    pub fn subcommand_name(&self) -> &'static str {
+        match self {
+            IncludeCommands::Help => "include::help",
+            IncludeCommands::Upgrade(_) => "include::upgrade",
+        }
+    }
 }
 
 impl Upgrade {
@@ -67,6 +76,11 @@ impl Upgrade {
             .await?;
 
         environment_subcommand_metric!("include::upgrade", environment);
+        if let Err(err) =
+            EventsHub::global().record_environment_include(env_detail_from_concrete(&environment))
+        {
+            debug!(error = %err, "Failed to record v2 event");
+        }
 
         let description = environment_description(&environment)?;
 

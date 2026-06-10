@@ -196,84 +196,27 @@ impl Commands {
     /// Centrally-derived subcommand name stamped onto v2
     /// `cli.command_run` / `cli.command_completed` events.
     ///
-    /// Nested commands use the `parent::child` join convention (see
-    /// `services::start`, `generations::switch`, etc.) — PR 5 pins this
-    /// convention against the consumer-side classifiers. The `auth`
-    /// command's downstream classifier needs the literal `auth2` —
-    /// the special-case rewrite is deferred to PR 5 per spec.
+    /// Each sub-enum owns its own [`Self::subcommand_name`] returning
+    /// the full wire string (including any `parent::child` prefix);
+    /// this top-level method just dispatches.
     ///
-    /// The `Help` arm of each nested family (e.g. `flox services
-    /// --help`) uses the `parent::help` form rather than the bare
-    /// parent name, so the wire shape distinguishes "the user
-    /// explicitly asked for help on `services`" from any future
-    /// emission that uses the bare parent name.
+    /// Nested commands use the `parent::child` join convention (see
+    /// `services::start`, `generations::switch`, etc.) — pinned
+    /// against the consumer-side classifiers in PR 5. The `auth`
+    /// command's downstream classifier needs the literal `auth2`;
+    /// that special-case lives on [`AdminCommands::subcommand_name`]
+    /// so the carve-out is co-located with the `Auth` variant.
     pub fn subcommand_name(&self) -> &'static str {
         match self {
             Commands::Help(_) => "help",
-            Commands::Manage(c) => match c {
-                ManageCommands::Init(_) => "init",
-                ManageCommands::Envs(_) => "envs",
-                ManageCommands::Delete(_) => "delete",
-            },
-            Commands::Use(c) => match c {
-                UseCommands::Activate(_) => "activate",
-                UseCommands::Deactivate(_) => "deactivate",
-                UseCommands::Services(sub) => match sub {
-                    services::ServicesCommands::Help => "services::help",
-                    services::ServicesCommands::Restart(_) => "services::restart",
-                    services::ServicesCommands::Start(_) => "services::start",
-                    services::ServicesCommands::Status(_) => "services::status",
-                    services::ServicesCommands::Stop(_) => "services::stop",
-                    services::ServicesCommands::Logs(_) => "services::logs",
-                    services::ServicesCommands::Persist(_) => "services::persist",
-                },
-            },
-            Commands::Discover(c) => match c {
-                DiscoverCommands::Search(_) => "search",
-                DiscoverCommands::Show(_) => "show",
-            },
-            Commands::Modify(c) => match c {
-                ModifyCommands::Install(_) => "install",
-                ModifyCommands::List(_) => "list",
-                ModifyCommands::Edit(_) => "edit",
-                ModifyCommands::Include(sub) => match sub {
-                    include::IncludeCommands::Help => "include::help",
-                    include::IncludeCommands::Upgrade(_) => "include::upgrade",
-                },
-                ModifyCommands::Upgrade(_) => "upgrade",
-                ModifyCommands::Uninstall(_) => "uninstall",
-                ModifyCommands::Generations(sub) => match sub {
-                    generations::GenerationsCommands::Help => "generations::help",
-                    generations::GenerationsCommands::List(_) => "generations::list",
-                    generations::GenerationsCommands::History(_) => "generations::history",
-                    generations::GenerationsCommands::Rollback(_) => "generations::rollback",
-                    generations::GenerationsCommands::Switch(_) => "generations::switch",
-                },
-            },
-            Commands::Share(c) => match c {
-                ShareCommands::Build(_) => "build",
-                ShareCommands::Publish(_) => "publish",
-                ShareCommands::Push(_) => "push",
-                ShareCommands::Pull(_) => "pull",
-                ShareCommands::Containerize(_) => "containerize",
-            },
-            Commands::Admin(c) => match c {
-                AdminCommands::Auth(_) => "auth",
-                AdminCommands::Config(_) => "config",
-                AdminCommands::Gc(_) => "gc",
-            },
-            Commands::Internal(c) => match c {
-                InternalCommands::ResetMetrics(_) => "reset-metrics",
-                InternalCommands::Upload(_) => "upload",
-                InternalCommands::LockManifest(_) => "lock-manifest",
-                InternalCommands::CheckForUpgrades(_) => "check-for-upgrades",
-                InternalCommands::ActivationState(_) => "activation-state",
-                InternalCommands::ServicesSocket(_) => "services-socket",
-                InternalCommands::HookEnv(_) => "hook-env",
-            },
-            Commands::Beta(c) => match c {
-                beta::BetaCommands::BetaEnabled(_) => "beta-enabled",
-            },
+            Commands::Manage(c) => c.subcommand_name(),
+            Commands::Use(c) => c.subcommand_name(),
+            Commands::Discover(c) => c.subcommand_name(),
+            Commands::Modify(c) => c.subcommand_name(),
+            Commands::Share(c) => c.subcommand_name(),
+            Commands::Admin(c) => c.subcommand_name(),
+            Commands::Internal(c) => c.subcommand_name(),
+            Commands::Beta(c) => c.subcommand_name(),
             // Hidden operator command group; the legacy pipeline emitted no
             // metric for it, so the bare parent name is sufficient here.
             Commands::Factory(_) => "factory",
@@ -736,6 +679,14 @@ impl ManageCommands {
         }
         Ok(())
     }
+
+    fn subcommand_name(&self) -> &'static str {
+        match self {
+            ManageCommands::Init(_) => "init",
+            ManageCommands::Envs(_) => "envs",
+            ManageCommands::Delete(_) => "delete",
+        }
+    }
 }
 
 /// Use environments
@@ -778,6 +729,14 @@ impl UseCommands {
             UseCommands::Services(args) => args.handle(config, flox).await,
         }
     }
+
+    fn subcommand_name(&self) -> &'static str {
+        match self {
+            UseCommands::Activate(_) => "activate",
+            UseCommands::Deactivate(_) => "deactivate",
+            UseCommands::Services(sub) => sub.subcommand_name(),
+        }
+    }
 }
 
 /// Discover packages
@@ -799,6 +758,13 @@ impl DiscoverCommands {
             DiscoverCommands::Show(args) => args.handle(flox).await?,
         }
         Ok(())
+    }
+
+    fn subcommand_name(&self) -> &'static str {
+        match self {
+            DiscoverCommands::Search(_) => "search",
+            DiscoverCommands::Show(_) => "show",
+        }
     }
 }
 
@@ -887,6 +853,18 @@ impl ModifyCommands {
         }
         Ok(())
     }
+
+    fn subcommand_name(&self) -> &'static str {
+        match self {
+            ModifyCommands::Install(_) => "install",
+            ModifyCommands::List(_) => "list",
+            ModifyCommands::Edit(_) => "edit",
+            ModifyCommands::Include(sub) => sub.subcommand_name(),
+            ModifyCommands::Upgrade(_) => "upgrade",
+            ModifyCommands::Uninstall(_) => "uninstall",
+            ModifyCommands::Generations(sub) => sub.subcommand_name(),
+        }
+    }
 }
 
 /// Share with others
@@ -936,6 +914,16 @@ impl ShareCommands {
         }
         Ok(())
     }
+
+    fn subcommand_name(&self) -> &'static str {
+        match self {
+            ShareCommands::Build(_) => "build",
+            ShareCommands::Publish(_) => "publish",
+            ShareCommands::Push(_) => "push",
+            ShareCommands::Pull(_) => "pull",
+            ShareCommands::Containerize(_) => "containerize",
+        }
+    }
 }
 
 /// Administration
@@ -968,6 +956,19 @@ impl AdminCommands {
             AdminCommands::Gc(args) => args.handle(flox)?,
         }
         Ok(())
+    }
+
+    /// The `Auth` arm emits `"auth2"` (not `"auth"`) to preserve the
+    /// downstream `cli.authenticated` classifier defined in
+    /// `efforts/unified-metrics/tasks/016-events-cli.md`. The legacy
+    /// `auth.rs:251` already wrote `"auth2"` on the wire; mirroring it
+    /// here keeps the consumer contract intact post-cutover.
+    fn subcommand_name(&self) -> &'static str {
+        match self {
+            AdminCommands::Auth(_) => "auth2",
+            AdminCommands::Config(_) => "config",
+            AdminCommands::Gc(_) => "gc",
+        }
     }
 }
 
@@ -1024,6 +1025,23 @@ impl InternalCommands {
             InternalCommands::HookEnv(args) => args.handle(config, flox)?,
         }
         Ok(())
+    }
+
+    /// `Deactivate(_)` always maps to `"deactivate"`. The legacy
+    /// `deactivate.rs::old_exit` emits `subcommand_metric!("exit")` —
+    /// that `"exit"` pseudo-subcommand is dropped on the new path; the
+    /// centrally-derived name is always the parsed clap command's
+    /// name, never the handler method's name.
+    fn subcommand_name(&self) -> &'static str {
+        match self {
+            InternalCommands::ResetMetrics(_) => "reset-metrics",
+            InternalCommands::Upload(_) => "upload",
+            InternalCommands::LockManifest(_) => "lock-manifest",
+            InternalCommands::CheckForUpgrades(_) => "check-for-upgrades",
+            InternalCommands::ActivationState(_) => "activation-state",
+            InternalCommands::ServicesSocket(_) => "services-socket",
+            InternalCommands::HookEnv(_) => "hook-env",
+        }
     }
 }
 
@@ -1682,4 +1700,61 @@ fn render_composition_manifest(manifest: &Manifest<TypedOnly>) -> Result<String>
     toml_edit::visit_mut::visit_document_mut(&mut Visitor::new_for_document(), &mut document);
 
     Ok(document.to_string())
+}
+
+#[cfg(test)]
+mod subcommand_name_tests {
+    use super::*;
+
+    /// Run the top-level `flox_args` parser against `argv` and return
+    /// the resulting [`Commands`] for assertion. Treats any parser
+    /// failure as a test failure so the assertion site stays terse.
+    fn parse_command(argv: &[&str]) -> Commands {
+        let parsed = flox_args()
+            .to_options()
+            .run_inner(argv)
+            .unwrap_or_else(|err| panic!("failed to parse {argv:?}: {err:?}"));
+        parsed
+            .command
+            .expect("expected an inner subcommand after parsing")
+    }
+
+    /// `auth` must derive to the literal `"auth2"` on the wire so the
+    /// consumer's `cli.authenticated` classifier (defined in
+    /// `efforts/unified-metrics/tasks/016-events-cli.md`) keeps firing
+    /// post-cutover. Removing this carve-out silently breaks the
+    /// classifier without surfacing a producer-side error.
+    #[test]
+    fn auth_command_derives_to_auth2_subcommand_name() {
+        let command = parse_command(&["auth", "status"]);
+        assert_eq!(command.subcommand_name(), "auth2");
+    }
+
+    /// `deactivate` must derive to the literal `"deactivate"`, not the
+    /// legacy `"exit"` pseudo-subcommand that `deactivate.rs::old_exit`
+    /// emits via the legacy macro. The new path is keyed off the
+    /// parsed clap command's name, not the handler method's name.
+    #[test]
+    fn deactivate_command_derives_to_deactivate_not_exit() {
+        let command = parse_command(&["deactivate"]);
+        assert_eq!(command.subcommand_name(), "deactivate");
+    }
+
+    /// Nested `services <sub>` commands must use the `parent::child`
+    /// join convention so the wire string matches the legacy
+    /// `environment_subcommand_metric!("services::start", …)` value
+    /// — the consumer's join-key continuity on `cli.telemetry`
+    /// depends on it.
+    #[test]
+    fn services_start_uses_parent_child_join_encoding() {
+        let command = parse_command(&["services", "start"]);
+        assert_eq!(command.subcommand_name(), "services::start");
+    }
+
+    /// `generations list` must use the same `parent::child` encoding.
+    #[test]
+    fn generations_list_uses_parent_child_join_encoding() {
+        let command = parse_command(&["generations", "list"]);
+        assert_eq!(command.subcommand_name(), "generations::list");
+    }
 }

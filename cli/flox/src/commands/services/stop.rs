@@ -1,13 +1,15 @@
 use anyhow::Result;
 use bpaf::Bpaf;
+use flox_events::EventsHub;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::services::process_compose::{ProcessStates, stop_services};
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use crate::commands::services::{ServicesEnvironment, guard_service_commands_available};
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 
 #[derive(Bpaf, Debug, Clone)]
@@ -26,6 +28,11 @@ impl Stop {
         let env =
             ServicesEnvironment::from_environment_selection(&mut flox, &self.environment).await?;
         environment_subcommand_metric!("services::stop", env.environment);
+        if let Err(err) = EventsHub::global()
+            .record_environment_services_stop(env_detail_from_concrete(&env.environment))
+        {
+            debug!(error = %err, "Failed to record v2 event");
+        }
         guard_service_commands_available(&env, &flox.system)?;
 
         let socket = env.socket();

@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
+use flox_events::EventsHub;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
@@ -37,6 +38,7 @@ use crate::commands::build::{
 use crate::commands::{SHELL_COMPLETION_FILE, ensure_auth};
 use crate::config::Config;
 use crate::utils::errors::display_chain;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
 
@@ -110,6 +112,11 @@ impl Publish {
             .environment
             .detect_concrete_environment(&mut flox, "Publish")?;
         environment_subcommand_metric!("publish", env);
+        if let Err(err) =
+            EventsHub::global().record_environment_publish(env_detail_from_concrete(&env))
+        {
+            debug!(error = %err, "Failed to record v2 event");
+        }
 
         let publish_config = PublishConfig {
             metadata_only: self.metadata_only,
@@ -152,6 +159,7 @@ impl Publish {
         let handle = ensure_auth(&mut flox).await?;
         let catalog_name = publish_config.cache_args.org.clone().unwrap_or(handle);
 
+        let env_detail = env_detail_from_concrete(&env);
         let path_env = match env {
             ConcreteEnvironment::Path(path_env) => path_env,
             ConcreteEnvironment::Managed(_) => {
@@ -222,19 +230,26 @@ impl Publish {
             .create_package_and_possibly_user_catalog(catalog, &catalog_name)
             .await?;
 
+        let has_expression_build = publish_provider
+            .package_metadata
+            .package
+            .kind()
+            .is_expression_build();
+        let has_manifest_build = publish_provider
+            .package_metadata
+            .package
+            .kind()
+            .is_manifest_build();
         subcommand_metric!(
             "publish",
-            "has_expression_build" = publish_provider
-                .package_metadata
-                .package
-                .kind()
-                .is_expression_build(),
-            "has_manifest_build" = publish_provider
-                .package_metadata
-                .package
-                .kind()
-                .is_manifest_build()
+            "has_expression_build" = has_expression_build,
+            "has_manifest_build" = has_manifest_build
         );
+        if let Err(err) = EventsHub::global().record_environment_publish_with(env_detail, |p| {
+            p.with_build_kinds(has_expression_build, has_manifest_build)
+        }) {
+            debug!(error = %err, "Failed to record v2 event");
+        }
 
         // Pre-check: ask the catalog server if this exact build already exists
         // before spending time on the build. If the check fails, warn the

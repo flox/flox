@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use flox_events::EventsHub;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::services::process_compose::{
@@ -9,11 +10,12 @@ use flox_rust_sdk::providers::services::process_compose::{
     ProcessComposeLogTail,
     ProcessStates,
 };
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use crate::commands::services::{ServicesEnvironment, guard_service_commands_available};
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
+use crate::utils::events::env_detail_from_concrete;
 
 #[derive(Bpaf, Debug, Clone)]
 pub struct Logs {
@@ -39,6 +41,11 @@ impl Logs {
         let env =
             ServicesEnvironment::from_environment_selection(&mut flox, &self.environment).await?;
         environment_subcommand_metric!("services::logs", env.environment);
+        if let Err(err) = EventsHub::global()
+            .record_environment_services_logs(env_detail_from_concrete(&env.environment))
+        {
+            debug!(error = %err, "Failed to record v2 event");
+        }
         guard_service_commands_available(&env, &flox.system)?;
 
         let socket = env.socket();
