@@ -15,4 +15,6 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 floxhub-client = { path = "../floxhub-client" }
 flox-core = {path = "../flox-core"}
+rnix.workspace = true
+rowan.workspace = true
 tokio.workspace = true
