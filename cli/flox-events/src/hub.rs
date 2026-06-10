@@ -127,6 +127,26 @@ impl EventsHub {
         })
     }
 
+    /// Record a `cli.environment.activate` event in one call: builds the
+    /// payload from the installed client's shared metadata, applies
+    /// `extras` to populate the activate-specific Optional fields, and
+    /// records it. When no client is installed the call short-circuits
+    /// without invoking `extras` — call sites do not need to write
+    /// `if let Some(payload) = …`.
+    pub fn record_environment_activate_with(
+        &self,
+        env_detail: EnvDetail,
+        extras: impl FnOnce(CliEnvironmentActivatePayload) -> CliEnvironmentActivatePayload,
+    ) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!("No v2 events client configured, skipping environment.activate record");
+                return Ok(());
+            };
+            client.record_environment_activate_with(env_detail, extras)
+        })
+    }
+
     /// Record a `cli.environment.push` event with the supplied env detail.
     /// No-op when no client is installed.
     pub fn record_environment_push(&self, env_detail: EnvDetail) -> Result<()> {

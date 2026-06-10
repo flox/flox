@@ -19,6 +19,7 @@ use flox_core::activations::activation_state_dir_path;
 use flox_core::data::System;
 use flox_core::data::environment_ref::DEFAULT_NAME;
 use flox_core::traceable_path;
+use flox_events::EventsHub;
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::IncludeDescriptor;
@@ -62,6 +63,7 @@ use crate::commands::{
 use crate::config::{AutoActivationPreference, Config, EnvironmentPromptConfig};
 use crate::utils::detect_shell::{detect_shell_for_in_place, detect_shell_for_subshell};
 use crate::utils::errors::format_diverged_metadata;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
 use crate::{Exit, environment_subcommand_metric, subcommand_metric, utils};
@@ -205,31 +207,20 @@ impl Activate {
                 .to_string()
         );
 
-        // Mirror the legacy emit above on the new pipeline as a typed
-        // `cli.environment.activate` event. The legacy stays in place
-        // (it feeds the dormant-from-the-other-side `Hub`); this emit
-        // feeds the dormant-until-cutover `EventsHub`. See PR 6 for the
-        // flip.
-        {
-            let env_detail = crate::utils::events::env_detail_from_concrete(&concrete_environment);
-            let hub = flox_events::EventsHub::global();
-            if let Some(payload) = hub.build_environment_activate_payload(env_detail) {
-                let payload = payload
-                    .with_start_services(options.start_services)
-                    .with_mode(
-                        options
-                            .mode
-                            .clone()
-                            .unwrap_or(ActivateMode::Dev)
-                            .to_string(),
-                    );
-                if let Err(err) = hub.record_environment_activate(payload) {
-                    debug!(
-                        error = %err,
-                        "Failed to record v2 cli.environment.activate (start_services + mode) event"
-                    );
-                }
-            }
+        // Both telemetry stacks emit in parallel through the dormant
+        // phase; the new-pipeline mirrors below are no-ops in production
+        // until the cutover PR installs an `EventsHub` client.
+        let v2_env_detail = env_detail_from_concrete(&concrete_environment);
+        let v2_mode = options
+            .mode
+            .clone()
+            .unwrap_or(ActivateMode::Dev)
+            .to_string();
+        if let Err(err) = EventsHub::global().record_environment_activate_with(v2_env_detail, |p| {
+            p.with_start_services(options.start_services)
+                .with_mode(v2_mode)
+        }) {
+            debug!(error = %err, "Failed to record v2 event");
         }
 
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment
@@ -399,19 +390,11 @@ impl ActivateOptions {
         let has_includes = lockfile.compose.is_some();
         subcommand_metric!("activate", "has_includes" = has_includes);
 
-        // Same breadcrumb on the new pipeline as a typed event.
-        {
-            let env_detail = crate::utils::events::env_detail_from_concrete(&concrete_environment);
-            let hub = flox_events::EventsHub::global();
-            if let Some(payload) = hub.build_environment_activate_payload(env_detail) {
-                let payload = payload.with_has_includes(has_includes);
-                if let Err(err) = hub.record_environment_activate(payload) {
-                    debug!(
-                        error = %err,
-                        "Failed to record v2 cli.environment.activate (has_includes) event"
-                    );
-                }
-            }
+        if let Err(err) = EventsHub::global().record_environment_activate_with(
+            env_detail_from_concrete(&concrete_environment),
+            |p| p.with_has_includes(has_includes),
+        ) {
+            debug!(error = %err, "Failed to record v2 event");
         }
 
         let rendered_env_path_result = concrete_environment.rendered_env_links(&flox);
@@ -440,22 +423,14 @@ impl ActivateOptions {
         let lockfile_version = lockfile.version();
         subcommand_metric!("activate#version", lockfile_version = lockfile_version);
 
-        // The legacy emit above uses the `activate#version` pseudo-
-        // subcommand to carry `lockfile_version`. The new pipeline drops
-        // that pseudo-sub entirely (per spec AC #4) and rides the value
-        // on a real `cli.environment.activate` event instead.
-        {
-            let env_detail = crate::utils::events::env_detail_from_concrete(&concrete_environment);
-            let hub = flox_events::EventsHub::global();
-            if let Some(payload) = hub.build_environment_activate_payload(env_detail) {
-                let payload = payload.with_lockfile_version(lockfile_version.to_string());
-                if let Err(err) = hub.record_environment_activate(payload) {
-                    debug!(
-                        error = %err,
-                        "Failed to record v2 cli.environment.activate (lockfile_version) event"
-                    );
-                }
-            }
+        // The new pipeline drops the legacy `activate#version` pseudo-
+        // subcommand (per spec AC #4) and rides `lockfile_version` on a
+        // real `cli.environment.activate` event instead.
+        if let Err(err) = EventsHub::global().record_environment_activate_with(
+            env_detail_from_concrete(&concrete_environment),
+            |p| p.with_lockfile_version(lockfile_version.to_string()),
+        ) {
+            debug!(error = %err, "Failed to record v2 event");
         }
 
         let mode = self.mode.clone().unwrap_or(
@@ -570,22 +545,14 @@ impl ActivateOptions {
         };
         subcommand_metric!("activate", "shell" = shell.to_string());
 
-        // Same shell breadcrumb on the new pipeline. Runs before the
-        // `command.exec()` site below, so the buffered event is flushed
-        // synchronously by the PR 2b pre-exec emit + flush block (spec AC
-        // #5).
-        {
-            let env_detail = crate::utils::events::env_detail_from_concrete(&concrete_environment);
-            let hub = flox_events::EventsHub::global();
-            if let Some(payload) = hub.build_environment_activate_payload(env_detail) {
-                let payload = payload.with_shell(shell.to_string());
-                if let Err(err) = hub.record_environment_activate(payload) {
-                    debug!(
-                        error = %err,
-                        "Failed to record v2 cli.environment.activate (shell) event"
-                    );
-                }
-            }
+        // Runs before `command.exec()`, so the buffered event is flushed
+        // synchronously by the pre-exec emit + flush block below
+        // (spec AC #5).
+        if let Err(err) = EventsHub::global().record_environment_activate_with(
+            env_detail_from_concrete(&concrete_environment),
+            |p| p.with_shell(shell.to_string()),
+        ) {
+            debug!(error = %err, "Failed to record v2 event");
         }
 
         let core = AttachCtx {

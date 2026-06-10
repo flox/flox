@@ -113,6 +113,19 @@ impl EventsClient {
         )
     }
 
+    /// Convenience wrapper: build a `cli.environment.activate` payload, apply
+    /// `extras` to populate the activate-specific Optional fields (e.g.
+    /// `|p| p.with_shell(shell.to_string())`), and record the event in one
+    /// call. The call site never sees the `None`-client branch.
+    pub fn record_environment_activate_with(
+        &self,
+        env_detail: EnvDetail,
+        extras: impl FnOnce(CliEnvironmentActivatePayload) -> CliEnvironmentActivatePayload,
+    ) -> Result<()> {
+        let payload = extras(self.build_environment_activate_payload(env_detail));
+        self.record_environment_activate(payload)
+    }
+
     /// Record a `cli.environment.push` event with the supplied env detail.
     pub fn record_environment_push(&self, env_detail: EnvDetail) -> Result<()> {
         let payload = CliEnvironmentPushPayload::new(
