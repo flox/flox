@@ -6,13 +6,79 @@ use rnix::ast;
 use rnix::ast::HasEntry as _;
 use rowan::ast::AstNode;
 
+/// Catalog references and dependency-argument names extracted from one file.
 #[derive(Debug)]
-pub struct FileInfo {
-    pub refs: BTreeSet<String>,
-    pub dep_args: Vec<String>,
+struct FileInfo {
+    /// Fully-qualified catalog attr-paths referenced by the file
+    /// (e.g. `catalogs.myorg.toolkit.readVersion`).
+    refs: BTreeSet<String>,
+    /// Non-root function arguments the file depends on, resolved by
+    /// [collect_transitive].
+    dep_args: Vec<String>,
 }
 
-pub fn analyze_file_at(
+/// Catalog root parameter names assumed by [scan_package].
+///
+/// A NEF package receives the catalog namespace as the `catalogs` lambda
+/// parameter; attribute paths reached through it (`catalogs.<org>.<pkg>…`) are
+/// the references that must be locked. Use [scan_package_with_roots] to scan
+/// against a different set of roots.
+const DEFAULT_ROOTS: &[&str] = &["catalogs"];
+
+/// Resolve the catalog-reference closure of a single NEF package.
+///
+/// `base_dir` is the package-set root (e.g. `pkgs/`) and `rel_file` is the
+/// target expression relative to it. The returned set contains every catalog
+/// attr-path the target transitively depends on: references in the target
+/// itself (including those reached through `import`), plus references reached
+/// through its dependency arguments, resolved as sibling packages
+/// (`<name>.nix` or `<name>/default.nix`) under `base_dir`.
+///
+/// Uses the default `catalogs` root; see [scan_package_with_roots] to override.
+pub fn scan_package(base_dir: impl AsRef<Path>, rel_file: impl AsRef<Path>) -> BTreeSet<String> {
+    scan_package_with_roots(base_dir, rel_file, DEFAULT_ROOTS.iter().copied())
+}
+
+/// [scan_package] generalized over the set of catalog root parameter names.
+///
+/// `roots` are the lambda-parameter names treated as catalog namespaces; every
+/// other parameter is a dependency argument followed to a sibling package.
+/// Any iterable of names is accepted; duplicates are harmless.
+pub fn scan_package_with_roots(
+    base_dir: impl AsRef<Path>,
+    rel_file: impl AsRef<Path>,
+    roots: impl IntoIterator<Item = impl Into<String>>,
+) -> BTreeSet<String> {
+    let roots: HashSet<String> = roots.into_iter().map(Into::into).collect();
+    let roots = &roots;
+
+    // Imports in the target resolve relative to its own directory; dependency
+    // arguments resolve as siblings under base_dir.
+    let db = {
+        let path: &Path = &base_dir.as_ref().join(rel_file.as_ref());
+        let mut db = HashMap::new();
+        if let Ok(content) = fs::read_to_string(path) {
+            let stem = path
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
+            let dir = path.parent();
+            let mut visited = HashSet::new();
+            db.insert(stem, analyze_file_at(&content, roots, dir, &mut visited));
+        }
+        db
+    };
+    collect_transitive(db, base_dir.as_ref(), roots)
+}
+
+/// Analyze one file's content, collecting catalog refs and the dependency
+/// arguments it pulls in.
+///
+/// `roots` are the lambda parameters treated as catalog roots (e.g. `catalogs`).
+/// When `file_dir` is `Some`, `import` calls forwarding a root are followed into
+/// the imported file; `visited` guards against import cycles.
+fn analyze_file_at(
     content: &str,
     roots: &HashSet<String>,
     file_dir: Option<&Path>,
@@ -30,7 +96,7 @@ pub fn analyze_file_at(
         for entry in pat.pat_entries() {
             if let Some(ident) = entry.ident()
                 && let Some(name) = ident.ident_token().map(|t| t.text().to_string())
-                && !roots.contains(&name)
+                && !roots.contains(name.as_str())
             {
                 dep_args.push(name);
             }
@@ -47,7 +113,12 @@ pub fn analyze_file_at(
     FileInfo { refs, dep_args }
 }
 
-pub fn collect_transitive(
+/// Resolve the transitive closure of catalog refs across a set of files.
+///
+/// Starting from the files in `db`, follow each file's `dep_args` to sibling
+/// files (loaded on demand from `dir` via [load_dep]) and union their refs.
+/// Cycles are handled by tracking visited names.
+fn collect_transitive(
     mut db: HashMap<String, FileInfo>,
     dir: &Path,
     roots: &HashSet<String>,
@@ -78,6 +149,10 @@ pub fn collect_transitive(
     result
 }
 
+/// Build the map of `let` bindings that alias a catalog path.
+///
+/// Repeats passes until no new alias is found, so bindings may reference
+/// earlier aliases regardless of source order.
 fn collect_aliases(root: &rnix::SyntaxNode, roots: &HashSet<String>) -> HashMap<String, String> {
     let mut aliases: HashMap<String, String> = HashMap::new();
     let mut changed = true;
@@ -88,6 +163,8 @@ fn collect_aliases(root: &rnix::SyntaxNode, roots: &HashSet<String>) -> HashMap<
     aliases
 }
 
+/// Single pass over `let` bindings, recording any that resolve to a catalog
+/// path and setting `changed` when a new alias is added.
 fn gather_let_aliases(
     node: &rnix::SyntaxNode,
     roots: &HashSet<String>,
@@ -126,6 +203,8 @@ fn gather_let_aliases(
     }
 }
 
+/// Walk the tree for `import ./file { <root> = …; }` calls and merge the refs
+/// found in each imported file into `refs`.
 fn follow_imports(
     node: &rnix::SyntaxNode,
     roots: &HashSet<String>,
@@ -154,6 +233,8 @@ fn follow_imports(
     }
 }
 
+/// Recognize an `import <path> { … }` application that forwards at least one
+/// catalog root, returning the import path and the roots passed to it.
 fn try_extract_import(
     apply: &ast::Apply,
     roots: &HashSet<String>,
@@ -180,6 +261,8 @@ fn try_extract_import(
     Some((path_str, passed))
 }
 
+/// Extract a statically-known path or string literal as a string, or `None`
+/// for dynamic expressions.
 fn static_path_str(expr: &ast::Expr) -> Option<String> {
     match expr {
         ast::Expr::PathRel(p) => Some(p.syntax().text().to_string()),
@@ -189,6 +272,8 @@ fn static_path_str(expr: &ast::Expr) -> Option<String> {
     }
 }
 
+/// Collect the catalog roots forwarded into an import's argument attrset,
+/// via either `inherit` or `<root> = <root>;` bindings.
 fn roots_passed_to_import(
     attrset: &ast::AttrSet,
     roots: &HashSet<String>,
@@ -202,7 +287,7 @@ fn roots_passed_to_import(
         for attr in inherit.attrs() {
             if let ast::Attr::Ident(id) = attr
                 && let Some(name) = id.ident_token().map(|t| t.text().to_string())
-                && roots.contains(&name)
+                && roots.contains(name.as_str())
             {
                 passed.insert(name);
             }
@@ -216,7 +301,7 @@ fn roots_passed_to_import(
         }
         if let ast::Attr::Ident(id) = &attrs[0]
             && let Some(name) = id.ident_token().map(|t| t.text().to_string())
-            && roots.contains(&name)
+            && roots.contains(name.as_str())
         {
             passed.insert(name);
         }
@@ -224,6 +309,11 @@ fn roots_passed_to_import(
     passed
 }
 
+/// Recursively walk the syntax tree, inserting every catalog attr-path
+/// reference into `refs`.
+///
+/// Handles `inherit (…)`, `with`, `builtins.getAttr`, and plain selects;
+/// dynamic attrs collapse to a `<path>.*` sentinel.
 fn collect_refs(
     node: &rnix::SyntaxNode,
     refs: &mut BTreeSet<String>,
@@ -266,6 +356,8 @@ fn collect_refs(
     }
 }
 
+/// Resolve an expression used as a namespace (in `with` or `getAttr`) to its
+/// catalog path, following aliases.
 fn namespace_path(
     expr: &ast::Expr,
     roots: &HashSet<String>,
@@ -275,7 +367,7 @@ fn namespace_path(
         ast::Expr::Select(select) => extract_ref_path(select, roots, aliases),
         ast::Expr::Ident(ident) => {
             let name = ident.ident_token()?.text().to_string();
-            if roots.contains(&name) {
+            if roots.contains(name.as_str()) {
                 Some(name)
             } else {
                 aliases.get(&name).cloned()
@@ -285,6 +377,8 @@ fn namespace_path(
     }
 }
 
+/// Resolve a `getAttr "key" <root>` application to a `<path>.key` reference,
+/// or a `<path>.*` sentinel when the key is dynamic.
 fn try_handle_get_attr(
     apply: &ast::Apply,
     roots: &HashSet<String>,
@@ -304,6 +398,8 @@ fn try_handle_get_attr(
     }
 }
 
+/// Whether an expression is the `getAttr` builtin, named either bare
+/// (`getAttr`) or qualified (`builtins.getAttr`).
 fn is_get_attr_fn(expr: &ast::Expr) -> bool {
     match expr {
         ast::Expr::Select(sel) => {
@@ -326,6 +422,7 @@ fn is_get_attr_fn(expr: &ast::Expr) -> bool {
     }
 }
 
+/// Extract the contents of a string literal with no interpolation, or `None`.
 fn static_str(expr: &ast::Expr) -> Option<String> {
     let ast::Expr::Str(s) = expr else { return None };
     if s.syntax().children().next().is_some() {
@@ -341,6 +438,8 @@ fn static_str(expr: &ast::Expr) -> Option<String> {
     })
 }
 
+/// Handle `inherit (<root-path>) a b c;`, emitting one `<path>.<name>`
+/// reference per inherited name. Returns whether the inherit was rooted.
 fn try_handle_inherit(
     inherit: &ast::Inherit,
     refs: &mut BTreeSet<String>,
@@ -370,6 +469,8 @@ fn try_handle_inherit(
     true
 }
 
+/// Build the dotted catalog path for a `select` expression rooted at a catalog
+/// root or alias. A dynamic component collapses the path to end in `*`.
 fn extract_ref_path(
     select: &ast::Select,
     roots: &HashSet<String>,
@@ -381,7 +482,7 @@ fn extract_ref_path(
     };
     let base_name = base.ident_token()?.text().to_string();
 
-    let base_path = if roots.contains(&base_name) {
+    let base_path = if roots.contains(base_name.as_str()) {
         base_name
     } else if let Some(alias) = aliases.get(&base_name) {
         alias.clone()
@@ -405,6 +506,8 @@ fn extract_ref_path(
     Some(parts.join("."))
 }
 
+/// Load a sibling dependency file by argument name, trying `<name>.nix` then
+/// `<name>/default.nix` under `dir`.
 fn load_dep(dir: &Path, name: &str, roots: &HashSet<String>) -> Option<FileInfo> {
     let candidates = [
         dir.join(format!("{}.nix", name)),
@@ -714,6 +817,22 @@ mod tests {
             set(&[
                 "inputs.nixpkgs.lib",
                 "inputs.devtools-flake.packages.default",
+            ])
+        );
+    }
+
+    #[test]
+    fn scan_package_unions_target_and_sibling_dep_refs() {
+        let base_dir = Path::new("test_data/catalog_refs");
+        // dep-entry.nix references one catalog path and pulls in a `dep-helper`
+        // dependency argument; dep-helper.nix (its sibling under base_dir)
+        // references another. The closure is the union of both.
+        let got = scan_package(base_dir, Path::new("dep-entry.nix"));
+        assert_eq!(
+            got,
+            set(&[
+                "catalogs.myorg.toolkit.readVersion",
+                "catalogs.myorg.python3Packages.alpha-lib",
             ])
         );
     }
