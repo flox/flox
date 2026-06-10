@@ -705,7 +705,18 @@ impl GenerationsExt for ManagedEnvironment {
         // update the rendered environment
         self.lock_pointer()?;
         self.reset_local_env_to_current_generation(flox)?;
-        self.build(flox)?;
+
+        // Instant rollback: if this generation's GC-root link already exists on
+        // this host, its build already ran here — flip the activation pointer
+        // to it with no `nix build`. Otherwise build it (e.g. the first switch
+        // to this generation on this host) — `build` targets the current
+        // generation, which is now `generation`.
+        let generation_link = self.rendered_env_links.generation_link(generation);
+        if generation_link.exists() {
+            self.flip_to_generation(&generation_link)?;
+        } else {
+            self.build(flox)?;
+        }
 
         Ok(())
     }
@@ -734,19 +745,6 @@ impl GenerationsExt for ManagedEnvironment {
         flox: &Flox,
         generation: GenerationId,
     ) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
-        let mut generations = self.generations();
-        let generation_rw = generations
-            .writable(
-                &flox.temp_dir,
-                &flox.system_user_name,
-                &flox.system_hostname,
-                &flox.argv,
-            )
-            .map_err(ManagedEnvironmentError::Generations)?;
-
-        let mut core_environment =
-            generation_rw.get_generation(*generation, self.include_fetcher.clone());
-
         let run_dir = &self.path.join(GCROOTS_DIR_NAME);
         if !run_dir.exists() {
             std::fs::create_dir_all(run_dir).map_err(ManagedEnvironmentError::CreateLinksDir)?;
@@ -754,10 +752,9 @@ impl GenerationsExt for ManagedEnvironment {
 
         let base_dir = CanonicalPath::new(run_dir).expect("run dir is checked to exist");
 
-        // Activating a specific generation builds (if necessary) and resolves
-        // directly to that generation's GC-root link, without flipping the
-        // current pointer — `--generation N` must not change which generation
-        // is current.
+        // Activating a specific generation resolves directly to that
+        // generation's GC-root link, without flipping the current pointer —
+        // `--generation N` must not change which generation is current.
         let generation_link = RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
             &base_dir,
             self.name().as_ref(),
@@ -765,7 +762,25 @@ impl GenerationsExt for ManagedEnvironment {
         )
         .generation_link(generation);
 
-        core_environment.build(flox, Some(generation_link.out_link_prefix()))?;
+        // Instant activation: build only if this generation's GC-root link is
+        // not already present on this host. The link is immutable once built,
+        // so its presence means the build already ran here (flox#4332).
+        if !generation_link.exists() {
+            let mut generations = self.generations();
+            let generation_rw = generations
+                .writable(
+                    &flox.temp_dir,
+                    &flox.system_user_name,
+                    &flox.system_hostname,
+                    &flox.argv,
+                )
+                .map_err(ManagedEnvironmentError::Generations)?;
+
+            let mut core_environment =
+                generation_rw.get_generation(*generation, self.include_fetcher.clone());
+
+            core_environment.build(flox, Some(generation_link.out_link_prefix()))?;
+        }
 
         Ok(generation_link.activation_links())
     }
@@ -2629,6 +2644,64 @@ mod test {
             std::fs::read_link(pointer_dev).unwrap(),
             Path::new(generation_dev.file_name().unwrap()),
             "activation pointer should redirect to the generation GC-root link"
+        );
+    }
+
+    /// Rolling back to a generation whose GC-root link already exists retains
+    /// that link and flips the activation pointer to it (instant rollback;
+    /// flox#4332 F2).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn rollback_retains_and_flips_to_prior_generation_link() {
+        let owner = "owner".parse().unwrap();
+        let (mut flox, temp_dir) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+
+        let mut env = mock_managed_environment_in(&flox, "version = 1", owner, &temp_dir, None);
+
+        // Build generation 1 so its GC-root link exists on this host.
+        env.build(&flox).unwrap();
+        let gen1 = env
+            .rendered_env_links
+            .generation_link(GenerationId::from(1usize));
+        assert!(gen1.exists(), "generation 1 link built");
+
+        // Install -> generation 2; generation 1's link must be retained.
+        let packages = [PackageToInstall::Catalog(
+            CatalogPackage::from_str("hello").unwrap(),
+        )];
+        env.install(&packages, &flox).unwrap();
+        assert_eq!(
+            env.generations_metadata().unwrap().current_gen().as_deref(),
+            Some(&2),
+            "install creates generation 2"
+        );
+        assert!(
+            gen1.exists(),
+            "prior generation's GC-root link retained after mutation"
+        );
+
+        // Roll back to generation 1: the pointer flips to its retained link.
+        env.switch_generation(&flox, GenerationId::from(1usize))
+            .unwrap();
+        assert_eq!(
+            env.generations_metadata().unwrap().current_gen().as_deref(),
+            Some(&1),
+            "rolled back to generation 1"
+        );
+        let expected_target = format!(
+            "{}-dev",
+            gen1.out_link_prefix()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+        );
+        assert_eq!(
+            std::fs::read_link(env.rendered_env_links.dev.as_path()).unwrap(),
+            Path::new(&expected_target),
+            "activation pointer flipped to generation 1's GC-root link"
         );
     }
 

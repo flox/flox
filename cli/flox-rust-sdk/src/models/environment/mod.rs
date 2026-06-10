@@ -516,6 +516,15 @@ impl GenerationLink {
     pub fn activation_links(&self) -> RenderedEnvironmentLinks {
         RenderedEnvironmentLinks::new_unchecked(self.out_link_prefix.clone())
     }
+
+    /// Whether this generation's GC-root links already exist on this host.
+    ///
+    /// When they do, the `nix build` for this generation has already run here,
+    /// so switching to or activating it is a pointer flip with no build —
+    /// instant rollback (flox#4332).
+    pub fn exists(&self) -> bool {
+        self.dev.as_path().is_symlink() && self.run.as_path().is_symlink()
+    }
 }
 
 /// A pointer to an environment, either managed or path.
@@ -1594,6 +1603,31 @@ mod test {
         // Flipping again over existing pointers succeeds (atomic replace).
         pointer.flip_to(&generation).unwrap();
         assert!(pointer.dev.as_path().is_symlink());
+    }
+
+    /// `GenerationLink::exists` is true only once both the dev and run GC-root
+    /// links are present — the signal that a generation's build already ran
+    /// here and a switch to it needs no rebuild.
+    #[test]
+    fn generation_link_exists_requires_both_dev_and_run() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = CanonicalPath::new(dir.path()).unwrap();
+        let system: System = "x86_64-linux".to_string();
+
+        let pointer = RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+            &base, "default", &system,
+        );
+        let generation = pointer.generation_link(GenerationId::from(1usize));
+
+        assert!(!generation.exists(), "no links yet");
+
+        let store = dir.path().join("store");
+        std::fs::write(&store, "").unwrap();
+        std::os::unix::fs::symlink(&store, generation.dev.as_path()).unwrap();
+        assert!(!generation.exists(), "only the dev link is present");
+
+        std::os::unix::fs::symlink(&store, generation.run.as_path()).unwrap();
+        assert!(generation.exists(), "both links present");
     }
 }
 

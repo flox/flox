@@ -83,6 +83,18 @@ teardown() {
   assert_line "Command:    flox generations switch 1"
 }
 
+# Instant rollback (flox#4332): switching to a generation whose GC-root link
+# was already built on this host is a pointer flip with no 'nix build'.
+@test "generations switch: rollback to a built generation needs no nix build" {
+  create_environment_with_generations
+
+  # Current generation is 3; generation 2 was built and its GC-root link is
+  # retained. _FLOX_TESTING_NO_BUILD makes any build attempt fail, so success
+  # here proves the switch flipped the pointer without rebuilding.
+  run env _FLOX_TESTING_NO_BUILD=true "$FLOX_BIN" generations switch 2
+  assert_success
+}
+
 @test "activate --generation: works with managed and remote envs" {
   create_environment_with_generations
 
