@@ -749,6 +749,34 @@ fn build_header_map(config: &FloxhubClientConfig) -> Result<HeaderMap, String> {
     Ok(header_map)
 }
 
+/// Test helpers for constructing [`FloxhubClient`] instances.
+///
+/// Intentionally not behind `#[cfg(test)]` so that other crates' (also
+/// non-gated) test helpers can build a client without enabling a feature.
+/// Nothing here should be used in production code.
+pub mod test_helpers {
+    use super::FloxhubClient;
+    use crate::auth::{AuthContext, AuthnMode};
+    use crate::config::{FloxhubClientConfig, FloxhubMockMode};
+
+    /// Build a no-op client for tests that need a structurally valid
+    /// [`FloxhubClient`] but never issue a request.
+    ///
+    /// Pointed at an unroutable dummy URL with no mock mode, so an unexpected
+    /// catalog or factory call fails fast and locally rather than reaching a
+    /// real server. Tests that exercise the network install a replay client.
+    pub fn new_noop() -> FloxhubClient {
+        let config = FloxhubClientConfig {
+            base_url: "http://localhost:0".to_string(),
+            extra_headers: Default::default(),
+            mock_mode: FloxhubMockMode::None,
+            auth_context: AuthContext::from_mode(&AuthnMode::default(), None),
+            user_agent: None,
+        };
+        FloxhubClient::new(config).expect("failed to build no-op FloxhubClient")
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use std::collections::BTreeMap;

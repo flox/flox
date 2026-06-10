@@ -1,7 +1,7 @@
-mod catalog_client;
+mod floxhub_client;
 mod logger;
 mod metrics;
 
-pub use catalog_client::*;
+pub use floxhub_client::*;
 pub use logger::*;
 pub use metrics::*;

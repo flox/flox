@@ -1812,7 +1812,7 @@ mod tests {
 
         let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
@@ -1846,7 +1846,7 @@ mod tests {
 
         let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         assert_build_status(&flox, &mut env, &package_name, None, true);
 
@@ -2199,7 +2199,7 @@ mod tests {
         "#};
         fs::write(env_path.join("main.go"), arg0_code).unwrap();
 
-        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("resolve/go.yaml")).await;
+        flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("resolve/go.yaml")).await;
         assert_build_status(&flox, &mut env, &package_name, None, true);
         let result_path = result_dir(&env_path, &package_name)
             .join("bin")
@@ -2306,7 +2306,7 @@ mod tests {
         "#};
         fs::write(env_path.join("main.go"), exe_code).unwrap();
 
-        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("resolve/go.yaml")).await;
+        flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("resolve/go.yaml")).await;
         assert_build_status(&flox, &mut env, &package_name, None, true);
         let result_path = result_dir(&env_path, &package_name)
             .join("bin")
@@ -2629,7 +2629,7 @@ mod tests {
     async fn assert_closure_check_failure(manifest: &str, package_name: &str, mock_file: &str) {
         let (mut flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, manifest);
-        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join(mock_file)).await;
+        flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join(mock_file)).await;
         let output = assert_build_status(&flox, &mut env, package_name, None, false);
 
         // TODO: Provide more targeted advice based on the current lockfile's
@@ -2746,7 +2746,7 @@ mod tests {
         let (mut flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello-curl-not-in-toplevel.yaml"))
                 .await;
         let output = assert_build_status(&flox, &mut env, &package_name, None, false);
@@ -3071,7 +3071,7 @@ mod tests {
                 fs::write(env_path.join(version_file), version).unwrap();
 
                 let _git = GitCommandProvider::init(&env_path, false).unwrap();
-                flox.catalog_client =
+                flox.floxhub_client =
                     catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
                 let collected = assert_build_status(&flox, &mut env, &pname, None, true);
                 let result_path = env_path.join(format!("result-{pname}"));
@@ -3331,7 +3331,7 @@ mod tests {
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
         let _ = GitCommandProvider::init(&env_path, false).unwrap();
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         assert_build_status(&flox, &mut env, &package_name, None, true);
 
@@ -3563,7 +3563,7 @@ mod tests {
             let _git = GitCommandProvider::init(&env_path, false).unwrap();
         }
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello-curl-not-in-toplevel.yaml"))
                 .await;
         assert_build_status(&flox, &mut env, &package_name, None, true);
@@ -3656,7 +3656,7 @@ mod tests {
             sandbox = "{}"
         "#, if sandbox { "pure" } else { "off" }}; // [sic] sandbox can be "warn" and "enforce" too
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/cmake-gnumake.yaml")).await;
 
         let mut env = new_path_environment(&flox, &manifest);

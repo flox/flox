@@ -84,7 +84,7 @@ use crate::utils::active_environments::{
 };
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
-use crate::utils::init::init_catalog_client;
+use crate::utils::init::init_floxhub_client;
 use crate::utils::message;
 use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, read_metrics_uuid};
 use crate::utils::update_notifications::UpdateNotification;
@@ -281,7 +281,7 @@ impl FloxArgs {
         let credential =
             AuthContext::from_mode(&config.flox.floxhub_authn_mode, floxhub_token.clone());
 
-        let catalog_client = init_catalog_client(&config, metrics_device_uuid)?;
+        let floxhub_client = init_floxhub_client(&config, metrics_device_uuid)?;
 
         // we already make sure $USER corresponds to **euid** earlier on in the process.
         let system_user_name =
@@ -302,7 +302,7 @@ impl FloxArgs {
             argv,
             auth_context: credential,
             floxhub,
-            catalog_client,
+            floxhub_client,
             installable_locker: Default::default(),
             #[allow(deprecated, reason = "This should be the only internal use")]
             features: config.features.unwrap_or_default(),

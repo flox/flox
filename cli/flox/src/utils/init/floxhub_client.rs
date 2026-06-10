@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use flox_rust_sdk::flox::FLOX_VERSION;
-use flox_rust_sdk::providers::catalog::Client;
 use flox_rust_sdk::utils::{HEADER_DEVICE_UUID, INVOCATION_SOURCES};
 use floxhub_client::{
     AuthContext,
@@ -17,14 +16,15 @@ use uuid::Uuid;
 
 use crate::config::Config;
 
-/// Initialize the Catalog API client
+/// Initialize the FloxHub API client.
 ///
-/// - Initialize a mock client if the `_FLOX_USE_CATALOG_MOCK` environment variable is set to `true`
-/// - Initialize a real client otherwise
-pub fn init_catalog_client(
+/// - Reads the catalog URL from config (defaults to the production catalog URL)
+/// - Configures mock replay mode if `_FLOX_USE_CATALOG_MOCK` is set
+/// - Includes device UUID and invocation-source headers when available
+pub fn init_floxhub_client(
     config: &Config,
     metrics_device_uuid: Option<Uuid>,
-) -> Result<Client, anyhow::Error> {
+) -> Result<FloxhubClient, anyhow::Error> {
     let mut extra_headers = BTreeMap::new();
 
     // Propagate the metrics UUID to catalog-server if metrics are enabled.
@@ -62,5 +62,5 @@ pub fn init_catalog_client(
     };
 
     debug!("using catalog client with url: {}", client_config.base_url);
-    Ok(FloxhubClient::new(client_config)?.into())
+    Ok(FloxhubClient::new(client_config)?)
 }

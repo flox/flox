@@ -988,7 +988,7 @@ mod tests {
         } else {
             "aarch64-linux, x86_64-linux"
         };
-        flox.catalog_client = catalog_replay_client(response_path).await;
+        flox.floxhub_client = catalog_replay_client(response_path).await;
 
         let _env = new_path_environment_in(&flox, EMPTY_ALL_SYSTEMS, tempdir.path());
         let install_cmd = Install {

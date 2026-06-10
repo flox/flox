@@ -30,7 +30,7 @@
 //! ```
 
 mod auth;
-mod client;
+pub mod client;
 mod config;
 mod error;
 mod token;
