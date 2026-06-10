@@ -277,9 +277,19 @@ impl FloxArgs {
         if !config.flox.disable_metrics {
             debug!("Metrics collection enabled");
 
-            let connection = AWSDatalakeConnection::default();
-            let client = Client::new_with_config(&config, connection)?;
-            Hub::global().set_client(client);
+            match crate::utils::events::selected_metrics_stack() {
+                crate::utils::events::MetricsStack::Legacy => {
+                    let connection = AWSDatalakeConnection::default();
+                    let client = Client::new_with_config(&config, connection)?;
+                    Hub::global().set_client(client);
+                },
+                crate::utils::events::MetricsStack::New => {
+                    debug!(
+                        "Legacy metrics stack inert this process (FLOX_METRICS_STACK=new); \
+                         canonical events client installed in main.rs"
+                    );
+                },
+            }
         } else {
             debug!("Metrics collection disabled");
             unsafe {
