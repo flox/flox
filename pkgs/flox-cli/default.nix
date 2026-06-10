@@ -49,15 +49,26 @@ let
 
       # Metrics subsystem configuration
       METRICS_EVENTS_URL = "https://z7qixlmjr3.execute-api.eu-north-1." + "amazonaws.com/prod/capture";
-      # TODO(dsawyer 2026-06-10): set the real new-pipeline ingest URL
-      # before merging PR 6. The placeholder value below intentionally
-      # fails-closed: any production build that ships with it will send
-      # the new-stack request to a non-routable host so the misconfig is
-      # loud (network error in logs) rather than silently dropped or
-      # mis-delivered. The new endpoint authenticates with the same
-      # `METRICS_EVENTS_API_KEY` as the legacy URL (D1, resolved
-      # 2026-06-09) — no second API-key const.
-      METRICS_EVENTS_URL_V2 = "https://example.invalid/REPLACE-BEFORE-MERGE";
+      # TODO: set the real new-pipeline ingest URL before merging the
+      # runtime-flag-gated cutover. The placeholder below uses the
+      # RFC 6761 §6.4 reserved `.invalid` TLD so DNS resolution fails
+      # (loud at the transport layer) rather than silently mis-
+      # delivering — do not "fix" the .invalid TLD by pointing at a
+      # real subdomain. The companion sentinel test
+      # `metrics_events_url_v2_is_not_placeholder` in
+      # `cli/flox/src/utils/events.rs` fails until this string is
+      # replaced; together they make a placeholder release impossible
+      # to ship without an explicit, traceable change. The new
+      # endpoint shares `METRICS_EVENTS_API_KEY` with the legacy URL
+      # (no second API-key const).
+      METRICS_EVENTS_URL_V2 =
+        let
+          value = "https://example.invalid/REPLACE-BEFORE-MERGE";
+        in
+        lib.warnIf (
+          lib.hasInfix "example.invalid" value
+          || lib.hasInfix "REPLACE-BEFORE-MERGE" value
+        ) "METRICS_EVENTS_URL_V2 still contains a placeholder; replace before deployment." value;
       METRICS_EVENTS_API_KEY = "5pAQnBqz5Q7dpqVD9BEXQ4Kdc3D2fGTd3ZgP0XXK";
 
       # oauth client id
