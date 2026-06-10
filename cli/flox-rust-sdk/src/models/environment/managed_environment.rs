@@ -329,11 +329,10 @@ impl Environment for ManagedEnvironment {
             local_checkout.install(packages, flox, Some(generation_link.out_link_prefix()))?;
         if !result.modifications.is_empty() {
             let change = HistoryKind::Install { targets };
-            generations
+            let committed = generations
                 .add_generation(&mut local_checkout, change)
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
-            self.lock_pointer()?;
-            self.flip_to_generation(&generation_link)?;
+            self.flip_to_committed_generation(committed, generation_id, &generation_link)?;
         }
 
         Ok(result)
@@ -376,11 +375,10 @@ impl Environment for ManagedEnvironment {
 
         // It's an error to uninstall a package that isn't installed so if we
         // got this far then we need a new generation.
-        generations
+        let committed = generations
             .add_generation(&mut local_checkout, change)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
-        self.lock_pointer()?;
-        self.flip_to_generation(&generation_link)?;
+        self.flip_to_committed_generation(committed, generation_id, &generation_link)?;
 
         Ok(result)
     }
@@ -410,11 +408,10 @@ impl Environment for ManagedEnvironment {
 
         match &result {
             EditResult::Changed { .. } => {
-                generations
+                let committed = generations
                     .add_generation(&mut local_checkout, HistoryKind::Edit)
                     .map_err(ManagedEnvironmentError::CommitGeneration)?;
-                self.lock_pointer()?;
-                self.flip_to_generation(&generation_link)?;
+                self.flip_to_committed_generation(committed, generation_id, &generation_link)?;
             },
             EditResult::Unchanged => {},
         }
@@ -474,12 +471,10 @@ impl Environment for ManagedEnvironment {
             let change = HistoryKind::Upgrade {
                 targets: result.packages().collect(),
             };
-            generations
+            let committed = generations
                 .add_generation(&mut local_checkout, change)
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
-
-            self.lock_pointer()?;
-            self.flip_to_generation(&generation_link)?;
+            self.flip_to_committed_generation(committed, generation_id, &generation_link)?;
         }
         Ok(result)
     }
@@ -523,12 +518,10 @@ impl Environment for ManagedEnvironment {
             let change = HistoryKind::IncludeUpgrade {
                 targets: to_upgrade,
             };
-            generations
+            let committed = generations
                 .add_generation(&mut local_checkout, change)
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
-
-            self.lock_pointer()?;
-            self.flip_to_generation(&generation_link)?;
+            self.flip_to_committed_generation(committed, generation_id, &generation_link)?;
         }
 
         Ok(result)
@@ -1065,12 +1058,11 @@ impl ManagedEnvironment {
         let generation_link = self.rendered_env_links.generation_link(generation_id);
         local_checkout.build(flox, Some(generation_link.out_link_prefix()))?;
 
-        generations
+        let committed = generations
             .add_generation(&mut local_checkout, HistoryKind::Edit)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
-        self.lock_pointer()?;
-        self.flip_to_generation(&generation_link)?;
+        self.flip_to_committed_generation(committed, generation_id, &generation_link)?;
         Ok(SyncToGenerationResult::Synced)
     }
 
@@ -1209,6 +1201,29 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::FlipActivationLinks)?;
         self.rendered_env_links.replace_legacy_links();
         Ok(())
+    }
+
+    /// Commit-time pointer flip for a freshly committed mutation: write the
+    /// generation lock and flip the activation pointer to `built_link`.
+    ///
+    /// `built_link` was built for `built_for` (the id predicted by
+    /// `next_generation_id`), which must equal the `committed` id returned by
+    /// `add_generation` — both are read from the same floxmeta snapshot, so
+    /// they always match. The assertion guards against ever flipping the
+    /// activation pointer to a generation link that was never built (e.g. if a
+    /// future change reintroduced a window between predicting and committing).
+    fn flip_to_committed_generation(
+        &self,
+        committed: GenerationId,
+        built_for: GenerationId,
+        built_link: &GenerationLink,
+    ) -> Result<(), EnvironmentError> {
+        assert_eq!(
+            committed, built_for,
+            "committed generation {committed} does not match the built generation link {built_for}"
+        );
+        self.lock_pointer()?;
+        self.flip_to_generation(built_link)
     }
 
     /// Returns the environment owner
