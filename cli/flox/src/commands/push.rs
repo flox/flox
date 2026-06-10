@@ -3,6 +3,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_core::data::environment_ref::EnvironmentOwner;
+use flox_events::EventsHub;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
@@ -23,6 +24,7 @@ use tracing::{debug, instrument};
 use crate::commands::{EnvironmentSelect, ensure_auth, environment_select};
 use crate::environment_subcommand_metric;
 use crate::utils::errors::format_core_error;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 
 // Send environment to FloxHub
@@ -83,17 +85,10 @@ impl Push {
 
         environment_subcommand_metric!("push", env);
 
-        // Mirror the legacy emit above on the new pipeline as a typed
-        // `cli.environment.push` event. Dormant until the PR 6 cutover
-        // installs a real client.
+        if let Err(err) =
+            EventsHub::global().record_environment_push(env_detail_from_concrete(&env))
         {
-            let env_detail = crate::utils::events::env_detail_from_concrete(&env);
-            if let Err(err) = flox_events::EventsHub::global().record_environment_push(env_detail) {
-                debug!(
-                    error = %err,
-                    "Failed to record canonical cli.environment.push event"
-                );
-            }
+            debug!(error = %err, "Failed to record canonical event");
         }
 
         match (env, self.owner) {

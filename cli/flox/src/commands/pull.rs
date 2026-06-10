@@ -5,6 +5,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_catalog::AuthContext;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
+use flox_events::{EnvDetail, EventsHub};
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::raw::SyncTypedToRaw;
 use flox_manifest::{Manifest, Migrated};
@@ -35,6 +36,7 @@ use super::{ConcreteEnvironment, open_path};
 use crate::commands::{EnvironmentSelect, environment_description, environment_select};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::{display_chain, format_core_error};
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
 
@@ -102,26 +104,17 @@ impl Pull {
                 // `ManagedEnvironment`, but we want to keep the remote name.
                 subcommand_metric!("pull", managed_environment = remote.to_string());
 
-                // Same env detail on the new pipeline. This branch runs
-                // **before** any `ConcreteEnvironment` is materialized, so
-                // the shared `env_detail_from_concrete` helper does not
-                // apply — construct the `EnvDetail` directly from the
-                // `RemoteRef` available here, matching the legacy
-                // `managed_environment = remote.to_string()` extra above
-                // for parity (spec AC #2).
-                {
-                    let env_detail = flox_events::EnvDetail {
-                        env_kind: "managed".to_string(),
-                        env_ref_or_name: remote.to_string(),
-                    };
-                    if let Err(err) =
-                        flox_events::EventsHub::global().record_environment_pull(env_detail)
-                    {
-                        debug!(
-                            error = %err,
-                            "Failed to record canonical cli.environment.pull (NewAbbreviated) event"
-                        );
-                    }
+                // No `ConcreteEnvironment` is materialized here yet, so
+                // the shared helper does not apply — construct the env
+                // detail directly from the `RemoteRef` to match the
+                // legacy `managed_environment = remote.to_string()`
+                // extra above (spec AC #2).
+                let env_detail = EnvDetail {
+                    env_kind: "managed".to_string(),
+                    env_ref_or_name: remote.to_string(),
+                };
+                if let Err(err) = EventsHub::global().record_environment_pull(env_detail) {
+                    debug!(error = %err, "Failed to record canonical event");
                 }
 
                 let (dir_message, dir) = match dir {
@@ -159,20 +152,10 @@ impl Pull {
                     .await?;
                 environment_subcommand_metric!("pull", environment);
 
-                // Mirror the legacy emit above on the new pipeline as a
-                // typed `cli.environment.pull` event. Standard shared
-                // helper applies here — `environment` is a
-                // `ConcreteEnvironment`.
+                if let Err(err) = EventsHub::global()
+                    .record_environment_pull(env_detail_from_concrete(&environment))
                 {
-                    let env_detail = crate::utils::events::env_detail_from_concrete(&environment);
-                    if let Err(err) =
-                        flox_events::EventsHub::global().record_environment_pull(env_detail)
-                    {
-                        debug!(
-                            error = %err,
-                            "Failed to record canonical cli.environment.pull (RemoteUpdate) event"
-                        );
-                    }
+                    debug!(error = %err, "Failed to record canonical event");
                 }
 
                 if let ConcreteEnvironment::Path(environment) = environment {
