@@ -6,6 +6,7 @@ pub mod lock;
 mod nix;
 mod nix_build_config;
 mod nix_build_lock;
+mod scan;
 mod tree;
 
 /// Common identifier for a `CatalogSpec` and its `CatalogLock`
