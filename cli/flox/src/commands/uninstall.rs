@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use flox_events::{EventsHub, PackageOutcome};
 use flox_manifest::parsed::latest::SelectedOutputs;
 use flox_manifest::raw::PackageModification;
 use flox_rust_sdk::flox::Flox;
@@ -123,6 +124,19 @@ impl Uninstall {
         }
 
         warn_manifest_changes_for_services(&flox, &concrete_environment);
+
+        // Per-package success events on the new pipeline. One event per
+        // package the uninstall actually touched (the iteration above
+        // already gates on the same `attempt.modifications` set). Net-
+        // new signal per PR 6 Merge gate #2.
+        let hub = EventsHub::global();
+        for modification in attempt.modifications.iter() {
+            if let Err(err) = hub
+                .record_package_uninstall(modification.install_id.clone(), PackageOutcome::Success)
+            {
+                debug!(error = %err, "Failed to record v2 event");
+            }
+        }
 
         Ok(())
     }
