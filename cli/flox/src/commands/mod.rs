@@ -84,6 +84,7 @@ use crate::utils::active_environments::{
 };
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
+use crate::utils::events::{MetricsStack, selected_metrics_stack};
 use crate::utils::init::init_catalog_client;
 use crate::utils::message;
 use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, read_metrics_uuid};
@@ -216,6 +217,43 @@ impl Commands {
     }
 }
 
+/// The action taken by the dispatch chokepoint with respect to
+/// installing the legacy `Hub`'s `Client`. Three states are
+/// mutually exclusive so the match in [`FloxArgs::handle`] cannot
+/// silently drop one — extracting the decision into a returned
+/// enum makes the symmetry testable without invoking the install
+/// itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LegacyChokepointAction {
+    /// `disable_metrics=false` AND `FLOX_METRICS_STACK=legacy` —
+    /// install the legacy `AWSDatalakeConnection`-backed `Client`
+    /// on the legacy `Hub`. The new pipeline's `Client` is left
+    /// uninstalled at the main.rs install site by symmetry.
+    InstallLegacyClient,
+    /// `disable_metrics=false` AND `FLOX_METRICS_STACK=new`
+    /// (default) — do not install the legacy `Client`. The new
+    /// pipeline's `Client` is installed at the main.rs install
+    /// site by symmetry.
+    SkipInstall,
+    /// `disable_metrics=true` — install nothing on either stack
+    /// and propagate the disable flag to subprocesses via
+    /// [`FLOX_DISABLE_METRICS_VAR`].
+    DisableMetricsAndSkipInstall,
+}
+
+/// Resolve the chokepoint's install decision from config + the
+/// `FLOX_METRICS_STACK` env var. Pure (no side effects); the
+/// caller in [`FloxArgs::handle`] dispatches the returned action.
+fn legacy_chokepoint_action(config: &Config) -> LegacyChokepointAction {
+    if config.flox.disable_metrics {
+        return LegacyChokepointAction::DisableMetricsAndSkipInstall;
+    }
+    match selected_metrics_stack() {
+        MetricsStack::Legacy => LegacyChokepointAction::InstallLegacyClient,
+        MetricsStack::New => LegacyChokepointAction::SkipInstall,
+    }
+}
+
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
     pub async fn handle(self, config: crate::config::Config) -> Result<()> {
@@ -266,37 +304,37 @@ impl FloxArgs {
             })
         };
 
-        if !config.flox.disable_metrics {
-            debug!("Metrics collection enabled");
-
-            match crate::utils::events::selected_metrics_stack() {
-                crate::utils::events::MetricsStack::Legacy => {
-                    let connection = AWSDatalakeConnection::default();
-                    let client = Client::new_with_config(&config, connection)?;
-                    Hub::global().set_client(client);
-                },
-                crate::utils::events::MetricsStack::New => {
-                    debug!(
-                        "Legacy metrics stack inert this process (FLOX_METRICS_STACK=new); \
-                         canonical events client installed in main.rs"
-                    );
-                },
-            }
-        } else {
-            debug!("Metrics collection disabled");
-            unsafe {
-                env::set_var(FLOX_DISABLE_METRICS_VAR, "true");
-            }
+        match legacy_chokepoint_action(&config) {
+            LegacyChokepointAction::InstallLegacyClient => {
+                debug!("Metrics collection enabled");
+                let connection = AWSDatalakeConnection::default();
+                let client = Client::new_with_config(&config, connection)?;
+                Hub::global().set_client(client);
+            },
+            LegacyChokepointAction::SkipInstall => {
+                debug!(
+                    "Metrics collection enabled; legacy stack inert this process \
+                     (FLOX_METRICS_STACK=new — canonical events client installed in main.rs)"
+                );
+            },
+            LegacyChokepointAction::DisableMetricsAndSkipInstall => {
+                debug!("Metrics collection disabled");
+                unsafe {
+                    env::set_var(FLOX_DISABLE_METRICS_VAR, "true");
+                }
+            },
         }
 
         // Emit the canonical `cli.command_run` exactly once at dispatch
         // start. The flox-events `EventsHub` was installed in `main.rs`
-        // and short-circuits in production until the cutover PR. The
-        // matching `cli.command_completed` is emitted at the end of
-        // `cli_worker` below (or immediately before `activate.rs`'s
-        // `command.exec()` call when activate replaces the parent
-        // process) — the hub's idempotent flag ensures only one of the
-        // two paths actually records the completed event.
+        // when `FLOX_METRICS_STACK=new` (default); under
+        // `FLOX_METRICS_STACK=legacy` no `EventsClient` is installed
+        // and this call short-circuits. The matching
+        // `cli.command_completed` is emitted at the end of `cli_worker`
+        // below (or immediately before `activate.rs`'s `command.exec()`
+        // call when activate replaces the parent process) — the hub's
+        // idempotent flag ensures only one of the two paths actually
+        // records the completed event.
         let canonical_subcommand: &'static str = self
             .command
             .as_ref()
@@ -1775,5 +1813,99 @@ mod subcommand_name_tests {
     fn build_update_catalogs_uses_parent_child_join_encoding() {
         let command = parse_command(&["build", "update-catalogs"]);
         assert_eq!(command.subcommand_name(), "build::update-catalogs");
+    }
+}
+
+#[cfg(test)]
+mod legacy_chokepoint_tests {
+    use serial_test::serial;
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::config::FloxConfig;
+    use crate::utils::events::FLOX_METRICS_STACK_VAR;
+
+    /// Build a minimal `Config` for the chokepoint decision. Only
+    /// `disable_metrics` matters here — the helper does not touch
+    /// disk.
+    #[allow(deprecated)]
+    fn config_with(disable_metrics: bool) -> (TempDir, Config) {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let config = Config {
+            flox: FloxConfig {
+                cache_dir: tempdir.path().join("cache"),
+                data_dir: tempdir.path().join("data"),
+                state_dir: tempdir.path().join("state"),
+                config_dir: tempdir.path().join("config"),
+                disable_metrics,
+                ..FloxConfig::default()
+            },
+            features: None,
+        };
+        (tempdir, config)
+    }
+
+    /// `disable_metrics=true` takes priority over the flag — the
+    /// chokepoint installs nothing on either stack and propagates the
+    /// disable flag via the env var.
+    #[test]
+    #[serial(canonical_events_wrapper_env)]
+    fn disable_metrics_short_circuits_install_regardless_of_stack_flag() {
+        let (_tempdir, config) = config_with(true);
+        temp_env::with_var(FLOX_METRICS_STACK_VAR, Some("legacy"), || {
+            assert_eq!(
+                legacy_chokepoint_action(&config),
+                LegacyChokepointAction::DisableMetricsAndSkipInstall
+            );
+        });
+        temp_env::with_var(FLOX_METRICS_STACK_VAR, Some("new"), || {
+            assert_eq!(
+                legacy_chokepoint_action(&config),
+                LegacyChokepointAction::DisableMetricsAndSkipInstall
+            );
+        });
+    }
+
+    /// `FLOX_METRICS_STACK=legacy` installs the legacy `Client` —
+    /// the in-field rollback handle.
+    #[test]
+    #[serial(canonical_events_wrapper_env)]
+    fn stack_legacy_routes_chokepoint_to_install_legacy_client() {
+        let (_tempdir, config) = config_with(false);
+        temp_env::with_var(FLOX_METRICS_STACK_VAR, Some("legacy"), || {
+            assert_eq!(
+                legacy_chokepoint_action(&config),
+                LegacyChokepointAction::InstallLegacyClient
+            );
+        });
+    }
+
+    /// `FLOX_METRICS_STACK=new` (default) leaves the legacy `Client`
+    /// uninstalled — the post-cutover production path. Without this
+    /// symmetric assertion, a future refactor that inverted the
+    /// match arms would still pass the existing rollback-side test.
+    #[test]
+    #[serial(canonical_events_wrapper_env)]
+    fn stack_new_routes_chokepoint_to_skip_install() {
+        let (_tempdir, config) = config_with(false);
+        temp_env::with_var(FLOX_METRICS_STACK_VAR, Some("new"), || {
+            assert_eq!(
+                legacy_chokepoint_action(&config),
+                LegacyChokepointAction::SkipInstall
+            );
+        });
+    }
+
+    /// Unset flag defaults to `new` — verify the chokepoint follows.
+    #[test]
+    #[serial(canonical_events_wrapper_env)]
+    fn unset_stack_flag_routes_chokepoint_to_skip_install() {
+        let (_tempdir, config) = config_with(false);
+        temp_env::with_var(FLOX_METRICS_STACK_VAR, None::<&str>, || {
+            assert_eq!(
+                legacy_chokepoint_action(&config),
+                LegacyChokepointAction::SkipInstall
+            );
+        });
     }
 }

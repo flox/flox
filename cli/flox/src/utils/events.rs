@@ -69,7 +69,7 @@ pub const FLOX_INVOCATION_ID_VAR: &str = "FLOX_INVOCATION_ID";
 ///
 /// See [`selected_metrics_stack`] for the resolution rules and the
 /// module rustdoc for the "Runtime stack selection" overview.
-pub const FLOX_METRICS_STACK_VAR: &str = "FLOX_METRICS_STACK";
+pub(crate) const FLOX_METRICS_STACK_VAR: &str = "FLOX_METRICS_STACK";
 
 /// Build-time URL for the new canonical-events ingest endpoint. Injected
 /// by the Nix wrapper (`pkgs/flox-cli/default.nix`) at the same site as
@@ -80,7 +80,7 @@ const METRICS_EVENTS_URL_V2: &str = env!("METRICS_EVENTS_URL_V2");
 /// Which telemetry stack the CLI installs a `Client` on for this
 /// process — see [`selected_metrics_stack`] and the module rustdoc.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MetricsStack {
+pub(crate) enum MetricsStack {
     /// New canonical-events pipeline (default). Installs an
     /// [`EventsClient`] pointing at the new ingest endpoint; the legacy
     /// stack's `Client` is left uninstalled and its `record_metric`
@@ -107,13 +107,27 @@ pub enum MetricsStack {
 ///   the production default — never emit nothing because the flag was
 ///   misspelled.
 ///
-/// Called once at each of the two `Client` install sites (the legacy
-/// install at `cli/flox/src/commands/mod.rs` and the new install via
-/// [`build_events_client`] / [`install_events_client_for_main`]).
-/// Both sites read the same env var value during the same startup
-/// window so the two reads agree by construction — no need for
-/// process-wide caching.
-pub fn selected_metrics_stack() -> MetricsStack {
+/// The resolution is cached process-wide in a `OnceLock` so both
+/// `Client` install sites (the legacy install at
+/// `cli/flox/src/commands/mod.rs` and the new install via
+/// [`build_events_client`]) see the same value with exactly **one**
+/// warning per process — calling this function N times from a
+/// process that set `FLOX_METRICS_STACK=banana` produces exactly one
+/// warn, not N. Tests bypass the cache via a `#[cfg(test)]`
+/// alternate definition so each test can exercise a different env
+/// value via `temp_env::with_var`.
+#[cfg(not(test))]
+pub(crate) fn selected_metrics_stack() -> MetricsStack {
+    static CACHED: OnceLock<MetricsStack> = OnceLock::new();
+    *CACHED.get_or_init(read_metrics_stack_from_env)
+}
+
+#[cfg(test)]
+pub(crate) fn selected_metrics_stack() -> MetricsStack {
+    read_metrics_stack_from_env()
+}
+
+fn read_metrics_stack_from_env() -> MetricsStack {
     match env::var(FLOX_METRICS_STACK_VAR) {
         Ok(raw) => match raw.as_str() {
             "" | "new" => MetricsStack::New,
@@ -271,9 +285,11 @@ pub fn build_events_client(config: &Config, invocation_id: Uuid) -> Option<Event
 /// `command_completed` emitted by the dispatcher or by `activate.rs` are
 /// all delivered before the process exits.
 ///
-/// When [`build_events_client`] returns `None` (production-dormant case),
-/// the guard is still returned but its flush is a no-op — `EventsHub::global()`
-/// has no client installed and `record_event` short-circuits.
+/// When [`build_events_client`] returns `None` (disable_metrics, the
+/// legacy stack is selected via `FLOX_METRICS_STACK=legacy`, or one
+/// of the other short-circuit cases), the guard is still returned
+/// but its flush is a no-op — `EventsHub::global()` has no client
+/// installed and `record_event` short-circuits.
 pub fn install_events_client_for_main(config: &Config, invocation_id: Uuid) -> EventsGuard {
     if let Some(client) = build_events_client(config, invocation_id) {
         EventsHub::global().set_client(client);
@@ -506,11 +522,13 @@ mod tests {
         });
     }
 
-    /// Cutover behavior: with `FLOX_METRICS_STACK` unset (default
-    /// `new`) and `_FLOX_METRICS_URL_OVERRIDE` unset, the production
-    /// fallback to `METRICS_EVENTS_URL_V2` installs a real client.
-    /// Pre-cutover this branch returned `None` ("production dormant"),
-    /// so this test asserts the flip is wired through.
+    /// With `FLOX_METRICS_STACK` unset (default `new`) and
+    /// `_FLOX_METRICS_URL_OVERRIDE` unset, the production fallback to
+    /// `METRICS_EVENTS_URL_V2` installs a real client. Pin both the
+    /// success of the default-stack install and the use of the
+    /// build-injected URL — without this assertion a future refactor
+    /// that re-introduced the no-override `None` branch would silently
+    /// disable production telemetry.
     #[test]
     #[serial(canonical_events_wrapper_env)]
     fn build_events_client_returns_some_on_default_stack_with_v2_url_fallback() {
@@ -634,6 +652,27 @@ mod tests {
         with_var(FLOX_METRICS_STACK_VAR, Some("banana"), || {
             assert_eq!(selected_metrics_stack(), MetricsStack::New);
         });
+    }
+
+    /// Sentinel: the build-injected [`METRICS_EVENTS_URL_V2`] must not
+    /// be the placeholder. Pairs with the companion `lib.warnIf` in
+    /// `pkgs/flox-cli/default.nix` so a release built with the
+    /// placeholder fails both `nix build` (warning) and `cargo test`
+    /// (this assertion). Survives rebases / merge conflicts that a
+    /// comment alone wouldn't.
+    #[test]
+    fn metrics_events_url_v2_is_not_placeholder() {
+        assert!(
+            !METRICS_EVENTS_URL_V2.contains("example.invalid"),
+            "METRICS_EVENTS_URL_V2 still has the .invalid placeholder; \
+             replace it in pkgs/flox-cli/default.nix before merging."
+        );
+        assert!(
+            !METRICS_EVENTS_URL_V2.contains("REPLACE-BEFORE-MERGE"),
+            "METRICS_EVENTS_URL_V2 still has the REPLACE-BEFORE-MERGE \
+             sentinel; replace it in pkgs/flox-cli/default.nix before \
+             merging."
+        );
     }
 
     /// End-to-end test mirroring the spec's "one-run-one-completed" AC:

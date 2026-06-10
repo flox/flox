@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
 use anyhow::Result;
-use tracing::debug;
+use tracing::{debug, trace};
 
 use crate::client::EventsClient;
 use crate::{
@@ -56,7 +56,7 @@ impl EventsHub {
             if let Some(client) = client {
                 client.flush(force)
             } else {
-                debug!("No canonical events client configured, skipping flush");
+                trace!("No canonical events client configured, skipping flush");
                 Ok(())
             }
         })
@@ -65,7 +65,7 @@ impl EventsHub {
     pub fn record_event(&self, kind: EventKind) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!("No canonical events client configured, skipping record");
+                trace!("No canonical events client configured, skipping record");
                 return Ok(());
             };
 
@@ -78,7 +78,7 @@ impl EventsHub {
     pub fn record_command_run(&self, subcommand: String) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!("No canonical events client configured, skipping command_run record");
+                trace!("No canonical events client configured, skipping command_run record");
                 return Ok(());
             };
             client.record_command_run(subcommand)
@@ -96,7 +96,7 @@ impl EventsHub {
         }
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!("No canonical events client configured, skipping command_completed record");
+                trace!("No canonical events client configured, skipping command_completed record");
                 return Ok(());
             };
             client.record_command_completed(subcommand)
@@ -114,7 +114,7 @@ impl EventsHub {
     ) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.activate record"
                 );
                 return Ok(());
@@ -150,7 +150,7 @@ impl EventsHub {
     ) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.activate record"
                 );
                 return Ok(());
@@ -164,7 +164,7 @@ impl EventsHub {
     pub fn record_environment_push(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!("No canonical events client configured, skipping environment.push record");
+                trace!("No canonical events client configured, skipping environment.push record");
                 return Ok(());
             };
             client.record_environment_push(env_detail)
@@ -176,7 +176,7 @@ impl EventsHub {
     pub fn record_environment_pull(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!("No canonical events client configured, skipping environment.pull record");
+                trace!("No canonical events client configured, skipping environment.pull record");
                 return Ok(());
             };
             client.record_environment_pull(env_detail)
@@ -188,7 +188,7 @@ impl EventsHub {
     pub fn record_package_install(&self, package: String, outcome: PackageOutcome) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!("No canonical events client configured, skipping package.install record");
+                trace!("No canonical events client configured, skipping package.install record");
                 return Ok(());
             };
             client.record_package_install(package, outcome)
@@ -200,7 +200,7 @@ impl EventsHub {
     pub fn record_package_upgrade(&self, package: String, outcome: PackageOutcome) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!("No canonical events client configured, skipping package.upgrade record");
+                trace!("No canonical events client configured, skipping package.upgrade record");
                 return Ok(());
             };
             client.record_package_upgrade(package, outcome)
@@ -212,7 +212,7 @@ impl EventsHub {
     pub fn record_package_uninstall(&self, package: String, outcome: PackageOutcome) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!("No canonical events client configured, skipping package.uninstall record");
+                trace!("No canonical events client configured, skipping package.uninstall record");
                 return Ok(());
             };
             client.record_package_uninstall(package, outcome)
@@ -224,7 +224,7 @@ impl EventsHub {
     pub fn record_environment_containerize(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.containerize record"
                 );
                 return Ok(());
@@ -238,7 +238,7 @@ impl EventsHub {
     pub fn record_environment_delete(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!("No canonical events client configured, skipping environment.delete record");
+                trace!("No canonical events client configured, skipping environment.delete record");
                 return Ok(());
             };
             client.record_environment_delete(env_detail)
@@ -250,7 +250,7 @@ impl EventsHub {
     pub fn record_environment_include_upgrade(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.include.upgrade record"
                 );
                 return Ok(());
@@ -265,7 +265,7 @@ impl EventsHub {
     pub fn record_environment_install(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.install record"
                 );
                 return Ok(());
@@ -279,7 +279,7 @@ impl EventsHub {
     pub fn record_environment_list(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!("No canonical events client configured, skipping environment.list record");
+                trace!("No canonical events client configured, skipping environment.list record");
                 return Ok(());
             };
             client.record_environment_list(env_detail)
@@ -292,7 +292,7 @@ impl EventsHub {
     pub fn record_environment_uninstall(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.uninstall record"
                 );
                 return Ok(());
@@ -307,7 +307,7 @@ impl EventsHub {
     pub fn record_environment_upgrade(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.upgrade record"
                 );
                 return Ok(());
@@ -321,7 +321,7 @@ impl EventsHub {
     pub fn record_environment_services_start(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.services.start record"
                 );
                 return Ok(());
@@ -335,7 +335,7 @@ impl EventsHub {
     pub fn record_environment_services_stop(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.services.stop record"
                 );
                 return Ok(());
@@ -349,7 +349,7 @@ impl EventsHub {
     pub fn record_environment_services_restart(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.services.restart record"
                 );
                 return Ok(());
@@ -363,7 +363,7 @@ impl EventsHub {
     pub fn record_environment_services_status(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.services.status record"
                 );
                 return Ok(());
@@ -377,7 +377,7 @@ impl EventsHub {
     pub fn record_environment_services_logs(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.services.logs record"
                 );
                 return Ok(());
@@ -391,7 +391,7 @@ impl EventsHub {
     pub fn record_environment_services_persist(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.services.persist record"
                 );
                 return Ok(());
@@ -405,7 +405,7 @@ impl EventsHub {
     pub fn record_environment_generations_history(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.generations.history record"
                 );
                 return Ok(());
@@ -419,7 +419,7 @@ impl EventsHub {
     pub fn record_environment_generations_rollback(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.generations.rollback record"
                 );
                 return Ok(());
@@ -433,7 +433,7 @@ impl EventsHub {
     pub fn record_environment_generations_switch(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.generations.switch record"
                 );
                 return Ok(());
@@ -447,7 +447,7 @@ impl EventsHub {
     pub fn record_environment_edit(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!("No canonical events client configured, skipping environment.edit record");
+                trace!("No canonical events client configured, skipping environment.edit record");
                 return Ok(());
             };
             client.record_environment_edit(env_detail)
@@ -464,7 +464,7 @@ impl EventsHub {
     ) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!("No canonical events client configured, skipping environment.edit record");
+                trace!("No canonical events client configured, skipping environment.edit record");
                 return Ok(());
             };
             client.record_environment_edit_with(env_detail, extras)
@@ -476,7 +476,7 @@ impl EventsHub {
     pub fn record_environment_publish(&self, env_detail: EnvDetail) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.publish record"
                 );
                 return Ok(());
@@ -494,7 +494,7 @@ impl EventsHub {
     ) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.publish record"
                 );
                 return Ok(());
@@ -514,7 +514,7 @@ impl EventsHub {
     ) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!(
+                trace!(
                     "No canonical events client configured, skipping environment.generations.list record"
                 );
                 return Ok(());
@@ -528,7 +528,7 @@ impl EventsHub {
     pub fn record_build(&self, has_expression_build: bool, has_manifest_build: bool) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!("No canonical events client configured, skipping build record");
+                trace!("No canonical events client configured, skipping build record");
                 return Ok(());
             };
             client.record_build(has_expression_build, has_manifest_build)
@@ -540,7 +540,7 @@ impl EventsHub {
     pub fn record_search(&self, search_term: String) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
-                debug!("No canonical events client configured, skipping search record");
+                trace!("No canonical events client configured, skipping search record");
                 return Ok(());
             };
             client.record_search(search_term)
