@@ -49,6 +49,15 @@ let
 
       # Metrics subsystem configuration
       METRICS_EVENTS_URL = "https://z7qixlmjr3.execute-api.eu-north-1." + "amazonaws.com/prod/capture";
+      # TODO(dsawyer 2026-06-10): set the real new-pipeline ingest URL
+      # before merging PR 6. The placeholder value below intentionally
+      # fails-closed: any production build that ships with it will send
+      # the new-stack request to a non-routable host so the misconfig is
+      # loud (network error in logs) rather than silently dropped or
+      # mis-delivered. The new endpoint authenticates with the same
+      # `METRICS_EVENTS_API_KEY` as the legacy URL (D1, resolved
+      # 2026-06-09) — no second API-key const.
+      METRICS_EVENTS_URL_V2 = "https://example.invalid/REPLACE-BEFORE-MERGE";
       METRICS_EVENTS_API_KEY = "5pAQnBqz5Q7dpqVD9BEXQ4Kdc3D2fGTd3ZgP0XXK";
 
       # oauth client id
