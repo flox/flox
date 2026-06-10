@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
+use chrono::{DateTime, Duration, Utc};
 use enum_dispatch::enum_dispatch;
 use flox_catalog::ResolveError;
 use flox_core::activate::mode::ActivateMode;
@@ -534,6 +535,79 @@ impl GenerationLink {
             .into_iter()
             .all(|link| link.is_symlink() && link.exists())
     }
+}
+
+/// The default age-out window for generation GC-root links: a generation that
+/// has not been the current generation for longer than this is eligible for
+/// pruning (flox#4332).
+pub const DEFAULT_GENERATION_LINK_MAX_AGE_DAYS: i64 = 10;
+
+/// Which generation GC-root links a prune pass removes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PrunePolicy {
+    /// Remove links whose generation ceased to be the current generation
+    /// longer ago than `max_age` (the opportunistic aging policy).
+    AgedOut { max_age: Duration },
+    /// Remove every generation link that is neither current nor in use, like
+    /// `nix-collect-garbage -d`.
+    AllNonLive,
+}
+
+impl PrunePolicy {
+    /// The default age-out policy ([`DEFAULT_GENERATION_LINK_MAX_AGE_DAYS`]).
+    pub fn default_aged_out() -> Self {
+        PrunePolicy::AgedOut {
+            max_age: chrono::Duration::days(DEFAULT_GENERATION_LINK_MAX_AGE_DAYS),
+        }
+    }
+}
+
+/// A generation's GC-root link plus the metadata needed to decide whether it
+/// can be pruned. See [`generation_links_to_prune`].
+#[derive(Clone, Debug)]
+pub struct PrunableGeneration {
+    pub generation: GenerationId,
+    pub link: GenerationLink,
+    /// When this generation last ceased to be the current generation; `None`
+    /// while it is current (the current generation is never pruned).
+    pub last_live: Option<DateTime<Utc>>,
+    /// The canonical store path the link resolves to, or `None` if it dangles.
+    /// Compared against the protected set to keep links that live activations
+    /// depend on.
+    pub store_path: Option<PathBuf>,
+}
+
+/// Decide which generation GC-root links are safe to prune.
+///
+/// A generation is never pruned when it is the `current` generation, nor when
+/// its link resolves to a store path in `protected_store_paths` — the canonical
+/// store paths that live activations reference, whose links appear in running
+/// processes' `PATH` and must stay live. Of the rest, [`PrunePolicy::AllNonLive`]
+/// prunes all, and [`PrunePolicy::AgedOut`] prunes only those whose `last_live`
+/// is older than the window.
+pub fn generation_links_to_prune<'a>(
+    candidates: &'a [PrunableGeneration],
+    current: GenerationId,
+    protected_store_paths: &HashSet<PathBuf>,
+    policy: PrunePolicy,
+    now: DateTime<Utc>,
+) -> Vec<&'a PrunableGeneration> {
+    candidates
+        .iter()
+        .filter(|candidate| candidate.generation != current)
+        .filter(|candidate| {
+            !candidate
+                .store_path
+                .as_deref()
+                .is_some_and(|path| protected_store_paths.contains(path))
+        })
+        .filter(|candidate| match policy {
+            PrunePolicy::AllNonLive => true,
+            PrunePolicy::AgedOut { max_age } => candidate
+                .last_live
+                .is_some_and(|last_live| now - last_live > max_age),
+        })
+        .collect()
 }
 
 /// A pointer to an environment, either managed or path.
@@ -1646,6 +1720,64 @@ mod test {
             !generation.exists(),
             "dangling links must not count as built"
         );
+    }
+
+    /// The prune decision never removes the current generation or one a live
+    /// activation depends on; `AgedOut` removes only links older than the
+    /// window, `AllNonLive` removes the rest.
+    #[test]
+    fn prune_decision_respects_current_protected_and_age() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = CanonicalPath::new(dir.path()).unwrap();
+        let system: System = "x86_64-linux".to_string();
+        let pointer = RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+            &base, "default", &system,
+        );
+
+        let now = Utc::now();
+        let candidate =
+            |n: usize, last_live: Option<DateTime<Utc>>, store: Option<&str>| PrunableGeneration {
+                generation: GenerationId::from(n),
+                link: pointer.generation_link(GenerationId::from(n)),
+                last_live,
+                store_path: store.map(PathBuf::from),
+            };
+
+        let candidates = vec![
+            candidate(5, None, Some("/nix/store/gen5")), // current
+            candidate(4, Some(now - chrono::Duration::days(30)), Some("/nix/store/gen4")), // aged but protected
+            candidate(3, Some(now - chrono::Duration::days(20)), Some("/nix/store/gen3")), // aged
+            candidate(2, Some(now - chrono::Duration::days(2)), Some("/nix/store/gen2")),  // recent
+            candidate(1, Some(now - chrono::Duration::days(20)), None),                    // aged, dangling
+        ];
+        let protected: HashSet<PathBuf> = [PathBuf::from("/nix/store/gen4")].into_iter().collect();
+
+        let pruned_ids = |policy| {
+            let mut ids: Vec<usize> = generation_links_to_prune(
+                &candidates,
+                GenerationId::from(5),
+                &protected,
+                policy,
+                now,
+            )
+            .iter()
+            .map(|candidate| *candidate.generation)
+            .collect::<Vec<_>>();
+            ids.sort_unstable();
+            ids
+        };
+
+        // Aged-out (10 days): only the aged, unprotected generations (3 and the
+        // dangling 1); current (5), protected (4) and recent (2) are kept.
+        assert_eq!(
+            pruned_ids(PrunePolicy::AgedOut {
+                max_age: chrono::Duration::days(10)
+            }),
+            vec![1, 3]
+        );
+
+        // All-non-live: everything except current (5) and protected (4).
+        assert_eq!(pruned_ids(PrunePolicy::AllNonLive), vec![1, 2, 3]);
     }
 }
 
