@@ -460,6 +460,141 @@ impl BaseCatalogInfo {
     }
 }
 
+/// Tests that require `BaseCatalogInfo::new_mock()` are gated behind the
+/// "tests" feature because `new_mock` itself is feature-gated.
+#[cfg(all(test, feature = "tests"))]
+mod stability_selection_tests {
+    use catalog_api_v1::types as api_types;
+
+    use super::*;
+
+    /// A local fixture with two pages that share the "not-default" stability
+    /// tag but have *distinct* revs, making the first-match-wins ordering
+    /// assertion meaningful.
+    fn two_page_fixture() -> BaseCatalogInfo {
+        api_types::BaseCatalogInfo {
+            base_url: "https://fixture.flox.dev".parse().unwrap(),
+            scraped_pages: [
+                api_types::PageInfo {
+                    rev: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1".into(),
+                    rev_count: 10,
+                    stability_tags: ["not-default".into()].to_vec(),
+                },
+                api_types::PageInfo {
+                    rev: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2".into(),
+                    rev_count: 5,
+                    stability_tags: [
+                        BaseCatalogInfo::DEFAULT_STABILITY.into(),
+                        "not-default".into(),
+                    ]
+                    .to_vec(),
+                },
+            ]
+            .to_vec(),
+            stabilities: [
+                api_types::StabilityInfo {
+                    name: BaseCatalogInfo::DEFAULT_STABILITY.into(),
+                    ref_: BaseCatalogInfo::DEFAULT_STABILITY.into(),
+                },
+                api_types::StabilityInfo {
+                    name: "not-default".into(),
+                    ref_: "not-default".into(),
+                },
+            ]
+            .to_vec(),
+        }
+        .into()
+    }
+
+    /// A stability that is present in the mock fixture returns `Some` with a
+    /// URL of the form `{base_url}?rev={rev}`.
+    #[test]
+    fn url_for_latest_page_with_stability_returns_some_for_known_stability() {
+        let info = BaseCatalogInfo::new_mock();
+
+        // "not-default" is on page0 of the mock, which has rev = ""
+        let url = info.url_for_latest_page_with_stability("not-default");
+        assert_eq!(
+            url,
+            Some(BaseCatalogUrl::from("https://mock.flox.dev?rev="))
+        );
+    }
+
+    /// The default stability ("stable") is on page1 of the mock fixture.
+    #[test]
+    fn url_for_latest_page_with_default_stability_returns_page_with_stable_tag() {
+        let info = BaseCatalogInfo::new_mock();
+
+        let url = info.url_for_latest_page_with_default_stability();
+        // page1 carries "stable" and has rev = "" — URL is base_url?rev=
+        assert_eq!(
+            url,
+            Some(BaseCatalogUrl::from("https://mock.flox.dev?rev="))
+        );
+    }
+
+    /// A stability that does not appear in any page returns `None`.
+    #[test]
+    fn url_for_latest_page_with_stability_returns_none_for_missing_stability() {
+        let info = BaseCatalogInfo::new_mock();
+
+        let url = info.url_for_latest_page_with_stability("does-not-exist");
+        assert_eq!(url, None);
+    }
+
+    /// First-match-wins: when a stability tag appears on both pages, the URL
+    /// from the *first* page in `scraped_pages` order is returned.
+    #[test]
+    fn url_for_latest_page_with_stability_first_match_wins() {
+        let info = two_page_fixture();
+
+        // "not-default" appears on both pages; page0 must win.
+        let url = info
+            .url_for_latest_page_with_stability("not-default")
+            .expect("should find not-default");
+
+        let expected = BaseCatalogUrl::from(
+            "https://fixture.flox.dev?rev=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
+        );
+        assert_eq!(url, expected, "first page in scraped_pages order must win");
+
+        // Confirm page1's rev is NOT selected.
+        assert_ne!(
+            url,
+            BaseCatalogUrl::from(
+                "https://fixture.flox.dev?rev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2"
+            )
+        );
+    }
+
+    /// "stable" appears only on page1 in the two-page fixture.
+    #[test]
+    fn url_for_latest_page_with_default_stability_uses_two_page_fixture() {
+        let info = two_page_fixture();
+
+        let url = info
+            .url_for_latest_page_with_default_stability()
+            .expect("should find stable");
+
+        let expected = BaseCatalogUrl::from(
+            "https://fixture.flox.dev?rev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2",
+        );
+        assert_eq!(url, expected);
+    }
+
+    /// `available_stabilities` returns the names from the `stabilities` list
+    /// in the mock fixture.
+    #[test]
+    fn available_stabilities_returns_expected_names() {
+        let info = BaseCatalogInfo::new_mock();
+
+        let mut stabilities = info.available_stabilities();
+        stabilities.sort_unstable();
+
+        assert_eq!(stabilities, vec!["not-default", "stable"]);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
