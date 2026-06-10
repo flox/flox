@@ -174,7 +174,7 @@ function old_hello_response_version() {
     run "$FLOX_BIN" upgrade --dry-run
   assert_success
   assert_output \
-"Dry run: Upgrades available for 1 package(s) in 'test':
+"Dry run: 1 version change in 'test':
 - hello: $(old_hello_response_version) -> $(hello_response_version)
 
 To apply these changes, run upgrade without the '--dry-run' flag."
