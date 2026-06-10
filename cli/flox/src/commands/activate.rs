@@ -745,14 +745,21 @@ fn notify_package_upgrades(
         debug!("Not notifying user of upgrade, no changes in lockfile");
         return Ok(());
     }
+    let diff_for_system = upgrade_result.diff_for_system(&flox.system);
+    if diff_for_system.is_empty() {
+        debug!("Not notifying user of upgrade, no changes for this system");
+        return Ok(());
+    }
     let description = environment_description(environment)?;
     // TODO: this doesn't capture the environment chosen by the user if we prompted
     let flags = environment_select
         .to_flags()
         .map(|flags| format!(" {}", flags.join(" ")))
         .unwrap_or("".to_string());
+    let (version_changes, rebuilds) = super::upgrade::count_upgrade_categories(&diff_for_system);
+    let summary = super::upgrade::format_upgrade_summary(version_changes, rebuilds);
     let message = formatdoc! {"
-        Upgrades are available for packages in {description}.
+        {summary} available in {description}.
         Use 'flox upgrade --dry-run{flags}' for details.
     "};
     message::info(message);
@@ -1116,7 +1123,7 @@ mod upgrade_notification_tests {
         let printed = writer.to_string();
 
         assert_eq!(printed, formatdoc! {"
-            ℹ Upgrades are available for packages in 'name'.
+            ℹ 1 rebuild available in 'name'.
             Use 'flox upgrade --dry-run' for details.
 
         "});
