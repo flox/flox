@@ -9,6 +9,10 @@ use crate::connection::{EventsConnection, EventsConnectionV2};
 use crate::{
     CliCommandCompletedPayload,
     CliCommandRunPayload,
+    CliEnvironmentActivatePayload,
+    CliEnvironmentPullPayload,
+    CliEnvironmentPushPayload,
+    EnvDetail,
     Event,
     EventKind,
     SharedMetadataTemplate,
@@ -80,6 +84,51 @@ impl EventsClient {
         let payload =
             CliCommandCompletedPayload::new(self.shared_metadata.into_payload(subcommand));
         self.record_event(EventKind::CliCommandCompleted(payload))
+    }
+
+    /// Record a `cli.environment.activate` event with the supplied env
+    /// detail. The caller is expected to populate any of the activate-
+    /// specific extras (`start_services`, `mode`, `has_includes`,
+    /// `lockfile_version`, `shell`) via the builder methods on the payload
+    /// before this is called, e.g. via [`build_environment_activate_payload`].
+    pub fn record_environment_activate(
+        &self,
+        payload: CliEnvironmentActivatePayload,
+    ) -> Result<()> {
+        self.record_event(EventKind::CliEnvironmentActivate(payload))
+    }
+
+    /// Build a `cli.environment.activate` payload using the stored shared
+    /// metadata (with `subcommand = "activate"`) and the supplied env
+    /// detail. The result has every activate extra `None`; the caller chains
+    /// `with_*` builder methods on the returned value before passing to
+    /// [`record_environment_activate`].
+    pub fn build_environment_activate_payload(
+        &self,
+        env_detail: EnvDetail,
+    ) -> CliEnvironmentActivatePayload {
+        CliEnvironmentActivatePayload::new(
+            self.shared_metadata.into_payload("activate".to_string()),
+            env_detail,
+        )
+    }
+
+    /// Record a `cli.environment.push` event with the supplied env detail.
+    pub fn record_environment_push(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentPushPayload::new(
+            self.shared_metadata.into_payload("push".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentPush(payload))
+    }
+
+    /// Record a `cli.environment.pull` event with the supplied env detail.
+    pub fn record_environment_pull(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentPullPayload::new(
+            self.shared_metadata.into_payload("pull".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentPull(payload))
     }
 
     pub fn record_event(&self, kind: impl Into<EventKind>) -> Result<()> {

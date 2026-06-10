@@ -102,6 +102,28 @@ impl Pull {
                 // `ManagedEnvironment`, but we want to keep the remote name.
                 subcommand_metric!("pull", managed_environment = remote.to_string());
 
+                // Same env detail on the new pipeline. This branch runs
+                // **before** any `ConcreteEnvironment` is materialized, so
+                // the shared `env_detail_from_concrete` helper does not
+                // apply — construct the `EnvDetail` directly from the
+                // `RemoteRef` available here, matching the legacy
+                // `managed_environment = remote.to_string()` extra above
+                // for parity (spec AC #2).
+                {
+                    let env_detail = flox_events::EnvDetail {
+                        env_kind: "managed".to_string(),
+                        env_ref_or_name: remote.to_string(),
+                    };
+                    if let Err(err) =
+                        flox_events::EventsHub::global().record_environment_pull(env_detail)
+                    {
+                        debug!(
+                            error = %err,
+                            "Failed to record v2 cli.environment.pull (NewAbbreviated) event"
+                        );
+                    }
+                }
+
                 let (dir_message, dir) = match dir {
                     Some(dir) => (format!("{}", dir.display()), dir),
                     None => (
@@ -136,6 +158,22 @@ impl Pull {
                     .detect_concrete_environment(&mut flox, "Pull")
                     .await?;
                 environment_subcommand_metric!("pull", environment);
+
+                // Mirror the legacy emit above on the new pipeline as a
+                // typed `cli.environment.pull` event. Standard shared
+                // helper applies here — `environment` is a
+                // `ConcreteEnvironment`.
+                {
+                    let env_detail = crate::utils::events::env_detail_from_concrete(&environment);
+                    if let Err(err) =
+                        flox_events::EventsHub::global().record_environment_pull(env_detail)
+                    {
+                        debug!(
+                            error = %err,
+                            "Failed to record v2 cli.environment.pull (RemoteUpdate) event"
+                        );
+                    }
+                }
 
                 if let ConcreteEnvironment::Path(environment) = environment {
                     bail!(
