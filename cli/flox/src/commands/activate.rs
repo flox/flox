@@ -203,6 +203,33 @@ impl Activate {
                 .to_string()
         );
 
+        // Mirror the legacy emit above on the new pipeline as a typed
+        // `cli.environment.activate` event. The legacy stays in place
+        // (it feeds the dormant-from-the-other-side `Hub`); this emit
+        // feeds the dormant-until-cutover `EventsHub`. See PR 6 for the
+        // flip.
+        {
+            let env_detail = crate::utils::events::env_detail_from_concrete(&concrete_environment);
+            let hub = flox_events::EventsHub::global();
+            if let Some(payload) = hub.build_environment_activate_payload(env_detail) {
+                let payload = payload
+                    .with_start_services(options.start_services)
+                    .with_mode(
+                        options
+                            .mode
+                            .clone()
+                            .unwrap_or(ActivateMode::Dev)
+                            .to_string(),
+                    );
+                if let Err(err) = hub.record_environment_activate(payload) {
+                    debug!(
+                        error = %err,
+                        "Failed to record canonical cli.environment.activate (start_services + mode) event"
+                    );
+                }
+            }
+        }
+
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment
             && !options.trust
         {
@@ -370,6 +397,21 @@ impl ActivateOptions {
         let has_includes = lockfile.compose.is_some();
         subcommand_metric!("activate", "has_includes" = has_includes);
 
+        // Same breadcrumb on the new pipeline as a typed event.
+        {
+            let env_detail = crate::utils::events::env_detail_from_concrete(&concrete_environment);
+            let hub = flox_events::EventsHub::global();
+            if let Some(payload) = hub.build_environment_activate_payload(env_detail) {
+                let payload = payload.with_has_includes(has_includes);
+                if let Err(err) = hub.record_environment_activate(payload) {
+                    debug!(
+                        error = %err,
+                        "Failed to record canonical cli.environment.activate (has_includes) event"
+                    );
+                }
+            }
+        }
+
         let rendered_env_path_result = concrete_environment.rendered_env_links(&flox);
         let rendered_env_path = match rendered_env_path_result {
             Err(EnvironmentError::Core(err)) if err.is_incompatible_system_error() => {
@@ -395,6 +437,24 @@ impl ActivateOptions {
         // for reasons unknown.
         let lockfile_version = lockfile.version();
         subcommand_metric!("activate#version", lockfile_version = lockfile_version);
+
+        // The legacy emit above uses the `activate#version` pseudo-
+        // subcommand to carry `lockfile_version`. The new pipeline drops
+        // that pseudo-sub entirely (per spec AC #4) and rides the value
+        // on a real `cli.environment.activate` event instead.
+        {
+            let env_detail = crate::utils::events::env_detail_from_concrete(&concrete_environment);
+            let hub = flox_events::EventsHub::global();
+            if let Some(payload) = hub.build_environment_activate_payload(env_detail) {
+                let payload = payload.with_lockfile_version(lockfile_version.to_string());
+                if let Err(err) = hub.record_environment_activate(payload) {
+                    debug!(
+                        error = %err,
+                        "Failed to record canonical cli.environment.activate (lockfile_version) event"
+                    );
+                }
+            }
+        }
 
         let mode = self.mode.clone().unwrap_or(
             manifest
@@ -507,6 +567,24 @@ impl ActivateOptions {
             detect_shell_for_subshell()
         };
         subcommand_metric!("activate", "shell" = shell.to_string());
+
+        // Same shell breadcrumb on the new pipeline. Runs before the
+        // `command.exec()` site below, so the buffered event is flushed
+        // synchronously by the PR 2b pre-exec emit + flush block (spec AC
+        // #5).
+        {
+            let env_detail = crate::utils::events::env_detail_from_concrete(&concrete_environment);
+            let hub = flox_events::EventsHub::global();
+            if let Some(payload) = hub.build_environment_activate_payload(env_detail) {
+                let payload = payload.with_shell(shell.to_string());
+                if let Err(err) = hub.record_environment_activate(payload) {
+                    debug!(
+                        error = %err,
+                        "Failed to record canonical cli.environment.activate (shell) event"
+                    );
+                }
+            }
+        }
 
         let core = AttachCtx {
             // Don't rely on FLOX_ENV in the environment when we explicitly know

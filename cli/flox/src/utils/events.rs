@@ -16,8 +16,9 @@ use std::env;
 use std::str::FromStr;
 use std::sync::OnceLock;
 
-use flox_events::{EventsClient, EventsGuard, EventsHub, SharedMetadataTemplate};
+use flox_events::{EnvDetail, EventsClient, EventsGuard, EventsHub, SharedMetadataTemplate};
 use flox_rust_sdk::flox::FLOX_VERSION;
+use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::utils::INVOCATION_SOURCES;
 use tracing::debug;
 use uuid::Uuid;
@@ -212,6 +213,34 @@ pub fn emit_early_exit_command_pair(subcommand: &str, invocation_id: Uuid) {
         debug!(error = %err, "Canonical events early-exit: flush failed");
     }
     hub.clear_client();
+}
+
+/// Build an [`EnvDetail`] for the supplied [`ConcreteEnvironment`], using
+/// the same env-kind / env-ref mapping the legacy
+/// `environment_subcommand_metric!` macro at
+/// `cli/flox/src/utils/metrics.rs:57-71` applies.
+///
+/// This is the **single shared helper** the spec mandates for the new path
+/// — the per-kind match must not be duplicated across `activate`, `push`,
+/// and `pull` call sites. (PR 2's `pull.rs:103` `NewAbbreviated` branch is
+/// the lone exception: it runs before a `ConcreteEnvironment` is
+/// materialized, so it constructs the `EnvDetail` directly from the
+/// `RemoteRef` available there — see the call-site comment.)
+pub fn env_detail_from_concrete(env: &ConcreteEnvironment) -> EnvDetail {
+    match env {
+        ConcreteEnvironment::Remote(environment) => EnvDetail {
+            env_kind: "remote".to_string(),
+            env_ref_or_name: environment.env_ref().to_string(),
+        },
+        ConcreteEnvironment::Managed(environment) => EnvDetail {
+            env_kind: "managed".to_string(),
+            env_ref_or_name: environment.env_ref().to_string(),
+        },
+        ConcreteEnvironment::Path(environment) => EnvDetail {
+            env_kind: "path".to_string(),
+            env_ref_or_name: Environment::name(environment).to_string(),
+        },
+    }
 }
 
 /// Resolve the endpoint URL for the canonical events client.

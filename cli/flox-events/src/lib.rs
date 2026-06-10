@@ -121,6 +121,12 @@ pub enum EventKind {
     CliCommandRun(CliCommandRunPayload),
     #[serde(rename = "cli.command_completed")]
     CliCommandCompleted(CliCommandCompletedPayload),
+    #[serde(rename = "cli.environment.activate")]
+    CliEnvironmentActivate(CliEnvironmentActivatePayload),
+    #[serde(rename = "cli.environment.push")]
+    CliEnvironmentPush(CliEnvironmentPushPayload),
+    #[serde(rename = "cli.environment.pull")]
+    CliEnvironmentPull(CliEnvironmentPullPayload),
 }
 
 /// Shared metadata fields stamped onto every `cli.*` command event payload.
@@ -211,6 +217,132 @@ pub struct CliCommandCompletedPayload {
 impl CliCommandCompletedPayload {
     pub fn new(command: CommandPayload) -> Self {
         Self { command }
+    }
+}
+
+/// Environment kind a `flox activate` / `push` / `pull` invocation touched,
+/// matching the three legacy `environment_subcommand_metric!` arms
+/// (`remote_environment` / `managed_environment` / `path_environment`).
+///
+/// Carried on every `cli.environment.*` event so downstream classifiers can
+/// reconstruct the legacy `*_environment` columns without re-parsing the
+/// `event_type` tag.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EnvDetail {
+    /// One of `"remote"`, `"managed"`, `"path"` — the
+    /// [`flox_rust_sdk::models::environment::ConcreteEnvironment`] variant
+    /// the command operated on. `"managed"` is also used for `flox pull`'s
+    /// `NewAbbreviated` branch, where only the remote `RemoteRef` is known
+    /// at emission time (no materialized `ConcreteEnvironment` yet).
+    pub env_kind: String,
+    /// The environment's identifier — the result of `env_ref().to_string()`
+    /// for remote and managed environments, and `Environment::name(...)`
+    /// for path environments. Matches the value the legacy macros emit.
+    pub env_ref_or_name: String,
+}
+
+/// Payload for [`EventKind::CliEnvironmentActivate`].
+///
+/// Carries the env detail plus the extras the legacy
+/// `environment_subcommand_metric!("activate", ...)` and
+/// `subcommand_metric!("activate", ...)` call sites in
+/// `cli/flox/src/commands/activate.rs` recorded. Each call site emits one
+/// event with only the fields it knows populated; the downstream consumer
+/// correlates via `invocation_id`. `lockfile_version` lands here instead of
+/// on a (dropped) `cli.environment.activate#version` pseudo-subcommand.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentActivatePayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_services: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_includes: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lockfile_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shell: Option<String>,
+}
+
+impl CliEnvironmentActivatePayload {
+    /// Construct an empty-extras payload — every Optional field defaulted
+    /// to `None`. Call sites fill in the fields they know via the builder
+    /// methods below or struct-literal field overrides.
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+            start_services: None,
+            mode: None,
+            has_includes: None,
+            lockfile_version: None,
+            shell: None,
+        }
+    }
+
+    pub fn with_start_services(mut self, value: bool) -> Self {
+        self.start_services = Some(value);
+        self
+    }
+
+    pub fn with_mode(mut self, value: impl Into<String>) -> Self {
+        self.mode = Some(value.into());
+        self
+    }
+
+    pub fn with_has_includes(mut self, value: bool) -> Self {
+        self.has_includes = Some(value);
+        self
+    }
+
+    pub fn with_lockfile_version(mut self, value: impl Into<String>) -> Self {
+        self.lockfile_version = Some(value.into());
+        self
+    }
+
+    pub fn with_shell(mut self, value: impl Into<String>) -> Self {
+        self.shell = Some(value.into());
+        self
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentPush`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentPushPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentPushPayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentPull`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentPullPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentPullPayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
     }
 }
 
@@ -333,6 +465,154 @@ mod tests {
         };
         let payload = template.into_payload("activate".to_string());
         assert_eq!(payload, command_payload("activate"));
+    }
+
+    fn env_detail(kind: &str, ref_or_name: &str) -> EnvDetail {
+        EnvDetail {
+            env_kind: kind.to_string(),
+            env_ref_or_name: ref_or_name.to_string(),
+        }
+    }
+
+    fn activate_envelope_json(payload_extras: serde_json::Value) -> serde_json::Value {
+        let mut payload = expected_payload_json("activate");
+        let payload_obj = payload.as_object_mut().expect("payload object");
+        for (key, value) in payload_extras.as_object().expect("extras object") {
+            payload_obj.insert(key.clone(), value.clone());
+        }
+        json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": "cli.environment.activate",
+            "payload": payload,
+        })
+    }
+
+    #[test]
+    fn cli_environment_activate_remote_envelope_golden() {
+        let payload = CliEnvironmentActivatePayload::new(
+            command_payload("activate"),
+            env_detail("remote", "alice/myenv"),
+        )
+        .with_start_services(false)
+        .with_mode("dev");
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentActivate(payload)))
+            .expect("event serializes");
+        let expected = activate_envelope_json(json!({
+            "env_kind": "remote",
+            "env_ref_or_name": "alice/myenv",
+            "start_services": false,
+            "mode": "dev",
+        }));
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_environment_activate_managed_envelope_golden() {
+        let payload = CliEnvironmentActivatePayload::new(
+            command_payload("activate"),
+            env_detail("managed", "alice/myenv"),
+        )
+        .with_has_includes(true);
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentActivate(payload)))
+            .expect("event serializes");
+        let expected = activate_envelope_json(json!({
+            "env_kind": "managed",
+            "env_ref_or_name": "alice/myenv",
+            "has_includes": true,
+        }));
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_environment_activate_path_envelope_golden() {
+        let payload = CliEnvironmentActivatePayload::new(
+            command_payload("activate"),
+            env_detail("path", "myenv"),
+        )
+        .with_lockfile_version("1")
+        .with_shell("bash");
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentActivate(payload)))
+            .expect("event serializes");
+        let expected = activate_envelope_json(json!({
+            "env_kind": "path",
+            "env_ref_or_name": "myenv",
+            "lockfile_version": "1",
+            "shell": "bash",
+        }));
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_environment_activate_omits_unset_extras() {
+        // No extras populated: every Optional field is `None` and the
+        // wire shape omits them entirely (skip_serializing_if).
+        let payload = CliEnvironmentActivatePayload::new(
+            command_payload("activate"),
+            env_detail("path", "myenv"),
+        );
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentActivate(payload)))
+            .expect("event serializes");
+        let expected = activate_envelope_json(json!({
+            "env_kind": "path",
+            "env_ref_or_name": "myenv",
+        }));
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_environment_push_envelope_golden() {
+        let payload = CliEnvironmentPushPayload::new(
+            command_payload("push"),
+            env_detail("managed", "alice/myenv"),
+        );
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentPush(payload)))
+            .expect("event serializes");
+        let mut payload_json = expected_payload_json("push");
+        let payload_obj = payload_json.as_object_mut().expect("payload object");
+        payload_obj.insert("env_kind".to_string(), json!("managed"));
+        payload_obj.insert("env_ref_or_name".to_string(), json!("alice/myenv"));
+        let expected = json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": "cli.environment.push",
+            "payload": payload_json,
+        });
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_environment_pull_envelope_golden() {
+        // The `NewAbbreviated` branch in `pull.rs:103` constructs the
+        // detail directly with `env_kind = "managed"`; assert that
+        // shape on the wire so a future drift in the wrapper trips
+        // this test.
+        let payload = CliEnvironmentPullPayload::new(
+            command_payload("pull"),
+            env_detail("managed", "alice/myenv"),
+        );
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentPull(payload)))
+            .expect("event serializes");
+        let mut payload_json = expected_payload_json("pull");
+        let payload_obj = payload_json.as_object_mut().expect("payload object");
+        payload_obj.insert("env_kind".to_string(), json!("managed"));
+        payload_obj.insert("env_ref_or_name".to_string(), json!("alice/myenv"));
+        let expected = json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": "cli.environment.pull",
+            "payload": payload_json,
+        });
+        assert_eq!(value, expected);
     }
 }
 

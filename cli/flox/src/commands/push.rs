@@ -83,6 +83,19 @@ impl Push {
 
         environment_subcommand_metric!("push", env);
 
+        // Mirror the legacy emit above on the new pipeline as a typed
+        // `cli.environment.push` event. Dormant until the PR 6 cutover
+        // installs a real client.
+        {
+            let env_detail = crate::utils::events::env_detail_from_concrete(&env);
+            if let Err(err) = flox_events::EventsHub::global().record_environment_push(env_detail) {
+                debug!(
+                    error = %err,
+                    "Failed to record canonical cli.environment.push event"
+                );
+            }
+        }
+
         match (env, self.owner) {
             (ConcreteEnvironment::Managed(managed_environment), Some(owner)) => {
                 cant_change_owner_error(managed_environment.pointer(), owner)?
