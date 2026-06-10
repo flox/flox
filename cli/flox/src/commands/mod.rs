@@ -201,82 +201,82 @@ impl Commands {
     /// convention against the consumer-side classifiers. The `auth`
     /// command's downstream classifier needs the literal `auth2` —
     /// the special-case rewrite is deferred to PR 5 per spec.
-    pub fn subcommand_name(&self) -> String {
+    ///
+    /// The `Help` arm of each nested family (e.g. `flox services
+    /// --help`) uses the `parent::help` form rather than the bare
+    /// parent name, so the wire shape distinguishes "the user
+    /// explicitly asked for help on `services`" from any future
+    /// emission that uses the bare parent name.
+    pub fn subcommand_name(&self) -> &'static str {
         match self {
-            Commands::Help(_) => "help".to_string(),
+            Commands::Help(_) => "help",
             Commands::Manage(c) => match c {
-                ManageCommands::Init(_) => "init".to_string(),
-                ManageCommands::Envs(_) => "envs".to_string(),
-                ManageCommands::Delete(_) => "delete".to_string(),
+                ManageCommands::Init(_) => "init",
+                ManageCommands::Envs(_) => "envs",
+                ManageCommands::Delete(_) => "delete",
             },
             Commands::Use(c) => match c {
-                UseCommands::Activate(_) => "activate".to_string(),
-                UseCommands::Deactivate(_) => "deactivate".to_string(),
+                UseCommands::Activate(_) => "activate",
+                UseCommands::Deactivate(_) => "deactivate",
                 UseCommands::Services(sub) => match sub {
-                    services::ServicesCommands::Help => "services".to_string(),
-                    services::ServicesCommands::Restart(_) => "services::restart".to_string(),
-                    services::ServicesCommands::Start(_) => "services::start".to_string(),
-                    services::ServicesCommands::Status(_) => "services::status".to_string(),
-                    services::ServicesCommands::Stop(_) => "services::stop".to_string(),
-                    services::ServicesCommands::Logs(_) => "services::logs".to_string(),
-                    services::ServicesCommands::Persist(_) => "services::persist".to_string(),
+                    services::ServicesCommands::Help => "services::help",
+                    services::ServicesCommands::Restart(_) => "services::restart",
+                    services::ServicesCommands::Start(_) => "services::start",
+                    services::ServicesCommands::Status(_) => "services::status",
+                    services::ServicesCommands::Stop(_) => "services::stop",
+                    services::ServicesCommands::Logs(_) => "services::logs",
+                    services::ServicesCommands::Persist(_) => "services::persist",
                 },
             },
             Commands::Discover(c) => match c {
-                DiscoverCommands::Search(_) => "search".to_string(),
-                DiscoverCommands::Show(_) => "show".to_string(),
+                DiscoverCommands::Search(_) => "search",
+                DiscoverCommands::Show(_) => "show",
             },
             Commands::Modify(c) => match c {
-                ModifyCommands::Install(_) => "install".to_string(),
-                ModifyCommands::List(_) => "list".to_string(),
-                ModifyCommands::Edit(_) => "edit".to_string(),
+                ModifyCommands::Install(_) => "install",
+                ModifyCommands::List(_) => "list",
+                ModifyCommands::Edit(_) => "edit",
                 ModifyCommands::Include(sub) => match sub {
-                    include::IncludeCommands::Help => "include".to_string(),
-                    include::IncludeCommands::Upgrade(_) => "include::upgrade".to_string(),
+                    include::IncludeCommands::Help => "include::help",
+                    include::IncludeCommands::Upgrade(_) => "include::upgrade",
                 },
-                ModifyCommands::Upgrade(_) => "upgrade".to_string(),
-                ModifyCommands::Uninstall(_) => "uninstall".to_string(),
+                ModifyCommands::Upgrade(_) => "upgrade",
+                ModifyCommands::Uninstall(_) => "uninstall",
                 ModifyCommands::Generations(sub) => match sub {
-                    generations::GenerationsCommands::Help => "generations".to_string(),
-                    generations::GenerationsCommands::List(_) => "generations::list".to_string(),
-                    generations::GenerationsCommands::History(_) => {
-                        "generations::history".to_string()
-                    },
-                    generations::GenerationsCommands::Rollback(_) => {
-                        "generations::rollback".to_string()
-                    },
-                    generations::GenerationsCommands::Switch(_) => {
-                        "generations::switch".to_string()
-                    },
+                    generations::GenerationsCommands::Help => "generations::help",
+                    generations::GenerationsCommands::List(_) => "generations::list",
+                    generations::GenerationsCommands::History(_) => "generations::history",
+                    generations::GenerationsCommands::Rollback(_) => "generations::rollback",
+                    generations::GenerationsCommands::Switch(_) => "generations::switch",
                 },
             },
             Commands::Share(c) => match c {
-                ShareCommands::Build(_) => "build".to_string(),
-                ShareCommands::Publish(_) => "publish".to_string(),
-                ShareCommands::Push(_) => "push".to_string(),
-                ShareCommands::Pull(_) => "pull".to_string(),
-                ShareCommands::Containerize(_) => "containerize".to_string(),
+                ShareCommands::Build(_) => "build",
+                ShareCommands::Publish(_) => "publish",
+                ShareCommands::Push(_) => "push",
+                ShareCommands::Pull(_) => "pull",
+                ShareCommands::Containerize(_) => "containerize",
             },
             Commands::Admin(c) => match c {
-                AdminCommands::Auth(_) => "auth".to_string(),
-                AdminCommands::Config(_) => "config".to_string(),
-                AdminCommands::Gc(_) => "gc".to_string(),
+                AdminCommands::Auth(_) => "auth",
+                AdminCommands::Config(_) => "config",
+                AdminCommands::Gc(_) => "gc",
             },
             Commands::Internal(c) => match c {
-                InternalCommands::ResetMetrics(_) => "reset-metrics".to_string(),
-                InternalCommands::Upload(_) => "upload".to_string(),
-                InternalCommands::LockManifest(_) => "lock-manifest".to_string(),
-                InternalCommands::CheckForUpgrades(_) => "check-for-upgrades".to_string(),
-                InternalCommands::ActivationState(_) => "activation-state".to_string(),
-                InternalCommands::ServicesSocket(_) => "services-socket".to_string(),
-                InternalCommands::HookEnv(_) => "hook-env".to_string(),
+                InternalCommands::ResetMetrics(_) => "reset-metrics",
+                InternalCommands::Upload(_) => "upload",
+                InternalCommands::LockManifest(_) => "lock-manifest",
+                InternalCommands::CheckForUpgrades(_) => "check-for-upgrades",
+                InternalCommands::ActivationState(_) => "activation-state",
+                InternalCommands::ServicesSocket(_) => "services-socket",
+                InternalCommands::HookEnv(_) => "hook-env",
             },
             Commands::Beta(c) => match c {
-                beta::BetaCommands::BetaEnabled(_) => "beta-enabled".to_string(),
+                beta::BetaCommands::BetaEnabled(_) => "beta-enabled",
             },
             // Hidden operator command group; the legacy pipeline emitted no
             // metric for it, so the bare parent name is sufficient here.
-            Commands::Factory(_) => "factory".to_string(),
+            Commands::Factory(_) => "factory",
         }
     }
 }
@@ -352,12 +352,13 @@ impl FloxArgs {
         // `command.exec()` call when activate replaces the parent
         // process) — the hub's idempotent flag ensures only one of the
         // two paths actually records the completed event.
-        let v2_subcommand = self
+        let v2_subcommand: &'static str = self
             .command
             .as_ref()
             .map(Commands::subcommand_name)
-            .unwrap_or_else(|| "help".to_string());
-        if let Err(err) = flox_events::EventsHub::global().record_command_run(v2_subcommand.clone())
+            .unwrap_or("help");
+        if let Err(err) =
+            flox_events::EventsHub::global().record_command_run(v2_subcommand.to_string())
         {
             debug!(error = %err, "Failed to record v2 cli.command_run event");
         }
@@ -437,7 +438,6 @@ impl FloxArgs {
         let signal_handler = async { tokio::signal::ctrl_c().await.unwrap() };
         let keep_tempfiles = config.flox.keep_tempdir.unwrap_or_default();
 
-        let canonical_subcommand_for_completion = v2_subcommand.clone();
         let cli_worker = async move {
             // command handled above
             let result = match self.command.unwrap() {
@@ -478,8 +478,8 @@ impl FloxArgs {
             // has already recorded its own completion before `command.exec()`
             // replaces the parent process, the hub's idempotent flag silently
             // turns this call into a no-op.
-            if let Err(err) = flox_events::EventsHub::global()
-                .record_command_completed(canonical_subcommand_for_completion)
+            if let Err(err) =
+                flox_events::EventsHub::global().record_command_completed(v2_subcommand.to_string())
             {
                 debug!(error = %err, "Failed to record v2 cli.command_completed event");
             }

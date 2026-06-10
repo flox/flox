@@ -56,7 +56,11 @@ pub fn resolve_invocation_id() -> Uuid {
                 uuid
             },
             Err(err) => {
-                debug!(error = %err, raw = %raw, "FLOX_INVOCATION_ID set but unparseable; minting fresh id");
+                // Deliberately do not log the raw value — it is an env var
+                // a parent flox process set, so it is generally not
+                // sensitive, but matching `resolve_endpoint_url`'s rule
+                // keeps the policy uniform for tracing subscribers.
+                debug!(error = %err, "FLOX_INVOCATION_ID set but unparseable; minting fresh id");
                 Uuid::new_v4()
             },
         },
@@ -185,6 +189,9 @@ pub fn install_events_client_for_main(config: &Config, invocation_id: Uuid) -> E
 /// `_FLOX_METRICS_URL_OVERRIDE` simply skips the emission — the user-facing
 /// command completes regardless. After emission the global hub's client is
 /// cleared so a subsequent test-mode invocation does not see leaked state.
+/// No previous client is restored here because the early-exit branches
+/// always run *before* [`install_events_client_for_main`] — the hub holds
+/// no client at this point.
 pub fn emit_early_exit_command_pair(subcommand: &str, invocation_id: Uuid) {
     let Ok(config) = Config::parse() else {
         debug!("v2 events early-exit: could not parse config; skipping emit");
@@ -194,7 +201,7 @@ pub fn emit_early_exit_command_pair(subcommand: &str, invocation_id: Uuid) {
         return;
     };
     let hub = EventsHub::global();
-    let previous = hub.set_client(client);
+    hub.set_client(client);
     if let Err(err) = hub.record_command_run(subcommand.to_string()) {
         debug!(error = %err, "v2 events early-exit: command_run record failed");
     }
@@ -205,9 +212,6 @@ pub fn emit_early_exit_command_pair(subcommand: &str, invocation_id: Uuid) {
         debug!(error = %err, "v2 events early-exit: flush failed");
     }
     hub.clear_client();
-    if let Some(previous) = previous {
-        hub.set_client(previous);
-    }
 }
 
 /// Resolve the endpoint URL for the v2 events client.
@@ -222,9 +226,11 @@ fn resolve_endpoint_url() -> Option<String> {
     match url::Url::parse(&raw) {
         Ok(parsed) => Some(parsed.to_string()),
         Err(err) => {
+            // Deliberately do not log `raw` — a dev who experiments with
+            // putting credentials in the override URL should not have them
+            // captured by a `RUST_LOG=debug` tracing subscriber.
             debug!(
                 error = %err,
-                raw = %raw,
                 "v2 events: _FLOX_METRICS_URL_OVERRIDE is unparseable; not installing client"
             );
             None
