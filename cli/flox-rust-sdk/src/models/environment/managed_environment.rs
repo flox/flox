@@ -1,7 +1,9 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{fs, io};
 
+use chrono::Utc;
 use flox_core::data::environment_ref::{EnvironmentName, EnvironmentOwner, RemoteEnvironmentRef};
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, ContentsMatch, WriteManifest};
 use flox_manifest::lockfile::{LOCKFILE_FILENAME, Lockfile};
@@ -9,7 +11,7 @@ use flox_manifest::parsed::common::IncludeDescriptor;
 use flox_manifest::raw::{CatalogPackage, FlakePackage, PackageToInstall, StorePath};
 use flox_manifest::{Manifest, ManifestError, Migrated, Validated};
 use thiserror::Error;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
 
 use super::core_environment::{CoreEnvironment, UpgradeResult};
 use super::fetcher::IncludeFetcher;
@@ -40,8 +42,11 @@ use super::{
     LOG_DIR_NAME,
     ManagedPointer,
     PathPointer,
+    PrunableGeneration,
+    PrunePolicy,
     RenderedEnvironmentLinks,
     UninstallationAttempt,
+    generation_links_to_prune,
     path_hash,
     services_socket_path,
 };
@@ -1239,6 +1244,74 @@ impl ManagedEnvironment {
         );
         self.lock_pointer()?;
         self.flip_to_generation(built_link)
+    }
+
+    /// The current generation plus a prune candidate for every generation that
+    /// has a GC-root link materialized on disk for this host.
+    fn prunable_generations(
+        &self,
+    ) -> Result<(GenerationId, Vec<PrunableGeneration>), EnvironmentError> {
+        let metadata = self
+            .generations()
+            .metadata()
+            .map_err(ManagedEnvironmentError::Generations)?;
+        let current = metadata
+            .current_gen()
+            .expect("managed environment always has a current generation");
+
+        let candidates = metadata
+            .generations()
+            .into_iter()
+            .filter_map(|(generation, generation_metadata)| {
+                let link = self.rendered_env_links.generation_link(generation);
+                // Only generations whose link is materialized on this host are
+                // prunable; a dangling link (symlink present, target gone) is
+                // included so it gets cleaned up.
+                if !link.dev().is_symlink() && !link.run().is_symlink() {
+                    return None;
+                }
+                Some(PrunableGeneration {
+                    generation,
+                    last_live: generation_metadata.last_live,
+                    store_path: fs::canonicalize(link.dev()).ok(),
+                    link,
+                })
+            })
+            .collect();
+
+        Ok((current, candidates))
+    }
+
+    /// Prune this environment's generation GC-root links according to `policy`,
+    /// never removing the current generation or links referenced by live
+    /// activations (`protected`, canonical store paths from
+    /// [`live_activation_store_paths`](super::live_activation_store_paths)).
+    ///
+    /// Best-effort: removing a link failing is logged, not fatal. Returns the
+    /// link paths that were removed.
+    pub fn prune_generation_links(
+        &self,
+        policy: PrunePolicy,
+        protected: &HashSet<PathBuf>,
+    ) -> Result<Vec<PathBuf>, EnvironmentError> {
+        let (current, candidates) = self.prunable_generations()?;
+        let to_prune =
+            generation_links_to_prune(&candidates, current, protected, policy, Utc::now());
+
+        let mut removed = Vec::new();
+        for generation in to_prune {
+            for link in [generation.link.dev(), generation.link.run()] {
+                match fs::remove_file(link) {
+                    Ok(()) => removed.push(link.to_path_buf()),
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => {},
+                    Err(err) => {
+                        warn!(path = %link.display(), %err, "failed to remove aged generation link");
+                    },
+                }
+            }
+        }
+
+        Ok(removed)
     }
 
     /// Returns the environment owner
@@ -2703,6 +2776,44 @@ mod test {
             Path::new(&expected_target),
             "activation pointer flipped to generation 1's GC-root link"
         );
+    }
+
+    /// `prune_generation_links` removes non-current generation links and keeps
+    /// the current generation's link (flox#4332 F3).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn prune_generation_links_removes_non_current_links() {
+        let owner = "owner".parse().unwrap();
+        let (mut flox, temp_dir) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+
+        let mut env = mock_managed_environment_in(&flox, "version = 1", owner, &temp_dir, None);
+
+        // Generation 1 link, then install -> generation 2 (current); both links present.
+        env.build(&flox).unwrap();
+        let gen1 = env
+            .rendered_env_links
+            .generation_link(GenerationId::from(1usize));
+        let packages = [PackageToInstall::Catalog(
+            CatalogPackage::from_str("hello").unwrap(),
+        )];
+        env.install(&packages, &flox).unwrap();
+        let gen2 = env
+            .rendered_env_links
+            .generation_link(GenerationId::from(2usize));
+        assert!(
+            gen1.exists() && gen2.exists(),
+            "both generation links built"
+        );
+
+        // No live activations -> all non-live: generation 1 pruned, current (2) kept.
+        let removed = env
+            .prune_generation_links(PrunePolicy::AllNonLive, &std::collections::HashSet::new())
+            .unwrap();
+        assert!(!removed.is_empty(), "generation 1 links removed");
+        assert!(!gen1.exists(), "non-current generation link pruned");
+        assert!(gen2.exists(), "current generation link kept");
     }
 
     #[tokio::test(flavor = "multi_thread")]

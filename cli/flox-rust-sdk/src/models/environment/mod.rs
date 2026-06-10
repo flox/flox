@@ -6,6 +6,7 @@ use chrono::{DateTime, Duration, Utc};
 use enum_dispatch::enum_dispatch;
 use flox_catalog::ResolveError;
 use flox_core::activate::mode::ActivateMode;
+use flox_core::activations::{read_activations_json, state_json_path};
 use flox_core::data::environment_ref::{
     ActivateEnvironmentRef,
     EnvironmentName,
@@ -508,6 +509,16 @@ impl GenerationLink {
         &self.out_link_prefix
     }
 
+    /// The dev GC-root link path (`<prefix>-dev`).
+    pub fn dev(&self) -> &Path {
+        self.dev.as_path()
+    }
+
+    /// The run GC-root link path (`<prefix>-run`).
+    pub fn run(&self) -> &Path {
+        self.run.as_path()
+    }
+
     /// Activation links that resolve directly to this generation's GC-root
     /// links (its own `dev`/`run`).
     ///
@@ -608,6 +619,37 @@ pub fn generation_links_to_prune<'a>(
                 .is_some_and(|last_live| now - last_live > max_age),
         })
         .collect()
+}
+
+/// Canonical store paths of every live activation on this host.
+///
+/// Scans the runtime activations directory, keeps activations that still have
+/// running processes, and resolves each one's `flox_env` (the `.flox/run/…`
+/// link in the running process's `PATH`) to its store path. Generation-link
+/// pruning passes this as the protected set so it never removes a link a live
+/// activation depends on (flox#4332). Best-effort: unreadable or stale entries
+/// are skipped.
+pub fn live_activation_store_paths(runtime_dir: &Path) -> HashSet<PathBuf> {
+    let mut protected = HashSet::new();
+
+    let Ok(entries) = fs::read_dir(runtime_dir.join("activations")) else {
+        return protected; // nothing has been activated
+    };
+
+    for activation_dir in entries.flatten().map(|entry| entry.path()) {
+        let Ok((Some(state), _lock)) = read_activations_json(state_json_path(&activation_dir))
+        else {
+            continue;
+        };
+        if state.running_processes().is_none() {
+            continue; // not live; its links may be pruned
+        }
+        if let Ok(store_path) = fs::canonicalize(state.flox_env()) {
+            protected.insert(store_path);
+        }
+    }
+
+    protected
 }
 
 /// A pointer to an environment, either managed or path.
@@ -1745,10 +1787,22 @@ mod test {
 
         let candidates = vec![
             candidate(5, None, Some("/nix/store/gen5")), // current
-            candidate(4, Some(now - chrono::Duration::days(30)), Some("/nix/store/gen4")), // aged but protected
-            candidate(3, Some(now - chrono::Duration::days(20)), Some("/nix/store/gen3")), // aged
-            candidate(2, Some(now - chrono::Duration::days(2)), Some("/nix/store/gen2")),  // recent
-            candidate(1, Some(now - chrono::Duration::days(20)), None),                    // aged, dangling
+            candidate(
+                4,
+                Some(now - chrono::Duration::days(30)),
+                Some("/nix/store/gen4"),
+            ), // aged but protected
+            candidate(
+                3,
+                Some(now - chrono::Duration::days(20)),
+                Some("/nix/store/gen3"),
+            ), // aged
+            candidate(
+                2,
+                Some(now - chrono::Duration::days(2)),
+                Some("/nix/store/gen2"),
+            ), // recent
+            candidate(1, Some(now - chrono::Duration::days(20)), None), // aged, dangling
         ];
         let protected: HashSet<PathBuf> = [PathBuf::from("/nix/store/gen4")].into_iter().collect();
 
