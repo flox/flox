@@ -704,19 +704,7 @@ where
 /// Build HTTP client for FloxHub catalog API.
 /// Authentication headers are injected per-request via `register_auth_hook`.
 fn build_http_client(config: &FloxhubClientConfig) -> Result<reqwest::Client, FloxhubClientError> {
-    let mut headers = build_header_map(config).map_err(FloxhubClientError::Other)?;
-
-    // Extra headers (SDK can add invocation-source, QoS, etc.)
-    for (key, value) in &config.extra_headers {
-        headers.insert(
-            header::HeaderName::from_str(key).map_err(
-                |e: reqwest::header::InvalidHeaderName| FloxhubClientError::Other(e.to_string()),
-            )?,
-            header::HeaderValue::from_str(value).map_err(
-                |e: reqwest::header::InvalidHeaderValue| FloxhubClientError::Other(e.to_string()),
-            )?,
-        );
-    }
+    let headers = build_header_map(config).map_err(FloxhubClientError::Other)?;
 
     debug!(
         base_url = %config.base_url,
