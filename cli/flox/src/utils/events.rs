@@ -322,13 +322,13 @@ pub fn install_events_client_for_main(config: &Config, invocation_id: Uuid) -> E
 /// no client at this point.
 ///
 /// The `cli.command_completed` event emitted here is the **no-lifecycle**
-/// shape — `exit_code` / `duration_ms` / `error_category` are absent (via
-/// `skip_serializing_if`). These early-exit branches return their
+/// shape — `exit_code` / `duration_ms` / `error_category` are absent
+/// (via `skip_serializing_if`). These early-exit branches return their
 /// `ExitCode` before any meaningful dispatch happens, so emitting
 /// `exit_code = 0, duration_ms = 0` would mis-represent the run.
-/// Consumer-side reliability dashboards keying off the lifecycle triple
-/// must treat the absent fields as "early-exit, not measurable" rather
-/// than as a failure.
+/// Downstream consumers should treat absent lifecycle fields here as
+/// "early-exit, no dispatch occurred" rather than as success or
+/// failure.
 pub fn emit_early_exit_command_pair(subcommand: &str, invocation_id: Uuid) {
     let Ok(config) = Config::parse() else {
         debug!("Canonical events early-exit: could not parse config; skipping emit");

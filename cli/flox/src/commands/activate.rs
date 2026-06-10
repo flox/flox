@@ -663,6 +663,19 @@ impl ActivateOptions {
             // shell. The hub's idempotent flag turns the dispatcher's emit
             // into a no-op if `exec` returns an error and the failure
             // propagates back to `cli_worker`.
+            //
+            // Wire-shape caveat: this emit uses the **no-lifecycle**
+            // method because exec has not happened yet — no exit code
+            // or dispatch duration is observable here. If `exec`
+            // succeeds the activate stream sees only this no-lifecycle
+            // event (correct: the process is gone). If `exec` returns
+            // Err the chokepoint's later lifecycle emit is no-op'd by
+            // the hub's idempotent flag, so the activate-failure path
+            // produces a no-lifecycle event on the wire — downstream
+            // consumers cannot distinguish "activate replaced the
+            // process" from "activate's exec failed" via the
+            // event alone. The propagated `Err` still surfaces in
+            // logs.
             let hub = flox_events::EventsHub::global();
             if let Err(err) = hub.record_command_completed("activate".to_string()) {
                 debug!(

@@ -256,6 +256,50 @@ fn legacy_chokepoint_action(config: &Config) -> LegacyChokepointAction {
     }
 }
 
+/// The three lifecycle fields stamped onto `cli.command_completed`
+/// at the end-of-dispatch chokepoint emit. Computed by
+/// [`lifecycle_triple_for`] from the dispatch `Result` and the
+/// captured wall-clock duration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LifecycleTriple {
+    exit_code: i32,
+    duration_ms: u64,
+    error_category: Option<String>,
+}
+
+/// Derive the lifecycle triple from the captured dispatch `Result`
+/// and the wall-clock duration in milliseconds.
+///
+/// - `Ok(())` → `(0, duration, None)` — the dispatch handler
+///   returned successfully.
+/// - `Err(err)` → `(1, duration, Some(redacted))` — the handler
+///   returned an error; `error_category` is the PII-safe redacted
+///   fingerprint produced by [`categorize`].
+///
+/// The duration is taken as a `u128` (the native return of
+/// `Instant::elapsed().as_millis()`) and saturated into `u64`.
+/// `u64::MAX` milliseconds is ~584 million years, so the saturation
+/// is a defensive ceiling rather than a practical concern.
+///
+/// Caller responsibility: read `Instant::elapsed()` BEFORE any
+/// post-dispatch I/O so the value reflects handler-execution time
+/// only and is not inflated by unrelated awaits.
+fn lifecycle_triple_for(result: &Result<()>, duration_ms_u128: u128) -> LifecycleTriple {
+    let duration_ms = u64::try_from(duration_ms_u128).unwrap_or(u64::MAX);
+    match result {
+        Ok(()) => LifecycleTriple {
+            exit_code: 0,
+            duration_ms,
+            error_category: None,
+        },
+        Err(err) => LifecycleTriple {
+            exit_code: 1,
+            duration_ms,
+            error_category: Some(categorize(err)),
+        },
+    }
+}
+
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
     pub async fn handle(self, config: crate::config::Config) -> Result<()> {
@@ -416,11 +460,13 @@ impl FloxArgs {
         let keep_tempfiles = config.flox.keep_tempdir.unwrap_or_default();
 
         let cli_worker = async move {
-            // Captured immediately before the dispatch so duration_ms on
-            // `cli.command_completed` measures the user-perceived "the
-            // handler ran" interval. Pre-dispatch overhead (config
-            // parse, hub install, span setup) is excluded by
-            // construction.
+            // Captured immediately before the dispatch so duration_ms
+            // measures the handler-execution interval. Pre-dispatch
+            // overhead (config parse, hub install, span setup) is
+            // excluded; the post-dispatch update-notification await is
+            // also excluded by reading `.elapsed()` immediately after
+            // the match returns rather than after the await — see the
+            // `lifecycle_triple_for` doc-comment.
             let dispatch_start = Instant::now();
 
             // command handled above
@@ -446,6 +492,12 @@ impl FloxArgs {
                 },
             };
 
+            // Read elapsed() *before* the update-notification await
+            // so duration_ms reflects handler execution only — the
+            // notification await is unrelated I/O whose latency would
+            // otherwise systematically inflate the wire value.
+            let lifecycle = lifecycle_triple_for(&result, dispatch_start.elapsed().as_millis());
+
             // This will print the update notification after output from a successful
             // command but before an error is printed for an unsuccessful command.
             // That's a bit weird,
@@ -457,16 +509,6 @@ impl FloxArgs {
                 Err(e) => debug!("Failed to check for CLI update: {}", display_chain(&e)),
             }
 
-            // Compute the lifecycle triple from the captured result.
-            // `error_category` is `Some(...)` only on `Err`; the
-            // redaction helper produces a PII-safe fingerprint of the
-            // top frame of the anyhow chain.
-            let duration_ms = dispatch_start.elapsed().as_millis() as u64;
-            let (exit_code, error_category) = match &result {
-                Ok(()) => (0_i32, None),
-                Err(err) => (1_i32, Some(categorize(err))),
-            };
-
             // Emit the canonical `cli.command_completed` with the
             // dispatch lifecycle triple. When `activate.rs` has
             // already recorded a no-lifecycle completion before
@@ -475,9 +517,9 @@ impl FloxArgs {
             if let Err(err) = flox_events::EventsHub::global()
                 .record_command_completed_with_lifecycle(
                     canonical_subcommand.to_string(),
-                    exit_code,
-                    duration_ms,
-                    error_category,
+                    lifecycle.exit_code,
+                    lifecycle.duration_ms,
+                    lifecycle.error_category,
                 )
             {
                 debug!(error = %err, "Failed to record canonical cli.command_completed event");
@@ -1932,5 +1974,51 @@ mod legacy_chokepoint_tests {
                 LegacyChokepointAction::SkipInstall
             );
         });
+    }
+}
+
+#[cfg(test)]
+mod lifecycle_chokepoint_tests {
+    use super::*;
+
+    /// `Ok(())` → exit_code=0, duration passed through, no
+    /// error_category. Pins the success-branch contract so a future
+    /// refactor that swapped the arms is caught at test-time.
+    #[test]
+    fn ok_result_produces_zero_exit_no_category() {
+        let result: Result<()> = Ok(());
+        let triple = lifecycle_triple_for(&result, 1234);
+        assert_eq!(triple, LifecycleTriple {
+            exit_code: 0,
+            duration_ms: 1234,
+            error_category: None,
+        });
+    }
+
+    /// `Err(...)` → exit_code=1, duration passed through,
+    /// error_category populated with the redacted top frame.
+    /// `assert_eq!` on the category string pins both the arm and the
+    /// redaction wiring; a future change that bypassed `categorize`
+    /// would produce a different output and fail this assertion.
+    #[test]
+    fn err_result_produces_redacted_category() {
+        let err = anyhow::anyhow!("could not open /etc/passwd");
+        let triple = lifecycle_triple_for(&Err(err), 567);
+        assert_eq!(triple.exit_code, 1);
+        assert_eq!(triple.duration_ms, 567);
+        assert_eq!(
+            triple.error_category.as_deref(),
+            Some("could not open <path>"),
+        );
+    }
+
+    /// A `u128` duration that exceeds `u64::MAX` saturates to
+    /// `u64::MAX` rather than wrapping or panicking. Defensive — no
+    /// realistic dispatch exceeds 584M years.
+    #[test]
+    fn very_large_duration_saturates() {
+        let result: Result<()> = Ok(());
+        let triple = lifecycle_triple_for(&result, u128::MAX);
+        assert_eq!(triple.duration_ms, u64::MAX);
     }
 }

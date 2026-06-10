@@ -1901,6 +1901,117 @@ mod pipeline_tests {
         );
     }
 
+    /// Calling the lifecycle method twice against the same client
+    /// install emits only the first event — same sticky idempotency
+    /// the no-lifecycle method has, exercised against the lifecycle
+    /// variant.
+    #[test]
+    fn events_hub_record_command_completed_with_lifecycle_is_idempotent_per_install() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let connection = MockEventsConnection::default();
+        let sent_batches = connection.sent_batches();
+        let hub = EventsHub::new();
+        hub.set_client(client_with_connection(&tempdir, connection));
+
+        hub.record_command_completed_with_lifecycle("install".to_string(), 0, 100, None)
+            .expect("first lifecycle record succeeds");
+        hub.record_command_completed_with_lifecycle(
+            "install".to_string(),
+            1,
+            200,
+            Some("second".to_string()),
+        )
+        .expect("second lifecycle record is a silent no-op");
+        hub.flush(true).expect("flush events");
+
+        let sent_batches = sent_batches.lock().expect("sent batches lock").clone();
+        let total_events: usize = sent_batches.iter().map(Vec::len).sum();
+        assert_eq!(total_events, 1, "second lifecycle record must be a no-op");
+    }
+
+    /// Mixed sequence — no-lifecycle FIRST (the `activate.rs` pre-
+    /// exec emit), then lifecycle (the chokepoint emit after exec
+    /// returns Err). Idempotency keeps only the first event; the
+    /// lifecycle data captured at the chokepoint is silently
+    /// dropped. This is a documented wire-shape gap on the
+    /// activate-pre-exec failure path.
+    #[test]
+    fn events_hub_no_lifecycle_then_lifecycle_keeps_only_no_lifecycle() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let connection = MockEventsConnection::default();
+        let sent_batches = connection.sent_batches();
+        let hub = EventsHub::new();
+        hub.set_client(client_with_connection(&tempdir, connection));
+
+        hub.record_command_completed("activate".to_string())
+            .expect("pre-exec record succeeds");
+        hub.record_command_completed_with_lifecycle(
+            "activate".to_string(),
+            1,
+            500,
+            Some("exec returned err".to_string()),
+        )
+        .expect("post-exec lifecycle record is a silent no-op");
+        hub.flush(true).expect("flush events");
+
+        let events: Vec<Event> = sent_batches
+            .lock()
+            .expect("sent batches lock")
+            .iter()
+            .flatten()
+            .cloned()
+            .collect();
+        assert_eq!(events.len(), 1, "second record must be a no-op");
+        match &events[0].kind {
+            EventKind::CliCommandCompleted(payload) => {
+                assert!(
+                    payload.exit_code.is_none(),
+                    "first event is the no-lifecycle one — lifecycle fields must be absent"
+                );
+                assert!(payload.duration_ms.is_none());
+                assert!(payload.error_category.is_none());
+            },
+            other => panic!("expected CliCommandCompleted, got {other:?}"),
+        }
+    }
+
+    /// Mixed sequence — lifecycle FIRST (the chokepoint emit on
+    /// normal flow), then no-lifecycle (a defensive second call from
+    /// e.g. an early-exit path that somehow runs after the
+    /// chokepoint). Symmetric coverage: idempotency keeps the
+    /// lifecycle event.
+    #[test]
+    fn events_hub_lifecycle_then_no_lifecycle_keeps_only_lifecycle() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let connection = MockEventsConnection::default();
+        let sent_batches = connection.sent_batches();
+        let hub = EventsHub::new();
+        hub.set_client(client_with_connection(&tempdir, connection));
+
+        hub.record_command_completed_with_lifecycle("install".to_string(), 0, 100, None)
+            .expect("lifecycle record succeeds");
+        hub.record_command_completed("install".to_string())
+            .expect("second no-lifecycle record is a silent no-op");
+        hub.flush(true).expect("flush events");
+
+        let events: Vec<Event> = sent_batches
+            .lock()
+            .expect("sent batches lock")
+            .iter()
+            .flatten()
+            .cloned()
+            .collect();
+        assert_eq!(events.len(), 1, "second record must be a no-op");
+        match &events[0].kind {
+            EventKind::CliCommandCompleted(payload) => {
+                assert_eq!(payload.exit_code, Some(0));
+                assert_eq!(payload.duration_ms, Some(100));
+                assert_eq!(payload.error_category, None);
+            },
+            other => panic!("expected CliCommandCompleted, got {other:?}"),
+        }
+    }
+
     #[test]
     fn events_hub_set_client_resets_completed_recorded_flag() {
         let first_dir = tempfile::tempdir().expect("first tempdir");
