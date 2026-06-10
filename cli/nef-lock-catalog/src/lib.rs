@@ -29,3 +29,4 @@ impl Display for CatalogId {
 
 pub use nix_build_config::{LockOptions, lock_config, lock_config_with_options, read_config};
 pub use nix_build_lock::write_lock;
+pub use scan::{scan_package, scan_package_with_roots};
