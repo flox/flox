@@ -1,12 +1,31 @@
-//! Canonical telemetry event types emitted by the flox CLI.
+//! Canonical telemetry events emitted by the Flox CLI.
 //!
-//! Types only. There is no sink, no context, and no emission machinery
-//! in this crate.
+//! This crate contains the canonical event envelope and the self-contained
+//! pipeline for buffering and sending `cli.*` events. The global hub is dormant
+//! until a client is installed by the CLI.
 
-use serde::Serialize;
+mod buffer;
+mod client;
+mod connection;
+mod guard;
+mod hub;
+
+pub use buffer::{EVENTS_BUFFER_FILE_NAME, EventsBuffer};
+pub use client::{BATCH_SIZE, EventsClient};
+pub use connection::{CanonicalEventsConnection, EventsConnection, TRAILING_NETWORK_CALL_TIMEOUT};
+pub use guard::EventsGuard;
+pub use hub::EventsHub;
+use serde::{Deserialize, Serialize, de};
 use serde_with::{TimestampMilliSeconds, serde_as};
 use time::OffsetDateTime;
 use uuid::Uuid;
+
+#[cfg(any(test, feature = "tests"))]
+pub mod test_helpers {
+    pub use crate::connection::MockEventsConnection;
+}
+
+const CLI_SOURCE: &str = "cli";
 
 /// A single telemetry event in the canonical envelope shape.
 ///
@@ -15,9 +34,10 @@ use uuid::Uuid;
 /// is `{event_id, event_timestamp, source, invocation_id, device_id,
 /// auth_subject?, event_type, payload}`.
 ///
-/// Serialize-only: the CLI produces events, it never reads them back.
+/// The CLI serializes events for transport and deserializes the same shape to
+/// reload its local buffer.
 #[serde_as]
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct Event {
     /// Unique id for this event (used downstream for de-duplication).
     pub event_id: Uuid,
@@ -49,13 +69,52 @@ pub struct Event {
     pub kind: EventKind,
 }
 
+#[serde_as]
+#[derive(Debug, Deserialize)]
+struct EventWire {
+    event_id: Uuid,
+    #[serde_as(as = "TimestampMilliSeconds<i64>")]
+    event_timestamp: OffsetDateTime,
+    source: String,
+    invocation_id: Uuid,
+    device_id: Uuid,
+    auth_subject: Option<String>,
+    #[serde(flatten)]
+    kind: EventKind,
+}
+
+impl<'de> Deserialize<'de> for Event {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = EventWire::deserialize(deserializer)?;
+        if wire.source != CLI_SOURCE {
+            return Err(de::Error::custom(format!(
+                "expected canonical event source {CLI_SOURCE:?}, got {:?}",
+                wire.source
+            )));
+        }
+
+        Ok(Self {
+            event_id: wire.event_id,
+            event_timestamp: wire.event_timestamp,
+            source: CLI_SOURCE,
+            invocation_id: wire.invocation_id,
+            device_id: wire.device_id,
+            auth_subject: wire.auth_subject,
+            kind: wire.kind,
+        })
+    }
+}
+
 /// The set of event variants the CLI emits.
 ///
 /// The dotted wire name on `#[serde(rename)]` is the single source of
 /// truth for each variant; call sites use the enum, never a string
 /// literal. `derive_more::From` is derived so a call site can pass a
 /// payload value directly to anything accepting `impl Into<EventKind>`.
-#[derive(Debug, Clone, Serialize, derive_more::From)]
+#[derive(Debug, Clone, Serialize, Deserialize, derive_more::From, PartialEq, Eq)]
 #[serde(tag = "event_type", content = "payload")]
 pub enum EventKind {
     #[serde(rename = "cli.command_run")]
@@ -65,11 +124,11 @@ pub enum EventKind {
 }
 
 /// Payload for [`EventKind::CliCommandRun`]. Serializes to `{}`.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliCommandRunPayload {}
 
 /// Payload for [`EventKind::CliCommandCompleted`]. Serializes to `{}`.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliCommandCompletedPayload {}
 
 #[cfg(test)]
@@ -148,5 +207,204 @@ mod tests {
             "payload": {},
         });
         assert_eq!(value, expected);
+    }
+}
+
+#[cfg(test)]
+mod pipeline_tests {
+    use pretty_assertions::assert_eq;
+    use serial_test::serial;
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::test_helpers::MockEventsConnection;
+
+    const DEVICE_ID: Uuid = Uuid::from_u128(0xaaaaaaaa_aaaa_aaaa_aaaa_aaaaaaaaaaaa);
+    const INVOCATION_ID: Uuid = Uuid::from_u128(0xbbbbbbbb_bbbb_bbbb_bbbb_bbbbbbbbbbbb);
+
+    fn fixed_event(kind: EventKind) -> Event {
+        Event {
+            event_id: Uuid::from_u128(0x11111111_1111_1111_1111_111111111111),
+            event_timestamp: OffsetDateTime::from_unix_timestamp(1_700_000_000)
+                .expect("fixture timestamp is valid"),
+            source: "cli",
+            invocation_id: INVOCATION_ID,
+            device_id: DEVICE_ID,
+            auth_subject: None,
+            kind,
+        }
+    }
+
+    fn command_run_kind() -> EventKind {
+        EventKind::CliCommandRun(CliCommandRunPayload {})
+    }
+
+    fn command_completed_kind() -> EventKind {
+        EventKind::CliCommandCompleted(CliCommandCompletedPayload {})
+    }
+
+    fn unix_timestamp_millis(time: OffsetDateTime) -> i128 {
+        time.unix_timestamp_nanos() / 1_000_000
+    }
+
+    fn client_with_connection(tempdir: &TempDir, connection: MockEventsConnection) -> EventsClient {
+        EventsClient::new_with_connection(DEVICE_ID, tempdir.path(), INVOCATION_ID, connection)
+    }
+
+    #[test]
+    fn events_buffer_round_trips_entries_from_disk() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let first = fixed_event(command_run_kind());
+        let second = fixed_event(command_completed_kind());
+
+        let mut buffer = EventsBuffer::read(tempdir.path()).expect("read empty buffer");
+        buffer.push(first.clone()).expect("push first event");
+        buffer.push(second.clone()).expect("push second event");
+        drop(buffer);
+
+        let buffer = EventsBuffer::read(tempdir.path()).expect("read persisted buffer");
+
+        assert_eq!(buffer.iter().cloned().collect::<Vec<_>>(), vec![
+            first, second
+        ]);
+    }
+
+    #[test]
+    fn events_hub_without_client_skips_recording() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let hub = EventsHub::new();
+
+        hub.record_event(command_run_kind())
+            .expect("record with no client");
+
+        assert!(!tempdir.path().join(EVENTS_BUFFER_FILE_NAME).exists());
+    }
+
+    #[test]
+    fn events_hub_records_and_flushes_when_client_is_set() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let connection = MockEventsConnection::default();
+        let sent_batches = connection.sent_batches();
+        let hub = EventsHub::new();
+        hub.set_client(client_with_connection(&tempdir, connection));
+
+        hub.record_event(command_run_kind()).expect("record event");
+        assert!(tempdir.path().join(EVENTS_BUFFER_FILE_NAME).exists());
+
+        hub.flush(true).expect("flush events");
+
+        let sent_batches = sent_batches.lock().expect("sent batches lock").clone();
+        assert_eq!(sent_batches.len(), 1);
+        assert_eq!(sent_batches[0].len(), 1);
+        assert_eq!(sent_batches[0][0].kind, command_run_kind());
+    }
+
+    #[test]
+    fn events_client_record_stamps_event_metadata() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let client = client_with_connection(&tempdir, MockEventsConnection::default());
+        let before = OffsetDateTime::now_utc();
+
+        client
+            .record_event(command_completed_kind())
+            .expect("record event");
+
+        let after = OffsetDateTime::now_utc();
+        let buffer = EventsBuffer::read(tempdir.path()).expect("read buffer");
+        let event = buffer.iter().next().expect("one buffered event");
+
+        assert_ne!(event.event_id, Uuid::nil());
+        assert!(unix_timestamp_millis(event.event_timestamp) >= unix_timestamp_millis(before));
+        assert!(unix_timestamp_millis(event.event_timestamp) <= unix_timestamp_millis(after));
+        assert_eq!(event.source, "cli");
+        assert_eq!(event.invocation_id, INVOCATION_ID);
+        assert_eq!(event.device_id, DEVICE_ID);
+        assert_eq!(event.auth_subject, None);
+        assert_eq!(event.kind, command_completed_kind());
+    }
+
+    #[test]
+    fn events_client_flush_batches_and_overwrites_buffer_file() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let connection = MockEventsConnection::default();
+        let sent_batches = connection.sent_batches();
+        let mut client = client_with_connection(&tempdir, connection);
+
+        for _ in 0..(BATCH_SIZE + 1) {
+            client
+                .record_event(command_run_kind())
+                .expect("record event");
+        }
+
+        client.flush(true).expect("flush events");
+
+        let sent_batches = sent_batches.lock().expect("sent batches lock").clone();
+        assert_eq!(sent_batches.iter().map(Vec::len).collect::<Vec<_>>(), vec![
+            BATCH_SIZE, 1
+        ]);
+
+        let buffer = EventsBuffer::read(tempdir.path()).expect("read buffer");
+        assert_eq!(buffer.iter().count(), 0);
+        assert_eq!(
+            std::fs::read_to_string(tempdir.path().join(EVENTS_BUFFER_FILE_NAME))
+                .expect("read buffer file"),
+            ""
+        );
+    }
+
+    #[test]
+    fn events_client_flush_retains_buffer_when_connection_errors() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let connection = MockEventsConnection::default();
+        connection.fail_next_send();
+        let mut client = client_with_connection(&tempdir, connection);
+
+        client
+            .record_event(command_run_kind())
+            .expect("record event");
+
+        let err = client.flush(true).expect_err("flush should fail");
+        assert!(err.to_string().contains("mock events send failed"));
+
+        let buffer = EventsBuffer::read(tempdir.path()).expect("read buffer");
+        let buffered = buffer.iter().cloned().collect::<Vec<_>>();
+        assert_eq!(buffered.len(), 1);
+        assert_eq!(buffered[0].kind, command_run_kind());
+    }
+
+    #[test]
+    fn canonical_events_connection_serializes_canonical_json_body() {
+        let event = fixed_event(command_run_kind());
+        let body =
+            CanonicalEventsConnection::serialize_events(&[&event]).expect("serialize events");
+
+        assert_eq!(
+            body,
+            r#"[{"event_id":"11111111-1111-1111-1111-111111111111","event_timestamp":1700000000000,"source":"cli","invocation_id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","device_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","event_type":"cli.command_run","payload":{}}]"#
+        );
+    }
+
+    #[test]
+    #[serial(global_events_client)]
+    fn events_guard_drop_flushes_global_hub() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let connection = MockEventsConnection::default();
+        let sent_batches = connection.sent_batches();
+        let previous_client =
+            EventsHub::global().set_client(client_with_connection(&tempdir, connection));
+
+        EventsHub::global()
+            .record_event(command_run_kind())
+            .expect("record event");
+        drop(EventsGuard::new());
+
+        EventsHub::global().clear_client();
+        if let Some(previous_client) = previous_client {
+            EventsHub::global().set_client(previous_client);
+        }
+
+        let sent_batches = sent_batches.lock().expect("sent batches lock").clone();
+        assert_eq!(sent_batches.len(), 1);
+        assert_eq!(sent_batches[0].len(), 1);
     }
 }
