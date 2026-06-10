@@ -18,6 +18,7 @@ mod init;
 mod install;
 mod list;
 mod lock_manifest;
+mod prune_generation_links;
 mod publish;
 mod pull;
 mod push;
@@ -810,6 +811,13 @@ enum InternalCommands {
         check_for_upgrades::CheckForUpgrades,
     ),
 
+    /// Prune aged managed-environment generation GC-root links
+    #[bpaf(command("prune-generation-links"), hide)]
+    PruneGenerationLinks(
+        #[bpaf(external(prune_generation_links::prune_generation_links))]
+        prune_generation_links::PruneGenerationLinks,
+    ),
+
     /// Print information for how to exit environment
     // TODO: when we flip features.auto_activate we should update this help
     // message
@@ -841,6 +849,7 @@ impl InternalCommands {
             InternalCommands::Upload(args) => args.handle(flox).await?,
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
+            InternalCommands::PruneGenerationLinks(args) => args.handle(flox)?,
             InternalCommands::Deactivate(args) => args.handle(config, flox)?,
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
