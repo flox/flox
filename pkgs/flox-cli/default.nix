@@ -49,27 +49,27 @@ let
 
       # Metrics subsystem configuration
       METRICS_EVENTS_URL = "https://z7qixlmjr3.execute-api.eu-north-1." + "amazonaws.com/prod/capture";
-      # TODO: set the real new-pipeline ingest URL before merging the
-      # runtime-flag-gated cutover. The placeholder below uses the
-      # RFC 6761 §6.4 reserved `.invalid` TLD so DNS resolution fails
-      # (loud at the transport layer) rather than silently mis-
-      # delivering — do not "fix" the .invalid TLD by pointing at a
-      # real subdomain. The companion sentinel test
+      # The new pipeline's ingest endpoint. The `lib.warnIf` below
+      # remains as a regression guard so a future edit that
+      # reintroduces a placeholder (e.g. the RFC 6761 §6.4 reserved
+      # `.invalid` TLD or the literal sentinel `REPLACE-BEFORE-MERGE`)
+      # is loud at `nix build`. The companion sentinel test
       # `metrics_events_url_v2_is_not_placeholder` in
-      # `cli/flox/src/utils/events.rs` fails until this string is
-      # replaced; together they make a placeholder release impossible
-      # to ship without an explicit, traceable change. The new
-      # endpoint shares `METRICS_EVENTS_API_KEY` with the legacy URL
-      # (no second API-key const).
+      # `cli/flox/src/utils/events.rs` provides the same gate at
+      # `cargo test`. The new endpoint uses its own API key
+      # (`METRICS_EVENTS_API_KEY_V2`) — the prior assumption that both
+      # stacks would share the legacy `METRICS_EVENTS_API_KEY` was
+      # superseded once the new endpoint was stood up.
       METRICS_EVENTS_URL_V2 =
         let
-          value = "https://example.invalid/REPLACE-BEFORE-MERGE";
+          value = "https://tvdlgwb8b9.execute-api.us-west-2.amazonaws.com/dev/events";
         in
         lib.warnIf (
           lib.hasInfix "example.invalid" value
           || lib.hasInfix "REPLACE-BEFORE-MERGE" value
         ) "METRICS_EVENTS_URL_V2 still contains a placeholder; replace before deployment." value;
       METRICS_EVENTS_API_KEY = "5pAQnBqz5Q7dpqVD9BEXQ4Kdc3D2fGTd3ZgP0XXK";
+      METRICS_EVENTS_API_KEY_V2 = "MZO4U4gnjO2o68yVq6j24aygq7Q5HUhQ8RfUwmkq";
 
       # oauth client id
       OAUTH_CLIENT_ID = "fGrotHBfQr9X1PHGbFoifEWaDPyWZDmc";
