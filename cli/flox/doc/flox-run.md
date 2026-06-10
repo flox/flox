@@ -13,9 +13,7 @@ flox-run - run a command without installing it
 ```
 flox [<general-options>] run
      -p=<package>
-     [--]
-     <command>
-     [<arguments>...]
+     [ -- ] <command> [<arguments>]
 ```
 
 # DESCRIPTION
@@ -52,7 +50,7 @@ require `--`.
 `-p <package>`, `--package <package>`
 :   Required. The package that provides the command.
 
-`[ -- ] <command> <arguments>`
+`[ -- ] <command> [<arguments>]`
 :   `flox run` runs the provided command and arguments
     from the package given with `--package`.
     The `--` separator is required when invoking commands with
