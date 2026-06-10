@@ -32,6 +32,7 @@ mod upload;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::time::Instant;
 use std::{env, fmt, mem};
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -83,6 +84,7 @@ use crate::utils::active_environments::{
     last_activated_environment,
 };
 use crate::utils::dialog::{Dialog, Select};
+use crate::utils::error_category::categorize;
 use crate::utils::errors::display_chain;
 use crate::utils::events::{MetricsStack, selected_metrics_stack};
 use crate::utils::init::init_catalog_client;
@@ -414,6 +416,13 @@ impl FloxArgs {
         let keep_tempfiles = config.flox.keep_tempdir.unwrap_or_default();
 
         let cli_worker = async move {
+            // Captured immediately before the dispatch so duration_ms on
+            // `cli.command_completed` measures the user-perceived "the
+            // handler ran" interval. Pre-dispatch overhead (config
+            // parse, hub install, span setup) is excluded by
+            // construction.
+            let dispatch_start = Instant::now();
+
             // command handled above
             let result = match self.command.unwrap() {
                 Commands::Help(group) => {
@@ -448,12 +457,28 @@ impl FloxArgs {
                 Err(e) => debug!("Failed to check for CLI update: {}", display_chain(&e)),
             }
 
-            // Emit the canonical `cli.command_completed`. When `activate.rs`
-            // has already recorded its own completion before `command.exec()`
-            // replaces the parent process, the hub's idempotent flag silently
-            // turns this call into a no-op.
+            // Compute the lifecycle triple from the captured result.
+            // `error_category` is `Some(...)` only on `Err`; the
+            // redaction helper produces a PII-safe fingerprint of the
+            // top frame of the anyhow chain.
+            let duration_ms = dispatch_start.elapsed().as_millis() as u64;
+            let (exit_code, error_category) = match &result {
+                Ok(()) => (0_i32, None),
+                Err(err) => (1_i32, Some(categorize(err))),
+            };
+
+            // Emit the canonical `cli.command_completed` with the
+            // dispatch lifecycle triple. When `activate.rs` has
+            // already recorded a no-lifecycle completion before
+            // `command.exec()` replaces the parent process, the hub's
+            // idempotent flag silently turns this call into a no-op.
             if let Err(err) = flox_events::EventsHub::global()
-                .record_command_completed(canonical_subcommand.to_string())
+                .record_command_completed_with_lifecycle(
+                    canonical_subcommand.to_string(),
+                    exit_code,
+                    duration_ms,
+                    error_category,
+                )
             {
                 debug!(error = %err, "Failed to record canonical cli.command_completed event");
             }

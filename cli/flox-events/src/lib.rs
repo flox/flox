@@ -257,15 +257,68 @@ impl CliCommandRunPayload {
 }
 
 /// Payload for [`EventKind::CliCommandCompleted`].
+///
+/// The lifecycle fields (`exit_code`, `duration_ms`, `error_category`)
+/// are populated on the chokepoint-end emit — the normal-flow path
+/// where the dispatch returns a `Result` the wrapper can observe.
+/// They are omitted (via `Option` + `skip_serializing_if`, or via
+/// constructor choice) on the early-exit pair emitted from
+/// `cli/flox/src/utils/events.rs::emit_early_exit_command_pair` and
+/// on the `activate.rs` pre-exec emit (`command.exec()` replaces the
+/// process before any meaningful exit status is observable).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliCommandCompletedPayload {
     #[serde(flatten)]
     pub command: CommandPayload,
+    /// Integer status the CLI process is about to return — `0` on
+    /// success, non-zero on failure (matches Unix convention).
+    /// Absent on early-exit / activate-pre-exec emits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    /// Wall-clock duration in milliseconds between dispatch start
+    /// and this event's emission. Absent on early-exit / activate-
+    /// pre-exec emits (no meaningful dispatch interval to measure).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    /// PII-safe redacted fingerprint of the top frame of the
+    /// `anyhow` error chain when the dispatch returned `Err`. Absent
+    /// on success and on emits that have no result to inspect
+    /// (early-exit, activate-pre-exec).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_category: Option<String>,
 }
 
 impl CliCommandCompletedPayload {
+    /// Construct a `cli.command_completed` payload without lifecycle
+    /// fields — used by `emit_early_exit_command_pair` and the
+    /// `activate.rs` pre-exec emit, where no meaningful exit status
+    /// or dispatch duration is observable.
     pub fn new(command: CommandPayload) -> Self {
-        Self { command }
+        Self {
+            command,
+            exit_code: None,
+            duration_ms: None,
+            error_category: None,
+        }
+    }
+
+    /// Construct a `cli.command_completed` payload populated with the
+    /// dispatch lifecycle triple captured by the chokepoint wrapper.
+    /// `error_category` is `Some(...)` only when `exit_code != 0`;
+    /// callers are responsible for the PII redaction (the wrapper
+    /// passes a pre-redacted string here).
+    pub fn with_lifecycle(
+        command: CommandPayload,
+        exit_code: i32,
+        duration_ms: u64,
+        error_category: Option<String>,
+    ) -> Self {
+        Self {
+            command,
+            exit_code: Some(exit_code),
+            duration_ms: Some(duration_ms),
+            error_category,
+        }
     }
 }
 
@@ -1010,6 +1063,9 @@ mod tests {
         assert_eq!(value, expected);
     }
 
+    /// The no-lifecycle shape — emitted by the early-exit pair and
+    /// the `activate.rs` pre-exec emit. Lifecycle fields are absent
+    /// from the wire via `skip_serializing_if = "Option::is_none"`.
     #[test]
     fn command_completed_serializes_to_canonical_envelope() {
         let value = serde_json::to_value(fixed_event(EventKind::CliCommandCompleted(
@@ -1024,6 +1080,66 @@ mod tests {
             "device_id": "00000000-0000-0000-0000-000000000000",
             "event_type": "cli.command_completed",
             "payload": expected_payload_json("install"),
+        });
+        assert_eq!(value, expected);
+    }
+
+    /// The lifecycle-success shape — emitted by the chokepoint
+    /// wrapper at the end of normal-flow dispatch when the handler
+    /// returned `Ok(())`. `exit_code = 0`, `duration_ms` set,
+    /// `error_category` absent.
+    #[test]
+    fn command_completed_with_lifecycle_success_envelope_golden() {
+        let payload =
+            CliCommandCompletedPayload::with_lifecycle(command_payload("install"), 0, 1234, None);
+        let value = serde_json::to_value(fixed_event(EventKind::CliCommandCompleted(payload)))
+            .expect("event serializes");
+        let mut payload_json = expected_payload_json("install");
+        let obj = payload_json.as_object_mut().expect("payload object");
+        obj.insert("exit_code".to_string(), json!(0));
+        obj.insert("duration_ms".to_string(), json!(1234));
+        let expected = json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": "cli.command_completed",
+            "payload": payload_json,
+        });
+        assert_eq!(value, expected);
+    }
+
+    /// The lifecycle-failure shape — emitted by the chokepoint
+    /// wrapper when the handler returned `Err`. `exit_code != 0`,
+    /// `duration_ms` set, `error_category` populated with the
+    /// PII-safe redacted fingerprint.
+    #[test]
+    fn command_completed_with_lifecycle_failure_envelope_golden() {
+        let payload = CliCommandCompletedPayload::with_lifecycle(
+            command_payload("install"),
+            1,
+            567,
+            Some("resolve failed: <path>".to_string()),
+        );
+        let value = serde_json::to_value(fixed_event(EventKind::CliCommandCompleted(payload)))
+            .expect("event serializes");
+        let mut payload_json = expected_payload_json("install");
+        let obj = payload_json.as_object_mut().expect("payload object");
+        obj.insert("exit_code".to_string(), json!(1));
+        obj.insert("duration_ms".to_string(), json!(567));
+        obj.insert(
+            "error_category".to_string(),
+            json!("resolve failed: <path>"),
+        );
+        let expected = json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": "cli.command_completed",
+            "payload": payload_json,
         });
         assert_eq!(value, expected);
     }

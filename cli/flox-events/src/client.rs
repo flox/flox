@@ -104,10 +104,36 @@ impl EventsClient {
         self.record_event(EventKind::CliCommandRun(payload))
     }
 
-    /// Record a `cli.command_completed` event for `subcommand`.
+    /// Record a `cli.command_completed` event for `subcommand` with
+    /// no lifecycle fields. Used by the early-exit pair
+    /// (`emit_early_exit_command_pair` for `--version`, `--prefix`,
+    /// `--bpaf-complete-style-bash`) and by the `activate.rs` pre-
+    /// exec emit — call sites where no exit code or dispatch
+    /// duration is observable yet.
     pub fn record_command_completed(&self, subcommand: String) -> Result<()> {
         let payload =
             CliCommandCompletedPayload::new(self.shared_metadata.into_payload(subcommand));
+        self.record_event(EventKind::CliCommandCompleted(payload))
+    }
+
+    /// Record a `cli.command_completed` event for `subcommand` with
+    /// the dispatch lifecycle triple captured by the chokepoint
+    /// wrapper. Use this on the normal-flow chokepoint emit; use
+    /// [`Self::record_command_completed`] (no lifecycle) on the
+    /// early-exit and activate-pre-exec sites.
+    pub fn record_command_completed_with_lifecycle(
+        &self,
+        subcommand: String,
+        exit_code: i32,
+        duration_ms: u64,
+        error_category: Option<String>,
+    ) -> Result<()> {
+        let payload = CliCommandCompletedPayload::with_lifecycle(
+            self.shared_metadata.into_payload(subcommand),
+            exit_code,
+            duration_ms,
+            error_category,
+        );
         self.record_event(EventKind::CliCommandCompleted(payload))
     }
 

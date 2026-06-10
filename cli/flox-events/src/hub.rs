@@ -85,10 +85,14 @@ impl EventsHub {
         })
     }
 
-    /// Record a `cli.command_completed` event for `subcommand`. No-op when
-    /// no client is installed. Subsequent calls against the same client
-    /// install are no-ops so the dispatcher and the `activate.rs` pre-exec
-    /// path cannot race-emit twice for one invocation.
+    /// Record a `cli.command_completed` event for `subcommand` with
+    /// no lifecycle fields. No-op when no client is installed.
+    /// Subsequent calls against the same client install are no-ops
+    /// (sticky via [`Self::completed_recorded`]) so the dispatcher
+    /// and the `activate.rs` pre-exec path cannot race-emit twice
+    /// for one invocation. Use this on the early-exit / pre-exec
+    /// sites; use [`Self::record_command_completed_with_lifecycle`]
+    /// on the normal-flow chokepoint emit.
     pub fn record_command_completed(&self, subcommand: String) -> Result<()> {
         if self.completed_recorded.swap(true, Ordering::SeqCst) {
             debug!("command_completed already recorded for this client install, skipping");
@@ -100,6 +104,38 @@ impl EventsHub {
                 return Ok(());
             };
             client.record_command_completed(subcommand)
+        })
+    }
+
+    /// Record a `cli.command_completed` event with the dispatch
+    /// lifecycle triple (`exit_code`, `duration_ms`, `error_category`)
+    /// captured by the chokepoint wrapper. Shares the same sticky
+    /// idempotency as [`Self::record_command_completed`] — if the
+    /// `activate.rs` pre-exec path already recorded a no-lifecycle
+    /// completed event, this call is a no-op. No-op when no client
+    /// is installed.
+    pub fn record_command_completed_with_lifecycle(
+        &self,
+        subcommand: String,
+        exit_code: i32,
+        duration_ms: u64,
+        error_category: Option<String>,
+    ) -> Result<()> {
+        if self.completed_recorded.swap(true, Ordering::SeqCst) {
+            debug!("command_completed already recorded for this client install, skipping");
+            return Ok(());
+        }
+        self.with_client(|client| {
+            let Some(client) = client else {
+                trace!("No canonical events client configured, skipping command_completed record");
+                return Ok(());
+            };
+            client.record_command_completed_with_lifecycle(
+                subcommand,
+                exit_code,
+                duration_ms,
+                error_category,
+            )
         })
     }
 
