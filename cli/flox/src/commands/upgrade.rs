@@ -232,7 +232,7 @@ mod tests {
             "name",
         );
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
         Upgrade {
@@ -262,7 +262,7 @@ mod tests {
         } else {
             "resolve/old_darwin_hello.yaml"
         };
-        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join(response_path)).await;
+        flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join(response_path)).await;
 
         environment
             .install(
@@ -271,7 +271,7 @@ mod tests {
             )
             .unwrap();
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         Upgrade {
             environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
@@ -499,7 +499,7 @@ mod tests {
         } else {
             "resolve/old_linux_hello.yaml"
         };
-        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join(response_path)).await;
+        flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join(response_path)).await;
 
         environment
             .install(
@@ -508,7 +508,7 @@ mod tests {
             )
             .unwrap();
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         Upgrade {
             environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),

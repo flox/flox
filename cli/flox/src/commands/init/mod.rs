@@ -577,8 +577,8 @@ async fn try_find_compatible_package(
             "using catalog client to find compatible package version"
         );
 
-        let resolved_groups = flox
-            .catalog_client
+        let catalog = &flox.floxhub_client;
+        let resolved_groups = catalog
             .resolve(vec![PackageGroup {
                 descriptors: vec![PackageDescriptor {
                     attr_path: attr_path.to_string(),
@@ -642,7 +642,8 @@ async fn try_find_compatible_major_version_package(
         .iter()
         .map(|pkg_name| group_for_single_package(pkg_name.as_ref(), version))
         .collect::<Vec<_>>();
-    let resolved_groups = flox.catalog_client.resolve(pkg_groups).await?;
+    let catalog = &flox.floxhub_client;
+    let resolved_groups = catalog.resolve(pkg_groups).await?;
     let candidate_pkgs: Vec<ProvidedPackage> = resolved_groups
         .into_iter()
         .filter_map(|maybe_pkg_group| {

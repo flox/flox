@@ -29,7 +29,7 @@ impl Show {
         sentry_set_tag("pkg_path", &self.pkg_path);
 
         tracing::debug!("using catalog client for show");
-        let results = match flox.catalog_client.package_versions(&self.pkg_path).await {
+        let results = match flox.floxhub_client.package_versions(&self.pkg_path).await {
             Ok(results) => results,
             // Below, results.is_empty() is used to mean the search_term
             // didn't match a package.
@@ -204,7 +204,7 @@ mod test {
     #[tokio::test]
     async fn show_handles_404() {
         let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.catalog_client = auto_recording_catalog_client("show_handles_404");
+        flox.floxhub_client = auto_recording_catalog_client("show_handles_404");
         let search_term = "search_term";
         let err = Show {
             pkg_path: search_term.to_string(),

@@ -447,7 +447,8 @@ impl Build {
         };
 
         let config = read_config(&config_path)?;
-        let lockfile = lock_config(&config, &flox.catalog_client).await?;
+        let catalog = &flox.floxhub_client;
+        let lockfile = lock_config(&config, catalog).await?;
 
         let lockfile_path = config_path.with_extension("lock");
         write_lock(&lockfile, &lockfile_path)?;
@@ -541,7 +542,8 @@ pub(crate) async fn base_nixpkgs_url_from_url_select(
     nixpkgs_url_select: Option<BaseCatalogUrlSelect>,
     lockfile: Option<&Lockfile>,
 ) -> Result<BaseCatalogUrl, anyhow::Error> {
-    let base_catalog_info_fut = flox.catalog_client.get_base_catalog_info();
+    let catalog = &flox.floxhub_client;
+    let base_catalog_info_fut = catalog.get_base_catalog_info();
 
     let toplevel_derived_url = if let Some(lockfile) = lockfile {
         find_toplevel_group_nixpkgs(lockfile)

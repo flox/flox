@@ -75,7 +75,8 @@ impl Search {
                 },
             };
 
-            flox.catalog_client
+            let catalog = &flox.floxhub_client;
+            catalog
                 .search_with_spinner(parsed_search, flox.system.clone().try_into()?, limit)
                 .await?
         };
@@ -87,10 +88,12 @@ impl Search {
         } else {
             debug!("printing search results as user facing");
 
+            let system = flox.system.clone();
+            let catalog = &flox.floxhub_client;
             let suggestion = DidYouMean::<SearchSuggestion>::new(
                 search_term,
-                &flox.catalog_client,
-                flox.system,
+                catalog,
+                system,
                 stderr_supports_color(),
             );
 

@@ -55,7 +55,8 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
 
     fn suggest_searched_packages(flox: &Flox, term: &str) -> Result<SearchResults> {
         tracing::debug!("using client for install suggestions");
-        Self::suggest_searched_packages_catalog(&flox.catalog_client, term, flox.system.clone())
+        let catalog = &flox.floxhub_client;
+        Self::suggest_searched_packages_catalog(catalog, term, flox.system.clone())
     }
 
     /// Collects installation suggestions for a given query using the catalog

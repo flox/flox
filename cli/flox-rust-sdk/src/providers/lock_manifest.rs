@@ -359,14 +359,11 @@ impl LockManifest {
         )
         .map_err(EnvironmentError::Recoverable)?;
 
-        let packages = Self::resolve_manifest(
-            &merged,
-            seed_lockfile,
-            &flox.catalog_client,
-            &flox.installable_locker,
-        )
-        .await
-        .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Resolve(e)))?;
+        let catalog = &flox.floxhub_client;
+        let packages =
+            Self::resolve_manifest(&merged, seed_lockfile, catalog, &flox.installable_locker)
+                .await
+                .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Resolve(e)))?;
 
         let proposed_lockfile = Lockfile {
             version: Version,

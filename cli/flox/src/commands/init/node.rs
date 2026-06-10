@@ -504,10 +504,8 @@ impl Node {
             ],
             name: "yarn".to_string(), // pkg-group name
         };
-        let resolved = flox
-            .catalog_client
-            .resolve(vec![yarn_and_node_pkg_group])
-            .await?;
+        let catalog = &flox.floxhub_client;
+        let resolved = catalog.resolve(vec![yarn_and_node_pkg_group]).await?;
         // A map of attr_path -> ProvidedPackage
         let pkgs = resolved
             .first()
@@ -740,8 +738,8 @@ impl Node {
     }
 
     async fn get_available_node_packages(flox: &Flox) -> Result<Vec<String>> {
-        let res = flox
-            .catalog_client
+        let catalog = &flox.floxhub_client;
+        let res = catalog
             .search(
                 "nodejs_",
                 flox.system
@@ -1404,7 +1402,7 @@ mod tests {
             }
 
             if tc.needs_client {
-                flox.catalog_client = auto_recording_catalog_client(&format!(
+                flox.floxhub_client = auto_recording_catalog_client(&format!(
                     "node_new_detection_{}",
                     tc.description.replace(" ", "_").replace(".", "_")
                 ));
@@ -1559,7 +1557,7 @@ mod tests {
     #[tokio::test]
     async fn try_find_compatible_yarn_no_constraints_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.catalog_client =
+        flox.floxhub_client =
             auto_recording_catalog_client("try_find_compatible_yarn_no_constraints_with_catalog");
 
         let yarn_install = Node::try_find_compatible_yarn_and_node_versions(
@@ -1581,7 +1579,7 @@ mod tests {
     #[tokio::test]
     async fn try_find_compatible_yarn_node_available_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.catalog_client =
+        flox.floxhub_client =
             auto_recording_catalog_client("try_find_compatible_yarn_node_available_with_catalog");
 
         // NOTE: there's a similar test below that tests for `yarn` and `nodejs`,
@@ -1607,7 +1605,7 @@ mod tests {
     #[tokio::test]
     async fn try_find_compatible_yarn_node_unavailable_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.catalog_client =
+        flox.floxhub_client =
             auto_recording_catalog_client("try_find_compatible_yarn_node_unavailable_with_catalog");
 
         let yarn_install = Node::try_find_compatible_yarn_and_node_versions(
@@ -1627,7 +1625,7 @@ mod tests {
     #[tokio::test]
     async fn try_find_compatible_yarn_yarn_available_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.catalog_client =
+        flox.floxhub_client =
             auto_recording_catalog_client("try_find_compatible_yarn_yarn_available_with_catalog");
 
         let yarn_install =
@@ -1648,7 +1646,7 @@ mod tests {
     #[tokio::test]
     async fn try_find_compatible_yarn_yarn_unavailable_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.catalog_client =
+        flox.floxhub_client =
             auto_recording_catalog_client("try_find_compatible_yarn_yarn_unavailable_with_catalog");
 
         let yarn_install =
@@ -1668,7 +1666,7 @@ mod tests {
     async fn try_find_compatible_yarn_both_available_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        flox.catalog_client =
+        flox.floxhub_client =
             auto_recording_catalog_client("try_find_compatible_yarn_both_available_with_catalog");
         let yarn_install = Node::try_find_compatible_yarn_and_node_versions(
             &flox,
