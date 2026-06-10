@@ -6,6 +6,14 @@
 # We are especially interested in ensuring that the deactivation script properly
 # restores environment variables and cleans up after activation.
 #
+# Scope: this file checks *exported environment* restoration — env-value
+# diffs across the in-place, subshell, and interactive (pty) modes, plus
+# prompt and individual user-set variables. Full shell-state restoration by
+# *name* (functions, aliases, shell options, non-exported vars — the surface
+# `env` cannot see) lives in the companion deactivate-state.bats. The two
+# keep overlapping noise/allow filters; when a shared name (NIX_SSL_CERT_FILE,
+# PATH_LOCALE, _activate_d, _flox_activate_tracer) is reclassified in one
+# file, update the other.
 #
 # ---------------------------------------------------------------------------- #
 
@@ -158,6 +166,9 @@ EOF
 
 # bats test_tags=deactivate
 @test "deactivate restores environment variables (tcsh)" {
+  # deactivate-state.bats works around this same FLOX_PROMPT_ENVIRONMENTS
+  # root cause (via dump.tcsh pre-seeding) rather than skipping; drop both
+  # once the tcsh deactivate generator guards the variable.
   skip "tcsh fails due to FLOX_PROMPT_ENVIRONMENTS undefined variable issue"
   project_setup
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -301,6 +312,9 @@ EOF
 
 # bats test_tags=deactivate
 @test "deactivate unsets added variables (tcsh)" {
+  # deactivate-state.bats works around this same FLOX_PROMPT_ENVIRONMENTS
+  # root cause (via dump.tcsh pre-seeding) rather than skipping; drop both
+  # once the tcsh deactivate generator guards the variable.
   skip "tcsh fails due to FLOX_PROMPT_ENVIRONMENTS undefined variable issue"
   project_setup
   MANIFEST_CONTENTS="$(cat << "EOF"
