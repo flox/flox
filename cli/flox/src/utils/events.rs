@@ -43,7 +43,7 @@ use tracing::debug;
 use uuid::Uuid;
 
 use crate::config::Config;
-use crate::utils::metrics::{METRICS_EVENTS_API_KEY, read_metrics_uuid};
+use crate::utils::metrics::read_metrics_uuid;
 
 /// Stores the invocation_id resolved by [`resolve_invocation_id`] so detached
 /// subprocess spawn sites can propagate it via [`FLOX_INVOCATION_ID_VAR`]
@@ -73,9 +73,16 @@ pub(crate) const FLOX_METRICS_STACK_VAR: &str = "FLOX_METRICS_STACK";
 
 /// Build-time URL for the new canonical-events ingest endpoint. Injected
 /// by the Nix wrapper (`pkgs/flox-cli/default.nix`) at the same site as
-/// the legacy `METRICS_EVENTS_URL`. Both stacks authenticate with the
-/// same `METRICS_EVENTS_API_KEY`.
+/// the legacy `METRICS_EVENTS_URL`.
 const METRICS_EVENTS_URL_V2: &str = env!("METRICS_EVENTS_URL_V2");
+
+/// Build-time API key for the new canonical-events ingest endpoint.
+/// The new endpoint uses its own key (the original D1 assumption that
+/// both stacks could share the legacy `METRICS_EVENTS_API_KEY` was
+/// superseded once the new endpoint was stood up). The legacy stack
+/// continues to read [`METRICS_EVENTS_API_KEY`] unchanged from
+/// `cli/flox/src/utils/metrics.rs`.
+const METRICS_EVENTS_API_KEY_V2: &str = env!("METRICS_EVENTS_API_KEY_V2");
 
 /// Which telemetry stack the CLI installs a `Client` on for this
 /// process — see [`selected_metrics_stack`] and the module rustdoc.
@@ -230,9 +237,11 @@ fn shared_metadata_template() -> SharedMetadataTemplate {
 ///
 /// Otherwise — the production path — returns `Some(EventsClient)` pointing
 /// at [`_FLOX_METRICS_URL_OVERRIDE`] when set to a parseable URL, falling
-/// back to the build-injected [`METRICS_EVENTS_URL_V2`]. Both URLs
-/// authenticate with the same build-injected
-/// [`METRICS_EVENTS_API_KEY`].
+/// back to the build-injected [`METRICS_EVENTS_URL_V2`]. The client
+/// authenticates with the build-injected
+/// [`METRICS_EVENTS_API_KEY_V2`] — the new endpoint's own API key,
+/// distinct from the legacy stack's
+/// [`crate::utils::metrics::METRICS_EVENTS_API_KEY`].
 pub fn build_events_client(config: &Config, invocation_id: Uuid) -> Option<EventsClient> {
     if config.flox.disable_metrics {
         debug!("Canonical events: disable_metrics is true; not installing client");
@@ -269,7 +278,7 @@ pub fn build_events_client(config: &Config, invocation_id: Uuid) -> Option<Event
         device_id,
         &config.flox.data_dir,
         endpoint_url,
-        METRICS_EVENTS_API_KEY,
+        METRICS_EVENTS_API_KEY_V2,
         invocation_id,
         shared_metadata_template(),
     ))
