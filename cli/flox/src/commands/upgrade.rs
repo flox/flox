@@ -12,6 +12,7 @@ use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::{ensure_auth, environment_description};
 use crate::utils::message::{self, stderr_supports_color};
+use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
 use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Upgrade packages in an environment
@@ -200,38 +201,6 @@ fn rebuild_detail(before: &LockedPackage, after: &LockedPackage) -> Option<Strin
     None
 }
 
-/// Count version changes vs rebuilds in a diff.
-pub(crate) fn count_upgrade_categories(diff: &SingleSystemUpgradeDiff) -> (usize, usize) {
-    diff.values().fold((0, 0), |(vc, rb), (before, after)| {
-        let old_version = before.version().unwrap_or("unknown");
-        let new_version = after.version().unwrap_or("unknown");
-        if new_version != old_version {
-            (vc + 1, rb)
-        } else {
-            (vc, rb + 1)
-        }
-    })
-}
-
-/// Format a human-readable summary like "2 version changes and 1 rebuild".
-pub(crate) fn format_upgrade_summary(version_changes: usize, rebuilds: usize) -> String {
-    let version_part = match version_changes {
-        0 => None,
-        1 => Some("1 version change".to_string()),
-        n => Some(format!("{n} version changes")),
-    };
-    let rebuild_part = match rebuilds {
-        0 => None,
-        1 => Some("1 rebuild".to_string()),
-        n => Some(format!("{n} rebuilds")),
-    };
-    match (version_part, rebuild_part) {
-        (Some(v), Some(b)) => format!("{v} and {b}"),
-        (Some(v), None) => v,
-        (None, Some(b)) => b,
-        (None, None) => "Upgrades".to_string(),
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -484,48 +453,54 @@ mod tests {
         }
     }
 
-    mod format_summary_tests {
-        use super::super::format_upgrade_summary;
+    /// Run a dry-run upgrade of an environment that has a version change on this system
+    async fn run_dry_run_with_version_change() -> String {
+        let (mut flox, _tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
 
-        #[test]
-        fn version_change_singular() {
-            assert_eq!(format_upgrade_summary(1, 0), "1 version change");
-        }
+        let mut environment = new_named_path_environment(&flox, "version = 1", "name");
 
-        #[test]
-        fn version_changes_plural() {
-            assert_eq!(format_upgrade_summary(3, 0), "3 version changes");
-        }
+        // Use the fixture that has an older version for THIS system
+        let response_path = if cfg!(target_os = "macos") {
+            "resolve/old_darwin_hello.yaml"
+        } else {
+            "resolve/old_linux_hello.yaml"
+        };
+        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join(response_path)).await;
 
-        #[test]
-        fn rebuild_singular() {
-            assert_eq!(format_upgrade_summary(0, 1), "1 rebuild");
-        }
+        environment
+            .install(
+                &[PackageToInstall::parse(&flox.system, "hello").unwrap()],
+                &flox,
+            )
+            .unwrap();
 
-        #[test]
-        fn rebuilds_plural() {
-            assert_eq!(format_upgrade_summary(0, 4), "4 rebuilds");
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+        Upgrade {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            dry_run: true,
+            groups_or_iids: Vec::new(),
         }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
 
-        #[test]
-        fn mixed() {
-            assert_eq!(
-                format_upgrade_summary(2, 1),
-                "2 version changes and 1 rebuild"
-            );
-        }
+        writer.to_string()
+    }
 
-        #[test]
-        fn mixed_plural() {
-            assert_eq!(
-                format_upgrade_summary(3, 5),
-                "3 version changes and 5 rebuilds"
-            );
-        }
+    #[tokio::test(flavor = "multi_thread")]
+    async fn dry_run_shows_version_change_summary() {
+        assert_eq!(
+            run_dry_run_with_version_change().await,
+            indoc! {"
+            Dry run: 1 version change in 'name':
+            - hello: 2.10.1 -> 2.12.3
 
-        #[test]
-        fn fallback_when_zero() {
-            assert_eq!(format_upgrade_summary(0, 0), "Upgrades");
-        }
+            To apply these changes, run upgrade without the '--dry-run' flag.
+
+            "}
+        );
     }
 }

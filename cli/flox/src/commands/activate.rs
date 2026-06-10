@@ -756,8 +756,9 @@ fn notify_package_upgrades(
         .to_flags()
         .map(|flags| format!(" {}", flags.join(" ")))
         .unwrap_or("".to_string());
-    let (version_changes, rebuilds) = super::upgrade::count_upgrade_categories(&diff_for_system);
-    let summary = super::upgrade::format_upgrade_summary(version_changes, rebuilds);
+    let (version_changes, rebuilds) =
+        crate::utils::upgrade_output::count_upgrade_categories(&diff_for_system);
+    let summary = crate::utils::upgrade_output::format_upgrade_summary(version_changes, rebuilds);
     let message = formatdoc! {"
         {summary} available in {description}.
         Use 'flox upgrade --dry-run{flags}' for details.
