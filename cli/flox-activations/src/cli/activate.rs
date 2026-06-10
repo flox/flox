@@ -136,13 +136,19 @@ impl ActivateArgs {
         let warning_interval = Duration::from_secs(5);
         let mut last_warning: Option<Instant> = None;
 
+        let deactivate_hint = if context.auto_activate {
+            "To stop using this environment, run 'flox deactivate'"
+        } else {
+            "To stop using this environment, type 'exit'"
+        };
+
         loop {
             match self.try_start_or_attach(context, subsystem_verbosity, vars_from_env)? {
                 StartOrAttachResult::Start { start_id, .. } => {
                     if *invocation_type == InvocationType::Interactive {
                         updated(
                             formatdoc! {"You are now using the environment '{env_description}'
-                                     To stop using this environment, type 'exit'
+                                     {deactivate_hint}
                                      ",
                             env_description = context.attach_ctx.env_description,
                             },
@@ -154,7 +160,7 @@ impl ActivateArgs {
                     if *invocation_type == InvocationType::Interactive {
                         updated(
                             formatdoc! {"Attached to existing activation of environment '{env_description}'
-                                     To stop using this environment, type 'exit'
+                                     {deactivate_hint}
                                      ",
                             env_description = context.attach_ctx.env_description,
                             },
