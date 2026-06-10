@@ -65,14 +65,25 @@ use std::process::{Child, ChildStderr, ChildStdout, Stdio};
 use anyhow::{Context, Result, anyhow};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::env_registry;
+use flox_rust_sdk::models::env_registry::{self, env_registry_path, read_environment_registry};
+use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
+use flox_rust_sdk::models::environment::{
+    EnvironmentPointer,
+    PrunePolicy,
+    live_activation_store_paths,
+};
 use flox_rust_sdk::providers::nix::nix_base_command;
 use tracing::{Span, debug, info_span, instrument, trace};
 
 use crate::{message, subcommand_metric};
 
 #[derive(Bpaf, Debug, Clone)]
-pub struct Gc {}
+pub struct Gc {
+    /// Remove all managed-environment generation GC-root links that are not in
+    /// use, not just aged-out ones — like 'nix-collect-garbage -d'.
+    #[bpaf(long, short('d'))]
+    all_generations: bool,
+}
 
 impl Gc {
     #[instrument(skip_all)]
@@ -82,11 +93,68 @@ impl Gc {
         let span = info_span!("collecting_garbage", progress = "Collecting garbage");
         let _guard = span.enter();
         env_registry::garbage_collect(&flox)?;
+
+        // Prune managed-environment generation GC-root links before the store
+        // GC so the freed store paths become collectable.
+        let policy = if self.all_generations {
+            PrunePolicy::AllNonLive
+        } else {
+            PrunePolicy::default_aged_out()
+        };
+        prune_generation_links(&flox, policy);
+
         let freed = run_store_gc()?;
         drop(_guard);
         message::info(freed);
         message::updated("Garbage collection complete");
         Ok(())
+    }
+}
+
+/// Synchronously prune managed-environment generation GC-root links across all
+/// registered environments, protecting links that live activations depend on.
+///
+/// Best-effort: failing to read the registry, open an environment, or remove a
+/// link is logged and skipped — it must never abort garbage collection
+/// (flox#4332).
+fn prune_generation_links(flox: &Flox, policy: PrunePolicy) {
+    let protected = live_activation_store_paths(&flox.runtime_dir);
+
+    let registry = match read_environment_registry(env_registry_path(flox)) {
+        Ok(Some(registry)) => registry,
+        Ok(None) => return,
+        Err(err) => {
+            debug!(%err, "failed to read environment registry for generation-link pruning");
+            return;
+        },
+    };
+
+    for entry in &registry.entries {
+        let Some(registered) = entry.latest_env() else {
+            continue;
+        };
+        // Only managed environments have generations / generation links.
+        let EnvironmentPointer::Managed(pointer) = &registered.pointer else {
+            continue;
+        };
+
+        let env = match ManagedEnvironment::open(flox, pointer.clone(), &entry.path, None) {
+            Ok(env) => env,
+            Err(err) => {
+                debug!(path = %entry.path.display(), %err, "skipping environment for generation-link pruning");
+                continue;
+            },
+        };
+
+        match env.prune_generation_links(policy, &protected) {
+            Ok(removed) if !removed.is_empty() => {
+                debug!(count = removed.len(), path = %entry.path.display(), "pruned generation links");
+            },
+            Ok(_) => {},
+            Err(err) => {
+                debug!(path = %entry.path.display(), %err, "failed to prune generation links");
+            },
+        }
     }
 }
 
