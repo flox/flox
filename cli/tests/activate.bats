@@ -2048,12 +2048,10 @@ EOF
 
 # bats test_tags=activate,activate:cwd_braces,activate:cwd_braces:tcsh
 @test "tcsh: tolerates cwd containing braces" {
-  skip "Apparently regressed in 1.4.3, now failing with Missing '}', due to quoting in _FLOX_ACTIVE_ENVIRONMENTS (#3173)"
   project_setup
   setup_cwd_with_braces
   activation_cmd="$(cat <<'EOF'
-    "$FLOX_BIN" activate --print-script
-    eval `"$FLOX_BIN" activate`
+    eval "`$FLOX_BIN activate`"
 EOF
 )"
   run tcsh -c "$activation_cmd"
