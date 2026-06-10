@@ -148,6 +148,42 @@ let
       ]
   )
   ++ (
+    # [profile.deactivate] section
+    let
+      deactivateSection =
+        if (builtins.hasAttr "deactivate" profileSection && profileSection.deactivate != null) then
+          profileSection.deactivate
+        else
+          { };
+    in
+    builtins.map
+      (
+        shellType:
+        if
+          (
+            builtins.hasAttr shellType deactivateSection
+            && (builtins.getAttr shellType deactivateSection) != null
+          )
+        then
+          let
+            contents = outdentScript (builtins.getAttr shellType deactivateSection);
+            scriptFile = builtins.toFile "deactivate-profile-${shellType}" contents;
+          in
+          ''
+            "${coreutils}/bin/cp" ${scriptFile} $out/activate.d/deactivate-profile-${shellType}
+          ''
+        else
+          ""
+      )
+      [
+        "bash"
+        "common"
+        "fish"
+        "tcsh"
+        "zsh"
+      ]
+  )
+  ++ (
     # [build] section
     builtins.map (
       buildId:
