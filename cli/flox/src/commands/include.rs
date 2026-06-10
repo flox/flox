@@ -76,8 +76,8 @@ impl Upgrade {
             .await?;
 
         environment_subcommand_metric!("include::upgrade", environment);
-        if let Err(err) =
-            EventsHub::global().record_environment_include(env_detail_from_concrete(&environment))
+        if let Err(err) = EventsHub::global()
+            .record_environment_include_upgrade(env_detail_from_concrete(&environment))
         {
             debug!(error = %err, "Failed to record canonical event");
         }

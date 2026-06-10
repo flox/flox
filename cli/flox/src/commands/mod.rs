@@ -663,7 +663,7 @@ impl UseCommands {
 
     fn subcommand_name(&self) -> &'static str {
         match self {
-            UseCommands::Activate(_) => "activate",
+            UseCommands::Activate(args) => args.subcommand_name(),
             UseCommands::Services(sub) => sub.subcommand_name(),
         }
     }
@@ -847,7 +847,7 @@ impl ShareCommands {
 
     fn subcommand_name(&self) -> &'static str {
         match self {
-            ShareCommands::Build(_) => "build",
+            ShareCommands::Build(args) => args.subcommand_name(),
             ShareCommands::Publish(_) => "publish",
             ShareCommands::Push(_) => "push",
             ShareCommands::Pull(_) => "pull",
@@ -889,10 +889,10 @@ impl AdminCommands {
     }
 
     /// The `Auth` arm emits `"auth2"` (not `"auth"`) to preserve the
-    /// downstream `cli.authenticated` classifier defined in
-    /// `efforts/unified-metrics/tasks/016-events-cli.md`. The legacy
-    /// `auth.rs:251` already wrote `"auth2"` on the wire; mirroring it
-    /// here keeps the consumer contract intact post-cutover.
+    /// downstream classifier that keys off `subcommand == "auth2"`
+    /// with `exit_code == 0`. The legacy `auth.rs:251` already wrote
+    /// `"auth2"` on the wire; mirroring it here keeps the consumer
+    /// contract intact post-cutover.
     fn subcommand_name(&self) -> &'static str {
         match self {
             AdminCommands::Auth(_) => "auth2",
@@ -969,11 +969,16 @@ impl InternalCommands {
     /// that `"exit"` pseudo-subcommand is dropped on the new path; the
     /// centrally-derived name is always the parsed clap command's
     /// name, never the handler method's name.
+    ///
+    /// `LockManifest(_)` maps to `"lock"` (not `"lock-manifest"`) to
+    /// preserve parity with the legacy `lock_manifest.rs:34`
+    /// `subcommand_metric!("lock")` wire string. Same shape as the
+    /// `Auth → "auth2"` carve-out on [`AdminCommands::subcommand_name`].
     fn subcommand_name(&self) -> &'static str {
         match self {
             InternalCommands::ResetMetrics(_) => "reset-metrics",
             InternalCommands::Upload(_) => "upload",
-            InternalCommands::LockManifest(_) => "lock-manifest",
+            InternalCommands::LockManifest(_) => "lock",
             InternalCommands::CheckForUpgrades(_) => "check-for-upgrades",
             InternalCommands::Deactivate(_) => "deactivate",
             InternalCommands::ActivationState(_) => "activation-state",
@@ -1657,11 +1662,11 @@ mod subcommand_name_tests {
             .expect("expected an inner subcommand after parsing")
     }
 
-    /// `auth` must derive to the literal `"auth2"` on the wire so the
-    /// consumer's `cli.authenticated` classifier (defined in
-    /// `efforts/unified-metrics/tasks/016-events-cli.md`) keeps firing
-    /// post-cutover. Removing this carve-out silently breaks the
-    /// classifier without surfacing a producer-side error.
+    /// `auth` must derive to the literal `"auth2"` on the wire so
+    /// the downstream classifier that keys off `subcommand == "auth2"`
+    /// keeps firing post-cutover. Removing this carve-out silently
+    /// changes the wire string without surfacing a producer-side
+    /// error; the test pins the parity contract.
     #[test]
     fn auth_command_derives_to_auth2_subcommand_name() {
         let command = parse_command(&["auth", "status"]);
@@ -1676,6 +1681,18 @@ mod subcommand_name_tests {
     fn deactivate_command_derives_to_deactivate_not_exit() {
         let command = parse_command(&["deactivate"]);
         assert_eq!(command.subcommand_name(), "deactivate");
+    }
+
+    /// `lock-manifest` must derive to the literal `"lock"` to preserve
+    /// parity with the legacy `lock_manifest.rs:34`
+    /// `subcommand_metric!("lock")` wire string. Removing the
+    /// carve-out changes the wire string silently and breaks any
+    /// downstream classifier keyed off `subcommand == "lock"`. Same
+    /// shape as the `auth → "auth2"` test above.
+    #[test]
+    fn lock_manifest_command_derives_to_lock_for_parity() {
+        let command = parse_command(&["lock-manifest", "/dev/null"]);
+        assert_eq!(command.subcommand_name(), "lock");
     }
 
     /// Nested `services <sub>` commands must use the `parent::child`
@@ -1694,5 +1711,59 @@ mod subcommand_name_tests {
     fn generations_list_uses_parent_child_join_encoding() {
         let command = parse_command(&["generations", "list"]);
         assert_eq!(command.subcommand_name(), "generations::list");
+    }
+
+    /// `include upgrade` must use the same `parent::child` encoding —
+    /// covers the third nested-command family alongside services and
+    /// generations.
+    #[test]
+    fn include_upgrade_uses_parent_child_join_encoding() {
+        let command = parse_command(&["include", "upgrade"]);
+        assert_eq!(command.subcommand_name(), "include::upgrade");
+    }
+
+    /// `activate allow` / `activate deny` are bpaf-parsed sub-commands
+    /// of `flox activate` (auto-activation permission management). The
+    /// legacy stream stamps `activate::allow` / `activate::deny` at
+    /// `cli/flox/src/commands/activate.rs:323,328`; without the
+    /// `Activate::subcommand_name` carve-out the central derivation
+    /// collapses both to bare `"activate"` and silently drops two
+    /// downstream join keys.
+    #[test]
+    fn activate_allow_uses_parent_child_join_encoding() {
+        let command = parse_command(&["activate", "allow"]);
+        assert_eq!(command.subcommand_name(), "activate::allow");
+    }
+
+    #[test]
+    fn activate_deny_uses_parent_child_join_encoding() {
+        let command = parse_command(&["activate", "deny"]);
+        assert_eq!(command.subcommand_name(), "activate::deny");
+    }
+
+    /// `flox build` has three pseudo-subcommands — `clean`,
+    /// `import-nixpkgs`, and `update-catalogs` — that the legacy
+    /// stream stamps as `build::clean` / `build::import-nixpkgs` /
+    /// `build::update-catalogs` at
+    /// `cli/flox/src/commands/build.rs:146,154,162`. Without the
+    /// `Build::subcommand_name` carve-out the central derivation
+    /// collapses all three to bare `"build"`, silently dropping
+    /// three downstream join keys.
+    #[test]
+    fn build_clean_uses_parent_child_join_encoding() {
+        let command = parse_command(&["build", "clean"]);
+        assert_eq!(command.subcommand_name(), "build::clean");
+    }
+
+    #[test]
+    fn build_import_nixpkgs_uses_parent_child_join_encoding() {
+        let command = parse_command(&["build", "import-nixpkgs", "nixpkgs#hello"]);
+        assert_eq!(command.subcommand_name(), "build::import-nixpkgs");
+    }
+
+    #[test]
+    fn build_update_catalogs_uses_parent_child_join_encoding() {
+        let command = parse_command(&["build", "update-catalogs"]);
+        assert_eq!(command.subcommand_name(), "build::update-catalogs");
     }
 }

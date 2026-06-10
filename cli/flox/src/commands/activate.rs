@@ -96,6 +96,23 @@ pub struct Activate {
     pub subcommand_or_options: ActivateSubcommandOrOptions,
 }
 
+impl Activate {
+    /// Centrally-derived subcommand string for this invocation. Returns
+    /// the `activate::allow` / `activate::deny` form for the auto-activate
+    /// permission-management sub-commands, preserving the join-key
+    /// continuity the legacy `environment_subcommand_metric!` stream
+    /// already used.
+    pub fn subcommand_name(&self) -> &'static str {
+        match &self.subcommand_or_options {
+            ActivateSubcommandOrOptions::AutoActivate { auto_activate } => match auto_activate {
+                AutoActivate::Allow => "activate::allow",
+                AutoActivate::Deny => "activate::deny",
+            },
+            ActivateSubcommandOrOptions::ActivateOptions { .. } => "activate",
+        }
+    }
+}
+
 #[derive(Bpaf, Clone)]
 pub enum ActivateSubcommandOrOptions {
     AutoActivate {
