@@ -48,6 +48,8 @@ pub(super) fn spawn_logs_gc_threads(dir: impl AsRef<Path>) {
                 KEEP_LAST_N_PROCESSES,
             )
             .unwrap_or_else(|err| error!(%err, "failed to delete upgrade-check logs"));
+            gc_logs_per_process(&dir, "generation-prune.*.log", KEEP_LAST_N_PROCESSES)
+                .unwrap_or_else(|err| error!(%err, "failed to delete generation-prune logs"));
 
             std::thread::sleep(EXECUTIVE_GC_INTERVAL);
         }
