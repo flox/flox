@@ -180,7 +180,10 @@ fn render_diff(diff: &SingleSystemUpgradeDiff) -> String {
 /// Tries rev_date first (formatted as YYYY-MM-DD), then rev hash (7 chars).
 /// Returns `None` if no rev info is available (e.g. flake packages).
 fn rebuild_detail(before: &LockedPackage, after: &LockedPackage) -> Option<String> {
-    let (old, new) = (before.as_catalog_package_ref()?, after.as_catalog_package_ref()?);
+    let (old, new) = (
+        before.as_catalog_package_ref()?,
+        after.as_catalog_package_ref()?,
+    );
 
     let old_date = old.rev_date.format("%Y-%m-%d");
     let new_date = new.rev_date.format("%Y-%m-%d");
@@ -425,11 +428,16 @@ mod tests {
         #[test]
         fn rebuild_same_date_different_rev() {
             let date = chrono::Utc.with_ymd_and_hms(2025, 1, 15, 0, 0, 0).unwrap();
-            let before = make_catalog_package("jq", "1.7.1", "/nix/store/old", "abc1234def567", date);
-            let after = make_catalog_package("jq", "1.7.1", "/nix/store/new", "fff9999aaa000", date);
+            let before =
+                make_catalog_package("jq", "1.7.1", "/nix/store/old", "abc1234def567", date);
+            let after =
+                make_catalog_package("jq", "1.7.1", "/nix/store/new", "fff9999aaa000", date);
             let mut diff = SingleSystemUpgradeDiff::new();
             diff.insert("jq".to_string(), (before, after));
-            assert_eq!(render_diff(&diff), "- jq: 1.7.1 (rebuild, rev abc1234 -> fff9999)");
+            assert_eq!(
+                render_diff(&diff),
+                "- jq: 1.7.1 (rebuild, rev abc1234 -> fff9999)"
+            );
         }
 
         #[test]
@@ -446,8 +454,13 @@ mod tests {
         fn count_categories_mixed() {
             let before_curl =
                 make_catalog_package("curl", "8.9.0", "/nix/store/old", "aaa", chrono::Utc::now());
-            let after_curl =
-                make_catalog_package("curl", "8.10.1", "/nix/store/new", "bbb", chrono::Utc::now());
+            let after_curl = make_catalog_package(
+                "curl",
+                "8.10.1",
+                "/nix/store/new",
+                "bbb",
+                chrono::Utc::now(),
+            );
             let before_tf = make_catalog_package(
                 "terraform-docs",
                 "0.21.0",
@@ -496,12 +509,18 @@ mod tests {
 
         #[test]
         fn mixed() {
-            assert_eq!(format_upgrade_summary(2, 1), "2 version changes and 1 rebuild");
+            assert_eq!(
+                format_upgrade_summary(2, 1),
+                "2 version changes and 1 rebuild"
+            );
         }
 
         #[test]
         fn mixed_plural() {
-            assert_eq!(format_upgrade_summary(3, 5), "3 version changes and 5 rebuilds");
+            assert_eq!(
+                format_upgrade_summary(3, 5),
+                "3 version changes and 5 rebuilds"
+            );
         }
 
         #[test]
