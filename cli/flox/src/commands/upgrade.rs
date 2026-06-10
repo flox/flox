@@ -201,7 +201,6 @@ fn rebuild_detail(before: &LockedPackage, after: &LockedPackage) -> Option<Strin
     None
 }
 
-
 #[cfg(test)]
 mod tests {
     use flox_manifest::raw::PackageToInstall;
@@ -492,15 +491,12 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn dry_run_shows_version_change_summary() {
-        assert_eq!(
-            run_dry_run_with_version_change().await,
-            indoc! {"
+        assert_eq!(run_dry_run_with_version_change().await, indoc! {"
             Dry run: 1 version change in 'name':
             - hello: 2.10.1 -> 2.12.3
 
             To apply these changes, run upgrade without the '--dry-run' flag.
 
-            "}
-        );
+            "});
     }
 }
