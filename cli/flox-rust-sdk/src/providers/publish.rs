@@ -539,7 +539,7 @@ impl ClientSideCatalogStoreConfig {
             );
             let output_nar_infos =
                 Self::get_nar_info(source_url, &output.store_path, auth_netrc_path)?;
-            nar_infos.extend(output_nar_infos.0.into_iter());
+            nar_infos.extend(output_nar_infos.0);
         }
         Ok(nar_infos.into())
     }
