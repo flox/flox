@@ -516,6 +516,24 @@ impl GenerationLink {
     pub fn activation_links(&self) -> RenderedEnvironmentLinks {
         RenderedEnvironmentLinks::new_unchecked(self.out_link_prefix.clone())
     }
+
+    /// Whether this generation's GC-root links are present on this host and
+    /// resolve to their built store paths.
+    ///
+    /// When they do, the `nix build` for this generation has already run here,
+    /// so switching to or activating it is a pointer flip with no build —
+    /// instant rollback (flox#4332).
+    ///
+    /// Both the dev and run links must be symlinks that resolve: a **dangling**
+    /// GC-root link (its store path removed out-of-band, or the link present on
+    /// a host that lacks the store path) does not count, so callers rebuild
+    /// rather than activate a broken environment. The links are only ever
+    /// written by `nix build --out-link`, so a resolving link is a store path.
+    pub fn exists(&self) -> bool {
+        [self.dev.as_path(), self.run.as_path()]
+            .into_iter()
+            .all(|link| link.is_symlink() && link.exists())
+    }
 }
 
 /// A pointer to an environment, either managed or path.
@@ -1594,6 +1612,40 @@ mod test {
         // Flipping again over existing pointers succeeds (atomic replace).
         pointer.flip_to(&generation).unwrap();
         assert!(pointer.dev.as_path().is_symlink());
+    }
+
+    /// `GenerationLink::exists` is true only once both the dev and run GC-root
+    /// links are present and resolve — the signal that a generation's build
+    /// already ran here and a switch to it needs no rebuild. A dangling link
+    /// (store path gone) must not count.
+    #[test]
+    fn generation_link_exists_requires_both_links_to_resolve() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = CanonicalPath::new(dir.path()).unwrap();
+        let system: System = "x86_64-linux".to_string();
+
+        let pointer = RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+            &base, "default", &system,
+        );
+        let generation = pointer.generation_link(GenerationId::from(1usize));
+
+        assert!(!generation.exists(), "no links yet");
+
+        let store = dir.path().join("store");
+        std::fs::write(&store, "").unwrap();
+        std::os::unix::fs::symlink(&store, generation.dev.as_path()).unwrap();
+        assert!(!generation.exists(), "only the dev link is present");
+
+        std::os::unix::fs::symlink(&store, generation.run.as_path()).unwrap();
+        assert!(generation.exists(), "both links present and resolve");
+
+        // Remove the store path out-of-band: the links now dangle, so the
+        // generation must be treated as not built (callers rebuild).
+        std::fs::remove_file(&store).unwrap();
+        assert!(
+            !generation.exists(),
+            "dangling links must not count as built"
+        );
     }
 }
 
