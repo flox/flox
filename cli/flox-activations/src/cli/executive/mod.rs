@@ -493,6 +493,7 @@ mod test {
     use std::collections::BTreeMap;
 
     use flox_core::activate::mode::ActivateMode;
+    use flox_core::activate::sandbox_mode::SandboxMode;
     use flox_core::activations::test_helpers::{read_activation_state, write_activation_state};
     use flox_core::activations::{ActivationState, StartOrAttachResult, activation_state_dir_path};
 
@@ -514,6 +515,7 @@ mod test {
             set_prompt: false,
             flox_env_cuda_detection: "".to_string(),
             flox_active_environments: "".to_string(),
+            sandbox_mode: SandboxMode::default(),
         };
         let project = AttachProjectCtx {
             env_project: dot_flox_path.to_path_buf(),
