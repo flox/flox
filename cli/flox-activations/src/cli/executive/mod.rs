@@ -482,6 +482,7 @@ fn cleanup_all(
 
 #[cfg(test)]
 mod test {
+    use std::assert_matches::assert_matches;
     use std::collections::BTreeMap;
 
     use flox_core::activate::mode::ActivateMode;
@@ -791,7 +792,7 @@ mod test {
             &project.flox_services_socket,
             &activation_state_directory,
         );
-        assert!(matches!(result, Ok(false)), "first call should succeed");
+        assert_matches!(result, Ok(false), "first call should succeed");
 
         // Second call: loop_guard.allow_remonitor(pid) returns false (count=2 >= limit=2)
         // The re-monitoring should be skipped
@@ -804,7 +805,7 @@ mod test {
             &project.flox_services_socket,
             &activation_state_directory,
         );
-        assert!(matches!(result, Ok(false)), "second call should succeed");
+        assert_matches!(result, Ok(false), "second call should succeed");
 
         // Verify the guard state: calling allow_remonitor again should return false
         // since we've hit the limit

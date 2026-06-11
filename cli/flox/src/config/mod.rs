@@ -524,6 +524,7 @@ fn mk_environment(envs: &mut Vec<(String, String)>, prefix: &str) -> Environment
 #[cfg(test)]
 mod tests {
 
+    use std::assert_matches::assert_matches;
     use std::num::NonZero;
 
     use indoc::{formatdoc, indoc};
@@ -754,7 +755,7 @@ mod tests {
     fn test_writing_invalid() {
         let config_content =
             Config::write_to(None, &Key::parse("does_not_exist").unwrap(), Some("true"));
-        assert!(matches!(config_content, Err(ReadWriteError::InvalidKey(_))));
+        assert_matches!(config_content, Err(ReadWriteError::InvalidKey(_)));
     }
 
     #[test]
@@ -785,10 +786,10 @@ mod tests {
             &Key::parse("invalid").unwrap(),
             None::<()>,
         );
-        assert!(matches!(
+        assert_matches!(
             config_content,
             Err(ReadWriteError::NotAUserValue(_))
-        ));
+        );
     }
 
     #[test]
@@ -800,10 +801,10 @@ mod tests {
             &Key::parse("git_base_url").unwrap(),
             None::<()>,
         );
-        assert!(matches!(
+        assert_matches!(
             config_content,
             Err(ReadWriteError::NotAUserValue(_))
-        ));
+        );
     }
 
     #[test]
@@ -815,10 +816,10 @@ mod tests {
             &Key::parse("trusted_environments.\"foo/bar\"").unwrap(),
             None::<()>,
         );
-        assert!(matches!(
+        assert_matches!(
             config_content,
             Err(ReadWriteError::NotAUserValue(_))
-        ));
+        );
     }
 
     #[test]

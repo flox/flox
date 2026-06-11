@@ -737,6 +737,7 @@ pub mod test_helpers {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches::assert_matches;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::str::FromStr;
@@ -976,10 +977,10 @@ mod tests {
         let result =
             ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock));
 
-        assert!(matches!(
+        assert_matches!(
             result,
             Err(FloxmetaBranchError::LocalRevDoesNotExist)
-        ));
+        );
     }
 
     /// Test that when ensure_generation_locked has input state of:
@@ -1076,7 +1077,7 @@ mod tests {
         let result =
             ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock));
 
-        assert!(matches!(result, Err(FloxmetaBranchError::RevDoesNotExist)));
+        assert_matches!(result, Err(FloxmetaBranchError::RevDoesNotExist));
     }
 
     /// Test that when ensure_generation_locked has input state of:
@@ -1158,7 +1159,7 @@ mod tests {
         let result =
             ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock));
 
-        assert!(matches!(result, Err(FloxmetaBranchError::RevDoesNotExist)));
+        assert_matches!(result, Err(FloxmetaBranchError::RevDoesNotExist));
     }
 
     /// Test that ensure_branch is a no-op with input state:

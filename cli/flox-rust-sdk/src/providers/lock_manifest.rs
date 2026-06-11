@@ -1353,6 +1353,7 @@ fn format_multiple_resolution_failures(failures: &[ResolutionFailure]) -> String
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches::assert_matches;
     use std::sync::LazyLock;
 
     use flox_core::data::environment_ref::RemoteEnvironmentRef;
@@ -3057,7 +3058,7 @@ mod tests {
         manifest.options.allow.unfree = Some(false);
 
         let client = MockClient::new();
-        assert!(matches!(
+        assert_matches!(
             LockManifest::resolve_manifest(
                 &manifest,
                 Some(&locked),
@@ -3067,7 +3068,7 @@ mod tests {
             .await
             .unwrap_err(),
             ResolveError::UnfreeNotAllowed { .. }
-        ));
+        );
     }
 
     /// [Lockfile::lock_manifest] returns an error if the server
@@ -3095,7 +3096,7 @@ mod tests {
             GENERATED_DATA.join("resolve/hello_buggy_unfree_server_response.yaml"),
         )
         .await;
-        assert!(matches!(
+        assert_matches!(
             LockManifest::resolve_manifest(
                 manifest.as_latest_schema(),
                 None,
@@ -3105,7 +3106,7 @@ mod tests {
             .await
             .unwrap_err(),
             ResolveError::UnfreeNotAllowed { .. }
-        ));
+        );
     }
 
     /// [Lockfile::check_packages_are_allowed] returns an error
@@ -3115,14 +3116,14 @@ mod tests {
         let (_, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
         foo_locked.license = Some("disallowed".to_string());
 
-        assert!(matches!(
+        assert_matches!(
             LockManifest::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: None,
                 licenses: Some(vec!["allowed".to_string()])
             }),
             Err(ResolveError::LicenseNotAllowed { .. })
-        ));
+        );
     }
 
     /// [Lockfile::check_packages_are_allowed] does not error when
@@ -3166,14 +3167,14 @@ mod tests {
         let (_, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
         foo_locked.broken = Some(true);
 
-        assert!(matches!(
+        assert_matches!(
             LockManifest::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: None,
                 licenses: None
             }),
             Err(ResolveError::BrokenNotAllowed { .. })
-        ));
+        );
     }
 
     /// [Lockfile::check_packages_are_allowed] does not error for a
@@ -3200,14 +3201,14 @@ mod tests {
         let (_, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
         foo_locked.broken = Some(true);
 
-        assert!(matches!(
+        assert_matches!(
             LockManifest::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: Some(false),
                 licenses: None
             }),
             Err(ResolveError::BrokenNotAllowed { .. })
-        ));
+        );
     }
 
     /// [Lockfile::check_packages_are_allowed] does not error for
@@ -3251,14 +3252,14 @@ mod tests {
         let (_, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
         foo_locked.unfree = Some(true);
 
-        assert!(matches!(
+        assert_matches!(
             LockManifest::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: Some(false),
                 broken: None,
                 licenses: None
             }),
             Err(ResolveError::UnfreeNotAllowed { .. })
-        ));
+        );
     }
 
     #[test]

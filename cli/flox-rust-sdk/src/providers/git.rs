@@ -1413,6 +1413,7 @@ pub mod test_helpers {
 #[cfg(test)]
 pub mod tests {
 
+    use std::assert_matches::assert_matches;
     use std::collections::HashMap;
     use std::fs;
 
@@ -1569,10 +1570,10 @@ pub mod tests {
         let subdirectory = path.join("subdirectory");
         std::fs::create_dir(&subdirectory).unwrap();
 
-        assert!(matches!(
+        assert_matches!(
             GitCommandProvider::open(subdirectory),
             Err(GitCommandOpenError::Subdirectory),
-        ));
+        );
     }
 
     // test opening a subdirectory of a bare repo fails
@@ -1584,22 +1585,22 @@ pub mod tests {
         // of having successfully created a bare repository. We previously
         // tested for the existence of "branches", but that directory stopped
         // being created in a recent update of the GitCommandProvider.
-        assert!(matches!(
+        assert_matches!(
             GitCommandProvider::open(tempdir_handle.path().join("hooks")),
             Err(GitCommandOpenError::Subdirectory),
-        ));
+        );
     }
 
     #[test]
     fn test_open_nonexistent() {
         let a = GitCommandProvider::open(PathBuf::from("/does-not-exist"));
         println!("{:?}", a);
-        assert!(matches!(
+        assert_matches!(
             GitCommandProvider::open(PathBuf::from("/does-not-exist")),
             Err(GitCommandOpenError::Discover(
                 GitCommandDiscoverError::Command(GitCommandError::BadExit(128, _, _))
             )),
-        ));
+        );
     }
 
     #[test]
@@ -1848,10 +1849,10 @@ pub mod tests {
             GitCommandProvider::clone_branch(&repo.path, tempdir_handle_2.path(), "branch_1", true)
                 .unwrap();
 
-        assert!(matches!(
+        assert_matches!(
             repo_2.fetch_ref("origin", "does-not-exist"),
             Err(GitRemoteCommandError::RefNotFound(_))
-        ));
+        );
     }
 
     #[test]
@@ -1909,7 +1910,7 @@ pub mod tests {
         repo.checkout("branch_1", true).unwrap();
         commit_file(&repo, "dummy");
         let err = repo.push("origin", false).unwrap_err();
-        assert!(matches!(dbg!(err), GitRemoteCommandError::AccessDenied));
+        assert_matches!(dbg!(err), GitRemoteCommandError::AccessDenied);
     }
 
     /// Test that we pushing to a read only repo fails with [GitRemoteCommandError::AccessDenied]
@@ -1930,7 +1931,7 @@ pub mod tests {
 
         let err = repo.fetch().unwrap_err();
 
-        assert!(matches!(dbg!(err), GitRemoteCommandError::AccessDenied));
+        assert_matches!(dbg!(err), GitRemoteCommandError::AccessDenied);
     }
 
     /// Test that we pushing to a read only repo fails with [GitRemoteCommandError::AccessDenied]
@@ -1955,7 +1956,7 @@ pub mod tests {
         )
         .unwrap_err();
 
-        assert!(matches!(dbg!(err), GitRemoteCommandError::AccessDenied));
+        assert_matches!(dbg!(err), GitRemoteCommandError::AccessDenied);
     }
 
     #[test]

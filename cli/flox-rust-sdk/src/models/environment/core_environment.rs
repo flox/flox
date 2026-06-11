@@ -1305,6 +1305,7 @@ pub mod test_helpers {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches::assert_matches;
     use std::fs::OpenOptions;
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
@@ -1414,7 +1415,7 @@ mod tests {
         let result = env_view
             .edit(&flox, same_manifest.to_string(), None)
             .unwrap();
-        assert!(matches!(result, EditResult::Changed { .. }));
+        assert_matches!(result, EditResult::Changed { .. });
     }
 
     /// Trying to build a manifest with a system other than the current one
@@ -1475,7 +1476,7 @@ mod tests {
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         let result = env_view.edit(&flox, new_env_str.to_string(), None).unwrap();
 
-        assert!(matches!(result, EditResult::Changed { .. }));
+        assert_matches!(result, EditResult::Changed { .. });
         assert!(!result.reactivate_required().unwrap());
     }
 
@@ -1543,7 +1544,7 @@ mod tests {
             .replace_with(temp_env)
             .expect_err("Should fail if backup exists");
 
-        assert!(matches!(err, CoreEnvironmentError::PriorTransaction(_)));
+        assert_matches!(err, CoreEnvironmentError::PriorTransaction(_));
     }
 
     /// creating backup should fail if env is readonly
@@ -1766,12 +1767,12 @@ mod tests {
             .unwrap()
             .shutdown = None;
         let res = env.transact_with_manifest(&manifest, &flox, None);
-        assert!(matches!(
+        assert_matches!(
             res,
             Err(EnvironmentError::ManifestError(
                 ManifestError::InvalidServiceConfig(_)
             ))
-        ));
+        );
     }
 
     #[test]

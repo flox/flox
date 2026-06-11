@@ -741,6 +741,7 @@ pub mod test_helpers {
 #[cfg(test)]
 pub mod tests {
 
+    use std::assert_matches::assert_matches;
     use std::fs::{self, OpenOptions};
     use std::io::Write;
 
@@ -889,10 +890,10 @@ pub mod tests {
         let reg_path = env_registry_path(&flox);
         assert!(reg_path.exists());
         let reg = read_environment_registry(&reg_path).unwrap().unwrap();
-        assert!(matches!(
+        assert_matches!(
             reg.entries[0].envs[0].pointer,
             EnvironmentPointer::Path(_)
-        ));
+        );
     }
 
     #[test]
@@ -914,10 +915,10 @@ pub mod tests {
         std::fs::remove_file(&reg_path).unwrap();
         let _env = PathEnvironment::open(&flox, ptr, env.path).unwrap();
         let reg = read_environment_registry(&reg_path).unwrap().unwrap();
-        assert!(matches!(
+        assert_matches!(
             reg.entries[0].envs[0].pointer,
             EnvironmentPointer::Path(_)
-        ));
+        );
     }
 
     #[test]
