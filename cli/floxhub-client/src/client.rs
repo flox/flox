@@ -1,16 +1,26 @@
-//! Catalog client wrapper around the auto-generated API client.
+//! FloxhubClient: shared catalog + factory SDK client.
+//!
+//! [`FloxhubClient`] fronts both the catalog and factory surfaces of FloxHub.
+//! Both generated inner clients (`catalog_api_v1::Client` and
+//! `factory_api_v1::Client`) share a single reqwest connection pool, a single
+//! auth pre-request hook, and (when configured) a single record/replay
+//! [`MockGuard`]. This means authentication, Sentry trace headers, timeouts,
+//! and mock recording are wired once and apply to all outgoing requests
+//! regardless of which API surface they target.
 
 use std::cmp::min;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use std::future::{Future, ready};
 use std::num::NonZeroU32;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_stream::try_stream;
 use catalog_api_v1::types::{self as api_types};
-use catalog_api_v1::{Client as APIClient, Error as APIError, RequestHooks};
+use catalog_api_v1::{Client as CatalogApiClient, Error as APIError, RequestHooks};
+use factory_api_v1::Client as FactoryApiClient;
 use futures::stream::Stream;
 use futures::{StreamExt, TryStreamExt};
 use reqwest::StatusCode;
@@ -32,14 +42,21 @@ pub const EMPTY_SEARCH_RESPONSE: &api_types::PackageSearchResult =
         total_count: 0,
     };
 
-/// A client for the catalog service.
+/// A client for the FloxHub catalog and factory service APIs.
 ///
-/// This is a wrapper around the auto-generated APIClient that handles:
-/// - HTTP client configuration with timeouts
-/// - Bearer token authentication for FloxHub
-/// - Mock server recording/replay for testing (feature-gated)
+/// Wraps both generated API clients (`catalog_api_v1::Client` and
+/// `factory_api_v1::Client`) and handles:
+/// - HTTP client construction with shared connection pool and timeouts
+/// - Bearer token / Kerberos authentication via a shared pre-request hook
+/// - Mock server recording/replay for testing (single guard covers both APIs)
+///
+/// The `base_url` / [`FloxhubClientConfig`] field fronts both the catalog
+/// and factory surfaces; both inner clients target the same effective URL.
 pub struct FloxhubClient {
-    client: APIClient,
+    /// Catalog inner client.
+    pub(crate) catalog: CatalogApiClient,
+    /// Factory inner client, sharing the same reqwest client and auth hook.
+    pub(crate) factory: FactoryApiClient,
     config: FloxhubClientConfig,
 
     _mock_guard: Option<MockGuard>,
@@ -54,30 +71,53 @@ impl Debug for FloxhubClient {
 }
 
 impl FloxhubClient {
-    /// Create a new catalog client from configuration.
+    /// Create a new client fronting both the catalog and factory surfaces.
+    ///
+    /// The reqwest connection pool, auth hook, and (when configured) the
+    /// record/replay [`MockGuard`] are built once and shared by both inner
+    /// clients. `reqwest::Client` clones share the underlying pool, so there
+    /// is no double connection overhead.
     pub fn new(config: FloxhubClientConfig) -> Result<Self, FloxhubClientError> {
-        // create a mock server if configured
+        // One MockGuard covers both surfaces.
         let mock_guard = MockGuard::new(&config);
         let effective_url = match mock_guard {
             Some(ref mock) => mock.url(),
             None => config.base_url.clone(),
         };
 
-        let hooks = Self::build_request_hooks(config.auth_context.clone());
+        // Build the shared auth closure once; wrap it in each crate's
+        // RequestHooks. The Arc clone is cheap — both hooks share the closure.
+        let pre_request = build_pre_request_hook(config.auth_context.clone());
+        let catalog_hooks = RequestHooks {
+            pre_request: Arc::clone(&pre_request),
+        };
+        let factory_hooks = factory_api_v1::RequestHooks {
+            pre_request: Arc::clone(&pre_request),
+        };
 
-        let http_client = build_http_client(&config)?;
-        let client = APIClient::new_with_client(&effective_url, http_client, hooks);
+        // One reqwest::Client for both inner clients. Clones share the pool.
+        let http_client = build_http_client(
+            &config.extra_headers,
+            config.user_agent.as_deref(),
+            &config.base_url,
+        )
+        .map_err(FloxhubClientError::Other)?;
+
+        let catalog =
+            CatalogApiClient::new_with_client(&effective_url, http_client.clone(), catalog_hooks);
+        let factory = FactoryApiClient::new_with_client(&effective_url, http_client, factory_hooks);
 
         Ok(Self {
-            client,
+            catalog,
+            factory,
             config,
             _mock_guard: mock_guard,
         })
     }
 
-    /// Access the underlying API client for making requests.
-    pub fn api(&self) -> &APIClient {
-        &self.client
+    /// Access the underlying catalog API client for making requests.
+    pub fn api(&self) -> &CatalogApiClient {
+        &self.catalog
     }
 
     /// Get the configured base URL.
@@ -103,43 +143,6 @@ impl FloxhubClient {
         update(&mut modified_config);
         *self = Self::new(modified_config)?;
         Ok(())
-    }
-
-    /// Build per-instance request hooks that inject authentication headers.
-    ///
-    /// The `Credential` is captured once at construction time. For Kerberos,
-    /// `authorization_header()` generates a fresh SPNEGO token on each call.
-    fn build_request_hooks(credential: AuthContext) -> RequestHooks {
-        RequestHooks {
-            pre_request: std::sync::Arc::new(move |request: &mut reqwest::Request| {
-                // Propagate the Sentry trace ID to catalog-server.
-                // This is a no-op when metrics are disabled because Sentry will
-                // not have been initialized.
-                if let Some(span) = sentry::configure_scope(|scope| scope.get_span()) {
-                    for (k, v) in span.iter_headers() {
-                        if let Ok(value) = reqwest::header::HeaderValue::from_str(&v) {
-                            request.headers_mut().append(k, value);
-                        }
-                    }
-                }
-
-                if let Some(result) = credential.authorization_header(request.url()) {
-                    match result {
-                        Ok(value) => {
-                            if let Ok(header_value) = reqwest::header::HeaderValue::from_str(&value)
-                            {
-                                request
-                                    .headers_mut()
-                                    .insert(reqwest::header::AUTHORIZATION, header_value);
-                            }
-                        },
-                        Err(e) => {
-                            tracing::warn!(error = %e, "Failed to produce authorization header")
-                        },
-                    }
-                }
-            }),
-        }
     }
 }
 
@@ -267,7 +270,7 @@ impl CatalogClientTrait for FloxhubClient {
         };
 
         let response = self
-            .client
+            .catalog
             .resolve_api_v1_catalog_resolve_post(None, &package_groups)
             .await
             .map_api_error()
@@ -324,7 +327,7 @@ impl CatalogClientTrait for FloxhubClient {
         let stream = make_depaging_stream(
             |page_number, page_size| async move {
                 let response = self
-                    .client
+                    .catalog
                     .search_api_v1_catalog_search_get(
                         None,
                         Some(page_number),
@@ -360,7 +363,7 @@ impl CatalogClientTrait for FloxhubClient {
         let stream = make_depaging_stream(
             |page_number, page_size| async move {
                 let response = self
-                    .client
+                    .catalog
                     .packages_api_v1_catalog_packages_attr_path_get(
                         attr_path,
                         Some(page_number),
@@ -402,7 +405,7 @@ impl CatalogClientTrait for FloxhubClient {
             |page_number, page_size| async move {
                 let catalog_name_api = str_to_catalog_name(catalog_name)?;
                 let response = self
-                    .client
+                    .catalog
                     .get_catalog_locked_sources_api_v1_catalog_catalogs_catalog_name_locked_sources_get(
                         &catalog_name_api,
                         Some(page_number),
@@ -431,7 +434,7 @@ impl CatalogClientTrait for FloxhubClient {
         let catalog = str_to_catalog_name(catalog_name)?;
         let package = str_to_package_name(package_name)?;
         let body = api_types::PublishInfoRequest(serde_json::Map::new());
-        self.client
+        self.catalog
             .publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post(
                 &catalog, &package, &body,
             )
@@ -452,7 +455,7 @@ impl CatalogClientTrait for FloxhubClient {
         };
         let catalog = str_to_catalog_name(&catalog_name)?;
         let package = str_to_package_name(&package_name)?;
-        self.client
+        self.catalog
             .create_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_post(
                 &catalog, &package, &body,
             )
@@ -472,7 +475,7 @@ impl CatalogClientTrait for FloxhubClient {
     ) -> Result<(), FloxhubClientError> {
         let catalog = str_to_catalog_name(catalog_name)?;
         let package = str_to_package_name(package_name)?;
-        self.client
+        self.catalog
             .create_package_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_post(
                 &catalog, &package, build_info,
             )
@@ -490,7 +493,7 @@ impl CatalogClientTrait for FloxhubClient {
             outpaths: derivations.iter().map(|s| s.to_string()).collect(),
         };
         let response = self
-            .client
+            .catalog
             .get_store_info_api_v1_catalog_store_post(&body)
             .await
             .map_api_error()
@@ -507,7 +510,7 @@ impl CatalogClientTrait for FloxhubClient {
             outpaths: store_paths.to_vec(),
         };
         let statuses = self
-            .client
+            .catalog
             .get_storepath_status_api_v1_catalog_store_status_post(&req)
             .await
             .map_api_error()
@@ -522,7 +525,7 @@ impl CatalogClientTrait for FloxhubClient {
 
     #[instrument(skip_all)]
     async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, FloxhubClientError> {
-        self.client
+        self.catalog
             .get_base_catalog_api_v1_catalog_info_base_catalog_get()
             .await
             .map_api_error()
@@ -547,7 +550,7 @@ impl CatalogClientTrait for FloxhubClient {
             nixpkgs_rev: nixpkgs_rev.to_string(),
             system,
         };
-        self.client
+        self.catalog
             .check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_post(
                 &catalog,
                 &package,
@@ -617,7 +620,7 @@ async fn collect_search_results<T, E>(
 }
 
 /// Collects all results from a stream, returning the total count and all items.
-async fn collect_all_results<T, E>(
+pub(crate) async fn collect_all_results<T, E>(
     stream: impl Stream<Item = Result<StreamItem<T>, E>>,
 ) -> Result<(ResultCount, Vec<T>), E> {
     let mut count = None;
@@ -639,7 +642,7 @@ async fn collect_all_results<T, E>(
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum StreamItem<T> {
+pub(crate) enum StreamItem<T> {
     TotalCount(u64),
     Result(T),
 }
@@ -654,7 +657,7 @@ impl<T> From<T> for StreamItem<T> {
 ///
 /// Takes a function that returns `(total_count, items)` for a given page, and
 /// yields `TotalCount` once followed by all `Result` items across pages.
-fn make_depaging_stream<T, E, Fut>(
+pub(crate) fn make_depaging_stream<T, E, Fut>(
     generator: impl Fn(i64, i64) -> Fut,
     page_size: NonZeroU32,
 ) -> impl Stream<Item = Result<StreamItem<T>, E>>
@@ -691,47 +694,92 @@ where
 }
 
 // ---------------------------------------------------------------------------
-// HTTP client builder
+// Shared HTTP client construction helpers (pub(crate) for factory module)
 // ---------------------------------------------------------------------------
 
-/// Build HTTP client for FloxHub catalog API.
-/// Authentication headers are injected per-request via `register_auth_hook`.
-fn build_http_client(config: &FloxhubClientConfig) -> Result<reqwest::Client, FloxhubClientError> {
-    let headers = build_header_map(config).map_err(FloxhubClientError::Other)?;
+/// Build the pre-request closure that injects Sentry trace headers and the
+/// bearer/Kerberos `Authorization` header on every outgoing request.
+///
+/// The returned `Arc` can be wrapped in either `catalog_api_v1::RequestHooks`
+/// or `factory_api_v1::RequestHooks`; both accept the same closure type.
+/// Capturing `credential` by value means a single SPNEGO token is negotiated
+/// per Kerberos session, which is the intended behaviour.
+pub(crate) fn build_pre_request_hook(
+    credential: AuthContext,
+) -> Arc<dyn Fn(&mut reqwest::Request) + Send + Sync> {
+    Arc::new(move |request: &mut reqwest::Request| {
+        // Propagate the Sentry trace ID to the backend service.
+        // This is a no-op when metrics are disabled because Sentry will
+        // not have been initialized.
+        if let Some(span) = sentry::configure_scope(|scope| scope.get_span()) {
+            for (k, v) in span.iter_headers() {
+                if let Ok(value) = reqwest::header::HeaderValue::from_str(&v) {
+                    request.headers_mut().append(k, value);
+                }
+            }
+        }
+
+        if let Some(result) = credential.authorization_header(request.url()) {
+            match result {
+                Ok(value) => {
+                    if let Ok(header_value) = reqwest::header::HeaderValue::from_str(&value) {
+                        request
+                            .headers_mut()
+                            .insert(reqwest::header::AUTHORIZATION, header_value);
+                    }
+                },
+                Err(e) => {
+                    tracing::warn!(error = %e, "Failed to produce authorization header")
+                },
+            }
+        }
+    })
+}
+
+/// Build a configured `reqwest::Client` with standard timeouts and the
+/// provided extra headers and user-agent.
+///
+/// Authentication is injected per-request via the hook returned by
+/// [`build_pre_request_hook`], not baked into the default headers here.
+///
+/// `base_url` is used only in the debug log line.
+pub(crate) fn build_http_client(
+    extra_headers: &BTreeMap<String, String>,
+    user_agent: Option<&str>,
+    base_url: &str,
+) -> Result<reqwest::Client, String> {
+    let headers = build_header_map(extra_headers)?;
 
     debug!(
-        base_url = %config.base_url,
-        handle = ?config.auth_context.handle(),
-        extra_headers = config.extra_headers.len(),
-        "building catalog HTTP client"
+        base_url = %base_url,
+        extra_headers = extra_headers.len(),
+        "building HTTP client"
     );
 
-    let client_builder = reqwest::Client::builder();
-
-    let client_builder = client_builder
+    let client_builder = reqwest::Client::builder()
         .default_headers(headers)
         .connect_timeout(Duration::from_secs(15))
         .timeout(Duration::from_secs(60));
 
-    let client_builder = if let Some(ref user_agent) = config.user_agent {
-        client_builder.user_agent(user_agent)
+    let client_builder = if let Some(ua) = user_agent {
+        client_builder.user_agent(ua)
     } else {
         client_builder
     };
 
-    client_builder
-        .build()
-        .map_err(|e| FloxhubClientError::Other(e.to_string()))
+    client_builder.build().map_err(|e| e.to_string())
 }
 
-/// Build the default header map for the HTTP client.
+/// Build the default header map from extra headers.
 ///
 /// Authentication headers are NOT included here — they are injected
-/// per-request via the pre_hook registered by `register_auth_hook`.
-fn build_header_map(config: &FloxhubClientConfig) -> Result<HeaderMap, String> {
+/// per-request via the hook returned by [`build_pre_request_hook`].
+pub(crate) fn build_header_map(
+    extra_headers: &BTreeMap<String, String>,
+) -> Result<HeaderMap, String> {
     let mut header_map = HeaderMap::new();
 
-    for (key, value) in &config.extra_headers {
+    for (key, value) in extra_headers {
         let name = header::HeaderName::from_str(key)
             .map_err(|_| format!("invalid extra header name '{key}'"))?;
         let value = header::HeaderValue::from_str(value)
@@ -749,8 +797,20 @@ fn build_header_map(config: &FloxhubClientConfig) -> Result<HeaderMap, String> {
 /// Nothing here should be used in production code.
 pub mod test_helpers {
     use super::FloxhubClient;
-    use crate::auth::{AuthContext, AuthnMode};
-    use crate::config::{FloxhubClientConfig, FloxhubMockMode};
+    use crate::auth::AuthContext;
+    use crate::config::FloxhubClientConfig;
+
+    /// Build an unauthenticated [`FloxhubClientConfig`] pointed at `url`,
+    /// with no mock mode, extra headers, or user agent.
+    pub fn client_config(url: &str) -> FloxhubClientConfig {
+        FloxhubClientConfig {
+            base_url: url.to_string(),
+            extra_headers: Default::default(),
+            mock_mode: Default::default(),
+            auth_context: AuthContext::from_mode(&Default::default(), None),
+            user_agent: None,
+        }
+    }
 
     /// Build a no-op client for tests that need a structurally valid
     /// [`FloxhubClient`] but never issue a request.
@@ -759,14 +819,8 @@ pub mod test_helpers {
     /// catalog or factory call fails fast and locally rather than reaching a
     /// real server. Tests that exercise the network install a replay client.
     pub fn new_noop() -> FloxhubClient {
-        let config = FloxhubClientConfig {
-            base_url: "http://localhost:0".to_string(),
-            extra_headers: Default::default(),
-            mock_mode: FloxhubMockMode::None,
-            auth_context: AuthContext::from_mode(&AuthnMode::default(), None),
-            user_agent: None,
-        };
-        FloxhubClient::new(config).expect("failed to build no-op FloxhubClient")
+        FloxhubClient::new(client_config("http://localhost:0"))
+            .expect("failed to build no-op FloxhubClient")
     }
 }
 
@@ -783,18 +837,9 @@ pub mod tests {
     use tracing::Instrument;
     use tracing_subscriber::layer::SubscriberExt;
 
+    use super::test_helpers::client_config;
     use super::*;
     const SENTRY_TRACE_HEADER: &str = "sentry-trace";
-
-    fn client_config(url: &str) -> FloxhubClientConfig {
-        FloxhubClientConfig {
-            base_url: url.to_string(),
-            extra_headers: Default::default(),
-            mock_mode: Default::default(),
-            auth_context: AuthContext::from_mode(&Default::default(), None),
-            user_agent: None,
-        }
-    }
 
     #[tokio::test]
     async fn resolve_response_with_new_message_type() {

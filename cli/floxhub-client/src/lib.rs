@@ -1,13 +1,13 @@
-//! FloxHub SDK client — catalog and (later) factory API surfaces.
+//! FloxHub SDK client — catalog and factory API surfaces.
 //!
-//! This crate provides:
-//! - HTTP client construction with bearer token authentication
-//! - Complete catalog API trait ([`CatalogClientTrait`]) with HTTP implementation
-//! - Catalog domain types (`PackageGroup`, `ResolvedPackageGroup`, etc.)
-//! - Operation-specific error types
-//! - Common error handling for catalog API operations
-//! - Mock server infrastructure for integration testing (feature-gated)
-//! - Re-exports of `catalog-api-v1` types for consumers
+//! This crate abstracts over both generated API crates:
+//! - `catalog-api-v1` — via [`FloxhubClient`] and the catalog [`CatalogClientTrait`]
+//! - `factory-api-v1` — via [`FactoryClientTrait`] implemented for
+//!   [`FloxhubClient`]
+//!
+//! Both clients share a single construction path inside [`FloxhubClient`]:
+//! one reqwest client, one auth pre-request hook, and one record/replay
+//! [`mock::MockGuard`] cover all outgoing requests.
 //!
 //! ## Usage
 //!
@@ -15,6 +15,7 @@
 //! use floxhub_client::{
 //!     FloxhubClient, FloxhubClientConfig,
 //!     FloxhubMockMode, CatalogClientTrait, AuthContext,
+//!     FactoryClientTrait,
 //! };
 //!
 //! let config = FloxhubClientConfig {
@@ -27,12 +28,14 @@
 //!
 //! let client = FloxhubClient::new(config)?;
 //! let results = client.search("curl", system, None).await?;
+//! let builds = client.list_builds(None).await?;
 //! ```
 
 mod auth;
 pub mod client;
 mod config;
 mod error;
+mod factory;
 mod token;
 mod types;
 
@@ -50,13 +53,26 @@ pub use catalog_api_v1::{
     Error as ApiError,
     ResponseValue as ApiResponseValue,
 };
-#[cfg(any(test, feature = "tests"))]
 // Client
+#[cfg(any(test, feature = "tests"))]
 pub use client::EMPTY_SEARCH_RESPONSE;
 pub use client::{CatalogClientTrait, FloxhubClient, str_to_catalog_name, str_to_package_name};
 pub use config::{FloxhubClientConfig, FloxhubMockMode};
 // Errors
 pub use error::*;
+// Re-export factory types so consumers depend only on floxhub-client.
+pub use factory::{
+    FactoryClientError,
+    FactoryClientTrait,
+    MapApiErrorExt as FactoryMapApiErrorExt,
+};
+pub use factory_api_v1::types::{BuildResponse, ErrorResponse as FactoryErrorResponse};
+// Re-export factory-api-v1 types for consumers.
+pub use factory_api_v1::{
+    ByteStream as FactoryByteStream,
+    Error as FactoryApiError,
+    ResponseValue as FactoryApiResponseValue,
+};
 pub use token::{FloxhubToken, FloxhubTokenError};
 // Types (re-exported from types module for convenience)
 pub use types::*;
