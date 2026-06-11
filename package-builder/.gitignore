@@ -5,3 +5,4 @@
 /libsandbox.dylib
 /tests/threadtest
 /tests/sandbox_probe
+/tests/mock_prompt_broker
