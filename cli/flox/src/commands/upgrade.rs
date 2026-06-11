@@ -102,7 +102,6 @@ impl Upgrade {
         let diff_for_system = result.diff_for_system(&flox.system);
 
         let rendered_diff = render_diff(&diff_for_system);
-        let num_changes_for_system = diff_for_system.len(); // used in non-dry-run path
 
         if self.dry_run {
             if diff_for_system.is_empty() {
@@ -140,8 +139,10 @@ impl Upgrade {
             Upgrades were not available for this system, but upgrades were applied for other
             systems supported by this environment."});
         } else {
+            let (version_changes, rebuilds) = count_upgrade_categories(&diff_for_system);
+            let summary = format_upgrade_summary(version_changes, rebuilds);
             message::plain(formatdoc! {"
-            {icon} Upgraded {num_changes_for_system} package(s) in {description}:
+            {icon} Upgraded {summary} in {description}:
             {rendered_diff}
             "});
         }
@@ -446,9 +447,7 @@ mod tests {
             let mut diff = SingleSystemUpgradeDiff::new();
             diff.insert("curl".to_string(), (before_curl, after_curl));
             diff.insert("terraform-docs".to_string(), (before_tf, after_tf));
-            let (version_changes, rebuilds) = count_upgrade_categories(&diff);
-            assert_eq!(version_changes, 1);
-            assert_eq!(rebuilds, 1);
+            assert_eq!(count_upgrade_categories(&diff), (1, 1));
         }
     }
 

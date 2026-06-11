@@ -62,6 +62,7 @@ use crate::config::{AutoActivationPreference, Config, EnvironmentPromptConfig};
 use crate::utils::detect_shell::{detect_shell_for_in_place, detect_shell_for_subshell};
 use crate::utils::errors::format_diverged_metadata;
 use crate::utils::message;
+use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
 use crate::{Exit, environment_subcommand_metric, subcommand_metric, utils};
 
 #[derive(Debug, Clone, Bpaf)]
@@ -756,9 +757,8 @@ fn notify_package_upgrades(
         .to_flags()
         .map(|flags| format!(" {}", flags.join(" ")))
         .unwrap_or("".to_string());
-    let (version_changes, rebuilds) =
-        crate::utils::upgrade_output::count_upgrade_categories(&diff_for_system);
-    let summary = crate::utils::upgrade_output::format_upgrade_summary(version_changes, rebuilds);
+    let (version_changes, rebuilds) = count_upgrade_categories(&diff_for_system);
+    let summary = format_upgrade_summary(version_changes, rebuilds);
     let message = formatdoc! {"
         {summary} available in {description}.
         Use 'flox upgrade --dry-run{flags}' for details.
