@@ -269,11 +269,14 @@ impl Edit {
                     .map(|compose| &compose.include);
                 let edited_includes = old_includes != new_includes;
                 subcommand_metric!("edit", "edited_includes" = edited_includes);
-                if let Err(err) = EventsHub::global()
-                    .record_environment_edit_with(env_detail_from_concrete(environment), |p| {
+                let manifest_version = new_lockfile.manifest_schema_version().to_string();
+                if let Err(err) = EventsHub::global().record_environment_edit_with(
+                    env_detail_from_concrete(environment),
+                    |p| {
                         p.with_edited_includes(edited_includes)
-                    })
-                {
+                            .with_manifest_version(manifest_version)
+                    },
+                ) {
                     debug!(error = %err, "Failed to record canonical event");
                 }
             },

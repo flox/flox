@@ -443,9 +443,13 @@ impl ActivateOptions {
         // The new pipeline drops the legacy `activate#version` pseudo-
         // subcommand (per spec AC #4) and rides `lockfile_version` on a
         // real `cli.environment.activate` event instead.
+        let manifest_version = lockfile.manifest_schema_version().to_string();
         if let Err(err) = EventsHub::global().record_environment_activate_with(
             env_detail_from_concrete(&concrete_environment),
-            |p| p.with_lockfile_version(lockfile_version.to_string()),
+            |p| {
+                p.with_lockfile_version(lockfile_version.to_string())
+                    .with_manifest_version(manifest_version)
+            },
         ) {
             debug!(error = %err, "Failed to record canonical event");
         }

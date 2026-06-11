@@ -38,7 +38,7 @@ use std::sync::OnceLock;
 use flox_events::{EnvDetail, EventsClient, EventsGuard, EventsHub, SharedMetadataTemplate};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
-use flox_rust_sdk::utils::INVOCATION_SOURCES;
+use flox_rust_sdk::utils::{INVOCATION_SOURCES, is_ci_environment, is_containerd_environment};
 use tracing::debug;
 use uuid::Uuid;
 
@@ -200,16 +200,27 @@ pub fn current_invocation_id() -> Option<Uuid> {
 /// pipeline.
 fn shared_metadata_template() -> SharedMetadataTemplate {
     let linux_release = sys_info::linux_os_release().ok();
+    let os_release = sys_info::os_release().ok();
     SharedMetadataTemplate {
         flox_version: FLOX_VERSION.to_string(),
         os_family: sys_info::os_type()
             .ok()
             .map(|x| x.replace("Darwin", "Mac OS")),
-        os_family_release: sys_info::os_release().ok(),
+        // `os_family_release` and `kernel_version` come from the same
+        // `sys_info::os_release()` call. Downstream consumers treat
+        // the two as separate concepts and derive both fields from
+        // this one source.
+        os_family_release: os_release.clone(),
         os: linux_release.as_ref().and_then(|r| r.id.clone()),
         os_version: linux_release.and_then(|r| r.version_id),
+        kernel_version: os_release,
         empty_flags: vec![],
         invocation_sources: INVOCATION_SOURCES.clone(),
+        // Typed bools sourced from the same helpers that produce the
+        // `"ci"` / `"containerd"` tokens in `invocation_sources` —
+        // they cannot drift by construction.
+        in_ci: is_ci_environment(),
+        containerd: is_containerd_environment(),
     }
 }
 
@@ -812,8 +823,11 @@ mod tests {
             os_family_release: None,
             os: None,
             os_version: None,
+            kernel_version: None,
             empty_flags: vec![],
             invocation_sources: vec!["shell".to_string()],
+            in_ci: false,
+            containerd: false,
         };
         let client = EventsClient::new_with_connection(
             Uuid::new_v4(),

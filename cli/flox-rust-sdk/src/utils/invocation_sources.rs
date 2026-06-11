@@ -2,13 +2,43 @@ use std::collections::HashSet;
 use std::env;
 use std::sync::LazyLock;
 
+/// `true` when this invocation is observed running in a CI
+/// environment. Currently mirrors the legacy heuristic: the `CI` env
+/// var is set to any non-error value.
+///
+/// Single source of truth for the `"ci"` token in
+/// [`detect_invocation_sources`] and for downstream consumers that
+/// want a typed boolean. The two cannot drift by construction
+/// because both read this function.
+pub fn is_ci_environment() -> bool {
+    env::var("CI").is_ok()
+}
+
+/// `true` when this invocation is observed running under Flox's
+/// containerized execution path. Mirrors the legacy heuristic:
+/// the `FLOX_CONTAINERD` env var is set to any non-error value.
+/// This is not a general "running in any container" signal — it
+/// tracks the env-var the Flox runtime sets on its own container
+/// path.
+///
+/// Single source of truth for the `"containerd"` token in
+/// [`detect_invocation_sources`] and for downstream consumers that
+/// want a typed boolean. The two cannot drift by construction
+/// because both read this function.
+pub fn is_containerd_environment() -> bool {
+    env::var("FLOX_CONTAINERD").is_ok()
+}
+
 /// Heuristics table for inferring invocation sources from environment
 /// Each entry: (env_var_name, expected_value_or_none, invocation_source_tag)
-/// Use None for expected_value to check env var presence only
+/// Use None for expected_value to check env var presence only.
+///
+/// The `"ci"` and `"containerd"` tokens are intentionally NOT in
+/// this table — they are emitted by [`detect_invocation_sources`]
+/// via [`is_ci_environment`] / [`is_containerd_environment`] so
+/// that the typed-boolean accessors and the string-token list
+/// share one source of truth.
 const INFERENCE_HEURISTICS: &[(&str, Option<&str>, &str)] = &[
-    // CI and containerd contexts
-    ("CI", None, "ci"),
-    ("FLOX_CONTAINERD", None, "containerd"),
     // Terminal programs
     ("TERM_PROGRAM", Some("vscode"), "term.vscode"),
     ("TERM_PROGRAM", Some("kiro"), "agentic.kiro"),
@@ -83,7 +113,17 @@ pub fn detect_invocation_sources() -> Vec<String> {
         }
     }
 
-    // Apply all inference heuristics (CI, containerd, agentic tools, etc.)
+    // Single-source-of-truth derivations for the typed bools — see
+    // `is_ci_environment` / `is_containerd_environment` rustdoc.
+    if is_ci_environment() {
+        sources.insert("ci".to_string());
+    }
+    if is_containerd_environment() {
+        sources.insert("containerd".to_string());
+    }
+
+    // Apply remaining inference heuristics (agentic tools, terminal
+    // programs, etc.). `ci` and `containerd` are emitted above.
     sources.extend(detect_heuristics());
 
     // Sort for consistent ordering
@@ -261,6 +301,70 @@ mod tests {
                 let sources = detect_invocation_sources();
                 assert!(sources.contains(&"agentic.flox-mcp".to_string()));
                 assert!(sources.contains(&"agentic.claude-code.plugin".to_string()));
+            },
+        );
+    }
+
+    /// Drift-safety: the `"ci"` token and `is_ci_environment()` come
+    /// from one helper, so they cannot disagree by construction.
+    /// Same for `"containerd"` / `is_containerd_environment()`. The
+    /// test exists to lock in the construction-by-construction
+    /// promise so a future refactor that splits the source surfaces
+    /// the regression at compile or test time.
+    #[test]
+    fn test_typed_bools_match_string_tokens() {
+        temp_env::with_vars(
+            [("CI", Some("true")), ("FLOX_CONTAINERD", Some("1"))],
+            || {
+                let sources = detect_invocation_sources();
+                assert_eq!(sources.contains(&"ci".to_string()), is_ci_environment());
+                assert_eq!(
+                    sources.contains(&"containerd".to_string()),
+                    is_containerd_environment()
+                );
+                assert!(is_ci_environment(), "fixture sets CI");
+                assert!(is_containerd_environment(), "fixture sets FLOX_CONTAINERD");
+            },
+        );
+
+        temp_env::with_vars([("CI", None::<&str>), ("FLOX_CONTAINERD", None)], || {
+            let sources = detect_invocation_sources();
+            assert_eq!(sources.contains(&"ci".to_string()), is_ci_environment());
+            assert_eq!(
+                sources.contains(&"containerd".to_string()),
+                is_containerd_environment()
+            );
+            assert!(!is_ci_environment(), "fixture clears CI");
+            assert!(
+                !is_containerd_environment(),
+                "fixture clears FLOX_CONTAINERD"
+            );
+        });
+
+        // Orthogonality: CI only — `"ci"` present, `"containerd"`
+        // absent. Catches a cross-wiring regression where one token
+        // is rewired to read the other env var.
+        temp_env::with_vars([("CI", Some("true")), ("FLOX_CONTAINERD", None)], || {
+            let sources = detect_invocation_sources();
+            assert!(is_ci_environment(), "fixture sets CI only");
+            assert!(!is_containerd_environment(), "FLOX_CONTAINERD cleared");
+            assert!(sources.contains(&"ci".to_string()));
+            assert!(!sources.contains(&"containerd".to_string()));
+        });
+
+        // Orthogonality: FLOX_CONTAINERD only — `"containerd"`
+        // present, `"ci"` absent. Mirror of the above arm.
+        temp_env::with_vars(
+            [("CI", None::<&str>), ("FLOX_CONTAINERD", Some("1"))],
+            || {
+                let sources = detect_invocation_sources();
+                assert!(!is_ci_environment(), "CI cleared");
+                assert!(
+                    is_containerd_environment(),
+                    "fixture sets FLOX_CONTAINERD only"
+                );
+                assert!(!sources.contains(&"ci".to_string()));
+                assert!(sources.contains(&"containerd".to_string()));
             },
         );
     }

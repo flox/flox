@@ -14,7 +14,7 @@ use std::{env, fs, io};
 
 pub use flox_core::traceable_path;
 // Re-export invocation sources for backward compatibility
-pub use invocation_sources::INVOCATION_SOURCES;
+pub use invocation_sources::{INVOCATION_SOURCES, is_ci_environment, is_containerd_environment};
 
 /// HTTP header name for the device UUID telemetry header.
 pub const HEADER_DEVICE_UUID: &str = "flox-device-uuid";

@@ -244,8 +244,10 @@ impl Publish {
             "has_expression_build" = has_expression_build,
             "has_manifest_build" = has_manifest_build
         );
+        let manifest_version = lockfile.manifest_schema_version().to_string();
         if let Err(err) = EventsHub::global().record_environment_publish_with(env_detail, |p| {
             p.with_build_kinds(has_expression_build, has_manifest_build)
+                .with_manifest_version(manifest_version)
         }) {
             debug!(error = %err, "Failed to record canonical event");
         }
