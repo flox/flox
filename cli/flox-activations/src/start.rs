@@ -71,6 +71,7 @@ pub fn start(
                 &context.activation_state_dir,
                 &start_state_dir,
                 context.metrics_uuid,
+                &context.flox_bin,
             )?;
             activations.set_executive_pid(exec_pid.as_raw());
             Some((exec_pid, signals))
@@ -188,6 +189,7 @@ fn spawn_executive(
     activation_state_dir: &Path,
     start_state_dir: &Path,
     metrics_uuid: Option<Uuid>,
+    flox_bin: &str,
 ) -> Result<Pid, anyhow::Error> {
     let parent_pid = getpid();
 
@@ -197,6 +199,7 @@ fn spawn_executive(
         activation_state_dir: activation_state_dir.to_path_buf(),
         parent_pid: parent_pid.as_raw(),
         metrics_uuid,
+        flox_bin: flox_bin.to_string(),
     };
 
     let temp_file = tempfile::NamedTempFile::with_prefix_in("executive_ctx_", start_state_dir)?;

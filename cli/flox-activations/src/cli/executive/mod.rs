@@ -13,6 +13,7 @@ use log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::sys::signal::Signal::SIGUSR1;
 use nix::sys::signal::kill;
 use nix::unistd::{Pid, getpgid, getpid, setsid};
+use prune::spawn_generation_prune_thread;
 use reaper::reap_orphaned_children;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, error, info, instrument};
@@ -25,6 +26,7 @@ use crate::process_compose::{process_compose_down, start_process_compose_no_serv
 
 mod event_coordinator;
 mod log_gc;
+mod prune;
 mod reaper;
 mod watcher;
 
@@ -42,6 +44,21 @@ pub struct ExecutiveCtx {
     /// When None, metrics are disabled and Sentry is not initialized.
     #[serde(default)]
     pub metrics_uuid: Option<Uuid>,
+
+    /// Path to the `flox` CLI binary, used to periodically spawn the
+    /// generation-link prune in the background (flox#4332).
+    ///
+    /// design-debt: the executive has to shell out to the `flox` CLI to run the
+    /// prune because the executive is a separate binary that cannot link
+    /// flox-rust-sdk. Were the executive the same binary as the CLI, it could
+    /// call the prune directly instead.
+    ///
+    /// `#[serde(default)]` so a context file written by an older
+    /// `flox-activations` (without this field) still deserializes during an
+    /// upgrade; an empty value just disables the background prune for that
+    /// activation.
+    #[serde(default)]
+    pub flox_bin: String,
 }
 
 #[derive(Debug, Args)]
@@ -67,6 +84,7 @@ impl ExecutiveArgs {
             activation_state_dir,
             parent_pid,
             metrics_uuid,
+            flox_bin,
         } = serde_json::from_str(&contents)?;
         if !std::env::var(NO_REMOVE_ACTIVATION_FILES).is_ok_and(|val| val == "true") {
             fs::remove_file(&self.executive_ctx)?;
@@ -120,6 +138,7 @@ impl ExecutiveArgs {
         // Step 8: Spawn non-essential GC threads
         spawn_heartbeat_log();
         spawn_logs_gc_threads(&log_dir);
+        spawn_generation_prune_thread(flox_bin, log_dir.clone());
 
         // Step 9: Enter the monitoring loop
         info!("starting monitoring loop");
