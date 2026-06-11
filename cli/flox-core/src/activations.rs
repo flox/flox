@@ -12,6 +12,7 @@ use time::OffsetDateTime;
 use tracing::{debug, trace};
 
 use crate::activate::mode::ActivateMode;
+use crate::activate::sandbox_mode::SandboxMode;
 use crate::proc_status::pid_is_running;
 use crate::{Version, path_hash};
 
@@ -374,6 +375,11 @@ pub struct ActivationState {
     version: Version<3>,
     info: EnvironmentInfo,
     mode: ActivateMode,
+    /// The sandbox mode recorded when this activation was started.
+    /// Absent in state files written before sandbox support existed,
+    /// which deserialize to `Off`.
+    #[serde(default)]
+    sandbox_mode: SandboxMode,
     ready: Ready,
     /// Pid must be a non-zero value when writing state to disk.
     executive_pid: Pid,
@@ -394,11 +400,19 @@ impl ActivationState {
                 flox_env: flox_env.as_ref().to_path_buf(),
             },
             mode: mode.clone(),
+            sandbox_mode: SandboxMode::default(),
             ready: Ready::default(),
             executive_pid: EXECUTIVE_NOT_STARTED,
             current_process_compose_store_path: None,
             attached_pids: BTreeMap::new(),
         }
+    }
+
+    /// Record the sandbox mode for this activation, returning `self` so it
+    /// can be chained onto [`ActivationState::new`].
+    pub fn with_sandbox_mode(mut self, sandbox_mode: SandboxMode) -> Self {
+        self.sandbox_mode = sandbox_mode;
+        self
     }
 
     /// Returns the list of attached PIDs that are still running.
@@ -444,6 +458,11 @@ impl ActivationState {
     /// Returns the current activation mode
     pub fn mode(&self) -> &ActivateMode {
         &self.mode
+    }
+
+    /// Returns the sandbox mode recorded for this activation.
+    pub fn sandbox_mode(&self) -> &SandboxMode {
+        &self.sandbox_mode
     }
 
     /// Check if the activation state has running processes.
@@ -893,6 +912,7 @@ mod tests {
                 dot_flox_path: Some(dot_flox_path),
             },
             mode: ActivateMode::default(),
+            sandbox_mode: SandboxMode::default(),
             ready,
             executive_pid: 1, // Not used, but will be running.
             current_process_compose_store_path: None,
