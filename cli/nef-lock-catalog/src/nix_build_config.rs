@@ -11,9 +11,9 @@ use tracing::instrument;
 use url::Url;
 
 use crate::CatalogId;
-use crate::lock::{NixFlakeref, lock_url_with_options};
-use crate::nix_build_lock::{BuildLock, CatalogLock};
-use crate::tree::PackageTreeBuilder;
+use crate::lock::flakeref::{NixFlakeref, lock_url_with_options};
+use crate::lock::build_lock::{BuildLock, CatalogLock};
+use crate::lock::tree::PackageTreeBuilder;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 enum CatalogType {
@@ -32,12 +32,12 @@ enum CatalogType {
 /// Examples:
 ///
 /// As a URL:
-/// ```
+/// ```toml
 /// url = "git+https://github.com/foo/bar?ref=<ref>"
 /// ```
 ///
 /// As a structured description:
-/// ```
+/// ```toml
 /// type = "git"
 /// url = "https://github.com/foo/bar"
 /// ref = "<ref>"

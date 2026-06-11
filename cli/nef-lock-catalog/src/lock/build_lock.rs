@@ -8,8 +8,8 @@ use serde::Serialize;
 use tracing::debug;
 
 use crate::CatalogId;
-use crate::lock::NixPrefetchResult;
-use crate::tree::PackageTreeNode;
+use super::flakeref::NixPrefetchResult;
+use super::tree::PackageTreeNode;
 
 /// Locked source information to nix expression catalog.
 /// That is either:

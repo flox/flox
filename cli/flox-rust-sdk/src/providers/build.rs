@@ -12,7 +12,7 @@ use flox_manifest::parsed::common::{BuildSandbox, DEFAULT_GROUP_NAME};
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use indoc::formatdoc;
 use itertools::Itertools;
-use nef_lock_catalog::lock::NixFlakeref;
+use nef_lock_catalog::NixFlakeref;
 use serde::Deserialize;
 use tempfile::NamedTempFile;
 use thiserror::Error;
