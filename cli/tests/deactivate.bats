@@ -1106,6 +1106,32 @@ EOF
 }
 
 # bats test_tags=activate,deactivate
+@test "interactive deactivate exits the subshell via the prompt hook (bash)" {
+  project_setup
+  FLOX_SHELL="bash" run -0 \
+    flox_cold_start expect "$TESTS_DIR/activate/interactive-deactivate.exp" "$PROJECT_DIR"
+}
+
+# bats test_tags=activate,deactivate
+@test "interactive deactivate exits the subshell via the prompt hook (fish)" {
+  project_setup
+
+  # Regression test: the fish hook used to pipe hook-env output into `source`,
+  # and fish's `exit` inside a sourced file only skips the rest of that file
+  # without exiting the shell, making `flox deactivate` a silent no-op (the
+  # hook now evals the output, where `exit` does exit the shell).
+  FLOX_SHELL="fish" run -0 \
+    flox_cold_start expect "$TESTS_DIR/activate/interactive-deactivate.exp" "$PROJECT_DIR"
+}
+
+# bats test_tags=activate,deactivate
+@test "interactive deactivate exits the subshell via the prompt hook (zsh)" {
+  project_setup
+  FLOX_SHELL="zsh" run -0 \
+    flox_cold_start expect "$TESTS_DIR/activate/interactive-deactivate.exp" "$PROJECT_DIR"
+}
+
+# bats test_tags=activate,deactivate
 @test "interactive deactivate env diff (zsh)" {
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
