@@ -1,10 +1,52 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::fmt::{self, Display};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use rnix::ast;
 use rnix::ast::HasEntry as _;
 use rowan::ast::AstNode;
+use serde::{Deserialize, Serialize};
+
+/// A single catalog attribute-path reference discovered by the scanner,
+/// e.g. `catalogs.myorg.toolkit.readVersion`. A dynamic component collapses
+/// the tail to a `*` sentinel (e.g. `catalogs.myorg.*`).
+///
+/// Distinct from a bare `String` so downstream lookup grouping consumes a
+/// typed reference rather than an arbitrary string.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct CatalogRef(String);
+
+impl CatalogRef {
+    /// The reference as a dotted attr-path string.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<String> for CatalogRef {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for CatalogRef {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
+    }
+}
+
+impl From<CatalogRef> for String {
+    fn from(value: CatalogRef) -> Self {
+        value.0
+    }
+}
+
+impl Display for CatalogRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 /// Catalog references and dependency attr-paths extracted from one file.
 #[derive(Debug)]
@@ -40,7 +82,10 @@ const DEFAULT_ROOTS: &[&str] = &["catalogs"];
 /// descending namespace directories under `base_dir`.
 ///
 /// Uses the default `catalogs` root; see [scan_package_with_roots] to override.
-pub fn scan_package(base_dir: impl AsRef<Path>, rel_file: impl AsRef<Path>) -> BTreeSet<String> {
+pub fn scan_package(
+    base_dir: impl AsRef<Path>,
+    rel_file: impl AsRef<Path>,
+) -> BTreeSet<CatalogRef> {
     scan_package_with_roots(base_dir, rel_file, DEFAULT_ROOTS.iter().copied())
 }
 
@@ -53,7 +98,7 @@ pub fn scan_package_with_roots(
     base_dir: impl AsRef<Path>,
     rel_file: impl AsRef<Path>,
     roots: impl IntoIterator<Item = impl Into<String>>,
-) -> BTreeSet<String> {
+) -> BTreeSet<CatalogRef> {
     let roots: HashSet<String> = roots.into_iter().map(Into::into).collect();
     let roots = &roots;
 
@@ -75,6 +120,9 @@ pub fn scan_package_with_roots(
         db
     };
     collect_transitive(db, base_dir.as_ref(), roots)
+        .into_iter()
+        .map(CatalogRef)
+        .collect()
 }
 
 /// Analyze one file's content, collecting catalog refs and the dependency
@@ -628,6 +676,10 @@ mod tests {
         items.iter().map(|s| s.to_string()).collect()
     }
 
+    fn refset(items: &[&str]) -> BTreeSet<CatalogRef> {
+        items.iter().map(|s| CatalogRef::from(*s)).collect()
+    }
+
     #[test]
     fn no_catalog_refs_fetchpypi() {
         let got = refs(
@@ -902,7 +954,7 @@ mod tests {
         let got = scan_package(base_dir, Path::new("dep-entry.nix"));
         assert_eq!(
             got,
-            set(&[
+            refset(&[
                 "catalogs.myorg.toolkit.readVersion",
                 "catalogs.myorg.python3Packages.alpha-lib",
             ])
@@ -921,7 +973,7 @@ mod tests {
         let got = scan_package(base_dir, Path::new("entry.nix"));
         assert_eq!(
             got,
-            set(&["catalogs.myorg.direct", "catalogs.myorg.helper-ref"]),
+            refset(&["catalogs.myorg.direct", "catalogs.myorg.helper-ref"]),
         );
     }
 
@@ -937,7 +989,7 @@ mod tests {
     fn scan_package_follows_alias_to_pkgset_member() {
         let base_dir = Path::new("test_data/catalog_refs/pkgset-member-alias");
         let got = scan_package(base_dir, Path::new("isdr-zk-client.nix"));
-        assert_eq!(got, set(&["catalogs.myorg.toolkit.readVersion"]));
+        assert_eq!(got, refset(&["catalogs.myorg.toolkit.readVersion"]));
     }
 
     /// A nested file as the scan target resolves deps against the root.
@@ -951,7 +1003,7 @@ mod tests {
         let got = scan_package(base_dir, Path::new("foo/bar.nix"));
         assert_eq!(
             got,
-            set(&["catalogs.myorg.bar-own", "catalogs.myorg.top-src"]),
+            refset(&["catalogs.myorg.bar-own", "catalogs.myorg.top-src"]),
         );
     }
 
@@ -967,7 +1019,7 @@ mod tests {
         let got = scan_package(base_dir, Path::new("top.nix"));
         assert_eq!(
             got,
-            set(&["catalogs.myorg.widget-src", "catalogs.myorg.helper-lib-src"]),
+            refset(&["catalogs.myorg.widget-src", "catalogs.myorg.helper-lib-src"]),
         );
     }
 
