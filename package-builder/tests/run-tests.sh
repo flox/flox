@@ -343,6 +343,75 @@ else
 fi
 
 # ----------------------------------------------------------------------------
+# Layer 4: ask mode (stub broker — deny-all out of policy via graceful EACCES).
+#
+# In this batch the broker RPC is not wired, so ask deterministically denies
+# any out-of-policy access: sandbox_check_path() returns false, the
+# interceptor's errno=EACCES branch fires, and the calling process sees a
+# clean permission error (it is NOT aborted, unlike enforce). A two-line
+# SANDBOX DENIED receipt is printed once per resolved path.
+# ----------------------------------------------------------------------------
+
+# ask + no socket env → deny. An out-of-closure read fails with EACCES (the
+# probe sees open() return -1 and continues to print OPEN_FAIL — no crash, no
+# exit(1) of the probe), and exactly one "SANDBOX DENIED ... not in policy"
+# receipt appears. run_probe sets no FLOX_SANDBOX_SOCKET, so this is the
+# unconfigured-broker case.
+out="$(run_probe ask open "$out_file" 2>&1)"; rc=$?
+denied_n="$(grep -c "SANDBOX DENIED" <<<"$out")"
+if [[ $rc -ne 0 && "$out" == *"OPEN_FAIL"* && "$out" == *"errno=13"* \
+      && "$out" == *"read $out_file (not in policy)"* && "$denied_n" -eq 2 ]]; then
+  pass "ask: out-of-closure read denied with graceful EACCES + receipt"
+else
+  fail "ask: expected EACCES (errno=13) + two-line DENIED receipt (rc=$rc, DENIED lines=$denied_n)" "$out"
+fi
+
+# Dotfile flip. Under ask the $HOME-dotfile carve-out is skipped, so a read of
+# an out-of-closure $HOME dotfile is DENIED (EACCES + receipt). Under enforce
+# the same read is PERMITTED with the existing "$HOME dotfile" warn line. The
+# dotfile lives under a temp HOME that is not an allow-dir prefix, so the access
+# genuinely exercises the home-dotfile branch rather than a directory allow.
+home_dir="$(mktemp -d "$HOME/flox-sandbox-tests-home.XXXXXX")"
+printf 'x' > "$home_dir/.fakerc"
+
+out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+    FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=ask \
+    HOME="$home_dir" "$root/tests/sandbox_probe" open "$home_dir/.fakerc" 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$out" == *"OPEN_FAIL"* && "$out" == *"errno=13"* \
+      && "$out" == *"read $home_dir/.fakerc (not in policy)"* ]]; then
+  pass "ask: \$HOME dotfile read denied (dotfile carve-out skipped under ask)"
+else
+  fail "ask: \$HOME dotfile should be denied under ask (rc=$rc)" "$out"
+fi
+
+out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+    FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=enforce \
+    HOME="$home_dir" "$root/tests/sandbox_probe" open "$home_dir/.fakerc" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"OPEN_OK"* \
+      && "$out" == *"permitted as a \$HOME dotfile"* ]]; then
+  pass "enforce: same \$HOME dotfile still permitted (carve-out intact off-ask)"
+else
+  fail "enforce: \$HOME dotfile should remain permitted under enforce (rc=$rc)" "$out"
+fi
+rm -rf "$home_dir"
+
+# Golden stability: a NORMAL out-of-closure file (not a dotfile) must behave
+# exactly as before under warn and enforce — ask must not have perturbed the
+# other levels. warn warns-but-permits; enforce is fatal with the same message.
+out="$(run_probe warn open "$out_file" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"OPEN_OK"* && "$out" == *"$out_file is not in the sandbox"* ]]; then
+  pass "warn: normal out-of-closure read unchanged by ask addition"
+else
+  fail "warn: normal out-of-closure read should warn-but-permit (rc=$rc)" "$out"
+fi
+out="$(run_probe enforce open "$out_file" 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$out" == *"$out_file is not in the sandbox"* && "$out" != *"DENIED"* ]]; then
+  pass "enforce: normal out-of-closure read still fatal, no DENIED receipt"
+else
+  fail "enforce: normal out-of-closure read should remain fatal (rc=$rc)" "$out"
+fi
+
+# ----------------------------------------------------------------------------
 # Summary.
 # ----------------------------------------------------------------------------
 echo
