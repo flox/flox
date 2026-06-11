@@ -232,6 +232,14 @@ pub struct FloxBuildMk<'args> {
     // are inherited from the current process.
     stdout_buffer: Option<&'args mut String>,
     stderr_buffer: Option<&'args mut String>,
+
+    // Interactive sandbox prompt broker (Phase 2). When set, the build is run
+    // with FLOX_SANDBOX_PROMPT_SOCKET pointing at the broker so libsandbox refers
+    // out-of-closure accesses to it. `force_prompt` additionally passes
+    // FLOX_SANDBOX_OVERRIDE=prompt so the build runs in prompt mode regardless of
+    // the manifest's sandbox value (used by `flox build --sandbox-prompt`).
+    prompt_socket: Option<PathBuf>,
+    force_prompt: bool,
 }
 
 impl FloxBuildMk<'_> {
@@ -249,7 +257,19 @@ impl FloxBuildMk<'_> {
             built_environments,
             stdout_buffer: None,
             stderr_buffer: None,
+            prompt_socket: None,
+            force_prompt: false,
         }
+    }
+
+    /// Attach an interactive sandbox prompt broker: the build runs with
+    /// `FLOX_SANDBOX_PROMPT_SOCKET` set to `socket`. When `force_prompt` is true
+    /// (the `--sandbox-prompt` flag) it also forces prompt mode regardless of the
+    /// manifest's per-build sandbox value.
+    pub fn with_sandbox_prompt(mut self, socket: PathBuf, force_prompt: bool) -> Self {
+        self.prompt_socket = Some(socket);
+        self.force_prompt = force_prompt;
+        self
     }
 
     /// Create a new instance with std{out,err} piped into buffers
@@ -272,6 +292,8 @@ impl FloxBuildMk<'_> {
             built_environments,
             stdout_buffer: Some(stdout),
             stderr_buffer: Some(stderr),
+            prompt_socket: None,
+            force_prompt: false,
         }
     }
 
@@ -378,6 +400,19 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         let build_cache = build_cache.unwrap_or(true);
         if !build_cache {
             command.arg("DISABLE_BUILDCACHE=true");
+        }
+
+        // Interactive sandbox prompt broker wiring (Phase 2). flox-build.mk
+        // forwards FLOX_SANDBOX_PROMPT_SOCKET into the build-script injection and
+        // honors FLOX_SANDBOX_OVERRIDE above the manifest's sandbox value.
+        if let Some(prompt_socket) = &self.prompt_socket {
+            command.arg(format!(
+                "FLOX_SANDBOX_PROMPT_SOCKET={}",
+                prompt_socket.display()
+            ));
+        }
+        if self.force_prompt {
+            command.arg("FLOX_SANDBOX_OVERRIDE=prompt");
         }
 
         if self.stdout_buffer.is_some() {
