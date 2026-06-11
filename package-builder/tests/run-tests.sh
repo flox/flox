@@ -247,9 +247,10 @@ fi
 # __readlink_chk coverage via a real tool. Coreutils 'readlink' (and 'ls -la')
 # are compiled with -D_FORTIFY_SOURCE=2 and bind to __readlink_chk rather than
 # plain readlink; without a specific interceptor for that symbol, symlink reads
-# in those tools would silently bypass the sandbox.
+# in those tools would silently bypass the sandbox. __readlink_chk is a
+# glibc-specific symbol, so this check only applies on Linux.
 readlink_bin="$(command -v readlink 2>/dev/null || true)"
-if [[ -n "$readlink_bin" ]]; then
+if [[ "$(uname -s)" == "Linux" && -n "$readlink_bin" ]]; then
   out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
       FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=warn \
       "$readlink_bin" "$link" 2>&1)"
@@ -259,7 +260,7 @@ if [[ -n "$readlink_bin" ]]; then
     fail "warn: readlink's __readlink_chk was not flagged — __readlink_chk interception gap" "$out"
   fi
 else
-  echo "skip - 'readlink' not on PATH; cannot exercise real-tool __readlink_chk coverage"
+  echo "skip - not Linux or 'readlink' not on PATH; __readlink_chk is glibc-only"
 fi
 
 # The directory-listing warning is de-duplicated per resolved path: a build that

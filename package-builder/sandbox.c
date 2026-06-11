@@ -954,6 +954,24 @@ ssize_t my_readlinkat(int dirfd, const char *pathname, char *buf,
   return -1;
 }
 
+// Interceptor for readlink (the non-at POSIX form) on macOS, for symmetry with
+// the Linux interceptor: also advisory (warned-but-permitted). The __*_chk
+// fortify variants are glibc-specific and have no macOS counterpart.
+ssize_t my_readlink(const char *pathname, char *buf, size_t bufsiz) {
+  ensure_init();
+  if (in_sandbox)
+    return readlink(pathname, buf, bufsiz);
+  in_sandbox = 1;
+  in_readlink = 1;
+  bool allowed = sandbox_check_path(pathname);
+  in_readlink = 0;
+  in_sandbox = 0;
+  if (allowed)
+    return readlink(pathname, buf, bufsiz);
+  errno = EACCES;
+  return -1;
+}
+
 // Thank you https://www.emergetools.com/blog/posts/DyldInterposing
 #define DYLD_INTERPOSE(_replacement, _replacee)                                \
   __attribute__((used)) static struct {                                        \
@@ -966,6 +984,7 @@ DYLD_INTERPOSE(my_open, open)
 DYLD_INTERPOSE(my_openat, openat)
 DYLD_INTERPOSE(my_fopen, fopen)
 DYLD_INTERPOSE(my_readlinkat, readlinkat)
+DYLD_INTERPOSE(my_readlink, readlink)
 
 // macOS exports a second fopen, fopen$DARWIN_EXTSN (the "extended standards"
 // variant). Binaries built in Darwin C mode — including the Nix coreutils
