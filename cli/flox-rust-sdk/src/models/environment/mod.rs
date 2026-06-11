@@ -425,6 +425,31 @@ impl RenderedEnvironmentLinks {
         GenerationLink::from_prefix(prefix)
     }
 
+    /// Legacy per-generation GC-root links from before the
+    /// `<prefix>-N-link-{dev,run}` naming: `<prefix>.gen{N}{-,.}{dev,run}`,
+    /// covering both the dash and dot separators older Flox versions used.
+    /// Returns the variants that currently exist on disk (a dangling one still
+    /// counts, so it gets cleaned up).
+    ///
+    /// Pruning ages these out by the same policy as their renamed counterparts.
+    /// TODO(flox#4332): remove this legacy sweep once old links have aged out
+    /// (target ~2026-12, roughly 6 months after introduction).
+    pub fn legacy_generation_links(&self, generation: GenerationId) -> Vec<PathBuf> {
+        let mut links = Vec::new();
+        for separator in ['-', '.'] {
+            for mode in ["dev", "run"] {
+                let path = append_output_suffix(
+                    &self.out_link_prefix,
+                    &format!(".gen{generation}{separator}{mode}"),
+                );
+                if path.is_symlink() {
+                    links.push(path);
+                }
+            }
+        }
+        links
+    }
+
     /// Atomically repoint the current activation links at `generation`'s
     /// GC-root links.
     ///
@@ -588,6 +613,11 @@ pub struct PrunableGeneration {
     /// mode-specific (`dev` or `run`) path — a run-mode activation references
     /// the run store path, not the dev one.
     pub store_paths: Vec<PathBuf>,
+    /// Legacy-named GC-root links for this generation
+    /// (`<system>.<name>.gen{N}{-,.}{dev,run}`) that exist on disk, pruned by
+    /// the same policy as the renamed `-N-link-{dev,run}` links.
+    /// TODO(flox#4332): drop once these have aged out (~2026-12, 6 months on).
+    pub legacy_links: Vec<PathBuf>,
 }
 
 /// Decide which generation GC-root links are safe to prune.
@@ -1785,6 +1815,7 @@ mod test {
                 link: pointer.generation_link(GenerationId::from(n)),
                 last_live,
                 store_paths: stores.iter().map(PathBuf::from).collect(),
+                legacy_links: vec![],
             };
 
         let candidates = vec![

@@ -1264,16 +1264,19 @@ impl ManagedEnvironment {
             .into_iter()
             .filter_map(|(generation, generation_metadata)| {
                 let link = self.rendered_env_links.generation_link(generation);
-                // Only generations whose link is materialized on this host are
-                // prunable; a dangling link (symlink present, target gone) is
-                // included so it gets cleaned up.
-                if !link.dev().is_symlink() && !link.run().is_symlink() {
+                let legacy_links = self.rendered_env_links.legacy_generation_links(generation);
+                // Only generations with a link (new or legacy) materialized on
+                // this host are prunable; a dangling link (symlink present,
+                // target gone) is included so it gets cleaned up.
+                let has_new_link = link.dev().is_symlink() || link.run().is_symlink();
+                if !has_new_link && legacy_links.is_empty() {
                     return None;
                 }
-                // Canonicalize both links: an activation protects the
+                // Canonicalize all links: an activation protects the
                 // mode-specific store path (run-mode resolves to the run link).
                 let store_paths = [link.dev(), link.run()]
                     .into_iter()
+                    .chain(legacy_links.iter().map(PathBuf::as_path))
                     .filter_map(|link| fs::canonicalize(link).ok())
                     .collect();
                 Some(PrunableGeneration {
@@ -1281,6 +1284,7 @@ impl ManagedEnvironment {
                     last_live: generation_metadata.last_live,
                     store_paths,
                     link,
+                    legacy_links,
                 })
             })
             .collect();
@@ -1306,7 +1310,10 @@ impl ManagedEnvironment {
 
         let mut removed = Vec::new();
         for generation in to_prune {
-            for link in [generation.link.dev(), generation.link.run()] {
+            let links = [generation.link.dev(), generation.link.run()]
+                .into_iter()
+                .chain(generation.legacy_links.iter().map(PathBuf::as_path));
+            for link in links {
                 match fs::remove_file(link) {
                     Ok(()) => removed.push(link.to_path_buf()),
                     Err(err) if err.kind() == io::ErrorKind::NotFound => {},
@@ -2813,12 +2820,23 @@ mod test {
             "both generation links built"
         );
 
+        // A legacy-named link for the non-current generation must be pruned by
+        // the same policy (flox#4332 transitional cleanup).
+        let prefix = env.rendered_env_links.out_link_prefix();
+        let legacy_link = PathBuf::from(format!("{}.gen1-dev", prefix.display()));
+        std::os::unix::fs::symlink(gen1.dev(), &legacy_link).unwrap();
+        assert!(legacy_link.is_symlink(), "legacy link created");
+
         // No live activations -> all non-live: generation 1 pruned, current (2) kept.
         let removed = env
             .prune_generation_links(PrunePolicy::AllNonLive, &std::collections::HashSet::new())
             .unwrap();
         assert!(!removed.is_empty(), "generation 1 links removed");
         assert!(!gen1.exists(), "non-current generation link pruned");
+        assert!(
+            !legacy_link.is_symlink(),
+            "legacy non-current generation link pruned"
+        );
         assert!(gen2.exists(), "current generation link kept");
     }
 
