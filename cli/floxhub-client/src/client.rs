@@ -420,10 +420,7 @@ impl CatalogClientTrait for FloxhubClient {
 
         let (count, results) = collect_all_results(stream).await?;
 
-        Ok(ResultsPage {
-            results,
-            count: Some(count),
-        })
+        Ok(ResultsPage { results, count })
     }
 
     async fn publish_info(
@@ -620,9 +617,9 @@ async fn collect_search_results<T, E>(
 }
 
 /// Collects all results from a stream, returning the total count and all items.
-async fn collect_all_results<T, E: std::convert::From<FloxhubClientError>>(
+async fn collect_all_results<T, E>(
     stream: impl Stream<Item = Result<StreamItem<T>, E>>,
-) -> Result<(u64, Vec<T>), E> {
+) -> Result<(ResultCount, Vec<T>), E> {
     let mut count = None;
     let results = stream
         .try_filter_map(|item| {
@@ -637,10 +634,6 @@ async fn collect_all_results<T, E: std::convert::From<FloxhubClientError>>(
         })
         .try_collect::<Vec<T>>()
         .await?;
-
-    let count = count
-        .ok_or_else(|| FloxhubClientError::Other("Missing total count in response".to_string()))
-        .map_err(|e| E::from(e))?;
 
     Ok((count, results))
 }
