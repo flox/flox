@@ -547,6 +547,46 @@ static void format_path_display(char *buf, size_t buflen, const char *pathname,
     snprintf(buf, buflen, "%s (%s)", pathname, real_path);
 }
 
+#ifdef linux
+// Report once per process if the process executable itself is outside the
+// closure. Called from sandbox_check_path() the first time any out-of-closure
+// path is detected, so the user sees the root cause ("the wrong Node.js is
+// active") before any downstream path message. In warn mode this emits a
+// warning and returns; in enforce/pure mode it errors and exits, the same
+// policy applied to any other out-of-closure file access. Safe to call while
+// in_sandbox==1: in_closure() re-uses the already-initialized closure table
+// (pthread_once is a no-op) and realpath() only touches glibc internals that
+// bypass our interceptors.
+static void maybe_report_process_outside_closure(void) {
+  static atomic_int done = 0;
+  if (atomic_fetch_add_explicit(&done, 1, memory_order_relaxed) != 0)
+    return;
+
+  char argv0_real[PATH_MAX];
+  if (realpath("/proc/self/exe", argv0_real) == NULL)
+    return;
+  // Skip the same permitted executables that sandbox_check_argv0() exempts.
+  if (strcmp(argv0_real, "/usr/bin/env") == 0 ||
+      strcmp(argv0_real, "/bin/sh") == 0 ||
+      strcmp(argv0_real, "/usr/bin/dash") == 0)
+    return;
+  // Mirror the same allow-list checks that sandbox_check_path() applies to
+  // regular paths: allowed dirs, user globs, then the closure itself.
+  if (check_allowed_basenames(argv0_real) || check_allowed_globs(argv0_real) ||
+      in_closure(argv0_real))
+    return;
+  if (sandbox_level == 1) {
+    warn("process executable %s is outside the environment closure; "
+         "subsequent file accesses by this process may not be reproducible",
+         argv0_real);
+  } else {
+    _error("process executable %s is not in the sandbox", argv0_real);
+    fflush(stderr);
+    exit(1);
+  }
+}
+#endif
+
 // Check if path access represents something that may not be reproducible
 // on another machine. Any path within the environment's closure is fine,
 // but there are also other specific paths and basenames accessed during a
@@ -584,6 +624,14 @@ bool sandbox_check_path(const char *pathname) {
     debug("%s is in the closure", pathname);
     return true;
   }
+
+  // If the running executable is itself outside the closure, report it once
+  // before any per-path message so the user sees the root cause first. In
+  // enforce/pure mode this is fatal (same policy as any other out-of-closure
+  // file access); in warn mode it warns and continues.
+#ifdef linux
+  maybe_report_process_outside_closure();
+#endif
 
   // Surface the resolved realpath alongside the opened path in any message
   // below, so relative paths ("..") and symlinks are intelligible.
