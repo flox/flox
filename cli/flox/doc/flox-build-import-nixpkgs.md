@@ -44,10 +44,10 @@ The `<installable>` parameter can be specified in one of the following formats:
 2. **Flake reference with attribute**: `nixpkgs#hello`
 3. **Full flake reference**: `github:nixos/nixpkgs#hello`
 
-When using `--stability` or `--nixpkgs-url`, the installable must be a bare
+When using `--stability`, the installable must be a bare
 attribute path or the `nixpkgs#` prefix form.
 An explicit flake reference (e.g. `github:nixos/nixpkgs#hello`) cannot be
-combined with either flag.
+combined with the flag.
 
 # OPTIONS
 
