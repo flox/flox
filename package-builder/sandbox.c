@@ -193,12 +193,19 @@ void sandbox_init() {
     sandbox_level = 1;
   } else if (strcmp(flox_virtual_sandbox_value, "enforce") == 0) {
     sandbox_level = 2;
+  } else if (strcmp(flox_virtual_sandbox_value, "prompt") == 0) {
+    // Prompt mode is enforce with an interactive escape hatch: out-of-closure
+    // accesses are referred to the prompt broker (when
+    // FLOX_SANDBOX_PROMPT_SOCKET is set; see prompt_broker) and otherwise
+    // blocked. With no broker — e.g. a non-interactive build — it is therefore
+    // just enforce.
+    sandbox_level = 2;
   } else if (strcmp(flox_virtual_sandbox_value, "pure") == 0) {
     // Pure mode is just like enforce, but invoked within the Nix sandbox.
     sandbox_level = 3;
   } else {
-    warn_once(
-        "FLOX_VIRTUAL_SANDBOX must be (off|warn|enforce|pure) ... ignoring");
+    warn_once("FLOX_VIRTUAL_SANDBOX must be (off|warn|enforce|prompt|pure) ... "
+              "ignoring");
     sandbox_level = 0;
   }
   debug("sandbox_level=%d", sandbox_level);
@@ -501,17 +508,20 @@ static bool check_allowed_globs(const char *real_path) {
 }
 
 // Decision values returned by prompt_broker().
-#define PROMPT_ERROR (-1) // no broker, or the exchange failed: use default policy
-#define PROMPT_DENY 0     // user/broker denied this access
-#define PROMPT_ALLOW 1    // user/broker allowed this access
+#define PROMPT_ERROR                                                           \
+  (-1)                 // no broker, or the exchange failed: use default policy
+#define PROMPT_DENY 0  // user/broker denied this access
+#define PROMPT_ALLOW 1 // user/broker allowed this access
 
 // Refer an out-of-closure access to the interactive prompt broker over the
 // AF_UNIX socket named by FLOX_SANDBOX_PROMPT_SOCKET. The wire protocol is one
 // request and one reply per connection, newline-terminated text:
 //
 //   -> "<realpath>\n"
-//   <- "allow\n"                 allow this access (remembered for the exact path)
-//   <- "allow-glob <pattern>\n"  allow, and remember <pattern> for future matches
+//   <- "allow\n"                 allow this access (remembered for the exact
+//   path)
+//   <- "allow-glob <pattern>\n"  allow, and remember <pattern> for future
+//   matches
 //   <- "deny\n"                  deny this access
 //
 // One connection per query keeps the client simple and lets the broker
@@ -570,7 +580,8 @@ static int prompt_broker(const char *real_path) {
     debug("prompt broker denied '%s'", real_path);
     return PROMPT_DENY;
   }
-  debug("prompt broker gave unrecognized reply '%s' for '%s'", reply, real_path);
+  debug("prompt broker gave unrecognized reply '%s' for '%s'", reply,
+        real_path);
   return PROMPT_ERROR;
 }
 
