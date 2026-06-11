@@ -282,6 +282,15 @@ static atomic_int warn_count = 0;
 static char home_real[PATH_MAX];
 static size_t home_real_len = 0;
 
+// Interactive prompt broker (Phase 2). When FLOX_SANDBOX_PROMPT_SOCKET names an
+// AF_UNIX socket, an out-of-closure access — instead of being warned/blocked
+// outright — is referred to that broker (the flox process driving the build),
+// which prompts the user and replies allow / deny / allow-glob. prompt_enabled
+// gates the (otherwise lock-free) glob-list reads, since the broker path can
+// append to the list at runtime; see allow_globs_add.
+static char prompt_socket_path[PATH_MAX];
+static int prompt_enabled = 0;
+
 // Perform various initialization, which includes loading the original
 // glibc functions to be wrapped using dlsym().
 void sandbox_init() {
@@ -294,6 +303,15 @@ void sandbox_init() {
   const char *home = getenv("HOME");
   if (home != NULL && realpath(home, home_real) != NULL)
     home_real_len = strlen(home_real);
+
+  // Note the interactive prompt broker socket, if any.
+  const char *prompt_socket = getenv("FLOX_SANDBOX_PROMPT_SOCKET");
+  if (prompt_socket != NULL && prompt_socket[0] != '\0' &&
+      strlen(prompt_socket) < sizeof(prompt_socket_path)) {
+    strncpy(prompt_socket_path, prompt_socket, sizeof(prompt_socket_path) - 1);
+    prompt_socket_path[sizeof(prompt_socket_path) - 1] = '\0';
+    prompt_enabled = 1;
+  }
 
   // Derive audit level from FLOX_VIRTUAL_SANDBOX environment variable.
   const char *flox_virtual_sandbox_value = getenv("FLOX_VIRTUAL_SANDBOX");
@@ -563,9 +581,31 @@ bool check_allowed_basenames(const char *pathname) {
 #define FLOX_SANDBOX_ALLOW_MAXLEN (16 * 1024)
 static pthread_once_t allow_globs_once = PTHREAD_ONCE_INIT;
 static char allow_globs_buf[FLOX_SANDBOX_ALLOW_MAXLEN];
-// Read-only after init (tokens inside allow_globs_buf), so `const char *`.
+// Entries point either into allow_globs_buf (manifest entries, parsed once) or
+// at strdup()'d strings appended at runtime by allow_globs_add() when the
+// prompt broker accepts a pattern; either way they are never freed or mutated,
+// so `const char *`.
 static const char *allow_globs[FLOX_SANDBOX_ALLOW_MAXENTRIES];
 static int allow_globs_count = 0;
+// Guards allow_globs[]/allow_globs_count against concurrent runtime appends
+// (allow_globs_add) racing reads (check_allowed_globs). Only engaged when the
+// prompt broker is active; without it the list is built once and read-only, so
+// the default build path takes no lock. PTHREAD_MUTEX_INITIALIZER is correct on
+// both platforms (unlike the removed zero-initialized mutex).
+static pthread_mutex_t allow_globs_lock = PTHREAD_MUTEX_INITIALIZER;
+
+// Append a pattern to the allow-globs list at runtime (used when the prompt
+// broker returns allow/allow-glob). Thread-safe. The pattern is strdup()'d and
+// intentionally never freed: it must live for the rest of the process.
+static void allow_globs_add(const char *pattern) {
+  pthread_mutex_lock(&allow_globs_lock);
+  if (allow_globs_count < FLOX_SANDBOX_ALLOW_MAXENTRIES) {
+    char *copy = strdup(pattern);
+    if (copy != NULL)
+      allow_globs[allow_globs_count++] = copy;
+  }
+  pthread_mutex_unlock(&allow_globs_lock);
+}
 
 static void allow_globs_init(void) {
   const char *env = getenv("FLOX_SANDBOX_ALLOW");
@@ -599,6 +639,11 @@ static void allow_globs_init(void) {
 // directory separators, giving simple recursive patterns like "~/.npm/**".
 static bool check_allowed_globs(const char *real_path) {
   pthread_once(&allow_globs_once, allow_globs_init);
+  // The list is immutable after init unless the prompt broker is active and may
+  // append to it, so only then do we take the lock around the scan.
+  if (prompt_enabled)
+    pthread_mutex_lock(&allow_globs_lock);
+  bool matched = false;
   for (int i = 0; i < allow_globs_count; i++) {
     const char *pattern = allow_globs[i];
     // Expand a leading "~/" to "$HOME/" (into a local buffer) so manifest
@@ -611,10 +656,87 @@ static bool check_allowed_globs(const char *real_path) {
     }
     if (fnmatch(pattern, real_path, 0) == 0) {
       debug("%s matches sandbox-allow pattern '%s'", real_path, allow_globs[i]);
-      return true;
+      matched = true;
+      break;
     }
   }
-  return false;
+  if (prompt_enabled)
+    pthread_mutex_unlock(&allow_globs_lock);
+  return matched;
+}
+
+// Decision values returned by prompt_broker().
+#define PROMPT_ERROR (-1) // no broker, or the exchange failed: use default policy
+#define PROMPT_DENY 0     // user/broker denied this access
+#define PROMPT_ALLOW 1    // user/broker allowed this access
+
+// Refer an out-of-closure access to the interactive prompt broker over the
+// AF_UNIX socket named by FLOX_SANDBOX_PROMPT_SOCKET. The wire protocol is one
+// request and one reply per connection, newline-terminated text:
+//
+//   -> "<realpath>\n"
+//   <- "allow\n"                 allow this access (remembered for the exact path)
+//   <- "allow-glob <pattern>\n"  allow, and remember <pattern> for future matches
+//   <- "deny\n"                  deny this access
+//
+// One connection per query keeps the client simple and lets the broker
+// serialize prompts (it accepts and handles connections one at a time). Socket
+// calls are not themselves interposed, so there is no re-entrancy here. Returns
+// a PROMPT_* value; PROMPT_ERROR means fall back to the normal warn/enforce
+// policy.
+static int prompt_broker(const char *real_path) {
+  if (!prompt_enabled)
+    return PROMPT_ERROR;
+
+  int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (fd < 0)
+    return PROMPT_ERROR;
+
+  struct sockaddr_un addr;
+  memset(&addr, 0, sizeof(addr));
+  addr.sun_family = AF_UNIX;
+  strncpy(addr.sun_path, prompt_socket_path, sizeof(addr.sun_path) - 1);
+  if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
+    close(fd);
+    return PROMPT_ERROR;
+  }
+
+  // Send the realpath being queried.
+  char request[PATH_MAX + 2];
+  int request_len = snprintf(request, sizeof(request), "%s\n", real_path);
+  if (request_len < 0 || (size_t)request_len >= sizeof(request) ||
+      write(fd, request, (size_t)request_len) != request_len) {
+    close(fd);
+    return PROMPT_ERROR;
+  }
+
+  // Read the single reply line. The broker writes one short line and we read
+  // once; that is sufficient for the small fixed vocabulary above.
+  char reply[PATH_MAX + 32];
+  ssize_t reply_len = read(fd, reply, sizeof(reply) - 1);
+  close(fd);
+  if (reply_len <= 0)
+    return PROMPT_ERROR;
+  reply[reply_len] = '\0';
+  reply[strcspn(reply, "\n")] = '\0';
+
+  if (strncmp(reply, "allow-glob ", 11) == 0) {
+    allow_globs_add(reply + 11);
+    debug("prompt broker allowed '%s' via glob '%s'", real_path, reply + 11);
+    return PROMPT_ALLOW;
+  }
+  if (strcmp(reply, "allow") == 0) {
+    // Remember the exact path so the same file is not queried again.
+    allow_globs_add(real_path);
+    debug("prompt broker allowed '%s'", real_path);
+    return PROMPT_ALLOW;
+  }
+  if (strcmp(reply, "deny") == 0) {
+    debug("prompt broker denied '%s'", real_path);
+    return PROMPT_DENY;
+  }
+  debug("prompt broker gave unrecognized reply '%s' for '%s'", reply, real_path);
+  return PROMPT_ERROR;
 }
 
 // Sensitive-path glob set. Under an ACTIVATION (allow_foreign_exe set), these
@@ -1700,6 +1822,19 @@ bool sandbox_check_path(const char *pathname) {
       home_dotfile_hint();
     }
     return true;
+  }
+  // If an interactive prompt broker is configured, let it resolve this access
+  // (allow / allow-glob / deny) before the default warn/enforce policy applies.
+  // An allow is remembered so the same path/pattern is not asked again; a
+  // broker error falls through to the default policy below.
+  if (prompt_enabled) {
+    int decision = prompt_broker(real_path);
+    if (decision == PROMPT_ALLOW)
+      return true;
+    if (decision == PROMPT_DENY) {
+      warn("%s denied by sandbox prompt", display);
+      return false; // the interceptor turns this into EACCES
+    }
   }
   // Out of policy. Apply the per-level verdict (warn permits; ask consults the
   // decision cache then the broker, caching the result; enforce/pure is

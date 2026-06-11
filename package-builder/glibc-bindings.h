@@ -77,13 +77,14 @@ __asm__(".symver pthread_once,pthread_once@" GLIBC_MIN_VERSION);
 // minimum so the library does not silently require GLIBC_2.34.
 __asm__(".symver pthread_mutex_lock,pthread_mutex_lock@" GLIBC_MIN_VERSION);
 __asm__(".symver pthread_mutex_unlock,pthread_mutex_unlock@" GLIBC_MIN_VERSION);
-// Sockets API for the ask broker RPC client. These are referenced by the
-// not-yet-wired ask flow; pinning them now keeps the library's glibc floor
-// stable so the floor cannot creep upward when the RPC code lands. All five
-// have existed since the baseline GLIBC for each arch (2.17 on aarch64,
-// 2.2.5 on x86_64), so binding them to GLIBC_MIN_VERSION matches the rest.
+// Sockets API for the broker RPC clients (the activation ask flow and the
+// interactive prompt client). All have existed since the baseline GLIBC for
+// each arch (2.17 on aarch64, 2.2.5 on x86_64), so binding them to
+// GLIBC_MIN_VERSION matches the rest. read/write back the prompt client's
+// line-protocol I/O; recv/send back the ask RPC.
 __asm__(".symver connect,connect@" GLIBC_MIN_VERSION);
 __asm__(".symver poll,poll@" GLIBC_MIN_VERSION);
+__asm__(".symver read,read@" GLIBC_MIN_VERSION);
 __asm__(".symver recv,recv@" GLIBC_MIN_VERSION);
 __asm__(".symver send,send@" GLIBC_MIN_VERSION);
 __asm__(".symver socket,socket@" GLIBC_MIN_VERSION);
@@ -130,7 +131,8 @@ __asm__(".symver syscall,syscall@" GLIBC_MIN_VERSION);
 // x86_64 baseline and would raise the floor).
 __asm__(".symver time,time@" GLIBC_MIN_VERSION);
 // write() performs the single-shot O_APPEND record append in the audit-store
-// hook (audit_append). At the baseline GLIBC for each arch.
+// hook (audit_append) and the prompt client's request write. At the baseline
+// GLIBC for each arch.
 __asm__(".symver write,write@" GLIBC_MIN_VERSION);
 
 #endif // GLIBC_BINDINGS_H
