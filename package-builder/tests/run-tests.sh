@@ -200,6 +200,18 @@ else
   fail "enforce: directory listing should be allowed with a warning" "$out"
 fi
 
+# enforce: open(O_DIRECTORY) on an out-of-closure regular file is a path
+# probe, not a content read (the kernel returns ENOTDIR regardless). It must
+# NOT be fatal under enforce — the sandbox should warn and permit it.
+# This exercises the in_dir_probe path that Node.js and similar runtimes
+# trigger during module/path resolution.
+out="$(run_probe enforce open-dir "$out_file" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"directory probe"* ]]; then
+  pass "enforce: O_DIRECTORY open on out-of-closure file is warned, not fatal"
+else
+  fail "enforce: O_DIRECTORY open should warn-but-allow under enforce (rc=$rc)" "$out"
+fi
+
 # readlinkat is intercepted too, but treated like a directory listing: reading
 # a symlink is "looking around", so it is warned-but-permitted even under
 # enforce (never fatal). The symlink resolves (via realpath) to out_file.

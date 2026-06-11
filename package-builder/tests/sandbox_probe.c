@@ -70,6 +70,23 @@ static int do_open(const char *path) {
   return 0;
 }
 
+/* open(O_DIRECTORY) — a directory probe that cannot read file contents.
+ * The kernel returns ENOTDIR for non-directory paths regardless; this
+ * exercises the in_dir_probe path in the sandbox interceptors. */
+static int do_open_dir(const char *path) {
+  int fd = open(path, O_RDONLY | O_NONBLOCK | O_DIRECTORY);
+  if (fd < 0) {
+    int saved = errno;
+    printf("OPEN_DIR_FAIL %s errno=%d (%s)\n", path, saved, strerror(saved));
+    /* ENOTDIR / ENOENT are expected for non-directory paths — not a probe
+     * failure, just the kernel doing the right thing. */
+    return saved == ENOTDIR || saved == ENOENT ? 0 : 1;
+  }
+  close(fd);
+  printf("OPEN_DIR_OK %s\n", path);
+  return 0;
+}
+
 /* readlinkat(AT_FDCWD, ...) so the readlinkat interceptor is exercised. */
 static int do_readlink(const char *path) {
   char buf[PATH_MAX];
@@ -140,6 +157,9 @@ int main(int argc, char **argv) {
   if (argc >= 3 && strcmp(argv[1], "open") == 0) {
     return do_open(argv[2]);
   }
+  if (argc >= 3 && strcmp(argv[1], "open-dir") == 0) {
+    return do_open_dir(argv[2]);
+  }
   if (argc >= 3 && strcmp(argv[1], "readlink") == 0) {
     return do_readlink(argv[2]);
   }
@@ -152,9 +172,10 @@ int main(int argc, char **argv) {
   fprintf(stderr,
           "usage:\n"
           "  %s open <path>\n"
+          "  %s open-dir <path>\n"
           "  %s readlink <path>\n"
           "  %s readlink-fn <path>\n"
           "  %s storm <nthreads> <niters> <path1> [path2 ...]\n",
-          argv[0], argv[0], argv[0], argv[0]);
+          argv[0], argv[0], argv[0], argv[0], argv[0]);
   return 2;
 }

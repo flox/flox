@@ -74,6 +74,15 @@ static __thread int in_sandbox = 0;
 // their sandbox_check_path() call; sandbox_check_path() consults it.
 static __thread int in_readlink = 0;
 
+// Per-thread flag marking the current open()/openat() as an O_DIRECTORY probe.
+// An open with O_DIRECTORY cannot read file contents — the kernel returns
+// ENOTDIR for any non-directory path, so no out-of-closure data can escape.
+// Like readlinkat, it is "looking around" rather than consuming file contents,
+// so it is warned-but-permitted even under enforce. The open/openat
+// interceptors set this when O_DIRECTORY is in the flags; sandbox_check_path()
+// consults it.
+static __thread int in_dir_probe = 0;
+
 // Pointers to the original libc functions (Linux only). On macOS the real
 // functions are reached by calling open()/openat() directly: dyld
 // interposition deliberately does not redirect references made from within the
@@ -590,6 +599,17 @@ bool sandbox_check_path(const char *pathname) {
     return true;
   }
 
+  // An open/openat with O_DIRECTORY (in_dir_probe) cannot read file contents —
+  // the kernel returns ENOTDIR for non-directory paths, so no out-of-closure
+  // data escapes. Treat it as a probe ("looking around"), warn but permit even
+  // under enforce.
+  if (in_dir_probe) {
+    if (should_warn_for_path(real_path))
+      warn("%s is outside the closure but permitted (directory probe)",
+           display);
+    return true;
+  }
+
   // Directory accesses are "looking around" rather than reading out-of-closure
   // contents, so permit them even under enforce — with a warning, but only the
   // first time we see each directory (builds list the same directory many
@@ -650,7 +670,9 @@ int open(const char *pathname, int flags, ...) {
   if (in_sandbox)
     return orig_open(pathname, flags, mode);
   in_sandbox = 1;
+  in_dir_probe = (flags & O_DIRECTORY) ? 1 : 0;
   bool allowed = sandbox_check_path(pathname);
+  in_dir_probe = 0;
   in_sandbox = 0;
   if (allowed)
     return orig_open(pathname, flags, mode);
@@ -672,7 +694,9 @@ int openat(int dirfd, const char *pathname, int flags, ...) {
   if (in_sandbox)
     return orig_openat(dirfd, pathname, flags, mode);
   in_sandbox = 1;
+  in_dir_probe = (flags & O_DIRECTORY) ? 1 : 0;
   bool allowed = sandbox_check_path(pathname);
+  in_dir_probe = 0;
   in_sandbox = 0;
   if (allowed)
     return orig_openat(dirfd, pathname, flags, mode);
@@ -815,7 +839,9 @@ int my_open(const char *pathname, int flags, ...) {
   if (in_sandbox)
     return open(pathname, flags, mode);
   in_sandbox = 1;
+  in_dir_probe = (flags & O_DIRECTORY) ? 1 : 0;
   bool allowed = sandbox_check_path(pathname);
+  in_dir_probe = 0;
   in_sandbox = 0;
   if (allowed)
     return open(pathname, flags, mode);
@@ -837,7 +863,9 @@ int my_openat(int dirfd, const char *pathname, int flags, ...) {
   if (in_sandbox)
     return openat(dirfd, pathname, flags, mode);
   in_sandbox = 1;
+  in_dir_probe = (flags & O_DIRECTORY) ? 1 : 0;
   bool allowed = sandbox_check_path(pathname);
+  in_dir_probe = 0;
   in_sandbox = 0;
   if (allowed)
     return openat(dirfd, pathname, flags, mode);
