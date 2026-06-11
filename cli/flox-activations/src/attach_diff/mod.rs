@@ -1,11 +1,11 @@
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub mod diff_serializer;
 
 use anyhow::Result;
-use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
+use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx, SandboxMode};
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVE_ENVIRONMENTS_VAR};
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
@@ -21,6 +21,8 @@ use crate::attach_diff::diff_serializer::{
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
 use crate::env_diff::EnvDiff;
+use crate::sandbox::seed::SeedContext;
+use crate::sandbox::{PRELOAD_VAR, sandbox_env};
 use crate::start_diff::StartDiff;
 use crate::vars_from_env::VarsFromEnvironment;
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
@@ -366,11 +368,68 @@ pub fn double_set_envs(context: &AttachCtx, project: Option<&AttachProjectCtx>) 
         deletions.push("FLOX_ENV_PROJECT".to_string());
     }
 
-    let additions = exports
+    let mut additions: HashMap<String, String> = exports
         .into_iter()
         .map(|(k, v)| (k.to_string(), v))
         .collect();
+
+    // Sandbox preload and policy. These go through double_sets specifically:
+    // the rc-script re-export is the only way DYLD_INSERT_LIBRARIES survives
+    // macOS's SIP strip at the /bin/zsh boundary and reaches user-spawned
+    // children. A failure to locate the library is fatal — silently
+    // activating unsandboxed would betray a user who explicitly asked for a
+    // sandbox.
+    additions.extend(sandbox_double_sets(context, project));
+
     EnvDiff::from_parts(additions, deletions)
+}
+
+/// Compute the sandbox env vars folded into `double_set_envs`.
+///
+/// Empty when the activation is not sandboxed, or when there is no project
+/// context (the grants dir is anchored under `.flox/`, which only exists for
+/// project activations; container activations reject `ask` upstream).
+///
+/// Panics on library-resolution failure rather than returning a `Result`,
+/// because `double_set_envs` is infallible by construction and the failure
+/// is a build/environment defect, not a runtime condition the caller can
+/// recover from. The message is actionable (it names the missing path).
+fn sandbox_double_sets(
+    context: &AttachCtx,
+    project: Option<&AttachProjectCtx>,
+) -> HashMap<String, String> {
+    if context.sandbox_mode == SandboxMode::Off {
+        return HashMap::new();
+    }
+    let Some(project) = project else {
+        return HashMap::new();
+    };
+
+    // The grants dir lives under the gitignored .flox/cache/ tree. Create it
+    // up front so the engine's write guard has a real directory to compare
+    // against, and so a later batch can drop grants.toml there.
+    let grants_dir = project.dot_flox_path.join("cache").join("sandbox");
+    if let Err(err) = std::fs::create_dir_all(&grants_dir) {
+        debug!(?grants_dir, %err, "could not create sandbox grants dir");
+    }
+
+    let seed_ctx = SeedContext {
+        shell_binary: std::env::var_os("SHELL").map(PathBuf::from),
+        interpreter_path: context.interpreter_path.clone(),
+        home_dir: dirs::home_dir(),
+        runtime_dir: std::env::var_os("FLOX_RUNTIME_DIR").map(PathBuf::from),
+    };
+
+    let existing_preload = std::env::var(PRELOAD_VAR).ok();
+
+    sandbox_env(
+        context.sandbox_mode,
+        &seed_ctx,
+        &project.env_project,
+        &grants_dir,
+        existing_preload.as_deref(),
+    )
+    .unwrap_or_else(|err| panic!("failed to assemble sandbox environment: {err:#}"))
 }
 
 /// Options parsed by getopt in the activate script
@@ -469,8 +528,20 @@ pub fn activate_tracer(interpreter_path: impl AsRef<Path>) -> String {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
+    use std::ffi::OsStr;
+
+    use tempfile::TempDir;
 
     use super::*;
+    use crate::sandbox::{
+        FLOX_SANDBOX_ALLOW_DIRS_VAR,
+        FLOX_SANDBOX_ALLOW_VAR,
+        FLOX_SANDBOX_GRANTS_DIR_VAR,
+        FLOX_SANDBOX_SOCKET_VAR,
+        FLOX_SRC_DIR_VAR,
+        FLOX_VIRTUAL_SANDBOX_VAR,
+        LIBSANDBOX_FILENAME_FOR_TESTS,
+    };
 
     fn make_env(pairs: &[(&str, &str)]) -> HashMap<String, String> {
         pairs
@@ -481,6 +552,130 @@ mod tests {
 
     fn make_keys(keys: &[&str]) -> HashSet<String> {
         keys.iter().map(|k| k.to_string()).collect()
+    }
+
+    /// All env var names this batch injects for an active sandbox, except the
+    /// per-OS preload var (asserted separately).
+    const SANDBOX_VAR_NAMES: &[&str] = &[
+        FLOX_VIRTUAL_SANDBOX_VAR,
+        FLOX_SANDBOX_ALLOW_VAR,
+        FLOX_SANDBOX_ALLOW_DIRS_VAR,
+        FLOX_SRC_DIR_VAR,
+        FLOX_SANDBOX_GRANTS_DIR_VAR,
+    ];
+
+    /// Build an `(AttachCtx, AttachProjectCtx)` rooted at a real tempdir so
+    /// the grants-dir creation and seed canonicalization have somewhere to
+    /// go. The dot_flox_path lives under the tempdir.
+    fn test_contexts(tmp: &TempDir, sandbox_mode: SandboxMode) -> (AttachCtx, AttachProjectCtx) {
+        let project_dir = tmp.path().join("project");
+        let dot_flox = project_dir.join(".flox");
+        std::fs::create_dir_all(&dot_flox).unwrap();
+        let interpreter = tmp.path().join("interpreter");
+        std::fs::create_dir_all(&interpreter).unwrap();
+        let attach = AttachCtx {
+            env: "/flox_env".to_string(),
+            env_cache: tmp.path().join("cache"),
+            env_description: "test".to_string(),
+            flox_active_environments: "[]".to_string(),
+            prompt_color_1: "1".to_string(),
+            prompt_color_2: "2".to_string(),
+            flox_prompt_environments: "".to_string(),
+            set_prompt: false,
+            flox_env_cuda_detection: "0".to_string(),
+            interpreter_path: interpreter,
+            sandbox_mode,
+        };
+        let project = AttachProjectCtx {
+            env_project: project_dir,
+            dot_flox_path: dot_flox,
+            flox_env_log_dir: tmp.path().join("log"),
+            flox_services_socket: tmp.path().join("services.sock"),
+            process_compose_bin: PathBuf::from("/nix/store/fake-process-compose"),
+            services_to_start: Vec::new(),
+        };
+        (attach, project)
+    }
+
+    /// Create a fake package-builder libexec with `flox-build.mk` and the
+    /// platform libsandbox file, returning the makefile path to point
+    /// `FLOX_BUILD_MK` at.
+    fn fake_build_mk(tmp: &TempDir) -> PathBuf {
+        let libexec = tmp.path().join("libexec");
+        std::fs::create_dir_all(&libexec).unwrap();
+        std::fs::write(libexec.join("flox-build.mk"), b"# fake\n").unwrap();
+        std::fs::write(libexec.join(LIBSANDBOX_FILENAME_FOR_TESTS), b"\x7fELF").unwrap();
+        libexec.join("flox-build.mk")
+    }
+
+    #[test]
+    fn double_set_envs_omits_sandbox_vars_when_off() {
+        let tmp = TempDir::new().unwrap();
+        let (attach, project) = test_contexts(&tmp, SandboxMode::Off);
+        // Even with a valid library configured, Off injects nothing sandbox.
+        let build_mk = fake_build_mk(&tmp);
+        let diff = temp_env::with_var("FLOX_BUILD_MK", Some(build_mk.as_os_str()), || {
+            double_set_envs(&attach, Some(&project))
+        });
+        for name in SANDBOX_VAR_NAMES {
+            assert!(
+                !diff.additions.contains_key(*name),
+                "Off mode should not inject {name}"
+            );
+        }
+        assert!(!diff.additions.contains_key(PRELOAD_VAR));
+        // The non-sandbox exports are still present.
+        assert!(diff.additions.contains_key("FLOX_ENV"));
+    }
+
+    #[test]
+    fn double_set_envs_injects_all_sandbox_vars_when_active() {
+        let tmp = TempDir::new().unwrap();
+        let (attach, project) = test_contexts(&tmp, SandboxMode::Enforce);
+        let build_mk = fake_build_mk(&tmp);
+
+        let diff = temp_env::with_vars(
+            [
+                ("FLOX_BUILD_MK", Some(build_mk.as_os_str())),
+                // Clear any inherited preload so the assertion is exact.
+                (PRELOAD_VAR, None::<&OsStr>),
+            ],
+            || double_set_envs(&attach, Some(&project)),
+        );
+
+        for name in SANDBOX_VAR_NAMES {
+            assert!(
+                diff.additions.contains_key(*name),
+                "active mode should inject {name}"
+            );
+        }
+        assert_eq!(
+            diff.additions.get(FLOX_VIRTUAL_SANDBOX_VAR).unwrap(),
+            "enforce"
+        );
+        assert!(diff.additions.contains_key(PRELOAD_VAR));
+        // No broker socket yet in this batch.
+        assert!(!diff.additions.contains_key(FLOX_SANDBOX_SOCKET_VAR));
+        // The grants dir was created so the engine write guard has a target.
+        assert!(project.dot_flox_path.join("cache").join("sandbox").is_dir());
+    }
+
+    #[test]
+    fn double_set_envs_excludes_sandbox_for_container_without_project() {
+        let tmp = TempDir::new().unwrap();
+        let (attach, _project) = test_contexts(&tmp, SandboxMode::Enforce);
+        let build_mk = fake_build_mk(&tmp);
+        // No project context (container path) means no grants dir anchor, so
+        // sandbox vars are omitted even for an active mode.
+        let diff = temp_env::with_var("FLOX_BUILD_MK", Some(build_mk.as_os_str()), || {
+            double_set_envs(&attach, None)
+        });
+        for name in SANDBOX_VAR_NAMES {
+            assert!(
+                !diff.additions.contains_key(*name),
+                "container activation should not inject {name}"
+            );
+        }
     }
 
     #[test]
