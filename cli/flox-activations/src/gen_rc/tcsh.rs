@@ -354,8 +354,8 @@ mod tests {
             unset verbose;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
             setenv _FLOX_PROMPT_HOOK_VERSION 1;
-            alias precmd 'set _flox_invocation_type=inplace; if ( $?_FLOX_INVOCATION_TYPE ) set _flox_invocation_type="$_FLOX_INVOCATION_TYPE"; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-type "$_flox_invocation_type"`"; unset _flox_invocation_type';
-            alias cwdcmd 'set _flox_invocation_type=inplace; if ( $?_FLOX_INVOCATION_TYPE ) set _flox_invocation_type="$_FLOX_INVOCATION_TYPE"; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-type "$_flox_invocation_type"`"; unset _flox_invocation_type';
+            alias precmd 'set _flox_invocation_type=inplace; if ( $?_FLOX_INVOCATION_TYPE ) set _flox_invocation_type="$_FLOX_INVOCATION_TYPE"; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-type "$_flox_invocation_type"`"; unset _flox_invocation_type; if ( $?_flox_exit ) exit';
+            alias cwdcmd 'set _flox_invocation_type=inplace; if ( $?_FLOX_INVOCATION_TYPE ) set _flox_invocation_type="$_FLOX_INVOCATION_TYPE"; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-type "$_flox_invocation_type"`"; unset _flox_invocation_type; if ( $?_flox_exit ) exit';
         "#]].assert_eq(&output);
     }
 
@@ -393,8 +393,8 @@ mod tests {
             unset verbose;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
             setenv _FLOX_PROMPT_HOOK_VERSION 1;
-            alias precmd 'set _flox_invocation_type=inplace; if ( $?_FLOX_INVOCATION_TYPE ) set _flox_invocation_type="$_FLOX_INVOCATION_TYPE"; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-type "$_flox_invocation_type"`"; unset _flox_invocation_type';
-            alias cwdcmd 'set _flox_invocation_type=inplace; if ( $?_FLOX_INVOCATION_TYPE ) set _flox_invocation_type="$_FLOX_INVOCATION_TYPE"; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-type "$_flox_invocation_type"`"; unset _flox_invocation_type';
+            alias precmd 'set _flox_invocation_type=inplace; if ( $?_FLOX_INVOCATION_TYPE ) set _flox_invocation_type="$_FLOX_INVOCATION_TYPE"; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-type "$_flox_invocation_type"`"; unset _flox_invocation_type; if ( $?_flox_exit ) exit';
+            alias cwdcmd 'set _flox_invocation_type=inplace; if ( $?_FLOX_INVOCATION_TYPE ) set _flox_invocation_type="$_FLOX_INVOCATION_TYPE"; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-type "$_flox_invocation_type"`"; unset _flox_invocation_type; if ( $?_flox_exit ) exit';
         "#]].assert_eq(&output);
     }
 

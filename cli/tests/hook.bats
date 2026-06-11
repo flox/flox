@@ -244,6 +244,36 @@ EOF
   assert_output --partial "after:original"
 }
 
+# bats test_tags=hook:deactivate:tcsh
+@test "tcsh: interactive-type deactivate exits via the auto-fired prompt hook" {
+  project_setup
+
+  # tcsh's faulty-alias handling only applies to auto-fired special aliases:
+  # an `exit` unwinding out of the eval'd `hook-env` output inside precmd makes
+  # tcsh print "Faulty alias 'precmd' removed." and delete the alias WITHOUT
+  # exiting the shell. The interactive deactivation script therefore sets
+  # `_flox_exit` for the alias body to act on after the eval. Unlike the test
+  # above, `precmd` must not be invoked manually here — a manual call is
+  # ordinary alias expansion and bypasses the faulty-alias handling under test;
+  # `tcsh -i` auto-fires precmd before each prompt even with stdin piped.
+  #
+  # The activation is in place; _FLOX_INVOCATION_TYPE is overridden to
+  # `interactive` so the hook requests the interactive (exit) deactivation
+  # script, as it would inside a real `flox activate` subshell.
+  SESSION="$BATS_TEST_TMPDIR/interactive-deactivate.tcsh"
+  cat > "$SESSION" <<EOF
+eval "\`$FLOX_BIN activate -d $PROJECT_DIR\`"
+setenv _FLOX_INVOCATION_TYPE interactive
+$FLOX_BIN deactivate
+echo SHOULD_NOT_PRINT: the shell exits at the next prompt, before this line
+EOF
+
+  run tcsh -i < "$SESSION"
+  assert_success
+  refute_output --partial "Faulty alias"
+  refute_output --partial "SHOULD_NOT_PRINT"
+}
+
 # ---------------------------------------------------------------------------- #
 # Plain `flox deactivate` errors when no compatible prompt hook will consume it
 # ---------------------------------------------------------------------------- #
