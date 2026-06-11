@@ -1320,6 +1320,142 @@ mod tests {
         );
     }
 
+    /// Build script that deliberately reads a file outside the build's
+    /// closure (`/etc/hosts` exists on both Linux and macOS and is not part of
+    /// any Flox environment), then produces a valid `$out`. Used by the
+    /// virtual-sandbox tests below to drive each sandbox level against a known
+    /// out-of-closure access.
+    ///
+    /// The output is a plain file directly under `$out` — deliberately NOT an
+    /// executable under `$out/bin`. An executable there triggers the
+    /// post-build `makeShellWrapper`, which embeds bash/glibc references that
+    /// the subsequent `validate-build` step then rejects against this manifest's
+    /// empty closure (it declares no packages). That wrapping/validation step
+    /// is unrelated to what these tests exercise — the sandbox interception of
+    /// the `/etc/hosts` read — so we avoid it to keep the tests focused and
+    /// portable (the wrapping behaves differently on Linux vs macOS).
+    fn sandbox_manifest(pname: &str, mode: &str) -> String {
+        // `warn`/`enforce` are v1.13.0 sandbox values, so declare that schema
+        // version. `off`/`pure` are also valid there, so the same helper serves
+        // every mode.
+        formatdoc! {r#"
+            schema-version = "1.13.0"
+
+            [build.{pname}]
+            sandbox = "{mode}"
+            command = '''
+                cat /etc/hosts > /dev/null
+                mkdir -p $out
+                echo done > $out/{pname}
+            '''
+        "#}
+    }
+
+    /// `sandbox = "off"`: the virtual sandbox is not engaged at all, so an
+    /// out-of-closure read is invisible and the build succeeds silently.
+    #[test]
+    fn build_sandbox_off_allows_out_of_closure_access() {
+        let pname = String::from("foo");
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &sandbox_manifest(&pname, "off"));
+
+        let output = assert_build_status(&flox, &mut env, &pname, None, true);
+
+        assert!(
+            !output.stderr.contains("is not in the sandbox"),
+            "off mode must not engage the virtual sandbox; stderr:\n{}",
+            output.stderr
+        );
+    }
+
+    /// `sandbox = "warn"`: the build still succeeds, but the virtual sandbox
+    /// reports the out-of-closure read so the author can discover undeclared
+    /// dependencies.
+    #[test]
+    fn build_sandbox_warn_flags_out_of_closure_access() {
+        let pname = String::from("foo");
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &sandbox_manifest(&pname, "warn"));
+
+        let output = assert_build_status(&flox, &mut env, &pname, None, true);
+
+        // The message may include the resolved realpath in parentheses (on
+        // macOS /etc/hosts resolves to /private/etc/hosts), so match the path
+        // and the "not in the sandbox" phrase separately rather than adjacently.
+        let flagged =
+            output.stderr.contains("/etc/hosts") && output.stderr.contains("not in the sandbox");
+        assert!(
+            flagged,
+            "warn mode should flag the out-of-closure read of /etc/hosts; stderr:\n{}",
+            output.stderr
+        );
+    }
+
+    /// `sandbox = "enforce"`: an out-of-closure access is fatal — the build
+    /// fails with a `SANDBOX ERROR` naming the offending path.
+    ///
+    /// The preload is injected right at the build script's bash (see
+    /// flox-build.mk), so the build invocation machinery (`activate`, the `t3`
+    /// trace wrapper) runs outside the sandbox and the block lands on the
+    /// script's *own* out-of-closure read of `/etc/hosts`, not on wrapper
+    /// paths.
+    #[test]
+    fn build_sandbox_enforce_blocks_out_of_closure_access() {
+        let pname = String::from("foo");
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &sandbox_manifest(&pname, "enforce"));
+
+        // expect the build to FAIL
+        let output = assert_build_status(&flox, &mut env, &pname, None, false);
+
+        let is_error = output.stderr.contains("SANDBOX ERROR");
+        // The path may be followed by its resolved realpath in parentheses.
+        let names_path = output.stderr.contains("/etc/hosts");
+        assert!(
+            is_error && names_path,
+            "enforce should block the script's out-of-closure read of /etc/hosts; stderr:\n{}",
+            output.stderr
+        );
+    }
+
+    /// `sandbox-allow` permits a specific out-of-closure path even under
+    /// enforce. The build reads `/etc/hosts` (out of closure) but allow-lists
+    /// it, so — unlike build_sandbox_enforce_blocks_out_of_closure_access —
+    /// the build succeeds. Exercises the whole path: manifest -> lockfile ->
+    /// flox-build.mk -> FLOX_SANDBOX_ALLOW -> libsandbox fnmatch.
+    #[test]
+    fn build_sandbox_allow_permits_listed_path() {
+        let pname = String::from("foo");
+        // sandbox-allow is a v1.13.0 field, so the manifest must declare that
+        // schema version. /etc/hosts resolves to /private/etc/hosts on macOS;
+        // list both.
+        let manifest = formatdoc! {r#"
+            schema-version = "1.13.0"
+
+            [build.{pname}]
+            sandbox = "enforce"
+            sandbox-allow = ["/etc/hosts", "/private/etc/hosts"]
+            command = '''
+                cat /etc/hosts > /dev/null
+                mkdir -p $out
+                echo done > $out/{pname}
+            '''
+        "#};
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+
+        // The build must SUCCEED — the allow-listed read is no longer fatal.
+        let output = assert_build_status(&flox, &mut env, &pname, None, true);
+
+        let blocked =
+            output.stderr.contains("/etc/hosts") && output.stderr.contains("not in the sandbox");
+        assert!(
+            !blocked,
+            "sandbox-allow should silently permit /etc/hosts; stderr:\n{}",
+            output.stderr
+        );
+    }
+
     /// Test for:
     /// - non-files in {bin,sbin} (note we do not warn for libexec)
     /// - non-executables in {bin,sbin} (note we do not warn for libexec)
@@ -1938,6 +2074,56 @@ mod tests {
     #[test]
     fn build_depending_on_another_build_pure_and_off() {
         build_depending_on_another_build("pure", "off");
+    }
+
+    /// Staged build (design §3.4): a chain of three builds with *differing*
+    /// sandbox levels, each consuming the previous one's output via `${...}`.
+    /// Demonstrates that sandbox levels can be mixed across a sequential build
+    /// workflow and still produce a correct final artifact.
+    ///
+    /// The chain spans all three local levels (`off` → `warn` → `enforce`).
+    /// Each stage only reads the prior stage's output, which is a declared
+    /// dependency, so even the `enforce` stage stays within its closure and
+    /// succeeds — no stage reaches for anything out-of-closure.
+    #[test]
+    fn build_staged_chain_with_mixed_sandbox_levels() {
+        let file_name = String::from("artifact");
+        let file_content = String::from("staged content");
+
+        // `warn`/`enforce` are v1.13.0 sandbox values, so declare that schema.
+        let manifest = formatdoc! {r#"
+            schema-version = "1.13.0"
+
+            [build.stage-one]
+            sandbox = "off"
+            command = """
+                mkdir $out
+                echo -n "{file_content}" > $out/{file_name}
+            """
+
+            [build.stage-two]
+            sandbox = "warn"
+            command = """
+                mkdir $out
+                cp ${{stage-one}}/{file_name} $out/{file_name}
+            """
+
+            [build.stage-three]
+            sandbox = "enforce"
+            command = """
+                mkdir $out
+                cp ${{stage-two}}/{file_name} $out/{file_name}
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+        let _ = GitCommandProvider::init(&env_path, false).unwrap();
+
+        // Building the last stage transitively builds the whole chain.
+        assert_build_status(&flox, &mut env, "stage-three", None, true);
+        assert_build_file(&env_path, "stage-three", &file_name, &file_content);
     }
 
     #[test]
