@@ -3,6 +3,13 @@ use std::collections::BTreeMap;
 #[cfg(test)]
 use flox_test_utils::proptest::alphanum_and_whitespace_string;
 #[cfg(any(test, feature = "tests"))]
+use flox_test_utils::proptest::{
+    alphanum_string,
+    btree_map_strategy,
+    optional_string,
+    optional_vec_of_strings,
+};
+#[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -10,7 +17,8 @@ use serde_with::skip_serializing_none;
 
 use crate::interfaces::{AsTypedOnlyManifest, SchemaVersion, impl_pkg_lookup};
 use crate::parsed::common::{
-    Build,
+    BuildSandbox,
+    BuildVersion,
     Containerize,
     Hook,
     Include,
@@ -21,7 +29,7 @@ use crate::parsed::common::{
 use crate::parsed::v1_10_0::{Install, ManifestPackageDescriptor};
 pub use crate::parsed::v1_11_0::MinimumCliVersion;
 pub use crate::parsed::v1_12_0::Services;
-use crate::parsed::{Inner, SkipSerializing};
+use crate::parsed::{Inner, SkipSerializing, impl_into_inner};
 use crate::{Manifest, ManifestError, Parsed, TypedOnly};
 
 /// Not meant for writing manifest files, only for reading them.
@@ -202,4 +210,116 @@ pub struct ProfileDeactivate {
         proptest(strategy = "proptest::option::of(alphanum_and_whitespace_string(5))")
     )]
     pub(crate) tcsh: Option<String>,
+}
+
+/// A map of package ids to package build descriptors.
+///
+/// This is a version-specific copy of `common::Build` because V1_13_0 adds the
+/// `sandbox-allow` field to [BuildDescriptor]; the map is otherwise identical.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+pub struct Build(
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "btree_map_strategy::<BuildDescriptor>(5, 3)")
+    )]
+    pub(crate) BTreeMap<String, BuildDescriptor>,
+);
+
+impl_into_inner!(Build, BTreeMap<String, BuildDescriptor>);
+
+impl SkipSerializing for Build {
+    fn skip_serializing(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+/// The definition of a package built from within the environment.
+///
+/// V1_13_0 adds `sandbox-allow`: a list of paths/globs the build is permitted
+/// to read from outside its closure without a sandbox warning (or, under
+/// `enforce`, without failing). Otherwise identical to `common::BuildDescriptor`.
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct BuildDescriptor {
+    /// The command to run to build a package.
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "alphanum_string(3)")
+    )]
+    pub command: String,
+    /// Packages from the 'toplevel' group to include in the closure of the
+    /// build result.
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "optional_vec_of_strings(3, 4)")
+    )]
+    pub runtime_packages: Option<Vec<String>>,
+    /// Sandbox mode for the build.
+    pub sandbox: Option<BuildSandbox>,
+    /// Paths or glob patterns the build may read from outside its closure
+    /// without the virtual sandbox warning about them (or, under `enforce`,
+    /// blocking them). A leading `~/` is expanded to `$HOME`; `*`/`**` are
+    /// matched with `fnmatch`. Only meaningful for the local sandbox modes
+    /// (`warn`/`enforce`).
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "optional_vec_of_strings(3, 4)")
+    )]
+    pub sandbox_allow: Option<Vec<String>>,
+    /// The version to assign the package.
+    pub version: Option<BuildVersion>,
+    /// A short description of the package that will appear on FloxHub and in
+    /// search results.
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "optional_string(3)")
+    )]
+    pub description: Option<String>,
+    /// A license to assign to the package in SPDX format.
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "optional_vec_of_strings(3, 4)")
+    )]
+    pub license: Option<Vec<String>>,
+}
+
+// Conversions from the common types, used by the V1_12_0 -> V1_13_0 migration.
+// The new `sandbox_allow` field defaults to None, which is what makes the
+// migration lossless.
+impl From<crate::parsed::common::BuildDescriptor> for BuildDescriptor {
+    fn from(descriptor: crate::parsed::common::BuildDescriptor) -> Self {
+        let crate::parsed::common::BuildDescriptor {
+            command,
+            runtime_packages,
+            sandbox,
+            version,
+            description,
+            license,
+        } = descriptor;
+        BuildDescriptor {
+            command,
+            runtime_packages,
+            sandbox,
+            sandbox_allow: None,
+            version,
+            description,
+            license,
+        }
+    }
+}
+
+impl From<crate::parsed::common::Build> for Build {
+    fn from(build: crate::parsed::common::Build) -> Self {
+        Build(
+            build
+                .into_inner()
+                .into_iter()
+                .map(|(id, descriptor)| (id, descriptor.into()))
+                .collect(),
+        )
+    }
 }

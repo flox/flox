@@ -114,14 +114,14 @@ mod tests {
     use crate::interfaces::{PackageLookup, SchemaVersion};
     use crate::parsed::Inner;
     use crate::parsed::common::{
-        Build,
-        BuildDescriptor,
         BuildVersion,
         Hook,
         IncludeDescriptor,
         PackageDescriptorStorePath,
     };
-    use crate::parsed::v1_13_0::{Profile, ProfileDeactivate};
+    // ManifestLatest's build section is the version-specific Build (with
+    // `sandbox-allow`), so build assertions use the latest schema's types.
+    use crate::parsed::v1_13_0::{Build, BuildDescriptor, Profile, ProfileDeactivate};
     use crate::test_helpers::{with_latest_schema, with_schema};
 
     #[test]
@@ -346,6 +346,7 @@ mod tests {
                     command: "hello".to_string(),
                     runtime_packages: None,
                     sandbox: None,
+                    sandbox_allow: None,
                     version: None,
                     description: None,
                     license: None,

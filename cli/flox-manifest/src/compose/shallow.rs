@@ -14,7 +14,6 @@ use crate::parsed::Inner;
 use crate::parsed::common::{
     ActivateOptions,
     Allows,
-    Build,
     Containerize,
     Hook,
     Include,
@@ -23,7 +22,9 @@ use crate::parsed::common::{
     Vars,
 };
 use crate::parsed::latest::{Install, ManifestLatest, MinimumCliVersion};
-use crate::parsed::v1_13_0::{Profile, ProfileDeactivate, Services};
+// merge_build operates on the latest schema's Build (which carries
+// `sandbox-allow`), so composing environments preserves the field.
+use crate::parsed::v1_13_0::{Build, Profile, ProfileDeactivate, Services};
 
 /// Merges two manifests by applying `manifest2` on top of `manifest1` and
 /// overwriting any conflicts for keys within the top-level of each `ManifestV1`
@@ -401,14 +402,10 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::parsed::common::{
-        Allows,
-        BuildDescriptor,
-        ContainerizeConfig,
-        SemverOptions,
-        ServiceDescriptor,
-    };
+    use crate::parsed::common::{Allows, ContainerizeConfig, SemverOptions, ServiceDescriptor};
     use crate::parsed::latest::ManifestPackageDescriptor;
+    // Build merging operates on the latest schema's BuildDescriptor.
+    use crate::parsed::v1_13_0::BuildDescriptor;
 
     proptest! {
         // Ensures that the vars unique to each manifest are present in the merged output,

@@ -495,6 +495,10 @@ pub struct BuildDescriptor {
 #[serde(rename_all = "kebab-case")]
 pub enum BuildSandbox {
     Off,
+    /// Local build; out-of-closure file access is reported with a warning.
+    Warn,
+    /// Local build; out-of-closure file access is denied (the build fails).
+    Enforce,
     Pure,
 }
 
