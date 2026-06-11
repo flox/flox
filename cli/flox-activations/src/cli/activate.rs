@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
+use flox_core::activate::sandbox_mode::SandboxMode;
 use flox_core::activations::{
     ActivationState,
     ModeMismatch,
@@ -208,9 +209,12 @@ impl ActivateArgs {
         // - Containers: None
         let dot_flox_path = context.project_ctx.as_ref().map(|p| &p.dot_flox_path);
 
+        let sandbox_mode = context.attach_ctx.sandbox_mode;
+
         let mut activations = activations_opt.unwrap_or_else(|| {
             debug!("no existing activation state, creating new one");
             ActivationState::new(&context.mode, dot_flox_path, &context.attach_ctx.env)
+                .with_sandbox_mode(sandbox_mode)
         });
 
         // Reset state (but leave start state dirs) if executive is not running.
@@ -220,7 +224,8 @@ impl ActivateArgs {
         if !activations.executive_running() {
             debug!("discarding activation state due to executive not running");
             activations =
-                ActivationState::new(&context.mode, dot_flox_path, &context.attach_ctx.env);
+                ActivationState::new(&context.mode, dot_flox_path, &context.attach_ctx.env)
+                    .with_sandbox_mode(sandbox_mode);
         }
 
         if activations.mode() != &context.mode {
@@ -235,6 +240,26 @@ impl ActivateArgs {
                 running,
             )
             .into());
+        }
+
+        // Mirror the activation-mode mismatch handling for the sandbox mode.
+        // An attach that requests no sandbox (the omitted-flag default of
+        // `Off`) inherits the active mode with an info line. An attach that
+        // explicitly requests a different non-`Off` mode is rejected, since a
+        // single activation cannot run under two sandbox policies at once.
+        let active_sandbox_mode = *activations.sandbox_mode();
+        if sandbox_mode == SandboxMode::Off {
+            if active_sandbox_mode != SandboxMode::Off {
+                updated(format!(
+                    "Attaching with the active sandbox mode '{active_sandbox_mode}'."
+                ));
+            }
+        } else if sandbox_mode != active_sandbox_mode {
+            return Err(anyhow::anyhow!(formatdoc! {"
+                environment '{env}' is already active with sandbox mode '{active_sandbox_mode}'.
+                Exit the existing session, or omit --sandbox to attach with the active mode.",
+                env = context.attach_ctx.env_description,
+            }));
         }
 
         let pid = std::process::id() as i32;
