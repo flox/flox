@@ -538,6 +538,15 @@ FLOX_COLD_START_UNSET=(
   -u FLOX_VERSION
   -u _FLOX_HOOK_SAVE_FPATH
   -u _activate_d
+  # Exported by an outer activation (e.g. when the test suite itself runs
+  # inside one) and unset by the deactivate flow, so leaked values surface
+  # as spurious env-diff records.
+  -u _FLOX_PROMPT_HOOK_VERSION
+  -u _FLOX_INVOCATION_TYPE
+  # A leaked auto-activate flag makes the prompt hook set _FLOX_HOOK_FIRED
+  # inside interactive test sessions, which also surfaces in the env diff.
+  -u FLOX_FEATURES_AUTO_ACTIVATE
+  -u _FLOX_HOOK_FIRED
 )
 
 # Wrapper for the cold-start env prefix. In addition to unsetting the
