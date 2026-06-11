@@ -28,6 +28,9 @@
 #error "Unsupported architecture"
 #endif
 
+// atoi parses the optional :port and /cidr fields of FLOX_SANDBOX_ALLOW_NET
+// entries. At the baseline GLIBC for each arch.
+__asm__(".symver atoi,atoi@" GLIBC_MIN_VERSION);
 __asm__(".symver closedir,closedir@" GLIBC_MIN_VERSION);
 __asm__(".symver __cxa_finalize,__cxa_finalize@" GLIBC_MIN_VERSION);
 __asm__(".symver dlsym,dlsym@" GLIBC_MIN_VERSION);
@@ -39,6 +42,15 @@ __asm__(".symver __fprintf_chk,__fprintf_chk@" ALT_GLIBC_MIN_VERSION);
 __asm__(".symver fwrite,fwrite@" GLIBC_MIN_VERSION);
 __asm__(".symver getenv,getenv@" GLIBC_MIN_VERSION);
 __asm__(".symver getpid,getpid@" GLIBC_MIN_VERSION);
+// inet_pton parses numeric IPv4/IPv6 allow-net entries; memcmp/memcpy/memset
+// move and compare the raw address bytes for CIDR matching and entry building.
+// All at the baseline GLIBC for each arch. (memcpy/memset are NOT compiled to
+// __memcpy_chk/__memset_chk here because this library is built without
+// _FORTIFY_SOURCE; pinning the plain symbols keeps the floor stable.)
+__asm__(".symver inet_pton,inet_pton@" GLIBC_MIN_VERSION);
+__asm__(".symver memcmp,memcmp@" GLIBC_MIN_VERSION);
+__asm__(".symver memcpy,memcpy@" GLIBC_MIN_VERSION);
+__asm__(".symver memset,memset@" GLIBC_MIN_VERSION);
 __asm__(".symver opendir,opendir@" GLIBC_MIN_VERSION);
 __asm__(".symver perror,perror@" GLIBC_MIN_VERSION);
 // pthread_once is the core of the thread-safety fix. On glibc < 2.34 it lives
@@ -63,11 +75,26 @@ __asm__(".symver poll,poll@" GLIBC_MIN_VERSION);
 __asm__(".symver recv,recv@" GLIBC_MIN_VERSION);
 __asm__(".symver send,send@" GLIBC_MIN_VERSION);
 __asm__(".symver socket,socket@" GLIBC_MIN_VERSION);
+// Network-egress mediation. The connect() interceptor formats the destination
+// address for policy matching and messages: getaddrinfo()/freeaddrinfo()
+// populate the IP->hostname attribution cache, and inet_ntop() stringifies the
+// IPv4/IPv6 address for the warn/error lines and policy compare. inet_ntop is
+// preferred over newer helpers because it has existed since the baseline GLIBC
+// and does not raise the floor. The destination port is byte-swapped inline
+// (a literal >> 8 / & 0xff on the network-order u16) rather than via ntohs(),
+// which glibc resolves to an inline byte swap with no external symbol — so it
+// needs no binding and pinning it would reference a symbol that may not exist.
+__asm__(".symver getaddrinfo,getaddrinfo@" GLIBC_MIN_VERSION);
+__asm__(".symver freeaddrinfo,freeaddrinfo@" GLIBC_MIN_VERSION);
+__asm__(".symver inet_ntop,inet_ntop@" GLIBC_MIN_VERSION);
 __asm__(".symver __realpath_chk,__realpath_chk@" ALT_ALT_GLIBC_MIN_VERSION);
 __asm__(".symver __snprintf_chk,__snprintf_chk@" ALT_GLIBC_MIN_VERSION);
 __asm__(".symver __stack_chk_fail,__stack_chk_fail@" ALT_ALT_GLIBC_MIN_VERSION);
 __asm__(".symver __stack_chk_guard,__stack_chk_guard@" GLIBC_MIN_VERSION);
 __asm__(".symver stderr,stderr@" GLIBC_MIN_VERSION);
+// strcasecmp compares a cached hostname against a hostname allow-net entry
+// case-insensitively. At the baseline GLIBC for each arch.
+__asm__(".symver strcasecmp,strcasecmp@" GLIBC_MIN_VERSION);
 __asm__(".symver strchr,strchr@" GLIBC_MIN_VERSION);
 __asm__(".symver strcmp,strcmp@" GLIBC_MIN_VERSION);
 __asm__(".symver strcspn,strcspn@" GLIBC_MIN_VERSION);
