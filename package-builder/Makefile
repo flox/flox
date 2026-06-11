@@ -32,6 +32,14 @@ validate-build: validate-build.bash
 .PHONY: all
 all: $(ALL)
 
+# Remove the compiled sandbox libraries and test binaries (the .gitignore'd
+# build artifacts). Source is untouched. Lets `make clean tests` start from a
+# pristine state so a stale object can never mask a source change.
+.PHONY: clean
+clean:
+	rm -f closure.o libsandbox.so libsandbox.dylib \
+	  tests/threadtest tests/sandbox_probe
+
 %/libexec_install: %
 	@mkdir -p $(PREFIX)/libexec/$(dir $(@D))
 	cp $< $(PREFIX)/libexec/$(@D)

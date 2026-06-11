@@ -45,11 +45,47 @@
 // For access to the in_closure() function.
 #include "closure.h"
 
-// Audit level derived from FLOX_VIRTUAL_SANDBOX:
-//   -1 = not yet initialized, 0 = off, 1 = warn, 2 = enforce, 3 = pure.
+// Audit level derived from FLOX_VIRTUAL_SANDBOX. The numeric values are a
+// total order from "do nothing" to "block everything out of policy"; new
+// code compares against the named constants rather than bare integers so the
+// intent is legible. The historical literals (0..3) are unchanged so the
+// warn/enforce/pure behaviour stays byte-identical.
+#define SANDBOX_LEVEL_UNINIT (-1) // not yet initialized
+#define SANDBOX_LEVEL_OFF 0       // no checking
+#define SANDBOX_LEVEL_WARN 1      // report out-of-closure access, permit it
+#define SANDBOX_LEVEL_ENFORCE 2   // out-of-closure file read is fatal
+#define SANDBOX_LEVEL_PURE 3      // enforce, but inside the Nix sandbox
+// "ask" routes out-of-policy access to an external broker for an
+// allow/deny verdict. The broker RPC is not yet wired; until it is, ask
+// denies out-of-policy access gracefully (EACCES) rather than aborting, so
+// it is testable without a broker.
+#define SANDBOX_LEVEL_ASK 4
+
 // Written exactly once (under init_once, via ensure_init) and only read
 // afterwards, so it needs no further synchronization.
-int sandbox_level = -1;
+int sandbox_level = SANDBOX_LEVEL_UNINIT;
+
+// Broker rendezvous, read once from the environment during init. The verdict
+// socket and grants directory are consumed by the (not-yet-wired) ask broker
+// RPC client; under ask without a configured broker both may be NULL, which
+// leaves the grants-dir write guard inert and forces a stub deny. Pointers
+// into the environment block, never freed or mutated after init.
+static const char *sandbox_socket_path = NULL;
+static const char *sandbox_grants_dir = NULL;
+// Resolved realpath of sandbox_grants_dir, captured once during init so the
+// write guard can do a boundary-aware prefix compare against realpaths.
+// grants_dir_real_len == 0 means the grants dir was unset or unresolvable, in
+// which case the write guard is inert.
+static char grants_dir_real[PATH_MAX];
+static size_t grants_dir_real_len = 0;
+
+// Monotonic request counter for ask receipts. The real broker assigns request
+// numbers; until the RPC lands this stand-in numbers receipts locally so the
+// "queued as req <N>" line is meaningful in tests. Incremented only from the
+// ask tail, which already runs under should_warn_for_path's mutex section per
+// resolved path, but receipts can fire for distinct paths concurrently, so the
+// counter is atomic.
+static atomic_uint ask_req_counter = 0;
 
 // One-time initialization guard.
 //
@@ -78,6 +114,14 @@ static __thread int in_sandbox = 0;
 // but warned even under enforce. The readlinkat interceptors set this around
 // their sandbox_check_path() call; sandbox_check_path() consults it.
 static __thread int in_readlink = 0;
+
+// Per-thread flag marking the current access as a write (or read-write /
+// append) rather than a pure read. Each interceptor derives this from the open
+// flags or fopen mode and sets it around its sandbox_check_path() call. Today
+// it feeds two ask-only behaviours: the receipt's read/write wording and the
+// grants-dir write guard. Enforcement otherwise stays access-agnostic, so
+// warn/enforce/pure ignore this flag entirely.
+static __thread int in_write_access = 0;
 
 // Per-thread flag marking the current open()/openat() as an O_DIRECTORY probe.
 // An open with O_DIRECTORY cannot read file contents — the kernel returns
@@ -143,6 +187,12 @@ static atomic_int warn_count = 0;
   fprintf(stderr, "SANDBOX ERROR[%d]: " format "\n", getpid(), ##__VA_ARGS__)
 #define hint(format, ...)                                                      \
   fprintf(stderr, "SANDBOX HINT[%d]: " format "\n", getpid(), ##__VA_ARGS__)
+// A denial receipt under ask: the access was refused and queued for approval
+// outside the session. Distinct prefix from WARNING/ERROR because it is
+// neither — the operation failed cleanly and can be redeemed by retry once
+// approved.
+#define denied(format, ...)                                                    \
+  fprintf(stderr, "SANDBOX DENIED[%d]: " format "\n", getpid(), ##__VA_ARGS__)
 
 // Resolved realpath of the user's $HOME and its length, captured once during
 // initialization. Used to recognize "$HOME/.<dotfile>" accesses (see
@@ -168,20 +218,34 @@ void sandbox_init() {
   const char *flox_virtual_sandbox_value = getenv("FLOX_VIRTUAL_SANDBOX");
   if (flox_virtual_sandbox_value == NULL ||
       (strcmp(flox_virtual_sandbox_value, "off") == 0)) {
-    sandbox_level = 0;
+    sandbox_level = SANDBOX_LEVEL_OFF;
   } else if (strcmp(flox_virtual_sandbox_value, "warn") == 0) {
-    sandbox_level = 1;
+    sandbox_level = SANDBOX_LEVEL_WARN;
   } else if (strcmp(flox_virtual_sandbox_value, "enforce") == 0) {
-    sandbox_level = 2;
+    sandbox_level = SANDBOX_LEVEL_ENFORCE;
   } else if (strcmp(flox_virtual_sandbox_value, "pure") == 0) {
     // Pure mode is just like enforce, but invoked within the Nix sandbox.
-    sandbox_level = 3;
+    sandbox_level = SANDBOX_LEVEL_PURE;
+  } else if (strcmp(flox_virtual_sandbox_value, "ask") == 0) {
+    sandbox_level = SANDBOX_LEVEL_ASK;
   } else {
-    warn_once(
-        "FLOX_VIRTUAL_SANDBOX must be (off|warn|enforce|pure) ... ignoring");
-    sandbox_level = 0;
+    warn_once("FLOX_VIRTUAL_SANDBOX must be (off|warn|enforce|pure|ask) ... "
+              "ignoring");
+    sandbox_level = SANDBOX_LEVEL_OFF;
   }
   debug("sandbox_level=%d", sandbox_level);
+
+  // Capture the broker rendezvous for the ask flow. Both may be absent (the
+  // broker is optional and, in this build, not yet wired); the ask tail copes
+  // with a NULL socket by denying, and the write guard is inert without a
+  // grants dir. Resolve the grants dir to a realpath up front so the guard's
+  // boundary-aware prefix compare matches the realpaths sandbox_check_path
+  // works with.
+  sandbox_socket_path = getenv("FLOX_SANDBOX_SOCKET");
+  sandbox_grants_dir = getenv("FLOX_SANDBOX_GRANTS_DIR");
+  if (sandbox_grants_dir != NULL &&
+      realpath(sandbox_grants_dir, grants_dir_real) != NULL)
+    grants_dir_real_len = strlen(grants_dir_real);
 
 #ifdef linux
   // Declare new functions to be intercepted here, then add stub
@@ -469,6 +533,20 @@ static bool is_home_dotfile(const char *path) {
          path[home_real_len] == '/' && path[home_real_len + 1] == '.';
 }
 
+// Returns true if `path` is `prefix` itself or lies beneath it, matching on a
+// path-component boundary. This is the same boundary discipline the allow-dirs
+// scan applies inline (a textual prefix alone would let "/a/bc" match "/a/b"),
+// factored out so the grants-dir write guard can reuse it. Both arguments must
+// already be realpaths; `prefix_len` is strlen(prefix), passed in because the
+// guard captures it once at init.
+static bool path_under(const char *path, const char *prefix,
+                       size_t prefix_len) {
+  if (prefix_len == 0)
+    return false;
+  return strncmp(path, prefix, prefix_len) == 0 &&
+         (path[prefix_len] == '/' || path[prefix_len] == '\0');
+}
+
 // Print, at most once per process, a hint explaining that $HOME dotfile access
 // is tolerated and how to move toward a stricter build.
 static void home_dotfile_hint(void) {
@@ -644,15 +722,28 @@ bool sandbox_check_path(const char *pathname) {
   char real_path[PATH_MAX];
   if (realpath(pathname, real_path) == NULL)
     return true;
-  if (check_allowed_basenames(real_path))
-    return true;
-  // User-declared sandbox-allow patterns are explicit exceptions: allow them
-  // silently (no warning), the same as the built-in allow dirs.
-  if (check_allowed_globs(real_path))
-    return true;
-  if (in_closure(real_path)) {
-    debug("%s is in the closure", pathname);
-    return true;
+
+  // Grants-dir write guard (ask only). The grants directory is seeded into the
+  // project's allow set so reads stay quiet, but a write there would let a
+  // process edit its own future-session approvals. Under ask, route writes
+  // under the grants dir through the ask flow instead of letting the allow
+  // shortcuts wave them through. Reads are unaffected, and without a configured
+  // grants dir (grants_dir_real_len == 0) the guard is inert. When the guard
+  // fires we skip the allow-list shortcuts and fall through to the ask tail.
+  bool grants_dir_write_guard =
+      sandbox_level == SANDBOX_LEVEL_ASK && in_write_access &&
+      path_under(real_path, grants_dir_real, grants_dir_real_len);
+  if (!grants_dir_write_guard) {
+    if (check_allowed_basenames(real_path))
+      return true;
+    // User-declared sandbox-allow patterns are explicit exceptions: allow them
+    // silently (no warning), the same as the built-in allow dirs.
+    if (check_allowed_globs(real_path))
+      return true;
+    if (in_closure(real_path)) {
+      debug("%s is in the closure", pathname);
+      return true;
+    }
   }
 
   // If the running executable is itself outside the closure, report it once
@@ -701,7 +792,14 @@ bool sandbox_check_path(const char *pathname) {
   // still depends on $HOME state on the path to full purity. As with directory
   // listings, warn only the first time we see each dotfile — builds re-read the
   // same config files (~/.gitconfig, ~/.npmrc, ...) repeatedly.
-  if (is_home_dotfile(real_path)) {
+  //
+  // Under ask this carve-out is deliberately skipped: the dotfile blanket is a
+  // build-purity convenience that is exactly backwards for an interactive
+  // agent threat model (it would wave through ~/.aws/credentials, ~/.ssh/*,
+  // ...), so under ask — and only ask — dotfiles route through the ask flow
+  // below. The metadata-only carve-outs above (readlink, directory probe,
+  // directory listing) stay permitted for every level.
+  if (sandbox_level != SANDBOX_LEVEL_ASK && is_home_dotfile(real_path)) {
     if (should_warn_for_path(real_path)) {
       warn("%s is outside the closure but permitted as a $HOME dotfile",
            display);
@@ -709,7 +807,7 @@ bool sandbox_check_path(const char *pathname) {
     }
     return true;
   }
-  if (sandbox_level == 1) {
+  if (sandbox_level == SANDBOX_LEVEL_WARN) {
     // warn mode: report the out-of-closure read, but only once per path —
     // a build that reads the same undeclared file repeatedly should produce a
     // single warning, not one per read.
@@ -717,10 +815,55 @@ bool sandbox_check_path(const char *pathname) {
       warn("%s is not in the sandbox", display);
     return true;
   }
+  if (sandbox_level == SANDBOX_LEVEL_ASK) {
+    // ask mode: the access is out of policy. The eventual broker RPC decides
+    // allow-or-deny here; until that lands, the stub denies. Emit the two-line
+    // receipt once per resolved path (the broker assigns the real request
+    // number; the stub numbers them locally), then return false. That false
+    // propagates to each interceptor's errno=EACCES branch, so the calling
+    // process sees a clean permission error and can continue — never exit(1).
+    //
+    // TODO(next batch): replace this stub deny with an ask_broker() RPC. The
+    // broker returns an allow/deny verdict (and a scope to cache); on allow
+    // this returns true, on deny it emits the same receipt and returns false.
+    // Splice the RPC in where the `denied(...)` block is: consult the broker
+    // before emitting, keep the receipt-and-return-false path for the deny and
+    // unreachable-broker cases.
+    const char *op = in_write_access ? "write" : "read";
+    if (should_warn_for_path(real_path)) {
+      unsigned int req =
+          atomic_fetch_add_explicit(&ask_req_counter, 1, memory_order_relaxed) +
+          1;
+      denied("%s %s (not in policy)", op, display);
+      denied("queued as req %u — approve outside: flox sandbox", req);
+    }
+    return false;
+  }
   // enforce / pure: an out-of-closure file read is fatal.
   _error("%s is not in the sandbox", display);
   fflush(stderr);
   exit(1);
+}
+
+// Classify an open()/openat() as a write from its flags. Anything that is not
+// purely read-only — write, read-write, or append — counts as a write. Used
+// only to populate in_write_access for the ask flow; read-vs-write does not
+// change whether an access is permitted.
+static int open_is_write(int flags) {
+  return (flags & O_ACCMODE) != O_RDONLY || (flags & O_APPEND) ? 1 : 0;
+}
+
+// Classify an fopen()/fopen64() mode string as a write. The C standard mode
+// grammar marks a write whenever it contains 'w' (truncate), 'a' (append), or
+// '+' (read-update / write-update). A bare "r"/"rb" is the only read-only
+// form. Same ask-only purpose as open_is_write().
+static int fopen_is_write(const char *mode) {
+  if (mode == NULL)
+    return 0;
+  return strchr(mode, 'w') != NULL || strchr(mode, 'a') != NULL ||
+                 strchr(mode, '+') != NULL
+             ? 1
+             : 0;
 }
 
 #ifdef linux
@@ -747,7 +890,9 @@ int open(const char *pathname, int flags, ...) {
     return orig_open(pathname, flags, mode);
   in_sandbox = 1;
   in_dir_probe = (flags & O_DIRECTORY) ? 1 : 0;
+  in_write_access = open_is_write(flags);
   bool allowed = sandbox_check_path(pathname);
+  in_write_access = 0;
   in_dir_probe = 0;
   in_sandbox = 0;
   if (allowed)
@@ -771,7 +916,9 @@ int openat(int dirfd, const char *pathname, int flags, ...) {
     return orig_openat(dirfd, pathname, flags, mode);
   in_sandbox = 1;
   in_dir_probe = (flags & O_DIRECTORY) ? 1 : 0;
+  in_write_access = open_is_write(flags);
   bool allowed = sandbox_check_path(pathname);
+  in_write_access = 0;
   in_dir_probe = 0;
   in_sandbox = 0;
   if (allowed)
@@ -792,7 +939,9 @@ FILE *fopen(const char *pathname, const char *mode) {
   if (in_sandbox)
     return orig_fopen(pathname, mode);
   in_sandbox = 1;
+  in_write_access = fopen_is_write(mode);
   bool allowed = sandbox_check_path(pathname);
+  in_write_access = 0;
   in_sandbox = 0;
   if (allowed)
     return orig_fopen(pathname, mode);
@@ -807,7 +956,9 @@ FILE *fopen64(const char *pathname, const char *mode) {
   if (in_sandbox)
     return orig_fopen64(pathname, mode);
   in_sandbox = 1;
+  in_write_access = fopen_is_write(mode);
   bool allowed = sandbox_check_path(pathname);
+  in_write_access = 0;
   in_sandbox = 0;
   if (allowed)
     return orig_fopen64(pathname, mode);
@@ -916,7 +1067,9 @@ int my_open(const char *pathname, int flags, ...) {
     return open(pathname, flags, mode);
   in_sandbox = 1;
   in_dir_probe = (flags & O_DIRECTORY) ? 1 : 0;
+  in_write_access = open_is_write(flags);
   bool allowed = sandbox_check_path(pathname);
+  in_write_access = 0;
   in_dir_probe = 0;
   in_sandbox = 0;
   if (allowed)
@@ -940,7 +1093,9 @@ int my_openat(int dirfd, const char *pathname, int flags, ...) {
     return openat(dirfd, pathname, flags, mode);
   in_sandbox = 1;
   in_dir_probe = (flags & O_DIRECTORY) ? 1 : 0;
+  in_write_access = open_is_write(flags);
   bool allowed = sandbox_check_path(pathname);
+  in_write_access = 0;
   in_dir_probe = 0;
   in_sandbox = 0;
   if (allowed)
@@ -949,13 +1104,16 @@ int my_openat(int dirfd, const char *pathname, int flags, ...) {
   return -1;
 }
 
-// Interceptor for fopen (macOS).
+// Interceptor for fopen (macOS). Also the interposer for fopen$DARWIN_EXTSN
+// (wired below), so it covers both the plain and extended-standards variants.
 FILE *my_fopen(const char *pathname, const char *mode) {
   ensure_init();
   if (in_sandbox)
     return fopen(pathname, mode);
   in_sandbox = 1;
+  in_write_access = fopen_is_write(mode);
   bool allowed = sandbox_check_path(pathname);
+  in_write_access = 0;
   in_sandbox = 0;
   if (allowed)
     return fopen(pathname, mode);
