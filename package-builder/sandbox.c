@@ -85,6 +85,18 @@ static const char *sandbox_grants_dir = NULL;
 static char grants_dir_real[PATH_MAX];
 static size_t grants_dir_real_len = 0;
 
+// When true, the executable-identity check is skipped entirely. A build runs
+// the toolchain from inside the environment closure, so a process executable
+// from outside it signals the wrong toolchain is active — a reproducibility
+// defect worth reporting (warn) or aborting on (enforce/pure). An activation
+// is the opposite: it deliberately runs the user's shell and host tools (the
+// coding agent, git, python) from outside the closure, and mediates only file
+// and network ACCESS, not executable identity. The activation injects
+// FLOX_SANDBOX_ALLOW_FOREIGN_EXE so the foreign-executable check does not fire
+// on the inner shell. Read once during init; builds never set it, so build
+// behaviour is unchanged.
+static bool allow_foreign_exe = false;
+
 // Monotonic request counter for ask receipts. The real broker assigns request
 // numbers; until the RPC lands this stand-in numbers receipts locally so the
 // "queued as req <N>" line is meaningful in tests. Incremented only from the
@@ -259,6 +271,13 @@ void sandbox_init() {
   if (sandbox_grants_dir != NULL &&
       realpath(sandbox_grants_dir, grants_dir_real) != NULL)
     grants_dir_real_len = strlen(grants_dir_real);
+
+  // Activation injects FLOX_SANDBOX_ALLOW_FOREIGN_EXE so the foreign-executable
+  // check (a build-reproducibility heuristic) does not abort on the inner
+  // shell. Any non-empty value enables it; builds never set it.
+  const char *allow_foreign_exe_value = getenv("FLOX_SANDBOX_ALLOW_FOREIGN_EXE");
+  allow_foreign_exe =
+      allow_foreign_exe_value != NULL && allow_foreign_exe_value[0] != '\0';
 
 #ifdef linux
   // Declare new functions to be intercepted here, then add stub
@@ -655,6 +674,14 @@ static void format_path_display(char *buf, size_t buflen, const char *pathname,
 // (pthread_once is a no-op) and realpath() only touches libc internals that
 // bypass our interceptors.
 static void maybe_report_process_outside_closure(void) {
+  // Activation deliberately runs host tools (the inner shell, the coding agent,
+  // git, python) from outside the environment closure, so the executable-
+  // identity check that guards build reproducibility does not apply. Skip it
+  // entirely — neither warn nor abort — when the activation opted in. File and
+  // network access mediation is unaffected; only the exe check changes.
+  if (allow_foreign_exe)
+    return;
+
   static atomic_int done = 0;
   if (atomic_fetch_add_explicit(&done, 1, memory_order_relaxed) != 0)
     return;
