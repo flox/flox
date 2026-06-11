@@ -501,6 +501,192 @@ fi
 rm -rf "$foreign_dir"
 
 # ----------------------------------------------------------------------------
+# Layer 4.6: activation policy hardening (sensitive set + write-create guard).
+#
+# These cover the activation-gated correctness fixes derived from the DX
+# assessment. All are gated on FLOX_SANDBOX_ALLOW_FOREIGN_EXE (the activation
+# signal): a build never sets it, so build behaviour stays byte-identical (the
+# warn/enforce/pure goldens above are the regression guard for that).
+#
+#   sensitive set : credentials (~/.ssh, ~/.aws, ~/.netrc, **/.env, ...) are
+#                   denied even under enforce, BEFORE the $HOME-dotfile carve-out
+#                   — while a non-sensitive dotfile (~/.gitconfig) is still
+#                   permitted, and an explicit FLOX_SANDBOX_ALLOW grant of the
+#                   sensitive path overrides back to allow.
+#   create guard  : a new-file write is judged by its parent directory's policy:
+#                   under an in-policy dir it succeeds; outside it is denied.
+#                   WITHOUT the activation flag (build mode), both creates are
+#                   allowed, unchanged.
+#   /nix/store    : a store read is permitted (DX-1 is seed-driven, but the
+#                   engine also recognizes the store prefix for the create
+#                   guard's parent check; a store read via an allow-dir is the
+#                   equivalent engine-level assertion).
+# ----------------------------------------------------------------------------
+
+# Helper: run the probe as if inside an activation — the foreign-exe flag set,
+# plus an explicit $HOME under the real home (so the home-dotfile / sensitive
+# branches engage rather than an allow-dir prefix). Usage:
+#   run_activation <mode> <home_dir> [extra VAR=VAL ...] -- <probe-args...>
+run_activation() {
+  local mode="$1"; local home_dir="$2"; shift 2
+  local -a extra=()
+  while [[ "$1" != "--" ]]; do extra+=("$1"); shift; done
+  shift # consume "--"
+  env "$preload_var=$sandbox_lib" \
+      FLOX_ENV="$fixture" \
+      FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" \
+      FLOX_VIRTUAL_SANDBOX="$mode" \
+      FLOX_SANDBOX_ALLOW_FOREIGN_EXE=1 \
+      HOME="$home_dir" \
+      "${extra[@]}" \
+      "$root/tests/sandbox_probe" "$@"
+}
+
+# Build a fake $HOME under the real home (not an allow-dir prefix) holding a
+# sensitive file (~/.ssh/known_hosts) and a non-sensitive dotfile (~/.gitconfig).
+sens_home="$(mktemp -d "$HOME/flox-sandbox-tests-home.XXXXXX")"
+mkdir -p "$sens_home/.ssh"
+printf 'x' > "$sens_home/.ssh/known_hosts"
+printf 'x' > "$sens_home/.gitconfig"
+
+# enforce + activation: a sensitive path (~/.ssh/known_hosts) is DENIED even
+# though it is a $HOME dotfile — the sensitive set fires before the carve-out.
+# The message names it as sensitive.
+out="$(run_activation enforce "$sens_home" -- open "$sens_home/.ssh/known_hosts" 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$out" == *"is not in the sandbox (sensitive)"* ]]; then
+  pass "enforce+activation: sensitive \$HOME path denied (sensitive set)"
+else
+  fail "enforce+activation: ~/.ssh/known_hosts should be denied as sensitive (rc=$rc)" "$out"
+fi
+
+# enforce + activation: a NON-sensitive $HOME dotfile (~/.gitconfig) is still
+# permitted via the dotfile carve-out — the sensitive set is narrow, not a
+# blanket dotfile denial.
+out="$(run_activation enforce "$sens_home" -- open "$sens_home/.gitconfig" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"OPEN_OK"* \
+      && "$out" == *"permitted as a \$HOME dotfile"* ]]; then
+  pass "enforce+activation: non-sensitive dotfile still permitted (carve-out)"
+else
+  fail "enforce+activation: ~/.gitconfig should be permitted as a dotfile (rc=$rc)" "$out"
+fi
+
+# enforce + activation + explicit FLOX_SANDBOX_ALLOW grant of the sensitive
+# path: the explicit grant wins, so the read is permitted silently. This proves
+# the sensitive check runs AFTER the explicit allow checks.
+out="$(run_activation enforce "$sens_home" \
+    FLOX_SANDBOX_ALLOW="$sens_home/.ssh/**" -- open "$sens_home/.ssh/known_hosts" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"OPEN_OK"* && "$out" != *"sensitive"* ]]; then
+  pass "enforce+activation: explicit allow grant overrides the sensitive set"
+else
+  fail "enforce+activation: an explicit FLOX_SANDBOX_ALLOW grant should win (rc=$rc)" "$out"
+fi
+
+# enforce + BUILD mode (no activation flag): the same sensitive path is NOT
+# denied as sensitive — the sensitive set is activation-only, so build
+# behaviour is unchanged (the dotfile carve-out permits it). This is the
+# byte-identical-build guard for DX-2.
+out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+    FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=enforce \
+    HOME="$sens_home" "$root/tests/sandbox_probe" open "$sens_home/.ssh/known_hosts" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"OPEN_OK"* && "$out" != *"sensitive"* ]]; then
+  pass "enforce+build: sensitive set NOT applied (build behaviour unchanged)"
+else
+  fail "enforce+build: ~/.ssh should follow the build dotfile carve-out (rc=$rc)" "$out"
+fi
+
+rm -rf "$sens_home"
+
+# Write-create guard. A create under an IN-POLICY dir (the fixture, an
+# allow-dir) succeeds; a create under an OUT-OF-POLICY dir (a fresh temp dir
+# that is not an allow-dir) is denied. The target file must not exist so the
+# create path (realpath fails) is exercised.
+in_policy_new="$fixture/created-by-probe-$$"
+out="$(run_activation enforce "$HOME" -- create "$in_policy_new" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"CREATE_OK"* ]]; then
+  pass "enforce+activation: create under an in-policy dir succeeds"
+else
+  fail "enforce+activation: create under the fixture (allow-dir) should succeed (rc=$rc)" "$out"
+fi
+rm -f "$in_policy_new"
+
+# A create whose immediate parent is a freshly-made subtree UNDER an in-policy
+# dir succeeds. This mirrors real git: it mkdir()s `.git/objects/<fanout>/`
+# (mkdir is not intercepted) and then open(O_CREAT)s the temp object inside it,
+# so at the open the immediate parent exists but is a directory the engine has
+# never seen. The guard resolves that parent and finds it under the in-policy
+# fixture. (We mkdir the subtree first because open(O_CREAT) itself never
+# creates intermediate directories — only the leaf file.)
+in_policy_subtree="$fixture/new/deep/subtree"
+mkdir -p "$in_policy_subtree"
+out="$(run_activation enforce "$HOME" -- create "$in_policy_subtree/created-by-probe-$$" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"CREATE_OK"* ]]; then
+  pass "enforce+activation: create in a fresh subtree under an in-policy dir succeeds"
+else
+  fail "enforce+activation: subtree create under the fixture should succeed (rc=$rc)" "$out"
+fi
+rm -rf "$fixture/new"
+
+# The walk-up itself: a create whose immediate parent does NOT yet exist but
+# whose nearest existing ancestor IS in policy is permitted by the sandbox. The
+# kernel still returns ENOENT (open does not create intermediate dirs), but the
+# point is the sandbox must NOT have denied it — assert no SANDBOX ERROR line
+# even though the open ultimately fails for the benign missing-dir reason.
+out="$(run_activation enforce "$HOME" -- create "$fixture/notyet/leaf" 2>&1)"; rc=$?
+if [[ "$out" != *"SANDBOX ERROR"* && "$out" == *"errno=2"* ]]; then
+  pass "enforce+activation: create under an in-policy missing parent not denied by sandbox"
+else
+  fail "enforce+activation: walk-up should permit an in-policy create (sandbox must not deny) (rc=$rc)" "$out"
+fi
+
+# An out-of-policy create dir: a temp dir under the real $HOME that is neither
+# an allow-dir, the closure, nor the store. The create is denied (fatal under
+# enforce) by the parent-dir policy check.
+oop_dir="$(mktemp -d "$HOME/flox-sandbox-tests-oop.XXXXXX")"
+out="$(run_activation enforce "$HOME" -- create "$oop_dir/pwned" 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$out" == *"is not in the sandbox"* ]]; then
+  pass "enforce+activation: create under an out-of-policy dir is denied"
+else
+  fail "enforce+activation: out-of-policy new-file create should be denied (rc=$rc)" "$out"
+fi
+
+# A create whose nearest existing ancestor is OUT of policy is still denied,
+# even when the immediate parent does not exist: walking up to $oop_dir finds it
+# out of policy. This proves the walk-up does not weaken the threat model.
+out="$(run_activation enforce "$HOME" -- create "$oop_dir/new/deep/pwned" 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$out" == *"is not in the sandbox"* ]]; then
+  pass "enforce+activation: deep create under an out-of-policy dir is denied"
+else
+  fail "enforce+activation: out-of-policy deep create should be denied (rc=$rc)" "$out"
+fi
+
+# Build mode (no activation flag): BOTH creates are allowed — the engine keeps
+# its blanket-allow of nonexistent paths for builds, which legitimately create
+# many new files. This is the byte-identical-build guard for DX-3.
+out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+    FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=enforce \
+    HOME="$HOME" "$root/tests/sandbox_probe" create "$oop_dir/pwned" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"CREATE_OK"* ]]; then
+  pass "enforce+build: out-of-policy create allowed (build behaviour unchanged)"
+else
+  fail "enforce+build: build mode should permit any new-file create (rc=$rc)" "$out"
+fi
+rm -rf "$oop_dir"
+
+# /nix/store read under enforce + a FLOX_SANDBOX_ALLOW_DIRS=/nix/store entry is
+# permitted silently. The activation seed adds /nix/store to the allow-dirs; the
+# equivalent engine-level assertion is that a store path under an allow-dir is
+# allowed without a warning. out_file is a real store file.
+out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+    FLOX_SANDBOX_ALLOW_DIRS="/nix/store" FLOX_VIRTUAL_SANDBOX=enforce \
+    FLOX_SANDBOX_ALLOW_FOREIGN_EXE=1 \
+    "$root/tests/sandbox_probe" open "$out_file" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"OPEN_OK"* && "$out" != *"not in the sandbox"* ]]; then
+  pass "enforce+activation: /nix/store read permitted via allow-dir (DX-1)"
+else
+  fail "enforce+activation: a /nix/store read should be permitted silently (rc=$rc)" "$out"
+fi
+
+# ----------------------------------------------------------------------------
 # Layer 5: network egress (connect interception, warn/enforce gradient).
 #
 # These use only loopback and TEST-NET-1 (192.0.2.0/24, RFC 5737, guaranteed

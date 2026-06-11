@@ -74,6 +74,25 @@ static int do_open(const char *path) {
   return 0;
 }
 
+/* create — open <path> for writing with O_CREAT, exercising the write-create
+ * guard. The target is expected NOT to exist, so this is a genuine new-file
+ * create: the sandbox judges it by its parent directory's policy under an
+ * activation. Prints "CREATE_OK <path>" on success or
+ * "CREATE_FAIL <path> errno=<n> (<msg>)" on refusal, and exits 0/1. Any file
+ * actually created is unlinked so reruns stay idempotent. */
+static int do_create(const char *path) {
+  int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  if (fd < 0) {
+    int saved = errno;
+    printf("CREATE_FAIL %s errno=%d (%s)\n", path, saved, strerror(saved));
+    return 1;
+  }
+  close(fd);
+  unlink(path);
+  printf("CREATE_OK %s\n", path);
+  return 0;
+}
+
 /* open(O_DIRECTORY) — a directory probe that cannot read file contents.
  * The kernel returns ENOTDIR for non-directory paths regardless; this
  * exercises the in_dir_probe path in the sandbox interceptors. */
@@ -246,6 +265,9 @@ int main(int argc, char **argv) {
   if (argc >= 3 && strcmp(argv[1], "open") == 0) {
     return do_open(argv[2]);
   }
+  if (argc >= 3 && strcmp(argv[1], "create") == 0) {
+    return do_create(argv[2]);
+  }
   if (argc >= 3 && strcmp(argv[1], "open-dir") == 0) {
     return do_open_dir(argv[2]);
   }
@@ -266,11 +288,12 @@ int main(int argc, char **argv) {
   fprintf(stderr,
           "usage:\n"
           "  %s open <path>\n"
+          "  %s create <path>\n"
           "  %s open-dir <path>\n"
           "  %s readlink <path>\n"
           "  %s readlink-fn <path>\n"
           "  %s connect <ipv4> <port> [timeout_ms]\n"
           "  %s storm <nthreads> <niters> <path1> [path2 ...]\n",
-          argv[0], argv[0], argv[0], argv[0], argv[0], argv[0]);
+          argv[0], argv[0], argv[0], argv[0], argv[0], argv[0], argv[0]);
   return 2;
 }
