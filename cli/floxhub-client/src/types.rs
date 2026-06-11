@@ -22,7 +22,7 @@ pub type SearchLimit = Option<NonZeroU8>;
 pub type ResultCount = Option<u64>;
 
 /// Generic paginated result container.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResultsPage<T> {
     pub results: Vec<T>,
     pub count: ResultCount,
