@@ -18,7 +18,7 @@ use flox_rust_sdk::providers::publish::{
     check_package_metadata,
 };
 use indoc::formatdoc;
-use nef_lock_catalog::lock::NixFlakeref;
+use nef_lock_catalog::NixFlakeref;
 use tracing::{debug, info_span, instrument, warn};
 
 use super::{DirEnvironmentSelect, dir_environment_select};

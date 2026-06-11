@@ -26,7 +26,7 @@ use flox_rust_sdk::providers::nix;
 use flox_rust_sdk::utils::{CommandExt, FLOX_INTERPRETER};
 use indoc::formatdoc;
 use itertools::Itertools;
-use nef_lock_catalog::lock::NixFlakeref;
+use nef_lock_catalog::NixFlakeref;
 use nef_lock_catalog::{lock_config, read_config, write_lock};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};

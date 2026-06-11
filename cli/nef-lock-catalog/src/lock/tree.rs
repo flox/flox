@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::warn;
 
-use crate::lock::NixFlakeref;
+use super::flakeref::NixFlakeref;
 
 /// Represents a node in the package tree - either a package set or an individual package
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]

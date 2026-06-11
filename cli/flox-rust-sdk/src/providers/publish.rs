@@ -26,7 +26,7 @@ use git_url_parse::GitUrl;
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use nef_lock_catalog::lock::NixFlakeref;
+use nef_lock_catalog::NixFlakeref;
 use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
