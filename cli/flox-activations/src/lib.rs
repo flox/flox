@@ -8,6 +8,7 @@ pub mod hook;
 pub mod logger;
 pub mod message;
 mod process_compose;
+pub mod sandbox;
 mod start;
 pub mod start_diff;
 mod vars_from_env;

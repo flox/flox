@@ -94,12 +94,19 @@ impl ActivateArgs {
         // Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
         unsafe { std::env::remove_var("FLOX_SHELL") };
 
-        let start_id = self.start_or_attach(
+        let (start_id, resolved_sandbox_mode) = self.start_or_attach(
             &context,
             &invocation_type,
             subsystem_verbosity,
             &vars_from_env,
         )?;
+
+        // An attach that omitted --sandbox inherits the mode recorded on the
+        // active activation. Record the resolved mode on the context so the
+        // env injection (double_set_envs) and the generated rc scripts
+        // re-export the active session's sandbox policy rather than the
+        // omitted-flag default of Off.
+        context.attach_ctx.sandbox_mode = resolved_sandbox_mode;
 
         // Only start services if project context exists
         if let Some(project) = &context.project_ctx
@@ -128,7 +135,7 @@ impl ActivateArgs {
         invocation_type: &InvocationType,
         subsystem_verbosity: u32,
         vars_from_env: &VarsFromEnvironment,
-    ) -> Result<StartIdentifier, anyhow::Error> {
+    ) -> Result<(StartIdentifier, SandboxMode), anyhow::Error> {
         let retry_delay = Duration::from_millis(200);
         let warning_interval = Duration::from_secs(5);
         let mut last_warning: Option<Instant> = None;
@@ -136,7 +143,9 @@ impl ActivateArgs {
         let deactivate_hint = "To stop using this environment, run 'flox deactivate'";
 
         loop {
-            match self.try_start_or_attach(context, subsystem_verbosity, vars_from_env)? {
+            let (result, resolved_sandbox_mode) =
+                self.try_start_or_attach(context, subsystem_verbosity, vars_from_env)?;
+            match result {
                 StartOrAttachResult::Start { start_id, .. } => {
                     if *invocation_type == InvocationType::Interactive {
                         updated(
@@ -147,7 +156,7 @@ impl ActivateArgs {
                             },
                         );
                     }
-                    return Ok(start_id);
+                    return Ok((start_id, resolved_sandbox_mode));
                 },
                 StartOrAttachResult::Attach { start_id, .. } => {
                     if *invocation_type == InvocationType::Interactive {
@@ -159,7 +168,7 @@ impl ActivateArgs {
                             },
                         );
                     }
-                    return Ok(start_id);
+                    return Ok((start_id, resolved_sandbox_mode));
                 },
                 StartOrAttachResult::AlreadyStarting {
                     pid: blocking_pid, ..
@@ -184,13 +193,17 @@ impl ActivateArgs {
 
     /// Try to start or attach to an activation.
     ///
-    /// Returns StartOrAttachResult indicating whether we started, attached, or should retry.
+    /// Returns the [`StartOrAttachResult`] (started, attached, or retry) plus
+    /// the resolved sandbox mode for this activation. The resolved mode is
+    /// the requested mode for a fresh start or an explicit match, and the
+    /// inherited active mode when `--sandbox` was omitted while a sandboxed
+    /// session is already running.
     fn try_start_or_attach(
         &self,
         context: &ActivateCtx,
         subsystem_verbosity: u32,
         vars_from_env: &VarsFromEnvironment,
-    ) -> Result<StartOrAttachResult, anyhow::Error> {
+    ) -> Result<(StartOrAttachResult, SandboxMode), anyhow::Error> {
         // Use the pre-computed activation state directory
         let activations_json_path = state_json_path(&context.activation_state_dir);
 
@@ -240,22 +253,30 @@ impl ActivateArgs {
         // explicitly requests a different non-`Off` mode is rejected, since a
         // single activation cannot run under two sandbox policies at once.
         let active_sandbox_mode = *activations.sandbox_mode();
-        if sandbox_mode == SandboxMode::Off {
+        // The mode this activation actually runs under. Omitting --sandbox
+        // (the `Off` default) while a sandboxed session is active inherits
+        // that session's mode; otherwise the requested mode stands (it equals
+        // the active mode on an explicit match, and is the start mode on a
+        // fresh start).
+        let resolved_sandbox_mode = if sandbox_mode == SandboxMode::Off {
             if active_sandbox_mode != SandboxMode::Off {
                 updated(format!(
                     "Attaching with the active sandbox mode '{active_sandbox_mode}'."
                 ));
             }
+            active_sandbox_mode
         } else if sandbox_mode != active_sandbox_mode {
             return Err(anyhow::anyhow!(formatdoc! {"
                 environment '{env}' is already active with sandbox mode '{active_sandbox_mode}'.
                 Exit the existing session, or omit --sandbox to attach with the active mode.",
                 env = context.attach_ctx.env_description,
             }));
-        }
+        } else {
+            sandbox_mode
+        };
 
         let pid = std::process::id() as i32;
-        match activations.start_or_attach(pid, &context.flox_activate_store_path) {
+        let result = match activations.start_or_attach(pid, &context.flox_activate_store_path) {
             StartOrAttachResult::Start { start_id } => start(
                 context,
                 subsystem_verbosity,
@@ -264,15 +285,16 @@ impl ActivateArgs {
                 &mut activations,
                 &activations_json_path,
                 lock,
-            ),
+            )?,
             StartOrAttachResult::Attach { start_id } => {
                 write_activations_json(&activations, &activations_json_path, lock)?;
-                Ok(StartOrAttachResult::Attach { start_id })
+                StartOrAttachResult::Attach { start_id }
             },
             StartOrAttachResult::AlreadyStarting { pid, start_id } => {
                 drop(lock); // Explicit for clarity only.
-                Ok(StartOrAttachResult::AlreadyStarting { pid, start_id })
+                StartOrAttachResult::AlreadyStarting { pid, start_id }
             },
-        }
+        };
+        Ok((result, resolved_sandbox_mode))
     }
 }
