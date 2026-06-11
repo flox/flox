@@ -383,6 +383,25 @@ else
   fail "prompt: no-broker should behave as enforce (rc=$rc)" "$out"
 fi
 
+# Mode gating: an enforce-mode build that happens to share the process-wide
+# prompt socket env must NOT consult the broker (it would say allow); only
+# prompt mode prompts. Start an allow-broker but run under enforce: the access
+# is still blocked.
+sock="$(mktemp -u "${TMPDIR:-/tmp}/flox-prompt.XXXXXX.sock")"
+"$root/tests/mock_prompt_broker" "$sock" allow >/dev/null 2>&1 &
+broker_pid=$!
+for _ in $(seq 1 50); do [[ -S "$sock" ]] && break; sleep 0.05; done
+out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+    FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=enforce \
+    FLOX_SANDBOX_PROMPT_SOCKET="$sock" \
+    "$root/tests/sandbox_probe" open "$out_file" 2>&1)"; rc=$?
+kill "$broker_pid" 2>/dev/null; wait "$broker_pid" 2>/dev/null; rm -f "$sock"
+if [[ "$rc" -ne 0 && "$out" == *"is not in the sandbox"* ]]; then
+  pass "enforce: ignores the prompt socket (only prompt mode consults the broker)"
+else
+  fail "enforce: must not consult the broker (rc=$rc)" "$out"
+fi
+
 # ----------------------------------------------------------------------------
 # Layer 3: threaded interception storm (stability of the real interceptors).
 # The OLD library crashed here on macOS (uninitialized mutex + shared buffers);

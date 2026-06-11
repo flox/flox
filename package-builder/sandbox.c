@@ -153,14 +153,21 @@ static atomic_int warn_count = 0;
 static char home_real[PATH_MAX];
 static size_t home_real_len = 0;
 
-// Interactive prompt broker (Phase 2). When FLOX_SANDBOX_PROMPT_SOCKET names an
-// AF_UNIX socket, an out-of-closure access — instead of being warned/blocked
-// outright — is referred to that broker (the flox process driving the build),
-// which prompts the user and replies allow / deny / allow-glob. prompt_enabled
-// gates the (otherwise lock-free) glob-list reads, since the broker path can
-// append to the list at runtime; see allow_globs_add.
+// Interactive prompt broker (Phase 2). In "prompt" mode an out-of-closure
+// access — instead of being blocked outright — is referred to a broker (the
+// flox process driving the build) at FLOX_SANDBOX_PROMPT_SOCKET, which prompts
+// the user and replies allow / deny / allow-glob.
+//
+// prompt_mode is true only when FLOX_VIRTUAL_SANDBOX == "prompt"; it gates the
+// broker consultation, so an enforce-mode build that happens to share the
+// process-wide socket env (a mixed `flox build`) never prompts. prompt_enabled
+// is true when a socket path is set; it gates the (otherwise lock-free)
+// glob-list reads, since the broker path can append to the list at runtime (see
+// allow_globs_add). With prompt_mode but no socket — a non-interactive build —
+// prompt_broker errors and the access falls through to enforce.
 static char prompt_socket_path[PATH_MAX];
 static int prompt_enabled = 0;
+static int prompt_mode = 0;
 
 // Perform various initialization, which includes loading the original
 // glibc functions to be wrapped using dlsym().
@@ -200,6 +207,7 @@ void sandbox_init() {
     // blocked. With no broker — e.g. a non-interactive build — it is therefore
     // just enforce.
     sandbox_level = 2;
+    prompt_mode = 1;
   } else if (strcmp(flox_virtual_sandbox_value, "pure") == 0) {
     // Pure mode is just like enforce, but invoked within the Nix sandbox.
     sandbox_level = 3;
@@ -844,11 +852,13 @@ bool sandbox_check_path(const char *pathname) {
     }
     return true;
   }
-  // If an interactive prompt broker is configured, let it resolve this access
-  // (allow / allow-glob / deny) before the default warn/enforce policy applies.
-  // An allow is remembered so the same path/pattern is not asked again; a
-  // broker error falls through to the default policy below.
-  if (prompt_enabled) {
+  // In prompt mode, let the broker resolve this access (allow / allow-glob /
+  // deny) before the default enforce policy applies. Gated on prompt_mode (not
+  // merely the socket) so an enforce-mode build sharing the process-wide socket
+  // env never prompts. An allow is remembered so the same path/pattern is not
+  // asked again; a broker error (e.g. no socket) falls through to enforce
+  // below.
+  if (prompt_mode) {
     int decision = prompt_broker(real_path);
     if (decision == PROMPT_ALLOW)
       return true;
