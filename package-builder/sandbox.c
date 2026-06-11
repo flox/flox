@@ -24,6 +24,7 @@
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdatomic.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,6 +36,10 @@
 // Declare version bindings to work with minimum supported GLIBC versions.
 #ifdef linux
 #include "glibc-bindings.h"
+#else
+// _NSGetExecutablePath, used to find the process executable on macOS (no
+// /proc).
+#include <mach-o/dyld.h>
 #endif
 
 // For access to the in_closure() function.
@@ -547,7 +552,6 @@ static void format_path_display(char *buf, size_t buflen, const char *pathname,
     snprintf(buf, buflen, "%s (%s)", pathname, real_path);
 }
 
-#ifdef linux
 // Report once per process if the process executable itself is outside the
 // closure. Called from sandbox_check_path() the first time any out-of-closure
 // path is detected, so the user sees the root cause ("the wrong Node.js is
@@ -555,16 +559,28 @@ static void format_path_display(char *buf, size_t buflen, const char *pathname,
 // warning and returns; in enforce/pure mode it errors and exits, the same
 // policy applied to any other out-of-closure file access. Safe to call while
 // in_sandbox==1: in_closure() re-uses the already-initialized closure table
-// (pthread_once is a no-op) and realpath() only touches glibc internals that
+// (pthread_once is a no-op) and realpath() only touches libc internals that
 // bypass our interceptors.
 static void maybe_report_process_outside_closure(void) {
   static atomic_int done = 0;
   if (atomic_fetch_add_explicit(&done, 1, memory_order_relaxed) != 0)
     return;
 
+  // Resolve the running executable's real path. Linux exposes it as the
+  // /proc/self/exe symlink; macOS has no /proc, so ask dyld for the image path
+  // and canonicalize that.
   char argv0_real[PATH_MAX];
+#ifdef linux
   if (realpath("/proc/self/exe", argv0_real) == NULL)
     return;
+#else
+  char exe_path[PATH_MAX];
+  uint32_t exe_size = sizeof(exe_path);
+  if (_NSGetExecutablePath(exe_path, &exe_size) != 0)
+    return; // path did not fit (exe_size is set to the required size)
+  if (realpath(exe_path, argv0_real) == NULL)
+    return;
+#endif
   // Skip the same permitted executables that sandbox_check_argv0() exempts.
   if (strcmp(argv0_real, "/usr/bin/env") == 0 ||
       strcmp(argv0_real, "/bin/sh") == 0 ||
@@ -585,7 +601,6 @@ static void maybe_report_process_outside_closure(void) {
     exit(1);
   }
 }
-#endif
 
 // Check if path access represents something that may not be reproducible
 // on another machine. Any path within the environment's closure is fine,
@@ -629,9 +644,7 @@ bool sandbox_check_path(const char *pathname) {
   // before any per-path message so the user sees the root cause first. In
   // enforce/pure mode this is fatal (same policy as any other out-of-closure
   // file access); in warn mode it warns and continues.
-#ifdef linux
   maybe_report_process_outside_closure();
-#endif
 
   // Surface the resolved realpath alongside the opened path in any message
   // below, so relative paths ("..") and symlinks are intelligible.
