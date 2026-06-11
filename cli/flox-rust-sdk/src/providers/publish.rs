@@ -928,12 +928,18 @@ pub fn check_build_metadata(
 }
 
 /// Returns `true` when `pkg` is a manifest build that runs locally, in situ:
-/// sandbox `off` (or unset, which defaults to off), `warn`, or `enforce`. Only
-/// `pure` builds hermetically from a clean checkout, so it is the sole mode
-/// that returns `false`.
+/// sandbox `off` (or unset, which defaults to off), `warn`, `enforce`, or
+/// `prompt`. Only `pure` builds hermetically from a clean checkout, so it is the
+/// sole mode that returns `false`.
 fn sandbox_is_local(pkg: &PackageTarget) -> bool {
     matches!(pkg.kind(), PackageTargetKind::ManifestBuild {
-        sandbox: None | Some(BuildSandbox::Off | BuildSandbox::Warn | BuildSandbox::Enforce)
+        sandbox: None
+            | Some(
+                BuildSandbox::Off
+                    | BuildSandbox::Warn
+                    | BuildSandbox::Enforce
+                    | BuildSandbox::Prompt
+            )
     })
 }
 
