@@ -15,19 +15,25 @@
  */
 
 #define _GNU_SOURCE
+#include <arpa/inet.h>
 #include <dirent.h>
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <fnmatch.h>
 #include <limits.h>
+#include <netdb.h>
+#include <netinet/in.h>
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
@@ -155,6 +161,13 @@ static ssize_t (*orig_readlink_chk)(const char *pathname, char *buf,
 static ssize_t (*orig_readlinkat_chk)(int dirfd, const char *pathname,
                                       char *buf, size_t bufsiz,
                                       size_t buflen) = NULL;
+// Network egress. connect() is the TCP egress choke point; getaddrinfo() is
+// observed only to attach a best-effort hostname to the resolved IPs.
+static int (*orig_connect)(int sockfd, const struct sockaddr *addr,
+                           socklen_t addrlen) = NULL;
+static int (*orig_getaddrinfo)(const char *node, const char *service,
+                               const struct addrinfo *hints,
+                               struct addrinfo **res) = NULL;
 #endif
 
 // Helper macros for printing debug, warnings, and errors. Each multi-statement
@@ -258,6 +271,8 @@ void sandbox_init() {
   orig_readlink = dlsym(RTLD_NEXT, "readlink");
   orig_readlink_chk = dlsym(RTLD_NEXT, "__readlink_chk");
   orig_readlinkat_chk = dlsym(RTLD_NEXT, "__readlinkat_chk");
+  orig_connect = dlsym(RTLD_NEXT, "connect");
+  orig_getaddrinfo = dlsym(RTLD_NEXT, "getaddrinfo");
 #endif
 }
 
@@ -866,6 +881,445 @@ static int fopen_is_write(const char *mode) {
              : 0;
 }
 
+// ===========================================================================
+// Network egress mediation.
+//
+// The filesystem engine above warns or denies out-of-policy file access; this
+// section applies the same gradient to outbound TCP connections. connect() is
+// the single choke point for TCP egress, so intercepting it is enough to
+// mediate every cooperative dynamically-linked client. getaddrinfo() is
+// observed (never blocked) purely to attach a human-readable hostname to the
+// IPs a later connect() targets — best-effort metadata for messages, never a
+// security boundary.
+//
+// The policy lives in FLOX_SANDBOX_ALLOW_NET, a space-separated list whose
+// entries are matched against the connection destination:
+//   - "ip"            exact IPv4/IPv6 literal
+//   - "ip/cidr"       CIDR block (IPv4 or IPv6)
+//   - "ip:port" / "ip/cidr:port"  as above, restricted to one port
+//   - "host" / "host:port"        matches if getaddrinfo observed this IP
+//                                 resolving from that hostname (best effort)
+// Loopback (127.0.0.0/8, ::1) and AF_UNIX sockets are always allowed and never
+// consult the policy. AF_UNIX in particular must never be mediated: it is the
+// transport for the broker itself and for process-compose, and blocking it
+// would break the sandbox's own plumbing.
+// ===========================================================================
+
+// Best-effort IP -> hostname attribution cache, populated by the getaddrinfo
+// interceptor and consulted by sandbox_check_connect to (a) match hostname
+// allow-net entries and (b) name the destination in messages. It is a small
+// fixed-size ring: when full, the oldest entry is overwritten. Mutex-guarded
+// like warned_paths; this is metadata only, so a miss (or an overwrite under
+// churn) merely yields a bare-IP message, never a wrong verdict.
+#define NET_NAME_CACHE_MAX 64
+#define NET_IP_STRLEN INET6_ADDRSTRLEN
+#define NET_HOST_STRLEN 256
+struct net_name_entry {
+  char ip[NET_IP_STRLEN];
+  char host[NET_HOST_STRLEN];
+};
+static struct net_name_entry net_name_cache[NET_NAME_CACHE_MAX];
+static int net_name_cache_count = 0; // number of valid entries (<= max)
+static int net_name_cache_next = 0;  // next slot to overwrite once full
+static pthread_mutex_t net_name_cache_lock = PTHREAD_MUTEX_INITIALIZER;
+
+// Record that `ip` most recently resolved from `host`. If `ip` is already
+// present its hostname is refreshed; otherwise a new entry is inserted (ring
+// overwrite when full). Called only from the getaddrinfo interceptor with
+// in_sandbox==1.
+static void net_name_cache_put(const char *ip, const char *host) {
+  if (ip == NULL || host == NULL || ip[0] == '\0' || host[0] == '\0')
+    return;
+  pthread_mutex_lock(&net_name_cache_lock);
+  for (int i = 0; i < net_name_cache_count; i++) {
+    if (strcmp(net_name_cache[i].ip, ip) == 0) {
+      strncpy(net_name_cache[i].host, host, NET_HOST_STRLEN - 1);
+      net_name_cache[i].host[NET_HOST_STRLEN - 1] = '\0';
+      pthread_mutex_unlock(&net_name_cache_lock);
+      return;
+    }
+  }
+  int slot;
+  if (net_name_cache_count < NET_NAME_CACHE_MAX)
+    slot = net_name_cache_count++;
+  else {
+    slot = net_name_cache_next;
+    net_name_cache_next = (net_name_cache_next + 1) % NET_NAME_CACHE_MAX;
+  }
+  strncpy(net_name_cache[slot].ip, ip, NET_IP_STRLEN - 1);
+  net_name_cache[slot].ip[NET_IP_STRLEN - 1] = '\0';
+  strncpy(net_name_cache[slot].host, host, NET_HOST_STRLEN - 1);
+  net_name_cache[slot].host[NET_HOST_STRLEN - 1] = '\0';
+  pthread_mutex_unlock(&net_name_cache_lock);
+}
+
+// Look up the most-recent hostname for `ip`, copying it into `host_out` (size
+// NET_HOST_STRLEN). Returns true on a hit. Best-effort: a miss is normal (the
+// client may have resolved via a path we did not observe, or used a literal
+// IP) and simply yields a nameless message.
+static bool net_name_cache_get(const char *ip, char *host_out) {
+  bool found = false;
+  pthread_mutex_lock(&net_name_cache_lock);
+  for (int i = 0; i < net_name_cache_count; i++) {
+    if (strcmp(net_name_cache[i].ip, ip) == 0) {
+      strncpy(host_out, net_name_cache[i].host, NET_HOST_STRLEN - 1);
+      host_out[NET_HOST_STRLEN - 1] = '\0';
+      found = true;
+      break;
+    }
+  }
+  pthread_mutex_unlock(&net_name_cache_lock);
+  return found;
+}
+
+// Parsed FLOX_SANDBOX_ALLOW_NET, one entry per token, built once under
+// allow_net_once. Mirrors the fs allow-list shape (256-entry cap, read-only
+// after init).
+#define FLOX_SANDBOX_ALLOW_NET_MAXENTRIES 256
+#define FLOX_SANDBOX_ALLOW_NET_MAXLEN (16 * 1024)
+
+// One allow-net entry. `is_cidr`/`is_ip` distinguish a numeric IP/CIDR rule
+// from a hostname rule. For IP/CIDR entries, `addr` holds the parsed network
+// (4 or 16 bytes) and `prefix_bits` the CIDR width; for hostname entries,
+// `host` holds the name. `port` is 0 for "any port", else the single allowed
+// port. `family` is AF_INET or AF_INET6 for IP entries.
+struct allow_net_entry {
+  bool is_ip;        // entry is an IP or CIDR (vs a hostname)
+  int family;        // AF_INET / AF_INET6 (IP entries only)
+  unsigned char addr[16]; // network bytes (IP entries only)
+  int prefix_bits;   // CIDR prefix width (IP entries only)
+  char host[NET_HOST_STRLEN]; // hostname (hostname entries only)
+  int port;          // 0 = any port, else the only permitted port
+};
+static pthread_once_t allow_net_once = PTHREAD_ONCE_INIT;
+static char allow_net_buf[FLOX_SANDBOX_ALLOW_NET_MAXLEN];
+static struct allow_net_entry allow_net[FLOX_SANDBOX_ALLOW_NET_MAXENTRIES];
+static int allow_net_count = 0;
+
+// Split a "host[:port]" token into host and port. Returns the port (0 if
+// absent) and writes the host portion into `host_out` (size host_out_len).
+// For IPv6 literals the address may itself contain ':', so a port suffix is
+// only recognized when the address is bracketed ("[::1]:443") or the token has
+// exactly one ':' (an IPv4/host form). Bracketed IPv6 has its brackets
+// stripped from host_out.
+static int split_host_port(const char *token, char *host_out,
+                           size_t host_out_len) {
+  // Bracketed form: [addr] or [addr]:port.
+  if (token[0] == '[') {
+    const char *close = strchr(token, ']');
+    if (close != NULL) {
+      size_t hlen = (size_t)(close - token - 1);
+      if (hlen >= host_out_len)
+        hlen = host_out_len - 1;
+      memcpy(host_out, token + 1, hlen);
+      host_out[hlen] = '\0';
+      if (close[1] == ':')
+        return atoi(close + 2);
+      return 0;
+    }
+  }
+  // Unbracketed: a single ':' is a port separator (IPv4 or hostname). More
+  // than one ':' means a bare IPv6 literal with no port.
+  const char *first = strchr(token, ':');
+  if (first != NULL && strchr(first + 1, ':') == NULL) {
+    size_t hlen = (size_t)(first - token);
+    if (hlen >= host_out_len)
+      hlen = host_out_len - 1;
+    memcpy(host_out, token, hlen);
+    host_out[hlen] = '\0';
+    return atoi(first + 1);
+  }
+  // No port: copy the whole token as the host.
+  strncpy(host_out, token, host_out_len - 1);
+  host_out[host_out_len - 1] = '\0';
+  return 0;
+}
+
+// Parse one allow-net token into `entry`. Recognizes "ip", "ip/cidr",
+// "host" with optional ":port" suffix. Returns true on success.
+static bool parse_allow_net_entry(const char *token,
+                                  struct allow_net_entry *entry) {
+  memset(entry, 0, sizeof(*entry));
+
+  char host_part[NET_HOST_STRLEN];
+  entry->port = split_host_port(token, host_part, sizeof(host_part));
+
+  // Split a trailing "/cidr" off the host part.
+  int prefix_bits = -1;
+  char *slash = strchr(host_part, '/');
+  if (slash != NULL) {
+    prefix_bits = atoi(slash + 1);
+    *slash = '\0';
+  }
+
+  // Try to parse the host part as a numeric IPv4 or IPv6 address.
+  unsigned char buf4[4];
+  unsigned char buf16[16];
+  if (inet_pton(AF_INET, host_part, buf4) == 1) {
+    entry->is_ip = true;
+    entry->family = AF_INET;
+    memcpy(entry->addr, buf4, 4);
+    entry->prefix_bits = (prefix_bits >= 0 && prefix_bits <= 32) ? prefix_bits
+                                                                  : 32;
+    return true;
+  }
+  if (inet_pton(AF_INET6, host_part, buf16) == 1) {
+    entry->is_ip = true;
+    entry->family = AF_INET6;
+    memcpy(entry->addr, buf16, 16);
+    entry->prefix_bits = (prefix_bits >= 0 && prefix_bits <= 128) ? prefix_bits
+                                                                   : 128;
+    return true;
+  }
+  // Otherwise treat it as a hostname rule. A "/cidr" on a hostname is
+  // meaningless; we ignore it (already stripped).
+  if (host_part[0] == '\0')
+    return false;
+  entry->is_ip = false;
+  strncpy(entry->host, host_part, NET_HOST_STRLEN - 1);
+  entry->host[NET_HOST_STRLEN - 1] = '\0';
+  return true;
+}
+
+static void allow_net_init(void) {
+  const char *env = getenv("FLOX_SANDBOX_ALLOW_NET");
+  if (env == NULL)
+    return;
+  if (strlen(env) >= sizeof(allow_net_buf)) {
+    _error("FLOX_SANDBOX_ALLOW_NET is too long, truncating to %zu characters",
+           sizeof(allow_net_buf) - 1);
+    fflush(stderr);
+  }
+  strncpy(allow_net_buf, env, sizeof(allow_net_buf) - 1);
+  allow_net_buf[sizeof(allow_net_buf) - 1] = '\0';
+
+  char *saveptr = NULL;
+  char *token = strtok_r(allow_net_buf, " ", &saveptr);
+  while (token != NULL) {
+    if (allow_net_count >= FLOX_SANDBOX_ALLOW_NET_MAXENTRIES) {
+      _error("FLOX_SANDBOX_ALLOW_NET has too many entries, using the first %d",
+             FLOX_SANDBOX_ALLOW_NET_MAXENTRIES);
+      fflush(stderr);
+      break;
+    }
+    if (parse_allow_net_entry(token, &allow_net[allow_net_count])) {
+      debug("FLOX_SANDBOX_ALLOW_NET entry[%d] = %s", allow_net_count, token);
+      allow_net_count++;
+    } else {
+      _error("FLOX_SANDBOX_ALLOW_NET: ignoring unparseable entry '%s'", token);
+      fflush(stderr);
+    }
+    token = strtok_r(NULL, " ", &saveptr);
+  }
+}
+
+// Return true if the `family`/`addr` destination falls inside the CIDR block
+// described by `entry` (same family). Compares `prefix_bits` leading bits,
+// byte by byte then a partial final byte.
+static bool cidr_match(const struct allow_net_entry *entry, int family,
+                       const unsigned char *addr) {
+  if (entry->family != family)
+    return false;
+  int bits = entry->prefix_bits;
+  int full_bytes = bits / 8;
+  int rem_bits = bits % 8;
+  if (memcmp(entry->addr, addr, (size_t)full_bytes) != 0)
+    return false;
+  if (rem_bits == 0)
+    return true;
+  unsigned char mask = (unsigned char)(0xff << (8 - rem_bits));
+  return (entry->addr[full_bytes] & mask) == (addr[full_bytes] & mask);
+}
+
+// True if the destination ip string `ip` resolved (per the getaddrinfo cache)
+// from the hostname `entry->host`. Best effort: a connect to a literal IP, or
+// to a host resolved through a path we did not observe, will not match a
+// hostname rule — only exact-IP/CIDR rules cover those.
+static bool host_entry_matches(const struct allow_net_entry *entry,
+                               const char *ip) {
+  char cached_host[NET_HOST_STRLEN];
+  if (!net_name_cache_get(ip, cached_host))
+    return false;
+  return strcasecmp(cached_host, entry->host) == 0;
+}
+
+// Decide whether a connection to `family`/`addr` (raw network bytes) on `port`
+// (host order) is permitted by FLOX_SANDBOX_ALLOW_NET. `ip` is the same
+// address already stringified (for hostname-cache lookups). Loopback is the
+// caller's responsibility (checked before this).
+static bool net_dest_allowed(int family, const unsigned char *addr,
+                             const char *ip, int port) {
+  pthread_once(&allow_net_once, allow_net_init);
+  for (int i = 0; i < allow_net_count; i++) {
+    const struct allow_net_entry *entry = &allow_net[i];
+    // A port-qualified rule only matches that port; a port-0 rule matches any.
+    if (entry->port != 0 && entry->port != port)
+      continue;
+    if (entry->is_ip) {
+      if (cidr_match(entry, family, addr))
+        return true;
+    } else {
+      if (host_entry_matches(entry, ip))
+        return true;
+    }
+  }
+  return false;
+}
+
+// Recognize loopback destinations (always allowed, never mediated): IPv4
+// 127.0.0.0/8 and IPv6 ::1. Operates on raw network bytes.
+static bool is_loopback(int family, const unsigned char *addr) {
+  if (family == AF_INET)
+    return addr[0] == 127; // 127.0.0.0/8
+  if (family == AF_INET6) {
+    // ::1 — fifteen zero bytes then a single 1.
+    static const unsigned char v6_loopback[16] = {0, 0, 0, 0, 0, 0, 0, 0,
+                                                   0, 0, 0, 0, 0, 0, 0, 1};
+    if (memcmp(addr, v6_loopback, 16) == 0)
+      return true;
+    // ::ffff:127.0.0.0/8 — IPv4-mapped loopback.
+    static const unsigned char v4mapped_prefix[12] = {
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
+    if (memcmp(addr, v4mapped_prefix, 12) == 0 && addr[12] == 127)
+      return true;
+  }
+  return false;
+}
+
+// Extract the destination family, raw address bytes, and port from a
+// connect() sockaddr. Returns true for AF_INET / AF_INET6 (the families we
+// mediate), writing the address into `addr_out` (>= 16 bytes), the family into
+// `*family_out`, and the host-order port into `*port_out`. Returns false for
+// AF_UNIX and every other family — those are never mediated (Unix sockets are
+// local IPC, used by the broker and process-compose; blocking them would break
+// the sandbox's own plumbing).
+static bool extract_dest(const struct sockaddr *sa, socklen_t addrlen,
+                         int *family_out, unsigned char *addr_out,
+                         int *port_out) {
+  if (sa == NULL)
+    return false;
+  if (sa->sa_family == AF_INET) {
+    if (addrlen < (socklen_t)sizeof(struct sockaddr_in))
+      return false;
+    const struct sockaddr_in *sin = (const struct sockaddr_in *)sa;
+    *family_out = AF_INET;
+    memcpy(addr_out, &sin->sin_addr, 4);
+    // Network-order u16 -> host order without ntohs (which glibc inlines).
+    unsigned short netport = sin->sin_port;
+    *port_out = ((netport & 0xff) << 8) | ((netport >> 8) & 0xff);
+    return true;
+  }
+  if (sa->sa_family == AF_INET6) {
+    if (addrlen < (socklen_t)sizeof(struct sockaddr_in6))
+      return false;
+    const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)sa;
+    *family_out = AF_INET6;
+    memcpy(addr_out, &sin6->sin6_addr, 16);
+    unsigned short netport = sin6->sin6_port;
+    *port_out = ((netport & 0xff) << 8) | ((netport >> 8) & 0xff);
+    return true;
+  }
+  return false;
+}
+
+// Apply the network-egress policy to one connect() destination.
+//
+// Returns true to permit the connection (the interceptor proceeds to the real
+// connect), false to refuse it (the interceptor sets errno=ECONNREFUSED and
+// returns -1 — a clean connection failure the application can handle, never an
+// exit()). AF_UNIX and unparseable addresses always return true: they are not
+// mediated. Loopback always returns true. Off mode returns true. Otherwise the
+// destination is matched against FLOX_SANDBOX_ALLOW_NET:
+//   - warn: out-of-policy destinations are reported once per dest, permitted.
+//   - enforce/pure: out-of-policy destinations are refused (ECONNREFUSED).
+//   - ask: there is no network broker yet (it lands in a later batch), so ask
+//     applies enforce semantics for the network — refuse out-of-policy with a
+//     clean ECONNREFUSED rather than inventing a net receipt the broker will
+//     define. The filesystem ask flow is unaffected.
+static bool sandbox_check_connect(const struct sockaddr *sa,
+                                  socklen_t addrlen) {
+  ensure_init();
+  if (sandbox_level == SANDBOX_LEVEL_OFF)
+    return true;
+
+  int family;
+  unsigned char addr[16];
+  int port;
+  if (!extract_dest(sa, addrlen, &family, addr, &port))
+    return true; // AF_UNIX and other families are never mediated.
+
+  if (is_loopback(family, addr))
+    return true; // loopback is always allowed, silently.
+
+  // Stringify the destination once for messages and hostname matching.
+  char ip[NET_IP_STRLEN] = "";
+  if (inet_ntop(family, addr, ip, sizeof(ip)) == NULL)
+    snprintf(ip, sizeof(ip), "?");
+
+  if (net_dest_allowed(family, addr, ip, port))
+    return true; // in policy: permit silently.
+
+  // Out of policy. Attach a hostname if getaddrinfo observed one, so the
+  // message names the destination the user recognizes.
+  char host[NET_HOST_STRLEN];
+  bool have_host = net_name_cache_get(ip, host);
+
+  if (sandbox_level == SANDBOX_LEVEL_WARN) {
+    // Warn once per destination (ip:port), modeled on the fs per-path dedup so
+    // a client that retries the same endpoint does not flood the log. The key
+    // is "ip:port" so different ports to the same host each warn once.
+    char dest_key[NET_IP_STRLEN + 16];
+    snprintf(dest_key, sizeof(dest_key), "%s:%d", ip, port);
+    if (should_warn_for_path(dest_key)) {
+      if (have_host)
+        warn("connect to %s:%d (%s) is not in the network policy", host, port,
+             ip);
+      else
+        warn("connect to %s:%d is not in the network policy", ip, port);
+    }
+    return true; // warn permits the connect.
+  }
+
+  // enforce / pure / ask (no net broker yet): refuse with a clean
+  // ECONNREFUSED. Report once per destination so a retrying client does not
+  // spam, mirroring warn's dedup.
+  char dest_key[NET_IP_STRLEN + 16];
+  snprintf(dest_key, sizeof(dest_key), "%s:%d", ip, port);
+  if (should_warn_for_path(dest_key)) {
+    if (have_host)
+      _error("connect to %s:%d (%s) is not in the network policy", host, port,
+             ip);
+    else
+      _error("connect to %s:%d is not in the network policy", ip, port);
+    fflush(stderr);
+  }
+  return false;
+}
+
+// Observe a getaddrinfo() result set, recording each resolved IP -> the queried
+// hostname into the attribution cache. Best-effort and message-only: it never
+// blocks resolution and never affects a verdict. Called from the getaddrinfo
+// interceptor after the real resolution, with in_sandbox==1.
+static void net_observe_resolution(const char *node, struct addrinfo *res) {
+  if (node == NULL || res == NULL)
+    return;
+  for (struct addrinfo *ai = res; ai != NULL; ai = ai->ai_next) {
+    char ip[NET_IP_STRLEN];
+    if (ai->ai_family == AF_INET &&
+        ai->ai_addrlen >= (socklen_t)sizeof(struct sockaddr_in)) {
+      const struct sockaddr_in *sin = (const struct sockaddr_in *)ai->ai_addr;
+      if (inet_ntop(AF_INET, &sin->sin_addr, ip, sizeof(ip)) != NULL)
+        net_name_cache_put(ip, node);
+    } else if (ai->ai_family == AF_INET6 &&
+               ai->ai_addrlen >= (socklen_t)sizeof(struct sockaddr_in6)) {
+      const struct sockaddr_in6 *sin6 =
+          (const struct sockaddr_in6 *)ai->ai_addr;
+      if (inet_ntop(AF_INET6, &sin6->sin6_addr, ip, sizeof(ip)) != NULL)
+        net_name_cache_put(ip, node);
+    }
+  }
+}
+
 #ifdef linux
 
 // Interceptor for open
@@ -1041,6 +1495,41 @@ ssize_t __readlinkat_chk(int dirfd, const char *pathname, char *buf,
   return -1;
 }
 
+// Interceptor for connect(). The TCP egress choke point: mirror the open()
+// interceptor's re-entrancy guard so socket connects made by our own RPC
+// client (which runs with in_sandbox==1) pass straight through. AF_UNIX and
+// non-INET families are never mediated (sandbox_check_connect returns true for
+// them). An out-of-policy refusal is a clean ECONNREFUSED, not an exit.
+int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
+  ensure_init();
+  if (in_sandbox)
+    return orig_connect(sockfd, addr, addrlen);
+  in_sandbox = 1;
+  bool allowed = sandbox_check_connect(addr, addrlen);
+  in_sandbox = 0;
+  if (allowed)
+    return orig_connect(sockfd, addr, addrlen);
+  errno = ECONNREFUSED;
+  return -1;
+}
+
+// Interceptor for getaddrinfo(). Resolution is never blocked — we only observe
+// the result to attach hostnames to IPs for later connect() messages and
+// hostname allow-net matching. The re-entrancy guard keeps our own internal
+// resolutions (none today, but future-proof) from recursing.
+int getaddrinfo(const char *node, const char *service,
+                const struct addrinfo *hints, struct addrinfo **res) {
+  ensure_init();
+  if (in_sandbox)
+    return orig_getaddrinfo(node, service, hints, res);
+  in_sandbox = 1;
+  int rc = orig_getaddrinfo(node, service, hints, res);
+  if (rc == 0 && res != NULL)
+    net_observe_resolution(node, *res);
+  in_sandbox = 0;
+  return rc;
+}
+
 #else
 
 // Interceptor for open.
@@ -1158,6 +1647,38 @@ ssize_t my_readlink(const char *pathname, char *buf, size_t bufsiz) {
   return -1;
 }
 
+// Interceptor for connect() (macOS). Like the Linux one: the TCP egress choke
+// point, refusing out-of-policy destinations with ECONNREFUSED rather than an
+// exit. We reach the real connect() by calling connect() (a self-call is not
+// interposed). AF_UNIX and non-INET destinations are never mediated.
+int my_connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
+  ensure_init();
+  if (in_sandbox)
+    return connect(sockfd, addr, addrlen);
+  in_sandbox = 1;
+  bool allowed = sandbox_check_connect(addr, addrlen);
+  in_sandbox = 0;
+  if (allowed)
+    return connect(sockfd, addr, addrlen);
+  errno = ECONNREFUSED;
+  return -1;
+}
+
+// Interceptor for getaddrinfo() (macOS). Observation only — resolution is
+// never blocked; we record IP -> hostname for later connect() attribution.
+int my_getaddrinfo(const char *node, const char *service,
+                   const struct addrinfo *hints, struct addrinfo **res) {
+  ensure_init();
+  if (in_sandbox)
+    return getaddrinfo(node, service, hints, res);
+  in_sandbox = 1;
+  int rc = getaddrinfo(node, service, hints, res);
+  if (rc == 0 && res != NULL)
+    net_observe_resolution(node, *res);
+  in_sandbox = 0;
+  return rc;
+}
+
 // Thank you https://www.emergetools.com/blog/posts/DyldInterposing
 #define DYLD_INTERPOSE(_replacement, _replacee)                                \
   __attribute__((used)) static struct {                                        \
@@ -1171,6 +1692,8 @@ DYLD_INTERPOSE(my_openat, openat)
 DYLD_INTERPOSE(my_fopen, fopen)
 DYLD_INTERPOSE(my_readlinkat, readlinkat)
 DYLD_INTERPOSE(my_readlink, readlink)
+DYLD_INTERPOSE(my_connect, connect)
+DYLD_INTERPOSE(my_getaddrinfo, getaddrinfo)
 
 // macOS exports a second fopen, fopen$DARWIN_EXTSN (the "extended standards"
 // variant). Binaries built in Darwin C mode — including the Nix coreutils
