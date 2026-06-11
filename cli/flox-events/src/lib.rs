@@ -55,11 +55,14 @@ pub struct Event {
     pub invocation_id: Uuid,
     /// Stable per-installation id.
     pub device_id: Uuid,
-    /// Pseudonymous authenticated-subject identifier — the OIDC/JWT
-    /// `sub` claim (sourced from the auth token) when known. Must not
-    /// contain email addresses, raw user handles, or token bytes — those
-    /// are PII and a different category from this field's pseudonymous-
-    /// identifier contract.
+    /// Authenticated-subject identifier — the OIDC `sub` claim from
+    /// the FloxHub auth token when known. For `github|<id>`
+    /// connections this resolves via the public, unauthenticated
+    /// GitHub API to a login, display name, and avatar; for Auth0-
+    /// native connections the value is provider-opaque. Must not
+    /// contain email addresses or token bytes. Downstream storage
+    /// and access policy should treat this column at the same
+    /// retention and access tier as a public account handle.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_subject: Option<String>,
     /// The event variant and its typed payload. Flattened into the
@@ -1165,6 +1168,20 @@ mod tests {
     }
 
     #[test]
+    fn auth_subject_omitted_from_wire_when_absent() {
+        let event = fixed_event(EventKind::CliCommandRun(CliCommandRunPayload::new(
+            command_payload("install"),
+        )));
+        assert_eq!(event.auth_subject, None, "fixture sanity");
+        let value = serde_json::to_value(event).expect("event serializes");
+        let object = value.as_object().expect("envelope is a JSON object");
+        assert!(
+            !object.contains_key("auth_subject"),
+            "auth_subject must be omitted (not serialized as null) when absent; got: {value}"
+        );
+    }
+
+    #[test]
     fn shared_metadata_template_merges_subcommand_into_payload() {
         let template = SharedMetadataTemplate {
             flox_version: "0.0.0-test".to_string(),
@@ -1687,10 +1704,19 @@ mod pipeline_tests {
     }
 
     fn client_with_connection(tempdir: &TempDir, connection: MockEventsConnection) -> EventsClient {
+        client_with_auth_subject(tempdir, connection, None)
+    }
+
+    fn client_with_auth_subject(
+        tempdir: &TempDir,
+        connection: MockEventsConnection,
+        auth_subject: Option<String>,
+    ) -> EventsClient {
         EventsClient::new_with_connection(
             DEVICE_ID,
             tempdir.path(),
             INVOCATION_ID,
+            auth_subject,
             shared_metadata(),
             connection,
         )
@@ -1766,6 +1792,31 @@ mod pipeline_tests {
         assert_eq!(event.device_id, DEVICE_ID);
         assert_eq!(event.auth_subject, None);
         assert_eq!(event.kind, command_completed_kind());
+    }
+
+    /// When a client is installed with a non-`None` `auth_subject`, that
+    /// value is stamped onto every emitted event in place of the
+    /// snapshot-time `None`. Regression guard: a future change that
+    /// reverts `record_event` to hardcode `auth_subject: None` would
+    /// pass `events_client_record_stamps_event_metadata` (which uses
+    /// the `None`-snapshot helper) but fail this test.
+    #[test]
+    fn events_client_record_stamps_auth_subject_when_present() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let subject = "github|99999999999".to_string();
+        let client = client_with_auth_subject(
+            &tempdir,
+            MockEventsConnection::default(),
+            Some(subject.clone()),
+        );
+
+        client
+            .record_event(command_completed_kind())
+            .expect("record event");
+
+        let buffer = EventsBuffer::read(tempdir.path()).expect("read buffer");
+        let event = buffer.iter().next().expect("one buffered event");
+        assert_eq!(event.auth_subject, Some(subject));
     }
 
     #[test]

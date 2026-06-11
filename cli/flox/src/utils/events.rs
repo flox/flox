@@ -274,12 +274,19 @@ pub fn build_events_client(config: &Config, invocation_id: Uuid) -> Option<Event
         },
     };
 
+    let auth_subject = config
+        .flox
+        .floxhub_token
+        .as_deref()
+        .and_then(crate::utils::jwt::decode_jwt_sub);
+
     Some(EventsClient::new(
         device_id,
         &config.flox.data_dir,
         endpoint_url,
         METRICS_EVENTS_API_KEY_V2,
         invocation_id,
+        auth_subject,
         shared_metadata_template(),
     ))
 }
@@ -602,6 +609,100 @@ mod tests {
         });
     }
 
+    /// Build a synthetic JWT with the given `sub` claim and no other
+    /// claims. Used by the auth_subject wrapper-integration tests.
+    /// The signature is irrelevant — `decode_jwt_sub` skips signature
+    /// verification (see `crate::utils::jwt` trust model).
+    fn synthetic_jwt_with_sub(sub: &str) -> String {
+        use jsonwebtoken::{EncodingKey, Header, encode};
+        encode(
+            &Header::default(),
+            &serde_json::json!({ "sub": sub }),
+            &EncodingKey::from_secret(b"test"),
+        )
+        .expect("encode synthetic JWT")
+    }
+
+    /// With a FloxHub token present in config, the built Client's
+    /// `auth_subject` matches the JWT's `sub` claim.
+    #[test]
+    #[serial(canonical_events_wrapper_env)]
+    fn build_events_client_populates_auth_subject_when_token_present() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let uuid = Uuid::new_v4();
+        let mut config = test_config_with_uuid(&tempdir, uuid);
+        config.flox.floxhub_token = Some(synthetic_jwt_with_sub("github|99999999999"));
+
+        with_default_stack(|| {
+            with_var(
+                "_FLOX_METRICS_URL_OVERRIDE",
+                Some("http://127.0.0.1:9999/"),
+                || {
+                    let client =
+                        build_events_client(&config, Uuid::new_v4()).expect("client installs");
+                    assert_eq!(
+                        client.auth_subject.as_deref(),
+                        Some("github|99999999999"),
+                        "auth_subject must reflect the JWT's sub claim"
+                    );
+                },
+            );
+        });
+    }
+
+    /// Without a FloxHub token, the built Client's `auth_subject` is
+    /// `None` — anonymous CLI use stays anonymous.
+    #[test]
+    #[serial(canonical_events_wrapper_env)]
+    fn build_events_client_leaves_auth_subject_none_when_token_absent() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let uuid = Uuid::new_v4();
+        let config = test_config_with_uuid(&tempdir, uuid);
+        // No floxhub_token set on config — default is None.
+
+        with_default_stack(|| {
+            with_var(
+                "_FLOX_METRICS_URL_OVERRIDE",
+                Some("http://127.0.0.1:9999/"),
+                || {
+                    let client =
+                        build_events_client(&config, Uuid::new_v4()).expect("client installs");
+                    assert!(
+                        client.auth_subject.is_none(),
+                        "auth_subject must be None when no token is configured"
+                    );
+                },
+            );
+        });
+    }
+
+    /// With a malformed token (not a valid JWT), `auth_subject` falls
+    /// back to `None` rather than failing the install — telemetry
+    /// silently degrades to anonymous for this invocation.
+    #[test]
+    #[serial(canonical_events_wrapper_env)]
+    fn build_events_client_leaves_auth_subject_none_when_token_unparseable() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let uuid = Uuid::new_v4();
+        let mut config = test_config_with_uuid(&tempdir, uuid);
+        config.flox.floxhub_token = Some("not.a.jwt".to_string());
+
+        with_default_stack(|| {
+            with_var(
+                "_FLOX_METRICS_URL_OVERRIDE",
+                Some("http://127.0.0.1:9999/"),
+                || {
+                    let client =
+                        build_events_client(&config, Uuid::new_v4()).expect("client installs");
+                    assert!(
+                        client.auth_subject.is_none(),
+                        "auth_subject must be None when token is unparseable"
+                    );
+                },
+            );
+        });
+    }
+
     /// `FLOX_METRICS_STACK=legacy` is the rollback handle: the new
     /// pipeline's `Client` must NOT install, even when the override is
     /// set and the metrics uuid is readable. The legacy `Client` is
@@ -718,6 +819,7 @@ mod tests {
             Uuid::new_v4(),
             tempdir.path(),
             invocation_id,
+            None,
             template,
             connection,
         );

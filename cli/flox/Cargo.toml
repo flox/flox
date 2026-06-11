@@ -25,6 +25,7 @@ indicatif.workspace = true
 indoc.workspace = true
 inquire.workspace = true
 itertools.workspace = true
+jsonwebtoken.workspace = true
 nix.workspace = true
 oauth2.workspace = true
 path-dedot.workspace = true
