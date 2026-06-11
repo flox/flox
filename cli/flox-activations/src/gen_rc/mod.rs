@@ -68,6 +68,7 @@ pub(crate) mod test_helpers {
 
     use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx, InvocationType};
     use flox_core::activate::mode::ActivateMode;
+    use flox_core::activate::sandbox_mode::SandboxMode;
     use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVE_ENVIRONMENTS_VAR};
     use shell_gen::ShellWithPath;
 
@@ -112,6 +113,7 @@ pub(crate) mod test_helpers {
             set_prompt: true,
             flox_env_cuda_detection: "0".to_string(),
             interpreter_path: PathBuf::from("/interpreter"),
+            sandbox_mode: SandboxMode::default(),
         };
         let project_ctx = Some(AttachProjectCtx {
             env_project: PathBuf::from("/flox_env_project"),
@@ -136,6 +138,7 @@ pub(crate) mod test_helpers {
             disable_hook,
             flox_bin: "/flox".to_string(),
             auto_activate_fish_mode: None,
+            sandbox_mode: SandboxMode::default(),
         };
         let deleted_var = "DELETED_VAR".to_string();
         let modified_var = "MODIFIED_VAR".to_string();

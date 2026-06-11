@@ -99,6 +99,8 @@ pub struct Features {
     pub beta: bool,
     #[serde(default)]
     pub auto_activate: bool,
+    #[serde(default)]
+    pub sandbox_activate: bool,
 }
 
 pub static DEFAULT_FLOXHUB_URL: LazyLock<Url> =
