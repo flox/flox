@@ -351,7 +351,7 @@ fi
 # fixed-reply mock broker and check both decisions under enforce.
 # ----------------------------------------------------------------------------
 
-# Run a probe under enforce with the mock broker replying $1, opening $out_file
+# Run a probe in prompt mode with the mock broker replying $1, opening $out_file
 # (out of closure). Echoes "<rc>|<stdout+stderr>".
 run_with_broker() {
   local reply="$1"
@@ -362,7 +362,7 @@ run_with_broker() {
   for _ in $(seq 1 50); do [[ -S "$sock" ]] && break; sleep 0.05; done
   local out rc
   out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
-      FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=enforce \
+      FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=prompt \
       FLOX_SANDBOX_PROMPT_SOCKET="$sock" \
       "$root/tests/sandbox_probe" open "$out_file" 2>&1)"; rc=$?
   kill "$broker_pid" 2>/dev/null; wait "$broker_pid" 2>/dev/null
@@ -370,21 +370,32 @@ run_with_broker() {
   printf '%s|%s' "$rc" "$out"
 }
 
-# Broker "allow": the out-of-closure read is permitted, no error, build the
-# probe succeeds even under enforce.
+# Broker "allow": the out-of-closure read is permitted, no error, the probe
+# succeeds.
 res="$(run_with_broker allow)"; rc="${res%%|*}"; out="${res#*|}"
 if [[ "$rc" -eq 0 && "$out" == *"OPEN_OK"* && "$out" != *"not in the sandbox"* ]]; then
-  pass "enforce: prompt broker 'allow' permits an out-of-closure file"
+  pass "prompt: broker 'allow' permits an out-of-closure file"
 else
-  fail "enforce: broker 'allow' should permit the access (rc=$rc)" "$out"
+  fail "prompt: broker 'allow' should permit the access (rc=$rc)" "$out"
 fi
 
 # Broker "deny": the access is refused (EACCES), so the probe's open() fails.
 res="$(run_with_broker deny)"; rc="${res%%|*}"; out="${res#*|}"
 if [[ "$rc" -ne 0 && "$out" == *"OPEN_FAIL"* && "$out" == *"denied by sandbox prompt"* ]]; then
-  pass "enforce: prompt broker 'deny' refuses an out-of-closure file"
+  pass "prompt: broker 'deny' refuses an out-of-closure file"
 else
-  fail "enforce: broker 'deny' should refuse the access (rc=$rc)" "$out"
+  fail "prompt: broker 'deny' should refuse the access (rc=$rc)" "$out"
+fi
+
+# No broker configured: prompt mode falls back to plain enforce (the access is
+# fatal), which is what a non-interactive build gets.
+out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+    FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=prompt \
+    "$root/tests/sandbox_probe" open "$out_file" 2>&1)"; rc=$?
+if [[ "$rc" -ne 0 && "$out" == *"is not in the sandbox"* ]]; then
+  pass "prompt: with no broker, falls back to enforce (blocks)"
+else
+  fail "prompt: no-broker should behave as enforce (rc=$rc)" "$out"
 fi
 
 # ----------------------------------------------------------------------------
