@@ -43,6 +43,15 @@ pub const FLOX_SANDBOX_SOCKET_VAR: &str = "FLOX_SANDBOX_SOCKET";
 /// `FLOX_SANDBOX_GRANTS_DIR` — directory holding persisted grants; the
 /// engine's write guard routes writes here through the ask flow.
 pub const FLOX_SANDBOX_GRANTS_DIR_VAR: &str = "FLOX_SANDBOX_GRANTS_DIR";
+/// `FLOX_SANDBOX_ALLOW_FOREIGN_EXE` — disables libsandbox's
+/// executable-identity check. A build runs its toolchain from inside the
+/// closure, so an out-of-closure process executable is a reproducibility
+/// defect worth reporting or aborting on. An activation is the opposite: it
+/// deliberately runs the user's shell and host tools (the coding agent, git,
+/// python) from outside the closure and mediates only file/network access, so
+/// the activation sets this to keep the inner shell from aborting. Builds
+/// never set it.
+pub const FLOX_SANDBOX_ALLOW_FOREIGN_EXE_VAR: &str = "FLOX_SANDBOX_ALLOW_FOREIGN_EXE";
 
 /// The preload env var name for the host platform.
 #[cfg(target_os = "macos")]
@@ -187,6 +196,15 @@ pub fn sandbox_env(
         FLOX_SANDBOX_GRANTS_DIR_VAR.to_string(),
         grants_dir.to_string_lossy().into_owned(),
     );
+    // Disable the executable-identity check for every active mode. An
+    // activation runs the user's shell and host tools from outside the
+    // closure on purpose; without this the inner shell would abort under
+    // enforce/ask before the user's command ran. Builds never reach this
+    // path, so build behaviour is untouched.
+    env.insert(
+        FLOX_SANDBOX_ALLOW_FOREIGN_EXE_VAR.to_string(),
+        "1".to_string(),
+    );
     env.insert(
         PRELOAD_VAR.to_string(),
         compose_preload(existing_preload, &libsandbox),
@@ -258,6 +276,10 @@ mod tests {
         );
         assert!(env.contains_key(FLOX_SANDBOX_ALLOW_VAR));
         assert!(env.contains_key(FLOX_SANDBOX_ALLOW_DIRS_VAR));
+        // An active mode exempts the inner shell from the executable-identity
+        // check, which is a build-only heuristic: an activation runs host
+        // tools from outside the closure on purpose.
+        assert_eq!(env.get(FLOX_SANDBOX_ALLOW_FOREIGN_EXE_VAR).unwrap(), "1");
         // The network allow-list is seeded with loopback and flox's own hosts.
         let allow_net = env.get(FLOX_SANDBOX_ALLOW_NET_VAR).unwrap();
         assert!(
@@ -317,6 +339,9 @@ mod tests {
         )
         .unwrap();
         assert!(env.is_empty());
+        // In particular the foreign-exe exemption is absent when off, so the
+        // executable-identity check keeps its build-time behaviour.
+        assert!(!env.contains_key(FLOX_SANDBOX_ALLOW_FOREIGN_EXE_VAR));
     }
 
     #[test]
