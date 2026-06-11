@@ -97,6 +97,8 @@ pub(crate) fn get_json_schema_version_kind(
 
 #[cfg(test)]
 mod schema_version_tests {
+    use std::assert_matches::assert_matches;
+
     use super::*;
 
     fn parse_toml(s: impl AsRef<str>) -> DocumentMut {
@@ -107,14 +109,14 @@ mod schema_version_tests {
     fn missing_schema() {
         let toml = parse_toml("foo = 1");
         let err = get_schema_version_kind(&toml).err().unwrap();
-        assert!(matches!(err, ManifestError::MissingSchemaVersion));
+        assert_matches!(err, ManifestError::MissingSchemaVersion);
     }
 
     #[test]
     fn version_wrong_type() {
         let toml = parse_toml("version = true");
         let err = get_schema_version_kind(&toml).err().unwrap();
-        assert!(matches!(err, ManifestError::Other(_)));
+        assert_matches!(err, ManifestError::Other(_));
     }
 
     #[test]
@@ -130,7 +132,7 @@ mod schema_version_tests {
     fn schema_version_wrong_type() {
         let toml = parse_toml("schema-version = 42");
         let err = get_schema_version_kind(&toml).err().unwrap();
-        assert!(matches!(err, ManifestError::Other(_)));
+        assert_matches!(err, ManifestError::Other(_));
     }
 
     #[test]
@@ -1503,6 +1505,8 @@ pub mod test_helpers {
 
 #[cfg(test)]
 mod test {
+    use std::assert_matches::assert_matches;
+
     use expect_test::expect;
     use pretty_assertions::assert_eq;
     use proptest::prelude::*;
@@ -1614,7 +1618,7 @@ mod test {
         ];
         let manifest = dummy_manifest();
         let removal = manifest.modify_packages(&test_packages);
-        assert!(matches!(removal, Err(ManifestError::PackageNotFound(_))));
+        assert_matches!(removal, Err(ManifestError::PackageNotFound(_)));
     }
 
     #[test]

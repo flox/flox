@@ -253,6 +253,8 @@ impl fmt::Display for FloxVersion {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches::assert_matches;
+
     use super::*;
 
     #[test]
@@ -349,10 +351,10 @@ mod tests {
 
     #[test]
     fn test_parse_version_with_wrong_git_describe_format() {
-        assert!(matches!(
+        assert_matches!(
             "1.2.3-21".parse::<FloxVersion>(),
             Err(VersionParseError::InvalidFormat),
-        ));
+        );
     }
 
     #[test]
@@ -376,10 +378,10 @@ mod tests {
 
     #[test]
     fn test_parse_version_with_pre_release_and_commits() {
-        assert!(matches!(
+        assert_matches!(
             "1.2.3-rc.1-10-gb91c3f1".parse::<FloxVersion>(),
             Err(VersionParseError::InvalidFormat),
-        ));
+        );
     }
 
     #[test]

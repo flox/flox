@@ -80,6 +80,8 @@ mod tests {
         },
     }
 
+    use std::assert_matches::assert_matches;
+
     use serde_json::json;
 
     use super::*;
@@ -92,14 +94,14 @@ mod tests {
         }))
         .expect("Should parse explicit V1");
 
-        assert!(matches!(bla, Bla::V1 { .. }));
+        assert_matches!(bla, Bla::V1 { .. });
 
         let bla = serde_json::from_value::<Bla>(json!({
             "hello": "world",
         }))
         .expect("Should parse implicit V1");
 
-        assert!(matches!(bla, Bla::V1 { .. }));
+        assert_matches!(bla, Bla::V1 { .. });
 
         serde_json::from_value::<Bla>(json!({
             "hello": "world",
@@ -116,7 +118,7 @@ mod tests {
         }))
         .expect("Should parse explicit V2");
 
-        assert!(matches!(bla, Bla::V2 { .. }));
+        assert_matches!(bla, Bla::V2 { .. });
 
         serde_json::from_value::<Bla>(json!({
             "foo": "bar",

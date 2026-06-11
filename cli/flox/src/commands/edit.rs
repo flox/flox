@@ -443,6 +443,7 @@ impl Edit {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches::assert_matches;
     use std::fs;
 
     use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
@@ -825,7 +826,7 @@ mod tests {
             .downcast::<ManagedEnvironmentError>()
             .expect("should be a ManagedEnvironmentError");
 
-        assert!(matches!(err, ManagedEnvironmentError::CheckoutOutOfSync));
+        assert_matches!(err, ManagedEnvironmentError::CheckoutOutOfSync);
     }
 
     /// If a manifest file or contents are provided, edit succeeds despite local changes.

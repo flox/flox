@@ -1093,6 +1093,7 @@ pub fn create_dot_flox_gitignore(dot_flox_path: impl AsRef<Path>) -> Result<(), 
 
 #[cfg(test)]
 mod test {
+    use std::assert_matches::assert_matches;
     use std::str::FromStr;
     use std::sync::LazyLock;
     use std::time::Duration;
@@ -1203,10 +1204,10 @@ mod test {
         let temp_dir = tempfile::tempdir().unwrap();
         let actual_dot_flox = temp_dir.path().join(DOT_FLOX);
         std::fs::create_dir_all(actual_dot_flox).unwrap();
-        assert!(matches!(
+        assert_matches!(
             find_dot_flox(temp_dir.path()),
             Err(EnvironmentError::InvalidDotFlox { .. })
-        ))
+        )
     }
 
     #[test]
@@ -1397,10 +1398,10 @@ mod test {
         let (mut flox, _temp_dir_handle) = flox_instance();
         flox.runtime_dir = flox.runtime_dir.join("X".repeat(100));
         let err = services_socket_path("1", &flox).unwrap_err();
-        assert!(matches!(
+        assert_matches!(
             err,
             EnvironmentError::ServicesSocketPathTooLong(_)
-        ));
+        );
     }
 
     #[cfg(target_os = "macos")]
@@ -1409,10 +1410,10 @@ mod test {
         let (mut flox, _temp_dir_handle) = flox_instance();
         flox.runtime_dir = flox.runtime_dir.join("X".repeat(100));
         let err = services_socket_path("1", &flox).unwrap_err();
-        assert!(matches!(
+        assert_matches!(
             err,
             EnvironmentError::ServicesSocketPathTooLong(_)
-        ));
+        );
     }
 
     /// The dev and run links are the `--out-link` prefix with the nix output
@@ -1436,6 +1437,8 @@ mod test {
 
 #[cfg(test)]
 mod migration_tests {
+    use std::assert_matches::assert_matches;
+
     use expect_test::expect;
     use flox_manifest::interfaces::{AsWritableManifest, SchemaVersion, WriteManifest};
     use flox_manifest::parsed::common::KnownSchemaVersion;
@@ -1788,7 +1791,7 @@ mod migration_tests {
         // flox activate will unnecessarily re-lock the environment.
         assert!(composer.lockfile_up_to_date().unwrap());
         let second_lock = composer.lockfile(&flox).unwrap();
-        assert!(matches!(second_lock, LockResult::Unchanged(_)));
+        assert_matches!(second_lock, LockResult::Unchanged(_));
     }
 
     #[tokio::test(flavor = "multi_thread")]
