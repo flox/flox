@@ -17,6 +17,7 @@ flox [<general-options>] activate
      [--print-script]
      [--start-services | --no-start-services]
      [-m=(dev|run)]
+     [--sandbox=(off|warn|enforce|ask)]
      [-g=<generation>]
      [-c=<shell command> | -- <exec command>...]
 ```
@@ -200,6 +201,16 @@ options.
    Overrides the `options.activate.mode` setting in the manifest.
    See [`manifest.toml(5)`](./manifest.toml.md) for more details on activation
    modes.
+
+`--sandbox (off|warn|enforce|ask)`
+:  Mediate filesystem access during this activation.
+   Defaults to `off`, which applies no sandbox.
+   `warn` reports out-of-policy access without blocking it,
+   `enforce` denies it, and `ask` denies it and queues it for approval.
+   Requires the `sandbox_activate` feature flag
+   (set `FLOX_FEATURES_SANDBOX_ACTIVATE=true`).
+   Cannot be combined with in-place activation.
+   This is an experimental prototype and may change or be removed.
 
 `-g <generation>`, `--generation <generation>`
 :  Activate a FloxHub environment at a specific generation.
