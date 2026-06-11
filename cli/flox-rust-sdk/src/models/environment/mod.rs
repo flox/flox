@@ -1,10 +1,12 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
+use chrono::{DateTime, Duration, Utc};
 use enum_dispatch::enum_dispatch;
 use flox_catalog::ResolveError;
 use flox_core::activate::mode::ActivateMode;
+use flox_core::activations::{read_activations_json, state_json_path};
 use flox_core::data::environment_ref::{
     ActivateEnvironmentRef,
     EnvironmentName,
@@ -423,6 +425,31 @@ impl RenderedEnvironmentLinks {
         GenerationLink::from_prefix(prefix)
     }
 
+    /// Legacy per-generation GC-root links from before the
+    /// `<prefix>-N-link-{dev,run}` naming: `<prefix>.gen{N}{-,.}{dev,run}`,
+    /// covering both the dash and dot separators older Flox versions used.
+    /// Returns the variants that currently exist on disk (a dangling one still
+    /// counts, so it gets cleaned up).
+    ///
+    /// Pruning ages these out by the same policy as their renamed counterparts.
+    /// TODO(flox#4332): remove this legacy sweep once old links have aged out
+    /// (target ~2026-12, roughly 6 months after introduction).
+    pub fn legacy_generation_links(&self, generation: GenerationId) -> Vec<PathBuf> {
+        let mut links = Vec::new();
+        for separator in ['-', '.'] {
+            for mode in ["dev", "run"] {
+                let path = append_output_suffix(
+                    &self.out_link_prefix,
+                    &format!(".gen{generation}{separator}{mode}"),
+                );
+                if path.is_symlink() {
+                    links.push(path);
+                }
+            }
+        }
+        links
+    }
+
     /// Atomically repoint the current activation links at `generation`'s
     /// GC-root links.
     ///
@@ -507,6 +534,16 @@ impl GenerationLink {
         &self.out_link_prefix
     }
 
+    /// The dev GC-root link path (`<prefix>-dev`).
+    pub fn dev(&self) -> &Path {
+        self.dev.as_path()
+    }
+
+    /// The run GC-root link path (`<prefix>-run`).
+    pub fn run(&self) -> &Path {
+        self.run.as_path()
+    }
+
     /// Activation links that resolve directly to this generation's GC-root
     /// links (its own `dev`/`run`).
     ///
@@ -534,6 +571,117 @@ impl GenerationLink {
             .into_iter()
             .all(|link| link.is_symlink() && link.exists())
     }
+}
+
+/// The default age-out window for generation GC-root links: a generation that
+/// has not been the current generation for longer than this is eligible for
+/// pruning (flox#4332).
+pub const DEFAULT_GENERATION_LINK_MAX_AGE_DAYS: i64 = 10;
+
+/// Which generation GC-root links a prune pass removes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PrunePolicy {
+    /// Remove links whose generation ceased to be the current generation
+    /// longer ago than `max_age` (the opportunistic aging policy).
+    AgedOut { max_age: Duration },
+    /// Remove every generation link that is neither current nor in use, like
+    /// `nix-collect-garbage -d`.
+    AllNonLive,
+}
+
+impl PrunePolicy {
+    /// The default age-out policy ([`DEFAULT_GENERATION_LINK_MAX_AGE_DAYS`]).
+    pub fn default_aged_out() -> Self {
+        PrunePolicy::AgedOut {
+            max_age: chrono::Duration::days(DEFAULT_GENERATION_LINK_MAX_AGE_DAYS),
+        }
+    }
+}
+
+/// A generation's GC-root link plus the metadata needed to decide whether it
+/// can be pruned. See [`generation_links_to_prune`].
+#[derive(Clone, Debug)]
+pub struct PrunableGeneration {
+    pub generation: GenerationId,
+    pub link: GenerationLink,
+    /// When this generation last ceased to be the current generation; `None`
+    /// while it is current (the current generation is never pruned).
+    pub last_live: Option<DateTime<Utc>>,
+    /// The canonical store paths the dev and run links resolve to (a dangling
+    /// link contributes nothing). A generation is protected when *any* of these
+    /// is referenced by a live activation, because `flox_env` resolves to the
+    /// mode-specific (`dev` or `run`) path — a run-mode activation references
+    /// the run store path, not the dev one.
+    pub store_paths: Vec<PathBuf>,
+    /// Legacy-named GC-root links for this generation
+    /// (`<system>.<name>.gen{N}{-,.}{dev,run}`) that exist on disk, pruned by
+    /// the same policy as the renamed `-N-link-{dev,run}` links.
+    /// TODO(flox#4332): drop once these have aged out (~2026-12, 6 months on).
+    pub legacy_links: Vec<PathBuf>,
+}
+
+/// Decide which generation GC-root links are safe to prune.
+///
+/// A generation is never pruned when it is the `current` generation, nor when
+/// any of its links resolves to a store path in `protected_store_paths` — the
+/// canonical store paths that live activations reference, whose links appear in
+/// running processes' `PATH` and must stay live. Of the rest,
+/// [`PrunePolicy::AllNonLive`] prunes all, and [`PrunePolicy::AgedOut`] prunes
+/// only those whose `last_live` is older than the window.
+pub fn generation_links_to_prune<'a>(
+    candidates: &'a [PrunableGeneration],
+    current: GenerationId,
+    protected_store_paths: &HashSet<PathBuf>,
+    policy: PrunePolicy,
+    now: DateTime<Utc>,
+) -> Vec<&'a PrunableGeneration> {
+    candidates
+        .iter()
+        .filter(|candidate| candidate.generation != current)
+        .filter(|candidate| {
+            !candidate
+                .store_paths
+                .iter()
+                .any(|path| protected_store_paths.contains(path))
+        })
+        .filter(|candidate| match policy {
+            PrunePolicy::AllNonLive => true,
+            PrunePolicy::AgedOut { max_age } => candidate
+                .last_live
+                .is_some_and(|last_live| now - last_live > max_age),
+        })
+        .collect()
+}
+
+/// Canonical store paths of every live activation on this host.
+///
+/// Scans the runtime activations directory, keeps activations that still have
+/// running processes, and resolves each one's `flox_env` (the `.flox/run/…`
+/// link in the running process's `PATH`) to its store path. Generation-link
+/// pruning passes this as the protected set so it never removes a link a live
+/// activation depends on (flox#4332). Best-effort: unreadable or stale entries
+/// are skipped.
+pub fn live_activation_store_paths(runtime_dir: &Path) -> HashSet<PathBuf> {
+    let mut protected = HashSet::new();
+
+    let Ok(entries) = fs::read_dir(runtime_dir.join("activations")) else {
+        return protected; // nothing has been activated
+    };
+
+    for activation_dir in entries.flatten().map(|entry| entry.path()) {
+        let Ok((Some(state), _lock)) = read_activations_json(state_json_path(&activation_dir))
+        else {
+            continue;
+        };
+        if state.running_processes().is_none() {
+            continue; // not live; its links may be pruned
+        }
+        if let Ok(store_path) = fs::canonicalize(state.flox_env()) {
+            protected.insert(store_path);
+        }
+    }
+
+    protected
 }
 
 /// A pointer to an environment, either managed or path.
@@ -1646,6 +1794,75 @@ mod test {
             !generation.exists(),
             "dangling links must not count as built"
         );
+    }
+
+    /// The prune decision never removes the current generation or one a live
+    /// activation depends on; `AgedOut` removes only links older than the
+    /// window, `AllNonLive` removes the rest.
+    #[test]
+    fn prune_decision_respects_current_protected_and_age() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = CanonicalPath::new(dir.path()).unwrap();
+        let system: System = "x86_64-linux".to_string();
+        let pointer = RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+            &base, "default", &system,
+        );
+
+        let now = Utc::now();
+        let candidate =
+            |n: usize, last_live: Option<DateTime<Utc>>, stores: &[&str]| PrunableGeneration {
+                generation: GenerationId::from(n),
+                link: pointer.generation_link(GenerationId::from(n)),
+                last_live,
+                store_paths: stores.iter().map(PathBuf::from).collect(),
+                legacy_links: vec![],
+            };
+
+        let candidates = vec![
+            candidate(5, None, &["/nix/store/gen5-dev", "/nix/store/gen5-run"]), // current
+            // Aged, but a live run-mode activation references its *run* path, so
+            // it must be protected even though the dev path differs.
+            candidate(4, Some(now - chrono::Duration::days(30)), &[
+                "/nix/store/gen4-dev",
+                "/nix/store/gen4-run",
+            ]),
+            candidate(3, Some(now - chrono::Duration::days(20)), &[
+                "/nix/store/gen3-dev",
+            ]), // aged
+            candidate(2, Some(now - chrono::Duration::days(2)), &[
+                "/nix/store/gen2-dev",
+            ]), // recent
+            candidate(1, Some(now - chrono::Duration::days(20)), &[]), // aged, dangling
+        ];
+        let protected: HashSet<PathBuf> =
+            [PathBuf::from("/nix/store/gen4-run")].into_iter().collect();
+
+        let pruned_ids = |policy| {
+            let mut ids: Vec<usize> = generation_links_to_prune(
+                &candidates,
+                GenerationId::from(5),
+                &protected,
+                policy,
+                now,
+            )
+            .iter()
+            .map(|candidate| *candidate.generation)
+            .collect::<Vec<_>>();
+            ids.sort_unstable();
+            ids
+        };
+
+        // Aged-out (10 days): only the aged, unprotected generations (3 and the
+        // dangling 1); current (5), protected (4) and recent (2) are kept.
+        assert_eq!(
+            pruned_ids(PrunePolicy::AgedOut {
+                max_age: chrono::Duration::days(10)
+            }),
+            vec![1, 3]
+        );
+
+        // All-non-live: everything except current (5) and protected (4).
+        assert_eq!(pruned_ids(PrunePolicy::AllNonLive), vec![1, 2, 3]);
     }
 }
 

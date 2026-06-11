@@ -358,9 +358,9 @@ enum Ready {
 
 /// Information about the activated environment.
 ///
-/// This is only intended for humans to debug the serialized state.
-/// Fields should be promoted to the top-level if they are later needed
-/// programmatically.
+/// `dot_flox_path` is intended for humans to debug the serialized state.
+/// `flox_env` is also read programmatically (via [`ActivationState::flox_env`])
+/// by generation-link pruning to protect links that live activations depend on.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct EnvironmentInfo {
     /// Path to the activated environment's .flox directory (None for containers)
@@ -444,6 +444,16 @@ impl ActivationState {
     /// Returns the current activation mode
     pub fn mode(&self) -> &ActivateMode {
         &self.mode
+    }
+
+    /// Path to the activated environment's `.flox/run/{symlink}` (the rendered
+    /// env link that appears in the activation's `PATH`).
+    ///
+    /// Used by generation-link pruning to protect the links that live
+    /// activations depend on: this exact path must not be removed while a
+    /// process referencing it is running (flox#4332).
+    pub fn flox_env(&self) -> &Path {
+        &self.info.flox_env
     }
 
     /// Check if the activation state has running processes.
