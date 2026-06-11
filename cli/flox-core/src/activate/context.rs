@@ -5,6 +5,7 @@ use shell_gen::ShellWithPath;
 use uuid::Uuid;
 
 pub use super::mode::ActivateMode;
+pub use super::sandbox_mode::SandboxMode;
 
 /// Context needed to attach to a start of an environment
 /// Note that store path is not included, as the executive needs to attach to
@@ -40,6 +41,11 @@ pub struct AttachCtx {
 
     /// Path to the interpreter (activate scripts)
     pub interpreter_path: PathBuf,
+
+    /// The sandbox mode for this activation.
+    /// Absent in older context files, which deserialize to `Off`.
+    #[serde(default)]
+    pub sandbox_mode: SandboxMode,
 }
 
 /// Additional context for project-based activations.
@@ -116,6 +122,11 @@ pub struct ActivateCtx {
     /// Controls how the fish shell hook responds to directory changes.
     #[serde(default)]
     pub auto_activate_fish_mode: Option<AutoActivateFishMode>,
+
+    /// The sandbox mode for this activation.
+    /// Absent in older context files, which deserialize to `Off`.
+    #[serde(default)]
+    pub sandbox_mode: SandboxMode,
 }
 
 /// Fish shell hook mode, matching direnv's `direnv_fish_mode` values.
@@ -207,5 +218,46 @@ mod tests {
                 kind,
             );
         }
+    }
+
+    /// A context file written before `sandbox_mode` existed has no such
+    /// field; it must still deserialize, defaulting the mode to `Off`.
+    #[test]
+    fn attach_ctx_without_sandbox_mode_deserializes_to_off() {
+        let json = r#"{
+            "env": "/flox_env",
+            "env_cache": "/cache",
+            "env_description": "myproject",
+            "flox_active_environments": "[]",
+            "prompt_color_1": "1",
+            "prompt_color_2": "2",
+            "flox_prompt_environments": "",
+            "set_prompt": true,
+            "flox_env_cuda_detection": "1",
+            "interpreter_path": "/interpreter"
+        }"#;
+
+        let ctx: AttachCtx = serde_json::from_str(json).unwrap();
+        assert_eq!(ctx.sandbox_mode, SandboxMode::Off);
+    }
+
+    #[test]
+    fn attach_ctx_round_trips_sandbox_mode() {
+        let json = r#"{
+            "env": "/flox_env",
+            "env_cache": "/cache",
+            "env_description": "myproject",
+            "flox_active_environments": "[]",
+            "prompt_color_1": "1",
+            "prompt_color_2": "2",
+            "flox_prompt_environments": "",
+            "set_prompt": true,
+            "flox_env_cuda_detection": "1",
+            "interpreter_path": "/interpreter",
+            "sandbox_mode": "ask"
+        }"#;
+
+        let ctx: AttachCtx = serde_json::from_str(json).unwrap();
+        assert_eq!(ctx.sandbox_mode, SandboxMode::Ask);
     }
 }
