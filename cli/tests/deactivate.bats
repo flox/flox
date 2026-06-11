@@ -538,6 +538,15 @@ FLOX_COLD_START_UNSET=(
   -u FLOX_VERSION
   -u _FLOX_HOOK_SAVE_FPATH
   -u _activate_d
+  # Exported by an outer activation (e.g. when the test suite itself runs
+  # inside one) and unset by the deactivate flow, so leaked values surface
+  # as spurious env-diff records.
+  -u _FLOX_PROMPT_HOOK_VERSION
+  -u _FLOX_INVOCATION_TYPE
+  # A leaked auto-activate flag makes the prompt hook set _FLOX_HOOK_FIRED
+  # inside interactive test sessions, which also surfaces in the env diff.
+  -u FLOX_FEATURES_AUTO_ACTIVATE
+  -u _FLOX_HOOK_FIRED
 )
 
 # Wrapper for the cold-start env prefix. In addition to unsetting the
@@ -1103,6 +1112,27 @@ EOF
   FLOX_SHELL="tcsh" run -0 \
     flox_cold_start expect "$TESTS_DIR/activate/interactive-deactivate.exp" "$PROJECT_DIR"
   refute_output --partial "Faulty alias"
+}
+
+# bats test_tags=activate,deactivate
+@test "interactive deactivate exits the subshell via the prompt hook (bash)" {
+  project_setup
+  FLOX_SHELL="bash" run -0 \
+    flox_cold_start expect "$TESTS_DIR/activate/interactive-deactivate.exp" "$PROJECT_DIR"
+}
+
+# bats test_tags=activate,deactivate
+@test "interactive deactivate exits the subshell via the prompt hook (fish)" {
+  project_setup
+  FLOX_SHELL="fish" run -0 \
+    flox_cold_start expect "$TESTS_DIR/activate/interactive-deactivate.exp" "$PROJECT_DIR"
+}
+
+# bats test_tags=activate,deactivate
+@test "interactive deactivate exits the subshell via the prompt hook (zsh)" {
+  project_setup
+  FLOX_SHELL="zsh" run -0 \
+    flox_cold_start expect "$TESTS_DIR/activate/interactive-deactivate.exp" "$PROJECT_DIR"
 }
 
 # bats test_tags=activate,deactivate
