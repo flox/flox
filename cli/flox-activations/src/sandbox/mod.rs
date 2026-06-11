@@ -30,6 +30,9 @@ pub const FLOX_VIRTUAL_SANDBOX_VAR: &str = "FLOX_VIRTUAL_SANDBOX";
 pub const FLOX_SANDBOX_ALLOW_VAR: &str = "FLOX_SANDBOX_ALLOW";
 /// `FLOX_SANDBOX_ALLOW_DIRS` — space-separated directory prefixes.
 pub const FLOX_SANDBOX_ALLOW_DIRS_VAR: &str = "FLOX_SANDBOX_ALLOW_DIRS";
+/// `FLOX_SANDBOX_ALLOW_NET` — space-separated network destinations
+/// (`host[:port]` / `ip[/cidr][:port]`) the workload may connect to.
+pub const FLOX_SANDBOX_ALLOW_NET_VAR: &str = "FLOX_SANDBOX_ALLOW_NET";
 /// `FLOX_SRC_DIR` — project working dir; the engine auto-adds it as an
 /// allow-dir, so setting it is how the project tree is seeded.
 pub const FLOX_SRC_DIR_VAR: &str = "FLOX_SRC_DIR";
@@ -108,6 +111,31 @@ fn compose_preload(existing: Option<&str>, libsandbox: &Path) -> String {
     }
 }
 
+/// Compose `FLOX_SANDBOX_ALLOW_NET` from any operator-supplied value plus the
+/// flox seeds, space-separated and deduplicated with the operator entries
+/// first. Unlike the other allow-sets, the network policy honors an inherited
+/// value so a CI step (or a one-off `FLOX_SANDBOX_ALLOW_NET=host flox
+/// activate`) can extend it without losing flox's own service hosts.
+fn merge_allow_net(existing: Option<&str>, seed: &SeedAllowSet) -> String {
+    let mut entries: Vec<String> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut push = |entry: &str| {
+        let entry = entry.trim();
+        if !entry.is_empty() && seen.insert(entry.to_string()) {
+            entries.push(entry.to_string());
+        }
+    };
+    if let Some(existing) = existing {
+        for entry in existing.split_whitespace() {
+            push(entry);
+        }
+    }
+    for entry in &seed.allow_net {
+        push(entry);
+    }
+    entries.join(" ")
+}
+
 /// Build the sandbox environment variables for an activation.
 ///
 /// Returns an empty map when `mode` is `Off`, so callers can unconditionally
@@ -117,12 +145,21 @@ fn compose_preload(existing: Option<&str>, libsandbox: &Path) -> String {
 ///
 /// `existing_preload` is the caller's current `LD_PRELOAD` /
 /// `DYLD_INSERT_LIBRARIES`, preserved by appending rather than replacing.
+///
+/// `existing_allow_net` is any `FLOX_SANDBOX_ALLOW_NET` the caller already
+/// had set (e.g. a CI step pre-seeding extra hosts before `flox activate`).
+/// Its entries are merged ahead of the flox seeds rather than discarded, so an
+/// operator can extend the network policy from outside the session. The
+/// filesystem allow-set is seed-only because its inputs are derived, not
+/// operator-supplied; the network policy is the one allow-set a human is
+/// likely to want to pre-populate, so it honors an inherited value.
 pub fn sandbox_env(
     mode: SandboxMode,
     seed_ctx: &SeedContext,
     project_working_dir: &Path,
     grants_dir: &Path,
     existing_preload: Option<&str>,
+    existing_allow_net: Option<&str>,
 ) -> Result<HashMap<String, String>> {
     if mode == SandboxMode::Off {
         return Ok(HashMap::new());
@@ -137,6 +174,10 @@ pub fn sandbox_env(
     env.insert(
         FLOX_SANDBOX_ALLOW_DIRS_VAR.to_string(),
         seed.allow_dirs_value(),
+    );
+    env.insert(
+        FLOX_SANDBOX_ALLOW_NET_VAR.to_string(),
+        merge_allow_net(existing_allow_net, &seed),
     );
     env.insert(
         FLOX_SRC_DIR_VAR.to_string(),
@@ -204,6 +245,7 @@ mod tests {
                 Path::new("/project/dir"),
                 Path::new("/project/dir/.flox/cache/sandbox"),
                 None,
+                None,
             )
             .unwrap()
         });
@@ -216,6 +258,12 @@ mod tests {
         );
         assert!(env.contains_key(FLOX_SANDBOX_ALLOW_VAR));
         assert!(env.contains_key(FLOX_SANDBOX_ALLOW_DIRS_VAR));
+        // The network allow-list is seeded with loopback and flox's own hosts.
+        let allow_net = env.get(FLOX_SANDBOX_ALLOW_NET_VAR).unwrap();
+        assert!(
+            allow_net.contains("hub.flox.dev") && allow_net.contains("api.flox.dev"),
+            "expected flox service hosts in FLOX_SANDBOX_ALLOW_NET, got {allow_net:?}"
+        );
         // The preload var points at the fake libsandbox inside the libexec.
         let expected_lib = libexec.path().join(LIBSANDBOX_FILENAME);
         assert_eq!(
@@ -241,6 +289,7 @@ mod tests {
                 Path::new("/project"),
                 Path::new("/grants"),
                 None,
+                None,
             )
         });
         let err = result.unwrap_err().to_string();
@@ -264,9 +313,57 @@ mod tests {
             Path::new("/project"),
             Path::new("/grants"),
             None,
+            None,
         )
         .unwrap();
         assert!(env.is_empty());
+    }
+
+    #[test]
+    fn active_mode_merges_inherited_allow_net() {
+        let libexec = fake_libexec();
+        let build_mk = libexec.path().join("flox-build.mk");
+        let seed_tmp = TempDir::new().unwrap();
+        let seed_ctx = minimal_seed_ctx(&seed_tmp);
+
+        let env = temp_env::with_var("FLOX_BUILD_MK", Some(build_mk.as_os_str()), || {
+            sandbox_env(
+                SandboxMode::Enforce,
+                &seed_ctx,
+                Path::new("/project"),
+                Path::new("/grants"),
+                None,
+                Some("example.com 10.0.0.0/8"),
+            )
+            .unwrap()
+        });
+
+        // The operator-supplied entries come first and the flox seeds follow,
+        // so a pre-set FLOX_SANDBOX_ALLOW_NET extends rather than replaces.
+        let allow_net = env.get(FLOX_SANDBOX_ALLOW_NET_VAR).unwrap();
+        assert!(allow_net.contains("example.com"), "got {allow_net:?}");
+        assert!(allow_net.contains("10.0.0.0/8"), "got {allow_net:?}");
+        assert!(allow_net.contains("api.flox.dev"), "got {allow_net:?}");
+    }
+
+    #[test]
+    fn merge_allow_net_dedups_and_orders_existing_first() {
+        let seed = SeedAllowSet {
+            allow_net: vec!["api.flox.dev".to_string(), "hub.flox.dev".to_string()],
+            ..Default::default()
+        };
+        // Empty/absent existing yields just the seeds.
+        assert_eq!(merge_allow_net(None, &seed), "api.flox.dev hub.flox.dev");
+        // Existing entries come first; a duplicate (api.flox.dev) is collapsed.
+        assert_eq!(
+            merge_allow_net(Some("example.com api.flox.dev"), &seed),
+            "example.com api.flox.dev hub.flox.dev"
+        );
+        // Whitespace-only existing is treated as absent.
+        assert_eq!(
+            merge_allow_net(Some("   "), &seed),
+            "api.flox.dev hub.flox.dev"
+        );
     }
 
     #[test]

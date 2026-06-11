@@ -22,7 +22,7 @@ use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
 use crate::env_diff::EnvDiff;
 use crate::sandbox::seed::SeedContext;
-use crate::sandbox::{PRELOAD_VAR, sandbox_env};
+use crate::sandbox::{FLOX_SANDBOX_ALLOW_NET_VAR, PRELOAD_VAR, sandbox_env};
 use crate::start_diff::StartDiff;
 use crate::vars_from_env::VarsFromEnvironment;
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
@@ -421,6 +421,10 @@ fn sandbox_double_sets(
     };
 
     let existing_preload = std::env::var(PRELOAD_VAR).ok();
+    // Honor an operator-supplied FLOX_SANDBOX_ALLOW_NET (e.g. a CI step or a
+    // one-off `FLOX_SANDBOX_ALLOW_NET=host flox activate`) by merging it with
+    // the seeds rather than discarding it.
+    let existing_allow_net = std::env::var(FLOX_SANDBOX_ALLOW_NET_VAR).ok();
 
     sandbox_env(
         context.sandbox_mode,
@@ -428,6 +432,7 @@ fn sandbox_double_sets(
         &project.env_project,
         &grants_dir,
         existing_preload.as_deref(),
+        existing_allow_net.as_deref(),
     )
     .unwrap_or_else(|err| panic!("failed to assemble sandbox environment: {err:#}"))
 }
@@ -560,6 +565,7 @@ mod tests {
         FLOX_VIRTUAL_SANDBOX_VAR,
         FLOX_SANDBOX_ALLOW_VAR,
         FLOX_SANDBOX_ALLOW_DIRS_VAR,
+        FLOX_SANDBOX_ALLOW_NET_VAR,
         FLOX_SRC_DIR_VAR,
         FLOX_SANDBOX_GRANTS_DIR_VAR,
     ];
