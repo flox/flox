@@ -131,13 +131,44 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
    File reads outside the environment closure and TCP connections to hosts
    not in the network policy are both mediated; loopback and Flox's own
    service hosts are always allowed.
+
+   The default policy is tuned so an agent can work autonomously with
+   minimal prompting:
+
+       * The project working directory is readable and writable.
+       * All `/nix/store` reads are allowed (the store holds immutable,
+         world-readable packages, so tools reading their own files are not
+         flagged).
+       * Common non-sensitive dev configs are allowed
+         (`~/.gitconfig`, `~/.npmrc`, `~/.config/{git,npm,pip}`, cargo and
+         rustup config).
+       * The default network allowlist covers FloxHub, the Flox Catalog,
+         GitHub (clone/fetch and release downloads), and the npm, PyPI, and
+         crates.io registries.
+       * Credential and secret files are denied even under `enforce`,
+         before the `$HOME`-dotfile allowance: `~/.ssh`, `~/.aws`,
+         `~/.gnupg`, `~/.kube`, `~/.netrc`, `~/.config/gh`, and any
+         `.env` / `.env.*` file. Override the set with the
+         `FLOX_SANDBOX_SENSITIVE` environment variable (space-separated
+         globs; a leading `~/` expands to `$HOME`).
+       * New files created outside an in-policy directory are denied: a
+         write to a path that does not yet exist is judged by its parent
+         directory's policy.
+
+   This is the `standard` profile, recommended for agents. A future
+   `strict` profile pairs `ask` with no default network allowlist and the
+   `$HOME`-dotfile allowance fully removed, granting access incrementally
+   for high-isolation work.
+
    Requires the `sandbox_activate` feature flag
    (set `FLOX_FEATURES_SANDBOX_ACTIVATE=true`).
    Cannot be combined with in-place activation.
    Mediation is advisory: it only covers cooperative, dynamically linked
    programs, and on macOS does not apply to Apple system binaries that strip
    the injected library. UDP, raw sockets, and statically linked clients are
-   not mediated.
+   not mediated. New-file writes are only checked against their parent
+   directory; a write via `rename()` into an out-of-policy location is not
+   mediated.
    This is an experimental prototype and may change or be removed.
 
 `-g <generation>`, `--generation <generation>`

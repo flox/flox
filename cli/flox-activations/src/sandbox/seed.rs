@@ -55,7 +55,7 @@ pub struct SeedAllowSet {
 /// Network destinations seeded into `FLOX_SANDBOX_ALLOW_NET` on every
 /// sandboxed activation.
 ///
-/// Two kinds of entry:
+/// Four kinds of entry:
 ///
 /// - Loopback. libsandbox already treats loopback as always-allowed without
 ///   consulting the policy, so these are belt-and-suspenders — harmless to
@@ -66,12 +66,21 @@ pub struct SeedAllowSet {
 ///   and the catalog API. Without these seeds an `enforce`/`ask` session
 ///   would block flox's own network calls, which is never the user's intent
 ///   — the sandbox is meant to mediate the *workload's* egress, not flox's.
+/// - Git hosting and release-download hosts. An agent that clones, fetches,
+///   or downloads a release archive needs GitHub and its CDN reachable, or
+///   `enforce` blocks routine version-control work on the first fetch.
+/// - Language package registries. `npm`/`pip`/`cargo` install from these
+///   hosts; seeding them lets an agent install dependencies without a manual
+///   grant. These are best-effort hostname matches via the engine's
+///   getaddrinfo attribution cache (a CDN that resolves through an
+///   unobserved path falls back to the per-session grant) — acceptable for
+///   the prototype's autonomy goal.
 ///
-/// The hosts mirror the SDK defaults: `hub.flox.dev`
+/// The flox hosts mirror the SDK defaults: `hub.flox.dev`
 /// (`flox-rust-sdk::flox::DEFAULT_FLOXHUB_URL`) and `api.flox.dev`
-/// (`flox-catalog::DEFAULT_CATALOG_URL`). They are hostname entries (no port),
-/// so libsandbox matches them against the getaddrinfo attribution cache for
-/// any port. If a deployment overrides those URLs, the operator extends
+/// (`flox-catalog::DEFAULT_CATALOG_URL`). All entries are hostname entries (no
+/// port), so libsandbox matches them against the getaddrinfo attribution cache
+/// for any port. If a deployment overrides a URL, the operator extends
 /// `FLOX_SANDBOX_ALLOW_NET` or grants the host interactively; seeding the
 /// defaults keeps the common case quiet without hard-coding a port.
 const NET_SEEDS: &[&str] = &[
@@ -82,6 +91,20 @@ const NET_SEEDS: &[&str] = &[
     "hub.flox.dev",
     // Flox Catalog API — package search and resolution.
     "api.flox.dev",
+    // Git hosting and release downloads (clone/fetch/pull, release archives).
+    "github.com",
+    "codeload.github.com",
+    "objects.githubusercontent.com",
+    "raw.githubusercontent.com",
+    // npm registry.
+    "registry.npmjs.org",
+    // Python package index and its file CDN.
+    "pypi.org",
+    "files.pythonhosted.org",
+    // Rust crates registry (index + downloads).
+    "crates.io",
+    "static.crates.io",
+    "index.crates.io",
 ];
 
 /// Inputs the seed needs that are not derivable from the process
@@ -122,11 +145,52 @@ const SHELL_DOTFILES: &[&str] = &[
     ".inputrc",
 ];
 
+/// Routine, non-sensitive developer config files seeded under `$HOME` as
+/// ALLOW globs.
+///
+/// Under `ask` the engine flips the `$HOME`-dotfile carve-out, so without
+/// these every `git`, `npm`, `pip`, or `cargo` invocation would queue a
+/// receipt for reading its own config. These are deliberately *non-sensitive*:
+/// they hold tool preferences (editor, registry URL, build profile), never
+/// credentials. Secrets live in the sensitive set the engine denies even under
+/// `enforce` (`~/.ssh`, `~/.aws`, `~/.netrc`, `~/.config/gh`, `**/.env`, ...),
+/// which is why none of those appears here — seeding a credential path would
+/// defeat the denial. flox's own state (`~/.config/flox/**`,
+/// `~/.cache/flox/**`) is seeded separately in [`SeedAllowSet::compute`].
+const DEV_CONFIG_GLOBS: &[&str] = &[
+    // git: user config and the XDG config dir (excludes ~/.config/gh, which is
+    // sensitive and seeded nowhere).
+    ".gitconfig",
+    ".config/git/**",
+    // npm.
+    ".npmrc",
+    ".config/npm/**",
+    // cargo: both the legacy and current config filenames.
+    ".cargo/config",
+    ".cargo/config.toml",
+    // pip.
+    ".config/pip/**",
+    ".pip/**",
+    // rustup toolchain selection.
+    ".rustup/settings.toml",
+];
+
 /// System directories seeded as allow-dirs on every platform.
 ///
 /// `/etc` and its macOS realpath `/private/etc` hold the host config that
 /// libc and name resolution read on startup.
-const SYSTEM_ALLOW_DIRS: &[&str] = &["/etc", "/private/etc"];
+///
+/// `/nix/store` is the immutable, content-addressed, world-readable package
+/// store. Under a build sandbox an out-of-closure store read is a
+/// reproducibility violation, but for an activation it is benign: a host tool
+/// run from outside the environment closure (git from another env, the coding
+/// agent, python) reads its own package files, and those reads are the
+/// dominant noise class an enforce session would otherwise surface. Allowing
+/// every store read carries no exfiltration or destruction risk — the store
+/// holds public packages, not user data — so it is seeded unconditionally.
+/// Builds compose their own allow-dirs via flox-build.mk and never consult
+/// this seed, so build behaviour is unaffected.
+const SYSTEM_ALLOW_DIRS: &[&str] = &["/etc", "/private/etc", "/nix/store"];
 
 /// Best-effort terminfo and locale locations.
 ///
@@ -180,6 +244,14 @@ impl SeedAllowSet {
             // missing file is harmless — fnmatch simply never matches it.
             for dotfile in SHELL_DOTFILES {
                 push_glob(&mut allow, home.join(dotfile));
+            }
+
+            // Routine, non-sensitive dev tool configs (git, npm, pip, cargo,
+            // rustup) so an `ask` session does not prompt for them. Credential
+            // paths are deliberately excluded — they stay denied via the
+            // engine's sensitive set.
+            for config in DEV_CONFIG_GLOBS {
+                push_glob(&mut allow, home.join(config));
             }
 
             // Flox's own config and cache trees, written as recursive globs
@@ -411,6 +483,105 @@ mod tests {
             "expected /etc realpath in allow_dirs, got {:?}",
             seed.allow_dirs
         );
+    }
+
+    #[test]
+    fn allow_dirs_include_nix_store() {
+        let tmp = TempDir::new().unwrap();
+        let (ctx, _) = ctx_in(&tmp);
+        let seed = SeedAllowSet::compute(&ctx);
+
+        // /nix/store is the dominant read source for host tools run inside an
+        // activation; seeding it as an allow-dir erases that noise class. It
+        // exists on every Flox host, so its realpath must be present.
+        let store_real = fs::canonicalize("/nix/store").unwrap();
+        assert!(
+            seed.allow_dirs
+                .contains(&store_real.to_str().unwrap().to_string()),
+            "expected /nix/store realpath in allow_dirs, got {:?}",
+            seed.allow_dirs
+        );
+    }
+
+    #[test]
+    fn net_seeds_include_git_hosts_and_language_registries() {
+        let tmp = TempDir::new().unwrap();
+        let (ctx, _) = ctx_in(&tmp);
+        let seed = SeedAllowSet::compute(&ctx);
+
+        // Git hosting and release downloads, plus the npm/pip/cargo registries
+        // an agent needs so `enforce` does not block routine clone/install
+        // work. The flox hosts stay present alongside them.
+        let expected = [
+            "github.com",
+            "codeload.github.com",
+            "objects.githubusercontent.com",
+            "raw.githubusercontent.com",
+            "registry.npmjs.org",
+            "pypi.org",
+            "files.pythonhosted.org",
+            "crates.io",
+            "static.crates.io",
+            "index.crates.io",
+            "hub.flox.dev",
+            "api.flox.dev",
+        ];
+        for host in expected {
+            assert!(
+                seed.allow_net.contains(&host.to_string()),
+                "expected {host} in allow_net, got {:?}",
+                seed.allow_net
+            );
+        }
+    }
+
+    #[test]
+    fn allow_seeds_non_sensitive_dev_configs_and_omits_sensitive_paths() {
+        let tmp = TempDir::new().unwrap();
+        let (ctx, _) = ctx_in(&tmp);
+        let home = ctx.home_dir.clone().unwrap();
+        let seed = SeedAllowSet::compute(&ctx);
+
+        // Routine, non-sensitive dev configs are present (home-expanded) so an
+        // `ask` session does not prompt for them.
+        let expected_present = [
+            ".gitconfig",
+            ".config/git/**",
+            ".npmrc",
+            ".config/npm/**",
+            ".cargo/config",
+            ".cargo/config.toml",
+            ".config/pip/**",
+            ".pip/**",
+            ".rustup/settings.toml",
+        ];
+        for config in expected_present {
+            let expected = home.join(config).to_str().unwrap().to_string();
+            assert!(
+                seed.allow.contains(&expected),
+                "missing dev-config seed: {expected}"
+            );
+        }
+
+        // No sensitive path is ever seeded: those must stay denied by the
+        // engine's sensitive set even under `enforce`. Seeding any of them
+        // would defeat the denial.
+        let forbidden_fragments = [
+            "/.ssh",
+            "/.aws",
+            "/.gnupg",
+            "/.kube",
+            "/.netrc",
+            "/.config/gh",
+            ".env",
+        ];
+        for fragment in forbidden_fragments {
+            assert!(
+                seed.allow.iter().all(|e| !e.contains(fragment)),
+                "sensitive fragment {fragment:?} leaked into the seed: {:?}",
+                seed.allow
+            );
+        }
     }
 
     #[test]
