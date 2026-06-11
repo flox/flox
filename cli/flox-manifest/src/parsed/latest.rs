@@ -10,6 +10,9 @@ pub use crate::parsed::v1_10_0::{
     SelectedOutputs,
 };
 pub use crate::parsed::v1_11_0::MinimumCliVersion;
+// BuildSandbox is version-specific from V1_13_0 on (it adds `warn`/`enforce`),
+// so the latest schema re-exports that copy rather than common's.
+pub use crate::parsed::v1_13_0::BuildSandbox;
 use crate::{Manifest, ManifestError, TypedOnly};
 pub type ManifestLatest = crate::parsed::v1_13_0::ManifestV1_13_0;
 
@@ -114,14 +117,14 @@ mod tests {
     use crate::interfaces::{PackageLookup, SchemaVersion};
     use crate::parsed::Inner;
     use crate::parsed::common::{
-        Build,
-        BuildDescriptor,
         BuildVersion,
         Hook,
         IncludeDescriptor,
         PackageDescriptorStorePath,
     };
-    use crate::parsed::v1_13_0::{Profile, ProfileDeactivate};
+    // ManifestLatest's build section is the version-specific Build (with
+    // `sandbox-allow`), so build assertions use the latest schema's types.
+    use crate::parsed::v1_13_0::{Build, BuildDescriptor, Profile, ProfileDeactivate};
     use crate::test_helpers::{with_latest_schema, with_schema};
 
     #[test]
@@ -346,6 +349,7 @@ mod tests {
                     command: "hello".to_string(),
                     runtime_packages: None,
                     sandbox: None,
+                    sandbox_allow: None,
                     version: None,
                     description: None,
                     license: None,
