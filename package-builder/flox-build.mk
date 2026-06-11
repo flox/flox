@@ -454,7 +454,7 @@ define BUILD_local_template =
 	  $(FLOX_INTERPRETER)/activate --env $$($(_pvarname)_develop_copy_env) \
 	    --mode build --skip-hook-on-activate --env-project $(PWD) -- \
 	    $(_t3) $($(_pvarname)_logfile) -- \
-	    $(if $(_virtualSandbox),$(_env) $(PRELOAD_VARS) FLOX_SRC_DIR=$(PWD) FLOX_SANDBOX_ALLOW_DIRS="$(__bash) $$($(_pvarname)_buildDeps)" FLOX_SANDBOX_ALLOW=$(_sandbox_allow) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
+	    $(if $(_virtualSandbox),$(_env) $(PRELOAD_VARS) FLOX_SRC_DIR=$(PWD) FLOX_SANDBOX_ALLOW_DIRS="$(__bashInteractive) $$($(_pvarname)_buildDeps)" FLOX_SANDBOX_ALLOW=$(_sandbox_allow) FLOX_SANDBOX_PROMPT_SOCKET="$(FLOX_SANDBOX_PROMPT_SOCKET)" FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
 	    $(_bash) -e $$<
 	@#
 	@# Finally, rewrite references to temporary build wrapper in "out",
@@ -764,13 +764,22 @@ endef
 #                                          wiring. (off/null leave it empty, so
 #                                          the preload is not applied.)
 #
+#   prompt               -> local       : like enforce, but out-of-closure
+#                                          access is referred to an interactive
+#                                          broker (FLOX_SANDBOX_PROMPT_SOCKET);
+#                                          with no broker it behaves as enforce.
+#
 # Only "pure" routes away from the local build; every other value (including an
 # unrecognized one) builds locally, and libsandbox itself ignores any
-# FLOX_VIRTUAL_SANDBOX value outside (off|warn|enforce|pure).
+# FLOX_VIRTUAL_SANDBOX value outside (off|warn|enforce|prompt|pure).
+#
+# FLOX_SANDBOX_OVERRIDE, when set, replaces the manifest's per-build sandbox
+# value for this invocation. `flox build --sandbox-prompt` uses it to force
+# prompt mode without editing the manifest.
 $(foreach build,$(MANIFEST_BUILDS), \
   $(eval _pname = $(notdir $(build))) \
-  $(eval _sandbox = $(shell \
-    $(_jq) -r '.manifest.build."$(_pname)".sandbox' $(MANIFEST_LOCK))) \
+  $(eval _sandbox = $(or $(FLOX_SANDBOX_OVERRIDE),$(shell \
+    $(_jq) -r '.manifest.build."$(_pname)".sandbox' $(MANIFEST_LOCK)))) \
   $(eval _sandbox_allow = $(shell \
     $(_jq) -r '(.manifest.build."$(_pname)"."sandbox-allow" // []) | join(" ") | @sh' $(MANIFEST_LOCK))) \
   $(eval _version = $(shell $(shell \
