@@ -16,6 +16,7 @@ pub mod init;
 pub mod message;
 pub mod metrics;
 pub mod openers;
+pub mod sandbox_prompt;
 pub mod search;
 pub mod tracing;
 pub mod update_notifications;
