@@ -20,10 +20,6 @@
 //! Box-drawing glyphs are written with `\u{...}` escapes so the source stays
 //! ASCII and the bytes emitted are unambiguous UTF-8.
 
-// Nothing constructs InteractivePromptResolver yet — it is wired into the
-// `flox build` path in increment 4, at which point this allow is removed.
-#![allow(dead_code)]
-
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
