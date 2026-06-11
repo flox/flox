@@ -1,0 +1,26 @@
+# Activate a project environment interactively, run a plain `flox deactivate`
+# at the prompt, and expect the activation subshell to exit on the next prompt.
+
+set dir [lindex $argv 0]
+set flox $env(FLOX_BIN)
+set timeout 10
+set env(NO_COLOR) 1
+set env(TERM) xterm-mono
+set stty_init "cols 1000"
+
+spawn $flox activate --dir $dir
+expect_after {
+  timeout { exit 1 }
+  "*\n" { exp_continue }
+  "*\r" { exp_continue }
+}
+
+expect "You are now using the environment"
+expect $env(KNOWN_PROMPT)
+
+# Plain `flox deactivate` records a prompt-hook action; the next prompt's hook
+# consumes it and exits the subshell, so the session must end without any
+# further input. A timeout here means the shell survived the deactivation
+# (e.g. tcsh's "Faulty alias 'precmd' removed." regression).
+send "$flox deactivate\n"
+expect eof

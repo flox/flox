@@ -1091,6 +1091,21 @@ EOF
 }
 
 # bats test_tags=activate,deactivate
+@test "interactive deactivate exits the subshell via the prompt hook (tcsh)" {
+  project_setup
+
+  # Unlike the env-diff tests above, deactivate at the TOP-LEVEL interactive
+  # prompt: the next prompt's hook consumes the action and exits the subshell.
+  # Regression test: tcsh used to print "Faulty alias 'precmd' removed." and
+  # stay in the subshell, because an `exit` unwinding out of the eval inside
+  # the auto-fired precmd alias removes the alias instead of exiting (the
+  # deactivation script now sets a flag the alias body acts on).
+  FLOX_SHELL="tcsh" run -0 \
+    flox_cold_start expect "$TESTS_DIR/activate/interactive-deactivate.exp" "$PROJECT_DIR"
+  refute_output --partial "Faulty alias"
+}
+
+# bats test_tags=activate,deactivate
 @test "interactive deactivate env diff (zsh)" {
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"

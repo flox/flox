@@ -134,6 +134,14 @@ pub fn fish_hook(flox_bin: &str) -> String {
 // it from `_FLOX_INVOCATION_TYPE` only when that is set, pass it, then unset it
 // so it doesn't linger. `inplace` is the right default because the prompt hook
 // only ever deactivates in place.
+//
+// Exiting from the hook is also awkward: if `exit` unwinds out of the eval'd
+// `hook-env` output, tcsh treats the special alias as broken, prints
+// "Faulty alias 'precmd' removed.", deletes the alias, and does NOT exit. An
+// `exit` at the alias-body top level is fine, so for an interactive
+// deactivation `hook-env` emits `set _flox_exit=1` (see
+// `emit_deactivate_script` in the `flox` crate) and the alias body checks the
+// flag after the eval completes.
 pub fn tcsh_hook(flox_bin: &str) -> String {
     // A tcsh alias body must be a single line, so assemble the statements here
     // and join them with "; " rather than writing one long string literal.
@@ -144,6 +152,7 @@ pub fn tcsh_hook(flox_bin: &str) -> String {
             r#"eval "`{flox_bin} hook-env --shell tcsh --shell-pid $$ --invocation-type "$_flox_invocation_type"`""#
         ),
         "unset _flox_invocation_type".to_string(),
+        "if ( $?_flox_exit ) exit".to_string(),
     ]
     .join("; ");
     formatdoc!(
