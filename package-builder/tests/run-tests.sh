@@ -417,6 +417,90 @@ else
 fi
 
 # ----------------------------------------------------------------------------
+# Layer 4.5: foreign-executable exemption (FLOX_SANDBOX_ALLOW_FOREIGN_EXE).
+#
+# maybe_report_process_outside_closure() reports (warn) or aborts (enforce/pure)
+# when the RUNNING EXECUTABLE is outside the closure — a build-reproducibility
+# heuristic ("the wrong toolchain is active"). For an activation that heuristic
+# is backwards: the whole point of a sandboxed activation is to run the user's
+# shell and host tools (the coding agent, git, python) from OUTSIDE the closure
+# while mediating only file/network ACCESS. FLOX_SANDBOX_ALLOW_FOREIGN_EXE makes
+# the exe-identity check a no-op so the inner shell does not abort before the
+# user's command runs.
+#
+# Driving this requires a probe whose OWN executable is outside every allow set
+# and outside the closure. The regular probe lives under $root, which is an
+# allow-dir, so it is always exempt and never reaches the exe check. We copy it
+# into a directory that is NOT an allow-dir (a subdir of $root) and run it with
+# allow-dirs narrowed to the fixture only, with TMPDIR/FLOX_SRC_DIR cleared so
+# they cannot incidentally cover it.
+# ----------------------------------------------------------------------------
+foreign_dir="$root/tests/foreign-exe-probe.$$"
+mkdir -p "$foreign_dir"
+cp "$root/tests/sandbox_probe" "$foreign_dir/probe"
+
+# Helper: run the foreign probe (exe outside all allow sets) with a given mode,
+# narrow allow-dirs (fixture only), and an explicit FLOX_SANDBOX_ALLOW_FOREIGN_EXE
+# value ("" leaves it unset). Usage: run_foreign <mode> <foreign-flag> <args...>
+run_foreign() {
+  local mode="$1"; local foreign="$2"; shift 2
+  local -a foreign_env=()
+  [[ -n "$foreign" ]] && foreign_env=(FLOX_SANDBOX_ALLOW_FOREIGN_EXE="$foreign")
+  env -u TMPDIR -u FLOX_SRC_DIR "$preload_var=$sandbox_lib" \
+      FLOX_ENV="$fixture" \
+      FLOX_SANDBOX_ALLOW_DIRS="$fixture" \
+      FLOX_VIRTUAL_SANDBOX="$mode" \
+      "${foreign_env[@]}" \
+      "$foreign_dir/probe" "$@"
+}
+
+# Baseline (no flag): the existing fatal behaviour is unchanged. Under enforce a
+# foreign-exe process that touches an out-of-policy path aborts at the exe check
+# with "process executable ... is not in the sandbox".
+out="$(run_foreign enforce "" open "$out_file" 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$out" == *"process executable"* \
+      && "$out" == *"is not in the sandbox"* ]]; then
+  pass "enforce: foreign exe still fatal without FLOX_SANDBOX_ALLOW_FOREIGN_EXE"
+else
+  fail "enforce: foreign-exe check should remain fatal when the flag is unset (rc=$rc)" "$out"
+fi
+
+# With the flag set, the exe-identity check is skipped: a foreign-exe process
+# that reads an IN-POLICY (in-closure) file succeeds, with no "process
+# executable ... is not in the sandbox" abort.
+out="$(run_foreign enforce 1 open "$in_file" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"OPEN_OK"* && "$out" != *"process executable"* ]]; then
+  pass "enforce: FLOX_SANDBOX_ALLOW_FOREIGN_EXE lets a foreign exe read in-policy"
+else
+  fail "enforce: foreign exe + flag should read in-policy without the exe abort (rc=$rc)" "$out"
+fi
+
+# The flag changes ONLY the exe-identity check: an out-of-policy FILE read from
+# the same foreign-exe process is still denied (fatal under enforce), and the
+# message is the per-file deny, not the exe abort.
+out="$(run_foreign enforce 1 open "$out_file" 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$out" == *"$out_file is not in the sandbox"* \
+      && "$out" != *"process executable"* ]]; then
+  pass "enforce: flag exempts the exe but still denies an out-of-policy file read"
+else
+  fail "enforce: out-of-policy file read should still be denied with the flag set (rc=$rc)" "$out"
+fi
+
+# ask + flag: the inner shell no longer exit(1)s on the foreign exe. A foreign
+# exe reading an OUT-OF-POLICY file gets the graceful ask deny (EACCES + receipt)
+# — never the exe abort — so an activation completes past the shell.
+out="$(run_foreign ask 1 open "$out_file" 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$out" == *"OPEN_FAIL"* && "$out" == *"errno=13"* \
+      && "$out" == *"read $out_file (not in policy)"* \
+      && "$out" != *"process executable"* ]]; then
+  pass "ask: flag exempts the foreign exe; out-of-policy read still EACCES-denied"
+else
+  fail "ask: foreign exe + flag should EACCES-deny the file, not abort on the exe (rc=$rc)" "$out"
+fi
+
+rm -rf "$foreign_dir"
+
+# ----------------------------------------------------------------------------
 # Layer 5: network egress (connect interception, warn/enforce gradient).
 #
 # These use only loopback and TEST-NET-1 (192.0.2.0/24, RFC 5737, guaranteed
