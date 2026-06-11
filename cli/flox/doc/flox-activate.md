@@ -194,13 +194,20 @@ options.
    modes.
 
 `--sandbox (off|warn|enforce|ask)`
-:  Mediate filesystem access during this activation.
+:  Mediate filesystem and outbound-network access during this activation.
    Defaults to `off`, which applies no sandbox.
    `warn` reports out-of-policy access without blocking it,
    `enforce` denies it, and `ask` denies it and queues it for approval.
+   File reads outside the environment closure and TCP connections to hosts
+   not in the network policy are both mediated; loopback and Flox's own
+   service hosts are always allowed.
    Requires the `sandbox_activate` feature flag
    (set `FLOX_FEATURES_SANDBOX_ACTIVATE=true`).
    Cannot be combined with in-place activation.
+   Mediation is advisory: it only covers cooperative, dynamically linked
+   programs, and on macOS does not apply to Apple system binaries that strip
+   the injected library. UDP, raw sockets, and statically linked clients are
+   not mediated.
    This is an experimental prototype and may change or be removed.
 
 `-g <generation>`, `--generation <generation>`

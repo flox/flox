@@ -37,16 +37,52 @@ use std::path::{Path, PathBuf};
 /// The computed allow-set for one sandboxed activation.
 ///
 /// `allow` populates `FLOX_SANDBOX_ALLOW` (fnmatch globs); `allow_dirs`
-/// populates `FLOX_SANDBOX_ALLOW_DIRS` (directory prefixes). Both render to
-/// space-separated strings via [`Self::allow_value`] and
-/// [`Self::allow_dirs_value`].
+/// populates `FLOX_SANDBOX_ALLOW_DIRS` (directory prefixes); `allow_net`
+/// populates `FLOX_SANDBOX_ALLOW_NET` (network destinations). All render to
+/// space-separated strings via [`Self::allow_value`],
+/// [`Self::allow_dirs_value`], and [`Self::allow_net_value`].
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SeedAllowSet {
     /// fnmatch globs for `FLOX_SANDBOX_ALLOW`.
     pub allow: Vec<String>,
     /// Directory prefixes for `FLOX_SANDBOX_ALLOW_DIRS`.
     pub allow_dirs: Vec<String>,
+    /// Network destinations (`host[:port]` / `ip[/cidr][:port]`) for
+    /// `FLOX_SANDBOX_ALLOW_NET`.
+    pub allow_net: Vec<String>,
 }
+
+/// Network destinations seeded into `FLOX_SANDBOX_ALLOW_NET` on every
+/// sandboxed activation.
+///
+/// Two kinds of entry:
+///
+/// - Loopback. libsandbox already treats loopback as always-allowed without
+///   consulting the policy, so these are belt-and-suspenders — harmless to
+///   list and a clear signal of intent for anyone reading the rendered env
+///   var.
+/// - Flox's own service hosts. flox commands run *inside* an activation
+///   (`flox install`, `flox pull`, catalog resolution) reach out to FloxHub
+///   and the catalog API. Without these seeds an `enforce`/`ask` session
+///   would block flox's own network calls, which is never the user's intent
+///   — the sandbox is meant to mediate the *workload's* egress, not flox's.
+///
+/// The hosts mirror the SDK defaults: `hub.flox.dev`
+/// (`flox-rust-sdk::flox::DEFAULT_FLOXHUB_URL`) and `api.flox.dev`
+/// (`flox-catalog::DEFAULT_CATALOG_URL`). They are hostname entries (no port),
+/// so libsandbox matches them against the getaddrinfo attribution cache for
+/// any port. If a deployment overrides those URLs, the operator extends
+/// `FLOX_SANDBOX_ALLOW_NET` or grants the host interactively; seeding the
+/// defaults keeps the common case quiet without hard-coding a port.
+const NET_SEEDS: &[&str] = &[
+    // Loopback (also auto-allowed by the engine; listed for clarity).
+    "127.0.0.1",
+    "::1",
+    // FloxHub — environment push/pull and auth.
+    "hub.flox.dev",
+    // Flox Catalog API — package search and resolution.
+    "api.flox.dev",
+];
 
 /// Inputs the seed needs that are not derivable from the process
 /// environment alone. Keeping these explicit makes the seed unit-testable
@@ -160,9 +196,16 @@ impl SeedAllowSet {
             push_glob(&mut allow, runtime.join("**"));
         }
 
+        // Network destinations are fixed seeds (loopback + flox's own service
+        // hosts); they do not depend on the filesystem, so no probing is
+        // needed. Grants and overrides are layered on top later by the broker
+        // batch — this is just the quiet baseline.
+        let allow_net: Vec<String> = NET_SEEDS.iter().map(|s| s.to_string()).collect();
+
         Self {
             allow: dedup_preserving_order(allow),
             allow_dirs: dedup_preserving_order(allow_dirs),
+            allow_net: dedup_preserving_order(allow_net),
         }
     }
 
@@ -176,6 +219,12 @@ impl SeedAllowSet {
     /// separated by single spaces.
     pub fn allow_dirs_value(&self) -> String {
         self.allow_dirs.join(" ")
+    }
+
+    /// Render `FLOX_SANDBOX_ALLOW_NET` as the engine expects it: entries
+    /// separated by single spaces.
+    pub fn allow_net_value(&self) -> String {
+        self.allow_net.join(" ")
     }
 }
 
@@ -297,6 +346,55 @@ mod tests {
             seed.allow
                 .contains(&runtime.join("**").to_str().unwrap().to_string())
         );
+    }
+
+    #[test]
+    fn seeds_loopback_and_flox_service_hosts_for_net() {
+        let tmp = TempDir::new().unwrap();
+        let (ctx, _) = ctx_in(&tmp);
+        let seed = SeedAllowSet::compute(&ctx);
+
+        // Loopback is listed (also auto-allowed by the engine, but seeded for
+        // an explicit, readable policy).
+        assert!(seed.allow_net.contains(&"127.0.0.1".to_string()));
+        assert!(seed.allow_net.contains(&"::1".to_string()));
+
+        // Flox's own service hosts must be present so flox commands run inside
+        // the activation are not blocked under enforce/ask.
+        assert!(
+            seed.allow_net.contains(&"hub.flox.dev".to_string()),
+            "FloxHub host must be seeded, got {:?}",
+            seed.allow_net
+        );
+        assert!(
+            seed.allow_net.contains(&"api.flox.dev".to_string()),
+            "catalog API host must be seeded, got {:?}",
+            seed.allow_net
+        );
+
+        // The net seeds do not depend on the filesystem context, so they are
+        // present even with a minimal context.
+        let minimal = SeedContext {
+            shell_binary: None,
+            interpreter_path: ctx.interpreter_path.clone(),
+            home_dir: None,
+            runtime_dir: None,
+        };
+        let minimal_seed = SeedAllowSet::compute(&minimal);
+        assert_eq!(minimal_seed.allow_net, seed.allow_net);
+    }
+
+    #[test]
+    fn allow_net_value_is_space_separated_and_quiet_for_empty() {
+        let tmp = TempDir::new().unwrap();
+        let (ctx, _) = ctx_in(&tmp);
+        let seed = SeedAllowSet::compute(&ctx);
+
+        let net = seed.allow_net_value();
+        assert!(!net.contains("  "));
+        assert_eq!(net.split(' ').count(), seed.allow_net.len());
+
+        assert_eq!(SeedAllowSet::default().allow_net_value(), "");
     }
 
     #[test]
