@@ -1,0 +1,7 @@
+# Build artifacts from the sandbox libraries and their test binaries.
+# Source lives in this directory and under tests/; the compiled outputs do not.
+/closure.o
+/libsandbox.so
+/libsandbox.dylib
+/tests/threadtest
+/tests/sandbox_probe
