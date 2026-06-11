@@ -25,13 +25,17 @@
  *       no open is fatal.
  */
 
+#include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <netinet/in.h>
+#include <poll.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
 /* Arguments handed to each storm worker. */
@@ -117,6 +121,91 @@ static int do_readlink_fn(const char *path) {
   return 0;
 }
 
+/* connect() to <ipv4>:<port> with a SHORT timeout so a permitted-but-
+ * unroutable destination (e.g. 192.0.2.1, TEST-NET-1) cannot hang the test.
+ *
+ * The socket is non-blocking so the interceptor's verdict is observed
+ * synchronously:
+ *   - sandbox refuses  -> connect() returns -1 with ECONNREFUSED immediately.
+ *     Prints "CONNECT_REFUSED <ip>:<port> errno=<n>" and exits 1.
+ *   - sandbox permits  -> connect() either succeeds at once (CONNECT_OK), or
+ *     returns -1/EINPROGRESS and we poll up to timeout_ms. A timeout means the
+ *     sandbox did NOT block (the connect reached the network and stalled),
+ *     which is the warn/allowed case for an unroutable address; we print
+ *     "CONNECT_PROCEEDED" and exit 0 so callers can assert "not refused".
+ *
+ * Usage: sandbox_probe connect <ipv4> <port> [timeout_ms]
+ */
+static int do_connect(const char *ip, int port, int timeout_ms) {
+  int fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (fd < 0) {
+    int saved = errno;
+    printf("CONNECT_SOCKETFAIL %s:%d errno=%d (%s)\n", ip, port, saved,
+           strerror(saved));
+    return 2;
+  }
+  /* Non-blocking so the interceptor verdict is immediate and a real network
+   * connect cannot block past our timeout. */
+  int flags = fcntl(fd, F_GETFL, 0);
+  fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
+  struct sockaddr_in sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sin_family = AF_INET;
+  sa.sin_port = htons((unsigned short)port);
+  if (inet_pton(AF_INET, ip, &sa.sin_addr) != 1) {
+    printf("CONNECT_BADIP %s\n", ip);
+    close(fd);
+    return 2;
+  }
+
+  int rc = connect(fd, (struct sockaddr *)&sa, sizeof(sa));
+  if (rc == 0) {
+    printf("CONNECT_OK %s:%d\n", ip, port);
+    close(fd);
+    return 0;
+  }
+  int saved = errno;
+  /* The sandbox refuses out-of-policy destinations with ECONNREFUSED before
+   * the syscall — this arrives immediately, never via EINPROGRESS. */
+  if (saved == ECONNREFUSED) {
+    printf("CONNECT_REFUSED %s:%d errno=%d (%s)\n", ip, port, saved,
+           strerror(saved));
+    close(fd);
+    return 1;
+  }
+  if (saved != EINPROGRESS) {
+    /* Some other immediate failure (e.g. ENETUNREACH). Not a sandbox refusal;
+     * report it so the caller can see the connect was not blocked. */
+    printf("CONNECT_PROCEEDED %s:%d errno=%d (%s)\n", ip, port, saved,
+           strerror(saved));
+    close(fd);
+    return 0;
+  }
+  /* EINPROGRESS: the sandbox permitted the connect and the network layer is
+   * working on it. Poll briefly; a timeout means "permitted, just unroutable",
+   * which for our purposes is success (the sandbox did not block). */
+  struct pollfd pfd = {.fd = fd, .events = POLLOUT};
+  int pr = poll(&pfd, 1, timeout_ms);
+  if (pr == 0) {
+    printf("CONNECT_PROCEEDED %s:%d (timeout; not blocked by sandbox)\n", ip,
+           port);
+    close(fd);
+    return 0;
+  }
+  int err = 0;
+  socklen_t errlen = sizeof(err);
+  getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &errlen);
+  if (err == 0) {
+    printf("CONNECT_OK %s:%d\n", ip, port);
+  } else {
+    printf("CONNECT_PROCEEDED %s:%d errno=%d (%s)\n", ip, port, err,
+           strerror(err));
+  }
+  close(fd);
+  return 0;
+}
+
 static int do_storm(int argc, char **argv) {
   /* argv: [0]=prog [1]="storm" [2]=nthreads [3]=niters [4..]=paths */
   long nthreads = strtol(argv[2], NULL, 10);
@@ -166,6 +255,11 @@ int main(int argc, char **argv) {
   if (argc >= 3 && strcmp(argv[1], "readlink-fn") == 0) {
     return do_readlink_fn(argv[2]);
   }
+  if (argc >= 4 && strcmp(argv[1], "connect") == 0) {
+    int port = (int)strtol(argv[3], NULL, 10);
+    int timeout_ms = (argc >= 5) ? (int)strtol(argv[4], NULL, 10) : 300;
+    return do_connect(argv[2], port, timeout_ms);
+  }
   if (argc >= 5 && strcmp(argv[1], "storm") == 0) {
     return do_storm(argc, argv);
   }
@@ -175,7 +269,8 @@ int main(int argc, char **argv) {
           "  %s open-dir <path>\n"
           "  %s readlink <path>\n"
           "  %s readlink-fn <path>\n"
+          "  %s connect <ipv4> <port> [timeout_ms]\n"
           "  %s storm <nthreads> <niters> <path1> [path2 ...]\n",
-          argv[0], argv[0], argv[0], argv[0], argv[0]);
+          argv[0], argv[0], argv[0], argv[0], argv[0], argv[0]);
   return 2;
 }

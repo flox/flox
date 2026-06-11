@@ -32,15 +32,20 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/.." && pwd)"
 cd "$root"
 
-# Per-OS choice of injected library and loader variable.
+# Per-OS choice of injected library, loader variable, and ECONNREFUSED value.
+# ECONNREFUSED is the errno the sandbox sets when it refuses an out-of-policy
+# connect; its numeric value is platform-specific (61 on Darwin, 111 on Linux),
+# and the connect probe prints "errno=<n>", so the test asserts the right one.
 case "$(uname -s)" in
   Darwin)
     sandbox_lib="$root/libsandbox.dylib"
     preload_var="DYLD_INSERT_LIBRARIES"
+    ECONNREFUSED_NO=61
     ;;
   Linux)
     sandbox_lib="$root/libsandbox.so"
     preload_var="LD_PRELOAD"
+    ECONNREFUSED_NO=111
     ;;
   *)
     echo "run-tests.sh: unsupported OS $(uname -s)" >&2
@@ -409,6 +414,107 @@ if [[ $rc -ne 0 && "$out" == *"$out_file is not in the sandbox"* && "$out" != *"
   pass "enforce: normal out-of-closure read still fatal, no DENIED receipt"
 else
   fail "enforce: normal out-of-closure read should remain fatal (rc=$rc)" "$out"
+fi
+
+# ----------------------------------------------------------------------------
+# Layer 5: network egress (connect interception, warn/enforce gradient).
+#
+# These use only loopback and TEST-NET-1 (192.0.2.0/24, RFC 5737, guaranteed
+# unroutable) so there is no real internet dependency and nothing can hang: the
+# probe uses a non-blocking socket with a short poll timeout, and under enforce
+# the sandbox refuses BEFORE the syscall so there is no network wait at all.
+#
+# The "network policy" substring is the sandbox's own message (warn emits
+# SANDBOX WARNING ... "is not in the network policy"; enforce emits SANDBOX
+# ERROR with the same tail). Its presence/absence is the discriminator between
+# "sandbox mediated this" and "sandbox stayed out of it".
+# ----------------------------------------------------------------------------
+
+# Loopback is always allowed, silently, in every mode. Connecting to a
+# loopback port with nothing listening yields a kernel ECONNREFUSED, but the
+# SANDBOX must NOT have mediated it: assert no "network policy" line appears.
+for mode in off warn enforce; do
+  out="$(run_probe "$mode" connect 127.0.0.1 1 2>&1)"; rc=$?
+  if [[ "$out" != *"network policy"* ]]; then
+    pass "$mode: loopback connect not mediated by sandbox (silent)"
+  else
+    fail "$mode: loopback connect should never hit the network policy" "$out"
+  fi
+done
+
+# warn: a connect to an out-of-policy NON-loopback dest is reported but
+# PERMITTED — the sandbox does not force ECONNREFUSED. 192.0.2.1 is unroutable,
+# so the non-blocking connect proceeds (EINPROGRESS) and times out at the
+# network layer; the probe prints CONNECT_PROCEEDED (exit 0). The warning line
+# must be present, and the probe must NOT report CONNECT_REFUSED.
+out="$(run_probe warn connect 192.0.2.1 443 2>&1)"; rc=$?
+if [[ "$out" == *"connect to 192.0.2.1:443 is not in the network policy"* \
+      && "$out" != *"CONNECT_REFUSED"* && "$out" == *"CONNECT_PROCEEDED"* ]]; then
+  pass "warn: out-of-policy connect warned but permitted (no sandbox refusal)"
+else
+  fail "warn: expected WARNING + CONNECT_PROCEEDED, not refused (rc=$rc)" "$out"
+fi
+
+# enforce: the same out-of-policy connect is refused by the sandbox
+# IMMEDIATELY with ECONNREFUSED — before the real syscall, so there is no
+# network wait (the probe returns at once with CONNECT_REFUSED, not a timeout).
+out="$(run_probe enforce connect 192.0.2.1 443 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$out" == *"CONNECT_REFUSED"* && "$out" == *"errno=$ECONNREFUSED_NO"* \
+      && "$out" == *"is not in the network policy"* ]]; then
+  pass "enforce: out-of-policy connect refused with ECONNREFUSED + ERROR line"
+else
+  fail "enforce: out-of-policy connect should be refused immediately (rc=$rc)" "$out"
+fi
+
+# enforce + FLOX_SANDBOX_ALLOW_NET lists the exact IP → the connect is
+# permitted silently (no "network policy" line, no sandbox refusal). It still
+# fails/times out at the network layer because 192.0.2.1 is unroutable, but
+# that is the kernel, not the sandbox: assert CONNECT_PROCEEDED and no policy
+# message.
+out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+    FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=enforce \
+    FLOX_SANDBOX_ALLOW_NET="192.0.2.1" \
+    "$root/tests/sandbox_probe" connect 192.0.2.1 443 2>&1)"; rc=$?
+if [[ "$out" != *"network policy"* && "$out" != *"CONNECT_REFUSED"* ]]; then
+  pass "enforce: FLOX_SANDBOX_ALLOW_NET exact-IP entry permits the connect"
+else
+  fail "enforce: allow-net IP should silently permit the connect (rc=$rc)" "$out"
+fi
+
+# enforce + a CIDR allow-net entry covering the dest → permitted silently.
+out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+    FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=enforce \
+    FLOX_SANDBOX_ALLOW_NET="192.0.2.0/24" \
+    "$root/tests/sandbox_probe" connect 192.0.2.1 443 2>&1)"; rc=$?
+if [[ "$out" != *"network policy"* && "$out" != *"CONNECT_REFUSED"* ]]; then
+  pass "enforce: FLOX_SANDBOX_ALLOW_NET CIDR entry permits the connect"
+else
+  fail "enforce: allow-net CIDR should silently permit the connect (rc=$rc)" "$out"
+fi
+
+# enforce + a port-qualified allow-net entry only matches that port: the dest
+# port (443) differs from the listed port (80), so the connect is still
+# refused.
+out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+    FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=enforce \
+    FLOX_SANDBOX_ALLOW_NET="192.0.2.1:80" \
+    "$root/tests/sandbox_probe" connect 192.0.2.1 443 2>&1)"; rc=$?
+if [[ "$out" == *"CONNECT_REFUSED"* && "$out" == *"is not in the network policy"* ]]; then
+  pass "enforce: port-qualified allow-net entry does not match a different port"
+else
+  fail "enforce: 192.0.2.1:80 must not permit a :443 connect (rc=$rc)" "$out"
+fi
+
+# ask has no network broker yet, so it applies enforce semantics for the
+# network: an out-of-policy connect is refused with ECONNREFUSED (the
+# filesystem ask flow is unaffected). This guards the documented interim
+# decision.
+out="$(run_probe ask connect 192.0.2.1 443 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$out" == *"CONNECT_REFUSED"* \
+      && "$out" == *"is not in the network policy"* ]]; then
+  pass "ask: out-of-policy connect refused (enforce semantics, no net broker yet)"
+else
+  fail "ask: out-of-policy connect should be refused under ask (rc=$rc)" "$out"
 fi
 
 # ----------------------------------------------------------------------------
