@@ -28,7 +28,7 @@ pub(crate) fn migrate_manifest_v1_12_0_to_v1_13_0(
         profile,
         options: manifest.options,
         services: manifest.services,
-        build: manifest.build,
+        build: manifest.build.into(),
         containerize: manifest.containerize,
         include: manifest.include,
     })
@@ -61,7 +61,7 @@ mod tests {
                 }),
                 options: manifest.options,
                 services: manifest.services,
-                build: manifest.build,
+                build: manifest.build.into(),
                 containerize: manifest.containerize,
                 include: manifest.include,
             };

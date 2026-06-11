@@ -49,7 +49,7 @@ Valid string values are:
 - `1.10.0`: introduced package outputs
 - `1.11.0`: introduced `minimum-cli-version`
 - `1.12.0`: introduced services `auto-start`
-- `1.13.0`: introduced `profile.deactivate`
+- `1.13.0`: introduced `profile.deactivate` and build `sandbox-allow`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -693,7 +693,8 @@ The full set of options is shown below:
 ```text
 BuildDescriptor ::= {
   command          = STRING
-, sandbox          = null | ("off" | "pure")
+, sandbox          = null | ("off" | "warn" | "enforce" | "pure")
+, sandbox-allow    = null | [<STRING>, ...]
 , version          = null | STRING | VersionFile | VersionCommand
 , description      = null | STRING
 , runtime-packages = null | [<STRING>, ...]
@@ -718,10 +719,27 @@ VersionCommand ::= {
     When set to `"off"`, the build is executed in a subshell
     of the current shell and is similar to running the commands manually
     in a subshell created by `flox activate`.
+    When set to `"warn"`, the build runs as for `"off"`, but a warning is
+    printed for each file the build accesses from outside its package closure.
+    This helps surface undeclared dependencies without failing the build.
+    When set to `"enforce"`, the build runs as for `"warn"`, but access to
+    files outside the build's package closure is denied,
+    so a build that relies on an undeclared dependency fails.
     When set to `"pure"`, the build will be unable to make network connections
     and can only access to the files currently under version control.
     Consequently, `"pure"` builds require your project
     to be under `git` version control.
+
+`sandbox-allow`
+:   A list of paths or glob patterns the build is permitted to read from
+    outside its package closure without the `"warn"`/`"enforce"` sandbox
+    warning about them (and, under `"enforce"`, without failing the build).
+    A leading `~/` is expanded to the user's home directory, and `*`/`**`
+    match across path separators, so for example `"~/.npm/**"` allows any
+    file under `~/.npm`. Individual patterns must not contain spaces (the list
+    is passed to the sandbox as a space-separated value). Only meaningful for
+    the local sandbox modes (`"warn"` and `"enforce"`); it has no effect under
+    `"off"` or `"pure"`.
 
 `version`
 :   The version to attach to this build artifact.

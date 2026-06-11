@@ -21,7 +21,7 @@ use flox_catalog::{
     UserDerivationInfo,
 };
 use flox_manifest::lockfile::Lockfile;
-use flox_manifest::parsed::common::BuildSandbox;
+use flox_manifest::parsed::latest::BuildSandbox;
 use git_url_parse::GitUrl;
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
@@ -891,7 +891,7 @@ pub fn check_build_metadata(
     env_metadata: &CheckedEnvironmentMetadata,
     pkg: &PackageTarget,
 ) -> Result<CheckedBuildMetadata, PublishError> {
-    let workdir = if sandbox_is_off(pkg) {
+    let workdir = if sandbox_is_local(pkg) {
         BuildWorkdir::SharedClone
     } else {
         BuildWorkdir::OriginalCheckout
@@ -916,11 +916,13 @@ pub fn check_build_metadata(
     convert_build_result_to_build_metadata(&build_results[0])
 }
 
-/// Returns `true` when `pkg` is a manifest build whose sandbox mode is `off`
-/// (or unset, which defaults to off).
-fn sandbox_is_off(pkg: &PackageTarget) -> bool {
+/// Returns `true` when `pkg` is a manifest build that runs locally, in situ:
+/// sandbox `off` (or unset, which defaults to off), `warn`, or `enforce`. Only
+/// `pure` builds hermetically from a clean checkout, so it is the sole mode
+/// that returns `false`.
+fn sandbox_is_local(pkg: &PackageTarget) -> bool {
     matches!(pkg.kind(), PackageTargetKind::ManifestBuild {
-        sandbox: None | Some(BuildSandbox::Off)
+        sandbox: None | Some(BuildSandbox::Off | BuildSandbox::Warn | BuildSandbox::Enforce)
     })
 }
 

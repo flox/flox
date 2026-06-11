@@ -420,11 +420,42 @@ define BUILD_local_template =
 	  $(_find) $($(_pvarname)_out) -type d -exec $(_chmod) +w {} \; && \
 	  $(_rm) -rf $($(_pvarname)_out); \
 	fi
+	@# The virtual-sandbox preload is injected here, immediately before the
+	@# build script's bash, rather than on the front `env`. If it were set on
+	@# the front `env` it would be inherited by `activate` and the `t3` trace
+	@# wrapper too, and those come from FLOX_INTERPRETER (not the build
+	@# closure), so every access they make would be flagged as out-of-closure.
+	@# Setting it right at the script's bash invocation means dyld/ld load
+	@# libsandbox only into bash and the build commands it spawns, so the
+	@# sandbox sees the build itself and not the machinery that launched it.
+	@#
+	@# FLOX_SANDBOX_ALLOW_DIRS lists paths that are legitimate but not part of
+	@# the develop environment's recorded closure (requisites.txt), namely:
+	@#   - $(__bashInteractive): the build interpreter itself, a pinned, fixed
+	@#     store path whose own startup self-accesses would otherwise be
+	@#     flagged.
+	@#   - $($(_pvarname)_buildDeps): the output store paths of other manifest
+	@#     builds this one depends on via $${other-build}. They are declared,
+	@#     reproducible dependencies, so a staged build reading a prior stage's
+	@#     output must be allowed.
+	@# Both are space-separated and passed as a single quoted value, which is
+	@# exactly the format libsandbox tokenizes.
+	@#
+	@# FLOX_SANDBOX_ALLOW carries the build's `sandbox-allow` manifest entries
+	@# (glob patterns, e.g. "~/.npm/**"). Unlike FLOX_SANDBOX_ALLOW_DIRS these
+	@# are fnmatch'd, and they are user-declared exceptions so libsandbox allows
+	@# them silently. The value is space-joined and run through jq's @sh, so it
+	@# is already a safely shell-quoted token: it must NOT be wrapped in
+	@# additional quotes here (@sh single-quotes it, which also stops the shell
+	@# expanding ~ or globbing *, leaving libsandbox to interpret the patterns).
+	@# As a result of the space delimiter, individual patterns cannot contain
+	@# spaces; this is documented for the `sandbox-allow` manifest field.
 	$(_V_) $(_env) $$(QUOTED_ENV_DISALLOW_ARGS) out=$($(_pvarname)_out) \
-	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$(PWD) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
 	  $(FLOX_INTERPRETER)/activate --env $$($(_pvarname)_develop_copy_env) \
 	    --mode build --skip-hook-on-activate --env-project $(PWD) -- \
-	    $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $$<
+	    $(_t3) $($(_pvarname)_logfile) -- \
+	    $(if $(_virtualSandbox),$(_env) $(PRELOAD_VARS) FLOX_SRC_DIR=$(PWD) FLOX_SANDBOX_ALLOW_DIRS="$(__bashInteractive) $$($(_pvarname)_buildDeps)" FLOX_SANDBOX_ALLOW=$(_sandbox_allow) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
+	    $(_bash) -e $$<
 	@#
 	@# Finally, rewrite references to temporary build wrapper in "out",
 	@# making sure to return the substituted output to the same location
@@ -717,15 +748,36 @@ define JSON_VERSION_TO_COMMAND_jq =
     ) else "echo \(. | @sh)" end
   )
 endef
+# Select the build mode based on the manifest's "sandbox" setting:
+#
+#   pure                 -> nix_sandbox : the build runs inside the real Nix
+#                                          build sandbox (hermetic).
+#   null|off|warn|enforce -> local       : the build runs in-situ; for warn and
+#                                          enforce the "virtual sandbox"
+#                                          (libsandbox via LD_PRELOAD /
+#                                          DYLD_INSERT_LIBRARIES) is layered on
+#                                          to flag or block out-of-closure file
+#                                          access. See BUILD_local_template,
+#                                          where _virtualSandbox = filter-out
+#                                          null off,$(_sandbox) drives the
+#                                          PRELOAD_VARS/FLOX_VIRTUAL_SANDBOX
+#                                          wiring. (off/null leave it empty, so
+#                                          the preload is not applied.)
+#
+# Only "pure" routes away from the local build; every other value (including an
+# unrecognized one) builds locally, and libsandbox itself ignores any
+# FLOX_VIRTUAL_SANDBOX value outside (off|warn|enforce|pure).
 $(foreach build,$(MANIFEST_BUILDS), \
   $(eval _pname = $(notdir $(build))) \
   $(eval _sandbox = $(shell \
     $(_jq) -r '.manifest.build."$(_pname)".sandbox' $(MANIFEST_LOCK))) \
+  $(eval _sandbox_allow = $(shell \
+    $(_jq) -r '(.manifest.build."$(_pname)"."sandbox-allow" // []) | join(" ") | @sh' $(MANIFEST_LOCK))) \
   $(eval _version = $(shell $(shell \
     $(_jq) -r --arg pname "$(_pname)" '$(strip $(JSON_VERSION_TO_COMMAND_jq))' $(MANIFEST_LOCK)))) \
-  $(if $(filter null off,$(_sandbox)), \
-    $(eval $(call MANIFEST_BUILD_template,local)), \
-    $(eval $(call MANIFEST_BUILD_template,nix_sandbox))))
+  $(if $(filter pure,$(_sandbox)), \
+    $(eval $(call MANIFEST_BUILD_template,nix_sandbox)), \
+    $(eval $(call MANIFEST_BUILD_template,local))))
 
 
 # The following template renders targets for the Nix expression build mode.
