@@ -14,6 +14,7 @@ use flox_core::activate::context::{
     AttachCtx,
     AttachProjectCtx,
     InvocationType,
+    SandboxMode,
 };
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY_VAR};
 use flox_core::activations::activation_state_dir_path;
@@ -163,6 +164,12 @@ pub struct ActivateOptions {
     #[bpaf(short, long)]
     pub mode: Option<ActivateMode>,
 
+    /// Mediate filesystem access during this activation:
+    /// "off" (default), "warn", "enforce", or "ask".
+    /// Experimental prototype; requires the sandbox_activate feature flag.
+    #[bpaf(long("sandbox"), argument("MODE"))]
+    pub sandbox: Option<SandboxMode>,
+
     /// Activate a FloxHub environment at a specific generation.
     #[bpaf(long, short)]
     pub generation: Option<GenerationId>,
@@ -287,6 +294,18 @@ impl Activate {
             },
         };
 
+        // Reject sandboxed in-place activation before anything reaches the
+        // stdout statement stream. A non-TTY stdout silently selects InPlace,
+        // so this also blocks `flox activate --sandbox ask | tee`, which would
+        // otherwise unsandbox silently.
+        if options.sandbox.unwrap_or_default() != SandboxMode::Off
+            && invocation_type == InvocationType::InPlace
+        {
+            bail!(
+                "--sandbox requires an interactive shell or a command ('flox activate --sandbox ask -- <cmd>'); in-place activation cannot be sandboxed."
+            );
+        }
+
         if (invocation_type == InvocationType::Interactive
             || invocation_type == InvocationType::InPlace)
             && config.flox.upgrade_notifications.unwrap_or(true)
@@ -382,6 +401,15 @@ impl ActivateOptions {
         invocation_type: InvocationType,
         services_for_ephemeral_activation: Vec<String>,
     ) -> Result<()> {
+        // Gate `--sandbox` behind the feature flag here rather than only in
+        // `Activate::handle`, so the ephemeral activation path used by
+        // `flox services start/restart` is covered too.
+        if self.sandbox.is_some() && !flox.features.sandbox_activate {
+            bail!(
+                "'--sandbox' requires the sandbox_activate feature flag. Set FLOX_FEATURES_SANDBOX_ACTIVATE=true."
+            );
+        }
+
         let now_active = UninitializedEnvironment::from_concrete_environment(&concrete_environment);
 
         let lockfile = match concrete_environment.lockfile(&flox)? {
@@ -392,6 +420,18 @@ impl ActivateOptions {
             LockResult::Unchanged(lockfile) => lockfile,
         };
         let manifest = &lockfile.migrated_manifest()?;
+
+        let sandbox_mode = self.sandbox.unwrap_or_default();
+
+        // Services run outside the sandbox in this prototype (TH-003
+        // deferred), so warn once when the environment defines any.
+        if sandbox_mode != SandboxMode::Off
+            && !manifest.as_latest_schema().services.inner().is_empty()
+        {
+            message::info(
+                "Services run unsandboxed; --sandbox does not mediate their filesystem access.",
+            );
+        }
 
         if !self.trust
             && let Some(compose) = &lockfile.compose
@@ -593,6 +633,7 @@ impl ActivateOptions {
             set_prompt,
             flox_env_cuda_detection: flox_env_cuda_detection.to_string(),
             interpreter_path,
+            sandbox_mode,
         };
 
         let dot_flox_path = concrete_environment.dot_flox_path().to_path_buf();
@@ -624,6 +665,7 @@ impl ActivateOptions {
                 .and_then(|p| p.to_str().map(String::from))
                 .unwrap_or_else(|| "flox".to_string()),
             auto_activate_fish_mode: config.flox.auto_activate_fish_mode,
+            sandbox_mode,
         };
 
         let tempfile = tempfile::NamedTempFile::new_in(flox.temp_dir)?;
@@ -1083,6 +1125,7 @@ mod tests {
             start_services,
             no_start_services,
             mode: None,
+            sandbox: None,
             generation: None,
             command: None,
         }
