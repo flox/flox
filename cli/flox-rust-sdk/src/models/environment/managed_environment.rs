@@ -1270,10 +1270,16 @@ impl ManagedEnvironment {
                 if !link.dev().is_symlink() && !link.run().is_symlink() {
                     return None;
                 }
+                // Canonicalize both links: an activation protects the
+                // mode-specific store path (run-mode resolves to the run link).
+                let store_paths = [link.dev(), link.run()]
+                    .into_iter()
+                    .filter_map(|link| fs::canonicalize(link).ok())
+                    .collect();
                 Some(PrunableGeneration {
                     generation,
                     last_live: generation_metadata.last_live,
-                    store_path: fs::canonicalize(link.dev()).ok(),
+                    store_paths,
                     link,
                 })
             })

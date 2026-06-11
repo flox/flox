@@ -582,20 +582,22 @@ pub struct PrunableGeneration {
     /// When this generation last ceased to be the current generation; `None`
     /// while it is current (the current generation is never pruned).
     pub last_live: Option<DateTime<Utc>>,
-    /// The canonical store path the link resolves to, or `None` if it dangles.
-    /// Compared against the protected set to keep links that live activations
-    /// depend on.
-    pub store_path: Option<PathBuf>,
+    /// The canonical store paths the dev and run links resolve to (a dangling
+    /// link contributes nothing). A generation is protected when *any* of these
+    /// is referenced by a live activation, because `flox_env` resolves to the
+    /// mode-specific (`dev` or `run`) path — a run-mode activation references
+    /// the run store path, not the dev one.
+    pub store_paths: Vec<PathBuf>,
 }
 
 /// Decide which generation GC-root links are safe to prune.
 ///
 /// A generation is never pruned when it is the `current` generation, nor when
-/// its link resolves to a store path in `protected_store_paths` — the canonical
-/// store paths that live activations reference, whose links appear in running
-/// processes' `PATH` and must stay live. Of the rest, [`PrunePolicy::AllNonLive`]
-/// prunes all, and [`PrunePolicy::AgedOut`] prunes only those whose `last_live`
-/// is older than the window.
+/// any of its links resolves to a store path in `protected_store_paths` — the
+/// canonical store paths that live activations reference, whose links appear in
+/// running processes' `PATH` and must stay live. Of the rest,
+/// [`PrunePolicy::AllNonLive`] prunes all, and [`PrunePolicy::AgedOut`] prunes
+/// only those whose `last_live` is older than the window.
 pub fn generation_links_to_prune<'a>(
     candidates: &'a [PrunableGeneration],
     current: GenerationId,
@@ -608,9 +610,9 @@ pub fn generation_links_to_prune<'a>(
         .filter(|candidate| candidate.generation != current)
         .filter(|candidate| {
             !candidate
-                .store_path
-                .as_deref()
-                .is_some_and(|path| protected_store_paths.contains(path))
+                .store_paths
+                .iter()
+                .any(|path| protected_store_paths.contains(path))
         })
         .filter(|candidate| match policy {
             PrunePolicy::AllNonLive => true,
@@ -1778,33 +1780,31 @@ mod test {
 
         let now = Utc::now();
         let candidate =
-            |n: usize, last_live: Option<DateTime<Utc>>, store: Option<&str>| PrunableGeneration {
+            |n: usize, last_live: Option<DateTime<Utc>>, stores: &[&str]| PrunableGeneration {
                 generation: GenerationId::from(n),
                 link: pointer.generation_link(GenerationId::from(n)),
                 last_live,
-                store_path: store.map(PathBuf::from),
+                store_paths: stores.iter().map(PathBuf::from).collect(),
             };
 
         let candidates = vec![
-            candidate(5, None, Some("/nix/store/gen5")), // current
-            candidate(
-                4,
-                Some(now - chrono::Duration::days(30)),
-                Some("/nix/store/gen4"),
-            ), // aged but protected
-            candidate(
-                3,
-                Some(now - chrono::Duration::days(20)),
-                Some("/nix/store/gen3"),
-            ), // aged
-            candidate(
-                2,
-                Some(now - chrono::Duration::days(2)),
-                Some("/nix/store/gen2"),
-            ), // recent
-            candidate(1, Some(now - chrono::Duration::days(20)), None), // aged, dangling
+            candidate(5, None, &["/nix/store/gen5-dev", "/nix/store/gen5-run"]), // current
+            // Aged, but a live run-mode activation references its *run* path, so
+            // it must be protected even though the dev path differs.
+            candidate(4, Some(now - chrono::Duration::days(30)), &[
+                "/nix/store/gen4-dev",
+                "/nix/store/gen4-run",
+            ]),
+            candidate(3, Some(now - chrono::Duration::days(20)), &[
+                "/nix/store/gen3-dev",
+            ]), // aged
+            candidate(2, Some(now - chrono::Duration::days(2)), &[
+                "/nix/store/gen2-dev",
+            ]), // recent
+            candidate(1, Some(now - chrono::Duration::days(20)), &[]), // aged, dangling
         ];
-        let protected: HashSet<PathBuf> = [PathBuf::from("/nix/store/gen4")].into_iter().collect();
+        let protected: HashSet<PathBuf> =
+            [PathBuf::from("/nix/store/gen4-run")].into_iter().collect();
 
         let pruned_ids = |policy| {
             let mut ids: Vec<usize> = generation_links_to_prune(
