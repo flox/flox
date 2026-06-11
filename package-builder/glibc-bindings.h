@@ -55,6 +55,16 @@ __asm__(".symver pthread_once,pthread_once@" GLIBC_MIN_VERSION);
 // minimum so the library does not silently require GLIBC_2.34.
 __asm__(".symver pthread_mutex_lock,pthread_mutex_lock@" GLIBC_MIN_VERSION);
 __asm__(".symver pthread_mutex_unlock,pthread_mutex_unlock@" GLIBC_MIN_VERSION);
+// Sockets API for the ask broker RPC client. These are referenced by the
+// not-yet-wired ask flow; pinning them now keeps the library's glibc floor
+// stable so the floor cannot creep upward when the RPC code lands. All five
+// have existed since the baseline GLIBC for each arch (2.17 on aarch64,
+// 2.2.5 on x86_64), so binding them to GLIBC_MIN_VERSION matches the rest.
+__asm__(".symver connect,connect@" GLIBC_MIN_VERSION);
+__asm__(".symver poll,poll@" GLIBC_MIN_VERSION);
+__asm__(".symver recv,recv@" GLIBC_MIN_VERSION);
+__asm__(".symver send,send@" GLIBC_MIN_VERSION);
+__asm__(".symver socket,socket@" GLIBC_MIN_VERSION);
 __asm__(".symver __realpath_chk,__realpath_chk@" ALT_ALT_GLIBC_MIN_VERSION);
 __asm__(".symver __snprintf_chk,__snprintf_chk@" ALT_GLIBC_MIN_VERSION);
 __asm__(".symver __stack_chk_fail,__stack_chk_fail@" ALT_ALT_GLIBC_MIN_VERSION);
