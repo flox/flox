@@ -2,6 +2,7 @@
   nixpkgs-url ? "nixpkgs",
   nixpkgs-flake ? builtins.getFlake nixpkgs-url,
   source-ref,
+  catalog-lockfile ? throw "A catalog lockfile is required to evaluate packages",
   system ? builtins.currentSystem or null,
 }:
 let
@@ -33,7 +34,12 @@ let
       in
       sourceInfo // lib.optionalAttrs (parsedRef ? dir) { inherit (parsedRef) dir; };
 
+  catalogSpecClosure = (lib.importJSON catalog-lockfile).catalogs;
+  instantiatedCatalogsClosure = lib.nef.instantiate.instantiateCatalogs {
+    inherit nixpkgs catalogSpecClosure;
+  };
+
 in
 lib.nef.instantiate.instantiateFromSourceInfo {
-  inherit nixpkgs sourceInfo;
+  inherit nixpkgs instantiatedCatalogsClosure sourceInfo;
 }

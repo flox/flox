@@ -202,7 +202,8 @@ impl Build {
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
 
         let lockfile_manifest = lockfile.migrated_manifest()?;
-        let packages_to_clean = packages_to_build(&lockfile_manifest, &expression_ref, &packages)?;
+        let (packages_to_clean, _) =
+            packages_to_build(&lockfile_manifest, &expression_ref, &packages)?;
         let target_names = packages_to_clean
             .iter()
             .map(|target| target.name())
@@ -246,24 +247,23 @@ impl Build {
         prefetch_flake_ref(&COMMON_NIXPKGS_URL)?;
 
         let lockfile_manifest = lockfile.migrated_manifest()?;
-        let (packages_to_build, expression_ref) = {
+        let (selected_packages, all_targets, expression_ref) = {
             // TODO: decouple from env
             let expression_parent_dir = env.dot_flox_path();
             let expression_path_ref = NixFlakeref::from_path(&expression_parent_dir)?;
-            let packages_to_build =
+            let (selected, all_targets) =
                 packages_to_build(&lockfile_manifest, &expression_path_ref, &packages)?;
-            let expression_git_ref = check_git_tracking_for_expression_builds(
-                &packages_to_build,
-                &expression_parent_dir,
-            )?;
+            let expression_git_ref =
+                check_git_tracking_for_expression_builds(&selected, &expression_parent_dir)?;
             (
-                packages_to_build,
+                selected,
+                all_targets,
                 expression_git_ref.unwrap_or(expression_path_ref),
             )
         };
 
         disallow_base_url_select_for_manifest_builds(
-            &packages_to_build,
+            &selected_packages,
             nixpkgs_url_select.is_some(),
         )?;
 
@@ -272,17 +272,19 @@ impl Build {
                 .await?
                 .as_flake_ref()?;
 
-        prefetch_expression_build_flake_ref(&packages_to_build, &base_nixpkgs_url)?;
+        prefetch_expression_build_flake_ref(&selected_packages, &base_nixpkgs_url)?;
 
-        let target_names = packages_to_build
+        let target_names = selected_packages
             .iter()
             .map(|target| target.name())
             .collect::<Vec<_>>();
 
-        let has_expression_build = packages_to_build
+        let nef_target_names = all_targets.nef_target_names();
+
+        let has_expression_build = selected_packages
             .iter()
             .any(|target| target.kind().is_expression_build());
-        let has_manifest_build = packages_to_build
+        let has_manifest_build = selected_packages
             .iter()
             .any(|target| target.kind().is_manifest_build());
         subcommand_metric!(
@@ -296,6 +298,7 @@ impl Build {
             &base_nixpkgs_url,
             &FLOX_INTERPRETER,
             &target_names,
+            &nef_target_names,
             None,
             system_override,
         )?;
@@ -709,7 +712,7 @@ pub(crate) fn packages_to_build<'o>(
     manifest: &'o Manifest<MigratedTypedOnly>,
     expression_ref: &'o NixFlakeref,
     packages: &[impl AsRef<str>],
-) -> Result<Vec<PackageTarget>> {
+) -> Result<(Vec<PackageTarget>, PackageTargets)> {
     let available_targets = PackageTargets::new(manifest, expression_ref)?;
 
     if available_targets.is_empty() {
@@ -728,7 +731,7 @@ pub(crate) fn packages_to_build<'o>(
         available_targets.all()
     };
 
-    Ok(selected)
+    Ok((selected, available_targets))
 }
 
 #[cfg(test)]
