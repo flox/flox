@@ -546,6 +546,94 @@ static bool check_allowed_globs(const char *real_path) {
   return false;
 }
 
+// Sensitive-path glob set. Under an ACTIVATION (allow_foreign_exe set), these
+// patterns are denied even under enforce — before the $HOME-dotfile carve-out
+// that would otherwise wave them through. They name the credential and secret
+// files a coding agent must not read (~/.ssh, ~/.aws, ~/.netrc, ~/.env, ...).
+//
+// This is deliberately gated on the activation: a build never sets
+// allow_foreign_exe, so the sensitive set is never consulted during a build
+// and build-sandbox behaviour is byte-identical. The defaults can be replaced
+// wholesale with FLOX_SANDBOX_SENSITIVE (space-separated, same `~/`-expanded
+// glob format as FLOX_SANDBOX_ALLOW); when that env var is set, the compiled-in
+// list is not used.
+//
+// Matched like check_allowed_globs: fnmatch() with flag 0 so `**` crosses
+// directory separators, and a leading `~/` expanded against $HOME. Parsed once
+// under sensitive_once; read-only afterwards.
+#define FLOX_SANDBOX_SENSITIVE_MAXENTRIES 256
+#define FLOX_SANDBOX_SENSITIVE_MAXLEN (16 * 1024)
+
+// Compiled-in defaults, used when FLOX_SANDBOX_SENSITIVE is unset. `**/.env`
+// and `**/.env.*` use no path anchor so a project-local dotenv anywhere in the
+// tree is covered; the rest are anchored under $HOME via `~/`.
+static const char *const SENSITIVE_DEFAULTS[] = {
+    "~/.ssh/**",      "~/.aws/**",       "~/.gnupg/**", "~/.kube/**",
+    "~/.netrc",       "~/.config/gh/**", "**/.env",     "**/.env.*",
+};
+#define SENSITIVE_DEFAULTS_COUNT                                                \
+  (sizeof(SENSITIVE_DEFAULTS) / sizeof(SENSITIVE_DEFAULTS[0]))
+
+static pthread_once_t sensitive_once = PTHREAD_ONCE_INIT;
+static char sensitive_buf[FLOX_SANDBOX_SENSITIVE_MAXLEN];
+// Read-only after init: either tokens inside sensitive_buf (env override) or
+// the string literals in SENSITIVE_DEFAULTS.
+static const char *sensitive_globs[FLOX_SANDBOX_SENSITIVE_MAXENTRIES];
+static int sensitive_count = 0;
+
+static void sensitive_init(void) {
+  const char *env = getenv("FLOX_SANDBOX_SENSITIVE");
+  if (env == NULL) {
+    // No override: use the compiled-in defaults verbatim.
+    for (size_t i = 0; i < SENSITIVE_DEFAULTS_COUNT; i++)
+      sensitive_globs[sensitive_count++] = SENSITIVE_DEFAULTS[i];
+    return;
+  }
+  // Override present: tokenize it the same way the allow globs are tokenized.
+  if (strlen(env) >= sizeof(sensitive_buf)) {
+    _error("FLOX_SANDBOX_SENSITIVE is too long, truncating to %zu characters",
+           sizeof(sensitive_buf) - 1);
+    fflush(stderr);
+  }
+  strncpy(sensitive_buf, env, sizeof(sensitive_buf) - 1);
+  sensitive_buf[sizeof(sensitive_buf) - 1] = '\0';
+
+  char *saveptr = NULL;
+  char *pattern = strtok_r(sensitive_buf, " ", &saveptr);
+  while (pattern != NULL) {
+    if (sensitive_count >= FLOX_SANDBOX_SENSITIVE_MAXENTRIES) {
+      _error("FLOX_SANDBOX_SENSITIVE has too many entries, using the first %d",
+             FLOX_SANDBOX_SENSITIVE_MAXENTRIES);
+      fflush(stderr);
+      break;
+    }
+    debug("FLOX_SANDBOX_SENSITIVE pattern[%d] = %s", sensitive_count, pattern);
+    sensitive_globs[sensitive_count++] = pattern;
+    pattern = strtok_r(NULL, " ", &saveptr);
+  }
+}
+
+// Returns true if `real_path` matches any sensitive glob. Mirrors
+// check_allowed_globs: a leading `~/` is expanded against $HOME, and fnmatch()
+// runs with flag 0 so `**` spans directory separators.
+static bool path_is_sensitive(const char *real_path) {
+  pthread_once(&sensitive_once, sensitive_init);
+  for (int i = 0; i < sensitive_count; i++) {
+    const char *pattern = sensitive_globs[i];
+    char expanded[PATH_MAX];
+    if (pattern[0] == '~' && pattern[1] == '/' && home_real_len > 0 &&
+        (size_t)snprintf(expanded, sizeof(expanded), "%s%s", home_real,
+                         pattern + 1) < sizeof(expanded)) {
+      pattern = expanded;
+    }
+    if (fnmatch(pattern, real_path, 0) == 0) {
+      debug("%s matches sensitive pattern '%s'", real_path, sensitive_globs[i]);
+      return true;
+    }
+  }
+  return false;
+}
+
 // Returns true if `path` (an already-resolved realpath) is a hidden entry
 // under the user's $HOME — i.e. it begins with "<HOME>/.". This matches user
 // config dotfiles and dot-directories like ~/.gitconfig, ~/.netrc, and
@@ -722,6 +810,148 @@ static void maybe_report_process_outside_closure(void) {
   }
 }
 
+// True if `real_path` is `/nix/store` itself or lies beneath it, on a
+// path-component boundary. The Nix store is immutable, content-addressed,
+// world-readable public packages, so for an activation a store path is always
+// in policy. This mirrors the activation seed (which adds /nix/store to the
+// allow-dirs); it is duplicated in the engine because the parent-dir create
+// check below must recognize a store parent independently of the seed.
+static bool path_in_nix_store(const char *real_path) {
+  static const char store[] = "/nix/store";
+  static const size_t store_len = sizeof(store) - 1;
+  return strncmp(real_path, store, store_len) == 0 &&
+         (real_path[store_len] == '/' || real_path[store_len] == '\0');
+}
+
+// True if `real_path` (a resolved realpath) is permitted by the standard allow
+// set: an allowed basename/dir prefix, a user-declared sandbox-allow glob, the
+// environment closure, or the Nix store. This is the same battery of checks
+// sandbox_check_path applies to a regular access, factored out so the
+// activation create-guard can ask the same question of a create's parent
+// directory.
+static bool path_in_policy(const char *real_path) {
+  return check_allowed_basenames(real_path) || check_allowed_globs(real_path) ||
+         in_closure(real_path) || path_in_nix_store(real_path);
+}
+
+// For a write that creates a nonexistent path, decide whether the create is in
+// policy by resolving the path's nearest EXISTING ancestor directory and
+// running it through path_in_policy(). A create under an in-policy directory
+// (the project tree, the closure, the store) is allowed; a create anywhere
+// else is out of policy.
+//
+// `pathname` is the path as opened (the target does not exist, so it has no
+// realpath of its own). We copy it into a stack buffer and walk up component by
+// component — trimming the trailing path element each time realpath() fails —
+// until an ancestor resolves. This handles a create inside a not-yet-existing
+// subtree (e.g. git writing `.git/objects/ce/tmp_obj_*` before the `ce` fanout
+// dir exists, or any tool doing a deep create): the create is judged by the
+// deepest directory that actually exists, which is the directory the new
+// subtree will be rooted under. Creating a new subtree under an allowed
+// directory is itself an allowed in-project write.
+//
+// All work is on a stack-local copy, never the caller's string and never a
+// shared static, so this is safe under in_sandbox==1 and across threads. A
+// relative pathname is resolved against the process cwd by realpath(), exactly
+// as the open() it guards would be. Returns false only if NO ancestor resolves
+// (which cannot normally happen — "/" always resolves) or the path is too long.
+static bool create_parent_in_policy(const char *pathname) {
+  char copy[PATH_MAX];
+  if (strlen(pathname) >= sizeof(copy))
+    return false; // too long to reason about; treat as out of policy
+
+  // Start from the path's parent directory, then walk up.
+  strncpy(copy, pathname, sizeof(copy) - 1);
+  copy[sizeof(copy) - 1] = '\0';
+  char *last_slash = strrchr(copy, '/');
+  if (last_slash == NULL) {
+    // Relative leaf with no '/': the parent is the current directory.
+    char cwd_real[PATH_MAX];
+    if (realpath(".", cwd_real) == NULL)
+      return false;
+    return path_in_policy(cwd_real);
+  }
+  if (last_slash == copy) {
+    // Path is "/name": the parent is the root directory.
+    char root_real[PATH_MAX];
+    if (realpath("/", root_real) == NULL)
+      return false;
+    return path_in_policy(root_real);
+  }
+  *last_slash = '\0';
+
+  // Walk up: try to resolve the current candidate; if it does not exist, trim
+  // its last component and retry. Each iteration shortens `copy`, so the loop
+  // terminates (in the worst case at the root, handled above).
+  char ancestor_real[PATH_MAX];
+  for (;;) {
+    if (realpath(copy, ancestor_real) != NULL)
+      return path_in_policy(ancestor_real);
+    char *slash = strrchr(copy, '/');
+    if (slash == NULL) {
+      // No more separators: the remaining candidate is a relative element
+      // under the cwd, so judge the cwd.
+      char cwd_real[PATH_MAX];
+      if (realpath(".", cwd_real) == NULL)
+        return false;
+      return path_in_policy(cwd_real);
+    }
+    if (slash == copy) {
+      // Trimmed down to "/something" that did not resolve: judge the root.
+      char root_real[PATH_MAX];
+      if (realpath("/", root_real) == NULL)
+        return false;
+      return path_in_policy(root_real);
+    }
+    *slash = '\0';
+  }
+}
+
+// Apply the per-level out-of-policy verdict and return whether to permit the
+// access. This is the shared tail for an access that has already been judged
+// out of policy: a regular out-of-closure file access, an
+// activation-denied sensitive path, or an activation create whose parent
+// directory is not in policy. `display` is the user-facing path string;
+// `dedup_key` is the key used to warn/deny at most once (the resolved realpath
+// for an existing path, or the opened pathname for a create). `suffix` is an
+// optional parenthetical reason appended to the message (e.g. " (sensitive)"),
+// or "" for none.
+//
+//   warn         -> warn once, permit (return true)
+//   ask          -> deny-stub receipt once, refuse (return false -> EACCES)
+//   enforce/pure -> fatal error, exit(1)
+static bool out_of_policy_verdict(const char *display, const char *dedup_key,
+                                  const char *suffix) {
+  if (sandbox_level == SANDBOX_LEVEL_WARN) {
+    // warn mode: report the out-of-policy access, but only once per key — a
+    // process that touches the same undeclared path repeatedly should produce
+    // a single warning, not one per access.
+    if (should_warn_for_path(dedup_key))
+      warn("%s is not in the sandbox%s", display, suffix);
+    return true;
+  }
+  if (sandbox_level == SANDBOX_LEVEL_ASK) {
+    // ask mode: the access is out of policy. The eventual broker RPC decides
+    // allow-or-deny here; until that lands, the stub denies. Emit the two-line
+    // receipt once per key, then return false. That false propagates to each
+    // interceptor's errno=EACCES branch, so the calling process sees a clean
+    // permission error and can continue — never exit(1).
+    const char *op = in_write_access ? "write" : "read";
+    if (should_warn_for_path(dedup_key)) {
+      unsigned int req =
+          atomic_fetch_add_explicit(&ask_req_counter, 1, memory_order_relaxed) +
+          1;
+      denied("%s %s (not in policy)", op, display);
+      denied("queued as req %u — approve outside: flox sandbox", req);
+    }
+    return false;
+  }
+  // enforce / pure: an out-of-policy access is fatal.
+  _error("%s is not in the sandbox%s", display, suffix);
+  fflush(stderr);
+  exit(1);
+}
+
 // Check if path access represents something that may not be reproducible
 // on another machine. Any path within the environment's closure is fine,
 // but there are also other specific paths and basenames accessed during a
@@ -741,14 +971,43 @@ bool sandbox_check_path(const char *pathname) {
   if (sandbox_check_argv0())
     return true;
 
-  // From here on out, operate on realpath. If a file doesn't exist then return
-  // true and let ENOENT be the eventual result. This must be a local (stack)
-  // buffer: a shared `static` here was a data race, since concurrent callers
-  // resolving different paths would overwrite each other between this call and
-  // the closure/allow-list checks below.
+  // From here on out, operate on realpath. If a file doesn't exist then it has
+  // no realpath. This must be a local (stack) buffer: a shared `static` here
+  // was a data race, since concurrent callers resolving different paths would
+  // overwrite each other between this call and the closure/allow-list checks
+  // below.
   char real_path[PATH_MAX];
-  if (realpath(pathname, real_path) == NULL)
+  if (realpath(pathname, real_path) == NULL) {
+    // The path does not exist. For a BUILD (allow_foreign_exe unset) keep the
+    // historical behaviour: permit it and let ENOENT surface naturally — a
+    // build legitimately creates many new files, and read-of-nonexistent must
+    // be allowed so the caller observes the real error.
+    //
+    // For an ACTIVATION that is creating a file (allow_foreign_exe set and the
+    // access is a write), a nonexistent path is a NEW FILE. Letting every such
+    // create through means an agent can write `~/newfile` or overwrite outside
+    // the project at will. Instead, judge the create by the nearest EXISTING
+    // ancestor directory's policy (see create_parent_in_policy): a create under
+    // an in-policy directory — including into a not-yet-existing subtree, e.g.
+    // git's `.git/objects/<fanout>/tmp_obj_*` — is fine; a create anywhere else
+    // is out of policy and gets the per-level verdict. A read of a nonexistent
+    // path, or a create whose ancestor IS in policy, is permitted as before.
+    //
+    // Walking up to the nearest existing ancestor (rather than requiring the
+    // immediate parent to already exist) is necessary for real workloads: git,
+    // mkdir -p, and similar tools create files inside directories they create on
+    // the fly, so an immediate-parent rule would deny ordinary in-project writes.
+    // The threat model is preserved — the nearest existing ancestor of
+    // `~/newfile` is `$HOME`, which is out of policy, so the create is denied.
+    if (allow_foreign_exe && in_write_access &&
+        !create_parent_in_policy(pathname)) {
+      // No realpath exists, so the display and dedup key are the opened path.
+      // The exe-identity report is a no-op here (allow_foreign_exe is set), so
+      // it is not called; only file access is being mediated.
+      return out_of_policy_verdict(pathname, pathname, "");
+    }
     return true;
+  }
 
   // Grants-dir write guard (ask only). The grants directory is seeded into the
   // project's allow set so reads stay quiet, but a write there would let a
@@ -814,6 +1073,23 @@ bool sandbox_check_path(const char *pathname) {
            display);
     return true;
   }
+  // Sensitive set (activation only). For an activation (allow_foreign_exe set),
+  // credential and secret files (~/.ssh, ~/.aws, ~/.netrc, **/.env, ...) are
+  // denied even under enforce — and crucially BEFORE the $HOME-dotfile carve-out
+  // below, which would otherwise wave ~/.ssh/* and ~/.aws/* through. This runs
+  // after the explicit allow checks above, so an explicit user grant
+  // (FLOX_SANDBOX_ALLOW) of a sensitive path still wins; only the implicit
+  // dotfile blanket is overridden. The metadata-only carve-outs above
+  // (readlink, directory probe, directory listing) stay permitted — those are
+  // "looking around", not reading secret contents.
+  //
+  // Gated on allow_foreign_exe so a build never consults the sensitive set:
+  // build-sandbox behaviour is byte-identical.
+  if (allow_foreign_exe && path_is_sensitive(real_path)) {
+    // maybe_report_process_outside_closure() already ran above and is a no-op
+    // under allow_foreign_exe; only file access is mediated here.
+    return out_of_policy_verdict(display, real_path, " (sensitive)");
+  }
   // User config dotfiles under $HOME are permitted even under enforce, but
   // flagged (and followed by a one-time hint), so the developer knows the build
   // still depends on $HOME state on the path to full purity. As with directory
@@ -834,42 +1110,13 @@ bool sandbox_check_path(const char *pathname) {
     }
     return true;
   }
-  if (sandbox_level == SANDBOX_LEVEL_WARN) {
-    // warn mode: report the out-of-closure read, but only once per path —
-    // a build that reads the same undeclared file repeatedly should produce a
-    // single warning, not one per read.
-    if (should_warn_for_path(real_path))
-      warn("%s is not in the sandbox", display);
-    return true;
-  }
-  if (sandbox_level == SANDBOX_LEVEL_ASK) {
-    // ask mode: the access is out of policy. The eventual broker RPC decides
-    // allow-or-deny here; until that lands, the stub denies. Emit the two-line
-    // receipt once per resolved path (the broker assigns the real request
-    // number; the stub numbers them locally), then return false. That false
-    // propagates to each interceptor's errno=EACCES branch, so the calling
-    // process sees a clean permission error and can continue — never exit(1).
-    //
-    // TODO(next batch): replace this stub deny with an ask_broker() RPC. The
-    // broker returns an allow/deny verdict (and a scope to cache); on allow
-    // this returns true, on deny it emits the same receipt and returns false.
-    // Splice the RPC in where the `denied(...)` block is: consult the broker
-    // before emitting, keep the receipt-and-return-false path for the deny and
-    // unreachable-broker cases.
-    const char *op = in_write_access ? "write" : "read";
-    if (should_warn_for_path(real_path)) {
-      unsigned int req =
-          atomic_fetch_add_explicit(&ask_req_counter, 1, memory_order_relaxed) +
-          1;
-      denied("%s %s (not in policy)", op, display);
-      denied("queued as req %u — approve outside: flox sandbox", req);
-    }
-    return false;
-  }
-  // enforce / pure: an out-of-closure file read is fatal.
-  _error("%s is not in the sandbox", display);
-  fflush(stderr);
-  exit(1);
+  // Out of policy. Apply the per-level verdict (warn permits, ask deny-stubs,
+  // enforce/pure is fatal), deduplicated on the resolved realpath.
+  //
+  // TODO(next batch): under ask, replace the deny-stub inside
+  // out_of_policy_verdict with an ask_broker() RPC that returns an
+  // allow/deny verdict and a scope to cache.
+  return out_of_policy_verdict(display, real_path, "");
 }
 
 // Classify an open()/openat() as a write from its flags. Anything that is not
