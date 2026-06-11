@@ -86,6 +86,17 @@ static FILE *(*orig_fopen)(const char *pathname, const char *mode) = NULL;
 static FILE *(*orig_fopen64)(const char *pathname, const char *mode) = NULL;
 static ssize_t (*orig_readlinkat)(int dirfd, const char *pathname, char *buf,
                                   size_t bufsiz) = NULL;
+static ssize_t (*orig_readlink)(const char *pathname, char *buf,
+                                size_t bufsiz) = NULL;
+// __readlink_chk / __readlinkat_chk are the _FORTIFY_SOURCE=2 variants of
+// readlink/readlinkat. Binaries compiled with fortification (e.g. coreutils)
+// bind to these names instead of the plain ones, so intercepting only
+// readlink/readlinkat misses them entirely.
+static ssize_t (*orig_readlink_chk)(const char *pathname, char *buf,
+                                    size_t bufsiz, size_t buflen) = NULL;
+static ssize_t (*orig_readlinkat_chk)(int dirfd, const char *pathname,
+                                      char *buf, size_t bufsiz,
+                                      size_t buflen) = NULL;
 #endif
 
 // Helper macros for printing debug, warnings, and errors. Each multi-statement
@@ -166,6 +177,9 @@ void sandbox_init() {
   orig_fopen = dlsym(RTLD_NEXT, "fopen");
   orig_fopen64 = dlsym(RTLD_NEXT, "fopen64");
   orig_readlinkat = dlsym(RTLD_NEXT, "readlinkat");
+  orig_readlink = dlsym(RTLD_NEXT, "readlink");
+  orig_readlink_chk = dlsym(RTLD_NEXT, "__readlink_chk");
+  orig_readlinkat_chk = dlsym(RTLD_NEXT, "__readlinkat_chk");
 #endif
 }
 
@@ -717,6 +731,61 @@ ssize_t readlinkat(int dirfd, const char *pathname, char *buf, size_t bufsiz) {
   in_sandbox = 0;
   if (allowed)
     return orig_readlinkat(dirfd, pathname, buf, bufsiz);
+  errno = EACCES;
+  return -1;
+}
+
+// Interceptor for readlink (the non-at POSIX form). Same semantics as
+// readlinkat: warned-but-permitted even under enforce.
+ssize_t readlink(const char *pathname, char *buf, size_t bufsiz) {
+  ensure_init();
+  if (in_sandbox)
+    return orig_readlink(pathname, buf, bufsiz);
+  in_sandbox = 1;
+  in_readlink = 1;
+  bool allowed = sandbox_check_path(pathname);
+  in_readlink = 0;
+  in_sandbox = 0;
+  if (allowed)
+    return orig_readlink(pathname, buf, bufsiz);
+  errno = EACCES;
+  return -1;
+}
+
+// Interceptor for __readlink_chk — the _FORTIFY_SOURCE=2 variant of readlink.
+// Coreutils (ls, readlink, realpath) and most binaries compiled with
+// -D_FORTIFY_SOURCE=2 bind to this name rather than plain readlink, so without
+// this interceptor symlink reads in those tools slip past the sandbox entirely.
+ssize_t __readlink_chk(const char *pathname, char *buf, size_t bufsiz,
+                       size_t buflen) {
+  ensure_init();
+  if (in_sandbox)
+    return orig_readlink_chk(pathname, buf, bufsiz, buflen);
+  in_sandbox = 1;
+  in_readlink = 1;
+  bool allowed = sandbox_check_path(pathname);
+  in_readlink = 0;
+  in_sandbox = 0;
+  if (allowed)
+    return orig_readlink_chk(pathname, buf, bufsiz, buflen);
+  errno = EACCES;
+  return -1;
+}
+
+// Interceptor for __readlinkat_chk — the _FORTIFY_SOURCE=2 variant of
+// readlinkat. Same semantics as the plain readlinkat interceptor.
+ssize_t __readlinkat_chk(int dirfd, const char *pathname, char *buf,
+                         size_t bufsiz, size_t buflen) {
+  ensure_init();
+  if (in_sandbox)
+    return orig_readlinkat_chk(dirfd, pathname, buf, bufsiz, buflen);
+  in_sandbox = 1;
+  in_readlink = 1;
+  bool allowed = sandbox_check_path(pathname);
+  in_readlink = 0;
+  in_sandbox = 0;
+  if (allowed)
+    return orig_readlinkat_chk(dirfd, pathname, buf, bufsiz, buflen);
   errno = EACCES;
   return -1;
 }

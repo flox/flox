@@ -84,6 +84,22 @@ static int do_readlink(const char *path) {
   return 0;
 }
 
+/* readlink() (the non-at form) so the readlink interceptor is exercised.
+ * This is compiled without _FORTIFY_SOURCE, so it calls the plain readlink
+ * symbol rather than __readlink_chk. */
+static int do_readlink_fn(const char *path) {
+  char buf[PATH_MAX];
+  ssize_t n = readlink(path, buf, sizeof(buf) - 1);
+  if (n < 0) {
+    int saved = errno;
+    printf("READLINK_FAIL %s errno=%d (%s)\n", path, saved, strerror(saved));
+    return 1;
+  }
+  buf[n] = '\0';
+  printf("READLINK_OK %s -> %s\n", path, buf);
+  return 0;
+}
+
 static int do_storm(int argc, char **argv) {
   /* argv: [0]=prog [1]="storm" [2]=nthreads [3]=niters [4..]=paths */
   long nthreads = strtol(argv[2], NULL, 10);
@@ -127,6 +143,9 @@ int main(int argc, char **argv) {
   if (argc >= 3 && strcmp(argv[1], "readlink") == 0) {
     return do_readlink(argv[2]);
   }
+  if (argc >= 3 && strcmp(argv[1], "readlink-fn") == 0) {
+    return do_readlink_fn(argv[2]);
+  }
   if (argc >= 5 && strcmp(argv[1], "storm") == 0) {
     return do_storm(argc, argv);
   }
@@ -134,7 +153,8 @@ int main(int argc, char **argv) {
           "usage:\n"
           "  %s open <path>\n"
           "  %s readlink <path>\n"
+          "  %s readlink-fn <path>\n"
           "  %s storm <nthreads> <niters> <path1> [path2 ...]\n",
-          argv[0], argv[0], argv[0]);
+          argv[0], argv[0], argv[0], argv[0]);
   return 2;
 }

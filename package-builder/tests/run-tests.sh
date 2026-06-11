@@ -217,6 +217,39 @@ else
   fail "enforce: readlinkat should warn-but-allow under enforce (rc=$rc)" "$out"
 fi
 
+# readlink() (non-at POSIX form) is intercepted and treated the same way.
+# sandbox_probe readlink-fn calls plain readlink() rather than readlinkat().
+out="$(run_probe off readlink-fn "$link" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"READLINK_OK"* && "$out" != *"symlink read"* ]]; then
+  pass "off: readlink (non-at) passes through, silent"
+else
+  fail "off: readlink-fn should succeed silently" "$out"
+fi
+out="$(run_probe enforce readlink-fn "$link" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"READLINK_OK"* && "$out" == *"symlink read"* ]]; then
+  pass "enforce: readlink (non-at) of out-of-closure target permitted but warned"
+else
+  fail "enforce: readlink-fn should warn-but-allow under enforce (rc=$rc)" "$out"
+fi
+
+# __readlink_chk coverage via a real tool. Coreutils 'readlink' (and 'ls -la')
+# are compiled with -D_FORTIFY_SOURCE=2 and bind to __readlink_chk rather than
+# plain readlink; without a specific interceptor for that symbol, symlink reads
+# in those tools would silently bypass the sandbox.
+readlink_bin="$(command -v readlink 2>/dev/null || true)"
+if [[ -n "$readlink_bin" ]]; then
+  out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+      FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=warn \
+      "$readlink_bin" "$link" 2>&1)"
+  if [[ "$out" == *"$out_file"* && "$out" == *"symlink read"* ]]; then
+    pass "warn: __readlink_chk via real tool (readlink) is intercepted"
+  else
+    fail "warn: readlink's __readlink_chk was not flagged — __readlink_chk interception gap" "$out"
+  fi
+else
+  echo "skip - 'readlink' not on PATH; cannot exercise real-tool __readlink_chk coverage"
+fi
+
 # The directory-listing warning is de-duplicated per resolved path: a build that
 # lists the same out-of-closure directory many times in one process must get a
 # single warning, not one per access. Drive 8 opens of out_store from one
