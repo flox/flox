@@ -2,12 +2,10 @@ use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 
-pub mod lock;
+mod lock;
 mod nix;
 mod nix_build_config;
-mod nix_build_lock;
 mod scan;
-mod tree;
 
 /// Common identifier for a `CatalogSpec` and its `CatalogLock`
 /// within a build config and lock respectively.
@@ -27,6 +25,7 @@ impl Display for CatalogId {
     }
 }
 
+pub use lock::build_lock::{BuildLock, write_lock};
+pub use lock::flakeref::NixFlakeref;
 pub use nix_build_config::{LockOptions, lock_config, lock_config_with_options, read_config};
-pub use nix_build_lock::{BuildLock, write_lock};
-pub use scan::{scan_package, scan_package_with_roots};
+pub use scan::{CatalogRef, scan_package, scan_package_with_roots};

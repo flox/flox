@@ -13,7 +13,7 @@ use flox_manifest::{Manifest, MigratedTypedOnly};
 use floxhub_client::BaseCatalogUrl;
 use indoc::formatdoc;
 use itertools::Itertools;
-use nef_lock_catalog::lock::NixFlakeref;
+use nef_lock_catalog::NixFlakeref;
 use serde::Deserialize;
 use tempfile::NamedTempFile;
 use thiserror::Error;
