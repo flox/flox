@@ -232,6 +232,7 @@ mod tests {
     use crate::attach_diff::double_set_envs;
     use crate::sandbox::{
         FLOX_SANDBOX_ALLOW_DIRS_VAR,
+        FLOX_SANDBOX_ALLOW_NET_VAR,
         FLOX_SANDBOX_ALLOW_VAR,
         FLOX_SANDBOX_GRANTS_DIR_VAR,
         FLOX_SRC_DIR_VAR,
@@ -280,6 +281,7 @@ mod tests {
             FLOX_VIRTUAL_SANDBOX_VAR,
             FLOX_SANDBOX_ALLOW_VAR,
             FLOX_SANDBOX_ALLOW_DIRS_VAR,
+            FLOX_SANDBOX_ALLOW_NET_VAR,
             FLOX_SRC_DIR_VAR,
             FLOX_SANDBOX_GRANTS_DIR_VAR,
             PRELOAD_VAR,
