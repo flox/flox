@@ -43,11 +43,7 @@ pub enum BaseCatalogUrlSelect {
         #[bpaf(
             long("stability"),
             argument("stability"),
-            help(
-                "Perform a nix expression build using a base package set of the given stability\n\
-                as tracked by the catalog server.\n\
-                Can not be used with manifest base builds."
-            )
+            help("Select the nixpkgs revision by stability, as tracked by the catalog server.")
         )]
         String,
     ),
@@ -369,9 +365,7 @@ impl Build {
             let is_explicit_non_nixpkgs = parsed_flake_ref != "nixpkgs";
             if is_explicit_non_nixpkgs {
                 bail!(
-                    "Cannot use --stability or --nixpkgs-url together with an explicit flake \
-                     reference ('{parsed_flake_ref}'). Remove the flag or use a bare attribute \
-                     path."
+                    "Cannot use --stability or --nixpkgs-url together with an explicit flake reference ('{parsed_flake_ref}'). Remove the flag or use a bare attribute path."
                 );
             }
             let base_nixpkgs_url = base_nixpkgs_url_from_url_select(flox, Some(sel), None).await?;
