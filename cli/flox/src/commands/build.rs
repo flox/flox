@@ -7,6 +7,7 @@ use bpaf::Bpaf;
 use flox_core::data::CanonicalPath;
 use flox_events::EventsHub;
 use flox_manifest::lockfile::Lockfile;
+use flox_manifest::parsed::latest::BuildSandbox;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
@@ -23,6 +24,7 @@ use flox_rust_sdk::providers::build::{
 use flox_rust_sdk::providers::catalog::base_catalog_url_for_stability_arg;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_rust_sdk::providers::nix;
+use flox_rust_sdk::providers::sandbox_prompt::SandboxPromptBroker;
 use flox_rust_sdk::utils::{CommandExt, FLOX_INTERPRETER};
 use floxhub_client::{BaseCatalogUrl, CatalogClientTrait};
 use indoc::formatdoc;
@@ -34,7 +36,46 @@ use url::Url;
 
 use super::{DirEnvironmentSelect, dir_environment_select};
 use crate::utils::message;
+use crate::utils::sandbox_prompt::InteractivePromptResolver;
 use crate::{environment_subcommand_metric, subcommand_metric};
+
+/// After a prompted build, guide the user through recording the exceptions they
+/// accepted into the manifest's `sandbox-allow`, so the next build is silent and
+/// can run under plain `enforce`. (A guided, copy-paste-ready summary rather than
+/// an automatic edit, since a build may have several targets and the user should
+/// see exactly what is being permitted.)
+fn guide_sandbox_allow_writeback(targets: &[PackageTarget], accepted: &[String]) {
+    if accepted.is_empty() {
+        return;
+    }
+
+    // Name the build to attach to when a single manifest build was built;
+    // otherwise use a placeholder the user fills in.
+    let manifest_builds: Vec<String> = targets
+        .iter()
+        .filter(|target| target.kind().is_manifest_build())
+        .map(|target| target.name().as_ref().to_string())
+        .collect();
+    let build_name = match manifest_builds.as_slice() {
+        [single] => single.clone(),
+        _ => "<name>".to_string(),
+    };
+
+    let allow_lines = accepted
+        .iter()
+        .map(|pattern| format!("      \"{pattern}\","))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    message::info(format!(
+        "Accepted {count} sandbox exception(s) during this build.\n\
+         To keep them, add to [build.{build_name}] in your manifest \
+         (e.g. with 'flox edit'):\n\n\
+         \x20   sandbox-allow = [\n{allow_lines}\n\x20   ]\n\n\
+         Then set sandbox = \"enforce\" for a reproducible build that no longer prompts.",
+        count = accepted.len(),
+    ));
+}
 
 #[derive(Debug, Clone, Bpaf)]
 pub enum BaseCatalogUrlSelect {
@@ -126,6 +167,14 @@ enum SubcommandOrBuildTargets {
         #[bpaf(external(system_override))]
         system_override: SystemOverride,
 
+        /// Interactively resolve out-of-closure file access during the build.
+        /// Runs the build in the 'prompt' sandbox mode regardless of the
+        /// manifest's sandbox setting, prompting to allow or deny each new
+        /// access, then guides you through recording the accepted paths in the
+        /// manifest's 'sandbox-allow'.
+        #[bpaf(long("sandbox-prompt"))]
+        sandbox_prompt: bool,
+
         /// The package to build.
         /// Corresponds to entries in the 'build' table in the environment's manifest.toml.
         /// If not specified, all packages are built.
@@ -184,6 +233,7 @@ impl Build {
                 targets,
                 base_catalog_url_select,
                 system_override,
+                sandbox_prompt,
             } => {
                 let env = self
                     .environment
@@ -196,6 +246,7 @@ impl Build {
                     targets,
                     base_catalog_url_select,
                     system_override.into_inner(),
+                    sandbox_prompt,
                 )
                 .await
             },
@@ -244,6 +295,7 @@ impl Build {
         packages: Vec<String>,
         nixpkgs_url_select: Option<BaseCatalogUrlSelect>,
         system_override: Option<String>,
+        sandbox_prompt: bool,
     ) -> Result<()> {
         match &env {
             ConcreteEnvironment::Path(_) => (),
@@ -320,7 +372,39 @@ impl Build {
             debug!(error = %err, "Failed to record v2 event");
         }
 
-        let builder = FloxBuildMk::new(&flox, &base_dir, &expression_ref, &built_environments);
+        // Interactive sandbox prompt (Phase 2). Prompting applies when the user
+        // passed --sandbox-prompt or any manifest build is in `prompt` mode.
+        let any_prompt_mode = packages_to_build.iter().any(|target| {
+            matches!(target.kind(), PackageTargetKind::ManifestBuild {
+                sandbox: Some(BuildSandbox::Prompt)
+            })
+        });
+        if sandbox_prompt
+            && let Some(pure) = packages_to_build.iter().find(|target| {
+                matches!(target.kind(), PackageTargetKind::ManifestBuild {
+                    sandbox: Some(BuildSandbox::Pure)
+                })
+            })
+        {
+            bail!(
+                "Cannot use '--sandbox-prompt' with the 'pure' build '{}'.\nA pure build runs in the Nix sandbox, which has no interactive escape hatch.",
+                pure.name()
+            );
+        }
+
+        let mut builder = FloxBuildMk::new(&flox, &base_dir, &expression_ref, &built_environments);
+        // The broker must outlive the build; it serves prompts on a background
+        // thread while make runs.
+        let prompt_broker = if sandbox_prompt || any_prompt_mode {
+            let broker = SandboxPromptBroker::new(Box::new(InteractivePromptResolver::new()))
+                .context("could not start the sandbox prompt broker")?;
+            builder =
+                builder.with_sandbox_prompt(broker.socket_path().to_path_buf(), sandbox_prompt);
+            Some(broker)
+        } else {
+            None
+        };
+
         let results = builder.build(
             &base_nixpkgs_url,
             &FLOX_INTERPRETER,
@@ -329,6 +413,14 @@ impl Build {
             None,
             system_override,
         )?;
+
+        // Surface any exceptions the user accepted during the build and guide
+        // them through recording them in the manifest's sandbox-allow.
+        if let Some(broker) = prompt_broker {
+            let accepted = broker.accepted_globs();
+            drop(broker); // shut the serving thread down
+            guide_sandbox_allow_writeback(&packages_to_build, &accepted);
+        }
 
         let current_dir = env::current_dir()
             .context("could not get current directory")?
