@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::Result;
-use flox_catalog::BuildType;
+use floxhub_client::BuildType;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::warn;
@@ -148,7 +148,7 @@ impl PackageTreeBuilder {
 #[cfg(test)]
 mod tests {
 
-    use flox_catalog::BuildType;
+    use floxhub_client::BuildType;
     use serde_json::json;
 
     use super::*;

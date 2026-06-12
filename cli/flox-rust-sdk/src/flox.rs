@@ -2,16 +2,16 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
-use flox_catalog::CatalogClientError;
-pub use flox_catalog::{AuthContext, AuthnMode, FloxhubToken, FloxhubTokenError};
 use flox_core::vars::FLOX_VERSION_STRING;
+pub use floxhub_client::{AuthContext, AuthnMode, FloxhubToken, FloxhubTokenError};
+use floxhub_client::{FloxhubClient, FloxhubClientError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 use uuid::Uuid;
 
 use crate::data::FloxVersion;
-use crate::providers::{catalog, flake_installable_locker};
+use crate::providers::flake_installable_locker;
 
 pub static FLOX_VERSION: LazyLock<FloxVersion> = LazyLock::new(|| {
     let Ok(version) = (*FLOX_VERSION_STRING).parse() else {
@@ -57,7 +57,9 @@ pub struct Flox {
     /// The current authentication credential.
     pub auth_context: AuthContext,
 
-    pub catalog_client: catalog::Client,
+    /// Shared HTTP client for both the catalog and factory API surfaces.
+    pub floxhub_client: FloxhubClient,
+
     pub installable_locker: flake_installable_locker::InstallableLockerImpl,
 
     /// Feature flags
@@ -78,13 +80,11 @@ impl Flox {
     pub fn set_auth_context(
         &mut self,
         auth_context: AuthContext,
-    ) -> Result<(), CatalogClientError> {
+    ) -> Result<(), FloxhubClientError> {
         self.auth_context = auth_context.clone();
-        if let catalog::Client::Catalog(client) = &mut self.catalog_client {
-            client.update_config(|config| {
-                config.auth_context = auth_context;
-            })?;
-        }
+        self.floxhub_client.update_config(|config| {
+            config.auth_context = auth_context;
+        })?;
         Ok(())
     }
 }
@@ -177,7 +177,6 @@ pub mod test_helpers {
     use flox_core::data::environment_ref::EnvironmentOwner;
     use tempfile::{TempDir, tempdir_in};
 
-    use self::catalog::MockClient;
     use super::*;
     use crate::providers::catalog::test_helpers::UNIT_TEST_GENERATED;
     use crate::providers::flake_installable_locker::{
@@ -311,7 +310,7 @@ pub mod test_helpers {
             )
             .unwrap(),
             auth_context,
-            catalog_client: MockClient::default().into(),
+            floxhub_client: floxhub_client::client::test_helpers::new_noop(),
             installable_locker: InstallableLockerImpl::Mock(InstallableLockerMock::new()),
             features: Default::default(),
             verbosity: 0,

@@ -13,6 +13,6 @@ serde.workspace = true
 indexmap.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-flox-catalog = { path = "../flox-catalog" }
+floxhub-client = { path = "../floxhub-client" }
 flox-core = {path = "../flox-core"}
 tokio.workspace = true

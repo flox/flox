@@ -5,11 +5,11 @@ use std::{env, fs};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
-use flox_catalog::{AuthnMode, SearchLimit};
 use flox_core::activate::context::AutoActivateFishMode;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_core::{WriteError, write_atomically};
 use flox_rust_sdk::flox::Features;
+use floxhub_client::{AuthnMode, SearchLimit};
 use itertools::{Either, Itertools};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

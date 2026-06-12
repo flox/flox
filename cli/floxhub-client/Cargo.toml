@@ -1,11 +1,12 @@
 [package]
-name = "flox-catalog"
+name = "floxhub-client"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
 async-stream.workspace = true
 catalog-api-v1.workspace = true
+factory-api-v1.workspace = true
 derive_more.workspace = true
 futures.workspace = true
 http.workspace = true
@@ -32,6 +33,7 @@ serde_json.workspace = true
 itertools.workspace = true
 proptest.workspace = true
 sentry.workspace = true
+tempfile.workspace = true
 tracing-subscriber.workspace = true
 
 [features]

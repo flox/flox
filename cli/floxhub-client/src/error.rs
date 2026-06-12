@@ -13,19 +13,19 @@ pub enum SearchError {
     #[error("invalid search term")]
     InvalidSearchTerm(#[source] api_error::ConversionError),
     #[error("catalog error")]
-    CatalogClientError(#[from] CatalogClientError),
+    FloxhubClientError(#[from] FloxhubClientError),
 }
 
 #[derive(Debug, Error)]
 pub enum ResolveError {
     #[error("catalog error")]
-    CatalogClientError(#[from] CatalogClientError),
+    FloxhubClientError(#[from] FloxhubClientError),
 }
 
 #[derive(Debug, Error)]
 pub enum VersionsError {
     #[error("catalog error")]
-    CatalogClientError(#[from] CatalogClientError),
+    FloxhubClientError(#[from] FloxhubClientError),
     #[error("package not found")]
     NotFound,
 }
@@ -33,7 +33,7 @@ pub enum VersionsError {
 #[derive(Debug, Error)]
 pub enum PublishError {
     #[error("catalog error")]
-    CatalogClientError(#[from] CatalogClientError),
+    FloxhubClientError(#[from] FloxhubClientError),
     #[error("catalog does not have a store configured")]
     UnconfiguredCatalog,
 }
@@ -47,7 +47,7 @@ pub type ApiErrorResponseValue = ResponseValue<ApiErrorResponse>;
 /// This error type wraps errors from the generated `catalog-api-v1` crate.
 /// SDK-specific operation errors (ResolveError, SearchError, etc.) wrap this type.
 #[derive(Debug, Error)]
-pub enum CatalogClientError {
+pub enum FloxhubClientError {
     #[error("system not supported by catalog")]
     UnsupportedSystem(#[source] api_error::ConversionError),
     #[error("{}", fmt_api_error(.0))]
@@ -61,14 +61,14 @@ pub enum CatalogClientError {
 /// Extension trait for converting API errors into client errors.
 pub trait MapApiErrorExt<T> {
     /// Consumes a `Result<T, APIError<ApiErrorResponse>>`, maps any APIError
-    /// into `CatalogClientError`, and returns `Ok(T)` or `Err(...)`.
+    /// into `FloxhubClientError`, and returns `Ok(T)` or `Err(...)`.
     fn map_api_error(
         self,
-    ) -> impl std::future::Future<Output = Result<T, CatalogClientError>> + Send;
+    ) -> impl std::future::Future<Output = Result<T, FloxhubClientError>> + Send;
 }
 
 impl<T: Send> MapApiErrorExt<T> for Result<T, APIError<ApiErrorResponse>> {
-    async fn map_api_error(self) -> Result<T, CatalogClientError> {
+    async fn map_api_error(self) -> Result<T, FloxhubClientError> {
         let err = match self {
             Ok(v) => return Ok(v),
             Err(err) => err,
@@ -80,14 +80,14 @@ impl<T: Send> MapApiErrorExt<T> for Result<T, APIError<ApiErrorResponse>> {
             return parse_api_error(resp).await;
         }
 
-        Err(CatalogClientError::APIError(err))
+        Err(FloxhubClientError::APIError(err))
     }
 }
 
-async fn parse_api_error<T>(resp: reqwest::Response) -> Result<T, CatalogClientError> {
+async fn parse_api_error<T>(resp: reqwest::Response) -> Result<T, FloxhubClientError> {
     let status = resp.status();
     match ApiErrorResponseValue::from_response::<api_types::ErrorResponse>(resp).await {
-        Ok(resp_parsed) => Err(CatalogClientError::APIError(APIError::ErrorResponse(
+        Ok(resp_parsed) => Err(FloxhubClientError::APIError(APIError::ErrorResponse(
             resp_parsed,
         ))),
         Err(_) => {
@@ -99,7 +99,7 @@ async fn parse_api_error<T>(resp: reqwest::Response) -> Result<T, CatalogClientE
                 .body("response body omitted by error parsing")
                 .expect("failed to rebuild response while parsing error response")
                 .into();
-            Err(CatalogClientError::APIError(APIError::UnexpectedResponse(
+            Err(FloxhubClientError::APIError(APIError::UnexpectedResponse(
                 resp_bare,
             )))
         },

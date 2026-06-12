@@ -914,7 +914,7 @@ mod tests {
     async fn pyproject_empty_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        flox.catalog_client = auto_recording_catalog_client("python_no_pyproject");
+        flox.floxhub_client = auto_recording_catalog_client("python_no_pyproject");
 
         let pyproject = PyProject::from_pyproject_content(&flox, "").await.unwrap();
 
@@ -935,7 +935,7 @@ mod tests {
     async fn pyproject_available_version_no_space() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        flox.catalog_client = auto_recording_catalog_client("python_lte310_no_space");
+        flox.floxhub_client = auto_recording_catalog_client("python_lte310_no_space");
 
         let content = indoc! {r#"
             [project]
@@ -959,7 +959,7 @@ mod tests {
     async fn pyproject_available_version_with_space() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        flox.catalog_client = auto_recording_catalog_client("python_lte310_with_space");
+        flox.floxhub_client = auto_recording_catalog_client("python_lte310_with_space");
 
         // python docs have a space in the version:
         // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
@@ -984,7 +984,7 @@ mod tests {
     async fn pyproject_available_version_eqeq() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        flox.catalog_client = auto_recording_catalog_client("python_eqeq310");
+        flox.floxhub_client = auto_recording_catalog_client("python_eqeq310");
 
         let content = indoc! {r#"
             [project]
@@ -1007,7 +1007,7 @@ mod tests {
     async fn pyproject_available_version_gte_lt() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        flox.catalog_client = auto_recording_catalog_client("python_gte310_lte311");
+        flox.floxhub_client = auto_recording_catalog_client("python_gte310_lte311");
 
         let content = indoc! {r#"
             [project]
@@ -1033,7 +1033,7 @@ mod tests {
     async fn pyproject_unavailable_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        flox.catalog_client = auto_recording_catalog_client("python_no_match");
+        flox.floxhub_client = auto_recording_catalog_client("python_no_match");
 
         let content = indoc! {r#"
             [project]
@@ -1102,7 +1102,7 @@ mod tests {
     async fn poetry_pyproject_available_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        flox.catalog_client = auto_recording_catalog_client("python_poetry_carat37");
+        flox.floxhub_client = auto_recording_catalog_client("python_poetry_carat37");
 
         let content = indoc! {r#"
             [tool.poetry.dependencies]
@@ -1131,7 +1131,7 @@ mod tests {
     async fn poetry_pyproject_unavailable_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        flox.catalog_client = auto_recording_catalog_client("python_poetry_1");
+        flox.floxhub_client = auto_recording_catalog_client("python_poetry_1");
 
         let content = indoc! {r#"
             [tool.poetry.dependencies]
