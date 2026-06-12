@@ -471,17 +471,6 @@ else
   fail "prompt: expected EACCES (errno=13) + fail-closed SANDBOX ERROR (rc=$rc, ERROR lines=$error_n)" "$out"
 fi
 
-# Transitional alias: FLOX_VIRTUAL_SANDBOX=ask parses as prompt while the Rust
-# activation side still exports the old mode name. Same fail-closed behavior;
-# this case is removed together with the alias once the rename lands.
-out="$(run_probe_activation ask open "$out_file" 2>&1)"; rc=$?
-if [[ $rc -ne 0 && "$out" == *"OPEN_FAIL"* && "$out" == *"errno=13"* \
-      && "$out" == *"denying read of $out_file (fail-closed"* ]]; then
-  pass "prompt: 'ask' mode word still accepted as a transitional alias"
-else
-  fail "prompt: 'ask' alias should behave as prompt (rc=$rc)" "$out"
-fi
-
 # Dotfile flip. Under a prompt-mode ACTIVATION the $HOME-dotfile carve-out is
 # skipped, so a read of an out-of-closure $HOME dotfile is routed through the
 # prompt flow and DENIED (here with no socket, that deny is the fail-closed

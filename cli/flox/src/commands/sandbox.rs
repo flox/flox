@@ -1,4 +1,4 @@
-//! `flox sandbox` — review and manage sandbox grants for an `ask`-mode
+//! `flox sandbox` — review and manage sandbox grants for a `prompt`-mode
 //! activation.
 //!
 //! The broker (hosted in the activation executive) owns the pending queue and
@@ -221,7 +221,7 @@ impl Broker {
         let stream = UnixStream::connect(&self.socket).map_err(|err| {
             anyhow::anyhow!(
                 "could not reach the sandbox broker at {}: {err}.\n\
-                 Is the environment activated with '--sandbox ask'?",
+                 Is the environment activated with '--sandbox prompt'?",
                 self.socket.display()
             )
         })?;
@@ -307,7 +307,7 @@ struct SandboxEnv {
 
 impl SandboxEnv {
     /// True when the broker control socket is currently bound (the environment
-    /// is activated with `--sandbox ask`).
+    /// is activated with `--sandbox prompt`).
     fn broker(&self) -> Option<Broker> {
         UnixStream::connect(&self.control_socket)
             .ok()
@@ -340,7 +340,7 @@ async fn review(flox: &mut Flox, args: ReviewArgs) -> Result<()> {
     let env = resolve(flox, &args.environment).await?;
     let Some(broker) = env.broker() else {
         message::info(format!(
-            "No active 'ask' sandbox for {}. Activate with '--sandbox ask' first.",
+            "No active 'prompt' sandbox for {}. Activate with '--sandbox prompt' first.",
             env.description
         ));
         return Ok(());
@@ -371,7 +371,7 @@ async fn review(flox: &mut Flox, args: ReviewArgs) -> Result<()> {
 fn print_summary(env: &SandboxEnv, status: Option<&StatusView>) {
     let header = match status {
         Some(status) => format!("Sandbox '{}' — {} (active)", status.mode, env.description),
-        None => format!("Sandbox 'ask' — {}", env.description),
+        None => format!("Sandbox 'prompt' — {}", env.description),
     };
     message::plain(header);
     if let Some(status) = status {
@@ -913,7 +913,7 @@ mod tests {
     #[test]
     fn the_in_session_marker_blocks_approval_verbs() {
         // With the marker set, an approval verb refuses; cleared, it passes.
-        temp_env::with_var(FLOX_VIRTUAL_SANDBOX_VAR, Some("ask"), || {
+        temp_env::with_var(FLOX_VIRTUAL_SANDBOX_VAR, Some("prompt"), || {
             assert!(refuse_if_in_session("allow").is_err());
         });
         temp_env::with_var(FLOX_VIRTUAL_SANDBOX_VAR, None::<&str>, || {

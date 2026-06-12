@@ -247,7 +247,7 @@ pub struct Options {
     // TODO: Migrate to `ActivateOptions`.
     pub cuda_detection: Option<bool>,
     /// The sandbox mode applied when the environment is activated
-    /// (`off`, `warn`, `enforce`, or `ask`). An explicit `--sandbox` flag
+    /// (`off`, `warn`, `enforce`, or `prompt`). An explicit `--sandbox` flag
     /// on `flox activate` takes precedence over this setting.
     pub sandbox: Option<SandboxMode>,
     /// Options that control the behavior of activations.

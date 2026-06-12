@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 /// The filesystem-mediation level requested for an activation.
 ///
 /// `Off` is the default and matches the historical behavior where no
-/// sandbox is applied. `Warn`, `Enforce`, and `Ask` correspond to the
+/// sandbox is applied. `Warn`, `Enforce`, and `Prompt` correspond to the
 /// libsandbox levels of the same name; this type only carries the
 /// selection through the CLI and activation context — it does not by
 /// itself change libsandbox behavior.
@@ -36,7 +36,13 @@ pub enum SandboxMode {
     /// Out-of-policy access is denied.
     Enforce,
     /// Out-of-policy access is denied and queued for approval.
-    Ask,
+    ///
+    /// The serde alias keeps activation-state files, context files, and
+    /// manifests written while this mode was called `ask` parsing for one
+    /// release cycle; remove the alias (and the matching `FromStr` arm)
+    /// after that.
+    #[serde(alias = "ask")]
+    Prompt,
 }
 
 impl Display for SandboxMode {
@@ -45,13 +51,13 @@ impl Display for SandboxMode {
             SandboxMode::Off => write!(f, "off"),
             SandboxMode::Warn => write!(f, "warn"),
             SandboxMode::Enforce => write!(f, "enforce"),
-            SandboxMode::Ask => write!(f, "ask"),
+            SandboxMode::Prompt => write!(f, "prompt"),
         }
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("'{0}' is not a valid sandbox mode. Expected one of: off, warn, enforce, ask.")]
+#[error("'{0}' is not a valid sandbox mode. Expected one of: off, warn, enforce, prompt.")]
 pub struct SandboxModeParseError(String);
 
 impl FromStr for SandboxMode {
@@ -62,7 +68,10 @@ impl FromStr for SandboxMode {
             "off" => Ok(SandboxMode::Off),
             "warn" => Ok(SandboxMode::Warn),
             "enforce" => Ok(SandboxMode::Enforce),
-            "ask" => Ok(SandboxMode::Ask),
+            "prompt" => Ok(SandboxMode::Prompt),
+            // Transitional alias from the prototype's mode name; remove with
+            // the serde alias above.
+            "ask" => Ok(SandboxMode::Prompt),
             other => Err(SandboxModeParseError(other.to_string())),
         }
     }
@@ -83,7 +92,7 @@ mod tests {
             (SandboxMode::Off, "off"),
             (SandboxMode::Warn, "warn"),
             (SandboxMode::Enforce, "enforce"),
-            (SandboxMode::Ask, "ask"),
+            (SandboxMode::Prompt, "prompt"),
         ];
 
         for (mode, rendered) in cases {
@@ -97,7 +106,7 @@ mod tests {
         let err = "bogus".parse::<SandboxMode>().unwrap_err();
         assert_eq!(
             err.to_string(),
-            "'bogus' is not a valid sandbox mode. Expected one of: off, warn, enforce, ask.",
+            "'bogus' is not a valid sandbox mode. Expected one of: off, warn, enforce, prompt.",
         );
     }
 
@@ -107,12 +116,23 @@ mod tests {
             (SandboxMode::Off, "\"off\""),
             (SandboxMode::Warn, "\"warn\""),
             (SandboxMode::Enforce, "\"enforce\""),
-            (SandboxMode::Ask, "\"ask\""),
+            (SandboxMode::Prompt, "\"prompt\""),
         ];
 
         for (mode, json) in cases {
             assert_eq!(serde_json::to_string(&mode).unwrap(), json);
             assert_eq!(serde_json::from_str::<SandboxMode>(json).unwrap(), mode);
         }
+    }
+
+    #[test]
+    fn legacy_ask_still_parses_as_prompt() {
+        // Activation-state files, context files, and manifests written while
+        // this mode was called `ask` must keep working for one release cycle.
+        assert_eq!("ask".parse::<SandboxMode>().unwrap(), SandboxMode::Prompt);
+        assert_eq!(
+            serde_json::from_str::<SandboxMode>("\"ask\"").unwrap(),
+            SandboxMode::Prompt
+        );
     }
 }

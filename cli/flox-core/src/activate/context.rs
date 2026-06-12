@@ -258,10 +258,10 @@ mod tests {
             "set_prompt": true,
             "flox_env_cuda_detection": "1",
             "interpreter_path": "/interpreter",
-            "sandbox_mode": "ask"
+            "sandbox_mode": "prompt"
         }"#;
 
         let ctx: AttachCtx = serde_json::from_str(json).unwrap();
-        assert_eq!(ctx.sandbox_mode, SandboxMode::Ask);
+        assert_eq!(ctx.sandbox_mode, SandboxMode::Prompt);
     }
 }

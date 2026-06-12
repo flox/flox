@@ -1,8 +1,8 @@
-//! Persisted ask-grant storage (`grants.toml`) and its provenance journal.
+//! Persisted prompt-grant storage (`grants.toml`) and its provenance journal.
 //!
 //! A grant is a glob pattern the user approved in a prior session. At broker
 //! start the file is read once into an in-memory session grant set; a path
-//! matching any grant is allowed silently under `ask`, so an environment the
+//! matching any grant is allowed silently under `prompt`, so an environment the
 //! user has already trusted stays quiet across activations.
 //!
 //! Two files live side by side under `FLOX_SANDBOX_GRANTS_DIR`:
@@ -181,7 +181,7 @@ const NET_SEED_GRANTS: &[&str] = &[
 
 /// Shell rc, profile, and history files seeded as `$HOME`-expanded grants.
 ///
-/// Under `ask` the engine flips the `$HOME`-dotfile carve-out, so without
+/// Under `prompt` the engine flips the `$HOME`-dotfile carve-out, so without
 /// these the first interactive shell would queue a receipt for reading its
 /// own startup files. Covers the zsh and bash families plus the shared
 /// `.profile`/`.inputrc`.
@@ -450,7 +450,7 @@ pub fn grants_file_path(grants_dir: &Path) -> PathBuf {
 }
 
 /// The audit store beside `grants.toml`: NDJSON records appended by the
-/// engine (libsandbox) for every warn-mode report and enforce/ask denial.
+/// engine (libsandbox) for every warn-mode report and enforce/prompt denial.
 pub const AUDIT_FILE_NAME: &str = "audit.ndjson";
 
 /// One audit record as written by the engine.
@@ -463,7 +463,7 @@ pub struct AuditRecord {
     /// Unix seconds when the report was emitted.
     #[serde(default)]
     pub ts: i64,
-    /// The sandbox mode at the time (`warn` / `enforce` / `ask`).
+    /// The sandbox mode at the time (`warn` / `enforce` / `prompt`).
     #[serde(default)]
     pub mode: String,
     /// `fs` or `net`.
@@ -598,7 +598,7 @@ source = "flox sandbox allow"
         .unwrap();
 
         // A broker must keep serving verdicts even if the grants file is
-        // corrupt; it falls back to an empty set (everything goes through ask)
+        // corrupt; it falls back to an empty set (everything goes through prompt)
         // rather than erroring or silently allowing.
         let grants = read_grants(tmp.path());
         assert!(grants.grants.is_empty());

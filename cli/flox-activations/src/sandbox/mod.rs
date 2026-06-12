@@ -36,13 +36,13 @@ pub const ALLOW_ENTRIES_WARN: usize = 200;
 pub const ALLOW_BYTES_WARN: usize = 12 * 1024;
 /// Hard cap: the engine's allow-set entry limit. Past this the env injection
 /// fails loudly rather than silently truncating — a truncated allow-set would
-/// drop grants the user explicitly saved and reopen the ask flow for paths
+/// drop grants the user explicitly saved and reopen the prompt flow for paths
 /// they already approved.
 pub const ALLOW_ENTRIES_MAX: usize = 256;
 /// Hard cap: the engine's allow-set byte limit.
 pub const ALLOW_BYTES_MAX: usize = 16 * 1024;
 
-/// `FLOX_VIRTUAL_SANDBOX` — the libsandbox mode (`warn`/`enforce`/`ask`).
+/// `FLOX_VIRTUAL_SANDBOX` — the libsandbox mode (`warn`/`enforce`/`prompt`).
 pub const FLOX_VIRTUAL_SANDBOX_VAR: &str = "FLOX_VIRTUAL_SANDBOX";
 /// `FLOX_SANDBOX_ALLOW` — space-separated fnmatch globs.
 pub const FLOX_SANDBOX_ALLOW_VAR: &str = "FLOX_SANDBOX_ALLOW";
@@ -61,7 +61,7 @@ pub const FLOX_SRC_DIR_VAR: &str = "FLOX_SRC_DIR";
 pub const FLOX_SANDBOX_PROMPT_SOCKET_VAR: &str =
     flox_core::activate::prompt_protocol::PROMPT_SOCKET_ENV;
 /// `FLOX_SANDBOX_GRANTS_DIR` — directory holding persisted grants; the
-/// engine's write guard routes writes here through the ask flow.
+/// engine's write guard routes writes here through the prompt flow.
 pub const FLOX_SANDBOX_GRANTS_DIR_VAR: &str = "FLOX_SANDBOX_GRANTS_DIR";
 /// `FLOX_SANDBOX_ALLOW_FOREIGN_EXE` — disables libsandbox's
 /// executable-identity check. A build runs its toolchain from inside the
@@ -103,10 +103,10 @@ fn flox_build_mk() -> PathBuf {
         .into()
 }
 
-/// Derive the ask broker's verdict-socket path from the services socket path.
+/// Derive the prompt broker's verdict-socket path from the services socket path.
 ///
 /// The broker rides the per-activation executive and binds a Unix socket the
-/// preloaded libsandbox connects to for `ask` verdicts. Two sides must agree
+/// preloaded libsandbox connects to for `prompt` verdicts. Two sides must agree
 /// on that path with no shared mutable state: the executive (which binds and
 /// listens) and the env injection in [`crate::attach_diff::double_set_envs`]
 /// (which exports it as `FLOX_SANDBOX_SOCKET`). Both already carry the
@@ -123,7 +123,7 @@ pub fn verdict_socket_path(services_socket: &Path) -> PathBuf {
     socket_sibling_path(services_socket, "sbx")
 }
 
-/// Derive the ask broker's control-socket path from the services socket path.
+/// Derive the prompt broker's control-socket path from the services socket path.
 ///
 /// The control socket carries the `flox sandbox` protocol (list/allow/revoke/
 /// status). Unlike the verdict socket it is *not* exported into the session
@@ -411,7 +411,7 @@ pub fn sandbox_env(
     // Disable the executable-identity check for every active mode. An
     // activation runs the user's shell and host tools from outside the
     // closure on purpose; without this the inner shell would abort under
-    // enforce/ask before the user's command ran. Builds never reach this
+    // enforce/prompt before the user's command ran. Builds never reach this
     // path, so build behaviour is untouched.
     env.insert(
         FLOX_SANDBOX_ALLOW_FOREIGN_EXE_VAR.to_string(),
@@ -422,8 +422,8 @@ pub fn sandbox_env(
         compose_preload(existing_preload, &libsandbox),
     );
 
-    // The verdict socket is the libsandbox `ask` RPC rendezvous. Only `ask`
-    // runs a broker, so only `ask` exports the socket; warn/enforce never
+    // The verdict socket is the libsandbox prompt-broker rendezvous. Only
+    // `prompt` runs a broker, so only it exports the socket; warn/enforce never
     // contact a broker and leaving the var unset for them keeps their wire
     // behavior unchanged. The path is a pure function of the services socket
     // (see `verdict_socket_path`), so the broker binds the same path the
@@ -431,7 +431,7 @@ pub fn sandbox_env(
     // broker is absent (e.g. a container activation with no executive), the
     // socket simply never appears and the engine fail-closes — the same
     // outcome as an unreachable broker.
-    if mode == SandboxMode::Ask {
+    if mode == SandboxMode::Prompt {
         env.insert(
             FLOX_SANDBOX_PROMPT_SOCKET_VAR.to_string(),
             verdict_socket.to_string_lossy().into_owned(),
@@ -516,7 +516,7 @@ mod tests {
             env.get(PRELOAD_VAR).unwrap(),
             expected_lib.to_str().unwrap()
         );
-        // The verdict socket is set only for `ask`; enforce never contacts a
+        // The verdict socket is set only for `prompt`; enforce never contacts a
         // broker, so it stays unset here.
         assert!(!env.contains_key(FLOX_SANDBOX_PROMPT_SOCKET_VAR));
     }
@@ -690,7 +690,7 @@ mod tests {
     }
 
     #[test]
-    fn ask_mode_exports_verdict_socket() {
+    fn prompt_mode_exports_verdict_socket() {
         let libexec = fake_libexec();
         let build_mk = libexec.path().join("flox-build.mk");
         let seed_tmp = TempDir::new().unwrap();
@@ -698,7 +698,7 @@ mod tests {
 
         let env = temp_env::with_var("FLOX_BUILD_MK", Some(build_mk.as_os_str()), || {
             sandbox_env(
-                SandboxMode::Ask,
+                SandboxMode::Prompt,
                 &seed_ctx,
                 Path::new("/project/dir"),
                 Path::new("/project/dir/.flox/cache/sandbox"),

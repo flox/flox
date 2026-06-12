@@ -340,13 +340,8 @@ void sandbox_init() {
   } else if (strcmp(flox_virtual_sandbox_value, "pure") == 0) {
     // Pure mode is just like enforce, but invoked within the Nix sandbox.
     sandbox_level = SANDBOX_LEVEL_PURE;
-  } else if (strcmp(flox_virtual_sandbox_value, "ask") == 0) {
-    // Transitional alias for "prompt", kept while the Rust activation side
-    // still exports FLOX_VIRTUAL_SANDBOX=ask; removed with the mode rename.
-    sandbox_level = SANDBOX_LEVEL_ENFORCE;
-    prompt_mode = 1;
   } else {
-    warn_once("FLOX_VIRTUAL_SANDBOX must be (off|warn|enforce|prompt|pure|ask) "
+    warn_once("FLOX_VIRTUAL_SANDBOX must be (off|warn|enforce|prompt|pure) "
               "... ignoring");
     sandbox_level = SANDBOX_LEVEL_OFF;
   }
@@ -1674,7 +1669,7 @@ bool sandbox_check_path(const char *pathname) {
   // entry name in the directory, so listing an out-of-policy directory leaks
   // its contents' names. Treat the enumeration as a READ of the directory
   // path and route it through the shared per-level verdict (warn once +
-  // permit; graceful EACCES under enforce; deny + queue under ask) so every
+  // permit; graceful EACCES under enforce; deny + queue under prompt) so
   // report — and any future audit hook on the shared helper — sees it. Gated
   // on allow_foreign_exe so build behaviour is byte-identical: the build-mode
   // warn-permit below is unchanged.
@@ -2115,10 +2110,10 @@ static bool extract_dest(const struct sockaddr *sa, socklen_t addrlen,
 // destination is matched against FLOX_SANDBOX_ALLOW_NET:
 //   - warn: out-of-policy destinations are reported once per dest, permitted.
 //   - enforce/pure: out-of-policy destinations are refused (ECONNREFUSED).
-//   - ask: there is no network broker yet (it lands in a later batch), so ask
+//   - prompt: there is no network broker yet (it lands in a later batch), so
 //     applies enforce semantics for the network — refuse out-of-policy with a
 //     clean ECONNREFUSED rather than inventing a net receipt the broker will
-//     define. The filesystem ask flow is unaffected.
+//     define. The filesystem prompt flow is unaffected.
 static bool sandbox_check_connect(const struct sockaddr *sa,
                                   socklen_t addrlen) {
   ensure_init();
@@ -2171,7 +2166,7 @@ static bool sandbox_check_connect(const struct sockaddr *sa,
     return true; // warn permits the connect.
   }
 
-  // enforce / pure / ask (no net broker yet): refuse with a clean
+  // enforce / pure / prompt (no net broker yet): refuse with a clean
   // ECONNREFUSED. Report once per destination so a retrying client does not
   // spam, mirroring warn's dedup.
   char dest_key[NET_IP_STRLEN + 16];
