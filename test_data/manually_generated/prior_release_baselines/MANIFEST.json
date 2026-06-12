@@ -2,16 +2,14 @@
   "captured_with_flox_version": "1.12.0",
   "captured_on": "2026-06-12",
   "captured_by": "bill@floxdev.com",
-  "note": "Captured via 'just regen-prior-release-fixtures'. See README.md.",
+  "note": "Captured via 'just regen-prior-release-fixtures'.",
   "fixtures": {
     "plain": {
-      "manifest_lock_sha256": "f0dc20393c5694208ee0a6f0da652cc88e23fa3c78474acfff0dd08d6c82be40",
-      "catalog_replay_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "manifest_lock_sha256": "f0dc20393c5694208ee0a6f0da652cc88e23fa3c78474acfff0dd08d6c82be40"
     },
     "with_include": {
       "parent": {
-        "manifest_lock_sha256": "85b58fa42ef42baea3e9a0277e9bfffeef7a6318d7b1630a0d1d49c3c08dc659",
-        "catalog_replay_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        "manifest_lock_sha256": "85b58fa42ef42baea3e9a0277e9bfffeef7a6318d7b1630a0d1d49c3c08dc659"
       },
       "included": {
         "manifest_lock_sha256": null

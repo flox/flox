@@ -5404,8 +5404,8 @@ success"
 
 # bats test_tags=activate,activate:idempotent
 @test "activate is idempotent for an already-locked already-built environment" {
-  # AI-159: ensure flox activate does not re-lock or re-build when the
-  # lockfile is already current and the rendered link is already valid.
+  # Ensure flox activate does not re-lock or re-build when the lockfile is
+  # already current and the rendered link is already valid.
   project_setup_common
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
@@ -5437,17 +5437,9 @@ success"
 
 # bats test_tags=activate,activate:idempotent,activate:prior-release
 @test "activate does not rewrite a prior-release lockfile" {
-  # AI-159-2 cross-release: a lockfile produced by a prior Flox release must
-  # be accepted as-is by the current release's activate.
-  #
-  # If the PENDING_CAPTURE marker exists the fixture has not yet been captured
-  # (run 'just regen-prior-release-fixtures' to populate it).  Skip rather
-  # than fail so CI stays green while fixtures are deferred.
+  # A lockfile produced by an earlier Flox release must be accepted as-is by
+  # the current release's activate, without rewriting it.
   BASELINES="$MANUALLY_GENERATED/prior_release_baselines"
-  if [ -f "$BASELINES/CAPTURE_PENDING" ]; then
-    skip "prior-release fixtures not yet captured; \
-run 'just regen-prior-release-fixtures' and commit the result"
-  fi
 
   project_setup_common
 
