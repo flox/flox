@@ -83,6 +83,45 @@ fn flox_build_mk() -> PathBuf {
         .into()
 }
 
+/// Derive the ask broker's verdict-socket path from the services socket path.
+///
+/// The broker rides the per-activation executive and binds a Unix socket the
+/// preloaded libsandbox connects to for `ask` verdicts. Two sides must agree
+/// on that path with no shared mutable state: the executive (which binds and
+/// listens) and the env injection in [`crate::attach_diff::double_set_envs`]
+/// (which exports it as `FLOX_SANDBOX_SOCKET`). Both already carry the
+/// services socket path — `runtime_dir/flox.<id>.sock` — so deriving the
+/// verdict path from it as `runtime_dir/sbx.<id>.sock` keeps the agreement a
+/// pure function of one value both sides hold, with no second channel to keep
+/// in sync. The `<id>` substring is preserved verbatim, so the verdict socket
+/// stays as short as the services socket and respects the same macOS 104-char
+/// limit the services socket already cleared.
+///
+/// A later batch's control socket sits beside this one as `sbc.<id>.sock`,
+/// derived the same way.
+pub fn verdict_socket_path(services_socket: &Path) -> PathBuf {
+    socket_sibling_path(services_socket, "sbx")
+}
+
+/// Rewrite a `flox.<id>.sock` services socket path into a sibling socket in
+/// the same directory with a different short prefix (`sbx` for the verdict
+/// socket). When the file name does not match the expected `flox.*.sock`
+/// shape — which should not happen in practice — fall back to appending the
+/// prefix as an extra extension so the result is still deterministic and
+/// unique per services socket.
+fn socket_sibling_path(services_socket: &Path, prefix: &str) -> PathBuf {
+    let dir = services_socket.parent().unwrap_or_else(|| Path::new("."));
+    let file = services_socket
+        .file_name()
+        .map(|f| f.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let rewritten = match file.strip_prefix("flox.") {
+        Some(rest) => format!("{prefix}.{rest}"),
+        None => format!("{file}.{prefix}.sock"),
+    };
+    dir.join(rewritten)
+}
+
 /// Locate the libsandbox preload library.
 ///
 /// The library installs next to flox-build.mk in the package-builder
@@ -167,6 +206,7 @@ pub fn sandbox_env(
     seed_ctx: &SeedContext,
     project_working_dir: &Path,
     grants_dir: &Path,
+    verdict_socket: &Path,
     existing_preload: Option<&str>,
     existing_allow_net: Option<&str>,
 ) -> Result<HashMap<String, String>> {
@@ -210,10 +250,21 @@ pub fn sandbox_env(
         compose_preload(existing_preload, &libsandbox),
     );
 
-    // TODO(next batch): set FLOX_SANDBOX_SOCKET to the broker verdict socket
-    // path once the broker rides the executive. Until then the var stays
-    // unset; the libsandbox `ask` stub denies when it is absent, which is the
-    // correct fail-closed behavior before approvals exist.
+    // The verdict socket is the libsandbox `ask` RPC rendezvous. Only `ask`
+    // runs a broker, so only `ask` exports the socket; warn/enforce never
+    // contact a broker and leaving the var unset for them keeps their wire
+    // behavior unchanged. The path is a pure function of the services socket
+    // (see `verdict_socket_path`), so the broker binds the same path the
+    // engine connects to without a second channel to synchronize. If the
+    // broker is absent (e.g. a container activation with no executive), the
+    // socket simply never appears and the engine fail-closes — the same
+    // outcome as an unreachable broker.
+    if mode == SandboxMode::Ask {
+        env.insert(
+            FLOX_SANDBOX_SOCKET_VAR.to_string(),
+            verdict_socket.to_string_lossy().into_owned(),
+        );
+    }
 
     Ok(env)
 }
@@ -262,6 +313,7 @@ mod tests {
                 &seed_ctx,
                 Path::new("/project/dir"),
                 Path::new("/project/dir/.flox/cache/sandbox"),
+                Path::new("/run/sbx.abc.sock"),
                 None,
                 None,
             )
@@ -292,8 +344,54 @@ mod tests {
             env.get(PRELOAD_VAR).unwrap(),
             expected_lib.to_str().unwrap()
         );
-        // The verdict socket is NOT set in this batch (no broker yet).
+        // The verdict socket is set only for `ask`; enforce never contacts a
+        // broker, so it stays unset here.
         assert!(!env.contains_key(FLOX_SANDBOX_SOCKET_VAR));
+    }
+
+    #[test]
+    fn ask_mode_exports_verdict_socket() {
+        let libexec = fake_libexec();
+        let build_mk = libexec.path().join("flox-build.mk");
+        let seed_tmp = TempDir::new().unwrap();
+        let seed_ctx = minimal_seed_ctx(&seed_tmp);
+
+        let env = temp_env::with_var("FLOX_BUILD_MK", Some(build_mk.as_os_str()), || {
+            sandbox_env(
+                SandboxMode::Ask,
+                &seed_ctx,
+                Path::new("/project/dir"),
+                Path::new("/project/dir/.flox/cache/sandbox"),
+                Path::new("/run/sbx.abc.sock"),
+                None,
+                None,
+            )
+            .unwrap()
+        });
+
+        // Ask runs a broker, so the verdict socket is exported and matches the
+        // path the broker is expected to bind.
+        assert_eq!(
+            env.get(FLOX_SANDBOX_SOCKET_VAR).unwrap(),
+            "/run/sbx.abc.sock"
+        );
+    }
+
+    #[test]
+    fn verdict_socket_path_is_a_sibling_of_the_services_socket() {
+        // The verdict socket preserves the `<id>` and lives next to the
+        // services socket, swapping only the `flox` prefix for `sbx` so both
+        // the broker and the env injection compute the identical path.
+        assert_eq!(
+            verdict_socket_path(Path::new("/run/user/1000/flox.deadbeef.sock")),
+            PathBuf::from("/run/user/1000/sbx.deadbeef.sock"),
+        );
+        // An unexpected services socket shape still yields a deterministic,
+        // unique sibling rather than panicking.
+        assert_eq!(
+            verdict_socket_path(Path::new("/run/custom.sock")),
+            PathBuf::from("/run/custom.sock.sbx.sock"),
+        );
     }
 
     #[test]
@@ -310,6 +408,7 @@ mod tests {
                 &seed_ctx,
                 Path::new("/project"),
                 Path::new("/grants"),
+                Path::new("/run/sbx.abc.sock"),
                 None,
                 None,
             )
@@ -334,6 +433,7 @@ mod tests {
             &ctx,
             Path::new("/project"),
             Path::new("/grants"),
+            Path::new("/run/sbx.abc.sock"),
             None,
             None,
         )
@@ -357,6 +457,7 @@ mod tests {
                 &seed_ctx,
                 Path::new("/project"),
                 Path::new("/grants"),
+                Path::new("/run/sbx.abc.sock"),
                 None,
                 Some("example.com 10.0.0.0/8"),
             )
