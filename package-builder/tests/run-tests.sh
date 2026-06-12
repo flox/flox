@@ -984,6 +984,22 @@ else
 fi
 rm -f "$fixture/.env"
 
+# The same create driven by a RELATIVE path: `cd $fixture` then create ".env".
+# This is the natural agent invocation (`cd project && echo x > .env`), and the
+# bare name matches neither `**/.env` (the pattern's literal '/' has no
+# counterpart in the string under fnmatch flags=0) nor any `~/`-expanded
+# absolute pattern — so without cwd-absolutization the create is judged only by
+# the (in-policy) parent and slips through. Assert the denial AND that the
+# report names the absolutized target (".../.env"), proving the engine matched
+# the cwd-joined candidate, not the raw relative name.
+out="$( cd "$fixture" && run_activation enforce "$HOME" -- create ".env" 2>&1 )"; rc=$?
+if [[ $rc -ne 0 && "$out" == *"/.env is not in the sandbox (sensitive)"* ]]; then
+  pass "enforce+activation: relative new sensitive file create denied (cwd-absolutized)"
+else
+  fail "enforce+activation: creating '.env' relative to an in-policy cwd should be denied as sensitive (rc=$rc)" "$out"
+fi
+rm -f "$fixture/.env"
+
 # creat(): a new file under an OUT-OF-POLICY dir is denied. creat is a distinct
 # entry point from open(O_CREAT); without its own interceptor the write would
 # slip past the sandbox.

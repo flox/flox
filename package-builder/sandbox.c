@@ -12,6 +12,13 @@
  * As with the parsing of FLOX_ENV_DIRS, it is essential that this parsing
  * of the closure be performant and initialized only once per invocation, so we
  * start by reading closure paths into a btable from $FLOX_ENV/requisites.txt.
+ *
+ * Threat model: this is friction plus audit for cooperative tools, not
+ * containment. Interposition only mediates libc entry points (raw syscalls
+ * and statically-linked binaries bypass it entirely), and every path check
+ * is check-then-act: the policy decision resolves the name, then the real
+ * call re-resolves it, so a symlink swapped in between defeats the check.
+ * That race is accepted as inside the cooperative-tools threat model.
  */
 
 #define _GNU_SOURCE
@@ -1381,7 +1388,8 @@ static struct ask_result ask_broker(const char *real_path, const char *raw,
 // activation-denied sensitive path, or an activation create whose parent
 // directory is not in policy. `display` is the user-facing path string;
 // `dedup_key` is the key used to warn/deny at most once (the resolved realpath
-// for an existing path, or the opened pathname for a create). `suffix` is an
+// for an existing path, or the opened pathname for a create — cwd-absolutized
+// when the sensitive set flagged the create). `suffix` is an
 // optional parenthetical reason appended to the message (e.g. " (sensitive)"),
 // or "" for none. `raw` is the path as originally opened, used as the RPC's
 // `raw` field under ask.
@@ -1527,21 +1535,39 @@ bool sandbox_check_path(const char *pathname) {
     // writes. The threat model is preserved — the nearest existing ancestor of
     // `~/newfile` is `$HOME`, which is out of policy, so the create is denied.
     if (allow_foreign_exe && in_write_access) {
-      // No realpath exists, so the display, dedup key, and RPC raw/path are
-      // all the opened path. The exe-identity report is a no-op here
-      // (allow_foreign_exe is set), so it is not called; only file access is
-      // being mediated.
+      // The exe-identity report is a no-op here (allow_foreign_exe is set),
+      // so it is not called; only file access is being mediated.
       //
       // A NEW sensitive file (writing a fresh ~/.aws/credentials, or a project
       // .env) is denied even when its parent directory is in policy. Without
       // this, the sensitive-file protection that covers existing files (below)
       // would have an obvious hole for first-time creation: an agent could
       // write a credential file into the project tree. The target has no
-      // realpath yet, so match the sensitive globs against the opened path —
-      // they are `**`-anchored or `~/`-expanded and match an absolute opened
-      // path the same way they match a resolved one.
-      if (path_is_sensitive(pathname))
-        return out_of_policy_verdict(pathname, pathname, pathname,
+      // realpath yet, and the sensitive globs (`**`-anchored or `~/`-expanded)
+      // only match ABSOLUTE strings: a bare relative create — `cd project &&
+      // echo x > .env` opens ".env" — slips past a raw match because the
+      // pattern's literal '/' must appear in the string under fnmatch with
+      // flags=0. So absolutize a relative pathname against the cwd, exactly
+      // as the open() being guarded resolves it, and match the sensitive set
+      // against that candidate. The joined candidate is not canonicalized
+      // (a nonexistent leaf has no realpath, so "." / ".." components are
+      // kept); the `**` patterns still match through them, and full
+      // canonicalization is outside the cooperative-tools threat model. On
+      // any cwd/overflow trouble fall back to the raw path, which preserves
+      // the absolute-path behaviour. The candidate also serves as display and
+      // dedup key so the report names the actual target; the RPC raw field
+      // stays the path as opened.
+      char abs_buf[PATH_MAX];
+      const char *candidate = pathname;
+      if (pathname[0] != '/') {
+        char cwd_real[PATH_MAX];
+        if (realpath(".", cwd_real) != NULL &&
+            (size_t)snprintf(abs_buf, sizeof(abs_buf), "%s/%s", cwd_real,
+                             pathname) < sizeof(abs_buf))
+          candidate = abs_buf;
+      }
+      if (path_is_sensitive(candidate))
+        return out_of_policy_verdict(candidate, candidate, pathname,
                                      " (sensitive)");
       if (!create_parent_in_policy(pathname))
         return out_of_policy_verdict(pathname, pathname, pathname, "");
@@ -1576,8 +1602,13 @@ bool sandbox_check_path(const char *pathname) {
 
   // If the running executable is itself outside the closure, report it once
   // before any per-path message so the user sees the root cause first. In
-  // enforce/pure mode this is fatal (same policy as any other out-of-closure
-  // file access); in warn mode it warns and continues.
+  // warn mode it warns and continues. In enforce/pure mode the exe-identity
+  // check is the one DELIBERATE exception to the graceful-EACCES rule for
+  // policy violations: it exits fatally. It is build-only — an activation
+  // returns early from the check via allow_foreign_exe — and a build whose
+  // own toolchain is out of closure cannot produce a reproducible result,
+  // so aborting early is the correct outcome. File-access denials, by
+  // contrast, are always graceful EACCES (see out_of_policy_verdict).
   maybe_report_process_outside_closure();
 
   // Surface the resolved realpath alongside the opened path in any message

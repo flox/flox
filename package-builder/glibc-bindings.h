@@ -129,5 +129,8 @@ __asm__(".symver syscall,syscall@" GLIBC_MIN_VERSION);
 // GLIBC for each arch (chosen over clock_gettime, which was in librt at the
 // x86_64 baseline and would raise the floor).
 __asm__(".symver time,time@" GLIBC_MIN_VERSION);
+// write() performs the single-shot O_APPEND record append in the audit-store
+// hook (audit_append). At the baseline GLIBC for each arch.
+__asm__(".symver write,write@" GLIBC_MIN_VERSION);
 
 #endif // GLIBC_BINDINGS_H
