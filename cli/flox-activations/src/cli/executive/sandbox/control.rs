@@ -86,10 +86,12 @@ pub struct ControlResponse {
 }
 
 /// A pending entry as the CLI renders it.
+///
+/// The prompt wire protocol carries only the realpath, so there is no
+/// read-vs-write column here; the engine-side audit store records the op.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PendingView {
     pub req: u64,
-    pub op: String,
     pub path: String,
     pub hits: u64,
 }
@@ -344,7 +346,6 @@ fn write_response(writer: &mut UnixStream, response: &ControlResponse) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::executive::sandbox::verdict::VerdictRequest;
 
     /// A broker state with a grants dir under a tempdir, returning both so the
     /// test can inspect grants.toml after an `allow`.
@@ -352,18 +353,6 @@ mod tests {
         let grants_dir = tmp.join("cache").join("sandbox");
         std::fs::create_dir_all(&grants_dir).unwrap();
         Arc::new(Mutex::new(BrokerState::with_grants_dir(vec![], grants_dir)))
-    }
-
-    fn fs_request(path: &str, op: &str) -> VerdictRequest {
-        VerdictRequest {
-            v: 1,
-            kind: "fs".to_string(),
-            op: op.to_string(),
-            path: path.to_string(),
-            raw: path.to_string(),
-            pid: 1,
-            exe: String::new(),
-        }
     }
 
     /// An out-of-session peer pid for tests: pid 1 (init) is never a descendant
@@ -381,7 +370,7 @@ mod tests {
         state
             .lock()
             .unwrap()
-            .decide(&fs_request("/home/dev/.aws/credentials", "read"));
+            .decide("/home/dev/.aws/credentials");
 
         let response = dispatch(
             r#"{"cmd":"list-pending"}"#,
@@ -392,7 +381,6 @@ mod tests {
         assert!(response.ok);
         assert_eq!(response.pending.len(), 1);
         assert_eq!(response.pending[0].path, "/home/dev/.aws/credentials");
-        assert_eq!(response.pending[0].op, "read");
     }
 
     #[test]
@@ -402,7 +390,7 @@ mod tests {
         state
             .lock()
             .unwrap()
-            .decide(&fs_request("/home/dev/.config/gh/hosts.yml", "read"));
+            .decide("/home/dev/.config/gh/hosts.yml");
 
         // Allow the exact path, session-only.
         let response = dispatch(
@@ -419,8 +407,11 @@ mod tests {
         let verdict = state
             .lock()
             .unwrap()
-            .decide(&fs_request("/home/dev/.config/gh/hosts.yml", "read"));
-        assert_eq!(verdict.verdict, "allow");
+            .decide("/home/dev/.config/gh/hosts.yml");
+        assert!(
+            verdict.wire_line().starts_with("allow-glob "),
+            "{verdict:?}"
+        );
         // Session-only: grants.toml was not written.
         let grants_toml = tmp.path().join("cache/sandbox/grants.toml");
         assert!(!grants_toml.exists());
@@ -476,8 +467,8 @@ mod tests {
         let verdict = state
             .lock()
             .unwrap()
-            .decide(&fs_request("/home/dev/data/x", "read"));
-        assert_eq!(verdict.verdict, "deny");
+            .decide("/home/dev/data/x");
+        assert!(verdict.wire_line().starts_with("deny "), "{verdict:?}");
         // Gone from grants.toml too.
         let grants_dir = tmp.path().join("cache/sandbox");
         assert!(
@@ -575,7 +566,7 @@ mod tests {
     fn status_reports_mode_and_counts() {
         let tmp = tempfile::tempdir().unwrap();
         let state = state_in(tmp.path());
-        state.lock().unwrap().decide(&fs_request("/p", "read"));
+        state.lock().unwrap().decide("/p");
         let response = dispatch(
             r#"{"cmd":"status"}"#,
             &state,
@@ -583,7 +574,7 @@ mod tests {
             OUT_OF_SESSION_PEER,
         );
         let status = response.status.unwrap();
-        assert_eq!(status.mode, "ask");
+        assert_eq!(status.mode, "prompt");
         assert_eq!(status.pending, 1);
     }
 }

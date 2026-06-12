@@ -199,14 +199,14 @@ fn bind_and_serve(
     let verdict_state = Arc::clone(&state);
     let verdict_shutdown = Arc::clone(&shutdown);
     let verdict_thread = std::thread::Builder::new()
-        .name("flox-ask-verdict".to_string())
+        .name("flox-prompt-verdict".to_string())
         .spawn(move || verdict::serve(verdict_listener, verdict_state, verdict_shutdown))
         .context("could not spawn verdict broker thread")?;
 
     let control_state = Arc::clone(&state);
     let control_shutdown = Arc::clone(&shutdown);
     let control_thread = std::thread::Builder::new()
-        .name("flox-ask-control".to_string())
+        .name("flox-prompt-control".to_string())
         .spawn(move || {
             control::serve(
                 control_listener,
@@ -240,7 +240,7 @@ mod tests {
 
     /// Connect to the verdict socket, send one request line, return the
     /// response line. Mirrors the C client's one-exchange-per-connection.
-    fn ask(socket: &Path, line: &str) -> String {
+    fn exchange(socket: &Path, line: &str) -> String {
         let mut stream = UnixStream::connect(socket).unwrap();
         stream.write_all(line.as_bytes()).unwrap();
         stream.write_all(b"\n").unwrap();
@@ -277,17 +277,8 @@ mod tests {
 
         let _handle = bind_and_serve(&verdict, &control, &dir, 1).unwrap();
 
-        let response = ask(
-            &verdict,
-            r#"{"v":1,"kind":"fs","op":"read","path":"/home/dev/.aws/credentials","raw":"~/.aws/credentials","pid":1,"exe":""}"#,
-        );
-        assert!(response.contains("\"verdict\":\"deny\""), "{response}");
-        assert!(response.contains("\"cache\":\"ttl\""), "{response}");
-        assert!(response.contains("\"req\":1"), "{response}");
-        assert!(
-            response.contains("\"scope\":\"/home/dev/.aws/credentials\""),
-            "{response}"
-        );
+        let response = exchange(&verdict, "/home/dev/.aws/credentials");
+        assert_eq!(response, "deny 1");
     }
 
     #[test]
@@ -301,18 +292,10 @@ mod tests {
 
         let _handle = bind_and_serve(&verdict, &control, &dir, 1).unwrap();
 
-        // A path covered by the saved grant is allowed silently under ask,
-        // with the matched glob as the cache scope.
-        let response = ask(
-            &verdict,
-            r#"{"v":1,"kind":"fs","op":"read","path":"/home/dev/.config/gh/hosts.yml","raw":"~/.config/gh/hosts.yml","pid":1,"exe":""}"#,
-        );
-        assert!(response.contains("\"verdict\":\"allow\""), "{response}");
-        assert!(
-            response.contains("\"scope\":\"/home/dev/.config/**\""),
-            "{response}"
-        );
-        assert!(response.contains("\"cache\":\"scope\""), "{response}");
+        // A path covered by the saved grant is allowed silently, with the
+        // matched glob as the reply pattern for the client's cache.
+        let response = exchange(&verdict, "/home/dev/.config/gh/hosts.yml");
+        assert_eq!(response, "allow-glob /home/dev/.config/**");
     }
 
     #[test]
@@ -375,25 +358,19 @@ mod tests {
         let _handle = bind_and_serve(&verdict, &control, &dir, 2).unwrap();
 
         // Before: the path is denied.
-        let denied = ask(
-            &verdict,
-            r#"{"v":1,"kind":"fs","op":"read","path":"/home/dev/.config/gh/hosts.yml","raw":"~","pid":1,"exe":""}"#,
-        );
-        assert!(denied.contains("\"verdict\":\"deny\""), "{denied}");
+        let denied = exchange(&verdict, "/home/dev/.config/gh/hosts.yml");
+        assert!(denied.starts_with("deny "), "{denied}");
 
         // Approve over the control socket (session-only).
-        let control_reply = ask(
+        let control_reply = exchange(
             &control,
             r#"{"cmd":"allow","pattern":"/home/dev/.config/gh/hosts.yml","source":"review","persist":false}"#,
         );
         assert!(control_reply.contains("\"ok\":true"), "{control_reply}");
 
         // After: the same path now allows, with zero re-activation.
-        let allowed = ask(
-            &verdict,
-            r#"{"v":1,"kind":"fs","op":"read","path":"/home/dev/.config/gh/hosts.yml","raw":"~","pid":1,"exe":""}"#,
-        );
-        assert!(allowed.contains("\"verdict\":\"allow\""), "{allowed}");
+        let allowed = exchange(&verdict, "/home/dev/.config/gh/hosts.yml");
+        assert!(allowed.starts_with("allow-glob "), "{allowed}");
     }
 
     #[test]
