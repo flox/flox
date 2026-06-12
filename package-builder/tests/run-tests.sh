@@ -178,6 +178,16 @@ else
   fail "enforce: out-of-closure open should be fatal" "$out"
 fi
 
+# Message attribution: every SANDBOX line carries [exe:pid] so a report can
+# be traced to the process that triggered it (a bare PID is useless once the
+# process exits). The probe binary is sandbox_probe, so the ERROR line from
+# the enforce denial above must name it alongside the PID.
+if grep -Eq 'SANDBOX ERROR\[sandbox_probe:[0-9]+\]:' <<<"$out"; then
+  pass "enforce: denial line attributes [exe:pid] (sandbox_probe)"
+else
+  fail "enforce: ERROR line should carry [exe:pid] attribution" "$out"
+fi
+
 # enforce: a $HOME dotfile is PERMITTED (not blocked) but warned, even under
 # enforce. The test HOME is created under the real $HOME, which is not part of
 # any built-in allow-dir prefix, so the access exercises the home-dotfile path
