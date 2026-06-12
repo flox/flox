@@ -16,6 +16,7 @@ flox [<general-options>] sandbox
 
 flox [<general-options>] sandbox list
      [-d=<path> | -r=<owner/name>]
+     [--all]
 
 flox [<general-options>] sandbox allow
      [-d=<path> | -r=<owner/name>]
@@ -24,6 +25,10 @@ flox [<general-options>] sandbox allow
 flox [<general-options>] sandbox revoke
      [-d=<path> | -r=<owner/name>]
      <GLOB>
+
+flox [<general-options>] sandbox audit
+     [-d=<path> | -r=<owner/name>]
+     [--clear]
 ```
 
 # DESCRIPTION
@@ -55,6 +60,28 @@ folded into the sandbox allow-set, so a path approved once is not asked about
 again. Grants are op-recorded but op-blind in enforcement: a saved grant allows
 all access kinds on its paths in later sessions.
 
+## Default policy as grants
+
+The first sandboxed activation of an environment seeds the default policy
+into `grants.toml` as explicit `default-seed` grants: git hosting and release
+hosts, the npm/PyPI/crates.io registries, shell dotfile and dev-config reads,
+and Flox's own metrics endpoint. There is no invisible policy: every default
+allowance is inspectable with `flox sandbox list --all` and revocable with
+`flox sandbox revoke`. A revoked default stays revoked — re-seeding is gated
+on a version marker in the file, never on entry presence. Only loopback and
+Flox's own service hosts (FloxHub, the Flox Catalog) remain hardcoded, since
+revoking them would break flox itself; the sensitive set likewise remains a
+hardcoded denylist and is never grantable by seeding.
+
+## Audit log
+
+The sandbox engine appends every report it emits — warn-mode reports and
+enforce/ask denials, for file accesses, directory listings, and network
+connects — to `audit.ndjson` beside `grants.toml`. `flox sandbox audit`
+reads it directly, so denials are queryable after the session ends and in
+every mode (warn and enforce run no broker). Allowed accesses are never
+recorded, and records are deduplicated to one per path per process.
+
 ## Self-approval guard
 
 The approval verbs (`allow`, `revoke`) are refused when run from inside the
@@ -77,10 +104,12 @@ This is friction plus audit, not containment. Every grant is journaled, and
     directory always (only when the path is not sensitive), deny for the
     session, or decide later. Pressing Esc keeps a request queued.
 
-`flox sandbox list`
+`flox sandbox list [--all]`
 :   List saved grants (pattern, ops, source, date, evidence), the current
     session grants, the sensitive set that is never auto-granted, and the
-    allow-set cap consumption.
+    allow-set cap consumption. Default-seed grants collapse into one summary
+    row; pass `--all` to list them individually. Network grants do not count
+    against the filesystem allow-set caps.
 
 `flox sandbox allow <GLOB>`
 :   Allow a path glob without prompting and save it to `grants.toml`. When a
@@ -88,7 +117,15 @@ This is friction plus audit, not containment. Every grant is journaled, and
     pending requests; otherwise the grant is written for the next activation.
 
 `flox sandbox revoke <GLOB>`
-:   Remove a saved or session grant by its exact pattern.
+:   Remove a saved or session grant by its exact pattern. Revoking a network
+    grant takes effect at the next activation: the network policy is compiled
+    at session start and is not re-read live.
+
+`flox sandbox audit [--clear]`
+:   Show the recorded sandbox denials and warnings for the environment,
+    aggregated by path, operation, and mode, with a count, the last-seen
+    time, and the verdict. Works without an active session. `--clear`
+    truncates the audit log only — it never touches grants.
 
 # SENSITIVE PATHS
 
@@ -104,6 +141,15 @@ space-separated list of globs).
 ```
 
 # EXAMPLES
+
+Review what the sandbox denied after a session:
+```console
+$ flox sandbox audit
+Sandbox audit for environment 'myproject'
+  PATH                                     OP       MODE     COUNT  LAST SEEN         VERDICT
+  /Users/dev/demo-secrets/.env             read     enforce  2      2026-06-11 17:02  denied
+  example.com:443                          connect  enforce  1      2026-06-11 17:03  denied
+```
 
 Approve a queued read from a second terminal, then retry in the first:
 ```console
