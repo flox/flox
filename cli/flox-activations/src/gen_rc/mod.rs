@@ -115,6 +115,7 @@ pub(crate) mod test_helpers {
             flox_env_cuda_detection: "0".to_string(),
             interpreter_path: PathBuf::from("/interpreter"),
             sandbox_mode: SandboxMode::default(),
+            metrics_host: None,
         };
         let project_ctx = Some(AttachProjectCtx {
             env_project: PathBuf::from("/flox_env_project"),

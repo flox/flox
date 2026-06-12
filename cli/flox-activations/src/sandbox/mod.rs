@@ -189,17 +189,24 @@ fn compose_preload(existing: Option<&str>, libsandbox: &Path) -> String {
     }
 }
 
-/// Compose `FLOX_SANDBOX_ALLOW_NET` from any operator-supplied value plus the
-/// flox seeds, space-separated and deduplicated with the operator entries
-/// first. Unlike the other allow-sets, the network policy honors an inherited
-/// value so a CI step (or a one-off `FLOX_SANDBOX_ALLOW_NET=host flox
-/// activate`) can extend it without losing flox's own service hosts.
-fn merge_allow_net(existing: Option<&str>, seed: &SeedAllowSet) -> String {
+/// Compose `FLOX_SANDBOX_ALLOW_NET` from any operator-supplied value, the
+/// infrastructure seeds, and the saved network grants, space-separated and
+/// deduplicated with the operator entries first. Unlike the other
+/// allow-sets, the network policy honors an inherited value so a CI step (or
+/// a one-off `FLOX_SANDBOX_ALLOW_NET=host flox activate`) can extend it
+/// without losing flox's own service hosts.
+///
+/// `grant_hosts` are the patterns of `kind = "net"` grants from grants.toml
+/// — the revocable half of the default network policy (git hosts,
+/// registries, the metrics endpoint) plus any host the user granted. They
+/// merge after the seeds, so revoking one removes it from the next session's
+/// policy without touching the hardcoded infrastructure entries.
+fn merge_allow_net(existing: Option<&str>, seed: &SeedAllowSet, grant_hosts: &[String]) -> String {
     let mut entries: Vec<String> = Vec::new();
     let mut seen = std::collections::HashSet::new();
     let mut push = |entry: &str| {
         let entry = entry.trim();
-        if !entry.is_empty() && seen.insert(entry.to_string()) {
+        if !entry.is_empty() && !entry.contains(' ') && seen.insert(entry.to_string()) {
             entries.push(entry.to_string());
         }
     };
@@ -209,6 +216,9 @@ fn merge_allow_net(existing: Option<&str>, seed: &SeedAllowSet) -> String {
         }
     }
     for entry in &seed.allow_net {
+        push(entry);
+    }
+    for entry in grant_hosts {
         push(entry);
     }
     entries.join(" ")
@@ -243,6 +253,12 @@ fn compile_allow_set(seed: &SeedAllowSet, grants: &GrantsFile) -> Result<Compile
     let mut allow_dirs = seed.allow_dirs.clone();
 
     for grant in &grants.grants {
+        // Network grants are compiled into FLOX_SANDBOX_ALLOW_NET by
+        // merge_allow_net; they never join the filesystem allow-set and
+        // never count against its caps.
+        if grant.is_net() {
+            continue;
+        }
         let pattern = grant.pattern.trim();
         if pattern.is_empty() || pattern.contains(' ') {
             // Space-containing patterns are unrepresentable in the
@@ -361,9 +377,17 @@ pub fn sandbox_env(
 
     // Fold saved grants into the seed allow-set so "allow always" silences a
     // path in future sessions, not just the one it was approved in. Dir-shaped
-    // patterns join the allow-dirs; file/glob patterns join the allow globs.
-    // Caps are enforced on the combined result.
+    // patterns join the allow-dirs; file/glob patterns join the allow globs;
+    // net-kind grants (the revocable default network policy plus user-granted
+    // hosts) join the network allow-list instead. Caps are enforced on the
+    // combined filesystem result only.
     let grants = grants::read_grants(grants_dir);
+    let net_grant_hosts: Vec<String> = grants
+        .grants
+        .iter()
+        .filter(|grant| grant.is_net())
+        .map(|grant| grant.pattern.clone())
+        .collect();
     let CompiledAllow { allow, allow_dirs } = compile_allow_set(&seed, &grants)?;
 
     let mut env = HashMap::new();
@@ -372,7 +396,7 @@ pub fn sandbox_env(
     env.insert(FLOX_SANDBOX_ALLOW_DIRS_VAR.to_string(), allow_dirs);
     env.insert(
         FLOX_SANDBOX_ALLOW_NET_VAR.to_string(),
-        merge_allow_net(existing_allow_net, &seed),
+        merge_allow_net(existing_allow_net, &seed, &net_grant_hosts),
     );
     env.insert(
         FLOX_SRC_DIR_VAR.to_string(),
@@ -504,10 +528,12 @@ mod tests {
         };
         let grants = GrantsFile {
             version: 1,
+            seeded_version: 0,
             grants: vec![
                 // A file grant joins the globs.
                 grants::Grant {
                     pattern: "/home/dev/.config/gh/hosts.yml".to_string(),
+                    kind: None,
                     ops: vec!["read".to_string()],
                     source: None,
                     created: None,
@@ -516,6 +542,7 @@ mod tests {
                 // A `/**` grant is directory-shaped: its prefix joins the dirs.
                 grants::Grant {
                     pattern: "/home/dev/.cargo/registry/**".to_string(),
+                    kind: None,
                     ops: vec!["read".to_string()],
                     source: None,
                     created: None,
@@ -524,7 +551,17 @@ mod tests {
                 // A trailing-slash grant is also directory-shaped.
                 grants::Grant {
                     pattern: "/home/dev/data/".to_string(),
+                    kind: None,
                     ops: vec!["any".to_string()],
+                    source: None,
+                    created: None,
+                    evidence: None,
+                },
+                // A net grant joins neither bucket — it belongs to ALLOW_NET.
+                grants::Grant {
+                    pattern: "github.com".to_string(),
+                    kind: Some(grants::KIND_NET.to_string()),
+                    ops: vec![],
                     source: None,
                     created: None,
                     evidence: None,
@@ -544,6 +581,9 @@ mod tests {
         assert!(dirs.contains(&"/home/dev/data"));
         // A directory grant is never left in the globs.
         assert!(!allow.contains(&"/home/dev/.cargo/registry/**"));
+        // A net grant never lands in either filesystem bucket.
+        assert!(!allow.contains(&"github.com"));
+        assert!(!dirs.contains(&"github.com"));
     }
 
     #[test]
@@ -554,8 +594,10 @@ mod tests {
         };
         let grants = GrantsFile {
             version: 1,
+            seeded_version: 0,
             grants: vec![grants::Grant {
                 pattern: "/home/dev/.gitconfig".to_string(),
+                kind: None,
                 ops: vec![],
                 source: None,
                 created: None,
@@ -611,9 +653,11 @@ mod tests {
         let seed = SeedAllowSet::default();
         let grants = GrantsFile {
             version: 1,
+            seeded_version: 0,
             grants: vec![
                 grants::Grant {
                     pattern: "  ".to_string(),
+                    kind: None,
                     ops: vec![],
                     source: None,
                     created: None,
@@ -621,6 +665,7 @@ mod tests {
                 },
                 grants::Grant {
                     pattern: "/has a space/**".to_string(),
+                    kind: None,
                     ops: vec![],
                     source: None,
                     created: None,
@@ -628,6 +673,7 @@ mod tests {
                 },
                 grants::Grant {
                     pattern: "/ok/**".to_string(),
+                    kind: None,
                     ops: vec![],
                     source: None,
                     created: None,
@@ -786,17 +832,159 @@ mod tests {
             ..Default::default()
         };
         // Empty/absent existing yields just the seeds.
-        assert_eq!(merge_allow_net(None, &seed), "api.flox.dev hub.flox.dev");
+        assert_eq!(
+            merge_allow_net(None, &seed, &[]),
+            "api.flox.dev hub.flox.dev"
+        );
         // Existing entries come first; a duplicate (api.flox.dev) is collapsed.
         assert_eq!(
-            merge_allow_net(Some("example.com api.flox.dev"), &seed),
+            merge_allow_net(Some("example.com api.flox.dev"), &seed, &[]),
             "example.com api.flox.dev hub.flox.dev"
         );
         // Whitespace-only existing is treated as absent.
         assert_eq!(
-            merge_allow_net(Some("   "), &seed),
+            merge_allow_net(Some("   "), &seed, &[]),
             "api.flox.dev hub.flox.dev"
         );
+    }
+
+    #[test]
+    fn merge_allow_net_appends_grant_hosts_after_the_seeds() {
+        let seed = SeedAllowSet {
+            allow_net: vec!["hub.flox.dev".to_string()],
+            ..Default::default()
+        };
+        let grant_hosts = vec![
+            "github.com".to_string(),
+            "hub.flox.dev".to_string(), // duplicate of a seed: collapsed
+            "registry.npmjs.org".to_string(),
+        ];
+        assert_eq!(
+            merge_allow_net(Some("example.com"), &seed, &grant_hosts),
+            "example.com hub.flox.dev github.com registry.npmjs.org"
+        );
+    }
+
+    /// End-to-end out-of-box regression: a freshly seeded grants dir produces
+    /// the same default network policy as the pre-seeding hardcoded list —
+    /// git hosts and registries now arrive via grants.toml instead of seeds.
+    #[test]
+    fn seeded_grants_dir_restores_the_default_net_policy() {
+        let libexec = fake_libexec();
+        let build_mk = libexec.path().join("flox-build.mk");
+        let seed_tmp = TempDir::new().unwrap();
+        let seed_ctx = minimal_seed_ctx(&seed_tmp);
+        let grants_tmp = TempDir::new().unwrap();
+        let grants_dir = grants_tmp.path().join("cache").join("sandbox");
+        grants::ensure_seed_grants(&grants_dir, Some(Path::new("/home/dev")), None).unwrap();
+
+        let env = temp_env::with_var("FLOX_BUILD_MK", Some(build_mk.as_os_str()), || {
+            sandbox_env(
+                SandboxMode::Enforce,
+                &seed_ctx,
+                Path::new("/project"),
+                &grants_dir,
+                Path::new("/run/sbx.abc.sock"),
+                None,
+                None,
+            )
+            .unwrap()
+        });
+
+        let allow_net = env.get(FLOX_SANDBOX_ALLOW_NET_VAR).unwrap();
+        // Infrastructure (hardcoded seed) and policy (seeded grants) both
+        // present — the out-of-box rendered policy keeps the same hosts.
+        for host in [
+            "hub.flox.dev",
+            "api.flox.dev",
+            "github.com",
+            "codeload.github.com",
+            "objects.githubusercontent.com",
+            "raw.githubusercontent.com",
+            "registry.npmjs.org",
+            "pypi.org",
+            "files.pythonhosted.org",
+            "crates.io",
+            "static.crates.io",
+            "index.crates.io",
+        ] {
+            assert!(
+                allow_net.split(' ').any(|e| e == host),
+                "expected {host} in FLOX_SANDBOX_ALLOW_NET, got {allow_net:?}"
+            );
+        }
+        // The seeded dotfile grants land in the filesystem allow-set.
+        let allow = env.get(FLOX_SANDBOX_ALLOW_VAR).unwrap();
+        assert!(
+            allow.split(' ').any(|e| e == "/home/dev/.zshrc"),
+            "expected the seeded dotfile grant in FLOX_SANDBOX_ALLOW, got {allow:?}"
+        );
+    }
+
+    /// Revoking a seeded net grant removes the host from the next session's
+    /// rendered policy (the live-revocation half is out of scope: the policy
+    /// is compiled at activation start).
+    #[test]
+    fn revoking_a_net_grant_removes_it_from_the_rendered_policy() {
+        let libexec = fake_libexec();
+        let build_mk = libexec.path().join("flox-build.mk");
+        let seed_tmp = TempDir::new().unwrap();
+        let seed_ctx = minimal_seed_ctx(&seed_tmp);
+        let grants_tmp = TempDir::new().unwrap();
+        let grants_dir = grants_tmp.path().join("cache").join("sandbox");
+        grants::ensure_seed_grants(&grants_dir, None, None).unwrap();
+
+        // Revoke github.com the way `flox sandbox revoke` does (drop the
+        // entry); the seeded_version gate keeps it from coming back.
+        let mut file = grants::read_grants(&grants_dir);
+        file.grants.retain(|grant| grant.pattern != "github.com");
+        grants::write_grants(&grants_dir, &file).unwrap();
+
+        let env = temp_env::with_var("FLOX_BUILD_MK", Some(build_mk.as_os_str()), || {
+            sandbox_env(
+                SandboxMode::Enforce,
+                &seed_ctx,
+                Path::new("/project"),
+                &grants_dir,
+                Path::new("/run/sbx.abc.sock"),
+                None,
+                None,
+            )
+            .unwrap()
+        });
+
+        let allow_net = env.get(FLOX_SANDBOX_ALLOW_NET_VAR).unwrap();
+        assert!(
+            allow_net.split(' ').all(|e| e != "github.com"),
+            "revoked github.com must not be rendered, got {allow_net:?}"
+        );
+        // Other seeded hosts are unaffected.
+        assert!(allow_net.split(' ').any(|e| e == "crates.io"));
+    }
+
+    /// Net grants are policy for ALLOW_NET only: they must not consume the
+    /// filesystem allow-set caps.
+    #[test]
+    fn net_grants_do_not_count_against_the_fs_caps() {
+        let seed = SeedAllowSet::default();
+        // Enough net grants to blow the fs entry cap if they were counted.
+        let grants = GrantsFile {
+            version: 1,
+            seeded_version: 1,
+            grants: (0..ALLOW_ENTRIES_MAX + 8)
+                .map(|i| grants::Grant {
+                    pattern: format!("host{i}.example.com"),
+                    kind: Some(grants::KIND_NET.to_string()),
+                    ops: vec![],
+                    source: None,
+                    created: None,
+                    evidence: None,
+                })
+                .collect(),
+        };
+        let compiled = compile_allow_set(&seed, &grants).unwrap();
+        assert_eq!(compiled.allow, "");
+        assert_eq!(compiled.allow_dirs, "");
     }
 
     #[test]

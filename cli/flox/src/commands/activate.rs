@@ -64,6 +64,7 @@ use crate::config::{AutoActivationPreference, Config, EnvironmentPromptConfig};
 use crate::utils::detect_shell::{detect_shell_for_in_place, detect_shell_for_subshell};
 use crate::utils::errors::format_diverged_metadata;
 use crate::utils::message;
+use crate::utils::metrics::metrics_events_host;
 use crate::{Exit, environment_subcommand_metric, subcommand_metric, utils};
 
 #[derive(Debug, Clone, Bpaf)]
@@ -594,6 +595,14 @@ impl ActivateOptions {
             flox_env_cuda_detection: flox_env_cuda_detection.to_string(),
             interpreter_path,
             sandbox_mode,
+            // Seeded into the sandbox network policy as a visible
+            // default-seed grant; absent when the user disabled metrics, so
+            // nothing is granted for traffic that will never happen.
+            metrics_host: if config.flox.disable_metrics {
+                None
+            } else {
+                metrics_events_host()
+            },
         };
 
         let dot_flox_path = concrete_environment.dot_flox_path().to_path_buf();

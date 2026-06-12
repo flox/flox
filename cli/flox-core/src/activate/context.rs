@@ -46,6 +46,13 @@ pub struct AttachCtx {
     /// Absent in older context files, which deserialize to `Off`.
     #[serde(default)]
     pub sandbox_mode: SandboxMode,
+
+    /// Hostname of flox's own metrics endpoint, seeded into the sandbox
+    /// network policy as a visible default-seed grant so the CLI's telemetry
+    /// flush is not reported (and blocked) as workload egress. `None` when
+    /// the user disabled metrics. Absent in older context files.
+    #[serde(default)]
+    pub metrics_host: Option<String>,
 }
 
 /// Additional context for project-based activations.
@@ -239,6 +246,8 @@ mod tests {
 
         let ctx: AttachCtx = serde_json::from_str(json).unwrap();
         assert_eq!(ctx.sandbox_mode, SandboxMode::Off);
+        // metrics_host is likewise absent in older context files.
+        assert_eq!(ctx.metrics_host, None);
     }
 
     #[test]

@@ -29,7 +29,7 @@ use tracing::{debug, warn};
 
 use super::control::{GrantView, PendingView, StatusView};
 use super::pending::PendingQueue;
-use crate::sandbox::grants::{self, Grant, GrantsFile, JournalRecord};
+use crate::sandbox::grants::{self, Grant, JournalRecord};
 
 /// A parsed verdict request from libsandbox.
 ///
@@ -138,21 +138,28 @@ impl BrokerState {
     /// decision logic without persistence.
     #[cfg(test)]
     pub fn new(grants: Vec<String>) -> Self {
-        Self::with_grants(grants, None)
+        let seeds = grants
+            .into_iter()
+            .map(|pattern| (pattern, Some("saved".to_string())))
+            .collect();
+        Self::with_grants(seeds, None)
     }
 
     /// Build broker state with a grants dir, so a control `allow` can persist.
-    /// The seeded grants are marked persisted (they came from grants.toml).
-    pub fn with_grants_dir(seed_patterns: Vec<String>, grants_dir: PathBuf) -> Self {
-        Self::with_grants(seed_patterns, Some(grants_dir))
+    /// `seeds` are `(pattern, source)` pairs read from grants.toml; the file's
+    /// own source is carried through so the review surface can tell a
+    /// default-seed grant from one the user approved. All seeds are marked
+    /// persisted (they came from grants.toml).
+    pub fn with_grants_dir(seeds: Vec<(String, Option<String>)>, grants_dir: PathBuf) -> Self {
+        Self::with_grants(seeds, Some(grants_dir))
     }
 
-    fn with_grants(seed_patterns: Vec<String>, grants_dir: Option<PathBuf>) -> Self {
-        let grants = seed_patterns
+    fn with_grants(seeds: Vec<(String, Option<String>)>, grants_dir: Option<PathBuf>) -> Self {
+        let grants = seeds
             .into_iter()
-            .map(|pattern| SessionGrant {
+            .map(|(pattern, source)| SessionGrant {
                 pattern,
-                source: Some("saved".to_string()),
+                source: source.or_else(|| Some("saved".to_string())),
                 persisted: true,
             })
             .collect();
@@ -306,13 +313,13 @@ fn persist_grant(
     file.grants.retain(|grant| grant.pattern != pattern);
     file.grants.push(Grant {
         pattern: pattern.to_string(),
+        kind: None,
         ops: Vec::new(),
         source: source.map(str::to_string),
         created: created.map(str::to_string),
         evidence,
     });
-    let GrantsFile { version, grants } = file;
-    grants::write_grants(grants_dir, &GrantsFile { version, grants })?;
+    grants::write_grants(grants_dir, &file)?;
     grants::append_journal(grants_dir, &JournalRecord {
         event: "grant".to_string(),
         pattern: Some(pattern.to_string()),

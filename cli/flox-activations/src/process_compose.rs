@@ -253,6 +253,7 @@ mod tests {
             flox_env_cuda_detection: "0".to_string(),
             interpreter_path: PathBuf::from("/interpreter"),
             sandbox_mode: SandboxMode::Enforce,
+            metrics_host: None,
         }
     }
 
