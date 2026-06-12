@@ -14,8 +14,8 @@
  *   sandbox_probe open  <path>
  *       Open <path> once. Prints "OPEN_OK <path>" on success or
  *       "OPEN_FAIL <path> errno=<n> (<msg>)" on failure, and exits 0/1
- *       accordingly. (In "enforce" mode the sandbox terminates the process
- *       itself before we can print, which is exactly the behavior under test.)
+ *       accordingly. (In "enforce" mode an out-of-policy open is refused with
+ *       EACCES — a clean failure the probe reports, never a process abort.)
  *
  *   sandbox_probe storm <nthreads> <niters> <path1> [path2 ...]
  *       Spawn <nthreads> threads, each opening the given paths in round-robin
@@ -138,6 +138,110 @@ static int do_write(const char *path) {
   }
   close(fd);
   printf("WRITE_OK %s\n", path);
+  return 0;
+}
+
+/* append — open an EXISTING <path> with O_WRONLY|O_APPEND, the access a shell
+ * `>>` redirect performs. The file has a realpath, so it is classified as a
+ * write of an existing path and (under an activation) reaches the sensitive-set
+ * check the same way an existing-file read does. Prints "APPEND_OK <path>" on
+ * success or "APPEND_FAIL <path> errno=<n> (<msg>)" on refusal, and exits 0/1.
+ * The file is opened but never written to, so a permitted append leaves it
+ * unchanged. */
+static int do_append(const char *path) {
+  int fd = open(path, O_WRONLY | O_APPEND);
+  if (fd < 0) {
+    int saved = errno;
+    printf("APPEND_FAIL %s errno=%d (%s)\n", path, saved, strerror(saved));
+    return 1;
+  }
+  close(fd);
+  printf("APPEND_OK %s\n", path);
+  return 0;
+}
+
+/* creat — create <path> via creat(), a distinct libc entry point from
+ * open(O_CREAT). The target is expected NOT to exist, so this is a genuine
+ * new-file create judged by its parent directory's policy under an activation.
+ * Exercises the creat() interceptor specifically (a tool binding creat rather
+ * than open must not slip past the sandbox). Prints "CREAT_OK"/"CREAT_FAIL" and
+ * exits 0/1; any file created is unlinked so reruns stay idempotent. */
+static int do_creat(const char *path) {
+  int fd = creat(path, 0644);
+  if (fd < 0) {
+    int saved = errno;
+    printf("CREAT_FAIL %s errno=%d (%s)\n", path, saved, strerror(saved));
+    return 1;
+  }
+  close(fd);
+  unlink(path);
+  printf("CREAT_OK %s\n", path);
+  return 0;
+}
+
+/* truncate — truncate an EXISTING <path> to zero length via truncate(). A
+ * truncate is a destructive write that takes a path (not an fd), so it must be
+ * mediated like an open-for-write. Prints "TRUNCATE_OK"/"TRUNCATE_FAIL" and
+ * exits 0/1. */
+static int do_truncate(const char *path) {
+  if (truncate(path, 0) != 0) {
+    int saved = errno;
+    printf("TRUNCATE_FAIL %s errno=%d (%s)\n", path, saved, strerror(saved));
+    return 1;
+  }
+  printf("TRUNCATE_OK %s\n", path);
+  return 0;
+}
+
+/* freopen — reopen a throwaway stream onto <path> for writing. freopen() is a
+ * libc entry point distinct from fopen()/open() that opens (and truncates) a
+ * file; a tool binding it must not slip past the sandbox. We first fopen()
+ * /dev/null (an allow-dir, so permitted) to get a base stream, then freopen()
+ * it onto <path> — the call under test. Prints "FREOPEN_OK"/"FREOPEN_FAIL" and
+ * exits 0/1. */
+static int do_freopen(const char *path) {
+  FILE *base = fopen("/dev/null", "w");
+  if (base == NULL) {
+    printf("FREOPEN_SETUP_FAIL errno=%d (%s)\n", errno, strerror(errno));
+    return 2;
+  }
+  FILE *f = freopen(path, "w", base);
+  if (f == NULL) {
+    int saved = errno;
+    printf("FREOPEN_FAIL %s errno=%d (%s)\n", path, saved, strerror(saved));
+    fclose(base);
+    return 1;
+  }
+  printf("FREOPEN_OK %s\n", path);
+  fclose(f);
+  return 0;
+}
+
+/* survive — prove a denied write does NOT terminate a long-lived process. A
+ * policy denial must surface as a graceful errno (EACCES), never an exit(): a
+ * shell builtin redirect performs its open inside the interactive shell
+ * process itself, so a fatal denial would kill the user's shell. This opens
+ * <denied> for append (expected to be refused), then — STILL RUNNING — opens
+ * <allowed> for read (expected to succeed), and prints a final "SURVIVED"
+ * line. Always returns 0: a process killed at the denied write never reaches
+ * the SURVIVED print, so the test discriminates on the output and exit status
+ * together. */
+static int do_survive(const char *denied, const char *allowed) {
+  int fd1 = open(denied, O_WRONLY | O_APPEND);
+  if (fd1 < 0) {
+    printf("APPEND_DENIED %s errno=%d\n", denied, errno);
+  } else {
+    close(fd1);
+    printf("APPEND_OK %s\n", denied);
+  }
+  int fd2 = open(allowed, O_RDONLY);
+  if (fd2 < 0) {
+    printf("READ_FAIL %s errno=%d\n", allowed, errno);
+  } else {
+    close(fd2);
+    printf("READ_OK %s\n", allowed);
+  }
+  printf("SURVIVED\n");
   return 0;
 }
 
@@ -322,6 +426,21 @@ int main(int argc, char **argv) {
   if (argc >= 3 && strcmp(argv[1], "write") == 0) {
     return do_write(argv[2]);
   }
+  if (argc >= 3 && strcmp(argv[1], "append") == 0) {
+    return do_append(argv[2]);
+  }
+  if (argc >= 3 && strcmp(argv[1], "creat") == 0) {
+    return do_creat(argv[2]);
+  }
+  if (argc >= 3 && strcmp(argv[1], "truncate") == 0) {
+    return do_truncate(argv[2]);
+  }
+  if (argc >= 3 && strcmp(argv[1], "freopen") == 0) {
+    return do_freopen(argv[2]);
+  }
+  if (argc >= 4 && strcmp(argv[1], "survive") == 0) {
+    return do_survive(argv[2], argv[3]);
+  }
   if (argc >= 3 && strcmp(argv[1], "open-dir") == 0) {
     return do_open_dir(argv[2]);
   }
@@ -345,12 +464,17 @@ int main(int argc, char **argv) {
           "  %s open-twice <path> <sleep_secs>\n"
           "  %s create <path>\n"
           "  %s write <path>\n"
+          "  %s append <path>\n"
+          "  %s creat <path>\n"
+          "  %s truncate <path>\n"
+          "  %s freopen <path>\n"
+          "  %s survive <denied-path> <allowed-path>\n"
           "  %s open-dir <path>\n"
           "  %s readlink <path>\n"
           "  %s readlink-fn <path>\n"
           "  %s connect <ipv4> <port> [timeout_ms]\n"
           "  %s storm <nthreads> <niters> <path1> [path2 ...]\n",
           argv[0], argv[0], argv[0], argv[0], argv[0], argv[0], argv[0],
-          argv[0], argv[0]);
+          argv[0], argv[0], argv[0], argv[0], argv[0], argv[0], argv[0]);
   return 2;
 }

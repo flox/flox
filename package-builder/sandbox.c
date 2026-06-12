@@ -62,8 +62,8 @@
 #define SANDBOX_LEVEL_UNINIT (-1) // not yet initialized
 #define SANDBOX_LEVEL_OFF 0       // no checking
 #define SANDBOX_LEVEL_WARN 1      // report out-of-closure access, permit it
-#define SANDBOX_LEVEL_ENFORCE 2   // out-of-closure file read is fatal
-#define SANDBOX_LEVEL_PURE 3      // enforce, but inside the Nix sandbox
+#define SANDBOX_LEVEL_ENFORCE 2 // report out-of-closure access, refuse (EACCES)
+#define SANDBOX_LEVEL_PURE 3    // enforce, but inside the Nix sandbox
 // "ask" routes out-of-policy access to an external broker (a thread in the
 // per-activation flox-activations executive) for an allow/deny verdict over
 // the FLOX_SANDBOX_SOCKET Unix socket. A dead or absent broker denies
@@ -161,6 +161,22 @@ static int (*orig_openat)(int dirfd, const char *pathname, int flags,
                           ...) = NULL;
 static FILE *(*orig_fopen)(const char *pathname, const char *mode) = NULL;
 static FILE *(*orig_fopen64)(const char *pathname, const char *mode) = NULL;
+// Additional write entry points. A write must not slip past the sandbox by
+// binding a libc symbol the open()/fopen() interceptors never saw: creat() is
+// open(O_WRONLY|O_CREAT|O_TRUNC) under another name; open64()/openat64()/
+// creat64() are the _FILE_OFFSET_BITS=64 large-file variants that 64-bit builds
+// bind instead of the plain names; truncate() is a path-addressed destructive
+// write; freopen()/freopen64() open (and truncate) a path behind a FILE*.
+static int (*orig_creat)(const char *pathname, mode_t mode) = NULL;
+static int (*orig_open64)(const char *pathname, int flags, ...) = NULL;
+static int (*orig_openat64)(int dirfd, const char *pathname, int flags,
+                            ...) = NULL;
+static int (*orig_creat64)(const char *pathname, mode_t mode) = NULL;
+static int (*orig_truncate)(const char *path, off_t length) = NULL;
+static FILE *(*orig_freopen)(const char *pathname, const char *mode,
+                             FILE *stream) = NULL;
+static FILE *(*orig_freopen64)(const char *pathname, const char *mode,
+                               FILE *stream) = NULL;
 static ssize_t (*orig_readlinkat)(int dirfd, const char *pathname, char *buf,
                                   size_t bufsiz) = NULL;
 static ssize_t (*orig_readlink)(const char *pathname, char *buf,
@@ -306,6 +322,13 @@ void sandbox_init() {
   orig_openat = dlsym(RTLD_NEXT, "openat");
   orig_fopen = dlsym(RTLD_NEXT, "fopen");
   orig_fopen64 = dlsym(RTLD_NEXT, "fopen64");
+  orig_creat = dlsym(RTLD_NEXT, "creat");
+  orig_open64 = dlsym(RTLD_NEXT, "open64");
+  orig_openat64 = dlsym(RTLD_NEXT, "openat64");
+  orig_creat64 = dlsym(RTLD_NEXT, "creat64");
+  orig_truncate = dlsym(RTLD_NEXT, "truncate");
+  orig_freopen = dlsym(RTLD_NEXT, "freopen");
+  orig_freopen64 = dlsym(RTLD_NEXT, "freopen64");
   orig_readlinkat = dlsym(RTLD_NEXT, "readlinkat");
   orig_readlink = dlsym(RTLD_NEXT, "readlink");
   orig_readlink_chk = dlsym(RTLD_NEXT, "__readlink_chk");
@@ -1246,7 +1269,10 @@ static struct ask_result ask_broker(const char *real_path, const char *raw,
 //                   broker emit the fail-closed receipt (once per path), on
 //                   allow stay silent; refuse on any deny (return false ->
 //                   EACCES)
-//   enforce/pure -> fatal error, exit(1)
+//   enforce/pure -> report once, refuse (return false -> EACCES). A policy
+//                   denial is NEVER fatal: a shell builtin redirect performs
+//                   its open inside the interactive shell process itself, so
+//                   exit(1) would kill the user's shell.
 static bool out_of_policy_verdict(const char *display, const char *dedup_key,
                                   const char *raw, const char *suffix) {
   if (sandbox_level == SANDBOX_LEVEL_WARN) {
@@ -1309,10 +1335,16 @@ static bool out_of_policy_verdict(const char *display, const char *dedup_key,
     }
     return false;
   }
-  // enforce / pure: an out-of-policy access is fatal.
-  _error("%s is not in the sandbox%s", display, suffix);
+  // enforce / pure: report and refuse with a clean error. The caller maps the
+  // false return to errno=EACCES and returns -1/NULL, so the access fails like
+  // any permission error and the calling process continues. A policy denial
+  // must never exit(1): a shell builtin redirect (echo x >> secret) performs
+  // the open inside the interactive shell process, so aborting would terminate
+  // the user's shell. Reported once per key, mirroring warn.
+  if (should_warn_for_path(dedup_key))
+    _error("%s is not in the sandbox%s", display, suffix);
   fflush(stderr);
-  exit(1);
+  return false;
 }
 
 // Check if path access represents something that may not be reproducible
@@ -1362,13 +1394,25 @@ bool sandbox_check_path(const char *pathname) {
     // on the fly, so an immediate-parent rule would deny ordinary in-project
     // writes. The threat model is preserved — the nearest existing ancestor of
     // `~/newfile` is `$HOME`, which is out of policy, so the create is denied.
-    if (allow_foreign_exe && in_write_access &&
-        !create_parent_in_policy(pathname)) {
+    if (allow_foreign_exe && in_write_access) {
       // No realpath exists, so the display, dedup key, and RPC raw/path are
       // all the opened path. The exe-identity report is a no-op here
       // (allow_foreign_exe is set), so it is not called; only file access is
       // being mediated.
-      return out_of_policy_verdict(pathname, pathname, pathname, "");
+      //
+      // A NEW sensitive file (writing a fresh ~/.aws/credentials, or a project
+      // .env) is denied even when its parent directory is in policy. Without
+      // this, the sensitive-file protection that covers existing files (below)
+      // would have an obvious hole for first-time creation: an agent could
+      // write a credential file into the project tree. The target has no
+      // realpath yet, so match the sensitive globs against the opened path —
+      // they are `**`-anchored or `~/`-expanded and match an absolute opened
+      // path the same way they match a resolved one.
+      if (path_is_sensitive(pathname))
+        return out_of_policy_verdict(pathname, pathname, pathname,
+                                     " (sensitive)");
+      if (!create_parent_in_policy(pathname))
+        return out_of_policy_verdict(pathname, pathname, pathname, "");
     }
     return true;
   }
@@ -2042,6 +2086,146 @@ FILE *fopen64(const char *pathname, const char *mode) {
   return NULL;
 }
 
+// Interceptor for creat — equivalent to open(path, O_WRONLY|O_CREAT|O_TRUNC),
+// so always a write. A tool that opens via creat() rather than open() must not
+// slip past the sandbox.
+int creat(const char *pathname, mode_t mode) {
+  ensure_init();
+  if (in_sandbox)
+    return orig_creat(pathname, mode);
+  in_sandbox = 1;
+  in_write_access = 1;
+  bool allowed = sandbox_check_path(pathname);
+  in_write_access = 0;
+  in_sandbox = 0;
+  if (allowed)
+    return orig_creat(pathname, mode);
+  errno = EACCES;
+  return -1;
+}
+
+// Interceptor for open64 — the _FILE_OFFSET_BITS=64 large-file variant of
+// open(). 64-bit builds bind open64 instead of open, so without this their
+// opens would never reach the policy. Identical logic to open().
+int open64(const char *pathname, int flags, ...) {
+  ensure_init();
+  mode_t mode = 0;
+  if (flags & O_CREAT) {
+    va_list args;
+    va_start(args, flags);
+    mode = va_arg(args, mode_t);
+    va_end(args);
+  }
+  if (in_sandbox)
+    return orig_open64(pathname, flags, mode);
+  in_sandbox = 1;
+  in_dir_probe = (flags & O_DIRECTORY) ? 1 : 0;
+  in_write_access = open_is_write(flags);
+  bool allowed = sandbox_check_path(pathname);
+  in_write_access = 0;
+  in_dir_probe = 0;
+  in_sandbox = 0;
+  if (allowed)
+    return orig_open64(pathname, flags, mode);
+  errno = EACCES;
+  return -1;
+}
+
+// Interceptor for openat64 — the large-file variant of openat(). Same logic.
+int openat64(int dirfd, const char *pathname, int flags, ...) {
+  ensure_init();
+  mode_t mode = 0;
+  if (flags & O_CREAT) {
+    va_list args;
+    va_start(args, flags);
+    mode = va_arg(args, mode_t);
+    va_end(args);
+  }
+  if (in_sandbox)
+    return orig_openat64(dirfd, pathname, flags, mode);
+  in_sandbox = 1;
+  in_dir_probe = (flags & O_DIRECTORY) ? 1 : 0;
+  in_write_access = open_is_write(flags);
+  bool allowed = sandbox_check_path(pathname);
+  in_write_access = 0;
+  in_dir_probe = 0;
+  in_sandbox = 0;
+  if (allowed)
+    return orig_openat64(dirfd, pathname, flags, mode);
+  errno = EACCES;
+  return -1;
+}
+
+// Interceptor for creat64 — the large-file variant of creat(). Same logic.
+int creat64(const char *pathname, mode_t mode) {
+  ensure_init();
+  if (in_sandbox)
+    return orig_creat64(pathname, mode);
+  in_sandbox = 1;
+  in_write_access = 1;
+  bool allowed = sandbox_check_path(pathname);
+  in_write_access = 0;
+  in_sandbox = 0;
+  if (allowed)
+    return orig_creat64(pathname, mode);
+  errno = EACCES;
+  return -1;
+}
+
+// Interceptor for truncate — a path-addressed destructive write. ftruncate(fd,
+// len) operates on an already-open fd (no path) and so cannot be mediated by
+// path-based interposition; it is a documented residual limit, mitigated by
+// the fact that the fd had to pass an open() check first.
+int truncate(const char *path, off_t length) {
+  ensure_init();
+  if (in_sandbox)
+    return orig_truncate(path, length);
+  in_sandbox = 1;
+  in_write_access = 1;
+  bool allowed = sandbox_check_path(path);
+  in_write_access = 0;
+  in_sandbox = 0;
+  if (allowed)
+    return orig_truncate(path, length);
+  errno = EACCES;
+  return -1;
+}
+
+// Interceptor for freopen — opens (and truncates) a path behind a FILE*, so it
+// is a write whenever the mode is not pure-read. A NULL pathname reopens the
+// existing stream in place (a mode change only); there is no path to mediate,
+// so it is passed straight through.
+FILE *freopen(const char *pathname, const char *mode, FILE *stream) {
+  ensure_init();
+  if (in_sandbox || pathname == NULL)
+    return orig_freopen(pathname, mode, stream);
+  in_sandbox = 1;
+  in_write_access = fopen_is_write(mode);
+  bool allowed = sandbox_check_path(pathname);
+  in_write_access = 0;
+  in_sandbox = 0;
+  if (allowed)
+    return orig_freopen(pathname, mode, stream);
+  errno = EACCES;
+  return NULL;
+}
+
+// Interceptor for freopen64 — the large-file variant of freopen(). Same logic.
+FILE *freopen64(const char *pathname, const char *mode, FILE *stream) {
+  ensure_init();
+  if (in_sandbox || pathname == NULL)
+    return orig_freopen64(pathname, mode, stream);
+  in_sandbox = 1;
+  in_write_access = fopen_is_write(mode);
+  bool allowed = sandbox_check_path(pathname);
+  in_write_access = 0;
+  in_sandbox = 0;
+  if (allowed)
+    return orig_freopen64(pathname, mode, stream);
+  errno = EACCES;
+  return NULL;
+}
+
 // Interceptor for readlinkat. Reading a symlink reveals an out-of-closure
 // path, which some build tools rely on instead of open(); it is flagged so the
 // dependency is visible. But a symlink read is "looking around", not consuming
@@ -2232,6 +2416,61 @@ FILE *my_fopen(const char *pathname, const char *mode) {
   return NULL;
 }
 
+// Interceptor for creat (macOS) — open(path, O_WRONLY|O_CREAT|O_TRUNC) under
+// another name, so always a write. We reach the real creat() by calling creat()
+// (a self-call is not interposed).
+int my_creat(const char *pathname, mode_t mode) {
+  ensure_init();
+  if (in_sandbox)
+    return creat(pathname, mode);
+  in_sandbox = 1;
+  in_write_access = 1;
+  bool allowed = sandbox_check_path(pathname);
+  in_write_access = 0;
+  in_sandbox = 0;
+  if (allowed)
+    return creat(pathname, mode);
+  errno = EACCES;
+  return -1;
+}
+
+// Interceptor for truncate (macOS) — a path-addressed destructive write.
+// ftruncate(fd, len) has no path and cannot be path-mediated (documented
+// residual limit; the fd had to pass an open() check first).
+int my_truncate(const char *path, off_t length) {
+  ensure_init();
+  if (in_sandbox)
+    return truncate(path, length);
+  in_sandbox = 1;
+  in_write_access = 1;
+  bool allowed = sandbox_check_path(path);
+  in_write_access = 0;
+  in_sandbox = 0;
+  if (allowed)
+    return truncate(path, length);
+  errno = EACCES;
+  return -1;
+}
+
+// Interceptor for freopen (macOS). Also the interposer for freopen$DARWIN_EXTSN
+// (wired below), mirroring my_fopen. A NULL pathname reopens the existing
+// stream in place (mode change only) — no path to mediate — so it is passed
+// through.
+FILE *my_freopen(const char *pathname, const char *mode, FILE *stream) {
+  ensure_init();
+  if (in_sandbox || pathname == NULL)
+    return freopen(pathname, mode, stream);
+  in_sandbox = 1;
+  in_write_access = fopen_is_write(mode);
+  bool allowed = sandbox_check_path(pathname);
+  in_write_access = 0;
+  in_sandbox = 0;
+  if (allowed)
+    return freopen(pathname, mode, stream);
+  errno = EACCES;
+  return NULL;
+}
+
 // Interceptor for readlinkat (macOS). Like the Linux one: a symlink read is
 // "looking around", so it is warned-but-permitted even under enforce (via
 // in_readlink), not blocked.
@@ -2312,6 +2551,9 @@ int my_getaddrinfo(const char *node, const char *service,
 DYLD_INTERPOSE(my_open, open)
 DYLD_INTERPOSE(my_openat, openat)
 DYLD_INTERPOSE(my_fopen, fopen)
+DYLD_INTERPOSE(my_creat, creat)
+DYLD_INTERPOSE(my_truncate, truncate)
+DYLD_INTERPOSE(my_freopen, freopen)
 DYLD_INTERPOSE(my_readlinkat, readlinkat)
 DYLD_INTERPOSE(my_readlink, readlink)
 DYLD_INTERPOSE(my_connect, connect)
@@ -2326,5 +2568,18 @@ extern FILE *
 fopen_darwin_extsn(const char *pathname,
                    const char *mode) __asm__("_fopen$DARWIN_EXTSN");
 DYLD_INTERPOSE(my_fopen, fopen_darwin_extsn)
+
+// NOTE: macOS exports $NOCANCEL variants of the open-family syscalls
+// (open$NOCANCEL / openat$NOCANCEL). They are deliberately NOT interposed:
+// dyld uses them internally to map dylibs, so routing them through the policy
+// check (which calls realpath()/opendir()/fopen() and can trigger lazy dylib
+// binding) re-enters dyld from inside its own file I/O and the process is
+// SIGKILLed. Application-level write-opens on this platform bind the plain
+// `open`/`openat` symbols (verified: the shell `>>` redirect is mediated via
+// the plain interceptors), so coverage does not depend on the variants — the
+// real-tool `>>` regression test in the suite guards this end to end.
+//
+// Likewise, unlike fopen, freopen has no $DARWIN_EXTSN variant exported by
+// libc on this platform, so only the plain `freopen` symbol is interposed.
 
 #endif
