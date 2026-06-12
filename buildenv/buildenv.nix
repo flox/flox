@@ -8,6 +8,7 @@
   manifestLock,
   name ? "environment",
   serviceConfigYaml ? null,
+  environmentOutputs ? null,
 }:
 let
   outdentScript = (import ./buildenvLib/default.nix).outdentText;
@@ -66,12 +67,21 @@ let
     else
       null;
 
-  # Calculate environment outputs.
-  environmentOutputs = [
-    "run"
-    "dev"
-  ]
-  ++ (builtins.map (buildId: "build-${buildId}") (builtins.attrNames buildSection));
+  # Calculate environment outputs. The caller may supply a restricted list via
+  # the `environmentOutputs` argument (e.g. `[ "run" "dev" ]`) to avoid
+  # declaring build-* outputs as derivation outputs and thereby suppress the
+  # `<prefix>-build-*` out-link symlinks that `nix build --out-link` would
+  # otherwise create.
+  # Use a distinct name to avoid self-referential recursion in the let binding.
+  resolvedOutputs =
+    if environmentOutputs != null then
+      environmentOutputs
+    else
+      [
+        "run"
+        "dev"
+      ]
+      ++ (builtins.map (buildId: "build-${buildId}") (builtins.attrNames buildSection));
 
   createRenderedEnvironmentChunks = [
     # static chunks
@@ -319,7 +329,7 @@ assert lockfile."lockfile-version" != "0";
 builtins.derivation {
   inherit name;
   builder = "${floxBuildEnv}/lib/builder.pl";
-  outputs = environmentOutputs;
+  outputs = resolvedOutputs;
 
   # Pull in external attributes and those calculated above.
   inherit

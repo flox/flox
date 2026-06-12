@@ -896,6 +896,15 @@ where
         nix_build_command.args(["build", "--offline", "--json"]);
         if let Some(prefix) = out_link_prefix {
             nix_build_command.arg("--out-link").arg(prefix);
+            // Restrict derivation outputs to "run" and "dev" so that nix does
+            // not create `<prefix>-build-*` out-link symlinks for manifest build
+            // outputs. build-* outputs are not needed for environment rendering
+            // and their out-links would otherwise have to be deleted immediately
+            // after the build.
+            nix_build_command
+                .arg("--arg")
+                .arg("environmentOutputs")
+                .arg("[ \"run\" \"dev\" ]");
         } else {
             nix_build_command.arg("--no-link");
         }
@@ -912,17 +921,18 @@ where
         }
         debug!(cmd=%nix_build_command.display(), "building environment");
 
+        // defined inline as an implementation detail
+        #[derive(Debug, Clone, Deserialize)]
+        struct BuildEnvResultRaw {
+            outputs: BuildEnvOutputs,
+        }
+
         let output = nix_build_command
             .output()
             .map_err(BuildEnvError::CallNixBuild)?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(BuildEnvError::Build(stderr.to_string()));
-        }
-        // defined inline as an implementation detail
-        #[derive(Debug, Clone, Deserialize)]
-        struct BuildEnvResultRaw {
-            outputs: BuildEnvOutputs,
         }
         let build_env_result: Result<[BuildEnvResultRaw; 1], _> =
             serde_json::from_slice(&output.stdout).map_err(|err| BuildEnvError::ReadOutputs {
@@ -931,9 +941,7 @@ where
             });
 
         if let Ok([build_env_result]) = build_env_result {
-            let outputs = build_env_result.outputs;
-            remove_build_output_symlinks(out_link_prefix, &outputs);
-            return Ok(outputs);
+            return Ok(build_env_result.outputs);
         }
 
         // Preexisting store paths produced by the build may have been (partially) swept away.
@@ -959,76 +967,11 @@ where
         }
 
         let [build_env_result]: [BuildEnvResultRaw; 1] = serde_json::from_slice(&output.stdout)
-            .inspect_err(|_| {
-                debug!("failed to deserialize output on second try");
-                remove_build_output_symlinks_by_scan(out_link_prefix);
-            })
             .map_err(|err| BuildEnvError::ReadOutputs {
                 output: String::from_utf8_lossy(&output.stdout).to_string(),
                 err,
             })?;
-        let outputs = build_env_result.outputs;
-        remove_build_output_symlinks(out_link_prefix, &outputs);
-        Ok(outputs)
-    }
-}
-
-/// Remove the `<prefix>-build-*` symlinks that `nix build --out-link` creates
-/// for manifest build outputs.
-///
-/// `nix build --out-link <prefix>` writes a symlink for every derivation
-/// output: `<prefix>-run`, `<prefix>-dev`, and — for environments with build
-/// sections — `<prefix>-build-<id>` for each manifest build output.  The
-/// `build-*` symlinks clutter `.flox/run/`.  We delete them immediately after
-/// the build — this also removes the GC roots for those outputs, which is
-/// intentional.  The store paths are captured in
-/// `outputs.manifest_build_runtimes` before deletion.
-fn remove_build_output_symlinks(out_link_prefix: Option<&Path>, outputs: &BuildEnvOutputs) {
-    let Some(prefix) = out_link_prefix else {
-        return;
-    };
-    for key in outputs.manifest_build_runtimes.keys() {
-        let mut link_name = prefix.as_os_str().to_owned();
-        link_name.push("-");
-        link_name.push(key.as_str());
-        let link_path = PathBuf::from(link_name);
-        if link_path.is_symlink()
-            && let Err(e) = std::fs::remove_file(&link_path)
-        {
-            debug!(path=?link_path, error=%e, "failed to remove build output symlink from run dir");
-        }
-    }
-}
-
-/// Fallback version of [`remove_build_output_symlinks`] for the error path,
-/// where we have a prefix but no parsed outputs to iterate over.  Scans the
-/// parent directory and removes any symlink whose name starts with
-/// `<prefix_filename>-build-`.
-fn remove_build_output_symlinks_by_scan(out_link_prefix: Option<&Path>) {
-    let Some(prefix) = out_link_prefix else {
-        return;
-    };
-    let Some(parent) = prefix.parent() else {
-        return;
-    };
-    let Some(prefix_name) = prefix.file_name().and_then(|n| n.to_str()) else {
-        return;
-    };
-    let scan_prefix = format!("{prefix_name}-build-");
-    let Ok(entries) = std::fs::read_dir(parent) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let name = entry.file_name();
-        let Some(name_str) = name.to_str() else {
-            continue;
-        };
-        if name_str.starts_with(&scan_prefix)
-            && entry.path().is_symlink()
-            && let Err(e) = std::fs::remove_file(entry.path())
-        {
-            debug!(path=?entry.path(), error=%e, "failed to remove build output symlink from run dir");
-        }
+        Ok(build_env_result.outputs)
     }
 }
 
