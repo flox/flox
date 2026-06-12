@@ -51,8 +51,29 @@ impl CanonicalEventsConnection {
         }
     }
 
+    /// Serialize a batch of events as the request body for the ingest endpoint.
+    ///
+    /// The wire contract is **NDJSON** — one JSON object per line. The ingest
+    /// is API Gateway → Firehose → S3 → ClickHouse `JSONEachRow`: the API
+    /// Gateway request-mapping template (see
+    /// `flox-analytics/terraform/units/ingest/api_gateway.tf`) takes the raw
+    /// `$input.body`, appends a single trailing newline, and writes the whole
+    /// thing as one Firehose Record. So:
+    ///
+    /// - 1 event  → body `{...}`               → S3 line `{...}\n`              (1 NDJSON line)
+    /// - N events → body `{...}\n{...}\n...`   → S3 record has N NDJSON lines
+    ///
+    /// An array body (e.g. `[{...},{...}]`) is the poison shape that stalls
+    /// the entire S3Queue behind it — ClickHouse cannot parse a body starting
+    /// with `[`. The previous implementation (`serde_json::to_string` over a
+    /// `Vec<&Event>`) produced exactly that shape; this is the parallel fix
+    /// to floxhub@128dce329 (`telemetry-events-producer`).
     pub fn serialize_events(events: &[&Event]) -> Result<String> {
-        serde_json::to_string(events).context("Could not serialize canonical events")
+        let mut lines = Vec::with_capacity(events.len());
+        for event in events {
+            lines.push(serde_json::to_string(event).context("Could not serialize event")?);
+        }
+        Ok(lines.join("\n"))
     }
 }
 

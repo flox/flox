@@ -2015,16 +2015,51 @@ mod pipeline_tests {
         assert_eq!(buffered[0].kind, command_run_kind());
     }
 
+    /// Wire-contract test: the body for one event is exactly one JSON object
+    /// (NDJSON line), NOT a `[{...}]` array. The previous serialization
+    /// produced an array, which is the poison shape that stalls the S3Queue
+    /// downstream — see `CanonicalEventsConnection::serialize_events` for the
+    /// full rationale. This is the parallel fix to
+    /// `flox/floxhub@128dce329` on `telemetry-events-producer`.
     #[test]
-    fn canonical_events_connection_serializes_canonical_json_body() {
+    fn canonical_events_serializes_single_event_as_one_ndjson_object() {
         let event = fixed_event(command_run_kind());
         let body =
             CanonicalEventsConnection::serialize_events(&[&event]).expect("serialize events");
 
+        // Wire contract: not an array.
+        assert!(
+            !body.starts_with('['),
+            "body must not be a JSON array (would poison the S3Queue); got prefix: {:?}",
+            &body[..body.len().min(48)]
+        );
+        // Exactly one JSON object on one line.
+        assert!(body.starts_with('{') && body.ends_with('}'));
+        assert!(!body.contains('\n'), "single-event body must be one line, no embedded \\n");
+        // And it parses as the canonical envelope object.
         assert_eq!(
             body,
-            r#"[{"event_id":"11111111-1111-1111-1111-111111111111","event_timestamp":1700000000000,"source":"cli","invocation_id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","device_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","event_type":"cli.command_run","payload":{"subcommand":"install","flox_version":"0.0.0-test","os_family":"Linux","os_family_release":"6.10.0","os":"ubuntu","os_version":"24.04","kernel_version":"6.10.0-test","empty_flags":[],"invocation_sources":["shell"],"in_ci":false,"containerd":false}}]"#
+            r#"{"event_id":"11111111-1111-1111-1111-111111111111","event_timestamp":1700000000000,"source":"cli","invocation_id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","device_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","event_type":"cli.command_run","payload":{"subcommand":"install","flox_version":"0.0.0-test","os_family":"Linux","os_family_release":"6.10.0","os":"ubuntu","os_version":"24.04","kernel_version":"6.10.0-test","empty_flags":[],"invocation_sources":["shell"],"in_ci":false,"containerd":false}}"#
         );
+    }
+
+    /// A multi-event batch becomes one JSON object per line (`\n`-separated),
+    /// so the API Gateway template's trailing-newline-appended Firehose Record
+    /// lands as exactly N NDJSON lines in S3.
+    #[test]
+    fn canonical_events_serializes_batch_as_ndjson_lines() {
+        let e1 = fixed_event(command_run_kind());
+        let e2 = fixed_event(command_run_kind());
+        let body = CanonicalEventsConnection::serialize_events(&[&e1, &e2])
+            .expect("serialize events");
+
+        assert!(!body.starts_with('['), "batch body must not be a JSON array");
+        let lines: Vec<&str> = body.split('\n').collect();
+        assert_eq!(lines.len(), 2, "two events must produce two NDJSON lines");
+        for line in &lines {
+            let parsed: serde_json::Value = serde_json::from_str(line).expect("parse line");
+            assert!(parsed.is_object(), "each line must be a JSON object");
+        }
     }
 
     #[test]
