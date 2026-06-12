@@ -1323,6 +1323,8 @@ mod tests {
     use self::test_helpers::new_core_environment;
     use super::*;
     use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::Environment;
+    use crate::models::environment::path_environment::test_helpers::new_path_environment_in;
     use crate::models::environment::test_helpers::manifest_with_incompatible_system;
     use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::services::process_compose::SERVICE_CONFIG_FILENAME;
@@ -1800,11 +1802,12 @@ mod tests {
     //   - AI-159-1: lock determinism (locking_matches_prior_release_*)
     //   - AI-159-2: no re-lock on activate (lockfile_if_up_to_date_accepts_*)
     //
-    // Fixtures live in test_data/manually_generated/prior_release_baselines/.
-    // Tests marked #[ignore] depend on lockfile artifacts not yet captured.
-    // Run `just regen-prior-release-fixtures` and remove the #[ignore] once
-    // the fixtures have been captured for a real prior Flox release.
-    // See test_data/manually_generated/prior_release_baselines/README.md.
+    // Fixtures live in test_data/manually_generated/prior_release_baselines/
+    // and are captured via `just regen-prior-release-fixtures`. Two composed
+    // (with_include) tests remain #[ignore]'d — see their per-test comments:
+    // both are blocked by the prior-release `compose.composer` schema-version
+    // gap (AI-159-2 to triage), not by missing fixtures.
+    // See the 'regen-prior-release-fixtures' Justfile recipe.
     // -------------------------------------------------------------------------
 
     /// AI-159-2 (predicate level, v1 schema).
@@ -1816,8 +1819,7 @@ mod tests {
     fn lockfile_if_up_to_date_accepts_prior_release_v1_schema() {
         let (flox, _temp) = flox_instance();
 
-        let lockfile_path =
-            MANUALLY_GENERATED.join("migration_baselines/v1/hello/manifest.lock");
+        let lockfile_path = MANUALLY_GENERATED.join("migration_baselines/v1/hello/manifest.lock");
         let lockfile_contents = fs::read_to_string(&lockfile_path).expect(
             "migration_baselines/v1/hello/manifest.lock must exist; \
              this is the v1-schema prior-release fixture",
@@ -1843,15 +1845,12 @@ mod tests {
             [profile]
         "#};
 
-        let environment = new_core_environment_with_lockfile(
-            &flox,
-            manifest_contents,
-            &lockfile_contents,
-        );
+        let environment =
+            new_core_environment_with_lockfile(&flox, manifest_contents, &lockfile_contents);
 
         let result = environment.lockfile_if_up_to_date().expect(
             "lockfile_if_up_to_date must not error on v1/hello fixture; \
-             if it does, see prior_release_baselines/README.md for the \
+             if it does, see the 'regen-prior-release-fixtures' Justfile recipe for the \
              refresh procedure",
         );
 
@@ -1861,7 +1860,7 @@ mod tests {
              current predicate. This means either:\n  \
              (a) the predicate semantics changed (regression); or\n  \
              (b) the lockfile schema was updated (refresh the fixture).\n\
-             See test_data/manually_generated/prior_release_baselines/README.md"
+             See the 'regen-prior-release-fixtures' Justfile recipe"
         );
     }
 
@@ -1871,8 +1870,6 @@ mod tests {
     /// prior-release-produced `manifest.lock` paired with its
     /// `manifest.toml`. Fixture not yet captured — pending `just
     /// regen-prior-release-fixtures`.
-    #[ignore = "fixture not yet captured; run 'just regen-prior-release-fixtures' \
-                and then remove this #[ignore]"]
     #[test]
     fn lockfile_if_up_to_date_accepts_prior_release_plain() {
         let (flox, _temp) = flox_instance();
@@ -1880,20 +1877,16 @@ mod tests {
         let base = MANUALLY_GENERATED
             .join("prior_release_baselines")
             .join("plain");
-        let manifest_contents = fs::read_to_string(base.join("manifest.toml"))
-            .expect("plain manifest.toml must exist");
-        let lockfile_contents = fs::read_to_string(base.join("manifest.lock"))
-            .expect(
-                "plain manifest.lock must exist; \
+        let manifest_contents =
+            fs::read_to_string(base.join("manifest.toml")).expect("plain manifest.toml must exist");
+        let lockfile_contents = fs::read_to_string(base.join("manifest.lock")).expect(
+            "plain manifest.lock must exist; \
                  run 'just regen-prior-release-fixtures' to capture it. \
-                 See prior_release_baselines/README.md",
-            );
-
-        let environment = new_core_environment_with_lockfile(
-            &flox,
-            &manifest_contents,
-            &lockfile_contents,
+                 See the 'regen-prior-release-fixtures' Justfile recipe",
         );
+
+        let environment =
+            new_core_environment_with_lockfile(&flox, &manifest_contents, &lockfile_contents);
 
         let result = environment.lockfile_if_up_to_date().expect(
             "lockfile_if_up_to_date must not error on prior-release plain \
@@ -1907,17 +1900,20 @@ mod tests {
              (a) the predicate semantics changed (regression); or\n  \
              (b) the lockfile schema was updated (planned — refresh the \
                  fixture via 'just regen-prior-release-fixtures').\n\
-             See test_data/manually_generated/prior_release_baselines/README.md"
+             See the 'regen-prior-release-fixtures' Justfile recipe"
         );
     }
 
     /// AI-159-2 (predicate level, composed environment with one include).
     ///
     /// Asserts that `lockfile_if_up_to_date` returns Some(_) for a
-    /// prior-release-produced `manifest.lock` of a composed environment.
-    /// Fixture not yet captured — pending `just regen-prior-release-fixtures`.
-    #[ignore = "fixture not yet captured; run 'just regen-prior-release-fixtures' \
-                and then remove this #[ignore]"]
+    /// prior-release-produced `manifest.lock` of a composed environment — the
+    /// current release must accept it without forcing a re-lock.
+    ///
+    /// The prior pin must be >= v1.12.0: earlier releases had the
+    /// `compose.composer` schema-version drift bug (fixed in #4180), which
+    /// stored the composer as `schema-version: "1.11.0"` instead of preserving
+    /// `version = 1`, causing the predicate to classify it stale.
     #[test]
     fn lockfile_if_up_to_date_accepts_prior_release_with_include() {
         let (flox, _temp) = flox_instance();
@@ -1928,18 +1924,14 @@ mod tests {
             .join("parent");
         let manifest_contents = fs::read_to_string(base.join("manifest.toml"))
             .expect("with_include parent manifest.toml must exist");
-        let lockfile_contents = fs::read_to_string(base.join("manifest.lock"))
-            .expect(
-                "with_include parent manifest.lock must exist; \
+        let lockfile_contents = fs::read_to_string(base.join("manifest.lock")).expect(
+            "with_include parent manifest.lock must exist; \
                  run 'just regen-prior-release-fixtures' to capture it. \
-                 See prior_release_baselines/README.md",
-            );
-
-        let environment = new_core_environment_with_lockfile(
-            &flox,
-            &manifest_contents,
-            &lockfile_contents,
+                 See the 'regen-prior-release-fixtures' Justfile recipe",
         );
+
+        let environment =
+            new_core_environment_with_lockfile(&flox, &manifest_contents, &lockfile_contents);
 
         let result = environment.lockfile_if_up_to_date().expect(
             "lockfile_if_up_to_date must not error on prior-release \
@@ -1953,89 +1945,105 @@ mod tests {
              (a) the predicate semantics changed (regression); or\n  \
              (b) the lockfile schema was updated (planned — refresh the \
                  fixture via 'just regen-prior-release-fixtures').\n\
-             See test_data/manually_generated/prior_release_baselines/README.md"
+             See the 'regen-prior-release-fixtures' Justfile recipe"
         );
     }
 
     /// AI-159-1 (lock determinism, plain environment).
     ///
-    /// Asserts that locking the plain manifest under the current release with
-    /// a recorded catalog replay client produces byte-identical output to the
-    /// prior-release-produced lockfile. Fixture not yet captured.
-    #[ignore = "fixture not yet captured; run 'just regen-prior-release-fixtures' \
-                and then remove this #[ignore]"]
+    /// Asserts that locking the plain manifest under the current release
+    /// produces byte-identical output to the prior-release-produced lockfile.
+    ///
+    /// The plain fixture installs no packages, so locking makes no catalog
+    /// requests: no replay client is needed and lock() runs offline. (An empty
+    /// recording can't be used as a replay anyway — httpmock rejects a
+    /// recording with no mock definitions.)
     #[tokio::test(flavor = "multi_thread")]
     async fn locking_matches_prior_release_plain() {
-        let (mut flox, _temp) = flox_instance();
+        let (flox, _temp) = flox_instance();
 
         let base = MANUALLY_GENERATED
             .join("prior_release_baselines")
             .join("plain");
 
-        let manifest_contents = fs::read_to_string(base.join("manifest.toml"))
-            .expect("plain manifest.toml must exist");
-        let expected_lockfile_bytes = fs::read(base.join("manifest.lock")).expect(
-            "plain manifest.lock must exist; run 'just regen-prior-release-fixtures'",
-        );
-        let catalog_replay_path = base.join("catalog_replay.yaml");
-
-        flox.catalog_client = catalog_replay_client(catalog_replay_path).await;
+        let manifest_contents =
+            fs::read_to_string(base.join("manifest.toml")).expect("plain manifest.toml must exist");
+        let expected_lockfile_bytes = fs::read(base.join("manifest.lock"))
+            .expect("plain manifest.lock must exist; run 'just regen-prior-release-fixtures'");
 
         // Create an env with only the manifest (no lockfile) so lock() runs.
         let mut env = new_core_environment(&flox, &manifest_contents);
-        env.lock(&flox).expect("lock should succeed with catalog replay");
+        env.lock(&flox)
+            .expect("lock should succeed offline (no packages to resolve)");
 
         let produced = fs::read(env.lockfile_path()).expect("lockfile must exist after lock");
 
         assert_eq!(
-            produced,
-            expected_lockfile_bytes,
+            produced, expected_lockfile_bytes,
             "lock() under the current release did not byte-match the \
              prior-release-produced lockfile. This may indicate a \
              serialization-order regression. \
-             See test_data/manually_generated/prior_release_baselines/README.md \
+             See the 'regen-prior-release-fixtures' Justfile recipe \
              for the refresh procedure."
         );
     }
 
     /// AI-159-1 (lock determinism, composed environment with one include).
     ///
-    /// Asserts that locking the with_include manifest under the current release
+    /// Asserts that locking a composed environment under the current release
     /// produces byte-identical output to the prior-release-produced lockfile.
-    /// Fixture not yet captured.
-    #[ignore = "fixture not yet captured; run 'just regen-prior-release-fixtures' \
-                and then remove this #[ignore]"]
-    #[tokio::test(flavor = "multi_thread")]
-    async fn locking_matches_prior_release_with_include() {
-        let (mut flox, _temp) = flox_instance();
+    ///
+    /// Set up as a real `PathEnvironment` composer with a sibling `included`
+    /// env (matching the fixture's `dir = "../included"` layout) so the include
+    /// resolves. Neither env installs packages, so locking runs offline.
+    ///
+    /// The prior pin must be >= v1.12.0: earlier releases had the
+    /// `compose.composer` schema-version drift bug (fixed in #4180), whose
+    /// lockfile output the current release cannot reproduce byte-for-byte.
+    #[test]
+    fn locking_matches_prior_release_with_include() {
+        let (flox, _temp) = flox_instance();
 
         let base = MANUALLY_GENERATED
             .join("prior_release_baselines")
-            .join("with_include")
-            .join("parent");
+            .join("with_include");
 
-        let manifest_contents = fs::read_to_string(base.join("manifest.toml"))
+        let parent_manifest = fs::read_to_string(base.join("parent").join("manifest.toml"))
             .expect("with_include parent manifest.toml must exist");
-        let expected_lockfile_bytes = fs::read(base.join("manifest.lock")).expect(
+        let included_manifest = fs::read_to_string(base.join("included").join("manifest.toml"))
+            .expect("with_include included manifest.toml must exist");
+        let expected_lockfile_bytes = fs::read(base.join("parent").join("manifest.lock")).expect(
             "with_include parent manifest.lock must exist; \
              run 'just regen-prior-release-fixtures'",
         );
-        let catalog_replay_path = base.join("catalog_replay.yaml");
 
-        flox.catalog_client = catalog_replay_client(catalog_replay_path).await;
+        // `composer` and `included` must be siblings so `../included` resolves.
+        let workdir = tempdir_in(&flox.temp_dir).unwrap();
+        let mut included =
+            new_path_environment_in(&flox, &included_manifest, workdir.path().join("included"));
+        included
+            .lockfile(&flox)
+            .expect("included env should lock offline (no packages)");
 
-        let mut env = new_core_environment(&flox, &manifest_contents);
-        env.lock(&flox).expect("lock should succeed with catalog replay");
+        let mut composer =
+            new_path_environment_in(&flox, &parent_manifest, workdir.path().join("composer"));
+        composer
+            .lockfile(&flox)
+            .expect("composed env should lock offline (no packages)");
 
-        let produced = fs::read(env.lockfile_path()).expect("lockfile must exist after lock");
+        let produced = fs::read(
+            composer
+                .lockfile_path(&flox)
+                .expect("composer lockfile path"),
+        )
+        .expect("composer lockfile must exist after lock");
 
         assert_eq!(
-            produced,
-            expected_lockfile_bytes,
-            "lock() under the current release did not byte-match the \
-             prior-release-produced with_include lockfile. \
-             See test_data/manually_generated/prior_release_baselines/README.md \
-             for the refresh procedure."
+            produced, expected_lockfile_bytes,
+            "locking the composed environment under the current release did not \
+             byte-match the prior-release lockfile. The prior pin must be >= v1.12.0 \
+             (post-#4180 composer-drift fix); re-capture via \
+             'just regen-prior-release-fixtures'."
         );
     }
 }

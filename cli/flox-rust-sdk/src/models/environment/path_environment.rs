@@ -1153,9 +1153,9 @@ pub mod tests {
     // cross-release path where a current-release activate must accept the
     // prior-release build stamp without triggering a rebuild.
     //
-    // The test is #[ignore] pending fixture capture.  Run
-    // `just regen-prior-release-fixtures` and remove the #[ignore].
-    // See test_data/manually_generated/prior_release_baselines/README.md.
+    // Fixtures are captured via `just regen-prior-release-fixtures`; this test
+    // is active.
+    // See the 'regen-prior-release-fixtures' Justfile recipe.
     // -------------------------------------------------------------------------
 
     /// AI-159-3 (needs_rebuild predicate, plain environment).
@@ -1164,8 +1164,6 @@ pub mod tests {
     /// PathEnvironment, builds it with the current release, then asserts
     /// needs_rebuild() returns false, proving the current release accepts
     /// the prior-release build state without triggering a rebuild.
-    #[ignore = "fixture not yet captured; run 'just regen-prior-release-fixtures' \
-                and then remove this #[ignore]"]
     #[test]
     fn needs_rebuild_accepts_prior_release_stamp_plain() {
         use flox_test_utils::MANUALLY_GENERATED;
@@ -1194,7 +1192,7 @@ pub mod tests {
         env.build(&flox).expect(
             "build should succeed with prior-release lockfile; \
              if it fails, the fixture may need refreshing. \
-             See test_data/manually_generated/prior_release_baselines/README.md",
+             See the 'regen-prior-release-fixtures' Justfile recipe",
         );
 
         // After the build, needs_rebuild() must return false: the
@@ -1207,7 +1205,7 @@ pub mod tests {
                  env's lockfile (serialisation regression); or\n  \
              (b) the prior-release fixture is too old to build correctly \
                  (refresh with 'just regen-prior-release-fixtures').\n\
-             See test_data/manually_generated/prior_release_baselines/README.md"
+             See the 'regen-prior-release-fixtures' Justfile recipe"
         );
     }
 }

@@ -313,51 +313,160 @@ test-all: test-nix-plugins impure-tests integ-tests nix-integ-tests
 #   - The lockfile schema bumps (fixture format changed)
 #   - A predicate-rejection test fails with a fixture-rot diagnostic
 #
-# The recipe is intentionally left as a commented-out shell script rather
-# than a runnable recipe, because it requires:
-#   1. A prior Flox release binary (not available in CI)
-#   2. Network access to the Flox catalog
-#   3. A real Nix store for the build stamp
+# This recipe fetches the named prior Flox release into the Nix store (NOT
+# your user profile), locks each fixture shape with it, and copies out the
+# resulting lockfiles + catalog replays.  It still requires:
+#   1. Network access (to fetch the release flake and the Flox catalog)
+#   2. A local Nix store (to build the rendered environment during activate)
+# so it cannot run in CI; a maintainer runs it when advancing the pin.
 #
-# To run manually:
+# It deliberately uses 'nix build' rather than 'nix profile install': the
+# former only populates the content-addressed store plus a temporary gcroot
+# symlink, leaving your profile and PATH untouched.  All prior-Flox state
+# (HOME, XDG dirs, config) is redirected into a tempdir so the host is not
+# touched either.
 #
-#   PRIOR_VERSION="${1:-auto}"
-#   BASELINES="test_data/manually_generated/prior_release_baselines"
-#   FIXTURES_DIR="$BASELINES/PENDING_CAPTURE"
+# The current fixtures install no packages, so locking makes no catalog
+# requests and needs no network beyond fetching the release flake.  Capturing
+# replays for package-bearing fixtures would require a source-built binary
+# (see the note on the capture() helper below).
 #
-#   # Step 1: obtain prior Flox binary
-#   #   nix profile install github:flox/flox/$PRIOR_VERSION
-#   #   PRIOR_FLOX=$(which flox)
-#
-#   # Step 2: lock and build each fixture shape
-#   #   for shape in plain with_include; do
-#   #     WORK=$(mktemp -d)
-#   #     cp "$FIXTURES_DIR/$shape/manifest.toml" "$WORK/manifest.toml"
-#   #     cd "$WORK"
-#   #     $PRIOR_FLOX init
-#   #     cp manifest.toml .flox/env/manifest.toml
-#   #     FLOX_CATALOG_DUMP="$PWD/replay.yaml" $PRIOR_FLOX activate -c true
-#   #     cp .flox/env/manifest.lock "$FIXTURES_DIR/$shape/manifest.lock"
-#   #     cp replay.yaml "$FIXTURES_DIR/$shape/catalog_replay.yaml"
-#   #   done
-#
-#   # Step 3: update MANIFEST.json with version, date, sha256s
-#   # Step 4: git add and commit with message naming the new version
-#
-# See test_data/manually_generated/prior_release_baselines/README.md for
-# the full procedure.
+# This recipe is the procedure: the comments above and below document each
+# step. The prior pin must be >= v1.12.0 for composed (with_include) fixtures —
+# earlier releases had the compose.composer schema-version drift bug (#4180),
+# whose lockfile output the current release cannot reproduce byte-for-byte.
 regen-prior-release-fixtures version="auto":
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "regen-prior-release-fixtures: see Justfile comments for the manual"
-    echo "procedure. Automatic fixture capture requires a prior Flox binary"
-    echo "and network access to the Flox catalog."
+
+    BASELINES="test_data/manually_generated/prior_release_baselines"
+
+    # --- Resolve the version pin to a release tag --------------------------
+    VERSION="{{version}}"
+    if [ "$VERSION" = "auto" ]; then
+      # N-1 minor: the highest patch of the minor below the current trunk.
+      top=$(git tag --list 'v*.*.*' --sort=-v:refname | head -n1)
+      major=$(printf '%s' "$top" | sed -E 's/^v([0-9]+)\..*/\1/')
+      minor=$(printf '%s' "$top" | sed -E 's/^v[0-9]+\.([0-9]+)\..*/\1/')
+      TAG=$(git tag --list "v${major}.$((minor - 1)).*" --sort=-v:refname | head -n1)
+      if [ -z "$TAG" ]; then
+        echo "Could not auto-resolve an N-1 minor tag below $top." >&2
+        echo "Pass an explicit version, e.g. 'just regen-prior-release-fixtures 1.11.0'." >&2
+        exit 1
+      fi
+    else
+      TAG="v${VERSION#v}"
+    fi
+    echo "==> Capturing prior-release fixtures with Flox $TAG"
+
+    # Capture provenance now, before HOME is redirected away from ~/.gitconfig.
+    CAPTURED_BY="$(git config user.email 2>/dev/null || echo unknown)"
+
+    # --- Workspace (cleaned on exit), isolated from the host ---------------
+    WORKROOT=$(mktemp -d)
+    trap 'rm -rf "$WORKROOT"' EXIT
+
+    # The 'nix develop' shell exports FLOX_* / NIX_PLUGINS / BUILDENV_BIN
+    # overrides pointing at the in-tree (current-release) subsystems.  The
+    # prior binary would pick these up and build with the new buildenv, then
+    # fail to parse the result (e.g. "missing field `develop`").  Scrub them
+    # so the prior binary uses its own compile-time-baked subsystems.
+    while IFS='=' read -r name _; do
+      case "$name" in
+        FLOX_*|_FLOX_*|_flox_*) unset "$name" 2>/dev/null || true ;;
+      esac
+    done < <(env)
+    unset NIX_PLUGINS BUILDENV_BIN _activate_d 2>/dev/null || true
+
+    export HOME="$WORKROOT/home"
+    export XDG_CACHE_HOME="$WORKROOT/cache"
+    export XDG_DATA_HOME="$WORKROOT/data"
+    export XDG_STATE_HOME="$WORKROOT/state"
+    export XDG_CONFIG_HOME="$WORKROOT/config"
+    export FLOX_CONFIG_DIR="$WORKROOT/config/flox"
+    export FLOX_DISABLE_METRICS=true
+    mkdir -p "$HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" \
+             "$XDG_STATE_HOME" "$FLOX_CONFIG_DIR"
+
+    # --- Build the prior release into the store (no profile/PATH changes) --
+    nix build "github:flox/flox/$TAG" \
+      --accept-flake-config \
+      --out-link "$WORKROOT/flox-result"
+    PRIOR_FLOX="$WORKROOT/flox-result/bin/flox"
+    echo "==> Using $("$PRIOR_FLOX" --version)"
+
+    # --- Lock one env dir with the prior release and copy artifacts out ----
+    # $1 = throwaway env dir (already contains .flox), $2 = fixture out dir
+    #
+    # The current fixture shapes install no packages, so locking makes zero
+    # catalog requests and the recorded replay is empty (a 0-byte file, as
+    # 'mk_data' itself emits for zero-interaction scenarios).  We therefore do
+    # NOT enable catalog record mode here: with a Nix-store-built binary,
+    # httpmock saves recordings to a compile-time path inside the read-only
+    # store and panics.  If a future fixture installs packages, capturing its
+    # replay requires a source-built (cargo) binary with a writable
+    # CARGO_MANIFEST_DIR; revisit this recipe then.
+    capture() {
+      local envdir="$1" outdir="$2"
+      "$PRIOR_FLOX" activate --dir "$envdir" -c true
+      cp "$envdir/.flox/env/manifest.lock" "$outdir/manifest.lock"
+      : > "$outdir/catalog_replay.yaml"  # empty: zero catalog interactions
+    }
+
+    # --- plain shape -------------------------------------------------------
+    PLAIN="$WORKROOT/plain"
+    mkdir -p "$PLAIN"
+    "$PRIOR_FLOX" init --dir "$PLAIN"
+    cp "$BASELINES/plain/manifest.toml" "$PLAIN/.flox/env/manifest.toml"
+    capture "$PLAIN" "$BASELINES/plain"
+
+    # --- with_include shape (parent includes ../included) ------------------
+    INC="$WORKROOT/with_include"
+    mkdir -p "$INC/parent" "$INC/included"
+    "$PRIOR_FLOX" init --dir "$INC/included"
+    cp "$BASELINES/with_include/included/manifest.toml" \
+       "$INC/included/.flox/env/manifest.toml"
+    # Lock the included env so its manifest and lockfile are in sync;
+    # otherwise the parent refuses to include it.
+    "$PRIOR_FLOX" activate --dir "$INC/included" -c true
+    "$PRIOR_FLOX" init --dir "$INC/parent"
+    cp "$BASELINES/with_include/parent/manifest.toml" \
+       "$INC/parent/.flox/env/manifest.toml"
+    capture "$INC/parent" "$BASELINES/with_include/parent"
+
+    # --- Record provenance in MANIFEST.json --------------------------------
+    sha() { sha256sum "$1" | cut -d' ' -f1; }
+    jq -n \
+      --arg ver "${TAG#v}" \
+      --arg on  "$(date -u +%Y-%m-%d)" \
+      --arg by  "$CAPTURED_BY" \
+      --arg pl  "$(sha "$BASELINES/plain/manifest.lock")" \
+      --arg pr  "$(sha "$BASELINES/plain/catalog_replay.yaml")" \
+      --arg ql  "$(sha "$BASELINES/with_include/parent/manifest.lock")" \
+      --arg qr  "$(sha "$BASELINES/with_include/parent/catalog_replay.yaml")" \
+      '{
+        captured_with_flox_version: $ver,
+        captured_on: $on,
+        captured_by: $by,
+        note: "Captured via '\''just regen-prior-release-fixtures'\''.",
+        fixtures: {
+          plain: { manifest_lock_sha256: $pl, catalog_replay_sha256: $pr },
+          with_include: {
+            parent: { manifest_lock_sha256: $ql, catalog_replay_sha256: $qr },
+            included: { manifest_lock_sha256: null }
+          }
+        }
+      }' > "$BASELINES/MANIFEST.json"
+
+    # --- Clear the pending marker ------------------------------------------
+    rm -f "$BASELINES/CAPTURE_PENDING"
+
     echo ""
-    echo "Version requested: {{version}}"
-    echo ""
-    echo "Full procedure documented in:"
-    echo "  test_data/manually_generated/prior_release_baselines/README.md"
-    exit 1
+    echo "==> Captured prior-release fixtures with $TAG."
+    echo "    Next steps:"
+    echo "      1. Inspect the diff under $BASELINES/"
+    echo "      2. just unit-tests   &&   just integ-tests -- --filter prior-release"
+    echo "      3. Commit: test(ai-159): capture prior-release baselines to ${TAG#v}"
 
 
 # ---------------------------------------------------------------------------- #
