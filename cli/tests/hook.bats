@@ -27,6 +27,39 @@ project_teardown() {
   unset PROJECT_DIR
 }
 
+# Set a `[vars]` manifest for the project at $1 defining $2 = "$3".
+set_vars_manifest() {
+  cat << EOF | "$FLOX_BIN" edit -d "$1" -f -
+version = 1
+
+[vars]
+$2 = "$3"
+EOF
+}
+
+# A second project with an observable var, as a target for auto-activation.
+project2_setup() {
+  export PROJECT2_DIR="${BATS_TEST_TMPDIR?}/project2-${BATS_TEST_NUMBER?}"
+  rm -rf "$PROJECT2_DIR"
+  mkdir -p "$PROJECT2_DIR"
+  "$FLOX_BIN" init -d "$PROJECT2_DIR"
+  set_vars_manifest "$PROJECT2_DIR" TEST_VAR2 auto2
+}
+
+project2_teardown() {
+  rm -rf "${PROJECT2_DIR?}"
+  unset PROJECT2_DIR
+}
+
+# A project nested inside PROJECT2_DIR, for stacked auto-activation.
+# Cleaned up by project2_teardown.
+project3_setup() {
+  export PROJECT3_DIR="${PROJECT2_DIR?}/nested"
+  mkdir -p "$PROJECT3_DIR"
+  "$FLOX_BIN" init -d "$PROJECT3_DIR"
+  set_vars_manifest "$PROJECT3_DIR" TEST_VAR3 auto3
+}
+
 setup() {
   common_test_setup
   setup_isolated_flox
@@ -34,6 +67,9 @@ setup() {
 }
 
 teardown() {
+  if [ -n "${PROJECT2_DIR:-}" ]; then
+    project2_teardown
+  fi
   if [ -n "${PROJECT_DIR:-}" ]; then
     project_teardown
   fi
@@ -45,83 +81,239 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 # Deactivate-action handling in hook-env is not gated, but the auto-activation
-# placeholder (_FLOX_HOOK_FIRED) still is.
+# logic still is: without the flag the hook emits nothing, even with a
+# discoverable environment in the working directory.
 # TODO: Remove this test when the auto_activate feature flag is removed.
 # bats test_tags=hook:hook-env
 @test "'flox hook-env' succeeds without auto_activate feature flag but doesn't auto-activate" {
+  project_setup
   unset FLOX_FEATURES_AUTO_ACTIVATE
-  run "$FLOX_BIN" hook-env --shell bash --shell-pid "$$" --invocation-type inplace
+  run --separate-stderr "$FLOX_BIN" hook-env --shell bash --shell-pid "$$" --invocation-type inplace
   assert_success
-  refute_output --partial "_FLOX_HOOK_FIRED"
+  assert_output ""
 }
 
 # ---------------------------------------------------------------------------- #
-# Hook fires: verify _FLOX_HOOK_FIRED is set per shell
+# Auto-activation: cd into a project activates its environment
 # ---------------------------------------------------------------------------- #
-
+#
+# Each test activates PROJECT_DIR to install the prompt hook, then cd's into
+# a second project and fires the hook manually to stand in for the next
+# prompt. The hook should activate the second project's environment in place.
+#
 # Each test has the shell call `flox activate` directly (not pre-captured in
 # a bats variable) to avoid quoting issues across shells.
 
-# bats test_tags=hook:fires:bash
-@test "bash: hook fires and sets _FLOX_HOOK_FIRED to cwd" {
+# bats test_tags=hook:auto-activate:bash
+@test "bash: hook auto-activates a discovered environment on cd" {
   project_setup
+  project2_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
 
-  run bash -c "
+  run --separate-stderr bash -c "
     export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which bash)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
     _flox_hook
-    printenv _FLOX_HOOK_FIRED
+    echo \"var2:\$TEST_VAR2\"
+    printenv _FLOX_AUTO_ACTIVATED_ENVIRONMENTS
   "
   assert_success
-  assert_output --partial "$PWD"
+  assert_output --partial "var2:auto2"
+  assert_output --partial "$(realpath "$PROJECT2_DIR")"
 }
 
-# bats test_tags=hook:fires:zsh
-@test "zsh: hook fires and sets _FLOX_HOOK_FIRED to cwd" {
+# bats test_tags=hook:auto-activate:zsh
+@test "zsh: hook auto-activates a discovered environment on cd" {
   project_setup
+  project2_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
 
-  run zsh -c "
+  run --separate-stderr zsh -c "
     export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which zsh)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
     _flox_hook
-    printenv _FLOX_HOOK_FIRED
+    echo \"var2:\$TEST_VAR2\"
+    printenv _FLOX_AUTO_ACTIVATED_ENVIRONMENTS
   "
   assert_success
-  assert_output --partial "$PWD"
+  assert_output --partial "var2:auto2"
+  assert_output --partial "$(realpath "$PROJECT2_DIR")"
 }
 
-# bats test_tags=hook:fires:fish
-@test "fish: hook fires and sets _FLOX_HOOK_FIRED to cwd" {
+# bats test_tags=hook:auto-activate:fish
+@test "fish: hook auto-activates a discovered environment on cd" {
   project_setup
+  project2_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
 
-  run fish -c "
+  run --separate-stderr fish -c "
     set -gx FLOX_FEATURES_AUTO_ACTIVATE true
     eval ($FLOX_BIN activate -d $PROJECT_DIR)
+    cd $PROJECT2_DIR
     _flox_hook
-    printenv _FLOX_HOOK_FIRED
+    echo \"var2:\$TEST_VAR2\"
+    printenv _FLOX_AUTO_ACTIVATED_ENVIRONMENTS
   "
   assert_success
-  assert_output --partial "$PWD"
+  assert_output --partial "var2:auto2"
+  assert_output --partial "$(realpath "$PROJECT2_DIR")"
 }
 
-# bats test_tags=hook:fires:tcsh
-@test "tcsh: hook fires and sets _FLOX_HOOK_FIRED to cwd" {
+# bats test_tags=hook:auto-activate:tcsh
+@test "tcsh: hook auto-activates a discovered environment on cd" {
   project_setup
+  project2_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
 
-  run tcsh -c "
+  run --separate-stderr tcsh -c "
     setenv FLOX_FEATURES_AUTO_ACTIVATE true
     eval \"\`$FLOX_BIN activate -d $PROJECT_DIR\`\"
+    cd $PROJECT2_DIR
     precmd
-    printenv _FLOX_HOOK_FIRED
+    echo \"var2:\$TEST_VAR2\"
+    printenv _FLOX_AUTO_ACTIVATED_ENVIRONMENTS
   "
   assert_success
-  assert_output --partial "$PWD"
+  assert_output --partial "var2:auto2"
+  assert_output --partial "$(realpath "$PROJECT2_DIR")"
+}
+
+# ---------------------------------------------------------------------------- #
+# Auto-deactivation: leaving the project directory deactivates the environment
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=hook:auto-deactivate:bash
+@test "bash: auto-activated environment deactivates after leaving its directory" {
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  run --separate-stderr bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    echo \"during:\$TEST_VAR2\"
+    cd $BATS_TEST_TMPDIR
+    _flox_hook
+    echo \"after:\${TEST_VAR2:-unset}\"
+    echo \"tracked:\${_FLOX_AUTO_ACTIVATED_ENVIRONMENTS:-unset}\"
+  "
+  assert_success
+  assert_output --partial "during:auto2"
+  assert_output --partial "after:unset"
+  assert_output --partial "tracked:unset"
+}
+
+# bats test_tags=hook:auto-deactivate:manual
+@test "bash: manually activated environment is not deactivated on leaving" {
+  project_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  set_vars_manifest "$PROJECT_DIR" TEST_VAR manual
+
+  run --separate-stderr bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $BATS_TEST_TMPDIR
+    _flox_hook
+    echo \"after:\${TEST_VAR:-unset}\"
+  "
+  assert_success
+  assert_output --partial "after:manual"
+}
+
+# bats test_tags=hook:auto-activate:reentry
+@test "bash: re-entering a project after leaving re-activates it" {
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  run --separate-stderr bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    cd $BATS_TEST_TMPDIR
+    _flox_hook
+    echo \"out:\${TEST_VAR2:-unset}\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    echo \"back:\$TEST_VAR2\"
+  "
+  assert_success
+  assert_output --partial "out:unset"
+  assert_output --partial "back:auto2"
+}
+
+# ---------------------------------------------------------------------------- #
+# Stacked auto-activation: nested projects activate outermost-first and
+# unwind one layer per prompt
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=hook:auto-activate:nested
+@test "bash: nested projects activate as a stack and unwind one layer per prompt" {
+  project_setup
+  project2_setup
+  project3_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  run --separate-stderr bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT3_DIR
+    _flox_hook
+    echo \"in: v2:\$TEST_VAR2 v3:\$TEST_VAR3\"
+    cd $BATS_TEST_TMPDIR
+    _flox_hook
+    echo \"one: v2:\${TEST_VAR2:-unset} v3:\${TEST_VAR3:-unset}\"
+    _flox_hook
+    echo \"two: v2:\${TEST_VAR2:-unset} v3:\${TEST_VAR3:-unset}\"
+  "
+  assert_success
+  assert_output --partial "in: v2:auto2 v3:auto3"
+  # One layer pops per prompt: the inner (most recent) env first.
+  assert_output --partial "one: v2:auto2 v3:unset"
+  assert_output --partial "two: v2:unset v3:unset"
+}
+
+# ---------------------------------------------------------------------------- #
+# Suppression: 'flox deactivate' inside the project must not be undone by
+# the next prompt
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=hook:suppress:bash
+@test "bash: 'flox deactivate' suppresses re-activation until the directory is left" {
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  run --separate-stderr bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    echo \"during:\$TEST_VAR2\"
+    $FLOX_BIN deactivate
+    _flox_hook
+    echo \"after:\${TEST_VAR2:-unset}\"
+    _flox_hook
+    echo \"still:\${TEST_VAR2:-unset}\"
+    printenv _FLOX_SUPPRESSED_ENVIRONMENTS
+  "
+  assert_success
+  assert_output --partial "during:auto2"
+  assert_output --partial "after:unset"
+  assert_output --partial "still:unset"
+  assert_output --partial "$(realpath "$PROJECT2_DIR")"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -129,8 +321,9 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=hook:auto-fires
-@test "bash: hook auto-fires via PROMPT_COMMAND in interactive shell" {
+@test "bash: hook auto-activates via PROMPT_COMMAND in interactive shell" {
   project_setup
+  project2_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
 
   # Set up a .bashrc so the interactive shell has a known prompt
@@ -142,15 +335,8 @@ EOF
 set enable-bracketed-paste off
 EOF
 
-  mkdir -p "$PROJECT_DIR/subdir"
-
-  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" 'echo _FLOX_HOOK_FIRED="$_FLOX_HOOK_FIRED" && pushd subdir >/dev/null && echo _FLOX_HOOK_FIRED="$_FLOX_HOOK_FIRED" && popd >/dev/null && echo _FLOX_HOOK_FIRED="$_FLOX_HOOK_FIRED"'
-  # All three echos should show the project dir — the hook fired before the
-  # compound command and the value doesn't change mid-pipeline.
-  local expected="_FLOX_HOOK_FIRED=$(realpath "$PROJECT_DIR")"
-  local count
-  count=$(sed 's/^[[:space:]]*//;s/[[:space:]]*$//' <<< "$output" | grep -cFx "$expected")
-  assert_equal "$count" "3"
+  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/hook-cd.exp" "$PROJECT_DIR" "$PROJECT2_DIR" 'echo TEST_VAR2="$TEST_VAR2"'
+  assert_output --partial 'TEST_VAR2=auto2'
 }
 
 # ---------------------------------------------------------------------------- #
@@ -162,12 +348,7 @@ EOF
 # place. We fire `_flox_hook` manually to stand in for the next prompt.
 
 set_test_var_manifest() {
-  cat << "EOF" | "$FLOX_BIN" edit -f -
-version = 1
-
-[vars]
-TEST_VAR = "modified"
-EOF
+  set_vars_manifest "$PROJECT_DIR" TEST_VAR modified
 }
 
 # bats test_tags=hook:deactivate:bash
