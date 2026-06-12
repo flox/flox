@@ -1,0 +1,9 @@
+when:
+  path: /api/v1/catalog/packages/foo
+  method: GET
+then:
+  status: 200
+  header:
+  - name: content-type
+    value: application/json
+  body: '{"deprecation":{"kind":"renamed","replacement":"bar","message":"Use the new package path."},"items":[{"catalog":"nixpkgs","attr_path":"foo","pkg_path":"foo","derivation":"/nix/store/foo-1.0.drv","name":"foo-1.0","pname":"foo","version":"1.0","system":"x86_64-linux","outputs":[{"name":"out","store_path":"/nix/store/foo-1.0"}],"outputs_to_install":["out"],"description":"Deprecated package alias","license":"MIT","locked_url":"https://github.com/flox/nixpkgs?rev=abc123","rev":"abc123","rev_count":1,"rev_date":"2026-03-02T06:35:32Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-03-03T06:45:08.463181Z","cache_uri":null}],"total_count":1}'
