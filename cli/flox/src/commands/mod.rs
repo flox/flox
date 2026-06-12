@@ -6,6 +6,7 @@ mod build;
 mod check_for_upgrades;
 mod containerize;
 mod deactivate;
+mod decode_hook_diff;
 mod delete;
 mod edit;
 mod envs;
@@ -831,6 +832,12 @@ enum InternalCommands {
     /// Compute env changes for auto-activation (called on every prompt)
     #[bpaf(command("hook-env"), hide)]
     HookEnv(#[bpaf(external(hook_env::hook_env))] hook_env::HookEnv),
+
+    /// Decode the _FLOX_HOOK_DIFF environment variable to JSON for debugging
+    #[bpaf(command("decode-hook-diff"), hide)]
+    DecodeHookDiff(
+        #[bpaf(external(decode_hook_diff::decode_hook_diff))] decode_hook_diff::DecodeHookDiff,
+    ),
 }
 
 impl InternalCommands {
@@ -843,6 +850,7 @@ impl InternalCommands {
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
             InternalCommands::HookEnv(args) => args.handle(flox)?,
+            InternalCommands::DecodeHookDiff(args) => args.handle()?,
         }
         Ok(())
     }
