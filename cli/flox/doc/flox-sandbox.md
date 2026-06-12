@@ -6,7 +6,7 @@ header: "Flox User Manuals"
 
 # NAME
 
-flox-sandbox - review and manage sandbox grants for an `ask`-mode activation
+flox-sandbox - review and manage sandbox grants for a `prompt`-mode activation
 
 # SYNOPSIS
 
@@ -34,10 +34,10 @@ flox [<general-options>] sandbox audit
 # DESCRIPTION
 
 `flox sandbox` is the human-facing front end to the sandbox broker that runs
-inside an activation started with `flox activate --sandbox ask` (see
+inside an activation started with `flox activate --sandbox prompt` (see
 [`flox-activate(1)`](./flox-activate.md)).
 
-Under `ask`, an out-of-policy file access is denied and queued rather than
+Under `prompt`, an out-of-policy file access is denied and queued rather than
 silently allowed or blocked. `flox sandbox` reviews that queue, approves or
 denies requests, and inspects the saved grant set.
 
@@ -46,7 +46,7 @@ feature flag; set `FLOX_FEATURES_SANDBOX_ACTIVATE=true` to use it.
 
 ## Live approval
 
-A grant approved while an `ask` session is active takes effect immediately in
+A grant approved while a `prompt` session is active takes effect immediately in
 that session. The denied operation can be retried and will succeed once the
 short negative cache expires — no re-activation is needed. This is the core
 loop: a tool's read is denied and queued in one terminal; the grant is
@@ -76,7 +76,7 @@ hardcoded denylist and is never grantable by seeding.
 ## Audit log
 
 The sandbox engine appends every report it emits — warn-mode reports and
-enforce/ask denials, for file accesses, directory listings, and network
+enforce/prompt denials, for file accesses, directory listings, and network
 connects — to `audit.ndjson` beside `grants.toml`. `flox sandbox audit`
 reads it directly, so denials are queryable after the session ends and in
 every mode (warn and enforce run no broker). Allowed accesses are never

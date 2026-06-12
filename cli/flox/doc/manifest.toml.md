@@ -772,7 +772,7 @@ Options ::= {
 , allow                     = null | Allows
 , semver                    = null | Semver
 , cuda-detection            = null | <BOOL>
-, sandbox                   = null | 'off' | 'warn' | 'enforce' | 'ask'
+, sandbox                   = null | 'off' | 'warn' | 'enforce' | 'prompt'
 }
 
 Activate ::= {
@@ -844,7 +844,7 @@ Semver ::= {
 
 `sandbox`
 :   The sandbox mode applied when the environment is activated:
-    `off` (default), `warn`, `enforce`, or `ask`.
+    `off` (default), `warn`, `enforce`, or `prompt`.
     An explicit `flox activate --sandbox` flag takes precedence over this
     setting.
     See [`flox-activate(1)`](./flox-activate.md) for the mode semantics.
