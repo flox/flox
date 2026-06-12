@@ -26,6 +26,7 @@ use crate::process_compose::{process_compose_down, start_process_compose_no_serv
 mod event_coordinator;
 mod log_gc;
 mod reaper;
+mod sandbox;
 mod watcher;
 
 #[cfg(target_os = "linux")]
@@ -120,6 +121,21 @@ impl ExecutiveArgs {
         // Step 8: Spawn non-essential GC threads
         spawn_heartbeat_log();
         spawn_logs_gc_threads(&log_dir);
+
+        // Step 8.5: Start the ask broker, if this activation requested `ask`.
+        // It binds the verdict socket the preloaded libsandbox connects to and
+        // lives for the activation: the handle is held in this stack frame, so
+        // it drops (stopping the accept loop and removing the socket) when the
+        // event loop returns. A non-ask mode yields None and no broker; a bind
+        // failure is logged but not fatal — the engine then fail-closes, the
+        // correct degradation for `ask`.
+        let _broker = match sandbox::start(&attach_ctx, &project_ctx) {
+            Ok(broker) => broker,
+            Err(err) => {
+                error!(%err, "could not start ask broker; ask access will fail closed");
+                None
+            },
+        };
 
         // Step 9: Enter the monitoring loop
         info!("starting monitoring loop");

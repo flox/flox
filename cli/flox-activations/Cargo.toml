@@ -24,6 +24,7 @@ nix.workspace = true
 sentry.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+toml.workspace = true
 shell-escape.workspace = true
 signal-hook.workspace = true
 time = { workspace = true, features = ["macros"] }
