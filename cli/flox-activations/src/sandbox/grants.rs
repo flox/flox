@@ -449,6 +449,73 @@ pub fn grants_file_path(grants_dir: &Path) -> PathBuf {
     grants_dir.join(GRANTS_FILE_NAME)
 }
 
+/// The audit store beside `grants.toml`: NDJSON records appended by the
+/// engine (libsandbox) for every warn-mode report and enforce/ask denial.
+pub const AUDIT_FILE_NAME: &str = "audit.ndjson";
+
+/// One audit record as written by the engine.
+///
+/// The engine builds these lines by hand in C, so the reader is tolerant:
+/// every field except `path` defaults, and a malformed line is skipped on
+/// read rather than failing the whole audit.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AuditRecord {
+    /// Unix seconds when the report was emitted.
+    #[serde(default)]
+    pub ts: i64,
+    /// The sandbox mode at the time (`warn` / `enforce` / `ask`).
+    #[serde(default)]
+    pub mode: String,
+    /// `fs` or `net`.
+    #[serde(default)]
+    pub kind: String,
+    /// `read` / `write` / `connect`.
+    #[serde(default)]
+    pub op: String,
+    /// The resolved path (fs) or `host:port` destination (net).
+    pub path: String,
+    /// `warned` / `denied` / `fail-closed`.
+    #[serde(default)]
+    pub verdict: String,
+    /// The reporting process id.
+    #[serde(default)]
+    pub pid: i64,
+    /// The reporting executable's realpath, or empty.
+    #[serde(default)]
+    pub exe: String,
+}
+
+/// Read every parseable record from `grants_dir/audit.ndjson`, in file
+/// order.
+///
+/// A missing file is an empty audit (nothing was denied). Malformed or
+/// truncated lines — a crash mid-append, or a record from a newer engine —
+/// are skipped rather than failing the read, matching how the journal is
+/// consumed.
+pub fn read_audit(grants_dir: &Path) -> Vec<AuditRecord> {
+    let path = grants_dir.join(AUDIT_FILE_NAME);
+    let contents = match std::fs::read_to_string(&path) {
+        Ok(contents) => contents,
+        Err(_) => return Vec::new(),
+    };
+    contents
+        .lines()
+        .filter_map(|line| serde_json::from_str::<AuditRecord>(line).ok())
+        .collect()
+}
+
+/// Remove `grants_dir/audit.ndjson`, leaving `grants.toml` and the journal
+/// untouched. Clearing the audit never touches grants: the audit is a log of
+/// past reports, not policy. A missing file is a no-op success.
+pub fn clear_audit(grants_dir: &Path) -> anyhow::Result<()> {
+    let path = grants_dir.join(AUDIT_FILE_NAME);
+    match std::fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err.into()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -790,6 +857,60 @@ source = "flox sandbox allow"
                 "sensitive fragment {fragment:?} leaked into the seed grants"
             );
         }
+    }
+
+    #[test]
+    fn audit_read_skips_malformed_lines_and_clear_leaves_grants_intact() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("cache").join("sandbox");
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Grants and journal exist alongside the audit.
+        ensure_seed_grants(&dir, Some(Path::new("/home/dev")), None).unwrap();
+        let grants_before = read_grants(&dir);
+
+        // Two clean engine-shaped records, one malformed line, one truncated
+        // final line (crash mid-append).
+        std::fs::write(
+            dir.join(AUDIT_FILE_NAME),
+            concat!(
+                "{\"ts\":1781240000,\"mode\":\"enforce\",\"kind\":\"fs\",",
+                "\"op\":\"read\",\"path\":\"/home/dev/secret\",",
+                "\"verdict\":\"denied\",\"pid\":42,\"exe\":\"/bin/cat\"}\n",
+                "not json at all\n",
+                "{\"ts\":1781240001,\"mode\":\"warn\",\"kind\":\"net\",",
+                "\"op\":\"connect\",\"path\":\"example.com:443\",",
+                "\"verdict\":\"warned\",\"pid\":43,\"exe\":\"/bin/curl\"}\n",
+                "{\"ts\":1781240002,\"mo",
+            ),
+        )
+        .unwrap();
+
+        let records = read_audit(&dir);
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0], AuditRecord {
+            ts: 1781240000,
+            mode: "enforce".to_string(),
+            kind: "fs".to_string(),
+            op: "read".to_string(),
+            path: "/home/dev/secret".to_string(),
+            verdict: "denied".to_string(),
+            pid: 42,
+            exe: "/bin/cat".to_string(),
+        });
+        assert_eq!(records[1].kind, "net");
+        assert_eq!(records[1].path, "example.com:443");
+
+        // Clearing the audit removes only audit.ndjson: grants.toml and the
+        // journal are untouched (--clear never revokes anything).
+        clear_audit(&dir).unwrap();
+        assert!(read_audit(&dir).is_empty());
+        assert!(!dir.join(AUDIT_FILE_NAME).exists());
+        assert_eq!(read_grants(&dir), grants_before);
+        assert!(dir.join(JOURNAL_FILE_NAME).exists());
+
+        // Clearing an already-missing audit is a no-op success.
+        clear_audit(&dir).unwrap();
     }
 
     #[test]
