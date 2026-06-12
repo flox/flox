@@ -54,10 +54,12 @@ pub const FLOX_SANDBOX_ALLOW_NET_VAR: &str = "FLOX_SANDBOX_ALLOW_NET";
 /// `FLOX_SRC_DIR` — project working dir; the engine auto-adds it as an
 /// allow-dir, so setting it is how the project tree is seeded.
 pub const FLOX_SRC_DIR_VAR: &str = "FLOX_SRC_DIR";
-/// `FLOX_SANDBOX_SOCKET` — verdict socket for the `ask` broker. Unset until
-/// the broker lands; the libsandbox `ask` stub denies when it is unset,
-/// which is the correct interim behavior.
-pub const FLOX_SANDBOX_SOCKET_VAR: &str = "FLOX_SANDBOX_SOCKET";
+/// `FLOX_SANDBOX_PROMPT_SOCKET` — the prompt-broker socket (the shared wire
+/// protocol with `flox build`'s prompt broker; see
+/// `flox_core::activate::prompt_protocol`). When unset, the engine fails
+/// closed for an activation, which is the correct broker-less behavior.
+pub const FLOX_SANDBOX_PROMPT_SOCKET_VAR: &str =
+    flox_core::activate::prompt_protocol::PROMPT_SOCKET_ENV;
 /// `FLOX_SANDBOX_GRANTS_DIR` — directory holding persisted grants; the
 /// engine's write guard routes writes here through the ask flow.
 pub const FLOX_SANDBOX_GRANTS_DIR_VAR: &str = "FLOX_SANDBOX_GRANTS_DIR";
@@ -431,7 +433,7 @@ pub fn sandbox_env(
     // outcome as an unreachable broker.
     if mode == SandboxMode::Ask {
         env.insert(
-            FLOX_SANDBOX_SOCKET_VAR.to_string(),
+            FLOX_SANDBOX_PROMPT_SOCKET_VAR.to_string(),
             verdict_socket.to_string_lossy().into_owned(),
         );
     }
@@ -516,7 +518,7 @@ mod tests {
         );
         // The verdict socket is set only for `ask`; enforce never contacts a
         // broker, so it stays unset here.
-        assert!(!env.contains_key(FLOX_SANDBOX_SOCKET_VAR));
+        assert!(!env.contains_key(FLOX_SANDBOX_PROMPT_SOCKET_VAR));
     }
 
     #[test]
@@ -710,7 +712,7 @@ mod tests {
         // Ask runs a broker, so the verdict socket is exported and matches the
         // path the broker is expected to bind.
         assert_eq!(
-            env.get(FLOX_SANDBOX_SOCKET_VAR).unwrap(),
+            env.get(FLOX_SANDBOX_PROMPT_SOCKET_VAR).unwrap(),
             "/run/sbx.abc.sock"
         );
     }
