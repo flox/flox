@@ -202,7 +202,9 @@ struct AutoActivatePlan {
 /// At most one environment is deactivated per run: the generated deactivation
 /// script restores the next layer's `_FLOX_HOOK_DIFF` only once the shell has
 /// applied it, so a deeper stack unwinds across consecutive prompts rather
-/// than in a single run.
+/// than in a single run. While such an unwind is in progress, newly
+/// discovered environments are not activated yet — they would bury the
+/// still-unwinding layers and force them to be abandoned.
 fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
     let inside = |path: &Path| ctx.cwd.starts_with(path);
     let is_active = |path: &PathBuf| ctx.active.iter().flatten().any(|active| active == path);
@@ -274,14 +276,20 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
     }
 
     // Activate discovered environments that aren't already active or
-    // suppressed, outermost-first so the innermost ends up on top.
+    // suppressed, outermost-first so the innermost ends up on top. Defer
+    // while tracked environments the shell has left are still unwinding:
+    // activating now would stack the new environment on top of them, and a
+    // buried environment can't be popped (it would be abandoned instead).
+    let unwinding = auto_activated.iter().any(|path| !inside(path));
     let mut activate = Vec::new();
-    for path in &ctx.discovered {
-        if is_active(path) || suppressed.contains(path) || activate.contains(path) {
-            continue;
+    if !unwinding {
+        for path in &ctx.discovered {
+            if is_active(path) || suppressed.contains(path) || activate.contains(path) {
+                continue;
+            }
+            activate.push(path.clone());
+            auto_activated.push(path.clone());
         }
-        activate.push(path.clone());
-        auto_activated.push(path.clone());
     }
 
     AutoActivatePlan {
@@ -533,6 +541,63 @@ mod tests {
             activate: paths(&["/home/user/proj_b"]),
             deactivate_front: true,
             auto_activated: paths(&["/home/user/proj_b"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn defers_activation_while_stack_unwinds() {
+        // Leaving /tmp/a/b for /tmp/z: the front pops this run, but /tmp/a is
+        // still unwinding, so /tmp/z is not activated yet — activating it now
+        // would bury /tmp/a and force an abandon on a later run.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/tmp/z"]),
+            active: vec![
+                Some(PathBuf::from("/tmp/a/b")),
+                Some(PathBuf::from("/tmp/a")),
+            ],
+            auto_activated: paths(&["/tmp/a", "/tmp/a/b"]),
+            ..empty_ctx("/tmp/z")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            deactivate_front: true,
+            auto_activated: paths(&["/tmp/a"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn unwinds_fully_then_activates_in_final_run() {
+        // Continuation of defers_activation_while_stack_unwinds, with the
+        // previous plan applied by the shell: the next hook run pops the last
+        // unwinding layer and activates the new environment in the same run.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/tmp/z"]),
+            active: vec![Some(PathBuf::from("/tmp/a"))],
+            auto_activated: paths(&["/tmp/a"]),
+            ..empty_ctx("/tmp/z")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            activate: paths(&["/tmp/z"]),
+            deactivate_front: true,
+            auto_activated: paths(&["/tmp/z"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn settled_state_is_a_noop() {
+        // A hook run with nothing to do (e.g. zsh fires the hook from both
+        // chpwd and precmd, so a second run often sees the first run's plan
+        // already applied) must plan no further changes.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/tmp/z"]),
+            active: vec![Some(PathBuf::from("/tmp/z"))],
+            auto_activated: paths(&["/tmp/z"]),
+            ..empty_ctx("/tmp/z")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            auto_activated: paths(&["/tmp/z"]),
             ..noop_plan()
         });
     }
