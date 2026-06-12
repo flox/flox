@@ -1352,6 +1352,148 @@ else
 fi
 
 # ----------------------------------------------------------------------------
+# Layer 6: audit store (audit.ndjson appended by the engine).
+#
+# Every report the engine emits — warn-mode reports and enforce/ask denials,
+# for files, directory enumerations, and network connects — must also land as
+# one NDJSON record in $FLOX_SANDBOX_GRANTS_DIR/audit.ndjson so it is
+# queryable after the session (`flox sandbox audit`). The hook rides the
+# once-per-key dedup, so repeated accesses append exactly one record. Without
+# FLOX_SANDBOX_GRANTS_DIR (every build, and all the layers above) the hook is
+# inert and no file is created.
+# ----------------------------------------------------------------------------
+
+audit_home="$(mktemp -d "$HOME/flox-sandbox-tests-home.XXXXXX")"
+audit_dir="$(mktemp -d "${TMPDIR:-/tmp}/flox-sandbox-tests-audit.XXXXXX")"
+audit_file="$audit_dir/audit.ndjson"
+printf 'secret' > "$audit_home/outside.txt"
+
+# Helper: count audit records matching a substring.
+audit_count() {
+  [[ -f "$audit_file" ]] || { echo 0; return; }
+  grep -c "$1" "$audit_file" || true
+}
+
+# warn + activation: an out-of-policy read appends exactly ONE record per
+# path (the storm touches it 8 times), with mode/kind/op/verdict fields.
+rm -f "$audit_file"
+out="$(run_activation warn "$audit_home" FLOX_SANDBOX_GRANTS_DIR="$audit_dir" \
+      -- storm 1 8 "$audit_home/outside.txt" 2>&1)"; rc=$?
+records="$(audit_count "$audit_home/outside.txt")"
+if [[ -f "$audit_file" && "$records" -eq 1 \
+      && "$(audit_count '"mode":"warn"')" -eq 1 \
+      && "$(audit_count '"kind":"fs"')" -eq 1 \
+      && "$(audit_count '"op":"read"')" -eq 1 \
+      && "$(audit_count '"verdict":"warned"')" -eq 1 ]]; then
+  pass "audit: warn-mode report appends exactly one fs record per path"
+else
+  fail "audit: warn report should append one record (rc=$rc, records=$records)" \
+       "$(cat "$audit_file" 2>/dev/null)"
+fi
+
+# enforce: a denial appends a record with verdict "denied"; the pid and exe
+# attribution fields are populated (exe ends in sandbox_probe).
+rm -f "$audit_file"
+out="$(run_activation enforce "$audit_home" FLOX_SANDBOX_GRANTS_DIR="$audit_dir" \
+      -- open "$audit_home/outside.txt" 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$(audit_count '"verdict":"denied"')" -eq 1 \
+      && "$(audit_count '"mode":"enforce"')" -eq 1 \
+      && "$(audit_count 'sandbox_probe')" -ge 1 \
+      && "$(audit_count '"pid":')" -eq 1 ]]; then
+  pass "audit: enforce denial recorded with exe/pid attribution"
+else
+  fail "audit: enforce denial should append a denied record (rc=$rc)" \
+       "$(cat "$audit_file" 2>/dev/null)"
+fi
+
+# enforce: a WRITE denial records op "write" (the new write entry points
+# route through the same audited verdict tail).
+rm -f "$audit_file"
+out="$(run_activation enforce "$audit_home" FLOX_SANDBOX_GRANTS_DIR="$audit_dir" \
+      -- append "$audit_home/outside.txt" 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$(audit_count '"op":"write"')" -eq 1 \
+      && "$(audit_count '"verdict":"denied"')" -eq 1 ]]; then
+  pass "audit: enforce write denial recorded with op write"
+else
+  fail "audit: write denial should append an op:write record (rc=$rc)" \
+       "$(cat "$audit_file" 2>/dev/null)"
+fi
+
+# enforce: a directory ENUMERATION denial is recorded as a read of the dir
+# path (the dir verdict routes through the shared audited tail).
+rm -f "$audit_file"
+mkdir -p "$audit_home/private"
+printf 'x' > "$audit_home/private/file"
+out="$(run_activation enforce "$audit_home" FLOX_SANDBOX_GRANTS_DIR="$audit_dir" \
+      -- opendir "$audit_home/private" 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$(audit_count "$audit_home/private")" -ge 1 \
+      && "$(audit_count '"op":"read"')" -eq 1 \
+      && "$(audit_count '"verdict":"denied"')" -eq 1 ]]; then
+  pass "audit: directory-enumeration denial recorded as a read of the dir"
+else
+  fail "audit: opendir denial should append a record for the dir (rc=$rc)" \
+       "$(cat "$audit_file" 2>/dev/null)"
+fi
+
+# ask with no broker socket: the fail-closed denial is recorded with verdict
+# "fail-closed" and mode "ask".
+rm -f "$audit_file"
+out="$(run_activation ask "$audit_home" FLOX_SANDBOX_GRANTS_DIR="$audit_dir" \
+      -- open "$audit_home/outside.txt" 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$(audit_count '"verdict":"fail-closed"')" -eq 1 \
+      && "$(audit_count '"mode":"ask"')" -eq 1 ]]; then
+  pass "audit: ask fail-closed denial recorded"
+else
+  fail "audit: broker-less ask denial should record fail-closed (rc=$rc)" \
+       "$(cat "$audit_file" 2>/dev/null)"
+fi
+
+# enforce: a refused connect appends a kind:net record with the destination
+# and op connect.
+rm -f "$audit_file"
+out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+    FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=enforce \
+    FLOX_SANDBOX_GRANTS_DIR="$audit_dir" \
+    "$root/tests/sandbox_probe" connect 192.0.2.1 443 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$(audit_count '"kind":"net"')" -eq 1 \
+      && "$(audit_count '"op":"connect"')" -eq 1 \
+      && "$(audit_count '192.0.2.1:443')" -eq 1 \
+      && "$(audit_count '"verdict":"denied"')" -eq 1 ]]; then
+  pass "audit: refused connect recorded as a net denial"
+else
+  fail "audit: net refusal should append a kind:net record (rc=$rc)" \
+       "$(cat "$audit_file" 2>/dev/null)"
+fi
+
+# warn: an out-of-policy connect that is permitted-with-warning records
+# verdict "warned".
+rm -f "$audit_file"
+out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+    FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=warn \
+    FLOX_SANDBOX_GRANTS_DIR="$audit_dir" \
+    "$root/tests/sandbox_probe" connect 192.0.2.1 443 2>&1)"; rc=$?
+if [[ "$(audit_count '"kind":"net"')" -eq 1 \
+      && "$(audit_count '"verdict":"warned"')" -eq 1 ]]; then
+  pass "audit: warned connect recorded as a net warning"
+else
+  fail "audit: net warning should append a warned record (rc=$rc)" \
+       "$(cat "$audit_file" 2>/dev/null)"
+fi
+
+# Without FLOX_SANDBOX_GRANTS_DIR no audit file is ever created — the hook is
+# inert for builds (which never set the var). run_activation does not set it
+# here, and the denial still happens on stderr.
+rm -f "$audit_file"
+out="$(run_activation enforce "$audit_home" -- open "$audit_home/outside.txt" 2>&1)"; rc=$?
+if [[ $rc -ne 0 && ! -f "$audit_file" && "$out" == *"is not in the sandbox"* ]]; then
+  pass "audit: no grants dir, no audit file (hook inert for builds)"
+else
+  fail "audit: without FLOX_SANDBOX_GRANTS_DIR nothing may be written (rc=$rc)" "$out"
+fi
+
+rm -rf "$audit_home" "$audit_dir"
+
+# ----------------------------------------------------------------------------
 # Summary.
 # ----------------------------------------------------------------------------
 echo
