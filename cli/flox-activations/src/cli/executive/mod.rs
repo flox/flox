@@ -129,7 +129,11 @@ impl ExecutiveArgs {
         // event loop returns. A non-ask mode yields None and no broker; a bind
         // failure is logged but not fatal — the engine then fail-closes, the
         // correct degradation for `ask`.
-        let _broker = match sandbox::start(&attach_ctx, &project_ctx) {
+        // The session-root pid is the activation's parent (the `flox activate`
+        // process that exec'd the user's shell): the control socket refuses
+        // approval verbs from it and its descendants, so an in-session agent
+        // cannot self-approve.
+        let _broker = match sandbox::start(&attach_ctx, &project_ctx, parent_pid) {
             Ok(broker) => broker,
             Err(err) => {
                 error!(%err, "could not start ask broker; ask access will fail closed");
