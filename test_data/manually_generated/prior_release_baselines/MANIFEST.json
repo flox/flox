@@ -1,0 +1,21 @@
+{
+  "captured_with_flox_version": "CAPTURE_PENDING",
+  "captured_on": null,
+  "captured_by": null,
+  "note": "Run 'just regen-prior-release-fixtures' to populate these fixtures. See README.md for details. Delete the CAPTURE_PENDING marker file after capture.",
+  "fixtures": {
+    "plain": {
+      "manifest_lock_sha256": null,
+      "catalog_replay_sha256": null
+    },
+    "with_include": {
+      "parent": {
+        "manifest_lock_sha256": null,
+        "catalog_replay_sha256": null
+      },
+      "included": {
+        "manifest_lock_sha256": null
+      }
+    }
+  }
+}

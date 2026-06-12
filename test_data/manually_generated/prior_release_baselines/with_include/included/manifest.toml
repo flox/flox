@@ -1,0 +1,4 @@
+version = 1
+
+[vars]
+included_var = "value"

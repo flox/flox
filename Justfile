@@ -295,6 +295,73 @@ test-all: test-nix-plugins impure-tests integ-tests nix-integ-tests
 
 # ---------------------------------------------------------------------------- #
 
+# Refresh the prior-release lockfile fixtures used by AI-159 cross-release
+# tests.  Fixtures live in
+#   test_data/manually_generated/prior_release_baselines/
+#
+# This recipe is documentation-of-procedure and automation for future
+# maintainers.  The fixtures checked into the repository are the actual test
+# inputs; this recipe is only needed when it is time to advance the prior
+# release pin.
+#
+# Usage:
+#   just regen-prior-release-fixtures           # auto: picks N-1 minor
+#   just regen-prior-release-fixtures 1.12.0    # explicit version
+#
+# When to run:
+#   - A new minor Flox release ships (advance the pin to the new N-1)
+#   - The lockfile schema bumps (fixture format changed)
+#   - A predicate-rejection test fails with a fixture-rot diagnostic
+#
+# The recipe is intentionally left as a commented-out shell script rather
+# than a runnable recipe, because it requires:
+#   1. A prior Flox release binary (not available in CI)
+#   2. Network access to the Flox catalog
+#   3. A real Nix store for the build stamp
+#
+# To run manually:
+#
+#   PRIOR_VERSION="${1:-auto}"
+#   BASELINES="test_data/manually_generated/prior_release_baselines"
+#   FIXTURES_DIR="$BASELINES/PENDING_CAPTURE"
+#
+#   # Step 1: obtain prior Flox binary
+#   #   nix profile install github:flox/flox/$PRIOR_VERSION
+#   #   PRIOR_FLOX=$(which flox)
+#
+#   # Step 2: lock and build each fixture shape
+#   #   for shape in plain with_include; do
+#   #     WORK=$(mktemp -d)
+#   #     cp "$FIXTURES_DIR/$shape/manifest.toml" "$WORK/manifest.toml"
+#   #     cd "$WORK"
+#   #     $PRIOR_FLOX init
+#   #     cp manifest.toml .flox/env/manifest.toml
+#   #     FLOX_CATALOG_DUMP="$PWD/replay.yaml" $PRIOR_FLOX activate -c true
+#   #     cp .flox/env/manifest.lock "$FIXTURES_DIR/$shape/manifest.lock"
+#   #     cp replay.yaml "$FIXTURES_DIR/$shape/catalog_replay.yaml"
+#   #   done
+#
+#   # Step 3: update MANIFEST.json with version, date, sha256s
+#   # Step 4: git add and commit with message naming the new version
+#
+# See test_data/manually_generated/prior_release_baselines/README.md for
+# the full procedure.
+regen-prior-release-fixtures version="auto":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "regen-prior-release-fixtures: see Justfile comments for the manual"
+    echo "procedure. Automatic fixture capture requires a prior Flox binary"
+    echo "and network access to the Flox catalog."
+    echo ""
+    echo "Version requested: {{version}}"
+    echo ""
+    echo "Full procedure documented in:"
+    echo "  test_data/manually_generated/prior_release_baselines/README.md"
+    exit 1
+
+
+# ---------------------------------------------------------------------------- #
+
 # Enters the Rust development environment
 @work:
     # Note that this command is only really useful if you have

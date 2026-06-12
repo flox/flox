@@ -761,6 +761,7 @@ pub mod tests {
     use crate::models::env_registry::{env_registry_path, read_environment_registry};
     use crate::models::environment::path_environment::test_helpers::{
         new_path_environment,
+        new_path_environment_from_env_files,
         new_path_environment_in,
     };
     use crate::providers::lock_manifest::RecoverableMergeError;
@@ -1141,5 +1142,72 @@ pub mod tests {
 
         assert_eq!(bytes_before, bytes_after, "lockfile bytes changed");
         assert_eq!(mtime_before, mtime_after, "lockfile mtime changed");
+    }
+
+    // -------------------------------------------------------------------------
+    // AI-159-3: prior-release rendered-env stamp acceptance
+    //
+    // This test loads a prior-release manifest.toml + manifest.lock, builds
+    // the environment with the current release, and asserts that
+    // needs_rebuild() returns false after the build.  This covers the
+    // cross-release path where a current-release activate must accept the
+    // prior-release build stamp without triggering a rebuild.
+    //
+    // The test is #[ignore] pending fixture capture.  Run
+    // `just regen-prior-release-fixtures` and remove the #[ignore].
+    // See test_data/manually_generated/prior_release_baselines/README.md.
+    // -------------------------------------------------------------------------
+
+    /// AI-159-3 (needs_rebuild predicate, plain environment).
+    ///
+    /// Copies a prior-release manifest.toml + manifest.lock into a
+    /// PathEnvironment, builds it with the current release, then asserts
+    /// needs_rebuild() returns false, proving the current release accepts
+    /// the prior-release build state without triggering a rebuild.
+    #[ignore = "fixture not yet captured; run 'just regen-prior-release-fixtures' \
+                and then remove this #[ignore]"]
+    #[test]
+    fn needs_rebuild_accepts_prior_release_stamp_plain() {
+        use flox_test_utils::MANUALLY_GENERATED;
+
+        let (flox, _temp_dir) = flox_instance();
+
+        let base = MANUALLY_GENERATED
+            .join("prior_release_baselines")
+            .join("plain");
+
+        // new_path_environment_from_env_files reads manifest.toml and
+        // manifest.lock from the given directory and writes them into a
+        // fresh .flox/env/ directory, giving us a PathEnvironment with the
+        // prior-release lockfile already in place.
+        let mut env = new_path_environment_from_env_files(&flox, &base);
+
+        // Before the first build, the rendered-env link does not exist, so
+        // needs_rebuild() returns true — the env needs to be built once.
+        assert!(
+            env.needs_rebuild().unwrap(),
+            "needs_rebuild() should return true before first build"
+        );
+
+        // Lock (no-op if the prior-release lockfile is up-to-date) and
+        // build, creating the rendered-env stamp.
+        env.build(&flox).expect(
+            "build should succeed with prior-release lockfile; \
+             if it fails, the fixture may need refreshing. \
+             See test_data/manually_generated/prior_release_baselines/README.md",
+        );
+
+        // After the build, needs_rebuild() must return false: the
+        // rendered-env stamp's lockfile matches the env's lockfile.
+        assert!(
+            !env.needs_rebuild().unwrap(),
+            "needs_rebuild() returned true after building from a prior-release \
+             lockfile. This means either:\n  \
+             (a) the rendered-env stamp's lockfile format diverged from the \
+                 env's lockfile (serialisation regression); or\n  \
+             (b) the prior-release fixture is too old to build correctly \
+                 (refresh with 'just regen-prior-release-fixtures').\n\
+             See test_data/manually_generated/prior_release_baselines/README.md"
+        );
     }
 }
