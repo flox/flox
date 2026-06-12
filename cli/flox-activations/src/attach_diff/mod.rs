@@ -22,12 +22,7 @@ use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
 use crate::env_diff::EnvDiff;
 use crate::sandbox::seed::SeedContext;
-use crate::sandbox::{
-    FLOX_SANDBOX_ALLOW_NET_VAR,
-    PRELOAD_VAR,
-    sandbox_env,
-    verdict_socket_path,
-};
+use crate::sandbox::{FLOX_SANDBOX_ALLOW_NET_VAR, PRELOAD_VAR, sandbox_env, verdict_socket_path};
 use crate::start_diff::StartDiff;
 use crate::vars_from_env::VarsFromEnvironment;
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
