@@ -60,6 +60,10 @@ pub enum SandboxCommands {
     /// Revoke a saved or session grant
     #[bpaf(command)]
     Revoke(#[bpaf(external(revoke_args))] RevokeArgs),
+
+    /// Show recorded sandbox denials and warnings for the environment
+    #[bpaf(command)]
+    Audit(#[bpaf(external(audit_args))] AuditArgs),
 }
 
 #[derive(Debug, Clone, Bpaf)]
@@ -72,6 +76,10 @@ pub struct ReviewArgs {
 pub struct ListArgs {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
+
+    /// Show the default-seed grants individually instead of one summary row
+    #[bpaf(long("all"))]
+    all: bool,
 }
 
 #[derive(Debug, Clone, Bpaf)]
@@ -96,6 +104,16 @@ pub struct RevokeArgs {
     glob: String,
 }
 
+#[derive(Debug, Clone, Bpaf)]
+pub struct AuditArgs {
+    #[bpaf(external(environment_select), fallback(Default::default()))]
+    environment: EnvironmentSelect,
+
+    /// Clear the audit log. Grants are never touched.
+    #[bpaf(long("clear"))]
+    clear: bool,
+}
+
 impl SandboxCommands {
     pub async fn handle(self, _config: Config, mut flox: Flox) -> Result<()> {
         // Gate behind the same feature flag as `flox activate --sandbox`.
@@ -114,6 +132,7 @@ impl SandboxCommands {
             SandboxCommands::List(args) => list(&mut flox, args).await,
             SandboxCommands::Allow(args) => allow(&mut flox, args).await,
             SandboxCommands::Revoke(args) => revoke(&mut flox, args).await,
+            SandboxCommands::Audit(args) => audit(&mut flox, args).await,
         }
     }
 }
@@ -504,6 +523,11 @@ fn apply_choice(broker: &Broker, path: &str, scope: Option<&str>, choice: Choice
 
 /// `flox sandbox list` — the grants/provenance/cap readout (the saved-grants
 /// inspection surface).
+///
+/// Default-seed rows (the out-of-box policy: git hosts, registries, dotfile
+/// reads, the metrics endpoint) collapse into one summary line by default so
+/// the grants the user actually approved stay prominent; `--all` expands
+/// them. Manual and approved grants always list individually.
 async fn list(flox: &mut Flox, args: ListArgs) -> Result<()> {
     let env = resolve(flox, &args.environment).await?;
     let saved = grants::read_grants(&env.grants_dir);
@@ -515,14 +539,28 @@ async fn list(flox: &mut Flox, args: ListArgs) -> Result<()> {
         grants::grants_file_path(&env.grants_dir).display()
     ));
 
+    let (manual, seeded): (Vec<&Grant>, Vec<&Grant>) = saved
+        .grants
+        .iter()
+        .partition(|grant| !grant.is_default_seed());
+
     if saved.grants.is_empty() {
         message::plain("  (no saved grants)\n");
     } else {
-        message::plain(
-            "  PATTERN                          OPS    SOURCE              ADDED       EVIDENCE",
-        );
-        for grant in &saved.grants {
+        if !manual.is_empty() || args.all {
+            message::plain(
+                "  PATTERN                          OPS    SOURCE              ADDED       EVIDENCE",
+            );
+        }
+        for grant in &manual {
             message::plain(format!("  {}", format_grant_row(grant)));
+        }
+        if args.all {
+            for grant in &seeded {
+                message::plain(format!("  {}", format_grant_row(grant)));
+            }
+        } else if !seeded.is_empty() {
+            message::plain(format!("  {}", seed_summary_row(seeded.len())));
         }
         message::plain("");
     }
@@ -551,11 +589,14 @@ async fn list(flox: &mut Flox, args: ListArgs) -> Result<()> {
     message::plain(format!("  {}", sensitive.patterns().join(" ")));
     message::plain("");
 
-    // Cap consumption.
-    let entries = saved.grants.len();
-    let bytes: usize = saved.grants.iter().map(|g| g.pattern.len()).sum();
+    // Cap consumption. Only filesystem grants count: net-kind grants are
+    // compiled into FLOX_SANDBOX_ALLOW_NET and never touch the fs caps, so
+    // including them would overstate consumption.
+    let fs_grants: Vec<&Grant> = saved.grants.iter().filter(|g| !g.is_net()).collect();
+    let entries = fs_grants.len();
+    let bytes: usize = fs_grants.iter().map(|g| g.pattern.len()).sum();
     message::plain(format!(
-        "{entries} saved grant(s) use {entries} of {} allow entries ({:.1} of {} KB).",
+        "{entries} saved filesystem grant(s) use {entries} of {} allow entries ({:.1} of {} KB); network grants are uncapped.",
         flox_activations::sandbox::ALLOW_ENTRIES_MAX,
         bytes as f64 / 1024.0,
         flox_activations::sandbox::ALLOW_BYTES_MAX / 1024,
@@ -595,6 +636,11 @@ fn format_grant_row(grant: &Grant) -> String {
         "{:<32} {:<6} {:<19} {:<11} {}",
         grant.pattern, ops, source, added, evidence
     )
+}
+
+/// The one-line summary that stands in for the collapsed default-seed rows.
+fn seed_summary_row(count: usize) -> String {
+    format!("default-seed: {count} grants — use --all to show")
 }
 
 /// `flox sandbox allow <glob>` — non-interactive grant.
@@ -645,6 +691,13 @@ async fn revoke(flox: &mut Flox, args: RevokeArgs) -> Result<()> {
     refuse_if_in_session("revoke")?;
     let env = resolve(flox, &args.environment).await?;
 
+    // Capture the grant's kind before removal: a network grant needs the
+    // timing note below, because the network policy has no live re-read.
+    let was_net = grants::read_grants(&env.grants_dir)
+        .grants
+        .iter()
+        .any(|grant| grant.pattern == args.glob && grant.is_net());
+
     if let Some(broker) = env.broker() {
         broker.revoke(&args.glob)?;
         message::updated(format!("Revoked '{}'.", args.glob));
@@ -654,7 +707,129 @@ async fn revoke(flox: &mut Flox, args: RevokeArgs) -> Result<()> {
         })?;
         message::updated(format!("Removed '{}' from grants.toml.", args.glob));
     }
+    if was_net {
+        // FLOX_SANDBOX_ALLOW_NET is compiled at session start; the engine
+        // never re-reads it, so a live session keeps the old policy.
+        message::info(
+            "Network policy is compiled at activation start — this revocation applies at the next activation.",
+        );
+    }
     Ok(())
+}
+
+/// `flox sandbox audit [--clear]` — the recorded-denials readout.
+///
+/// Reads `audit.ndjson` directly from the grants dir, so it works without a
+/// live broker and covers past sessions in every mode (warn and enforce
+/// never run a broker). `--clear` truncates the audit log only; grants are
+/// never touched.
+async fn audit(flox: &mut Flox, args: AuditArgs) -> Result<()> {
+    let env = resolve(flox, &args.environment).await?;
+
+    if args.clear {
+        grants::clear_audit(&env.grants_dir)?;
+        message::updated(format!(
+            "Cleared the sandbox audit log for {}. Grants are untouched.",
+            env.description
+        ));
+        return Ok(());
+    }
+
+    let records = grants::read_audit(&env.grants_dir);
+    if records.is_empty() {
+        message::info(format!(
+            "No recorded sandbox denials or warnings for {}.",
+            env.description
+        ));
+        return Ok(());
+    }
+
+    let rows = aggregate_audit(&records);
+    message::plain(format!("Sandbox audit for {}\n", env.description));
+    message::plain(
+        "  PATH                                     OP       MODE     COUNT  LAST SEEN         VERDICT",
+    );
+    for row in &rows {
+        message::plain(format!("  {}", format_audit_row(row)));
+    }
+    message::plain("");
+    message::info(
+        "Grant a path with: flox sandbox allow '<glob>' — clear the log with: flox sandbox audit --clear",
+    );
+    Ok(())
+}
+
+/// One aggregated audit row: the same (path, op, mode) seen `count` times.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AuditRow {
+    path: String,
+    op: String,
+    mode: String,
+    count: u64,
+    last_ts: i64,
+    last_verdict: String,
+}
+
+/// Aggregate raw audit records by (path, op, mode), preserving first-seen
+/// order, with a count and the most recent timestamp/verdict per group. The
+/// engine already dedups once per path per process, so counts approximate
+/// "how many processes tripped on this" rather than raw access volume.
+fn aggregate_audit(records: &[grants::AuditRecord]) -> Vec<AuditRow> {
+    let mut rows: Vec<AuditRow> = Vec::new();
+    for record in records {
+        if let Some(row) = rows
+            .iter_mut()
+            .find(|row| row.path == record.path && row.op == record.op && row.mode == record.mode)
+        {
+            row.count += 1;
+            if record.ts >= row.last_ts {
+                row.last_ts = record.ts;
+                row.last_verdict = record.verdict.clone();
+            }
+        } else {
+            rows.push(AuditRow {
+                path: record.path.clone(),
+                op: record.op.clone(),
+                mode: record.mode.clone(),
+                count: 1,
+                last_ts: record.ts,
+                last_verdict: record.verdict.clone(),
+            });
+        }
+    }
+    rows
+}
+
+/// Render one aggregated audit row for the table.
+fn format_audit_row(row: &AuditRow) -> String {
+    format!(
+        "{:<40} {:<8} {:<8} {:<6} {:<17} {}",
+        row.path,
+        row.op,
+        row.mode,
+        row.count,
+        format_audit_ts(row.last_ts),
+        row.last_verdict,
+    )
+}
+
+/// A human-readable UTC timestamp (`YYYY-MM-DD HH:MM`) for the last-seen
+/// column; a zero/invalid timestamp renders as `-`.
+fn format_audit_ts(ts: i64) -> String {
+    if ts <= 0 {
+        return "-".to_string();
+    }
+    match time::OffsetDateTime::from_unix_timestamp(ts) {
+        Ok(when) => format!(
+            "{:04}-{:02}-{:02} {:02}:{:02}",
+            when.year(),
+            when.month() as u8,
+            when.day(),
+            when.hour(),
+            when.minute()
+        ),
+        Err(_) => "-".to_string(),
+    }
 }
 
 // --- Helpers --------------------------------------------------------------
@@ -802,5 +977,147 @@ mod tests {
         assert_eq!(today.len(), 10);
         assert_eq!(today.as_bytes()[4], b'-');
         assert_eq!(today.as_bytes()[7], b'-');
+    }
+
+    #[test]
+    fn audit_subcommand_parses_with_and_without_clear() {
+        use bpaf::Parser;
+
+        let parsed = sandbox_commands()
+            .to_options()
+            .run_inner(bpaf::Args::from(&["audit"]))
+            .expect("'sandbox audit' should parse");
+        assert!(matches!(
+            parsed,
+            SandboxCommands::Audit(AuditArgs { clear: false, .. })
+        ));
+
+        let parsed = sandbox_commands()
+            .to_options()
+            .run_inner(bpaf::Args::from(&["audit", "--clear"]))
+            .expect("'sandbox audit --clear' should parse");
+        assert!(matches!(
+            parsed,
+            SandboxCommands::Audit(AuditArgs { clear: true, .. })
+        ));
+    }
+
+    fn audit_record(
+        path: &str,
+        op: &str,
+        mode: &str,
+        ts: i64,
+        verdict: &str,
+    ) -> grants::AuditRecord {
+        grants::AuditRecord {
+            ts,
+            mode: mode.to_string(),
+            kind: if op == "connect" { "net" } else { "fs" }.to_string(),
+            op: op.to_string(),
+            path: path.to_string(),
+            verdict: verdict.to_string(),
+            pid: 42,
+            exe: "/bin/tool".to_string(),
+        }
+    }
+
+    #[test]
+    fn audit_aggregates_by_path_op_mode_with_count_and_last_seen() {
+        let records = vec![
+            audit_record("/home/dev/secret", "read", "enforce", 100, "denied"),
+            // Same (path, op, mode) from a second process: coalesced.
+            audit_record("/home/dev/secret", "read", "enforce", 200, "denied"),
+            // Same path, different op: its own row.
+            audit_record("/home/dev/secret", "write", "enforce", 150, "denied"),
+            // A net record groups separately.
+            audit_record("example.com:443", "connect", "warn", 120, "warned"),
+        ];
+        let rows = aggregate_audit(&records);
+        assert_eq!(rows, vec![
+            AuditRow {
+                path: "/home/dev/secret".to_string(),
+                op: "read".to_string(),
+                mode: "enforce".to_string(),
+                count: 2,
+                last_ts: 200,
+                last_verdict: "denied".to_string(),
+            },
+            AuditRow {
+                path: "/home/dev/secret".to_string(),
+                op: "write".to_string(),
+                mode: "enforce".to_string(),
+                count: 1,
+                last_ts: 150,
+                last_verdict: "denied".to_string(),
+            },
+            AuditRow {
+                path: "example.com:443".to_string(),
+                op: "connect".to_string(),
+                mode: "warn".to_string(),
+                count: 1,
+                last_ts: 120,
+                last_verdict: "warned".to_string(),
+            },
+        ]);
+    }
+
+    #[test]
+    fn audit_row_renders_with_a_readable_timestamp() {
+        let row = AuditRow {
+            path: "/home/dev/secret".to_string(),
+            op: "read".to_string(),
+            mode: "enforce".to_string(),
+            count: 3,
+            // 2026-06-11 00:00:00 UTC.
+            last_ts: 1781136000,
+            last_verdict: "denied".to_string(),
+        };
+        let rendered = format_audit_row(&row);
+        assert!(rendered.contains("/home/dev/secret"), "{rendered}");
+        assert!(rendered.contains("2026-06-11"), "{rendered}");
+        assert!(rendered.contains("denied"), "{rendered}");
+        // A zero timestamp renders as a placeholder, not an epoch date.
+        assert_eq!(format_audit_ts(0), "-");
+    }
+
+    #[test]
+    fn list_collapses_default_seed_rows_into_one_summary_line() {
+        // The partition that list() renders from: manual grants stay
+        // individual; default-seed rows collapse to a summary unless --all.
+        let grants = vec![
+            Grant {
+                pattern: "/home/dev/data/**".to_string(),
+                kind: None,
+                ops: vec![],
+                source: Some("allow".to_string()),
+                created: None,
+                evidence: None,
+            },
+            Grant {
+                pattern: "github.com".to_string(),
+                kind: Some(grants::KIND_NET.to_string()),
+                ops: vec![],
+                source: Some(grants::SOURCE_DEFAULT_SEED.to_string()),
+                created: None,
+                evidence: None,
+            },
+            Grant {
+                pattern: "/home/dev/.zshrc".to_string(),
+                kind: None,
+                ops: vec!["read".to_string()],
+                source: Some(grants::SOURCE_DEFAULT_SEED.to_string()),
+                created: None,
+                evidence: None,
+            },
+        ];
+        let (manual, seeded): (Vec<&Grant>, Vec<&Grant>) =
+            grants.iter().partition(|grant| !grant.is_default_seed());
+        assert_eq!(manual.len(), 1);
+        assert_eq!(manual[0].pattern, "/home/dev/data/**");
+        assert_eq!(seeded.len(), 2);
+        assert_eq!(
+            seed_summary_row(seeded.len()),
+            "default-seed: 2 grants — use --all to show"
+        );
     }
 }

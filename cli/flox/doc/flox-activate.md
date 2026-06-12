@@ -217,8 +217,9 @@ options.
          (`~/.gitconfig`, `~/.npmrc`, `~/.config/{git,npm,pip}`, cargo and
          rustup config).
        * The default network allowlist covers FloxHub, the Flox Catalog,
-         GitHub (clone/fetch and release downloads), and the npm, PyPI, and
-         crates.io registries.
+         GitHub (clone/fetch and release downloads), the npm, PyPI, and
+         crates.io registries, and Flox's own metrics endpoint (omitted
+         when metrics are disabled).
        * Credential and secret files are denied even under `enforce`,
          before the `$HOME`-dotfile allowance: `~/.ssh`, `~/.aws`,
          `~/.gnupg`, `~/.kube`, `~/.netrc`, `~/.config/gh`, and any
@@ -228,6 +229,15 @@ options.
        * New files created outside an in-policy directory are denied: a
          write to a path that does not yet exist is judged by its parent
          directory's policy.
+
+   These defaults are not invisible policy: the first sandboxed activation
+   writes them to the environment's grant store as explicit `default-seed`
+   grants. Inspect them with `flox sandbox list --all` and revoke any of
+   them with `flox sandbox revoke` — a revoked default stays revoked. Only
+   loopback and Flox's own service hosts remain hardcoded (revoking them
+   would break flox itself), and the sensitive set remains a hardcoded
+   denylist. Denied and warned accesses are recorded per environment and
+   reviewable afterwards with `flox sandbox audit`.
 
    This is the `standard` profile, recommended for agents. A future
    `strict` profile pairs `ask` with no default network allowlist and the
