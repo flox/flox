@@ -403,7 +403,7 @@ impl Provider for PoetryPyProject {
         InitCustomization {
             hook_on_activate: Some(
                 indoc! {r#"
-                # Setup a Python virtual environment
+                # Set up a Python virtual environment
 
                 export POETRY_VIRTUALENVS_PATH="$FLOX_ENV_CACHE/poetry/virtualenvs"
 
@@ -573,7 +573,7 @@ impl Provider for PyProject {
     fn describe_customization(&self) -> Cow<'static, str> {
         let mut message = formatdoc! {"
             Installs python ({}) with pip bundled.
-            Adds a hook to setup a venv.
+            Adds a hook to set up a venv.
             Installs the dependencies from the pyproject.toml to the venv.
         ", self.provided_python_version.display_version() };
 
@@ -602,7 +602,7 @@ impl Provider for PyProject {
         InitCustomization {
             hook_on_activate: Some(
                 indoc! {r#"
-                # Setup a Python virtual environment
+                # Set up a Python virtual environment
 
                 export PYTHON_DIR="$FLOX_ENV_CACHE/python"
                 if [ ! -d "$PYTHON_DIR" ]; then
@@ -757,7 +757,7 @@ impl Provider for Requirements {
         InitCustomization {
             hook_on_activate: Some(
                 formatdoc! {r#"
-                # Setup a Python virtual environment
+                # Set up a Python virtual environment
 
                 export PYTHON_DIR="$FLOX_ENV_CACHE/python"
                 if [ ! -d "$PYTHON_DIR" ]; then

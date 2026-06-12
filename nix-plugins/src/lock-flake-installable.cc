@@ -220,7 +220,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   debugLog( nix::fmt( "locked outputs: '%s'",
                       installable.extendedOutputsSpec.to_string() ) );
 
-  // check if the output is a derivation (not a just a store path)
+  // check if the output is a derivation (not just a store path)
   if ( ! cursor->isDerivation() )
     {
       auto v = cursor->forceValue();

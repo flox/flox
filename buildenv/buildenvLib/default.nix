@@ -37,7 +37,7 @@
       # > Returns a list composed of non matched strings
       # > interleaved with the lists of the extended POSIX regular expression regex matches
       #
-      # In the absense of match groups that means we return
+      # In the absence of match groups that means we return
       #
       #     [ "<line>" [] "<line>" [] "<line>"... ]
       #

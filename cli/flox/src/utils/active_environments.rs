@@ -47,7 +47,7 @@ impl FromStr for ActiveEnvironments {
         }
 
         serde_json::from_str(s).map(Self).or_else(|_| {
-            // Fallback from the old flat UnitializedEnvironment format.
+            // Fallback from the old flat UninitializedEnvironment format.
             serde_json::from_str::<VecDeque<UninitializedEnvironment>>(s).map(|envs| {
                 Self(
                     envs.into_iter()

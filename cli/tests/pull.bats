@@ -441,7 +441,7 @@ function add_incompatible_package() {
   assert_output --partial "Created path environment from owner/name"
 }
 
-# `flox pull --copy` is the recommended way to push an environmentto a new name
+# `flox pull --copy` is the recommended way to push an environment to a new name
 # if the original was deleted from FloxHub.
 # bats test_tags=pull:copy:convert-if-deleted
 @test "'pull --copy' converts to path environment even if upstream deleted" {

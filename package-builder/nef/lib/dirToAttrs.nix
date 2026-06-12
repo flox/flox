@@ -5,7 +5,7 @@
       This function takes a directory structure of nix expressions
       and turns them ino a recursive attrset.
 
-      The name of entries is eitehr the base name of `.nix` files found
+      The name of entries is either the base name of `.nix` files found
       or the directory name iff `<parent>/<name>/default.nix` exists.
 
       # Example
@@ -40,7 +40,7 @@
       Directory :: {
         path = String
         type = "directory"
-        entries = { name -> Nix | Directopry }
+        entries = { name -> Nix | Directory }
       }
       Nix :: {
         path = String

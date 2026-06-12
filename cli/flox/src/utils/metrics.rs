@@ -138,7 +138,7 @@ where
 }
 
 /// A single metric entry
-/// This is the a metric event with additional static metadata
+/// This is the metric event with additional static metadata
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MetricEntry {
     subcommand: Option<String>,
@@ -729,7 +729,7 @@ mod tests {
         buffer.push(entry_foo.clone()).unwrap();
         buffer.push(entry_bar.clone()).unwrap();
 
-        // entries are writtent to disk immediately,
+        // entries are written to disk immediately,
         // but lets drop the buffer anyway to be closer to reality
         drop(buffer);
 
@@ -765,7 +765,7 @@ mod tests {
         assert_eq!(buffer.buffer.len(), 0);
         assert_eq!(buffer.oldest_timestamp(), None);
 
-        // entries are writtent to disk immediately,
+        // entries are written to disk immediately,
         // but lets drop the buffer anyway to be closer to reality
         drop(buffer);
 

@@ -17,7 +17,7 @@ use crate::{Manifest, ManifestError, TypedOnly};
 pub type ManifestLatest = crate::parsed::v1_13_0::ManifestV1_13_0;
 
 impl ManifestLatest {
-    /// Try to return a manifest in it's original schema
+    /// Try to return a manifest in its original schema
     ///
     /// If original_schema is the same as the current schema, this just returns
     /// self as a typed manifest

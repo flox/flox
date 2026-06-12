@@ -442,7 +442,7 @@ pub enum GenerationsError {
     #[error("could not write generations metadata file")]
     WriteMetadata(#[source] std::io::Error),
 
-    #[error("failed to migrate v1 metatada: {0}")]
+    #[error("failed to migrate v1 metadata: {0}")]
     MigrateV1ToV2(String),
 
     #[error("could not show generations metadata file")]
@@ -642,7 +642,7 @@ pub trait GenerationsExt {
     /// Pulling an environment for example may result in an invalid environment
     /// e.g. because the manifest does not specify the current system,
     /// resetting in that context should not fail either.
-    /// Like [ManagedEnvironment::pull], downtream commands should check that the environment builds
+    /// Like [ManagedEnvironment::pull], downstream commands should check that the environment builds
     /// if applicable.
     ///
     /// TODO: Specific behavior for other files than the manifest should is undefined.
@@ -1781,7 +1781,7 @@ mod tests {
                     &["and-not-targets"],
                 ),
                 //
-                // wrong fields, doesn't parse as install becauise the fields don't match,
+                // wrong fields, doesn't parse as install because the fields don't match,
                 // but won't fail parsing
                 (
                     json! {{ "kind": "install", "targets": "not a list" }},

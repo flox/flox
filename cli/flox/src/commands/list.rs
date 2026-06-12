@@ -69,7 +69,7 @@ impl List {
 
         let (manifest_contents, lockfile) = match (&mut env, self.upstream) {
             (ConcreteEnvironment::Path(_), true) => {
-                bail!("'--upstream' can not be used with path environments");
+                bail!("'--upstream' cannot be used with path environments");
             },
             (ConcreteEnvironment::Managed(managed_environment), true) => {
                 managed_environment.fetch_remote_state(&flox)?;
@@ -971,7 +971,7 @@ mod tests {
             result
                 .unwrap_err()
                 .to_string()
-                .contains("can not be used with path environments")
+                .contains("cannot be used with path environments")
         )
     }
 }
