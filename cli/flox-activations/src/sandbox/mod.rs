@@ -109,7 +109,7 @@ fn flox_build_mk() -> PathBuf {
 /// preloaded libsandbox connects to for `prompt` verdicts. Two sides must agree
 /// on that path with no shared mutable state: the executive (which binds and
 /// listens) and the env injection in [`crate::attach_diff::double_set_envs`]
-/// (which exports it as `FLOX_SANDBOX_SOCKET`). Both already carry the
+/// (which exports it as `FLOX_SANDBOX_PROMPT_SOCKET`). Both already carry the
 /// services socket path — `runtime_dir/flox.<id>.sock` — so deriving the
 /// verdict path from it as `runtime_dir/sbx.<id>.sock` keeps the agreement a
 /// pure function of one value both sides hold, with no second channel to keep
@@ -709,7 +709,7 @@ mod tests {
             .unwrap()
         });
 
-        // Ask runs a broker, so the verdict socket is exported and matches the
+        // Prompt runs a broker, so the verdict socket is exported and matches the
         // path the broker is expected to bind.
         assert_eq!(
             env.get(FLOX_SANDBOX_PROMPT_SOCKET_VAR).unwrap(),

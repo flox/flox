@@ -1,12 +1,13 @@
 //! The prompt broker, hosted as a thread inside the per-activation executive.
 //!
-//! When an activation runs with `sandbox_mode == Ask`, the executive spawns
+//! When an activation runs with `sandbox_mode == Prompt`, the executive spawns
 //! this broker before entering its event loop. The broker binds a Unix
 //! "verdict" socket that the preloaded libsandbox connects to for allow/deny
 //! decisions on out-of-policy file access. It seeds an in-memory session
-//! grant set from `grants.toml` (read-only this batch) and, for any request
-//! that does not match a grant, records a pending entry and denies
-//! (auto-deny-and-queue — there is no human approver yet).
+//! grant set from `grants.toml` and, for any request that does not match a
+//! grant, records a pending entry and denies (deny-and-queue). Approvals
+//! arrive out-of-band over the control socket — `flox sandbox allow` from a
+//! second terminal — and take effect on the next verdict.
 //!
 //! The broker lives for the activation: the [`BrokerHandle`] returned by
 //! [`start`] stops the accept loop and removes the socket file when it is
@@ -125,7 +126,12 @@ pub fn start(
     let grants_dir = project_ctx.dot_flox_path.join("cache").join("sandbox");
 
     let handle = bind_and_serve(&verdict_path, &control_path, &grants_dir, session_root_pid)
-        .with_context(|| format!("failed to start prompt broker on {}", verdict_path.display()))?;
+        .with_context(|| {
+            format!(
+                "failed to start prompt broker on {}",
+                verdict_path.display()
+            )
+        })?;
     info!(
         verdict = ?verdict_path,
         control = ?control_path,

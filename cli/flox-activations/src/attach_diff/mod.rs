@@ -710,7 +710,7 @@ mod tests {
             || double_set_envs(&attach, Some(&project)),
         );
 
-        // Ask exports the verdict socket, and its value is the sibling of the
+        // Prompt exports the verdict socket, and its value is the sibling of the
         // services socket the broker binds — the contract both sides share.
         let expected = project
             .flox_services_socket

@@ -78,11 +78,12 @@ static int do_open(const char *path) {
 
 /* open-twice — open <path>, sleep <secs>, open <path> again, all in ONE
  * process so the sandbox library's per-process decision cache persists across
- * the two opens. This exercises the ask deny-cache TTL: a first deny is cached
- * for ~2s; sleeping past the TTL and re-opening forces a fresh broker RPC, so
- * a broker that flipped deny->allow during the sleep is observed on the second
- * open. Prints "FIRST <OPEN_OK|OPEN_FAIL>" then "SECOND <OPEN_OK|OPEN_FAIL>".
- * Exits 0 iff the second open succeeded (the TTL-expiry case under test). */
+ * the two opens. This exercises the prompt deny-cache TTL: a first deny is
+ * cached for ~2s; sleeping past the TTL and re-opening forces a fresh broker
+ * RPC, so a broker that flipped deny->allow during the sleep is observed on the
+ * second open. Prints "FIRST <OPEN_OK|OPEN_FAIL>" then "SECOND
+ * <OPEN_OK|OPEN_FAIL>". Exits 0 iff the second open succeeded (the TTL-expiry
+ * case under test). */
 static int do_open_twice(const char *path, double secs) {
   int fd1 = open(path, O_RDONLY);
   if (fd1 >= 0) {
@@ -266,7 +267,7 @@ static int do_open_dir(const char *path) {
 /* opendir — enumerate <path> via opendir()+readdir(), the entry points ls and
  * shell globs bind. Under an activation an out-of-policy enumeration is
  * mediated as a READ of the directory path: warn reports and permits,
- * enforce/ask refuse with a graceful EACCES from opendir() (never a process
+ * enforce/prompt refuse with a graceful EACCES from opendir() (never a process
  * abort). Prints "OPENDIR_OK <path> entries=<n>" on success or
  * "OPENDIR_FAIL <path> errno=<n> (<msg>)" on refusal, and exits 0/1. */
 static int do_opendir(const char *path) {
