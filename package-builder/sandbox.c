@@ -71,25 +71,24 @@
 #define SANDBOX_LEVEL_WARN 1      // report out-of-closure access, permit it
 #define SANDBOX_LEVEL_ENFORCE 2 // report out-of-closure access, refuse (EACCES)
 #define SANDBOX_LEVEL_PURE 3    // enforce, but inside the Nix sandbox
-// "ask" routes out-of-policy access to an external broker (a thread in the
-// per-activation flox-activations executive) for an allow/deny verdict over
-// the FLOX_SANDBOX_SOCKET Unix socket. A dead or absent broker denies
+// "prompt" is enforce plus an interactive escape hatch: out-of-policy access
+// is referred to an external broker over the FLOX_SANDBOX_PROMPT_SOCKET Unix
+// socket (the per-activation flox-activations executive, or the per-build
+// flox prompt broker) for an allow/deny verdict. It is not a distinct level:
+// the parser maps it to SANDBOX_LEVEL_ENFORCE and sets prompt_mode. Under an
+// ACTIVATION (allow_foreign_exe set), a dead or absent broker denies
 // gracefully (EACCES) with a distinct fail-closed receipt rather than
-// aborting, so `ask` degrades to enforce-with-better-errors and stays testable
-// against a scripted fake broker.
-#define SANDBOX_LEVEL_ASK 4
+// aborting, so prompt degrades to enforce-with-better-errors; for a BUILD the
+// no-broker case is plain enforce.
 
 // Written exactly once (under init_once, via ensure_init) and only read
 // afterwards, so it needs no further synchronization.
 int sandbox_level = SANDBOX_LEVEL_UNINIT;
 
-// Broker rendezvous, read once from the environment during init. The verdict
-// socket is the ask RPC client's connect target; the grants directory backs
-// the write guard. Under ask without a configured socket the RPC fails closed
-// (deny + the fail-closed receipt), and without a grants dir the write guard
-// is inert. Pointers into the environment block, never freed or mutated after
-// init.
-static const char *sandbox_socket_path = NULL;
+// The grants directory backs the write guard and the audit store, read once
+// from the environment during init. Without a grants dir both are inert
+// (builds never set it). A pointer into the environment block, never freed or
+// mutated after init.
 static const char *sandbox_grants_dir = NULL;
 // Resolved realpath of sandbox_grants_dir, resolved lazily on first use (NOT in
 // init — see the note in sandbox_init) so the write guard can do a
@@ -144,9 +143,9 @@ static __thread int in_readlink = 0;
 // Per-thread flag marking the current access as a write (or read-write /
 // append) rather than a pure read. Each interceptor derives this from the open
 // flags or fopen mode and sets it around its sandbox_check_path() call. Today
-// it feeds two ask-only behaviours: the receipt's read/write wording and the
+// it feeds the audit op column, the receipt's read/write wording, and the
 // grants-dir write guard. Enforcement otherwise stays access-agnostic, so
-// warn/enforce/pure ignore this flag entirely.
+// the verdict never depends on this flag.
 static __thread int in_write_access = 0;
 
 // Per-thread flag marking the current open()/openat() as an O_DIRECTORY probe.
@@ -267,9 +266,10 @@ static atomic_int warn_count = 0;
 #define hint(format, ...)                                                      \
   fprintf(stderr, "SANDBOX HINT[%s:%d]: " format "\n", SANDBOX_PROGNAME,       \
           getpid(), ##__VA_ARGS__)
-// A denial receipt under ask: the access was refused and queued for approval
-// outside the session. Distinct prefix from WARNING/ERROR because it is
-// neither — the operation failed cleanly and can be redeemed by retry once
+// A denial receipt under prompt: the access was refused (and, under an
+// activation, queued for approval outside the session). Distinct prefix from
+// WARNING/ERROR because it is neither — the operation failed cleanly and can
+// be redeemed by retry once
 // approved.
 #define denied(format, ...)                                                    \
   fprintf(stderr, "SANDBOX DENIED[%s:%d]: " format "\n", SANDBOX_PROGNAME,     \
@@ -341,17 +341,19 @@ void sandbox_init() {
     // Pure mode is just like enforce, but invoked within the Nix sandbox.
     sandbox_level = SANDBOX_LEVEL_PURE;
   } else if (strcmp(flox_virtual_sandbox_value, "ask") == 0) {
-    sandbox_level = SANDBOX_LEVEL_ASK;
+    // Transitional alias for "prompt", kept while the Rust activation side
+    // still exports FLOX_VIRTUAL_SANDBOX=ask; removed with the mode rename.
+    sandbox_level = SANDBOX_LEVEL_ENFORCE;
+    prompt_mode = 1;
   } else {
     warn_once("FLOX_VIRTUAL_SANDBOX must be (off|warn|enforce|prompt|pure|ask) "
               "... ignoring");
     sandbox_level = SANDBOX_LEVEL_OFF;
   }
-  debug("sandbox_level=%d", sandbox_level);
+  debug("sandbox_level=%d prompt_mode=%d", sandbox_level, prompt_mode);
 
-  // Capture the broker rendezvous for the ask flow. Both may be absent: the
-  // ask tail copes with a NULL socket by failing closed, and the write guard
-  // is inert without a grants dir.
+  // Capture the grants directory for the write guard and the audit store. It
+  // may be absent: without a grants dir both are inert.
   //
   // The grants dir is captured here but NOT realpath()'d here. Resolving it in
   // init is unsafe on macOS: when DYLD_INSERT_LIBRARIES is active, a realpath()
@@ -361,7 +363,6 @@ void sandbox_init() {
   // kills the process. The resolution is deferred to first use in the write
   // guard (grants_dir_real_resolved), by which point the process is fully up
   // and a symlink-traversing realpath() is safe.
-  sandbox_socket_path = getenv("FLOX_SANDBOX_SOCKET");
   sandbox_grants_dir = getenv("FLOX_SANDBOX_GRANTS_DIR");
 
   // Activation injects FLOX_SANDBOX_ALLOW_FOREIGN_EXE so the foreign-executable
@@ -696,24 +697,50 @@ static bool check_allowed_globs(const char *real_path) {
 //   <- "allow-glob <pattern>\n"  allow, and remember <pattern> for future
 //   matches
 //   <- "deny\n"                  deny this access
+//   <- "deny <req>\n"            deny, queued for out-of-band review as
+//                                request <req> (sent by the activation broker;
+//                                the build broker sends the bare form)
 //
 // One connection per query keeps the client simple and lets the broker
 // serialize prompts (it accepts and handles connections one at a time). Socket
-// calls are not themselves interposed, so there is no re-entrancy here. Returns
-// a PROMPT_* value; PROMPT_ERROR means fall back to the normal warn/enforce
-// policy.
-static int prompt_broker(const char *real_path) {
+// calls are not themselves interposed, so there is no re-entrancy here.
+// Returns a PROMPT_* value; PROMPT_ERROR means fall back to the normal
+// warn/enforce policy (the activation tail turns that into a graceful
+// fail-closed deny instead). On PROMPT_DENY, *req_out carries the queued
+// request id (0 when the broker sent the bare form).
+//
+// An interactive build broker legitimately blocks for minutes while the user
+// decides at /dev/tty, so the build path waits indefinitely. The activation
+// broker answers instantly from its grant table, so under an activation
+// (allow_foreign_exe set) a 2s poll() bounds the wait — the only thing it can
+// catch is a wedged executive, which must not hang the user's shell.
+static int prompt_broker(const char *real_path, unsigned long *req_out) {
+  *req_out = 0;
   if (!prompt_enabled)
-    return PROMPT_ERROR;
-
-  int fd = socket(AF_UNIX, SOCK_STREAM, 0);
-  if (fd < 0)
     return PROMPT_ERROR;
 
   struct sockaddr_un addr;
   memset(&addr, 0, sizeof(addr));
   addr.sun_family = AF_UNIX;
+  // The socket path must fit in sun_path. If it does not, treat the broker as
+  // unreachable rather than connecting to a truncated path.
+  if (strlen(prompt_socket_path) >= sizeof(addr.sun_path))
+    return PROMPT_ERROR;
   strncpy(addr.sun_path, prompt_socket_path, sizeof(addr.sun_path) - 1);
+
+  // The fd must be close-on-exec so a user-spawned child of the requesting
+  // process never inherits the broker connection. Linux exposes SOCK_CLOEXEC
+  // as a socket() flag; macOS does not, so set it with fcntl() there.
+#ifdef SOCK_CLOEXEC
+  int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+#else
+  int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (fd >= 0)
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
+#endif
+  if (fd < 0)
+    return PROMPT_ERROR;
+
   if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
     close(fd);
     return PROMPT_ERROR;
@@ -726,6 +753,17 @@ static int prompt_broker(const char *real_path) {
       write(fd, request, (size_t)request_len) != request_len) {
     close(fd);
     return PROMPT_ERROR;
+  }
+
+  // Under an activation, bound the wait (see above). A timeout or poll error
+  // is PROMPT_ERROR, which the activation tail fails closed.
+  if (allow_foreign_exe) {
+    struct pollfd pfd = {.fd = fd, .events = POLLIN};
+    int pr = poll(&pfd, 1, 2000);
+    if (pr <= 0) {
+      close(fd); // timeout (pr==0) or error (pr<0)
+      return PROMPT_ERROR;
+    }
   }
 
   // Read the single reply line. The broker writes one short line and we read
@@ -751,6 +789,14 @@ static int prompt_broker(const char *real_path) {
   }
   if (strcmp(reply, "deny") == 0) {
     debug("prompt broker denied '%s'", real_path);
+    return PROMPT_DENY;
+  }
+  if (strncmp(reply, "deny ", 5) == 0) {
+    // Queued for out-of-band review; the req id shapes the deny receipt. A
+    // malformed id parses as 0, which just yields the less specific receipt.
+    *req_out = strtoul(reply + 5, NULL, 10);
+    debug("prompt broker denied '%s' (queued as req %lu)", real_path,
+          *req_out);
     return PROMPT_DENY;
   }
   debug("prompt broker gave unrecognized reply '%s' for '%s'", reply,
@@ -1153,50 +1199,45 @@ static bool create_parent_in_policy(const char *pathname) {
 }
 
 // ===========================================================================
-// ask flow: decision cache + broker RPC.
+// prompt flow: deny cache + receipts around the prompt broker client.
 //
-// Under `ask`, an out-of-policy access asks an external broker (a thread in
-// the per-activation flox-activations executive) for an allow/deny verdict
-// over a Unix socket named by FLOX_SANDBOX_SOCKET. Two pieces make that cheap
-// and fail-safe:
+// In prompt mode, an out-of-policy access asks the broker named by
+// FLOX_SANDBOX_PROMPT_SOCKET for a verdict (see prompt_broker above). Two
+// pieces make that cheap and fail-safe for a long-lived activation session:
 //
-//   - a decision cache so a verdict is reused without re-contacting the broker
-//     (an allow carries a SCOPE glob that silences a whole subtree; a deny is
-//     cached per exact path with a short TTL so a later grant is picked up on
-//     retry);
-//   - a fail-closed path: any socket trouble denies with a distinct receipt,
-//     so a dead broker degrades `ask` to enforce-with-better-errors rather
-//     than silently unsandboxing.
+//   - allow verdicts are cached by the client itself (allow_globs_add), so
+//     one allow-glob answer silences a whole subtree with no further RPCs;
+//   - deny verdicts are cached here per exact path with a short TTL, so a
+//     denied path retried in a tight loop does not storm the broker, while an
+//     approval granted out-of-band ('flox sandbox allow') is redeemable by a
+//     quick retry;
+//   - a fail-closed path for activations: any socket trouble denies with a
+//     distinct receipt, so a dead broker degrades prompt to
+//     enforce-with-better-errors rather than silently unsandboxing.
 //
-// Only the filesystem flow is wired to the broker; network `ask` keeps the
+// Only the filesystem flow is wired to the broker; network prompt keeps the
 // interim enforce semantics handled in sandbox_check_connect().
 // ===========================================================================
 
-// Decision cache (modeled on warned_paths). Each entry caches one verdict:
-//   - an ALLOW scope glob, matched with fnmatch, living for the process
-//     lifetime (expiry == 0) — one answer silences a subtree with no further
-//     RPCs;
-//   - a DENY exact realpath, matched literally, with a short absolute expiry
-//     (monotonic seconds) so a retry after the TTL re-asks the broker and can
-//     pick up a freshly added grant.
+// Deny cache (modeled on warned_paths): exact realpaths, matched literally,
+// with a short absolute expiry (wall-clock seconds) so a retry after the TTL
+// re-asks the broker and can pick up a freshly added grant.
 // Mutex-guarded like warned_paths; the same pthread_atfork exposure applies
 // (a child forked while the lock is held could deadlock on the cache), which
 // is accepted here exactly as it is for warned_paths: the lock is only taken
 // on the cold out-of-policy path, never the hot in-closure path.
-#define SCOPE_VERDICTS_MAX 4096
-// Negative (deny/pending) cache lifetime in seconds. Short on purpose: a deny
-// should not pin a path closed for long, so an approval granted out-of-band is
-// redeemable by a quick retry.
-#define ASK_DENY_TTL_SECONDS 2
-struct scope_verdict {
-  char glob[PATH_MAX]; // scope glob (allow) or exact realpath (deny)
-  bool allow;          // cached verdict
-  bool is_scope;       // true: fnmatch glob; false: exact-path deny
-  time_t expiry;       // 0 == no expiry (process lifetime); else absolute secs
+#define DENY_CACHE_MAX 4096
+// Deny cache lifetime in seconds. Short on purpose: a deny should not pin a
+// path closed for long, so an approval granted out-of-band is redeemable by a
+// quick retry.
+#define PROMPT_DENY_TTL_SECONDS 2
+struct deny_entry {
+  char path[PATH_MAX]; // exact realpath
+  time_t expiry;       // absolute wall-clock seconds
 };
-static struct scope_verdict scope_verdicts[SCOPE_VERDICTS_MAX];
-static int scope_verdicts_count = 0;
-static pthread_mutex_t scope_verdicts_lock = PTHREAD_MUTEX_INITIALIZER;
+static struct deny_entry deny_cache[DENY_CACHE_MAX];
+static int deny_cache_count = 0;
+static pthread_mutex_t deny_cache_lock = PTHREAD_MUTEX_INITIALIZER;
 
 // Wall-clock seconds, for the short deny TTL. time() (not clock_gettime) is
 // used deliberately: clock_gettime lived in librt rather than libc at the
@@ -1205,55 +1246,46 @@ static pthread_mutex_t scope_verdicts_lock = PTHREAD_MUTEX_INITIALIZER;
 // since the baseline for every supported arch. A 2-second TTL is short enough
 // that a wall-clock jump is not a meaningful concern for a prototype. time()
 // is not intercepted, so this is safe under in_sandbox==1.
-static time_t ask_now_seconds(void) { return time(NULL); }
+static time_t deny_now_seconds(void) { return time(NULL); }
 
-// Look up a cached verdict for `real_path`. On a hit, write the verdict into
-// `*out_allow` and return true; on a miss (or an expired deny), return false.
-// Expired deny entries are treated as misses so the caller re-asks the broker.
-static bool scope_cache_lookup(const char *real_path, bool *out_allow) {
-  time_t now = ask_now_seconds();
+// Return true if `real_path` has a still-fresh cached deny. Expired entries
+// are treated as misses so the caller re-asks the broker.
+static bool deny_cache_hit(const char *real_path) {
+  time_t now = deny_now_seconds();
   bool found = false;
-  pthread_mutex_lock(&scope_verdicts_lock);
-  for (int i = 0; i < scope_verdicts_count; i++) {
-    struct scope_verdict *v = &scope_verdicts[i];
-    // A deny entry past its TTL is stale; skip it so the path re-asks.
-    if (v->expiry != 0 && now >= v->expiry)
+  pthread_mutex_lock(&deny_cache_lock);
+  for (int i = 0; i < deny_cache_count; i++) {
+    struct deny_entry *v = &deny_cache[i];
+    // An entry past its TTL is stale; skip it so the path re-asks.
+    if (now >= v->expiry)
       continue;
-    bool match = v->is_scope ? (fnmatch(v->glob, real_path, 0) == 0)
-                             : (strcmp(v->glob, real_path) == 0);
-    if (match) {
-      *out_allow = v->allow;
+    if (strcmp(v->path, real_path) == 0) {
       found = true;
       break;
     }
   }
-  pthread_mutex_unlock(&scope_verdicts_lock);
+  pthread_mutex_unlock(&deny_cache_lock);
   return found;
 }
 
-// Store a verdict in the cache. `key` is the scope glob (allow) or the exact
-// realpath (deny). `ttl_seconds == 0` means no expiry (process lifetime, used
-// for allow scopes); a positive TTL sets an absolute monotonic expiry (used
-// for deny entries). If the table is full the store is dropped silently — a
-// dropped cache entry only costs an extra RPC, never a wrong verdict.
-static void scope_cache_store(const char *key, bool allow, bool is_scope,
-                              int ttl_seconds) {
-  pthread_mutex_lock(&scope_verdicts_lock);
-  if (scope_verdicts_count < SCOPE_VERDICTS_MAX) {
-    struct scope_verdict *v = &scope_verdicts[scope_verdicts_count++];
-    strncpy(v->glob, key, PATH_MAX - 1);
-    v->glob[PATH_MAX - 1] = '\0';
-    v->allow = allow;
-    v->is_scope = is_scope;
-    v->expiry = ttl_seconds == 0 ? 0 : ask_now_seconds() + ttl_seconds;
+// Cache a deny for `real_path` with the short TTL. If the table is full the
+// store is dropped silently — a dropped cache entry only costs an extra RPC,
+// never a wrong verdict.
+static void deny_cache_store(const char *real_path) {
+  pthread_mutex_lock(&deny_cache_lock);
+  if (deny_cache_count < DENY_CACHE_MAX) {
+    struct deny_entry *v = &deny_cache[deny_cache_count++];
+    strncpy(v->path, real_path, PATH_MAX - 1);
+    v->path[PATH_MAX - 1] = '\0';
+    v->expiry = deny_now_seconds() + PROMPT_DENY_TTL_SECONDS;
   }
-  pthread_mutex_unlock(&scope_verdicts_lock);
+  pthread_mutex_unlock(&deny_cache_lock);
 }
 
 // Append `src` to `dst` (a fixed buffer of size `cap`, NUL-terminated),
 // JSON-escaping the only two characters that can appear unescaped in a path
 // and break the wire format: backslash and double-quote. Truncates safely if
-// the buffer fills. Used to build the request line by hand (no JSON library).
+// the buffer fills. Used to build audit records by hand (no JSON library).
 static void json_append_escaped(char *dst, size_t cap, const char *src) {
   size_t len = strlen(dst);
   for (const char *p = src; *p != '\0' && len + 2 < cap; p++) {
@@ -1265,53 +1297,10 @@ static void json_append_escaped(char *dst, size_t cap, const char *src) {
   dst[len] = '\0';
 }
 
-// Extract a string field's value from a newline-JSON response into `out`.
-// Finds `"<field>"`, skips to the value's opening quote, and copies until the
-// closing quote. Tolerant by design: the broker emits fixed fields with no
-// nested quoting in these values, so a full parser is unnecessary. Returns
-// true if the field was found. (Backslash escapes are not un-escaped — the
-// values we read, verdict/scope/cache, never contain them.)
-static bool json_extract_string(const char *json, const char *field, char *out,
-                                size_t cap) {
-  char needle[64];
-  snprintf(needle, sizeof(needle), "\"%s\"", field);
-  const char *at = strstr(json, needle);
-  if (at == NULL)
-    return false;
-  at += strlen(needle);
-  // Skip ':' and whitespace to the opening quote of the value.
-  while (*at != '\0' && *at != '"')
-    at++;
-  if (*at != '"')
-    return false;
-  at++; // past the opening quote
-  size_t i = 0;
-  while (*at != '\0' && *at != '"' && i + 1 < cap)
-    out[i++] = *at++;
-  out[i] = '\0';
-  return true;
-}
-
-// Extract a numeric field (the req id) from a newline-JSON response. Returns 0
-// if absent — a 0 req just yields a less specific receipt, never a wrong
-// verdict.
-static unsigned long json_extract_uint(const char *json, const char *field) {
-  char needle[64];
-  snprintf(needle, sizeof(needle), "\"%s\"", field);
-  const char *at = strstr(json, needle);
-  if (at == NULL)
-    return 0;
-  at += strlen(needle);
-  while (*at != '\0' && (*at < '0' || *at > '9'))
-    at++;
-  return strtoul(at, NULL, 10);
-}
-
 // Resolve the running executable's realpath into `out` (size PATH_MAX),
 // best-effort: out[0] == '\0' on any failure. Linux exposes the executable as
 // the /proc/self/exe symlink; macOS has no /proc, so ask dyld for the image
-// path and canonicalize that. Shared by the ask RPC's `exe` field and the
-// audit record's attribution column.
+// path and canonicalize that. Used for the audit record's attribution column.
 static void current_exe_realpath(char *out) {
   out[0] = '\0';
 #ifdef linux
@@ -1327,7 +1316,11 @@ static void current_exe_realpath(char *out) {
 }
 
 // The current sandbox level as the mode string recorded in audit records.
+// prompt is enforce-with-prompt_mode rather than a distinct level, so it is
+// checked first.
 static const char *sandbox_level_name(void) {
+  if (prompt_mode)
+    return "prompt";
   switch (sandbox_level) {
   case SANDBOX_LEVEL_WARN:
     return "warn";
@@ -1335,8 +1328,6 @@ static const char *sandbox_level_name(void) {
     return "enforce";
   case SANDBOX_LEVEL_PURE:
     return "pure";
-  case SANDBOX_LEVEL_ASK:
-    return "ask";
   default:
     return "off";
   }
@@ -1345,7 +1336,8 @@ static const char *sandbox_level_name(void) {
 // ===========================================================================
 // Audit store.
 //
-// Every report the engine emits — warn-mode reports and enforce/ask denials,
+// Every report the engine emits — warn-mode reports and enforce/prompt
+// denials,
 // for file accesses, directory enumerations, and network connects alike — is
 // also appended as one NDJSON record to
 // $FLOX_SANDBOX_GRANTS_DIR/audit.ndjson, so a denial is queryable after the
@@ -1391,7 +1383,7 @@ static void audit_append(const char *kind, const char *op, const char *path,
   line[len++] = '\n';
 
   // Append through the real syscalls: with in_sandbox set our own
-  // interceptors pass straight through (mirroring how ask_broker does its
+  // interceptors pass straight through (mirroring how prompt_broker does its
   // socket I/O). Saved and restored so the hook behaves identically if it is
   // ever reached from a path that did not already set the guard.
   int saved_in_sandbox = in_sandbox;
@@ -1407,122 +1399,6 @@ static void audit_append(const char *kind, const char *op, const char *path,
   in_sandbox = saved_in_sandbox;
 }
 
-// The outcome of an ask_broker() call, returned to the ask tail so it can both
-// cache the verdict and shape the right receipt.
-struct ask_result {
-  bool allow;           // permit the access?
-  bool reachable;       // did we complete an RPC round-trip?
-  bool cache_scope;     // cache `scope` as a process-lifetime allow glob
-  bool cache_ttl;       // cache `path` as a short-TTL deny
-  char scope[PATH_MAX]; // glob (allow) or exact path (deny) to cache
-  unsigned long req;    // queued request id for the receipt (0 if none)
-};
-
-// Ask the broker for a verdict on `real_path` (op = "read"/"write", `raw` is
-// the path as opened). Performs ONE fork-safe request/response exchange over a
-// fresh AF_UNIX/SOCK_STREAM connection — the fd is never cached, and this is
-// only ever called from sandbox_check_path with in_sandbox==1 (so the socket
-// syscalls and any internal opens pass straight through the interceptors).
-//
-// On any trouble (no socket configured, connect/send/recv/poll error, 2s
-// timeout, or an unparseable reply) the result is fail-closed: allow=false,
-// reachable=false. The caller emits the distinct SANDBOX ERROR receipt in that
-// case. A clean round-trip fills in the verdict, the cache directives, and the
-// req id from the broker's reply.
-static struct ask_result ask_broker(const char *real_path, const char *raw,
-                                    const char *op) {
-  struct ask_result result;
-  memset(&result, 0, sizeof(result));
-
-  if (sandbox_socket_path == NULL || sandbox_socket_path[0] == '\0')
-    return result; // no broker configured -> fail closed.
-
-  // The socket path must fit in sun_path. If it does not, treat the broker as
-  // unreachable rather than connecting to a truncated path.
-  struct sockaddr_un addr;
-  memset(&addr, 0, sizeof(addr));
-  addr.sun_family = AF_UNIX;
-  if (strlen(sandbox_socket_path) >= sizeof(addr.sun_path))
-    return result;
-  strncpy(addr.sun_path, sandbox_socket_path, sizeof(addr.sun_path) - 1);
-
-  // Linux exposes SOCK_CLOEXEC as a socket() flag; macOS does not, so set
-  // close-on-exec with fcntl() there. The fd must be close-on-exec so a
-  // user-spawned child of the requesting process never inherits the broker
-  // connection.
-#ifdef SOCK_CLOEXEC
-  int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
-#else
-  int fd = socket(AF_UNIX, SOCK_STREAM, 0);
-  if (fd >= 0)
-    fcntl(fd, F_SETFD, FD_CLOEXEC);
-#endif
-  if (fd < 0)
-    return result;
-
-  if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
-    close(fd);
-    return result;
-  }
-
-  // Build the request line by hand. exe is best-effort: the running
-  // executable's realpath, or empty on any failure.
-  char exe_real[PATH_MAX];
-  current_exe_realpath(exe_real);
-
-  char req[PATH_MAX * 4 + 256];
-  snprintf(req, sizeof(req),
-           "{\"v\":1,\"kind\":\"fs\",\"op\":\"%s\",\"path\":\"", op);
-  json_append_escaped(req, sizeof(req), real_path);
-  size_t len = strlen(req);
-  snprintf(req + len, sizeof(req) - len, "\",\"raw\":\"");
-  json_append_escaped(req, sizeof(req), raw);
-  len = strlen(req);
-  snprintf(req + len, sizeof(req) - len, "\",\"pid\":%d,\"exe\":\"", getpid());
-  json_append_escaped(req, sizeof(req), exe_real);
-  len = strlen(req);
-  snprintf(req + len, sizeof(req) - len, "\"}\n");
-
-  if (send(fd, req, strlen(req), 0) < 0) {
-    close(fd);
-    return result;
-  }
-
-  // Poll up to 2000ms for the single response line. A timeout or error denies
-  // (fail-closed). One recv() suffices: the reply is a single short line and
-  // the broker writes it in one go.
-  struct pollfd pfd = {.fd = fd, .events = POLLIN};
-  int pr = poll(&pfd, 1, 2000);
-  if (pr <= 0) {
-    close(fd); // timeout (pr==0) or error (pr<0)
-    return result;
-  }
-
-  char resp[PATH_MAX * 2 + 256];
-  ssize_t n = recv(fd, resp, sizeof(resp) - 1, 0);
-  close(fd);
-  if (n <= 0)
-    return result;
-  resp[n] = '\0';
-
-  char verdict[16];
-  if (!json_extract_string(resp, "verdict", verdict, sizeof(verdict)))
-    return result; // unparseable -> fail closed.
-
-  // From here the round-trip succeeded: honor whatever the broker decided.
-  result.reachable = true;
-  result.allow = (strcmp(verdict, "allow") == 0);
-  result.req = json_extract_uint(resp, "req");
-
-  char cache[16] = "";
-  json_extract_string(resp, "cache", cache, sizeof(cache));
-  if (!json_extract_string(resp, "scope", result.scope, sizeof(result.scope)))
-    result.scope[0] = '\0';
-  result.cache_scope = (strcmp(cache, "scope") == 0);
-  result.cache_ttl = (strcmp(cache, "ttl") == 0);
-  return result;
-}
-
 // Apply the per-level out-of-policy verdict and return whether to permit the
 // access. This is the shared tail for an access that has already been judged
 // out of policy: a regular out-of-closure file access, an
@@ -1532,21 +1408,24 @@ static struct ask_result ask_broker(const char *real_path, const char *raw,
 // for an existing path, or the opened pathname for a create — cwd-absolutized
 // when the sensitive set flagged the create). `suffix` is an
 // optional parenthetical reason appended to the message (e.g. " (sensitive)"),
-// or "" for none. `raw` is the path as originally opened, used as the RPC's
-// `raw` field under ask.
+// or "" for none. `raw` is the path as originally opened (no longer sent to
+// the broker, which receives only the realpath; kept so call sites stay
+// stable while the wire protocol evolves).
 //
 //   warn         -> warn once, permit (return true)
-//   ask          -> consult the decision cache, else ask the broker; on deny
-//                   emit the two-line receipt (once per path), on a dead
-//                   broker emit the fail-closed receipt (once per path), on
-//                   allow stay silent; refuse on any deny (return false ->
-//                   EACCES)
+//   prompt       -> consult the deny cache, else ask the broker; on deny
+//                   emit the receipt (once per path), on allow stay silent;
+//                   refuse on any deny (return false -> EACCES). With no
+//                   reachable broker, an activation emits the fail-closed
+//                   receipt (once per path) and refuses, while a build falls
+//                   through to plain enforce.
 //   enforce/pure -> report once, refuse (return false -> EACCES). A policy
 //                   denial is NEVER fatal: a shell builtin redirect performs
 //                   its open inside the interactive shell process itself, so
 //                   exit(1) would kill the user's shell.
 static bool out_of_policy_verdict(const char *display, const char *dedup_key,
                                   const char *raw, const char *suffix) {
+  (void)raw;
   // The op recorded in receipts and audit records. A directory enumeration
   // arrives here as a read of the directory path (in_write_access unset).
   const char *op = in_write_access ? "write" : "read";
@@ -1561,58 +1440,64 @@ static bool out_of_policy_verdict(const char *display, const char *dedup_key,
     }
     return true;
   }
-  if (sandbox_level == SANDBOX_LEVEL_ASK) {
-    // 1. Decision cache first (cheapest path; zero RPCs). A cached allow scope
-    //    (fnmatch glob) or a still-fresh deny (exact path) short-circuits the
-    //    broker entirely. dedup_key is the resolved realpath for an existing
-    //    path, which is exactly what the cache keys on.
-    bool cached_allow;
-    if (scope_cache_lookup(dedup_key, &cached_allow))
-      return cached_allow;
+  if (prompt_mode) {
+    // 1. Deny cache first (cheapest path; zero RPCs). A still-fresh deny
+    //    short-circuits the broker entirely; allow verdicts were already
+    //    cached client-side by prompt_broker (allow_globs_add) and matched
+    //    upstream in sandbox_check_path. dedup_key is the resolved realpath
+    //    for an existing path, which is exactly what the cache keys on.
+    if (deny_cache_hit(dedup_key))
+      return false;
 
-    // 2. Ask the broker. The RPC is fail-closed: a dead/absent broker or any
-    //    socket trouble denies with a distinct receipt (below), so `ask`
-    //    degrades to enforce-with-better-errors rather than silently
-    //    unsandboxing.
-    struct ask_result r = ask_broker(dedup_key, raw, op);
+    // 2. Ask the broker.
+    unsigned long req = 0;
+    int decision = prompt_broker(dedup_key, &req);
 
-    if (!r.reachable) {
-      // Fail-closed: broker unreachable. Distinct receipt from a normal deny,
-      // rate-limited once per path, with the blast-radius framing from the
-      // design. Cache nothing — the broker may come back, and a later retry
-      // should re-ask rather than stay stuck on a cached error.
+    if (decision == PROMPT_ALLOW) {
+      // Allow: permit silently (no receipt on allow). prompt_broker already
+      // remembered the path/pattern, so the subtree is silenced with no
+      // further RPCs.
+      return true;
+    }
+
+    if (decision == PROMPT_DENY) {
+      // Deny: cache the exact path with a short TTL so a retry after the TTL
+      // re-asks (and can pick up a later grant), then emit the receipt once
+      // per path. The activation broker queues the request and replies
+      // `deny <req>`, so the receipt names the review id; an interactive
+      // build broker replies the bare form (the user already saw and
+      // answered the prompt). The false propagates to each interceptor's
+      // errno=EACCES branch, so the caller sees a clean permission error and
+      // continues — never exit(1).
+      deny_cache_store(dedup_key);
       if (should_warn_for_path(dedup_key)) {
-        _error("ask broker unreachable; denying %s of %s (fail-closed; restart "
-               "the activation to restore approvals)",
+        if (req > 0) {
+          denied("%s %s (not in policy)", op, display);
+          denied("queued as req %lu — approve outside: flox sandbox", req);
+        } else {
+          denied("%s denied by sandbox prompt", display);
+        }
+        audit_append("fs", op, dedup_key, "denied");
+      }
+      return false;
+    }
+
+    // PROMPT_ERROR: no broker, or the exchange failed. For an ACTIVATION
+    // (allow_foreign_exe set) fail closed with a distinct receipt — a dead
+    // executive must degrade prompt to enforce-with-better-errors, never
+    // silently unsandbox or kill the user's shell. Cache nothing: the broker
+    // may come back, and a later retry should re-ask rather than stay stuck
+    // on a cached error. For a BUILD, fall through to plain enforce below
+    // (prompt with no broker is just enforce).
+    if (allow_foreign_exe) {
+      if (should_warn_for_path(dedup_key)) {
+        _error("prompt broker unreachable; denying %s of %s (fail-closed; "
+               "restart the activation to restore approvals)",
                op, display);
         audit_append("fs", op, dedup_key, "fail-closed");
       }
       return false;
     }
-
-    if (r.allow) {
-      // Allow: cache the scope so the whole subtree is silenced with no
-      // further RPCs, then permit silently (no receipt on allow).
-      if (r.cache_scope && r.scope[0] != '\0')
-        scope_cache_store(r.scope, true, true, 0);
-      return true;
-    }
-
-    // Deny: cache the exact path with a short TTL so a retry after the TTL
-    // re-asks (and can pick up a later grant), then emit the two-line receipt
-    // once per path. The false propagates to each interceptor's errno=EACCES
-    // branch, so the caller sees a clean permission error and continues —
-    // never exit(1).
-    if (r.cache_ttl) {
-      const char *key = r.scope[0] != '\0' ? r.scope : dedup_key;
-      scope_cache_store(key, false, false, ASK_DENY_TTL_SECONDS);
-    }
-    if (should_warn_for_path(dedup_key)) {
-      denied("%s %s (not in policy)", op, display);
-      denied("queued as req %lu — approve outside: flox sandbox", r.req);
-      audit_append("fs", op, dedup_key, "denied");
-    }
-    return false;
   }
   // enforce / pure: report and refuse with a clean error. The caller maps the
   // false return to errno=EACCES and returns -1/NULL, so the access fails like
@@ -1716,17 +1601,19 @@ bool sandbox_check_path(const char *pathname) {
     return true;
   }
 
-  // Grants-dir write guard (ask only). The grants directory is seeded into the
+  // Grants-dir write guard (prompt only). The grants directory is seeded into
+  // the
   // project's allow set so reads stay quiet, but a write there would let a
-  // process edit its own future-session approvals. Under ask, route writes
-  // under the grants dir through the ask flow instead of letting the allow
-  // shortcuts wave them through. Reads are unaffected, and without a configured
-  // grants dir the guard is inert. When the guard fires we skip the allow-list
-  // shortcuts and fall through to the ask tail. The grants-dir realpath is
-  // resolved lazily on first need here (short-circuited for the common
-  // not-ask / not-write case), never in init.
+  // process edit its own future-session approvals. In prompt mode, route
+  // writes under the grants dir through the prompt flow instead of letting
+  // the allow shortcuts wave them through. Reads are unaffected, and without
+  // a configured grants dir the guard is inert. When the guard fires we skip
+  // the allow-list shortcuts and fall through to the out-of-policy tail. The
+  // grants-dir realpath is resolved lazily on first need here
+  // (short-circuited for the common not-prompt / not-write case), never in
+  // init.
   bool grants_dir_write_guard =
-      sandbox_level == SANDBOX_LEVEL_ASK && in_write_access &&
+      prompt_mode && in_write_access &&
       path_under(real_path, grants_dir_real, grants_dir_real_length());
   if (!grants_dir_write_guard) {
     if (check_allowed_basenames(real_path))
@@ -1828,13 +1715,15 @@ bool sandbox_check_path(const char *pathname) {
   // listings, warn only the first time we see each dotfile — builds re-read the
   // same config files (~/.gitconfig, ~/.npmrc, ...) repeatedly.
   //
-  // Under ask this carve-out is deliberately skipped: the dotfile blanket is a
-  // build-purity convenience that is exactly backwards for an interactive
-  // agent threat model (it would wave through ~/.aws/credentials, ~/.ssh/*,
-  // ...), so under ask — and only ask — dotfiles route through the ask flow
-  // below. The metadata-only carve-outs above (readlink, directory probe,
-  // directory listing) stay permitted for every level.
-  if (sandbox_level != SANDBOX_LEVEL_ASK && is_home_dotfile(real_path)) {
+  // Under a prompt-mode ACTIVATION this carve-out is deliberately skipped:
+  // the dotfile blanket is a build-purity convenience that is exactly
+  // backwards for an interactive agent threat model (it would wave through
+  // ~/.aws/credentials, ~/.ssh/*, ...), so there — and only there — dotfiles
+  // route through the prompt flow below. A prompt-mode BUILD keeps the
+  // carve-out, like every other build level. The metadata-only carve-outs
+  // above (readlink, directory probe, directory listing) stay permitted for
+  // every level.
+  if (!(prompt_mode && allow_foreign_exe) && is_home_dotfile(real_path)) {
     if (should_warn_for_path(real_path)) {
       warn("%s is outside the closure but permitted as a $HOME dotfile",
            display);
@@ -1842,31 +1731,22 @@ bool sandbox_check_path(const char *pathname) {
     }
     return true;
   }
-  // In prompt mode, let the broker resolve this access (allow / allow-glob /
-  // deny) before the default enforce policy applies. Gated on prompt_mode (not
-  // merely the socket) so an enforce-mode build sharing the process-wide socket
-  // env never prompts. An allow is remembered so the same path/pattern is not
-  // asked again; a broker error (e.g. no socket) falls through to enforce
-  // below.
-  if (prompt_mode) {
-    int decision = prompt_broker(real_path);
-    if (decision == PROMPT_ALLOW)
-      return true;
-    if (decision == PROMPT_DENY) {
-      warn("%s denied by sandbox prompt", display);
-      return false; // the interceptor turns this into EACCES
-    }
-  }
-  // Out of policy. Apply the per-level verdict (warn permits; ask consults the
-  // decision cache then the broker, caching the result; enforce/pure is
-  // fatal), deduplicated on the resolved realpath.
+  // Out of policy. Apply the per-level verdict (warn permits; prompt consults
+  // the deny cache then the broker, caching the result; enforce/pure refuses),
+  // deduplicated on the resolved realpath. Prompt-mode consultation lives in
+  // the shared tail — gated on prompt_mode (not merely the socket) so an
+  // enforce-mode build sharing the process-wide socket env never prompts —
+  // and the tail also serves creates, directory enumerations, sensitive
+  // paths, and grants-guard writes, so every caller class gets the same
+  // broker flow.
   return out_of_policy_verdict(display, real_path, pathname, "");
 }
 
 // Classify an open()/openat() as a write from its flags. Anything that is not
 // purely read-only — write, read-write, or append — counts as a write. Used
-// only to populate in_write_access for the ask flow; read-vs-write does not
-// change whether an access is permitted.
+// only to populate in_write_access (the audit op column, the create guard,
+// and the grants-dir write guard); read-vs-write does not change whether an
+// access is permitted.
 static int open_is_write(int flags) {
   return (flags & O_ACCMODE) != O_RDONLY || (flags & O_APPEND) ? 1 : 0;
 }
@@ -1874,7 +1754,7 @@ static int open_is_write(int flags) {
 // Classify an fopen()/fopen64() mode string as a write. The C standard mode
 // grammar marks a write whenever it contains 'w' (truncate), 'a' (append), or
 // '+' (read-update / write-update). A bare "r"/"rb" is the only read-only
-// form. Same ask-only purpose as open_is_write().
+// form. Same purpose as open_is_write().
 static int fopen_is_write(const char *mode) {
   if (mode == NULL)
     return 0;
