@@ -21,6 +21,7 @@ mod lock_manifest;
 mod publish;
 mod pull;
 mod push;
+mod run;
 mod search;
 mod services;
 mod services_socket;
@@ -576,6 +577,9 @@ enum UseCommands {
     )]
     Activate(#[bpaf(external(activate::activate))] activate::Activate),
 
+    /// Run a command from a package without installing it
+    Run(#[bpaf(external(run::run))] run::Run),
+
     /// Manage services in an environment
     #[bpaf(command)]
     Services(
@@ -591,6 +595,7 @@ impl UseCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             UseCommands::Activate(args) => args.handle(config, flox).await,
+            UseCommands::Run(args) => args.handle(flox).await,
             UseCommands::Services(args) => args.handle(config, flox).await,
         }
     }
