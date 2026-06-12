@@ -1,3 +1,9 @@
+# A previous in-place deactivation in this shell unsets the tracer, so default
+# to a no-op rather than executing an empty command when sourced again.
+if not set -q _flox_activate_tracer; or test -z "$_flox_activate_tracer"
+    set -g _flox_activate_tracer true
+end
+
 "$_flox_activate_tracer" "$_activate_d/set-prompt.fish" START
 
 if set -q FLOX_PROMPT_ENVIRONMENTS && test -n "$FLOX_PROMPT_ENVIRONMENTS"

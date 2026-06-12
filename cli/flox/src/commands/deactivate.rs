@@ -118,6 +118,7 @@ impl Deactivate {
             &target.activation_state_dir,
             &target.flox_env,
             flox_activate_tracelevel(),
+            None,
             &mut writer,
         )
     }
@@ -222,12 +223,18 @@ pub(crate) fn flox_activate_tracelevel() -> u32 {
 ///   `flox-activations detach` command so state.json is updated once the caller
 ///   eval's the script.
 /// - `ExecCommand` → unreachable; `_FLOX_INVOCATION_TYPE` is never `exec_command`.
+///
+/// `encoded_diff` selects which layer's diff to restore: `None` restores the
+/// front of the stack from this process's `_FLOX_HOOK_DIFF`; `Some` restores
+/// an explicitly provided diff, which is how the prompt hook pops several
+/// stacked layers in one run (see `embedded_hook_diff`).
 pub(crate) fn emit_deactivate_script(
     shell: ShellWithPath,
     invocation_kind: InvocationKind,
     activation_state_dir: &Path,
     flox_env: &Path,
     flox_activate_tracelevel: u32,
+    encoded_diff: Option<&str>,
     writer: &mut impl Write,
 ) -> Result<()> {
     match invocation_kind {
@@ -238,8 +245,20 @@ pub(crate) fn emit_deactivate_script(
             }
             Ok(())
         },
-        InvocationKind::InPlace | InvocationKind::ShellCommand => {
-            flox_activations::deactivate::generate_deactivate_script(
+        InvocationKind::InPlace | InvocationKind::ShellCommand => match encoded_diff {
+            Some(encoded_diff) => {
+                flox_activations::deactivate::generate_deactivate_script_with_diff(
+                    shell,
+                    writer,
+                    &*FLOX_INTERPRETER,
+                    &FLOX_ACTIVATIONS_BIN,
+                    activation_state_dir,
+                    flox_env,
+                    flox_activate_tracelevel,
+                    encoded_diff,
+                )
+            },
+            None => flox_activations::deactivate::generate_deactivate_script(
                 shell,
                 writer,
                 &*FLOX_INTERPRETER,
@@ -247,9 +266,9 @@ pub(crate) fn emit_deactivate_script(
                 activation_state_dir,
                 flox_env,
                 flox_activate_tracelevel,
-            )
-            .context("failed to generate deactivation script")
-        },
+            ),
+        }
+        .context("failed to generate deactivation script"),
         InvocationKind::ExecCommand => {
             bail!("cannot deactivate an exec command activation");
         },
@@ -268,6 +287,7 @@ mod tests {
             Path::new("/activation_state_dir"),
             Path::new("/flox_env"),
             0,
+            None,
             &mut buf,
         )
         .unwrap();
