@@ -1968,3 +1968,140 @@ mod migration_tests {
         .assert_eq(&composer_manifest_contents);
     }
 }
+
+#[cfg(test)]
+mod rendered_env_links_tests {
+    use std::os::unix::fs::symlink;
+
+    use tempfile::tempdir;
+
+    use super::*;
+    use crate::models::environment::generations::GenerationId;
+
+    /// Build a `RenderedEnvironmentLinks` for a plain (non-generation) env,
+    /// pre-populate the directory with the new dash-separator symlinks and old
+    /// dot-separator symlinks pointing into the Nix store, call
+    /// `replace_legacy_links`, and assert the old symlinks are replaced with
+    /// relative redirects to the new names.
+    #[test]
+    fn replace_legacy_links_plain_replaces_store_dot_links_with_redirects() {
+        let dir = tempdir().unwrap();
+        let base_dir = CanonicalPath::new(dir.path()).unwrap();
+        let system = "x86_64-linux".to_string();
+        let name = "myenv";
+
+        let links = RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+            &base_dir, name, &system,
+        );
+
+        // New dash-separator symlinks must exist for the redirect to be created.
+        symlink("/nix/store/new-dev-aaaaaaaaaaaa", links.dev.as_path()).unwrap();
+        symlink("/nix/store/new-run-aaaaaaaaaaaa", links.run.as_path()).unwrap();
+
+        // Old dot-separator symlinks pointing into the store.
+        let old_dev = base_dir.join(format!("{system}.{name}.dev"));
+        let old_run = base_dir.join(format!("{system}.{name}.run"));
+        symlink("/nix/store/old-dev-aaaaaaaaaaaa", &old_dev).unwrap();
+        symlink("/nix/store/old-run-aaaaaaaaaaaa", &old_run).unwrap();
+
+        links.replace_legacy_links();
+
+        // Old paths are now relative redirects to the dash-separator names.
+        assert_eq!(
+            std::fs::read_link(&old_dev).unwrap(),
+            PathBuf::from(format!("{system}.{name}-dev"))
+        );
+        assert_eq!(
+            std::fs::read_link(&old_run).unwrap(),
+            PathBuf::from(format!("{system}.{name}-run"))
+        );
+    }
+
+    /// Same as above but for generation-qualified links, pinning the invariant
+    /// that `new_in_base_dir_with_name_system_and_generation` produces names
+    /// ending in `-dev`/`-run` so that `replace_legacy_links` derives the
+    /// correct legacy stem `<system>.<name>.gen<N>`.
+    #[test]
+    fn replace_legacy_links_generation_replaces_store_dot_links_with_redirects() {
+        let dir = tempdir().unwrap();
+        let base_dir = CanonicalPath::new(dir.path()).unwrap();
+        let system = "x86_64-linux".to_string();
+        let name = "myenv";
+        let generation = GenerationId::from(3usize);
+
+        let links = RenderedEnvironmentLinks::new_in_base_dir_with_name_system_and_generation(
+            &base_dir, name, &system, generation,
+        );
+
+        symlink("/nix/store/new-dev-aaaaaaaaaaaa", links.dev.as_path()).unwrap();
+        symlink("/nix/store/new-run-aaaaaaaaaaaa", links.run.as_path()).unwrap();
+
+        let old_dev = base_dir.join(format!("{system}.{name}.gen{generation}.dev"));
+        let old_run = base_dir.join(format!("{system}.{name}.gen{generation}.run"));
+        symlink("/nix/store/old-dev-aaaaaaaaaaaa", &old_dev).unwrap();
+        symlink("/nix/store/old-run-aaaaaaaaaaaa", &old_run).unwrap();
+
+        links.replace_legacy_links();
+
+        assert_eq!(
+            std::fs::read_link(&old_dev).unwrap(),
+            PathBuf::from(format!("{system}.{name}.gen{generation}-dev"))
+        );
+        assert_eq!(
+            std::fs::read_link(&old_run).unwrap(),
+            PathBuf::from(format!("{system}.{name}.gen{generation}-run"))
+        );
+    }
+
+    /// When no legacy dot-separator symlinks are present, `replace_legacy_links`
+    /// is a no-op and must not create new dot-separator symlinks.
+    #[test]
+    fn replace_legacy_links_skips_when_no_legacy_symlink_present() {
+        let dir = tempdir().unwrap();
+        let base_dir = CanonicalPath::new(dir.path()).unwrap();
+        let system = "x86_64-linux".to_string();
+        let name = "myenv";
+
+        let links = RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+            &base_dir, name, &system,
+        );
+
+        symlink("/nix/store/new-dev-aaaaaaaaaaaa", links.dev.as_path()).unwrap();
+        symlink("/nix/store/new-run-aaaaaaaaaaaa", links.run.as_path()).unwrap();
+
+        links.replace_legacy_links();
+
+        let old_dev = base_dir.join(format!("{system}.{name}.dev"));
+        assert!(!old_dev.exists() && !old_dev.is_symlink());
+    }
+
+    /// When the legacy symlink already points to the new dash-separator name
+    /// (i.e. it is already a redirect from a previous run), it must not be
+    /// touched — the `/nix/store/` guard prevents the re-creation cycle.
+    #[test]
+    fn replace_legacy_links_skips_when_legacy_symlink_is_already_redirect() {
+        let dir = tempdir().unwrap();
+        let base_dir = CanonicalPath::new(dir.path()).unwrap();
+        let system = "x86_64-linux".to_string();
+        let name = "myenv";
+
+        let links = RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+            &base_dir, name, &system,
+        );
+
+        symlink("/nix/store/new-dev-aaaaaaaaaaaa", links.dev.as_path()).unwrap();
+        symlink("/nix/store/new-run-aaaaaaaaaaaa", links.run.as_path()).unwrap();
+
+        // Simulate a redirect that was already created by a previous build.
+        let old_dev = base_dir.join(format!("{system}.{name}.dev"));
+        symlink(format!("{system}.{name}-dev"), &old_dev).unwrap();
+
+        links.replace_legacy_links();
+
+        // Redirect target must be unchanged.
+        assert_eq!(
+            std::fs::read_link(&old_dev).unwrap(),
+            PathBuf::from(format!("{system}.{name}-dev"))
+        );
+    }
+}
