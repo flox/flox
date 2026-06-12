@@ -927,6 +927,181 @@ else
 fi
 
 # ----------------------------------------------------------------------------
+# Layer 4.7: write-path interposition (full write entry-point coverage +
+# graceful denial).
+#
+# Two fixes are exercised here:
+#   1. Write coverage. Beyond open()/openat(), the destructive write entry
+#      points creat(), truncate(), and freopen() (plus the platform large-file
+#      and $NOCANCEL variants) are interposed, so a write cannot slip past the
+#      sandbox by binding a symbol the open interceptor never saw. A shell `>>`
+#      redirect to a sensitive file is the canonical real-world case.
+#   2. Graceful denial. A policy denial is reported and refused with EACCES in
+#      EVERY mode — never exit(1). A shell builtin redirect performs its open
+#      inside the interactive shell process, so a fatal denial would kill the
+#      user's shell. enforce/pure now refuse with a clean error like ask.
+#
+# Unless noted, cases run under an activation (FLOX_SANDBOX_ALLOW_FOREIGN_EXE=1).
+# ----------------------------------------------------------------------------
+
+wp_home="$(mktemp -d "$HOME/flox-sandbox-tests-home.XXXXXX")"
+mkdir -p "$wp_home/.ssh"
+printf 'known' > "$wp_home/.ssh/known_hosts"
+
+# append to an EXISTING sensitive file is denied GRACEFULLY (EACCES), not fatal,
+# and leaves the file untouched. Mirrors a shell `>>` to a credential file.
+out="$(run_activation enforce "$wp_home" -- append "$wp_home/.ssh/known_hosts" 2>&1)"; rc=$?
+contents="$(cat "$wp_home/.ssh/known_hosts")"
+if [[ $rc -ne 0 && "$out" == *"APPEND_FAIL"* && "$out" == *"errno=13"* \
+      && "$out" == *"is not in the sandbox (sensitive)"* && "$contents" == "known" ]]; then
+  pass "enforce+activation: append to an existing sensitive file denied (EACCES), file intact"
+else
+  fail "enforce+activation: sensitive append should be EACCES-denied, file unchanged (rc=$rc, contents=$contents)" "$out"
+fi
+
+# A denied write does NOT terminate a long-lived process: the probe attempts the
+# denied append, then — still running — reads an in-policy file and prints
+# SURVIVED. Under the old fatal model the process died at the append.
+out="$(run_activation enforce "$wp_home" -- survive "$wp_home/.ssh/known_hosts" "$in_file" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"APPEND_DENIED"* && "$out" == *"errno=13"* \
+      && "$out" == *"READ_OK"* && "$out" == *"SURVIVED"* ]]; then
+  pass "enforce+activation: a denied write does not kill the process (graceful EACCES)"
+else
+  fail "enforce+activation: process should survive a denied write (rc=$rc)" "$out"
+fi
+
+rm -rf "$wp_home"
+
+# New-file create of a SENSITIVE path under an IN-POLICY directory is denied:
+# the parent ($fixture, an allow-dir) is in policy, but the target itself is
+# sensitive (**/.env), so the create is refused — consistent with the
+# existing-file sensitive denial (closes the create-branch sensitive gap).
+out="$(run_activation enforce "$HOME" -- create "$fixture/.env" 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$out" == *"is not in the sandbox (sensitive)"* ]]; then
+  pass "enforce+activation: new sensitive file create under an in-policy dir denied"
+else
+  fail "enforce+activation: creating \$fixture/.env should be denied as sensitive (rc=$rc)" "$out"
+fi
+rm -f "$fixture/.env"
+
+# creat(): a new file under an OUT-OF-POLICY dir is denied. creat is a distinct
+# entry point from open(O_CREAT); without its own interceptor the write would
+# slip past the sandbox.
+wp_oop="$(mktemp -d "$HOME/flox-sandbox-tests-oop.XXXXXX")"
+out="$(run_activation enforce "$HOME" -- creat "$wp_oop/pwned" 2>&1)"; rc=$?
+if [[ $rc -ne 0 && "$out" == *"CREAT_FAIL"* && "$out" == *"errno=13"* \
+      && "$out" == *"is not in the sandbox"* ]]; then
+  pass "enforce+activation: creat() under an out-of-policy dir is denied"
+else
+  fail "enforce+activation: creat() out-of-policy should be denied (rc=$rc)" "$out"
+fi
+
+# truncate(): truncating an EXISTING out-of-policy file is a destructive write
+# and must be denied, leaving the file unchanged.
+printf 'data' > "$wp_oop/victim"
+out="$(run_activation enforce "$HOME" -- truncate "$wp_oop/victim" 2>&1)"; rc=$?
+contents="$(cat "$wp_oop/victim")"
+if [[ $rc -ne 0 && "$out" == *"TRUNCATE_FAIL"* && "$out" == *"errno=13"* \
+      && "$out" == *"is not in the sandbox"* && "$contents" == "data" ]]; then
+  pass "enforce+activation: truncate() of an out-of-policy file is denied, file intact"
+else
+  fail "enforce+activation: truncate() out-of-policy should be denied, file unchanged (rc=$rc, contents=$contents)" "$out"
+fi
+
+# freopen(): reopening an EXISTING out-of-policy file for writing must be denied
+# (freopen opens and truncates). A third distinct write entry point.
+printf 'data' > "$wp_oop/freopen-victim"
+out="$(run_activation enforce "$HOME" -- freopen "$wp_oop/freopen-victim" 2>&1)"; rc=$?
+contents="$(cat "$wp_oop/freopen-victim")"
+if [[ $rc -ne 0 && "$out" == *"FREOPEN_FAIL"* && "$out" == *"errno=13"* \
+      && "$out" == *"is not in the sandbox"* && "$contents" == "data" ]]; then
+  pass "enforce+activation: freopen() of an out-of-policy file is denied, file intact"
+else
+  fail "enforce+activation: freopen() out-of-policy should be denied, file unchanged (rc=$rc, contents=$contents)" "$out"
+fi
+rm -rf "$wp_oop"
+
+# In-policy writes still pass on every new entry point. The fixture is an
+# allow-dir ($TMPDIR), so appending/creating/truncating there is permitted
+# silently — the write interception must not regress legitimate in-project edits.
+printf 'x' > "$fixture/wp-existing"
+out="$(run_activation enforce "$HOME" -- append "$fixture/wp-existing" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"APPEND_OK"* && "$out" != *"not in the sandbox"* ]]; then
+  pass "enforce+activation: append to an in-policy file still permitted"
+else
+  fail "enforce+activation: in-policy append should succeed (rc=$rc)" "$out"
+fi
+out="$(run_activation enforce "$HOME" -- creat "$fixture/wp-created" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"CREAT_OK"* && "$out" != *"not in the sandbox"* ]]; then
+  pass "enforce+activation: creat() in an in-policy dir still permitted"
+else
+  fail "enforce+activation: in-policy creat should succeed (rc=$rc)" "$out"
+fi
+out="$(run_activation enforce "$HOME" -- truncate "$fixture/wp-existing" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"TRUNCATE_OK"* && "$out" != *"not in the sandbox"* ]]; then
+  pass "enforce+activation: truncate() of an in-policy file still permitted"
+else
+  fail "enforce+activation: in-policy truncate should succeed (rc=$rc)" "$out"
+fi
+rm -f "$fixture/wp-existing" "$fixture/wp-created"
+
+# $TMPDIR write: a built-in allow-dir, so a create directly under it succeeds.
+tmpdir_target="${TMPDIR:-/tmp}/flox-sandbox-wp-$$"
+out="$(run_activation enforce "$HOME" -- create "$tmpdir_target" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"CREATE_OK"* && "$out" != *"not in the sandbox"* ]]; then
+  pass "enforce+activation: \$TMPDIR write permitted"
+else
+  fail "enforce+activation: a \$TMPDIR write should succeed (rc=$rc)" "$out"
+fi
+rm -f "$tmpdir_target"
+
+# Byte-identical build behaviour: WITHOUT the activation flag (build mode), the
+# new write interceptors keep the historical allow-of-nonexistent — a build
+# legitimately creates many new files. creat() under an out-of-policy dir is
+# permitted in build mode, unchanged.
+wp_build_oop="$(mktemp -d "$HOME/flox-sandbox-tests-oop.XXXXXX")"
+out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+    FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=enforce \
+    HOME="$HOME" "$root/tests/sandbox_probe" creat "$wp_build_oop/newfile" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"CREAT_OK"* ]]; then
+  pass "enforce+build: creat() of a new file allowed (build behaviour unchanged)"
+else
+  fail "enforce+build: build mode should permit any new-file creat (rc=$rc)" "$out"
+fi
+rm -rf "$wp_build_oop"
+
+# Real-tool coverage: an actual shell `>>` redirect to an existing sensitive
+# file. The redirect binds a libc open variant (open$NOCANCEL on macOS, open64
+# on glibc) that the plain interceptor historically could miss; the destination
+# .env is sensitive. Assert the sandbox blocked it, the file is byte-for-byte
+# unchanged, and the shell SURVIVED the denial (a later command ran) rather than
+# being killed. Skipped when bash is unavailable or SIP-protected (macOS strips
+# DYLD_INSERT_LIBRARIES for /bin, /usr/bin, ... binaries).
+bash_bin="$(command -v bash 2>/dev/null || true)"
+sip_bash=0
+case "$bash_bin" in
+  /bin/*|/usr/bin/*|/sbin/*|/usr/sbin/*) sip_bash=1 ;;
+esac
+if [[ -n "$bash_bin" && ( "$(uname -s)" != "Darwin" || $sip_bash -eq 0 ) ]]; then
+  rt_home="$(mktemp -d "$HOME/flox-sandbox-tests-home.XXXXXX")"
+  printf 'SECRET' > "$rt_home/.env"
+  out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+      FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs /nix/store" FLOX_VIRTUAL_SANDBOX=enforce \
+      FLOX_SANDBOX_ALLOW_FOREIGN_EXE=1 HOME="$rt_home" \
+      "$bash_bin" -c 'echo PWNED >> "$HOME/.env"; echo STILL_ALIVE' 2>&1)"; rc=$?
+  contents="$(cat "$rt_home/.env")"
+  rm -rf "$rt_home"
+  if [[ "$out" == *"is not in the sandbox (sensitive)"* \
+        && "$contents" == "SECRET" && "$out" == *"STILL_ALIVE"* ]]; then
+    pass "enforce+activation: real shell '>>' to a sensitive file blocked, file intact, shell survives"
+  else
+    fail "enforce+activation: shell redirect should be denied gracefully, file unchanged (rc=$rc, contents=$contents)" "$out"
+  fi
+else
+  echo "skip - bash unavailable or SIP-protected; real-tool '>>' write coverage needs a mediatable shell"
+fi
+
+# ----------------------------------------------------------------------------
 # Layer 5: network egress (connect interception, warn/enforce gradient).
 #
 # These use only loopback and TEST-NET-1 (192.0.2.0/24, RFC 5737, guaranteed
