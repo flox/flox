@@ -5,9 +5,10 @@ use crate::parsed::v1_13_0::{ManifestV1_13_0, Profile};
 /// Migrate a v1.12.0 manifest to a v1.13.0 manifest.
 ///
 /// This is a lossless migration: V1_13_0 adds an optional `deactivate` table
-/// to the `[profile]` section for symmetric per-shell deactivation hooks. All
-/// V1_12_0 manifests are valid V1_13_0 manifests with `profile.deactivate:
-/// None`.
+/// to the `[profile]` section for symmetric per-shell deactivation hooks, an
+/// optional `sandbox` field to `[options]`, and an optional `sandbox-allow`
+/// field per build. All V1_12_0 manifests are valid V1_13_0 manifests with
+/// the new fields set to `None`.
 pub(crate) fn migrate_manifest_v1_12_0_to_v1_13_0(
     manifest: ManifestV1_12_0,
 ) -> Result<ManifestV1_13_0, MigrationError> {
@@ -26,7 +27,7 @@ pub(crate) fn migrate_manifest_v1_12_0_to_v1_13_0(
         vars: manifest.vars,
         hook: manifest.hook,
         profile,
-        options: manifest.options,
+        options: manifest.options.into(),
         services: manifest.services,
         build: manifest.build.into(),
         containerize: manifest.containerize,
@@ -59,7 +60,7 @@ mod tests {
                     tcsh: p.tcsh,
                     deactivate: None,
                 }),
-                options: manifest.options,
+                options: manifest.options.into(),
                 services: manifest.services,
                 build: manifest.build.into(),
                 containerize: manifest.containerize,
