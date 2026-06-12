@@ -1539,6 +1539,7 @@ dependencies = [
  "temp-env",
  "tempfile",
  "time",
+ "toml",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
