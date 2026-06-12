@@ -151,6 +151,15 @@ static __thread int in_write_access = 0;
 // consults it.
 static __thread int in_dir_probe = 0;
 
+// Per-thread flag marking the current check as a directory ENUMERATION
+// (opendir()/fdopendir()). Unlike an O_DIRECTORY probe — which only yields an
+// fd — an enumeration hands the caller every entry name in the directory, so
+// under an activation it is mediated as a READ of the directory path (per the
+// unified severity model) rather than warn-permitted. The opendir/fdopendir
+// interceptors set this around their sandbox_check_path() call;
+// sandbox_check_path() consults it.
+static __thread int in_dir_read = 0;
+
 // Pointers to the original libc functions (Linux only). On macOS the real
 // functions are reached by calling open()/openat() directly: dyld
 // interposition deliberately does not redirect references made from within the
@@ -190,6 +199,14 @@ static ssize_t (*orig_readlink_chk)(const char *pathname, char *buf,
 static ssize_t (*orig_readlinkat_chk)(int dirfd, const char *pathname,
                                       char *buf, size_t bufsiz,
                                       size_t buflen) = NULL;
+// Directory enumeration. ls and shell globs list a directory with
+// opendir()/readdir(); glibc's opendir() opens the directory through an
+// internal __open*_nocancel symbol that never touches the exported
+// open()/openat() PLT entries, so the open interceptors above cannot see an
+// enumeration. fdopendir() covers the openat()+fdopendir() traversal style
+// (find, fts).
+static DIR *(*orig_opendir)(const char *name) = NULL;
+static DIR *(*orig_fdopendir)(int fd) = NULL;
 // Network egress. connect() is the TCP egress choke point; getaddrinfo() is
 // observed only to attach a best-effort hostname to the resolved IPs.
 static int (*orig_connect)(int sockfd, const struct sockaddr *addr,
@@ -333,6 +350,8 @@ void sandbox_init() {
   orig_readlink = dlsym(RTLD_NEXT, "readlink");
   orig_readlink_chk = dlsym(RTLD_NEXT, "__readlink_chk");
   orig_readlinkat_chk = dlsym(RTLD_NEXT, "__readlinkat_chk");
+  orig_opendir = dlsym(RTLD_NEXT, "opendir");
+  orig_fdopendir = dlsym(RTLD_NEXT, "fdopendir");
   orig_connect = dlsym(RTLD_NEXT, "connect");
   orig_getaddrinfo = dlsym(RTLD_NEXT, "getaddrinfo");
 #endif
@@ -1489,15 +1508,33 @@ bool sandbox_check_path(const char *pathname) {
   }
 
   // Directory accesses are "looking around" rather than reading out-of-closure
-  // contents, so permit them even under enforce — with a warning, but only the
-  // first time we see each directory (builds list the same directory many
-  // times, which otherwise floods the log).
+  // contents, so for a BUILD they are permitted even under enforce — with a
+  // warning, but only the first time we see each directory (builds list the
+  // same directory many times, which otherwise floods the log).
+  //
+  // For an ACTIVATION (allow_foreign_exe set) a directory ENUMERATION
+  // (in_dir_read: opendir/fdopendir) is different: it hands the caller every
+  // entry name in the directory, so listing an out-of-policy directory leaks
+  // its contents' names. Treat the enumeration as a READ of the directory
+  // path and route it through the shared per-level verdict (warn once +
+  // permit; graceful EACCES under enforce; deny + queue under ask) so every
+  // report — and any future audit hook on the shared helper — sees it. Gated
+  // on allow_foreign_exe so build behaviour is byte-identical: the build-mode
+  // warn-permit below is unchanged.
   if (is_directory(real_path)) {
+    if (allow_foreign_exe && in_dir_read)
+      return out_of_policy_verdict(display, real_path, pathname,
+                                   " (directory listing)");
     if (should_warn_for_path(real_path))
       warn("%s is outside the closure but permitted (directory listing)",
            display);
     return true;
   }
+  // A directory-read of a NON-directory cannot enumerate anything — the
+  // kernel returns ENOTDIR regardless — so permit it and let the caller
+  // observe the natural error instead of a policy denial.
+  if (in_dir_read)
+    return true;
   // Sensitive set (activation only). For an activation (allow_foreign_exe set),
   // credential and secret files (~/.ssh, ~/.aws, ~/.netrc, **/.env, ...) are
   // denied even under enforce — and crucially BEFORE the $HOME-dotfile
@@ -2316,6 +2353,61 @@ ssize_t __readlinkat_chk(int dirfd, const char *pathname, char *buf,
   return -1;
 }
 
+// Interceptor for opendir — the directory-enumeration choke point. `ls` and
+// shell globs list directories via opendir()/readdir(); glibc's opendir()
+// opens the directory through an internal __open*_nocancel symbol that never
+// touches the exported open()/openat() PLT entries, so without this
+// interceptor an enumeration reaches no check at all. The verdict is applied
+// to the directory path as a read; a refusal is a graceful NULL + EACCES.
+DIR *opendir(const char *name) {
+  ensure_init();
+  // Re-entrancy guard. Beyond the usual internal-call concern, this one is
+  // load-bearing for correctness: is_directory() inside sandbox_check_path()
+  // probes via opendir() itself, so without the short-circuit the check would
+  // recurse straight back into the policy.
+  if (in_sandbox)
+    return orig_opendir(name);
+  in_sandbox = 1;
+  in_dir_read = 1;
+  bool allowed = sandbox_check_path(name);
+  in_dir_read = 0;
+  in_sandbox = 0;
+  if (allowed)
+    return orig_opendir(name);
+  errno = EACCES;
+  return NULL;
+}
+
+// Interceptor for fdopendir — enumeration over an fd obtained from an earlier
+// open(O_DIRECTORY) (the openat()+fdopendir() traversal style used by find
+// and fts). The fd is mapped back to its directory path via /proc/self/fd; on
+// mapping failure the call FAILS OPEN, because the fd can only have come from
+// an open()/openat() that already passed the O_DIRECTORY probe check.
+DIR *fdopendir(int fd) {
+  ensure_init();
+  if (in_sandbox)
+    return orig_fdopendir(fd);
+  in_sandbox = 1;
+  bool allowed = true;
+  char fd_link[64];
+  char fd_path[PATH_MAX];
+  snprintf(fd_link, sizeof(fd_link), "/proc/self/fd/%d", fd);
+  // orig_readlink, not readlink: the exported interceptor would only bounce
+  // through its own in_sandbox guard to land in the same place.
+  ssize_t n = orig_readlink(fd_link, fd_path, sizeof(fd_path) - 1);
+  if (n > 0) {
+    fd_path[n] = '\0';
+    in_dir_read = 1;
+    allowed = sandbox_check_path(fd_path);
+    in_dir_read = 0;
+  }
+  in_sandbox = 0;
+  if (allowed)
+    return orig_fdopendir(fd);
+  errno = EACCES;
+  return NULL;
+}
+
 // Interceptor for connect(). The TCP egress choke point: mirror the open()
 // interceptor's re-entrancy guard so socket connects made by our own RPC
 // client (which runs with in_sandbox==1) pass straight through. AF_UNIX and
@@ -2523,6 +2615,52 @@ ssize_t my_readlink(const char *pathname, char *buf, size_t bufsiz) {
   return -1;
 }
 
+// Interceptor for opendir (macOS) — the directory-enumeration choke point.
+// `ls` and shell globs list directories via opendir()/readdir(), which on
+// this platform opens the directory through open$NOCANCEL (deliberately not
+// interposed, see the note at the end of this file), so without this
+// interceptor an enumeration reaches no check at all. We reach the real
+// opendir() by calling opendir() (a self-call is not interposed) — which is
+// also why is_directory()'s internal probe never recurses here.
+DIR *my_opendir(const char *name) {
+  ensure_init();
+  if (in_sandbox)
+    return opendir(name);
+  in_sandbox = 1;
+  in_dir_read = 1;
+  bool allowed = sandbox_check_path(name);
+  in_dir_read = 0;
+  in_sandbox = 0;
+  if (allowed)
+    return opendir(name);
+  errno = EACCES;
+  return NULL;
+}
+
+// Interceptor for fdopendir (macOS) — enumeration over an fd from an earlier
+// open(O_DIRECTORY). The fd is mapped back to its directory path with
+// fcntl(F_GETPATH); on mapping failure the call FAILS OPEN, because the fd
+// can only have come from an open()/openat() that already passed the
+// O_DIRECTORY probe check.
+DIR *my_fdopendir(int fd) {
+  ensure_init();
+  if (in_sandbox)
+    return fdopendir(fd);
+  in_sandbox = 1;
+  bool allowed = true;
+  char fd_path[PATH_MAX];
+  if (fcntl(fd, F_GETPATH, fd_path) == 0) {
+    in_dir_read = 1;
+    allowed = sandbox_check_path(fd_path);
+    in_dir_read = 0;
+  }
+  in_sandbox = 0;
+  if (allowed)
+    return fdopendir(fd);
+  errno = EACCES;
+  return NULL;
+}
+
 // Interceptor for connect() (macOS). Like the Linux one: the TCP egress choke
 // point, refusing out-of-policy destinations with ECONNREFUSED rather than an
 // exit. We reach the real connect() by calling connect() (a self-call is not
@@ -2571,8 +2709,25 @@ DYLD_INTERPOSE(my_truncate, truncate)
 DYLD_INTERPOSE(my_freopen, freopen)
 DYLD_INTERPOSE(my_readlinkat, readlinkat)
 DYLD_INTERPOSE(my_readlink, readlink)
+DYLD_INTERPOSE(my_opendir, opendir)
+DYLD_INTERPOSE(my_fdopendir, fdopendir)
 DYLD_INTERPOSE(my_connect, connect)
 DYLD_INTERPOSE(my_getaddrinfo, getaddrinfo)
+
+// On x86_64 macOS, <dirent.h> rewrites the `opendir`/`fdopendir` identifiers
+// to their $INODE64 variants (the 64-bit-inode ABI, default since 10.6), so
+// the interpose entries above already cover the symbols modern binaries bind
+// there. Cover the legacy plain symbols too, via asm-aliased declarations,
+// so a 32-bit-inode binary cannot enumerate unmediated — the same dual-
+// binding pattern as fopen$DARWIN_EXTSN below. arm64 has no $INODE64
+// variants (64-bit inodes are the only ABI), so the identifiers above ARE
+// the plain symbols and these aliases must not be declared.
+#if defined(__x86_64__)
+extern DIR *opendir_plain(const char *name) __asm__("_opendir");
+DYLD_INTERPOSE(my_opendir, opendir_plain)
+extern DIR *fdopendir_plain(int fd) __asm__("_fdopendir");
+DYLD_INTERPOSE(my_fdopendir, fdopendir_plain)
+#endif
 
 // macOS exports a second fopen, fopen$DARWIN_EXTSN (the "extended standards"
 // variant). Binaries built in Darwin C mode — including the Nix coreutils

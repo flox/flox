@@ -26,6 +26,7 @@
  */
 
 #include <arpa/inet.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -262,6 +263,57 @@ static int do_open_dir(const char *path) {
   return 0;
 }
 
+/* opendir — enumerate <path> via opendir()+readdir(), the entry points ls and
+ * shell globs bind. Under an activation an out-of-policy enumeration is
+ * mediated as a READ of the directory path: warn reports and permits,
+ * enforce/ask refuse with a graceful EACCES from opendir() (never a process
+ * abort). Prints "OPENDIR_OK <path> entries=<n>" on success or
+ * "OPENDIR_FAIL <path> errno=<n> (<msg>)" on refusal, and exits 0/1. */
+static int do_opendir(const char *path) {
+  DIR *dir = opendir(path);
+  if (dir == NULL) {
+    int saved = errno;
+    printf("OPENDIR_FAIL %s errno=%d (%s)\n", path, saved, strerror(saved));
+    return 1;
+  }
+  int entries = 0;
+  while (readdir(dir) != NULL)
+    entries++;
+  closedir(dir);
+  printf("OPENDIR_OK %s entries=%d\n", path, entries);
+  return 0;
+}
+
+/* fdopendir — open <path> with O_DIRECTORY, then enumerate via fdopendir()
+ * (the openat()+fdopendir() traversal style used by find and fts). The
+ * open(O_DIRECTORY) is a warned-but-permitted probe, so the fd is obtained
+ * even out of policy; fdopendir() maps the fd back to its directory path and
+ * applies the directory-read verdict before any entry is readable. Prints
+ * "FDOPENDIR_OK <path> entries=<n>" or "FDOPENDIR_FAIL <path> errno=<n>
+ * (<msg>)" (or FDOPENDIR_SETUP_FAIL if the open itself failed) and exits
+ * 0/1/2. */
+static int do_fdopendir(const char *path) {
+  int fd = open(path, O_RDONLY | O_NONBLOCK | O_DIRECTORY);
+  if (fd < 0) {
+    printf("FDOPENDIR_SETUP_FAIL %s errno=%d (%s)\n", path, errno,
+           strerror(errno));
+    return 2;
+  }
+  DIR *dir = fdopendir(fd);
+  if (dir == NULL) {
+    int saved = errno;
+    printf("FDOPENDIR_FAIL %s errno=%d (%s)\n", path, saved, strerror(saved));
+    close(fd);
+    return 1;
+  }
+  int entries = 0;
+  while (readdir(dir) != NULL)
+    entries++;
+  closedir(dir); /* also closes fd */
+  printf("FDOPENDIR_OK %s entries=%d\n", path, entries);
+  return 0;
+}
+
 /* readlinkat(AT_FDCWD, ...) so the readlinkat interceptor is exercised. */
 static int do_readlink(const char *path) {
   char buf[PATH_MAX];
@@ -444,6 +496,12 @@ int main(int argc, char **argv) {
   if (argc >= 3 && strcmp(argv[1], "open-dir") == 0) {
     return do_open_dir(argv[2]);
   }
+  if (argc >= 3 && strcmp(argv[1], "opendir") == 0) {
+    return do_opendir(argv[2]);
+  }
+  if (argc >= 3 && strcmp(argv[1], "fdopendir") == 0) {
+    return do_fdopendir(argv[2]);
+  }
   if (argc >= 3 && strcmp(argv[1], "readlink") == 0) {
     return do_readlink(argv[2]);
   }
@@ -470,11 +528,14 @@ int main(int argc, char **argv) {
           "  %s freopen <path>\n"
           "  %s survive <denied-path> <allowed-path>\n"
           "  %s open-dir <path>\n"
+          "  %s opendir <path>\n"
+          "  %s fdopendir <path>\n"
           "  %s readlink <path>\n"
           "  %s readlink-fn <path>\n"
           "  %s connect <ipv4> <port> [timeout_ms]\n"
           "  %s storm <nthreads> <niters> <path1> [path2 ...]\n",
           argv[0], argv[0], argv[0], argv[0], argv[0], argv[0], argv[0],
-          argv[0], argv[0], argv[0], argv[0], argv[0], argv[0], argv[0]);
+          argv[0], argv[0], argv[0], argv[0], argv[0], argv[0], argv[0],
+          argv[0], argv[0]);
   return 2;
 }
