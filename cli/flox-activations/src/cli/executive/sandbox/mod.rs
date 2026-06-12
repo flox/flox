@@ -172,21 +172,26 @@ fn bind_and_serve(
 
     // Seed the session grant set from grants.toml. A missing file is normal (no
     // grants yet); a matching path is allowed silently under ask, so an
-    // already-trusted environment stays quiet. The grants dir is held in state
-    // so a control `allow` can persist back to it.
+    // already-trusted environment stays quiet. The file's own source is
+    // carried through (so default-seed grants stay distinguishable in the
+    // session view), and net-kind grants are excluded — the fs broker only
+    // matches filesystem globs; the network policy is compiled into
+    // FLOX_SANDBOX_ALLOW_NET at activation start. The grants dir is held in
+    // state so a control `allow` can persist back to it.
     let grants_file = grants::read_grants(grants_dir);
-    let grant_globs: Vec<String> = grants_file
+    let grant_seeds: Vec<(String, Option<String>)> = grants_file
         .grants
         .into_iter()
-        .map(|grant| grant.pattern)
+        .filter(|grant| !grant.is_net())
+        .map(|grant| (grant.pattern, grant.source))
         .collect();
     debug!(
-        count = grant_globs.len(),
+        count = grant_seeds.len(),
         "seeded ask broker session grants"
     );
 
     let state = Arc::new(Mutex::new(BrokerState::with_grants_dir(
-        grant_globs,
+        grant_seeds,
         grants_dir.to_path_buf(),
     )));
     let shutdown = Arc::new(AtomicBool::new(false));
@@ -409,6 +414,7 @@ mod tests {
             flox_env_cuda_detection: "".to_string(),
             interpreter_path: PathBuf::from("/nix/store/fake"),
             sandbox_mode: SandboxMode::Enforce,
+            metrics_host: None,
         };
         let project = AttachProjectCtx {
             env_project: tmp.path().to_path_buf(),

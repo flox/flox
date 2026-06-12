@@ -22,7 +22,13 @@ use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
 use crate::env_diff::EnvDiff;
 use crate::sandbox::seed::SeedContext;
-use crate::sandbox::{FLOX_SANDBOX_ALLOW_NET_VAR, PRELOAD_VAR, sandbox_env, verdict_socket_path};
+use crate::sandbox::{
+    FLOX_SANDBOX_ALLOW_NET_VAR,
+    PRELOAD_VAR,
+    grants,
+    sandbox_env,
+    verdict_socket_path,
+};
 use crate::start_diff::StartDiff;
 use crate::vars_from_env::VarsFromEnvironment;
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
@@ -413,6 +419,19 @@ fn sandbox_double_sets(
         debug!(?grants_dir, %err, "could not create sandbox grants dir");
     }
 
+    // One-time seeding of the default policy as explicit, revocable grants
+    // (git hosts, registries, dotfile reads, the metrics endpoint). Gated on
+    // the file's seeded_version, so a user's revocation of a seeded grant
+    // survives later activations. Best-effort: a failure (read-only .flox,
+    // full disk) is logged but never blocks the activation.
+    if let Err(err) = grants::ensure_seed_grants(
+        &grants_dir,
+        dirs::home_dir().as_deref(),
+        context.metrics_host.as_deref(),
+    ) {
+        debug!(?grants_dir, %err, "could not seed default sandbox grants");
+    }
+
     let seed_ctx = SeedContext {
         shell_binary: std::env::var_os("SHELL").map(PathBuf::from),
         interpreter_path: context.interpreter_path.clone(),
@@ -599,6 +618,7 @@ mod tests {
             flox_env_cuda_detection: "0".to_string(),
             interpreter_path: interpreter,
             sandbox_mode,
+            metrics_host: None,
         };
         let project = AttachProjectCtx {
             env_project: project_dir,
