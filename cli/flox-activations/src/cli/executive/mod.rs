@@ -536,6 +536,7 @@ mod test {
             flox_env_cuda_detection: "".to_string(),
             flox_active_environments: "".to_string(),
             sandbox_mode: SandboxMode::default(),
+            metrics_host: None,
         };
         let project = AttachProjectCtx {
             env_project: dot_flox_path.to_path_buf(),

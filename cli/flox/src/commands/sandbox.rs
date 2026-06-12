@@ -619,6 +619,7 @@ async fn allow(flox: &mut Flox, args: AllowArgs) -> Result<()> {
             file.grants.retain(|g| g.pattern != args.glob);
             file.grants.push(Grant {
                 pattern: args.glob.clone(),
+                kind: None,
                 ops: Vec::new(),
                 source: Some("allow".to_string()),
                 created: Some(today()),
