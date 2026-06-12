@@ -1518,3 +1518,21 @@ fn render_composition_manifest(manifest: &Manifest<TypedOnly>) -> Result<String>
 
     Ok(document.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Verify that the bpaf parser has no positional-ordering violations across
+    /// the entire CLI tree. bpaf requires all positional arguments to appear
+    /// after any flags in the same parser; a violation causes a panic in the
+    /// usage renderer, which is triggered by both `--help` and the help
+    /// fallback for bare subcommand invocations.
+    ///
+    /// This test catches the class of bug fixed in `AllowArgs` where a
+    /// positional field was declared before a flag field.
+    #[test]
+    fn bpaf_check_invariants() {
+        flox_cli().check_invariants(false);
+    }
+}

@@ -80,12 +80,10 @@ pub struct AllowArgs {
     environment: EnvironmentSelect,
 
     /// The path glob to allow (e.g. '~/.cargo/registry/**').
+    /// The grant is always saved to grants.toml; use `flox sandbox revoke`
+    /// to remove it later.
     #[bpaf(positional("GLOB"))]
     glob: String,
-
-    /// Save the grant to grants.toml so future sessions do not ask.
-    #[bpaf(long("persist"))]
-    persist: bool,
 }
 
 #[derive(Debug, Clone, Bpaf)]
@@ -638,7 +636,6 @@ async fn allow(flox: &mut Flox, args: AllowArgs) -> Result<()> {
             args.glob
         ));
     }
-    let _ = args.persist; // `allow` always persists; the flag is accepted for symmetry.
     Ok(())
 }
 
