@@ -4,7 +4,7 @@ use std::io::Write;
 
 use crossterm::style::Stylize;
 use flox_core::data::System;
-use flox_core::util::message::{format_error, format_updated};
+use flox_core::util::message::{format_error, format_info, format_updated};
 pub use flox_core::util::message::{stderr_supports_color, stdout_supports_color};
 use flox_manifest::compose::{COMPOSER_MANIFEST_ID, Warning};
 use flox_manifest::lockfile::{LockedPackage, Lockfile, PackageOutputs};
@@ -58,12 +58,7 @@ pub(crate) fn verbose(v: impl Display) {
 }
 /// double width character, add an additional space for alignment
 pub(crate) fn info(v: impl Display) {
-    let icon = if stderr_supports_color() {
-        "ℹ".blue().to_string()
-    } else {
-        "ℹ".to_string()
-    };
-    print_message(std::format_args!("{icon} {v}"));
+    print_message(format_info(v));
 }
 /// double width character, add an additional space for alignment
 pub(crate) fn warning(v: impl Display) {
