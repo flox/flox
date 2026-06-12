@@ -62,6 +62,7 @@ use crate::config::{AutoActivationPreference, Config, EnvironmentPromptConfig};
 use crate::utils::detect_shell::{detect_shell_for_in_place, detect_shell_for_subshell};
 use crate::utils::errors::format_diverged_metadata;
 use crate::utils::message;
+use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
 use crate::{Exit, environment_subcommand_metric, subcommand_metric, utils};
 
 #[derive(Debug, Clone, Bpaf)]
@@ -745,13 +746,22 @@ fn notify_package_upgrades(
         return Ok(());
     }
     let description = environment_description(environment)?;
+    let diff_for_system = upgrade_result.diff_for_system(&flox.system);
+    if diff_for_system.is_empty() {
+        message::verbose(formatdoc! {"
+            Upgrades available for {description} on other systems.
+            Use 'flox upgrade --dry-run' for details."});
+        return Ok(());
+    }
     // TODO: this doesn't capture the environment chosen by the user if we prompted
     let flags = environment_select
         .to_flags()
         .map(|flags| format!(" {}", flags.join(" ")))
         .unwrap_or("".to_string());
+    let (version_changes, rebuilds) = count_upgrade_categories(&diff_for_system);
+    let summary = format_upgrade_summary(version_changes, rebuilds);
     let message = formatdoc! {"
-        Upgrades are available for packages in {description}.
+        {summary} available in {description}.
         Use 'flox upgrade --dry-run{flags}' for details.
     "};
     message::info(message);
@@ -1115,7 +1125,7 @@ mod upgrade_notification_tests {
         let printed = writer.to_string();
 
         assert_eq!(printed, formatdoc! {"
-            ℹ Upgrades are available for packages in 'name'.
+            ℹ 1 rebuild available in 'name'.
             Use 'flox upgrade --dry-run' for details.
 
         "});
