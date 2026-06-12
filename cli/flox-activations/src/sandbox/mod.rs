@@ -14,15 +14,33 @@
 //! generated rc script after the shell has started. `double_set_envs` is the
 //! one channel that both sets before exec and re-exports from rc.
 
+pub mod grants;
 pub mod seed;
+pub mod sensitive;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use flox_core::activate::context::SandboxMode;
+use tracing::warn;
 
+use self::grants::GrantsFile;
 use self::seed::{SeedAllowSet, SeedContext};
+
+/// Soft cap: warn (with a consolidate hint) once the compiled allow-set
+/// reaches this many entries. Chosen below the engine's hard limit so an
+/// operator has room to react before grants start being refused.
+pub const ALLOW_ENTRIES_WARN: usize = 200;
+/// Soft cap: warn once the rendered allow-set reaches this many bytes.
+pub const ALLOW_BYTES_WARN: usize = 12 * 1024;
+/// Hard cap: the engine's allow-set entry limit. Past this the env injection
+/// fails loudly rather than silently truncating — a truncated allow-set would
+/// drop grants the user explicitly saved and reopen the ask flow for paths
+/// they already approved.
+pub const ALLOW_ENTRIES_MAX: usize = 256;
+/// Hard cap: the engine's allow-set byte limit.
+pub const ALLOW_BYTES_MAX: usize = 16 * 1024;
 
 /// `FLOX_VIRTUAL_SANDBOX` — the libsandbox mode (`warn`/`enforce`/`ask`).
 pub const FLOX_VIRTUAL_SANDBOX_VAR: &str = "FLOX_VIRTUAL_SANDBOX";
@@ -97,19 +115,31 @@ fn flox_build_mk() -> PathBuf {
 /// stays as short as the services socket and respects the same macOS 104-char
 /// limit the services socket already cleared.
 ///
-/// A later batch's control socket sits beside this one as `sbc.<id>.sock`,
+/// The control socket sits beside the verdict socket as `sbc.<id>.sock`,
 /// derived the same way.
 pub fn verdict_socket_path(services_socket: &Path) -> PathBuf {
     socket_sibling_path(services_socket, "sbx")
 }
 
+/// Derive the ask broker's control-socket path from the services socket path.
+///
+/// The control socket carries the `flox sandbox` protocol (list/allow/revoke/
+/// status). Unlike the verdict socket it is *not* exported into the session
+/// env — the `flox sandbox` CLI rediscovers it from the same services socket
+/// the executive holds, by the sibling rule (`sbc.<id>.sock`). Keeping the
+/// path off the session env is part of the self-approval guard: an in-session
+/// process cannot read the control-socket path from its own environment.
+pub fn control_socket_path(services_socket: &Path) -> PathBuf {
+    socket_sibling_path(services_socket, "sbc")
+}
+
 /// Rewrite a `flox.<id>.sock` services socket path into a sibling socket in
 /// the same directory with a different short prefix (`sbx` for the verdict
-/// socket). When the file name does not match the expected `flox.*.sock`
-/// shape — which should not happen in practice — fall back to appending the
-/// prefix as an extra extension so the result is still deterministic and
-/// unique per services socket.
-fn socket_sibling_path(services_socket: &Path, prefix: &str) -> PathBuf {
+/// socket, `sbc` for the control socket). When the file name does not match
+/// the expected `flox.*.sock` shape — which should not happen in practice —
+/// fall back to appending the prefix as an extra extension so the result is
+/// still deterministic and unique per services socket.
+pub fn socket_sibling_path(services_socket: &Path, prefix: &str) -> PathBuf {
     let dir = services_socket.parent().unwrap_or_else(|| Path::new("."));
     let file = services_socket
         .file_name()
@@ -184,6 +214,118 @@ fn merge_allow_net(existing: Option<&str>, seed: &SeedAllowSet) -> String {
     entries.join(" ")
 }
 
+/// The rendered allow-set after folding grants into the seed, ready to inject.
+#[derive(Debug)]
+struct CompiledAllow {
+    /// `FLOX_SANDBOX_ALLOW` value (space-separated globs).
+    allow: String,
+    /// `FLOX_SANDBOX_ALLOW_DIRS` value (space-separated directory prefixes).
+    allow_dirs: String,
+}
+
+/// Compile the seed allow-set plus saved grants into the two rendered env
+/// values, enforcing the engine caps.
+///
+/// Grants are routed by shape: a directory-shaped pattern (trailing `/` or
+/// `/**`) joins the allow-dirs as a prefix; everything else (a single file or
+/// a non-recursive glob) joins the allow globs. This mirrors how the broker
+/// suggests scopes — a directory grant is a subtree prefix, a file grant is a
+/// path glob — so a grant saved as `~/.cargo/registry/**` lands in the same
+/// bucket whether it came from the seed or from a prior approval.
+///
+/// Caps are checked on the combined entry count and rendered byte length. At
+/// the soft cap a warning with a consolidate hint is logged; past the hard cap
+/// this returns an error so the activation fails loudly. Silent truncation is
+/// the one outcome ruled out: dropping a saved grant would re-prompt for a path
+/// the user already approved, which is exactly the friction the grant removed.
+fn compile_allow_set(seed: &SeedAllowSet, grants: &GrantsFile) -> Result<CompiledAllow> {
+    let mut allow = seed.allow.clone();
+    let mut allow_dirs = seed.allow_dirs.clone();
+
+    for grant in &grants.grants {
+        let pattern = grant.pattern.trim();
+        if pattern.is_empty() || pattern.contains(' ') {
+            // Space-containing patterns are unrepresentable in the
+            // space-tokenized list; skip rather than corrupt the var.
+            warn!(pattern = %grant.pattern, "skipping ungrantable pattern (empty or contains a space)");
+            continue;
+        }
+        if let Some(dir) = dir_shaped_prefix(pattern) {
+            allow_dirs.push(dir);
+        } else {
+            allow.push(pattern.to_string());
+        }
+    }
+
+    let allow = dedup_preserving_order(allow);
+    let allow_dirs = dedup_preserving_order(allow_dirs);
+
+    enforce_allow_caps(&allow, &allow_dirs)?;
+
+    Ok(CompiledAllow {
+        allow: allow.join(" "),
+        allow_dirs: allow_dirs.join(" "),
+    })
+}
+
+/// If `pattern` is directory-shaped, return its prefix (no trailing `/` or
+/// `/**`); otherwise `None`. A directory grant covers a subtree, which the
+/// engine expresses as an allow-dir prefix rather than a glob.
+fn dir_shaped_prefix(pattern: &str) -> Option<String> {
+    if let Some(prefix) = pattern.strip_suffix("/**") {
+        return Some(prefix.to_string());
+    }
+    if let Some(prefix) = pattern.strip_suffix('/') {
+        return Some(prefix.to_string());
+    }
+    None
+}
+
+/// Enforce the engine's allow-set caps on the combined globs + dirs.
+///
+/// Warns at the soft cap, errors past the hard cap. The byte length counts the
+/// rendered space-separated values, which is what the engine actually parses.
+fn enforce_allow_caps(allow: &[String], allow_dirs: &[String]) -> Result<()> {
+    let entries = allow.len() + allow_dirs.len();
+    let bytes = rendered_len(allow) + rendered_len(allow_dirs);
+
+    if entries > ALLOW_ENTRIES_MAX || bytes > ALLOW_BYTES_MAX {
+        bail!(
+            "the sandbox allow-set is too large ({entries} entries, {bytes} bytes; \
+             limits are {ALLOW_ENTRIES_MAX} entries and {ALLOW_BYTES_MAX} bytes).\n\
+             Consolidate file grants into directory grants \
+             (e.g. 'flox sandbox allow \"~/.cargo/registry/**\"') and remove ones you no longer need."
+        );
+    }
+    if entries >= ALLOW_ENTRIES_WARN || bytes >= ALLOW_BYTES_WARN {
+        warn!(
+            entries,
+            bytes,
+            "sandbox allow-set is approaching the engine cap; consolidate file grants into directory grants"
+        );
+    }
+    Ok(())
+}
+
+/// The byte length of a space-separated render of `items` (the form the engine
+/// parses), without allocating the string.
+fn rendered_len(items: &[String]) -> usize {
+    let content: usize = items.iter().map(String::len).sum();
+    let separators = items.len().saturating_sub(1);
+    content + separators
+}
+
+/// Deduplicate while preserving first-seen order. Shared with the seed so a
+/// grant duplicating a seed entry is collapsed rather than double-counted
+/// against the cap.
+fn dedup_preserving_order(items: Vec<String>) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    items
+        .into_iter()
+        .filter(|item| seen.insert(item.clone()))
+        .collect()
+}
+
 /// Build the sandbox environment variables for an activation.
 ///
 /// Returns an empty map when `mode` is `Off`, so callers can unconditionally
@@ -217,13 +359,17 @@ pub fn sandbox_env(
     let libsandbox = libsandbox_path()?;
     let seed = SeedAllowSet::compute(seed_ctx);
 
+    // Fold saved grants into the seed allow-set so "allow always" silences a
+    // path in future sessions, not just the one it was approved in. Dir-shaped
+    // patterns join the allow-dirs; file/glob patterns join the allow globs.
+    // Caps are enforced on the combined result.
+    let grants = grants::read_grants(grants_dir);
+    let CompiledAllow { allow, allow_dirs } = compile_allow_set(&seed, &grants)?;
+
     let mut env = HashMap::new();
     env.insert(FLOX_VIRTUAL_SANDBOX_VAR.to_string(), mode.to_string());
-    env.insert(FLOX_SANDBOX_ALLOW_VAR.to_string(), seed.allow_value());
-    env.insert(
-        FLOX_SANDBOX_ALLOW_DIRS_VAR.to_string(),
-        seed.allow_dirs_value(),
-    );
+    env.insert(FLOX_SANDBOX_ALLOW_VAR.to_string(), allow);
+    env.insert(FLOX_SANDBOX_ALLOW_DIRS_VAR.to_string(), allow_dirs);
     env.insert(
         FLOX_SANDBOX_ALLOW_NET_VAR.to_string(),
         merge_allow_net(existing_allow_net, &seed),
@@ -350,6 +496,152 @@ mod tests {
     }
 
     #[test]
+    fn grants_fold_into_the_allow_set_by_shape() {
+        let seed = SeedAllowSet {
+            allow: vec!["/home/dev/.zshrc".to_string()],
+            allow_dirs: vec!["/etc".to_string()],
+            ..Default::default()
+        };
+        let grants = GrantsFile {
+            version: 1,
+            grants: vec![
+                // A file grant joins the globs.
+                grants::Grant {
+                    pattern: "/home/dev/.config/gh/hosts.yml".to_string(),
+                    ops: vec!["read".to_string()],
+                    source: None,
+                    created: None,
+                    evidence: None,
+                },
+                // A `/**` grant is directory-shaped: its prefix joins the dirs.
+                grants::Grant {
+                    pattern: "/home/dev/.cargo/registry/**".to_string(),
+                    ops: vec!["read".to_string()],
+                    source: None,
+                    created: None,
+                    evidence: None,
+                },
+                // A trailing-slash grant is also directory-shaped.
+                grants::Grant {
+                    pattern: "/home/dev/data/".to_string(),
+                    ops: vec!["any".to_string()],
+                    source: None,
+                    created: None,
+                    evidence: None,
+                },
+            ],
+        };
+
+        let compiled = compile_allow_set(&seed, &grants).unwrap();
+        let allow: Vec<&str> = compiled.allow.split(' ').collect();
+        let dirs: Vec<&str> = compiled.allow_dirs.split(' ').collect();
+
+        assert!(allow.contains(&"/home/dev/.zshrc"));
+        assert!(allow.contains(&"/home/dev/.config/gh/hosts.yml"));
+        // Directory-shaped grants drop their `/**` or `/` suffix and join dirs.
+        assert!(dirs.contains(&"/etc"));
+        assert!(dirs.contains(&"/home/dev/.cargo/registry"));
+        assert!(dirs.contains(&"/home/dev/data"));
+        // A directory grant is never left in the globs.
+        assert!(!allow.contains(&"/home/dev/.cargo/registry/**"));
+    }
+
+    #[test]
+    fn a_grant_duplicating_a_seed_entry_is_collapsed() {
+        let seed = SeedAllowSet {
+            allow: vec!["/home/dev/.gitconfig".to_string()],
+            ..Default::default()
+        };
+        let grants = GrantsFile {
+            version: 1,
+            grants: vec![grants::Grant {
+                pattern: "/home/dev/.gitconfig".to_string(),
+                ops: vec![],
+                source: None,
+                created: None,
+                evidence: None,
+            }],
+        };
+        let compiled = compile_allow_set(&seed, &grants).unwrap();
+        assert_eq!(
+            compiled
+                .allow
+                .split(' ')
+                .filter(|e| *e == "/home/dev/.gitconfig")
+                .count(),
+            1,
+            "a grant equal to a seed entry must not be double-counted"
+        );
+    }
+
+    #[test]
+    fn the_allow_set_hard_caps_at_the_entry_limit() {
+        // One over the hard entry cap must error, not silently truncate.
+        let allow: Vec<String> = (0..ALLOW_ENTRIES_MAX + 1)
+            .map(|i| format!("/p/{i}"))
+            .collect();
+        let seed = SeedAllowSet {
+            allow,
+            ..Default::default()
+        };
+        let err = compile_allow_set(&seed, &GrantsFile::default())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("allow-set is too large"), "{err}");
+        assert!(err.contains("Consolidate"), "{err}");
+    }
+
+    #[test]
+    fn the_allow_set_hard_caps_at_the_byte_limit() {
+        // A few very long entries blow the byte cap before the entry cap.
+        let long = "x".repeat(4096);
+        let allow: Vec<String> = (0..5).map(|i| format!("/{long}/{i}")).collect();
+        let seed = SeedAllowSet {
+            allow,
+            ..Default::default()
+        };
+        let err = compile_allow_set(&seed, &GrantsFile::default())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("allow-set is too large"), "{err}");
+    }
+
+    #[test]
+    fn an_empty_or_spacey_grant_pattern_is_skipped() {
+        let seed = SeedAllowSet::default();
+        let grants = GrantsFile {
+            version: 1,
+            grants: vec![
+                grants::Grant {
+                    pattern: "  ".to_string(),
+                    ops: vec![],
+                    source: None,
+                    created: None,
+                    evidence: None,
+                },
+                grants::Grant {
+                    pattern: "/has a space/**".to_string(),
+                    ops: vec![],
+                    source: None,
+                    created: None,
+                    evidence: None,
+                },
+                grants::Grant {
+                    pattern: "/ok/**".to_string(),
+                    ops: vec![],
+                    source: None,
+                    created: None,
+                    evidence: None,
+                },
+            ],
+        };
+        let compiled = compile_allow_set(&seed, &grants).unwrap();
+        // Only the well-formed grant survives.
+        assert_eq!(compiled.allow_dirs, "/ok");
+        assert_eq!(compiled.allow, "");
+    }
+
+    #[test]
     fn ask_mode_exports_verdict_socket() {
         let libexec = fake_libexec();
         let build_mk = libexec.path().join("flox-build.mk");
@@ -392,6 +684,21 @@ mod tests {
             verdict_socket_path(Path::new("/run/custom.sock")),
             PathBuf::from("/run/custom.sock.sbx.sock"),
         );
+    }
+
+    #[test]
+    fn control_socket_is_a_sibling_with_the_sbc_prefix() {
+        // The control socket sits next to the verdict socket, sharing the
+        // `<id>`, so the `flox sandbox` CLI can rediscover it from the services
+        // socket without the path ever being exported into the session env.
+        assert_eq!(
+            control_socket_path(Path::new("/run/user/1000/flox.deadbeef.sock")),
+            PathBuf::from("/run/user/1000/sbc.deadbeef.sock"),
+        );
+        // The verdict and control sockets are distinct paths for the same
+        // activation.
+        let services = Path::new("/run/user/1000/flox.deadbeef.sock");
+        assert_ne!(verdict_socket_path(services), control_socket_path(services),);
     }
 
     #[test]

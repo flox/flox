@@ -128,9 +128,28 @@ pub fn pid_is_running(pid: i32) -> bool {
 /// Walks up the process tree from the current process to see if `ancestor_pid`
 /// is in the parent chain.
 pub fn is_descendant_of(ancestor_pid: i32) -> bool {
+    is_pid_descendant_of(std::process::id() as i32, ancestor_pid)
+}
+
+/// Check whether `pid` is `ancestor_pid` itself or a descendant of it.
+///
+/// Walks up the process tree from `pid` toward init, reporting a match when
+/// `ancestor_pid` appears anywhere in that chain. `pid == ancestor_pid` counts
+/// as a match: the self-approval guard treats the session-root process the same
+/// as any process inside the session, since both are "in the session" for the
+/// purpose of refusing a grant.
+///
+/// Used in two places that must agree: the CLI's client-side in-session refusal
+/// (`pid` = the running `flox sandbox`) and the broker's server-side peer-cred
+/// guard (`pid` = the control-socket peer). Sharing one predicate keeps the two
+/// halves of the self-approval check from drifting apart.
+pub fn is_pid_descendant_of(pid: i32, ancestor_pid: i32) -> bool {
+    if pid == ancestor_pid {
+        return true;
+    }
     let ancestor = Pid::from_u32(ancestor_pid as u32);
     let mut system = System::new();
-    let mut check_pid = Pid::from_u32(std::process::id());
+    let mut check_pid = Pid::from_u32(pid as u32);
 
     // Safety limit - process trees shouldn't be deeper than this.
     for _ in 0..256 {
@@ -152,4 +171,44 @@ pub fn is_descendant_of(ancestor_pid: i32) -> bool {
         check_pid = parent_pid;
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_pid_is_its_own_descendant_for_the_self_approval_guard() {
+        // The sandbox self-approval guard treats "is this caller in the
+        // session?" as true when the caller IS the session root, not only when
+        // it is strictly below it.
+        let pid = std::process::id() as i32;
+        assert!(is_pid_descendant_of(pid, pid));
+    }
+
+    #[test]
+    fn the_current_process_is_a_descendant_of_its_parent() {
+        // The current process is a descendant of its own parent — the first hop
+        // of the ancestry walk. Using the live parent pid (rather than pid 1)
+        // keeps the assertion robust against test-harness reparenting and the
+        // platform differences in how sysinfo resolves the deeper tree.
+        let pid = std::process::id() as i32;
+        let mut system = System::new();
+        let self_pid = Pid::from_u32(pid as u32);
+        system.refresh_processes(ProcessesToUpdate::Some(&[self_pid]), false);
+        let parent = system
+            .process(self_pid)
+            .and_then(|process| process.parent())
+            .map(|parent| parent.as_u32() as i32)
+            .expect("the test process must have a resolvable parent");
+        assert!(is_pid_descendant_of(pid, parent));
+    }
+
+    #[test]
+    fn an_unrelated_high_pid_is_not_an_ancestor() {
+        // A pid that is almost certainly not running (and certainly not our
+        // ancestor) yields false rather than looping or panicking.
+        let pid = std::process::id() as i32;
+        assert!(!is_pid_descendant_of(pid, i32::MAX - 1));
+    }
 }
