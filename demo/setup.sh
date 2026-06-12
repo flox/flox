@@ -51,7 +51,7 @@ git add -A && git commit -qm "initial project"
 # libsandbox treats /tmp as a built-in always-allowed prefix, checked before
 # the sensitive set (package-builder/sandbox.c: allow_dirs_init). If these
 # lived under /tmp they would be silently allowed and the demo's blocked /
-# (sensitive) / ask beats would vanish. $HOME is out of policy, which is the
+# (sensitive) / prompt beats would vanish. $HOME is out of policy, which is the
 # whole story: a secret OUTSIDE the project that the agent must not read.
 echo "Creating two HARMLESS fake secrets (removed by demo/cleanup.sh)…"
 mkdir -p "$HOME/demo-secrets" "$HOME/demo-data"

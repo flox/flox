@@ -38,7 +38,7 @@ cd /tmp/sandbox-demo
 call out to the network. Flox can now wrap an activation in a
 sandbox so anything you run inside it — including a coding agent
 — is contained. There are three modes: `warn` to observe,
-`enforce` to lock down, and `ask` to decide interactively."**
+`enforce` to lock down, and `prompt` to decide interactively."**
 
 ---
 
@@ -137,12 +137,12 @@ directory, or phone home somewhere you didn't allow."**
 
 ---
 
-## 3 · `ask` — tighten interactively (~110s)
+## 3 · `prompt` — tighten interactively (~110s)
 
-**"`enforce` is great once you know your policy. `ask` is how you
+**"`enforce` is great once you know your policy. `prompt` is how you
 get there: when something's blocked, instead of just failing, the
-request is queued and you decide — once, or forever. `ask` is the
-default: bare `--sandbox` means `--sandbox ask`."**
+request is queued and you decide — once, or forever. `prompt` is the
+default: bare `--sandbox` means `--sandbox prompt`."**
 
 ### 3.1 — a legitimate access is denied and queued
 
@@ -153,7 +153,7 @@ flox activate --sandbox -- bash -c 'cat ~/demo-data/fixtures.csv'
 Expected:
 
 ```
-ℹ Sandbox 'ask' enabled (advisory; mediates file reads/writes).
+ℹ Sandbox 'prompt' enabled (advisory; mediates file reads/writes).
   Out-of-policy access is denied and queued for approval.
     review queue:   flox sandbox
     approve a path: flox sandbox allow '<glob>'   (second terminal)
@@ -162,7 +162,7 @@ SANDBOX DENIED[cat:41681]: queued as req 1 — approve outside: flox sandbox
 cat: /Users/you/demo-data/fixtures.csv: Permission denied
 ```
 
-**"My agent needs a data file outside the project. Under `ask` it
+**"My agent needs a data file outside the project. Under `prompt` it
 fails cleanly with a clear message — and it's queued for me to
 approve. Approvals happen *outside* the session on purpose, so a
 misbehaving agent can't approve itself."**
@@ -179,7 +179,7 @@ Expected:
 ✔ Saved grant '/Users/you/demo-data/**' to grants.toml — it applies at the next activation.
 ```
 
-> If an `ask` session is still running (e.g. you left 3.1's
+> If a `prompt` session is still running (e.g. you left 3.1's
 > session open in another pane), the live broker answers instead:
 > `✔ Saved grant '/Users/you/demo-data/**' (cleared 1 pending) —
 > future sessions won't ask.` — and the grant reaches the running
@@ -191,10 +191,10 @@ Expected:
 flox activate --sandbox -- bash -c 'cat ~/demo-data/fixtures.csv'
 ```
 
-Expected (the `ask` banner always prints; no denials follow):
+Expected (the `prompt` banner always prints; no denials follow):
 
 ```
-ℹ Sandbox 'ask' enabled (advisory; mediates file reads/writes).
+ℹ Sandbox 'prompt' enabled (advisory; mediates file reads/writes).
   Out-of-policy access is denied and queued for approval.
     review queue:   flox sandbox
     approve a path: flox sandbox allow '<glob>'   (second terminal)
@@ -243,7 +243,7 @@ sandbox off."**
 flox activate --sandbox -- bash -c 'flox sandbox allow /tmp/anything'
 ```
 
-Expected (after the `ask` banner):
+Expected (after the `prompt` banner):
 
 ```
 ✘ ERROR: refusing to allow from inside the sandboxed session.
@@ -255,7 +255,7 @@ Expected (after the `ask` banner):
 ## 4 · Close (~20s)
 
 **"So: `warn` to learn, `enforce` to lock down with a default
-that keeps agents productive, and `ask` to tighten the policy
+that keeps agents productive, and `prompt` to tighten the policy
 interactively. It's a prototype — it's advisory, not bulletproof:
 it covers cooperative, dynamically-linked tools, not static
 binaries or system binaries that bypass the loader, and file
