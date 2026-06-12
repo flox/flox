@@ -1103,13 +1103,13 @@ fn nix_path_info_null_paths(paths: &[String]) -> Result<Vec<String>, std::io::Er
 /// `realise` errors always propagate immediately; a path that never appeared
 /// in the store is not a GC race.
 ///
-/// `expected_paths` returns the full list of store paths the environment
-/// depends on. It is called once per attempt for diagnostic logging and
-/// for the `nix path-info` store-database check on failure.
+/// `expected_paths` is the full list of store paths the environment depends
+/// on, used for diagnostic logging and the `nix path-info` store-database
+/// check on failure.  It is computed once by the caller before the retry loop.
 fn materialise_with_retry(
     mut realise: impl FnMut() -> Result<(), BuildEnvError>,
     mut missing_paths: impl FnMut() -> Vec<String>,
-    expected_paths: impl Fn() -> Vec<String>,
+    expected_paths: Vec<String>,
     mut build_env: impl FnMut() -> Result<BuildEnvOutputs, BuildEnvError>,
 ) -> Result<BuildEnvOutputs, BuildEnvError> {
     const MAX_RETRIES: usize = 3;
@@ -1143,11 +1143,10 @@ fn materialise_with_retry(
                 paths: display,
             });
         }
-        let confirmed = expected_paths();
         debug!(
             attempt,
             MAX_RETRIES,
-            paths = ?confirmed,
+            paths = ?expected_paths,
             "all store paths present per stat(), calling buildenv.nix"
         );
         match build_env() {
@@ -1166,7 +1165,7 @@ fn materialise_with_retry(
                     // Nix daemon agrees. CI caches may restore store content
                     // by copying files directly to /nix/store, bypassing the
                     // daemon, leaving paths on disk but unregistered.
-                    match nix_path_info_null_paths(&confirmed) {
+                    match nix_path_info_null_paths(&expected_paths) {
                         Ok(null_paths) if null_paths.is_empty() => {
                             // Daemon confirms all paths are registered. This is
                             // usually a genuine deterministic failure, but there
@@ -1360,7 +1359,7 @@ where
                     .cloned()
                     .collect()
             },
-            || all_env_paths.clone(),
+            all_env_paths.clone(),
             || self.call_buildenv_nix(lockfile_path, service_config_path.clone(), out_link_prefix),
         )
     }
@@ -2779,7 +2778,7 @@ mod materialise_retry_tests {
     #[test]
     fn succeeds_on_first_attempt_when_paths_present() {
         init_tracing();
-        let result = materialise_with_retry(|| Ok(()), Vec::new, Vec::new, || Ok(fake_outputs()));
+        let result = materialise_with_retry(|| Ok(()), Vec::new, Vec::new(), || Ok(fake_outputs()));
         assert_eq!(result.unwrap(), fake_outputs());
     }
 
@@ -2806,7 +2805,7 @@ mod materialise_retry_tests {
                     vec![]
                 }
             },
-            Vec::new,
+            Vec::new(),
             || Ok(fake_outputs()),
         );
         assert_eq!(result.unwrap(), fake_outputs());
@@ -2827,7 +2826,7 @@ mod materialise_retry_tests {
         let result = materialise_with_retry(
             || Ok(()),
             || missing.clone(),
-            Vec::new,
+            Vec::new(),
             || Ok(fake_outputs()),
         );
         match result.unwrap_err() {
@@ -2863,7 +2862,7 @@ mod materialise_retry_tests {
                     _ => vec![], // pre-build attempt 2: present
                 }
             },
-            Vec::new,
+            Vec::new(),
             || {
                 build_calls.set(build_calls.get() + 1);
                 if build_calls.get() == 1 {
@@ -2898,7 +2897,7 @@ mod materialise_retry_tests {
                     vec![]
                 }
             },
-            Vec::new,
+            Vec::new(),
             || Err(BuildEnvError::Build("nix build failed".to_string())),
         );
         match result.unwrap_err() {
@@ -2926,7 +2925,7 @@ mod materialise_retry_tests {
                 Ok(())
             },
             Vec::new, // paths always present
-            Vec::new,
+            Vec::new(),
             || {
                 build_calls.set(build_calls.get() + 1);
                 Err(BuildEnvError::Build("deterministic failure".to_string()))
@@ -2953,7 +2952,7 @@ mod materialise_retry_tests {
         let result = materialise_with_retry(
             || Err(BuildEnvError::Build("realise failed".to_string())),
             Vec::new,
-            Vec::new,
+            Vec::new(),
             || {
                 build_called.set(true);
                 Ok(fake_outputs())
