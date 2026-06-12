@@ -1,3 +1,10 @@
+# A previous in-place deactivation in this shell unsets the tracer and
+# _activate_d; default them so the unset-variable references below don't
+# abort this script when it is sourced again.
+if ( ! $?_flox_activate_tracer ) set _flox_activate_tracer = true
+if ( "$_flox_activate_tracer" == "" ) set _flox_activate_tracer = true
+if ( ! $?_activate_d ) set _activate_d = ""
+
 $_flox_activate_tracer $_activate_d/set-prompt.tcsh START
 
 # Tweak the (already customized) prompt: add a flox indicator.
