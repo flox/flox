@@ -34,6 +34,25 @@ pub static METRICS_EVENTS_URL: LazyLock<String> = LazyLock::new(|| {
 });
 pub const METRICS_EVENTS_API_KEY: &str = env!("METRICS_EVENTS_API_KEY");
 
+/// The hostname of the metrics events endpoint, parsed from
+/// [`METRICS_EVENTS_URL`] (which already honors `_FLOX_METRICS_URL_OVERRIDE`).
+///
+/// Seeded into the sandbox network policy as a visible default-seed grant:
+/// the metrics flush runs from every short-lived flox process inside an
+/// activation, and without the grant an `enforce` session reports (and
+/// blocks) flox's own telemetry as workload egress on every prompt.
+/// Returns `None` when the URL cannot be parsed or has no host.
+pub fn metrics_events_host() -> Option<String> {
+    url_host(&METRICS_EVENTS_URL)
+}
+
+/// The host portion of `url`, if it parses as a URL with a host.
+fn url_host(url: &str) -> Option<String> {
+    url::Url::parse(url)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
+}
+
 /// Creates a trace event for the given subcommand.
 ///
 /// Do NOT inline functions as fields values because any child tracing events
@@ -1039,5 +1058,27 @@ mod tests {
         assert_eq!(entry_foo.subcommand, Some("foo".to_string()));
         assert_eq!(entry_bar.subcommand, Some("bar".to_string()));
         assert_eq!(entry_baz.subcommand, Some("baz".to_string()));
+    }
+
+    #[test]
+    fn url_host_extracts_the_hostname() {
+        assert_eq!(
+            url_host("https://z7qixlmjr3.execute-api.eu-north-1.amazonaws.com/prod/capture"),
+            Some("z7qixlmjr3.execute-api.eu-north-1.amazonaws.com".to_string())
+        );
+        assert_eq!(
+            url_host("http://localhost:9123/capture"),
+            Some("localhost".to_string())
+        );
+        // Unparseable or host-less URLs yield None rather than a bogus seed.
+        assert_eq!(url_host("not a url"), None);
+        assert_eq!(url_host("file:///tmp/metrics.json"), None);
+    }
+
+    #[test]
+    fn metrics_events_host_resolves_for_the_baked_url() {
+        // The baked METRICS_EVENTS_URL must always yield a host — if this
+        // fails, sandboxed sessions will burst metrics denials per prompt.
+        assert!(metrics_events_host().is_some());
     }
 }

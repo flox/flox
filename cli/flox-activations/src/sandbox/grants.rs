@@ -23,6 +23,15 @@ use flox_core::write_atomically;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
+/// The `kind` value marking a grant as a network destination rather than a
+/// filesystem glob. A missing/`fs` kind is a filesystem grant.
+pub const KIND_NET: &str = "net";
+
+/// The `source` value stamped on grants written by the one-time default
+/// seeding, so the review surface can tell out-of-box policy from grants the
+/// user approved.
+pub const SOURCE_DEFAULT_SEED: &str = "default-seed";
+
 /// One persisted grant: a glob pattern plus provenance metadata.
 ///
 /// Only `pattern` participates in matching. The remaining fields are recorded
@@ -32,15 +41,23 @@ use tracing::{debug, warn};
 /// allows all access kinds on its paths — see the design's honest limits).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Grant {
-    /// fnmatch-style glob matched against the resolved request path.
+    /// fnmatch-style glob matched against the resolved request path, or (for
+    /// `kind = "net"`) a network destination (`host[:port]`).
     pub pattern: String,
+
+    /// What the pattern names: `None`/`"fs"` for a filesystem glob, `"net"`
+    /// for a network destination. Network grants are compiled into
+    /// `FLOX_SANDBOX_ALLOW_NET` and never count against the filesystem
+    /// allow-set caps.
+    #[serde(default)]
+    pub kind: Option<String>,
 
     /// Access kinds the grant was created for (`read`, `write`, `any`).
     /// Informational only in this prototype.
     #[serde(default)]
     pub ops: Vec<String>,
 
-    /// Where the grant came from: review / allow / watch.
+    /// Where the grant came from: review / allow / watch / default-seed.
     #[serde(default)]
     pub source: Option<String>,
 
@@ -53,12 +70,33 @@ pub struct Grant {
     pub evidence: Option<u64>,
 }
 
+impl Grant {
+    /// True when this grant names a network destination (`kind = "net"`)
+    /// rather than a filesystem glob.
+    pub fn is_net(&self) -> bool {
+        self.kind.as_deref() == Some(KIND_NET)
+    }
+
+    /// True when this grant was written by the default seeding rather than
+    /// approved by the user.
+    pub fn is_default_seed(&self) -> bool {
+        self.source.as_deref() == Some(SOURCE_DEFAULT_SEED)
+    }
+}
+
 /// The `grants.toml` document: a versioned list of `[[grant]]` tables.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GrantsFile {
     /// Schema version, so later batches can migrate the file shape.
     #[serde(default = "default_grants_version")]
     pub version: u32,
+
+    /// The default-seed generation already applied to this file. Re-seeding
+    /// is gated on this marker — never on entry presence — so a user's
+    /// revocation of a seeded grant survives later activations (a
+    /// presence-based reseed would silently resurrect it).
+    #[serde(default)]
+    pub seeded_version: u32,
 
     /// The saved grants, one per `[[grant]]` table.
     #[serde(default, rename = "grant")]
@@ -73,6 +111,7 @@ impl Default for GrantsFile {
     fn default() -> Self {
         Self {
             version: default_grants_version(),
+            seeded_version: 0,
             grants: Vec::new(),
         }
     }
@@ -107,6 +146,198 @@ pub fn read_grants(grants_dir: &Path) -> GrantsFile {
             GrantsFile::default()
         },
     }
+}
+
+/// The default-seed generation this build writes. Bump when the default
+/// grant set changes shape; environments seeded at an older generation will
+/// be topped up with the new entries (existing user edits untouched).
+pub const SEED_GRANTS_VERSION: u32 = 1;
+
+/// Network destinations seeded as explicit, revocable `[[grant]]` entries on
+/// the first sandboxed activation of an environment.
+///
+/// These are *policy* — convenience allowances a user may legitimately want
+/// to revoke — as opposed to the infrastructure entries (loopback and flox's
+/// own service hosts) that stay hardcoded in the seed because revoking them
+/// would break flox itself. Two groups:
+///
+/// - Git hosting and release downloads: clone/fetch/pull and release
+///   archives (GitHub plus its CDN hosts).
+/// - Language package registries: npm, PyPI (index + file CDN), and
+///   crates.io (index + downloads), so an agent can install dependencies
+///   without a manual grant.
+const NET_SEED_GRANTS: &[&str] = &[
+    "github.com",
+    "codeload.github.com",
+    "objects.githubusercontent.com",
+    "raw.githubusercontent.com",
+    "registry.npmjs.org",
+    "pypi.org",
+    "files.pythonhosted.org",
+    "crates.io",
+    "static.crates.io",
+    "index.crates.io",
+];
+
+/// Shell rc, profile, and history files seeded as `$HOME`-expanded grants.
+///
+/// Under `ask` the engine flips the `$HOME`-dotfile carve-out, so without
+/// these the first interactive shell would queue a receipt for reading its
+/// own startup files. Covers the zsh and bash families plus the shared
+/// `.profile`/`.inputrc`.
+const SHELL_DOTFILE_SEEDS: &[&str] = &[
+    ".zshrc",
+    ".zshenv",
+    ".zprofile",
+    ".zsh_history",
+    ".bashrc",
+    ".bash_profile",
+    ".bash_history",
+    ".profile",
+    ".inputrc",
+];
+
+/// Routine, non-sensitive developer config files seeded as `$HOME`-expanded
+/// grants.
+///
+/// These are deliberately *non-sensitive*: they hold tool preferences
+/// (editor, registry URL, build profile), never credentials. Secrets live in
+/// the sensitive set the engine denies even under `enforce` (`~/.ssh`,
+/// `~/.aws`, `~/.netrc`, `~/.config/gh`, `**/.env`, ...), which is why none
+/// of those appears here — seeding a credential path would defeat the
+/// denial.
+const DEV_CONFIG_SEEDS: &[&str] = &[
+    // git: user config and the XDG config dir (excludes ~/.config/gh, which
+    // is sensitive and seeded nowhere).
+    ".gitconfig",
+    ".config/git/**",
+    // npm.
+    ".npmrc",
+    ".config/npm/**",
+    // cargo: both the legacy and current config filenames.
+    ".cargo/config",
+    ".cargo/config.toml",
+    // pip.
+    ".config/pip/**",
+    ".pip/**",
+    // rustup toolchain selection.
+    ".rustup/settings.toml",
+];
+
+/// The default grant set written by the one-time seeding: the implicit
+/// policy (git hosts, registries, dotfile reads, and flox's own metrics
+/// endpoint) made explicit, inspectable, and revocable.
+///
+/// Filesystem patterns are written `$HOME`-expanded and absolute because the
+/// broker matches grants literally against realpaths, with no `~` expansion.
+/// `metrics_host` is the hostname of flox's metrics endpoint, passed in by
+/// the CLI (`None` when the user disabled metrics): without it, every
+/// short-lived flox process inside an `enforce` session bursts connection
+/// refusals when the telemetry buffer tries to flush.
+pub fn default_seed_grants(home: Option<&Path>, metrics_host: Option<&str>) -> Vec<Grant> {
+    let today = today();
+    let net_grant = |host: &str| Grant {
+        pattern: host.to_string(),
+        kind: Some(KIND_NET.to_string()),
+        ops: Vec::new(),
+        source: Some(SOURCE_DEFAULT_SEED.to_string()),
+        created: Some(today.clone()),
+        evidence: None,
+    };
+    let fs_grant = |pattern: String| Grant {
+        pattern,
+        kind: None,
+        ops: vec!["read".to_string()],
+        source: Some(SOURCE_DEFAULT_SEED.to_string()),
+        created: Some(today.clone()),
+        evidence: None,
+    };
+
+    let mut grants: Vec<Grant> = NET_SEED_GRANTS.iter().map(|host| net_grant(host)).collect();
+    // The metrics host is flox's own service traffic, but it is seeded as a
+    // visible grant like the rest of the default policy — not a hardcoded
+    // exemption — so it shows up in `flox sandbox list --all` and can be
+    // revoked.
+    if let Some(host) = metrics_host {
+        grants.push(net_grant(host));
+    }
+
+    if let Some(home) = home {
+        for dotfile in SHELL_DOTFILE_SEEDS {
+            if let Some(pattern) = home.join(dotfile).to_str() {
+                grants.push(fs_grant(pattern.to_string()));
+            }
+        }
+        for config in DEV_CONFIG_SEEDS {
+            if let Some(pattern) = home.join(config).to_str() {
+                grants.push(fs_grant(pattern.to_string()));
+            }
+        }
+    }
+    grants
+}
+
+/// Write the default seed grants into `grants_dir/grants.toml`, once per
+/// seed generation.
+///
+/// Idempotence and revocability hang on the `seeded_version` gate: when the
+/// file already records this generation, nothing happens — even if seeded
+/// entries were since deleted. Revoking a seeded grant is therefore just the
+/// ordinary revoke path, and it stays revoked. When seeding does run, only
+/// patterns not already present are appended (a user's earlier manual grant
+/// for the same pattern is left untouched), and each appended grant is
+/// journaled so the tamper diff does not flag the seeds as hand-edits.
+///
+/// Returns `true` when the file was (re)written.
+pub fn ensure_seed_grants(
+    grants_dir: &Path,
+    home: Option<&Path>,
+    metrics_host: Option<&str>,
+) -> anyhow::Result<bool> {
+    let mut file = read_grants(grants_dir);
+    if file.seeded_version >= SEED_GRANTS_VERSION {
+        return Ok(false);
+    }
+
+    let mut appended: Vec<Grant> = Vec::new();
+    for seed in default_seed_grants(home, metrics_host) {
+        if file
+            .grants
+            .iter()
+            .any(|grant| grant.pattern == seed.pattern)
+        {
+            continue;
+        }
+        appended.push(seed.clone());
+        file.grants.push(seed);
+    }
+    file.seeded_version = SEED_GRANTS_VERSION;
+    write_grants(grants_dir, &file)?;
+    for grant in &appended {
+        append_journal(grants_dir, &JournalRecord {
+            event: "grant".to_string(),
+            pattern: Some(grant.pattern.clone()),
+            source: Some(SOURCE_DEFAULT_SEED.to_string()),
+            created: grant.created.clone(),
+        });
+    }
+    debug!(
+        ?grants_dir,
+        seeded = appended.len(),
+        "seeded default sandbox grants"
+    );
+    Ok(true)
+}
+
+/// Today's date as `YYYY-MM-DD`, for the `created` stamp on seeded grants.
+fn today() -> String {
+    let now = time::OffsetDateTime::now_utc();
+    format!(
+        "{:04}-{:02}-{:02}",
+        now.year(),
+        now.month() as u8,
+        now.day()
+    )
 }
 
 /// The append-only provenance journal beside `grants.toml`.
@@ -258,6 +489,7 @@ source = "flox sandbox allow"
         assert_eq!(grants.grants, vec![
             Grant {
                 pattern: "~/.cargo/registry/**".to_string(),
+                kind: None,
                 ops: vec!["read".to_string()],
                 source: Some("flox sandbox review".to_string()),
                 created: Some("2026-06-11".to_string()),
@@ -265,6 +497,7 @@ source = "flox sandbox allow"
             },
             Grant {
                 pattern: "~/data/fixtures/**".to_string(),
+                kind: None,
                 ops: vec!["any".to_string()],
                 source: Some("flox sandbox allow".to_string()),
                 created: None,
@@ -310,9 +543,11 @@ source = "flox sandbox allow"
         let dir = tmp.path().join("cache").join("sandbox");
         let file = GrantsFile {
             version: 1,
+            seeded_version: 0,
             grants: vec![
                 Grant {
                     pattern: "/home/dev/.cargo/registry/**".to_string(),
+                    kind: None,
                     ops: vec!["read".to_string()],
                     source: Some("review".to_string()),
                     created: Some("2026-06-11".to_string()),
@@ -320,6 +555,7 @@ source = "flox sandbox allow"
                 },
                 Grant {
                     pattern: "/home/dev/data/**".to_string(),
+                    kind: Some(KIND_NET.to_string()),
                     ops: vec!["any".to_string()],
                     source: Some("allow".to_string()),
                     created: None,
@@ -344,6 +580,7 @@ source = "flox sandbox allow"
         let mut file = GrantsFile::default();
         file.grants.push(Grant {
             pattern: "/home/dev/project/**".to_string(),
+            kind: None,
             ops: vec!["read".to_string()],
             source: Some("allow".to_string()),
             created: Some("2026-06-11".to_string()),
@@ -360,6 +597,7 @@ source = "flox sandbox allow"
         // A grant hand-edited into the file never reaches the journal.
         file.grants.push(Grant {
             pattern: "/home/dev/secrets/**".to_string(),
+            kind: None,
             ops: vec!["any".to_string()],
             source: None,
             created: None,
@@ -377,8 +615,10 @@ source = "flox sandbox allow"
         let dir = tmp.path().join("cache").join("sandbox");
         let file = GrantsFile {
             version: 1,
+            seeded_version: 0,
             grants: vec![Grant {
                 pattern: "/home/dev/**".to_string(),
+                kind: None,
                 ops: vec![],
                 source: None,
                 created: None,
@@ -407,5 +647,163 @@ source = "flox sandbox allow"
         let journaled = journaled_patterns(&dir);
         assert!(journaled.contains("/a/**"));
         assert_eq!(journaled.len(), 1);
+    }
+
+    #[test]
+    fn seeding_writes_default_grants_with_kind_source_and_journal() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("cache").join("sandbox");
+        let home = Path::new("/home/dev");
+
+        let seeded = ensure_seed_grants(&dir, Some(home), Some("metrics.example.com")).unwrap();
+        assert!(seeded);
+
+        let file = read_grants(&dir);
+        assert_eq!(file.seeded_version, SEED_GRANTS_VERSION);
+
+        // Every default-seed entry carries the provenance source and the
+        // right kind: net for hosts, fs (None) for $HOME-expanded patterns.
+        assert!(!file.grants.is_empty());
+        for grant in &file.grants {
+            assert_eq!(
+                grant.source.as_deref(),
+                Some(SOURCE_DEFAULT_SEED),
+                "unexpected source on {}",
+                grant.pattern
+            );
+        }
+        let net: Vec<&str> = file
+            .grants
+            .iter()
+            .filter(|g| g.is_net())
+            .map(|g| g.pattern.as_str())
+            .collect();
+        for host in ["github.com", "registry.npmjs.org", "crates.io"] {
+            assert!(net.contains(&host), "missing net seed {host}: {net:?}");
+        }
+        // The metrics host is an ordinary, visible net grant — not a
+        // hardcoded exemption.
+        assert!(net.contains(&"metrics.example.com"), "got {net:?}");
+
+        // Filesystem seeds are $HOME-expanded and absolute (the broker
+        // matches literally against realpaths).
+        let fs: Vec<&str> = file
+            .grants
+            .iter()
+            .filter(|g| !g.is_net())
+            .map(|g| g.pattern.as_str())
+            .collect();
+        assert!(fs.contains(&"/home/dev/.zshrc"), "got {fs:?}");
+        assert!(fs.contains(&"/home/dev/.gitconfig"), "got {fs:?}");
+        assert!(fs.contains(&"/home/dev/.config/git/**"), "got {fs:?}");
+
+        // Each seeded grant is journaled, so the tamper diff has nothing to
+        // flag.
+        assert!(unjournaled_patterns(&dir).is_empty());
+    }
+
+    #[test]
+    fn seeding_is_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("cache").join("sandbox");
+        let home = Path::new("/home/dev");
+
+        assert!(ensure_seed_grants(&dir, Some(home), None).unwrap());
+        let first = read_grants(&dir);
+        // A second call at the same generation is a no-op.
+        assert!(!ensure_seed_grants(&dir, Some(home), None).unwrap());
+        assert_eq!(read_grants(&dir), first);
+    }
+
+    #[test]
+    fn a_revoked_seed_grant_stays_revoked_across_reseeding() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("cache").join("sandbox");
+        let home = Path::new("/home/dev");
+
+        ensure_seed_grants(&dir, Some(home), None).unwrap();
+
+        // Revoke github.com (the ordinary revoke path: drop the entry).
+        let mut file = read_grants(&dir);
+        file.grants.retain(|grant| grant.pattern != "github.com");
+        write_grants(&dir, &file).unwrap();
+
+        // Re-running the seeding must NOT resurrect it: the gate is the
+        // seeded_version marker, not entry presence.
+        assert!(!ensure_seed_grants(&dir, Some(home), None).unwrap());
+        let after = read_grants(&dir);
+        assert!(
+            after.grants.iter().all(|g| g.pattern != "github.com"),
+            "revoked seed grant was resurrected: {:?}",
+            after.grants
+        );
+    }
+
+    #[test]
+    fn seeding_skips_patterns_the_user_already_granted() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("cache").join("sandbox");
+        let home = Path::new("/home/dev");
+
+        // A manual grant for a pattern the seed would also write.
+        let mut file = GrantsFile::default();
+        file.grants.push(Grant {
+            pattern: "github.com".to_string(),
+            kind: Some(KIND_NET.to_string()),
+            ops: vec![],
+            source: Some("allow".to_string()),
+            created: None,
+            evidence: None,
+        });
+        write_grants(&dir, &file).unwrap();
+
+        ensure_seed_grants(&dir, Some(home), None).unwrap();
+        let after = read_grants(&dir);
+        let github: Vec<&Grant> = after
+            .grants
+            .iter()
+            .filter(|g| g.pattern == "github.com")
+            .collect();
+        // Not duplicated, and the user's provenance is preserved.
+        assert_eq!(github.len(), 1);
+        assert_eq!(github[0].source.as_deref(), Some("allow"));
+    }
+
+    #[test]
+    fn no_sensitive_path_is_ever_seeded() {
+        let home = Path::new("/home/dev");
+        let grants = default_seed_grants(Some(home), Some("metrics.example.com"));
+        // Seeding a credential path would defeat the engine's sensitive-set
+        // denial, so none may appear in the default grants.
+        let forbidden_fragments = [
+            "/.ssh",
+            "/.aws",
+            "/.gnupg",
+            "/.kube",
+            "/.netrc",
+            "/.config/gh",
+            ".env",
+        ];
+        for fragment in forbidden_fragments {
+            assert!(
+                grants.iter().all(|g| !g.pattern.contains(fragment)),
+                "sensitive fragment {fragment:?} leaked into the seed grants"
+            );
+        }
+    }
+
+    #[test]
+    fn pre_seeding_grants_file_reads_with_seeded_version_zero() {
+        let tmp = tempfile::tempdir().unwrap();
+        // A grants.toml written before seeding existed has no seeded_version
+        // key; it must read as generation 0 (eligible for seeding).
+        std::fs::write(
+            tmp.path().join(GRANTS_FILE_NAME),
+            "version = 1\n\n[[grant]]\npattern = \"/data/**\"\n",
+        )
+        .unwrap();
+        let file = read_grants(tmp.path());
+        assert_eq!(file.seeded_version, 0);
+        assert_eq!(file.grants.len(), 1);
     }
 }
