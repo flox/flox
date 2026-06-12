@@ -260,6 +260,7 @@ impl SeedAllowSet {
             // receipts.
             push_glob(&mut allow, home.join(".config/flox/**"));
             push_glob(&mut allow, home.join(".cache/flox/**"));
+            push_glob(&mut allow, home.join(".local/share/flox/**"));
         }
 
         // The per-activation runtime dir holds activation state and (in a
@@ -413,6 +414,15 @@ mod tests {
         assert!(
             seed.allow
                 .contains(&home.join(".cache/flox/**").to_str().unwrap().to_string())
+        );
+        assert!(
+            seed.allow.contains(
+                &home
+                    .join(".local/share/flox/**")
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+            )
         );
         assert!(
             seed.allow
