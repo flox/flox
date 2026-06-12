@@ -1084,7 +1084,7 @@ mod tests {
     fn list_collapses_default_seed_rows_into_one_summary_line() {
         // The partition that list() renders from: manual grants stay
         // individual; default-seed rows collapse to a summary unless --all.
-        let grants = vec![
+        let grants = [
             Grant {
                 pattern: "/home/dev/data/**".to_string(),
                 kind: None,
