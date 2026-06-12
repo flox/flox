@@ -1603,6 +1603,15 @@ bool sandbox_check_path(const char *pathname) {
       if (path_is_sensitive(candidate))
         return out_of_policy_verdict(candidate, candidate, pathname,
                                      " (sensitive)");
+      // An allow glob matching the absolutized target permits the create
+      // directly (checked after the sensitive set, which a grant must not
+      // override). This is the same match an out-of-band approval would
+      // redeem through the broker in prompt mode, honored here so enforce
+      // behaves identically without a broker: a grant like `~/.bash_history*`
+      // covers the shell's history temp file even though the nearest existing
+      // ancestor, $HOME, is out of policy.
+      if (check_allowed_globs(candidate))
+        return true;
       // The non-sensitive deny uses the absolutized candidate too: the broker
       // request, the deny cache, the receipt dedup, and the pending review
       // entry all key on it, and only an absolute path can match an absolute

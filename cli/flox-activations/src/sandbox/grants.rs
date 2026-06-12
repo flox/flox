@@ -151,7 +151,11 @@ pub fn read_grants(grants_dir: &Path) -> GrantsFile {
 /// The default-seed generation this build writes. Bump when the default
 /// grant set changes shape; environments seeded at an older generation will
 /// be topped up with the new entries (existing user edits untouched).
-pub const SEED_GRANTS_VERSION: u32 = 1;
+///
+/// v2: history file seeds widened to globs and the Apple Terminal
+/// session-restore dirs added, because the session shell of a sandboxed
+/// activation is now itself mediated.
+pub const SEED_GRANTS_VERSION: u32 = 2;
 
 /// Network destinations seeded as explicit, revocable `[[grant]]` entries on
 /// the first sandboxed activation of an environment.
@@ -185,14 +189,24 @@ const NET_SEED_GRANTS: &[&str] = &[
 /// these the first interactive shell would queue a receipt for reading its
 /// own startup files. Covers the zsh and bash families plus the shared
 /// `.profile`/`.inputrc`.
+///
+/// History entries are globs, not literal filenames: shells save history
+/// through sibling temp files (`.bash_history-<pid>.tmp`,
+/// `.zsh_history.new`) renamed into place, and Apple Terminal's
+/// session-restore machinery writes per-session history under
+/// `.bash_sessions`/`.zsh_sessions`. The session shell of a sandboxed
+/// activation is itself mediated, so without these every interactive
+/// session ends with denied history writes.
 const SHELL_DOTFILE_SEEDS: &[&str] = &[
     ".zshrc",
     ".zshenv",
     ".zprofile",
-    ".zsh_history",
+    ".zsh_history*",
+    ".zsh_sessions/**",
     ".bashrc",
     ".bash_profile",
-    ".bash_history",
+    ".bash_history*",
+    ".bash_sessions/**",
     ".profile",
     ".inputrc",
 ];

@@ -16,10 +16,12 @@ use flox_core::activations::{
     write_activations_json,
 };
 use indoc::formatdoc;
+use shell_gen::ShellWithPath;
 use tracing::debug;
 
 use crate::attach::{attach, quote_run_args};
-use crate::message::updated;
+use crate::message::{info, updated};
+use crate::sandbox;
 use crate::start::{start, start_services_with_new_process_compose};
 use crate::vars_from_env::VarsFromEnvironment;
 
@@ -107,6 +109,52 @@ impl ActivateArgs {
         // re-export the active session's sandbox policy rather than the
         // omitted-flag default of Off.
         context.attach_ctx.sandbox_mode = resolved_sandbox_mode;
+
+        // A sandboxed session must not exec a shell libsandbox cannot load
+        // into: macOS strips DYLD_INSERT_LIBRARIES when exec'ing a
+        // SIP-protected shell such as /bin/zsh, so the shell's own builtins
+        // and redirections (`echo secret > ~/file`) would escape the policy
+        // even though the children it spawns are mediated. Swap in the
+        // mediable bash bundled with flox instead. This runs after
+        // sandbox-mode resolution so an attach that inherited the mode is
+        // covered, and only swaps unmediable shells, so a FLOX_SHELL pointed
+        // at a mediable shell (one installed in the environment, say) is
+        // honored unchanged.
+        if context.attach_ctx.sandbox_mode != SandboxMode::Off && context.project_ctx.is_some() {
+            if let Some(bash) = sandboxed_session_shell_swap(
+                context.attach_ctx.sandbox_mode,
+                context.project_ctx.is_some(),
+                &context.shell,
+            ) {
+                // The session shell is only exec'd for interactive and
+                // shell-command invocations; an exec-command invocation runs
+                // the user's argv directly, so there the swap only feeds the
+                // SHELL rewrite below and a user-facing notice would be
+                // misleading noise.
+                if matches!(
+                    invocation_type,
+                    InvocationType::Interactive | InvocationType::ShellCommand(_)
+                ) {
+                    info(formatdoc! {"
+                        Cannot mediate '{shell}' inside the sandbox; using the bash bundled with Flox for this session.
+                          To use a different shell, set FLOX_SHELL to a shell the sandbox can mediate, such as one installed in the environment.",
+                        shell = context.shell.exe_path().display(),
+                    });
+                } else {
+                    debug!(
+                        original_shell = %context.shell.exe_path().display(),
+                        "swapped unmediable shell for the bundled bash in a sandboxed activation"
+                    );
+                }
+                context.shell = ShellWithPath::Bash(bash);
+            }
+            // Processes inside the session inherit the activation's
+            // environment, so rewriting SHELL to the (now guaranteed
+            // mediable) session shell is what makes `$SHELL`-spawning tools
+            // (editors, tmux, git) launch a mediated shell rather than
+            // re-opening the SIP hole through the user's original value.
+            unsafe { std::env::set_var("SHELL", context.shell.exe_path()) };
+        }
 
         // Only start services if project context exists
         if let Some(project) = &context.project_ctx
@@ -296,5 +344,60 @@ impl ActivateArgs {
             },
         };
         Ok((result, resolved_sandbox_mode))
+    }
+}
+
+/// The bundled-bash swap for a sandboxed session: `Some(bash)` when the
+/// session shell must be replaced because the sandbox cannot mediate it,
+/// `None` to keep the detected shell. Unsandboxed activations and
+/// activations without a project context (containers, where the sandbox env
+/// is never injected) always keep their shell.
+fn sandboxed_session_shell_swap(
+    sandbox_mode: SandboxMode,
+    has_project: bool,
+    shell: &ShellWithPath,
+) -> Option<std::path::PathBuf> {
+    (sandbox_mode != SandboxMode::Off && has_project && !sandbox::mediable_shell(shell.exe_path()))
+        .then(sandbox::bundled_bash)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+
+    #[test]
+    fn shell_swap_keeps_shell_when_unsandboxed_or_projectless() {
+        let zsh = ShellWithPath::Zsh(PathBuf::from("/bin/zsh"));
+        assert_eq!(
+            sandboxed_session_shell_swap(SandboxMode::Off, true, &zsh),
+            None
+        );
+        assert_eq!(
+            sandboxed_session_shell_swap(SandboxMode::Enforce, false, &zsh),
+            None
+        );
+    }
+
+    #[test]
+    fn shell_swap_keeps_mediable_shells() {
+        let nix_zsh = ShellWithPath::Zsh(PathBuf::from("/nix/store/abc-zsh-5.9/bin/zsh"));
+        assert_eq!(
+            sandboxed_session_shell_swap(SandboxMode::Enforce, true, &nix_zsh),
+            None
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn shell_swap_replaces_sip_shells_in_active_modes() {
+        let zsh = ShellWithPath::Zsh(PathBuf::from("/bin/zsh"));
+        for mode in [SandboxMode::Warn, SandboxMode::Enforce, SandboxMode::Prompt] {
+            assert_eq!(
+                sandboxed_session_shell_swap(mode, true, &zsh),
+                Some(sandbox::bundled_bash())
+            );
+        }
     }
 }

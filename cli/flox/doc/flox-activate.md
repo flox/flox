@@ -179,6 +179,15 @@ Inside a `flox activate` subshell,
    `$HOME`-dotfile allowance fully removed, granting access incrementally
    for high-isolation work.
 
+   The session shell is swapped when the sandbox cannot mediate it: on
+   macOS a SIP-protected login shell such as `/bin/zsh` strips the
+   mediation library, which would leave the shell's own redirections and
+   builtins unmediated. A sandboxed activation runs the interactive bash
+   bundled with Flox instead, and sets `SHELL` to the session shell so
+   programs that spawn `$SHELL` get a mediated shell too. Set `FLOX_SHELL`
+   to a shell the sandbox can mediate — one installed in the environment,
+   for example — to use a different shell.
+
    Requires the `sandbox_activate` feature flag
    (set `FLOX_FEATURES_SANDBOX_ACTIVATE=true`).
    Cannot be combined with in-place activation.
