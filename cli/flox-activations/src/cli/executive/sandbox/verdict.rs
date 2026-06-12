@@ -347,9 +347,11 @@ fn handle_connection(stream: UnixStream, state: &Arc<Mutex<BrokerState>>) {
         return;
     }
     let path = line.trim();
-    if path.is_empty() {
-        // No reply: the client reads EOF as a broker error and the activation
-        // fails closed, which is the right verdict for a garbled exchange.
+    if !path.starts_with('/') {
+        // The protocol carries realpaths only. An empty or non-absolute line
+        // is a garbled exchange (or a same-user process poking the socket):
+        // give no reply — the client reads EOF as a broker error and fails
+        // closed — and never let junk into the pending review queue.
         return;
     }
 

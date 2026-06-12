@@ -106,6 +106,9 @@ __asm__(".symver stderr,stderr@" GLIBC_MIN_VERSION);
 // case-insensitively. At the baseline GLIBC for each arch.
 __asm__(".symver strcasecmp,strcasecmp@" GLIBC_MIN_VERSION);
 __asm__(".symver strchr,strchr@" GLIBC_MIN_VERSION);
+// strrchr finds the last '/' in the create guard's walk up to the nearest
+// existing ancestor directory. At the baseline GLIBC for each arch.
+__asm__(".symver strrchr,strrchr@" GLIBC_MIN_VERSION);
 __asm__(".symver strcmp,strcmp@" GLIBC_MIN_VERSION);
 __asm__(".symver strcspn,strcspn@" GLIBC_MIN_VERSION);
 __asm__(".symver strdup,strdup@" GLIBC_MIN_VERSION);

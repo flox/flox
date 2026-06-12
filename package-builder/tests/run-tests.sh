@@ -1008,6 +1008,33 @@ else
   fail "enforce+activation: out-of-policy deep create should be denied (rc=$rc)" "$out"
 fi
 
+# A RELATIVE out-of-policy create is reported and brokered under its
+# cwd-absolutized path: the wire protocol carries realpaths only, and only an
+# absolute path can match an absolute grant — so 'approve outside, then retry'
+# can actually redeem the deny. The fake broker logs each request line; assert
+# the absolute form (not the bare relative name) went over the wire and into
+# the receipt.
+if command -v python3 >/dev/null 2>&1 && start_fake_broker deny; then
+  oop_rel_dir="$(mktemp -d "$HOME/flox-sandbox-tests-relcwd.XXXXXX")"
+  out="$(cd "$oop_rel_dir" && env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+      FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=prompt \
+      FLOX_SANDBOX_ALLOW_FOREIGN_EXE=1 FLOX_SANDBOX_PROMPT_SOCKET="$broker_sock" \
+      HOME="$HOME" "$root/tests/sandbox_probe" create relative-pwned 2>&1)"; rc=$?
+  req_line="$(tail -1 "$broker_log")"
+  stop_fake_broker
+  if [[ $rc -ne 0 && "$out" == *"errno=13"* \
+        && "$req_line" == "$oop_rel_dir/relative-pwned" \
+        && "$out" == *"$oop_rel_dir/relative-pwned (not in policy)"* ]]; then
+    pass "prompt+activation: relative create brokered under its absolute path"
+  else
+    fail "prompt+activation: relative create should send the cwd-absolutized path (rc=$rc, req='$req_line')" "$out"
+  fi
+  rm -rf "$oop_rel_dir"
+else
+  stop_fake_broker
+  pass "prompt relative-create broker test skipped (python3 unavailable)"
+fi
+
 # Build mode (no activation flag): BOTH creates are allowed — the engine keeps
 # its blanket-allow of nonexistent paths for builds, which legitimately create
 # many new files. This is the byte-identical-build guard for DX-3.
@@ -1473,7 +1500,7 @@ if [[ $rc -ne 0 && "$out" == *"CONNECT_REFUSED"* \
       && "$out" == *"is not in the network policy"* ]]; then
   pass "prompt: out-of-policy connect refused (enforce semantics, no net broker yet)"
 else
-  fail "prompt: out-of-policy connect should be refused under ask (rc=$rc)" "$out"
+  fail "prompt: out-of-policy connect should be refused under prompt (rc=$rc)" "$out"
 fi
 
 # ----------------------------------------------------------------------------

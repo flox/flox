@@ -34,6 +34,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
+use flox_core::activate::prompt_protocol::{REPLY_ALLOW, REPLY_ALLOW_GLOB_PREFIX, REPLY_DENY};
 use tempfile::TempDir;
 use tracing::{debug, warn};
 
@@ -248,10 +249,10 @@ fn decide(
     {
         let acc = accepted.lock().expect("broker mutex poisoned");
         if let Some(glob) = acc.matching_glob(path) {
-            return format!("allow-glob {glob}\n");
+            return format!("{REPLY_ALLOW_GLOB_PREFIX}{glob}\n");
         }
         if acc.covered_exactly(path) {
-            return "allow\n".to_string();
+            return format!("{REPLY_ALLOW}\n");
         }
     }
     // Not yet covered: ask the resolver (this may block to prompt the user). The
@@ -263,7 +264,7 @@ fn decide(
                 .expect("broker mutex poisoned")
                 .globs
                 .push(glob.clone());
-            format!("allow-glob {glob}\n")
+            format!("{REPLY_ALLOW_GLOB_PREFIX}{glob}\n")
         },
         PromptDecision::Allow => {
             accepted
@@ -271,9 +272,9 @@ fn decide(
                 .expect("broker mutex poisoned")
                 .exacts
                 .push(path.to_string());
-            "allow\n".to_string()
+            format!("{REPLY_ALLOW}\n")
         },
-        PromptDecision::Deny => "deny\n".to_string(),
+        PromptDecision::Deny => format!("{REPLY_DENY}\n"),
     }
 }
 

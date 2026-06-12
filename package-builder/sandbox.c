@@ -790,8 +790,7 @@ static int prompt_broker(const char *real_path, unsigned long *req_out) {
     // Queued for out-of-band review; the req id shapes the deny receipt. A
     // malformed id parses as 0, which just yields the less specific receipt.
     *req_out = strtoul(reply + 5, NULL, 10);
-    debug("prompt broker denied '%s' (queued as req %lu)", real_path,
-          *req_out);
+    debug("prompt broker denied '%s' (queued as req %lu)", real_path, *req_out);
     return PROMPT_DENY;
   }
   debug("prompt broker gave unrecognized reply '%s' for '%s'", reply,
@@ -1263,16 +1262,30 @@ static bool deny_cache_hit(const char *real_path) {
   return found;
 }
 
-// Cache a deny for `real_path` with the short TTL. If the table is full the
+// Cache a deny for `real_path` with the short TTL. A repeated path refreshes
+// its existing entry, and an expired entry's slot is reused, so a hot path
+// retried in a loop cannot exhaust the table. If the table is still full the
 // store is dropped silently — a dropped cache entry only costs an extra RPC,
 // never a wrong verdict.
 static void deny_cache_store(const char *real_path) {
+  time_t now = deny_now_seconds();
   pthread_mutex_lock(&deny_cache_lock);
-  if (deny_cache_count < DENY_CACHE_MAX) {
-    struct deny_entry *v = &deny_cache[deny_cache_count++];
-    strncpy(v->path, real_path, PATH_MAX - 1);
-    v->path[PATH_MAX - 1] = '\0';
-    v->expiry = deny_now_seconds() + PROMPT_DENY_TTL_SECONDS;
+  struct deny_entry *slot = NULL;
+  for (int i = 0; i < deny_cache_count; i++) {
+    struct deny_entry *v = &deny_cache[i];
+    if (strcmp(v->path, real_path) == 0) {
+      slot = v; // same path: refresh in place
+      break;
+    }
+    if (slot == NULL && now >= v->expiry)
+      slot = v; // remember the first expired slot for reuse
+  }
+  if (slot == NULL && deny_cache_count < DENY_CACHE_MAX)
+    slot = &deny_cache[deny_cache_count++];
+  if (slot != NULL) {
+    strncpy(slot->path, real_path, PATH_MAX - 1);
+    slot->path[PATH_MAX - 1] = '\0';
+    slot->expiry = now + PROMPT_DENY_TTL_SECONDS;
   }
   pthread_mutex_unlock(&deny_cache_lock);
 }
@@ -1590,8 +1603,12 @@ bool sandbox_check_path(const char *pathname) {
       if (path_is_sensitive(candidate))
         return out_of_policy_verdict(candidate, candidate, pathname,
                                      " (sensitive)");
+      // The non-sensitive deny uses the absolutized candidate too: the broker
+      // request, the deny cache, the receipt dedup, and the pending review
+      // entry all key on it, and only an absolute path can match an absolute
+      // grant glob (so 'approve outside, then retry' actually redeems).
       if (!create_parent_in_policy(pathname))
-        return out_of_policy_verdict(pathname, pathname, pathname, "");
+        return out_of_policy_verdict(candidate, candidate, pathname, "");
     }
     return true;
   }
@@ -1624,14 +1641,13 @@ bool sandbox_check_path(const char *pathname) {
   }
 
   // If the running executable is itself outside the closure, report it once
-  // before any per-path message so the user sees the root cause first. In
-  // warn mode it warns and continues. In enforce/pure mode the exe-identity
-  // check is the one DELIBERATE exception to the graceful-EACCES rule for
-  // policy violations: it exits fatally. It is build-only — an activation
-  // returns early from the check via allow_foreign_exe — and a build whose
-  // own toolchain is out of closure cannot produce a reproducible result,
-  // so aborting early is the correct outcome. File-access denials, by
-  // contrast, are always graceful EACCES (see out_of_policy_verdict).
+  // before any per-path message so the user sees the root cause first. This
+  // is ALWAYS a warning, never fatal on its own: it is context for the
+  // per-path verdict that follows, and that verdict is a graceful EACCES
+  // under enforce/pure (see out_of_policy_verdict). It is build-only — an
+  // activation returns early from the check via allow_foreign_exe, since
+  // running host tools from outside the closure is the activation's whole
+  // point.
   maybe_report_process_outside_closure();
 
   // Surface the resolved realpath alongside the opened path in any message
