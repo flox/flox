@@ -330,6 +330,79 @@ else
 fi
 
 # ----------------------------------------------------------------------------
+# Layer 2c: interactive prompt broker (Phase 2). With FLOX_SANDBOX_PROMPT_SOCKET
+# set, an out-of-closure access is referred to the broker instead of being
+# warned/blocked outright. We drive the libsandbox prompt client against the
+# fixed-reply mock broker and check both decisions under enforce.
+# ----------------------------------------------------------------------------
+
+# Run a probe in prompt mode with the mock broker replying $1, opening $out_file
+# (out of closure). Echoes "<rc>|<stdout+stderr>".
+run_with_broker() {
+  local reply="$1"
+  local sock; sock="$(mktemp -u "${TMPDIR:-/tmp}/flox-prompt.XXXXXX.sock")"
+  "$root/tests/mock_prompt_broker" "$sock" "$reply" >/dev/null 2>&1 &
+  local broker_pid=$!
+  # Wait (briefly) for the socket to appear.
+  for _ in $(seq 1 50); do [[ -S "$sock" ]] && break; sleep 0.05; done
+  local out rc
+  out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+      FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=prompt \
+      FLOX_SANDBOX_PROMPT_SOCKET="$sock" \
+      "$root/tests/sandbox_probe" open "$out_file" 2>&1)"; rc=$?
+  kill "$broker_pid" 2>/dev/null; wait "$broker_pid" 2>/dev/null
+  rm -f "$sock"
+  printf '%s|%s' "$rc" "$out"
+}
+
+# Broker "allow": the out-of-closure read is permitted, no error, the probe
+# succeeds.
+res="$(run_with_broker allow)"; rc="${res%%|*}"; out="${res#*|}"
+if [[ "$rc" -eq 0 && "$out" == *"OPEN_OK"* && "$out" != *"not in the sandbox"* ]]; then
+  pass "prompt: broker 'allow' permits an out-of-closure file"
+else
+  fail "prompt: broker 'allow' should permit the access (rc=$rc)" "$out"
+fi
+
+# Broker "deny": the access is refused (EACCES), so the probe's open() fails.
+res="$(run_with_broker deny)"; rc="${res%%|*}"; out="${res#*|}"
+if [[ "$rc" -ne 0 && "$out" == *"OPEN_FAIL"* && "$out" == *"denied by sandbox prompt"* ]]; then
+  pass "prompt: broker 'deny' refuses an out-of-closure file"
+else
+  fail "prompt: broker 'deny' should refuse the access (rc=$rc)" "$out"
+fi
+
+# No broker configured: prompt mode falls back to plain enforce (the access is
+# fatal), which is what a non-interactive build gets.
+out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+    FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=prompt \
+    "$root/tests/sandbox_probe" open "$out_file" 2>&1)"; rc=$?
+if [[ "$rc" -ne 0 && "$out" == *"is not in the sandbox"* ]]; then
+  pass "prompt: with no broker, falls back to enforce (blocks)"
+else
+  fail "prompt: no-broker should behave as enforce (rc=$rc)" "$out"
+fi
+
+# Mode gating: an enforce-mode build that happens to share the process-wide
+# prompt socket env must NOT consult the broker (it would say allow); only
+# prompt mode prompts. Start an allow-broker but run under enforce: the access
+# is still blocked.
+sock="$(mktemp -u "${TMPDIR:-/tmp}/flox-prompt.XXXXXX.sock")"
+"$root/tests/mock_prompt_broker" "$sock" allow >/dev/null 2>&1 &
+broker_pid=$!
+for _ in $(seq 1 50); do [[ -S "$sock" ]] && break; sleep 0.05; done
+out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+    FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=enforce \
+    FLOX_SANDBOX_PROMPT_SOCKET="$sock" \
+    "$root/tests/sandbox_probe" open "$out_file" 2>&1)"; rc=$?
+kill "$broker_pid" 2>/dev/null; wait "$broker_pid" 2>/dev/null; rm -f "$sock"
+if [[ "$rc" -ne 0 && "$out" == *"is not in the sandbox"* ]]; then
+  pass "enforce: ignores the prompt socket (only prompt mode consults the broker)"
+else
+  fail "enforce: must not consult the broker (rc=$rc)" "$out"
+fi
+
+# ----------------------------------------------------------------------------
 # Layer 3: threaded interception storm (stability of the real interceptors).
 # The OLD library crashed here on macOS (uninitialized mutex + shared buffers);
 # the fixed library must run to completion. Mixed in/out/nonexistent paths

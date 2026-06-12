@@ -236,9 +236,10 @@ impl SkipSerializing for Build {
 /// Sandbox mode for a build.
 ///
 /// This is a version-specific copy of `common::BuildSandbox` because V1_13_0
-/// adds the local `warn` and `enforce` modes. Keeping the new variants out of
-/// the common enum is what stops older schema versions (whose `BuildDescriptor`
-/// uses `common::BuildSandbox`) from accepting `sandbox = "warn" | "enforce"`.
+/// adds the local `warn`, `enforce`, and `prompt` modes. Keeping the new
+/// variants out of the common enum is what stops older schema versions (whose
+/// `BuildDescriptor` uses `common::BuildSandbox`) from accepting
+/// `sandbox = "warn" | "enforce" | "prompt"`.
 #[derive(
     Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, derive_more::Display, JsonSchema,
 )]
@@ -250,6 +251,10 @@ pub enum BuildSandbox {
     Warn,
     /// Local build; out-of-closure file access is denied (the build fails).
     Enforce,
+    /// Local build; out-of-closure file access is referred to an interactive
+    /// prompt (and otherwise denied, as enforce). A transitional mode for
+    /// building up a `sandbox-allow` list.
+    Prompt,
     Pure,
 }
 
