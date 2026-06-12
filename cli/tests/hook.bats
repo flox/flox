@@ -60,6 +60,21 @@ project3_setup() {
   set_vars_manifest "$PROJECT3_DIR" TEST_VAR3 auto3
 }
 
+# A sibling project with an observable var, as a target for switching away
+# from a nested stack.
+projectz_setup() {
+  export PROJECTZ_DIR="${BATS_TEST_TMPDIR?}/projectz-${BATS_TEST_NUMBER?}"
+  rm -rf "$PROJECTZ_DIR"
+  mkdir -p "$PROJECTZ_DIR"
+  "$FLOX_BIN" init -d "$PROJECTZ_DIR"
+  set_vars_manifest "$PROJECTZ_DIR" TEST_VARZ autoz
+}
+
+projectz_teardown() {
+  rm -rf "${PROJECTZ_DIR?}"
+  unset PROJECTZ_DIR
+}
+
 setup() {
   common_test_setup
   setup_isolated_flox
@@ -67,6 +82,9 @@ setup() {
 }
 
 teardown() {
+  if [ -n "${PROJECTZ_DIR:-}" ]; then
+    projectz_teardown
+  fi
   if [ -n "${PROJECT2_DIR:-}" ]; then
     project2_teardown
   fi
@@ -253,12 +271,12 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------- #
-# Stacked auto-activation: nested projects activate outermost-first and
-# unwind one layer per prompt
+# Stacked auto-activation: nested projects activate outermost-first and the
+# whole stack unwinds in a single hook run on leaving (DEV-111)
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=hook:auto-activate:nested
-@test "bash: nested projects activate as a stack and unwind one layer per prompt" {
+@test "bash: nested projects activate as a stack and unwind together on leaving" {
   project_setup
   project2_setup
   project3_setup
@@ -273,15 +291,14 @@ teardown() {
     echo \"in: v2:\$TEST_VAR2 v3:\$TEST_VAR3\"
     cd $BATS_TEST_TMPDIR
     _flox_hook
-    echo \"one: v2:\${TEST_VAR2:-unset} v3:\${TEST_VAR3:-unset}\"
-    _flox_hook
-    echo \"two: v2:\${TEST_VAR2:-unset} v3:\${TEST_VAR3:-unset}\"
+    echo \"out: v2:\${TEST_VAR2:-unset} v3:\${TEST_VAR3:-unset}\"
+    echo \"tracked:\${_FLOX_AUTO_ACTIVATED_ENVIRONMENTS:-unset}\"
   "
   assert_success
   assert_output --partial "in: v2:auto2 v3:auto3"
-  # One layer pops per prompt: the inner (most recent) env first.
-  assert_output --partial "one: v2:auto2 v3:unset"
-  assert_output --partial "two: v2:unset v3:unset"
+  # Both layers pop in the single hook run after leaving.
+  assert_output --partial "out: v2:unset v3:unset"
+  assert_output --partial "tracked:unset"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -346,6 +363,32 @@ EOF
 
   FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/hook-cd.exp" "$PROJECT_DIR" "$PROJECT2_DIR" 'echo TEST_VAR2="$TEST_VAR2"'
   assert_output --partial 'TEST_VAR2=auto2'
+}
+
+# bats test_tags=hook:auto-fires:nested
+@test "bash: interactive hook unwinds a nested stack and switches projects in one prompt" {
+  project_setup
+  project2_setup
+  project3_setup
+  projectz_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  # Set up a .bashrc so the interactive shell has a known prompt
+  export KNOWN_PROMPT="hooktest> "
+  cat >"$HOME/.bashrc" <<EOF
+export PS1="$KNOWN_PROMPT"
+EOF
+  cat >"$HOME/.inputrc" <<EOF
+set enable-bracketed-paste off
+EOF
+
+  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/hook-nested-cd.exp" "$PROJECT_DIR" "$PROJECT3_DIR" "$PROJECTZ_DIR"
+  # The whole stack pops in the prompt run that switches projects, so no
+  # layer is buried and abandoned ...
+  refute_output --partial "Did not auto-deactivate"
+  # ... and the consecutive deactivations must not leave tracer noise from
+  # re-sourcing set-prompt after a previous pop unset the tracer.
+  refute_output --partial "command not found"
 }
 
 # ---------------------------------------------------------------------------- #

@@ -2,8 +2,10 @@ use std::borrow::Cow;
 use std::io::{BufWriter, Write, stdout};
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
+use flox_activations::attach_diff::diff_serializer::FLOX_HOOK_DIFF_VAR;
+use flox_activations::deactivate::embedded_hook_diff;
 use flox_core::activate::context::InvocationKind;
 use flox_core::activate::vars::{
     FLOX_AUTO_ACTIVATED_ENVIRONMENTS_VAR,
@@ -75,6 +77,7 @@ impl HookEnv {
                         activation_state_dir,
                         flox_env,
                         flox_activate_tracelevel(),
+                        None,
                         &mut writer,
                     )?;
                 },
@@ -102,28 +105,62 @@ impl HookEnv {
         // `hook-env` runs on every shell prompt, and recording the common
         // nothing-to-do case would be noise.
         if !actions.is_empty()
-            || plan.deactivate_front
+            || !plan.deactivate.is_empty()
             || !plan.activate.is_empty()
             || !plan.abandoned.is_empty()
         {
             subcommand_metric!("hook-env");
         }
 
-        if plan.deactivate_front {
-            let active = activated_environments()
-                .last_active_full()
-                .context("no active environment to auto-deactivate")?;
-            let target = open_deactivation_target(&flox, active)?;
-            // Auto-activations are always in-place, so the matching
-            // deactivation is too.
-            emit_deactivate_script(
-                ShellWithPath::from(self.shell),
-                InvocationKind::InPlace,
-                &target.activation_state_dir,
-                &target.flox_env,
-                flox_activate_tracelevel(),
-                &mut writer,
-            )?;
+        if !plan.deactivate.is_empty() {
+            // Auto-activations are always in-place, so each layer recorded
+            // the previous value of `_FLOX_HOOK_DIFF` in its own diff. The
+            // shell's variable holds the front layer's diff; walking the
+            // embedded chain yields one diff per deeper layer, which is what
+            // lets a single run pop several layers (DEV-111).
+            let mut encoded_diff = std::env::var(FLOX_HOOK_DIFF_VAR).ok();
+            let stack = activated_environments();
+            let mut layers = stack.iter_full();
+            for project_dir in &plan.deactivate {
+                let layer = layers.next().with_context(|| {
+                    format!(
+                        "no active environment to auto-deactivate for '{}'",
+                        project_dir.display()
+                    )
+                })?;
+                let layer_dir = layer.environment.path().and_then(Path::parent);
+                if layer_dir != Some(project_dir.as_path()) {
+                    bail!(
+                        "activation stack does not match the auto-deactivation plan (expected '{}')",
+                        project_dir.display()
+                    );
+                }
+                let Some(diff) = encoded_diff.take() else {
+                    // A layer without a chained diff (e.g. activated by an
+                    // older flox). Pop what we have; once the shell applies
+                    // these scripts `_FLOX_HOOK_DIFF` holds this layer's
+                    // diff, so later prompts can still unwind it manually
+                    // via 'flox deactivate'.
+                    message::warning(format!(
+                        "Did not auto-deactivate the environment in '{}' because its activation predates the prompt hook.\nRun 'flox deactivate' to deactivate it.",
+                        project_dir.display()
+                    ));
+                    break;
+                };
+                let target = open_deactivation_target(&flox, layer.clone())?;
+                // Auto-activations are always in-place, so the matching
+                // deactivation is too.
+                emit_deactivate_script(
+                    ShellWithPath::from(self.shell),
+                    InvocationKind::InPlace,
+                    &target.activation_state_dir,
+                    &target.flox_env,
+                    flox_activate_tracelevel(),
+                    Some(&diff),
+                    &mut writer,
+                )?;
+                encoded_diff = embedded_hook_diff(&diff)?;
+            }
         }
 
         for path in &plan.abandoned {
@@ -184,8 +221,8 @@ struct AutoActivateContext {
 struct AutoActivatePlan {
     /// Project directories to activate, outermost-first.
     activate: Vec<PathBuf>,
-    /// Deactivate the front-of-stack environment.
-    deactivate_front: bool,
+    /// Project directories to deactivate, front of stack first.
+    deactivate: Vec<PathBuf>,
     /// Auto-activated environments that should be deactivated but are buried
     /// under other activations. Tearing down the middle of the stack is
     /// deferred (DEV-85), so these are dropped from tracking with a warning.
@@ -199,12 +236,16 @@ struct AutoActivatePlan {
 /// Decide what the prompt hook should do given the shell's current location
 /// and activation state.
 ///
-/// At most one environment is deactivated per run: the generated deactivation
-/// script restores the next layer's `_FLOX_HOOK_DIFF` only once the shell has
-/// applied it, so a deeper stack unwinds across consecutive prompts rather
-/// than in a single run. While such an unwind is in progress, newly
+/// All tracked leaver layers at the front of the activation stack pop in a
+/// single run: each in-place activation's diff embeds the previous value of
+/// `_FLOX_HOOK_DIFF` (DEV-111), so one run can emit a deactivation script per
+/// layer and they restore state correctly when evaluated in order. The walk
+/// stops at the first layer that is not a tracked leaver, because tearing
+/// down the middle of the stack is deferred (DEV-85); leavers buried beneath
+/// such a layer are abandoned with a warning once nothing in front of them
+/// can pop. While any tracked layer the shell has left remains active, newly
 /// discovered environments are not activated yet — they would bury the
-/// still-unwinding layers and force them to be abandoned.
+/// still-unwinding layers.
 fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
     let inside = |path: &Path| ctx.cwd.starts_with(path);
     let is_active = |path: &PathBuf| ctx.active.iter().flatten().any(|active| active == path);
@@ -245,7 +286,7 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
         }
         return AutoActivatePlan {
             activate: Vec::new(),
-            deactivate_front: false,
+            deactivate: Vec::new(),
             abandoned: Vec::new(),
             auto_activated,
             suppressed,
@@ -253,8 +294,9 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
     }
 
     // Auto-deactivate environments whose directory the shell has left,
-    // popping at most one layer per run (see the function docs).
-    let mut deactivate_front = false;
+    // popping every tracked leaver at the front of the stack in one run
+    // (see the function docs).
+    let mut deactivate = Vec::new();
     let mut abandoned = Vec::new();
     let leavers: Vec<PathBuf> = auto_activated
         .iter()
@@ -262,16 +304,20 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
         .cloned()
         .collect();
     if !leavers.is_empty() {
-        match ctx.active.first() {
-            Some(Some(front)) if leavers.contains(front) => {
-                deactivate_front = true;
-                auto_activated.retain(|path| path != front);
-                // Any remaining leavers unwind on subsequent prompts.
-            },
-            _ => {
-                abandoned = leavers;
-                auto_activated.retain(|path| inside(path));
-            },
+        for layer in &ctx.active {
+            match layer {
+                Some(path) if leavers.contains(path) => deactivate.push(path.clone()),
+                _ => break,
+            }
+        }
+        auto_activated.retain(|path| !deactivate.contains(path));
+        if deactivate.is_empty() {
+            // Every leaver is buried under a layer that can't pop: drop them
+            // from tracking with a warning. (When something did pop, buried
+            // leavers stay tracked; they are abandoned on a later run once
+            // the front of the stack settles.)
+            abandoned = leavers;
+            auto_activated.retain(|path| inside(path));
         }
     }
 
@@ -294,7 +340,7 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
 
     AutoActivatePlan {
         activate,
-        deactivate_front,
+        deactivate,
         abandoned,
         auto_activated,
         suppressed,
@@ -429,7 +475,7 @@ mod tests {
     fn noop_plan() -> AutoActivatePlan {
         AutoActivatePlan {
             activate: Vec::new(),
-            deactivate_front: false,
+            deactivate: Vec::new(),
             abandoned: Vec::new(),
             auto_activated: Vec::new(),
             suppressed: Vec::new(),
@@ -505,13 +551,13 @@ mod tests {
             ..empty_ctx("/home/user/elsewhere")
         };
         assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
-            deactivate_front: true,
+            deactivate: paths(&["/home/user/proj"]),
             ..noop_plan()
         });
     }
 
     #[test]
-    fn pops_one_layer_per_run() {
+    fn pops_all_leaver_layers_in_one_run() {
         let ctx = AutoActivateContext {
             // Front of stack is the innermost env.
             active: vec![
@@ -522,9 +568,8 @@ mod tests {
             ..empty_ctx("/home/user/elsewhere")
         };
         assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
-            deactivate_front: true,
-            // The outer env unwinds on the next prompt.
-            auto_activated: paths(&["/home/user/outer"]),
+            // Front-of-stack (innermost) first, the whole stack in one run.
+            deactivate: paths(&["/home/user/outer/inner", "/home/user/outer"]),
             ..noop_plan()
         });
     }
@@ -539,17 +584,17 @@ mod tests {
         };
         assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
             activate: paths(&["/home/user/proj_b"]),
-            deactivate_front: true,
+            deactivate: paths(&["/home/user/proj_a"]),
             auto_activated: paths(&["/home/user/proj_b"]),
             ..noop_plan()
         });
     }
 
     #[test]
-    fn defers_activation_while_stack_unwinds() {
-        // Leaving /tmp/a/b for /tmp/z: the front pops this run, but /tmp/a is
-        // still unwinding, so /tmp/z is not activated yet — activating it now
-        // would bury /tmp/a and force an abandon on a later run.
+    fn pops_whole_stack_and_activates_replacement_in_one_run() {
+        // Leaving a nested stack for a different project unwinds every
+        // tracked layer and activates the replacement in the same run, so
+        // the shell never shows a stale stack or buries an unwinding layer.
         let ctx = AutoActivateContext {
             discovered: paths(&["/tmp/z"]),
             active: vec![
@@ -560,26 +605,54 @@ mod tests {
             ..empty_ctx("/tmp/z")
         };
         assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
-            deactivate_front: true,
+            activate: paths(&["/tmp/z"]),
+            deactivate: paths(&["/tmp/a/b", "/tmp/a"]),
+            auto_activated: paths(&["/tmp/z"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn defers_activation_while_buried_leaver_unwinds() {
+        // Leaving /tmp/a/b for /tmp/z with a manual activation between the
+        // tracked layers: the front pops this run, but /tmp/a is buried and
+        // still unwinding, so /tmp/z is not activated yet — activating it
+        // now would bury /tmp/a even deeper.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/tmp/z"]),
+            active: vec![
+                Some(PathBuf::from("/tmp/a/b")),
+                Some(PathBuf::from("/tmp/manual")),
+                Some(PathBuf::from("/tmp/a")),
+            ],
+            auto_activated: paths(&["/tmp/a", "/tmp/a/b"]),
+            ..empty_ctx("/tmp/z")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            deactivate: paths(&["/tmp/a/b"]),
             auto_activated: paths(&["/tmp/a"]),
             ..noop_plan()
         });
     }
 
     #[test]
-    fn unwinds_fully_then_activates_in_final_run() {
-        // Continuation of defers_activation_while_stack_unwinds, with the
-        // previous plan applied by the shell: the next hook run pops the last
-        // unwinding layer and activates the new environment in the same run.
+    fn abandons_buried_leaver_then_activates_in_next_run() {
+        // Continuation of defers_activation_while_buried_leaver_unwinds, with
+        // the previous plan applied by the shell: nothing in front of /tmp/a
+        // can pop, so it is abandoned with a warning and the new environment
+        // activates in the same run.
         let ctx = AutoActivateContext {
             discovered: paths(&["/tmp/z"]),
-            active: vec![Some(PathBuf::from("/tmp/a"))],
+            active: vec![
+                Some(PathBuf::from("/tmp/manual")),
+                Some(PathBuf::from("/tmp/a")),
+            ],
             auto_activated: paths(&["/tmp/a"]),
             ..empty_ctx("/tmp/z")
         };
         assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
             activate: paths(&["/tmp/z"]),
-            deactivate_front: true,
+            abandoned: paths(&["/tmp/a"]),
             auto_activated: paths(&["/tmp/z"]),
             ..noop_plan()
         });
@@ -759,7 +832,7 @@ mod tests {
             ..empty_ctx("/home/user/proj2")
         };
         assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
-            deactivate_front: true,
+            deactivate: paths(&["/home/user/proj"]),
             ..noop_plan()
         });
     }
