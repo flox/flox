@@ -568,7 +568,7 @@ mod tests {
         FLOX_SANDBOX_ALLOW_FOREIGN_EXE_VAR,
         FLOX_SANDBOX_ALLOW_VAR,
         FLOX_SANDBOX_GRANTS_DIR_VAR,
-        FLOX_SANDBOX_SOCKET_VAR,
+        FLOX_SANDBOX_PROMPT_SOCKET_VAR,
         FLOX_SRC_DIR_VAR,
         FLOX_VIRTUAL_SANDBOX_VAR,
         LIBSANDBOX_FILENAME_FOR_TESTS,
@@ -691,7 +691,7 @@ mod tests {
         );
         assert!(diff.additions.contains_key(PRELOAD_VAR));
         // Enforce never contacts a broker, so it exports no verdict socket.
-        assert!(!diff.additions.contains_key(FLOX_SANDBOX_SOCKET_VAR));
+        assert!(!diff.additions.contains_key(FLOX_SANDBOX_PROMPT_SOCKET_VAR));
         // The grants dir was created so the engine write guard has a target.
         assert!(project.dot_flox_path.join("cache").join("sandbox").is_dir());
     }
@@ -718,7 +718,7 @@ mod tests {
             .unwrap()
             .join("sbx.testid.sock");
         assert_eq!(
-            diff.additions.get(FLOX_SANDBOX_SOCKET_VAR).unwrap(),
+            diff.additions.get(FLOX_SANDBOX_PROMPT_SOCKET_VAR).unwrap(),
             &expected.to_string_lossy().into_owned()
         );
     }

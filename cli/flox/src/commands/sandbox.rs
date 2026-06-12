@@ -189,7 +189,6 @@ struct ControlResponse {
 #[derive(Debug, Clone, Deserialize)]
 struct PendingView {
     req: u64,
-    op: String,
     path: String,
     hits: u64,
 }
@@ -396,8 +395,8 @@ async fn review_pending(
 
         let sensitive_tag = if is_sensitive { "   [sensitive]" } else { "" };
         message::warning(format!(
-            "request wants to {} {} (req {}, x{}){}",
-            entry.op, entry.path, entry.req, entry.hits, sensitive_tag
+            "request wants to access {} (req {}, x{}){}",
+            entry.path, entry.req, entry.hits, sensitive_tag
         ));
 
         // The directory-scope option is offered only when the parent is a

@@ -37,8 +37,10 @@ use std::thread::JoinHandle;
 use tempfile::TempDir;
 use tracing::{debug, warn};
 
-/// Environment variable libsandbox reads to find the broker socket.
-pub const PROMPT_SOCKET_ENV: &str = "FLOX_SANDBOX_PROMPT_SOCKET";
+/// Environment variable libsandbox reads to find the broker socket. Shared
+/// with the activation-side broker through flox-core so the two servers
+/// cannot drift.
+pub const PROMPT_SOCKET_ENV: &str = flox_core::activate::prompt_protocol::PROMPT_SOCKET_ENV;
 
 /// What to do about an out-of-closure access that is not yet covered by an
 /// accepted pattern. Returned by a [`PromptResolver`].
