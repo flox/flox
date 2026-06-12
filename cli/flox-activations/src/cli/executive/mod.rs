@@ -122,13 +122,13 @@ impl ExecutiveArgs {
         spawn_heartbeat_log();
         spawn_logs_gc_threads(&log_dir);
 
-        // Step 8.5: Start the ask broker, if this activation requested `ask`.
+        // Step 8.5: Start the prompt broker, if this activation requested `prompt`.
         // It binds the verdict socket the preloaded libsandbox connects to and
         // lives for the activation: the handle is held in this stack frame, so
         // it drops (stopping the accept loop and removing the socket) when the
-        // event loop returns. A non-ask mode yields None and no broker; a bind
+        // event loop returns. A non-prompt mode yields None and no broker; a bind
         // failure is logged but not fatal — the engine then fail-closes, the
-        // correct degradation for `ask`.
+        // correct degradation for `prompt`.
         // The session-root pid is the activation's parent (the `flox activate`
         // process that exec'd the user's shell): the control socket refuses
         // approval verbs from it and its descendants, so an in-session agent
@@ -136,7 +136,7 @@ impl ExecutiveArgs {
         let _broker = match sandbox::start(&attach_ctx, &project_ctx, parent_pid) {
             Ok(broker) => broker,
             Err(err) => {
-                error!(%err, "could not start ask broker; ask access will fail closed");
+                error!(%err, "could not start prompt broker; out-of-policy access will fail closed");
                 None
             },
         };

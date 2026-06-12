@@ -963,7 +963,7 @@
               "type": "null"
             }
           ],
-          "description": "The sandbox mode applied when the environment is activated\n(`off`, `warn`, `enforce`, or `ask`). An explicit `--sandbox` flag\non `flox activate` takes precedence over this setting."
+          "description": "The sandbox mode applied when the environment is activated\n(`off`, `warn`, `enforce`, or `prompt`). An explicit `--sandbox` flag\non `flox activate` takes precedence over this setting."
         },
         "semver": {
           "$ref": "#/$defs/SemverOptions",
@@ -1378,7 +1378,7 @@
       "type": "string"
     },
     "SandboxMode": {
-      "description": "The filesystem-mediation level requested for an activation.\n\n`Off` is the default and matches the historical behavior where no\nsandbox is applied. `Warn`, `Enforce`, and `Ask` correspond to the\nlibsandbox levels of the same name; this type only carries the\nselection through the CLI and activation context — it does not by\nitself change libsandbox behavior.",
+      "description": "The filesystem-mediation level requested for an activation.\n\n`Off` is the default and matches the historical behavior where no\nsandbox is applied. `Warn`, `Enforce`, and `Prompt` correspond to the\nlibsandbox levels of the same name; this type only carries the\nselection through the CLI and activation context — it does not by\nitself change libsandbox behavior.",
       "oneOf": [
         {
           "const": "off",
@@ -1396,8 +1396,8 @@
           "type": "string"
         },
         {
-          "const": "ask",
-          "description": "Out-of-policy access is denied and queued for approval.",
+          "const": "prompt",
+          "description": "Out-of-policy access is denied and queued for approval.\n\nThe serde alias keeps activation-state files, context files, and\nmanifests written while this mode was called `ask` parsing for one\nrelease cycle; remove the alias (and the matching `FromStr` arm)\nafter that.",
           "type": "string"
         }
       ]

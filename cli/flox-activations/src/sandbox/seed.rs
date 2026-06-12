@@ -68,7 +68,7 @@ pub struct SeedAllowSet {
 ///   var.
 /// - Flox's own service hosts. flox commands run *inside* an activation
 ///   (`flox install`, `flox pull`, catalog resolution) reach out to FloxHub
-///   and the catalog API. Without these seeds an `enforce`/`ask` session
+///   and the catalog API. Without these seeds an `enforce`/`prompt` session
 ///   would block flox's own network calls, which is never the user's intent
 ///   — the sandbox is meant to mediate the *workload's* egress, not flox's.
 ///
@@ -372,7 +372,7 @@ mod tests {
         assert!(seed.allow_net.contains(&"::1".to_string()));
 
         // Flox's own service hosts must be present so flox commands run inside
-        // the activation are not blocked under enforce/ask.
+        // the activation are not blocked under enforce/prompt.
         assert!(
             seed.allow_net.contains(&"hub.flox.dev".to_string()),
             "FloxHub host must be seeded, got {:?}",

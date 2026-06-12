@@ -282,7 +282,7 @@ mod tests {
     fn stays_latest_schema_when_sandbox_set() {
         let manifest = ManifestLatest {
             options: Options {
-                sandbox: Some(SandboxMode::Ask),
+                sandbox: Some(SandboxMode::Prompt),
                 ..Default::default()
             },
             ..Default::default()

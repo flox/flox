@@ -394,7 +394,7 @@ pub fn double_set_envs(context: &AttachCtx, project: Option<&AttachProjectCtx>) 
 ///
 /// Empty when the activation is not sandboxed, or when there is no project
 /// context (the grants dir is anchored under `.flox/`, which only exists for
-/// project activations; container activations reject `ask` upstream).
+/// project activations; container activations reject `prompt` upstream).
 ///
 /// Panics on library-resolution failure rather than returning a `Result`,
 /// because `double_set_envs` is infallible by construction and the failure
@@ -447,7 +447,7 @@ fn sandbox_double_sets(
 
     // The verdict socket path is a pure function of the services socket, so it
     // matches the path the broker binds inside the executive — no shared
-    // mutable state, no second channel. Only `ask` actually exports it.
+    // mutable state, no second channel. Only `prompt` actually exports it.
     let verdict_socket = verdict_socket_path(&project.flox_services_socket);
 
     sandbox_env(
@@ -697,9 +697,9 @@ mod tests {
     }
 
     #[test]
-    fn double_set_envs_exports_verdict_socket_for_ask() {
+    fn double_set_envs_exports_verdict_socket_for_prompt() {
         let tmp = TempDir::new().unwrap();
-        let (attach, project) = test_contexts(&tmp, SandboxMode::Ask);
+        let (attach, project) = test_contexts(&tmp, SandboxMode::Prompt);
         let build_mk = fake_build_mk(&tmp);
 
         let diff = temp_env::with_vars(

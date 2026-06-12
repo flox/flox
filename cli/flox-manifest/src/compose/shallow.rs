@@ -993,7 +993,7 @@ mod tests {
     #[test]
     fn merges_options_sandbox_falls_back_to_low_priority() {
         let low_priority = Options {
-            sandbox: Some(SandboxMode::Ask),
+            sandbox: Some(SandboxMode::Prompt),
             ..Default::default()
         };
         let high_priority = Options::default();
@@ -1002,7 +1002,7 @@ mod tests {
             ShallowMerger::merge_options(&low_priority, &high_priority).unwrap();
 
         assert_eq!(merged, Options {
-            sandbox: Some(SandboxMode::Ask),
+            sandbox: Some(SandboxMode::Prompt),
             ..Default::default()
         });
         assert!(warnings.is_empty(), "unexpected warnings: {warnings:?}");
