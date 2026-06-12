@@ -40,6 +40,12 @@ __asm__(".symver __cxa_finalize,__cxa_finalize@" GLIBC_MIN_VERSION);
 __asm__(".symver dlsym,dlsym@" GLIBC_MIN_VERSION);
 __asm__(".symver __errno_location,__errno_location@" GLIBC_MIN_VERSION);
 __asm__(".symver fclose,fclose@" GLIBC_MIN_VERSION);
+// fdopendir backs the directory-enumeration interceptor. It arrived in glibc
+// 2.4 on x86_64 (and is at the 2.17 baseline on aarch64), so like
+// __realpath_chk it pins at ALT_ALT — a version the library already
+// references, so this adds no new floor. opendir/closedir are pinned at the
+// baseline below, unchanged.
+__asm__(".symver fdopendir,fdopendir@" ALT_ALT_GLIBC_MIN_VERSION);
 __asm__(".symver fgets,fgets@" GLIBC_MIN_VERSION);
 __asm__(".symver fnmatch,fnmatch@" GLIBC_MIN_VERSION);
 __asm__(".symver __fprintf_chk,__fprintf_chk@" ALT_GLIBC_MIN_VERSION);
