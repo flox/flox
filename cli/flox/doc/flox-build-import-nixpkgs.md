@@ -14,6 +14,7 @@ flox-build-import-nixpkgs - Import package definition from nixpkgs
 flox [<general-options>] build import-nixpkgs
      [-d=<path>]
      [--force]
+     [--stability <stability>]
      <installable>
 ```
 
@@ -43,6 +44,11 @@ The `<installable>` parameter can be specified in one of the following formats:
 2. **Flake reference with attribute**: `nixpkgs#hello`
 3. **Full flake reference**: `github:nixos/nixpkgs#hello`
 
+When using `--stability`, the installable must be a bare
+attribute path or the `nixpkgs#` prefix form.
+An explicit flake reference (e.g. `github:nixos/nixpkgs#hello`) cannot be
+combined with the flag.
+
 # OPTIONS
 
 `<installable>`
@@ -54,6 +60,14 @@ The `<installable>` parameter can be specified in one of the following formats:
 :   Overwrite existing package file if it already exists.
     Without this flag, the command will fail if the package file
     already exists in the environment.
+
+`--stability <stability>`
+:   Import using a base package set of the given stability as tracked by
+    the catalog server.
+    A stability (e.g., `"stable"` or `"unstable"`) identifies a curated
+    nixpkgs revision managed by the catalog server.
+    When omitted, the default nixpkgs channel is used.
+    Cannot be combined with an explicit flake reference in `<installable>`.
 
 ```{.include}
 ./include/dir-environment-options.md
@@ -71,6 +85,14 @@ flox build import-nixpkgs hello
 ```
 
 This creates `.flox/pkgs/hello/default.nix` with the package definition.
+
+## Import using a specific stability
+
+Import `samba` from the `unstable` channel as tracked by the catalog:
+
+```bash
+flox build import-nixpkgs samba --stability unstable
+```
 
 ## Import from a specific nixpkgs revision
 
