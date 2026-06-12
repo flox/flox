@@ -10,7 +10,7 @@ flox-deactivate - deactivate an environment
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] deactivate
 ```
 
@@ -59,14 +59,14 @@ where any previously active environments are restored automatically.
 
 Deactivate the innermost active environment:
 
-```
+```text
 $ flox deactivate
 ```
 
 Exit a `flox activate` subshell
 (equivalent to running `exit`):
 
-```
+```text
 flox [myenv] $ flox deactivate
 $
 ```
