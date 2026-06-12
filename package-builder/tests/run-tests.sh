@@ -1102,6 +1102,155 @@ else
 fi
 
 # ----------------------------------------------------------------------------
+# Layer 4.8: directory enumeration (opendir/fdopendir interposition).
+#
+# `ls` enumerates with opendir()/readdir(), which never routes through the
+# interposed open()/openat() symbols — so before these interceptors a
+# directory listing reached NO check at all: warn mode was silent and ask mode
+# listed unapproved directories without a receipt. Under an ACTIVATION
+# (FLOX_SANDBOX_ALLOW_FOREIGN_EXE=1) an out-of-policy enumeration is now
+# mediated as a READ of the directory path with the unified severity model:
+#   warn    -> report once, permit
+#   enforce -> report once, graceful EACCES (opendir returns NULL; never fatal)
+#   ask     -> deny + queue receipt (fail-closed without a broker)
+# In-policy directories (allow-dirs, the closure, seeded prefixes) stay
+# enumerable and silent, and BUILD behaviour (no activation flag) keeps the
+# historical warn-but-permit.
+# ----------------------------------------------------------------------------
+
+dir_home="$(mktemp -d "$HOME/flox-sandbox-tests-home.XXXXXX")"
+mkdir -p "$dir_home/private-dir"
+printf 'x' > "$dir_home/private-dir/file.txt"
+oop_list_dir="$dir_home/private-dir"
+
+# warn + activation: an out-of-policy listing is permitted but REPORTED (a
+# silent `ls ~` was the bug). The message goes through the shared verdict
+# helper, so it is the standard "not in the sandbox" line with the
+# directory-listing qualifier.
+out="$(run_activation warn "$dir_home" -- opendir "$oop_list_dir" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"OPENDIR_OK"* \
+      && "$out" == *"is not in the sandbox (directory listing)"* ]]; then
+  pass "warn+activation: out-of-policy opendir permitted but warned"
+else
+  fail "warn+activation: opendir should warn-and-permit (rc=$rc)" "$out"
+fi
+
+# enforce + activation: the same listing is refused with a GRACEFUL EACCES —
+# opendir returns NULL, the probe prints OPENDIR_FAIL and exits 1 cleanly
+# (never killed), and no entry name was enumerable.
+out="$(run_activation enforce "$dir_home" -- opendir "$oop_list_dir" 2>&1)"; rc=$?
+if [[ $rc -eq 1 && "$out" == *"OPENDIR_FAIL"* && "$out" == *"errno=13"* \
+      && "$out" == *"is not in the sandbox (directory listing)"* ]]; then
+  pass "enforce+activation: out-of-policy opendir denied with graceful EACCES"
+else
+  fail "enforce+activation: opendir should EACCES, not crash (rc=$rc)" "$out"
+fi
+
+# ask + activation, no broker socket: fail-closed deny — EACCES plus the
+# distinct fail-closed receipt, exactly as for any other ask-denied read.
+out="$(run_activation ask "$dir_home" -- opendir "$oop_list_dir" 2>&1)"; rc=$?
+if [[ $rc -eq 1 && "$out" == *"OPENDIR_FAIL"* && "$out" == *"errno=13"* \
+      && "$out" == *"denying read of"*"(fail-closed"* ]]; then
+  pass "ask+activation: out-of-policy opendir fail-closed EACCES without broker"
+else
+  fail "ask+activation: opendir should fail closed without a broker (rc=$rc)" "$out"
+fi
+
+# ask + activation + live broker deny: EACCES plus the two-line deny+queue
+# receipt (enumeration without a receipt was the bug).
+if command -v python3 >/dev/null 2>&1 && start_fake_broker deny; then
+  out="$(run_activation ask "$dir_home" FLOX_SANDBOX_SOCKET="$broker_sock" \
+      -- opendir "$oop_list_dir" 2>&1)"; rc=$?
+  stop_fake_broker
+  if [[ $rc -eq 1 && "$out" == *"OPENDIR_FAIL"* && "$out" == *"errno=13"* \
+        && "$out" == *"read $oop_list_dir (not in policy)"* \
+        && "$out" == *"queued as req"* ]]; then
+    pass "ask+activation: out-of-policy opendir denied + queued receipt"
+  else
+    fail "ask+activation: opendir deny should EACCES + queue (rc=$rc)" "$out"
+  fi
+else
+  stop_fake_broker
+  pass "ask broker opendir test skipped (python3 unavailable)"
+fi
+
+# In-policy directories stay enumerable and SILENT in every mode: the fixture
+# is under an allow-dir, so the listing must succeed without a single sandbox
+# line (under ask this also proves no RPC is attempted — a fail-closed
+# receipt would appear, since no socket is configured).
+for mode in warn enforce ask; do
+  out="$(run_activation "$mode" "$dir_home" -- opendir "$fixture" 2>&1)"; rc=$?
+  if [[ $rc -eq 0 && "$out" == *"OPENDIR_OK"* && "$out" != *"SANDBOX"* ]]; then
+    pass "$mode+activation: in-policy opendir permitted silently"
+  else
+    fail "$mode+activation: in-policy opendir should be silent (rc=$rc)" "$out"
+  fi
+done
+
+# Seeded-profile prefix: the activation seed adds /nix/store as an allow-dir;
+# a store directory must stay enumerable and silent under enforce (the
+# engine-level equivalent of "the seeded profile keeps the shell quiet").
+out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+    FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs /nix/store" FLOX_VIRTUAL_SANDBOX=enforce \
+    FLOX_SANDBOX_ALLOW_FOREIGN_EXE=1 HOME="$dir_home" \
+    "$root/tests/sandbox_probe" opendir "$out_store" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"OPENDIR_OK"* && "$out" != *"SANDBOX"* ]]; then
+  pass "enforce+activation: seeded /nix/store dir opendir permitted silently"
+else
+  fail "enforce+activation: store dir should be enumerable via seeded allow-dir (rc=$rc)" "$out"
+fi
+
+# fdopendir(): the openat()+fdopendir() traversal style (find, fts). The
+# open(O_DIRECTORY) itself is a warned-but-permitted probe, so the caller gets
+# an fd even out of policy — fdopendir() maps the fd back to its directory
+# path and applies the same directory-read verdict before any entry is
+# readable. (The denial message is deduped against the probe warning for the
+# same path, so only the EACCES is asserted here.)
+out="$(run_activation enforce "$dir_home" -- fdopendir "$oop_list_dir" 2>&1)"; rc=$?
+if [[ $rc -eq 1 && "$out" == *"FDOPENDIR_FAIL"* && "$out" == *"errno=13"* ]]; then
+  pass "enforce+activation: out-of-policy fdopendir denied with graceful EACCES"
+else
+  fail "enforce+activation: fdopendir should EACCES on an out-of-policy dir (rc=$rc)" "$out"
+fi
+out="$(run_activation enforce "$dir_home" -- fdopendir "$fixture" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"FDOPENDIR_OK"* && "$out" != *"SANDBOX"* ]]; then
+  pass "enforce+activation: in-policy fdopendir permitted silently"
+else
+  fail "enforce+activation: in-policy fdopendir should succeed silently (rc=$rc)" "$out"
+fi
+
+# BUILD mode (no activation flag): opendir of an out-of-closure directory
+# keeps the historical warn-but-permit — the new denial is activation-only,
+# so build behaviour stays byte-identical (mirrors the open()-based directory
+# test in Layer 2).
+out="$(run_probe enforce opendir "$out_store" 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$out" == *"OPENDIR_OK"* && "$out" == *"directory listing"* ]]; then
+  pass "enforce+build: out-of-closure opendir still warn-but-permit"
+else
+  fail "enforce+build: build-mode opendir should warn and permit (rc=$rc)" "$out"
+fi
+
+# Shell startup is unaffected: a real shell launches, runs a command, and
+# exits cleanly under enforce+activation with the seeded-style allow set —
+# directory mediation must not break the interactive entry path. Skipped when
+# bash is SIP-protected (macOS strips DYLD_INSERT_LIBRARIES for /bin/...).
+if [[ -n "$bash_bin" && ( "$(uname -s)" != "Darwin" || $sip_bash -eq 0 ) ]]; then
+  out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+      FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs /nix/store" FLOX_VIRTUAL_SANDBOX=enforce \
+      FLOX_SANDBOX_ALLOW_FOREIGN_EXE=1 HOME="$dir_home" \
+      "$bash_bin" -c 'echo SHELL_OK' 2>&1)"; rc=$?
+  if [[ $rc -eq 0 && "$out" == *"SHELL_OK"* && "$out" != *"SANDBOX ERROR"* ]]; then
+    pass "enforce+activation: shell startup unaffected by directory mediation"
+  else
+    fail "enforce+activation: shell should start and run under enforce (rc=$rc)" "$out"
+  fi
+else
+  echo "skip - bash unavailable or SIP-protected; shell-startup coverage needs a mediatable shell"
+fi
+
+rm -rf "$dir_home"
+
+# ----------------------------------------------------------------------------
 # Layer 5: network egress (connect interception, warn/enforce gradient).
 #
 # These use only loopback and TEST-NET-1 (192.0.2.0/24, RFC 5737, guaranteed
