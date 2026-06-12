@@ -1232,9 +1232,13 @@ mod tests {
         assert_eq!(mode, SandboxMode::Warn);
 
         // An explicit `--sandbox off` overrides a manifest-set mode.
-        let mode =
-            resolve_sandbox_mode(Some(SandboxMode::Off), Some(SandboxMode::Prompt), true, false)
-                .unwrap();
+        let mode = resolve_sandbox_mode(
+            Some(SandboxMode::Off),
+            Some(SandboxMode::Prompt),
+            true,
+            false,
+        )
+        .unwrap();
         assert_eq!(mode, SandboxMode::Off);
     }
 
@@ -1286,7 +1290,9 @@ mod tests {
 
     #[test]
     fn in_place_guard_rejects_any_active_sandbox_mode() {
-        assert!(ensure_sandbox_not_in_place(SandboxMode::Prompt, &InvocationType::InPlace).is_err());
+        assert!(
+            ensure_sandbox_not_in_place(SandboxMode::Prompt, &InvocationType::InPlace).is_err()
+        );
         assert!(ensure_sandbox_not_in_place(SandboxMode::Warn, &InvocationType::InPlace).is_err());
         assert!(
             ensure_sandbox_not_in_place(SandboxMode::Enforce, &InvocationType::InPlace).is_err()

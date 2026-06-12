@@ -367,10 +367,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let state = state_in(tmp.path());
         // Queue one request by deciding it through the verdict path.
-        state
-            .lock()
-            .unwrap()
-            .decide("/home/dev/.aws/credentials");
+        state.lock().unwrap().decide("/home/dev/.aws/credentials");
 
         let response = dispatch(
             r#"{"cmd":"list-pending"}"#,
@@ -464,10 +461,7 @@ mod tests {
         assert!(response.ok, "{response:?}");
 
         // Gone from the session set: a new decide no longer allows.
-        let verdict = state
-            .lock()
-            .unwrap()
-            .decide("/home/dev/data/x");
+        let verdict = state.lock().unwrap().decide("/home/dev/data/x");
         assert!(verdict.wire_line().starts_with("deny "), "{verdict:?}");
         // Gone from grants.toml too.
         let grants_dir = tmp.path().join("cache/sandbox");
