@@ -44,6 +44,8 @@ env:
 jobs:
   nix-plugins-dev:
     name: "Nix Plugins"
+    # Skip on push to main; already run in the merge queue
+    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
 
@@ -90,6 +92,8 @@ jobs:
 
   nef-dev:
     name: "Nix expression tests"
+    # Skip on push to main; already run in the merge queue
+    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     runs-on: "ubuntu-22.04-8core"
     timeout-minutes: 15 # eval only tests should be plenty fast
 
@@ -126,6 +130,8 @@ jobs:
 
   cli-unit:
     name: "unit"
+    # Skip on push to main; already run in the merge queue
+    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
 
@@ -289,7 +295,8 @@ jobs:
     name: "Verify Kerberos CLI build"
     # Same as nix-build: fork PRs lack the secrets this job needs. The required
     # "Verify Kerberos CLI build (*)" contexts come from the community-ci draft.
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    # Also skipped on push to main; already run in the merge queue
+    if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     runs-on: "ubuntu-latest"
     timeout-minutes: 60
 
@@ -417,12 +424,9 @@ jobs:
 
     if: ${{ failure() && (github.base_ref == 'refs/heads/main' || github.ref == 'refs/heads/main') && github.event_name == 'push' }}
 
+    # Only nix-build runs on main (all other jobs are only run in the merge queue)
     needs:
       - "nix-build"
-      - "nix-build-kerberos"
-      - "nix-plugins-dev"
-      - "cli-unit"
-      - "nix-build-bats-tests"
 
     steps:
       - name: "Setup upterm session"
@@ -446,6 +450,8 @@ jobs:
 
   nix-build-bats-tests:
     name: "remote"
+    # Skip on push to main; already run in the merge queue
+    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     runs-on: "ubuntu-latest"
     timeout-minutes: 90
 
