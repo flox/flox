@@ -1096,6 +1096,138 @@ Attributes:
             value.clone()
         }
     }
+    /**A single package in the locked-input closure.
+
+inputs lists DIRECT inputs only; the publish path maps each entry
+row-for-row onto a package_inputs(package_id, input_package_id) row.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "LockedInput",
+    ///  "description": "A single package in the locked-input closure.\n\ninputs lists DIRECT inputs only; the publish path maps each entry\nrow-for-row onto a package_inputs(package_id, input_package_id) row.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "attr_path",
+    ///    "catalog",
+    ///    "rev"
+    ///  ],
+    ///  "properties": {
+    ///    "attr_path": {
+    ///      "title": "Attr Path",
+    ///      "type": "string"
+    ///    },
+    ///    "catalog": {
+    ///      "title": "Catalog",
+    ///      "type": "string"
+    ///    },
+    ///    "inputs": {
+    ///      "title": "Inputs",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/LockedInputRef"
+    ///      }
+    ///    },
+    ///    "rev": {
+    ///      "title": "Rev",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct LockedInput {
+        pub attr_path: ::std::string::String,
+        pub catalog: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+        pub inputs: ::std::vec::Vec<LockedInputRef>,
+        pub rev: ::std::string::String,
+    }
+    impl ::std::convert::From<&LockedInput> for LockedInput {
+        fn from(value: &LockedInput) -> Self {
+            value.clone()
+        }
+    }
+    ///Reference to a direct input of a LockedInput package.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "LockedInputRef",
+    ///  "description": "Reference to a direct input of a LockedInput package.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "attr_path",
+    ///    "catalog",
+    ///    "rev"
+    ///  ],
+    ///  "properties": {
+    ///    "attr_path": {
+    ///      "title": "Attr Path",
+    ///      "type": "string"
+    ///    },
+    ///    "catalog": {
+    ///      "title": "Catalog",
+    ///      "type": "string"
+    ///    },
+    ///    "rev": {
+    ///      "title": "Rev",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct LockedInputRef {
+        pub attr_path: ::std::string::String,
+        pub catalog: ::std::string::String,
+        pub rev: ::std::string::String,
+    }
+    impl ::std::convert::From<&LockedInputRef> for LockedInputRef {
+        fn from(value: &LockedInputRef) -> Self {
+            value.clone()
+        }
+    }
+    /**Edge-preserving closure of locked inputs for a NEF build.
+
+packages is the flat closure; each LockedInput.inputs field carries
+the directed edges so inter-package relationships are recoverable.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "LockedInputSet",
+    ///  "description": "Edge-preserving closure of locked inputs for a NEF build.\n\npackages is the flat closure; each LockedInput.inputs field carries\nthe directed edges so inter-package relationships are recoverable.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "packages"
+    ///  ],
+    ///  "properties": {
+    ///    "packages": {
+    ///      "title": "Packages",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/LockedInput"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct LockedInputSet {
+        pub packages: ::std::vec::Vec<LockedInput>,
+    }
+    impl ::std::convert::From<&LockedInputSet> for LockedInputSet {
+        fn from(value: &LockedInputSet) -> Self {
+            value.clone()
+        }
+    }
     ///A single entry in the /locked-sources response.
     ///
     /// <details><summary>JSON schema</summary>
@@ -1977,6 +2109,9 @@ Attributes:
     ///        "null"
     ///      ]
     ///    },
+    ///    "locked_inputs": {
+    ///      "$ref": "#/components/schemas/LockedInputSet"
+    ///    },
     ///    "narinfos": {
     ///      "$ref": "#/components/schemas/NarInfos"
     ///    },
@@ -2039,6 +2174,8 @@ Attributes:
         pub dot_flox_dir: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub locked_base_catalog_url: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub locked_inputs: ::std::option::Option<LockedInputSet>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub narinfos: ::std::option::Option<NarInfos>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]

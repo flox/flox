@@ -2573,6 +2573,78 @@
         ],
         "title": "HealthCheck"
       },
+      "LockedInput": {
+        "properties": {
+          "catalog": {
+            "type": "string",
+            "title": "Catalog"
+          },
+          "attr_path": {
+            "type": "string",
+            "title": "Attr Path"
+          },
+          "rev": {
+            "type": "string",
+            "title": "Rev"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/LockedInputRef"
+            },
+            "type": "array",
+            "title": "Inputs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "catalog",
+          "attr_path",
+          "rev"
+        ],
+        "title": "LockedInput",
+        "description": "A single package in the locked-input closure.\n\ninputs lists DIRECT inputs only; the publish path maps each entry\nrow-for-row onto a package_inputs(package_id, input_package_id) row."
+      },
+      "LockedInputRef": {
+        "properties": {
+          "catalog": {
+            "type": "string",
+            "title": "Catalog"
+          },
+          "attr_path": {
+            "type": "string",
+            "title": "Attr Path"
+          },
+          "rev": {
+            "type": "string",
+            "title": "Rev"
+          }
+        },
+        "type": "object",
+        "required": [
+          "catalog",
+          "attr_path",
+          "rev"
+        ],
+        "title": "LockedInputRef",
+        "description": "Reference to a direct input of a LockedInput package."
+      },
+      "LockedInputSet": {
+        "properties": {
+          "packages": {
+            "items": {
+              "$ref": "#/components/schemas/LockedInput"
+            },
+            "type": "array",
+            "title": "Packages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "packages"
+        ],
+        "title": "LockedInputSet",
+        "description": "Edge-preserving closure of locked inputs for a NEF build.\n\npackages is the flat closure; each LockedInput.inputs field carries\nthe directed edges so inter-package relationships are recoverable."
+      },
       "LockedSourceItem": {
         "properties": {
           "attr_path": {
@@ -2963,6 +3035,10 @@
             "title": "Narinfos Source Version",
             "nullable": true,
             "type": "integer"
+          },
+          "locked_inputs": {
+            "nullable": true,
+            "$ref": "#/components/schemas/LockedInputSet"
           }
         },
         "type": "object",
