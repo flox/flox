@@ -1159,6 +1159,106 @@ static unsigned long json_extract_uint(const char *json, const char *field) {
   return strtoul(at, NULL, 10);
 }
 
+// Resolve the running executable's realpath into `out` (size PATH_MAX),
+// best-effort: out[0] == '\0' on any failure. Linux exposes the executable as
+// the /proc/self/exe symlink; macOS has no /proc, so ask dyld for the image
+// path and canonicalize that. Shared by the ask RPC's `exe` field and the
+// audit record's attribution column.
+static void current_exe_realpath(char *out) {
+  out[0] = '\0';
+#ifdef linux
+  if (realpath("/proc/self/exe", out) == NULL)
+    out[0] = '\0';
+#else
+  char exe_path[PATH_MAX];
+  uint32_t exe_size = sizeof(exe_path);
+  if (_NSGetExecutablePath(exe_path, &exe_size) != 0 ||
+      realpath(exe_path, out) == NULL)
+    out[0] = '\0';
+#endif
+}
+
+// The current sandbox level as the mode string recorded in audit records.
+static const char *sandbox_level_name(void) {
+  switch (sandbox_level) {
+  case SANDBOX_LEVEL_WARN:
+    return "warn";
+  case SANDBOX_LEVEL_ENFORCE:
+    return "enforce";
+  case SANDBOX_LEVEL_PURE:
+    return "pure";
+  case SANDBOX_LEVEL_ASK:
+    return "ask";
+  default:
+    return "off";
+  }
+}
+
+// ===========================================================================
+// Audit store.
+//
+// Every report the engine emits — warn-mode reports and enforce/ask denials,
+// for file accesses, directory enumerations, and network connects alike — is
+// also appended as one NDJSON record to
+// $FLOX_SANDBOX_GRANTS_DIR/audit.ndjson, so a denial is queryable after the
+// session with `flox sandbox audit`. Allowed accesses are never recorded.
+//
+// The hooks ride the existing once-per-key dedup (should_warn_for_path), so
+// volume is bounded to one record per path per process. Writes are
+// best-effort: a failure (read-only .flox, full disk) never changes a
+// verdict and never raises an error. Builds never set
+// FLOX_SANDBOX_GRANTS_DIR, so the hook is inert for them.
+// ===========================================================================
+static void audit_append(const char *kind, const char *op, const char *path,
+                         const char *verdict) {
+  if (sandbox_grants_dir == NULL || sandbox_grants_dir[0] == '\0')
+    return;
+
+  char audit_path[PATH_MAX];
+  if (snprintf(audit_path, sizeof(audit_path), "%s/audit.ndjson",
+               sandbox_grants_dir) >= (int)sizeof(audit_path))
+    return;
+
+  char exe_real[PATH_MAX];
+  current_exe_realpath(exe_real);
+
+  // Build the record by hand (no JSON library), escaping the only two
+  // characters that can break the wire format in a path. The buffer leaves
+  // room for the fixed fields plus a fully-escaped path and exe.
+  char line[PATH_MAX * 3 + 256];
+  snprintf(line, sizeof(line),
+           "{\"ts\":%ld,\"mode\":\"%s\",\"kind\":\"%s\",\"op\":\"%s\","
+           "\"path\":\"",
+           (long)time(NULL), sandbox_level_name(), kind, op);
+  json_append_escaped(line, sizeof(line), path);
+  size_t len = strlen(line);
+  snprintf(line + len, sizeof(line) - len,
+           "\",\"verdict\":\"%s\",\"pid\":%d,\"exe\":\"", verdict, getpid());
+  json_append_escaped(line, sizeof(line), exe_real);
+  len = strlen(line);
+  if (len + 3 >= sizeof(line))
+    return; // no room to terminate the record; drop rather than corrupt
+  line[len++] = '"';
+  line[len++] = '}';
+  line[len++] = '\n';
+
+  // Append through the real syscalls: with in_sandbox set our own
+  // interceptors pass straight through (mirroring how ask_broker does its
+  // socket I/O). Saved and restored so the hook behaves identically if it is
+  // ever reached from a path that did not already set the guard.
+  int saved_in_sandbox = in_sandbox;
+  in_sandbox = 1;
+  int fd = open(audit_path, O_WRONLY | O_APPEND | O_CREAT, 0600);
+  if (fd >= 0) {
+    // One write per record: O_APPEND keeps concurrent appenders from
+    // interleaving within a line at this size.
+    ssize_t written = write(fd, line, len);
+    (void)written;
+    close(fd);
+  }
+  in_sandbox = saved_in_sandbox;
+}
+
 // The outcome of an ask_broker() call, returned to the ask tail so it can both
 // cache the verdict and shape the right receipt.
 struct ask_result {
@@ -1219,19 +1319,8 @@ static struct ask_result ask_broker(const char *real_path, const char *raw,
 
   // Build the request line by hand. exe is best-effort: the running
   // executable's realpath, or empty on any failure.
-  char exe_real[PATH_MAX] = "";
-#ifdef linux
-  if (realpath("/proc/self/exe", exe_real) == NULL)
-    exe_real[0] = '\0';
-#else
-  {
-    char exe_path[PATH_MAX];
-    uint32_t exe_size = sizeof(exe_path);
-    if (_NSGetExecutablePath(exe_path, &exe_size) != 0 ||
-        realpath(exe_path, exe_real) == NULL)
-      exe_real[0] = '\0';
-  }
-#endif
+  char exe_real[PATH_MAX];
+  current_exe_realpath(exe_real);
 
   char req[PATH_MAX * 4 + 256];
   snprintf(req, sizeof(req),
@@ -1309,17 +1398,21 @@ static struct ask_result ask_broker(const char *real_path, const char *raw,
 //                   exit(1) would kill the user's shell.
 static bool out_of_policy_verdict(const char *display, const char *dedup_key,
                                   const char *raw, const char *suffix) {
+  // The op recorded in receipts and audit records. A directory enumeration
+  // arrives here as a read of the directory path (in_write_access unset).
+  const char *op = in_write_access ? "write" : "read";
+
   if (sandbox_level == SANDBOX_LEVEL_WARN) {
     // warn mode: report the out-of-policy access, but only once per key — a
     // process that touches the same undeclared path repeatedly should produce
     // a single warning, not one per access.
-    if (should_warn_for_path(dedup_key))
+    if (should_warn_for_path(dedup_key)) {
       warn("%s is not in the sandbox%s", display, suffix);
+      audit_append("fs", op, dedup_key, "warned");
+    }
     return true;
   }
   if (sandbox_level == SANDBOX_LEVEL_ASK) {
-    const char *op = in_write_access ? "write" : "read";
-
     // 1. Decision cache first (cheapest path; zero RPCs). A cached allow scope
     //    (fnmatch glob) or a still-fresh deny (exact path) short-circuits the
     //    broker entirely. dedup_key is the resolved realpath for an existing
@@ -1339,10 +1432,12 @@ static bool out_of_policy_verdict(const char *display, const char *dedup_key,
       // rate-limited once per path, with the blast-radius framing from the
       // design. Cache nothing — the broker may come back, and a later retry
       // should re-ask rather than stay stuck on a cached error.
-      if (should_warn_for_path(dedup_key))
+      if (should_warn_for_path(dedup_key)) {
         _error("ask broker unreachable; denying %s of %s (fail-closed; restart "
                "the activation to restore approvals)",
                op, display);
+        audit_append("fs", op, dedup_key, "fail-closed");
+      }
       return false;
     }
 
@@ -1366,6 +1461,7 @@ static bool out_of_policy_verdict(const char *display, const char *dedup_key,
     if (should_warn_for_path(dedup_key)) {
       denied("%s %s (not in policy)", op, display);
       denied("queued as req %lu — approve outside: flox sandbox", r.req);
+      audit_append("fs", op, dedup_key, "denied");
     }
     return false;
   }
@@ -1375,8 +1471,10 @@ static bool out_of_policy_verdict(const char *display, const char *dedup_key,
   // must never exit(1): a shell builtin redirect (echo x >> secret) performs
   // the open inside the interactive shell process, so aborting would terminate
   // the user's shell. Reported once per key, mirroring warn.
-  if (should_warn_for_path(dedup_key))
+  if (should_warn_for_path(dedup_key)) {
     _error("%s is not in the sandbox%s", display, suffix);
+    audit_append("fs", op, dedup_key, "denied");
+  }
   fflush(stderr);
   return false;
 }
@@ -1982,6 +2080,13 @@ static bool sandbox_check_connect(const struct sockaddr *sa,
   char host[NET_HOST_STRLEN];
   bool have_host = net_name_cache_get(ip, host);
 
+  // The destination as recorded in audit records: the hostname when
+  // getaddrinfo observed one (the name the user recognizes), else the bare
+  // IP, with the port attached either way.
+  char dest_audit[NET_HOST_STRLEN + 16];
+  snprintf(dest_audit, sizeof(dest_audit), "%s:%d", have_host ? host : ip,
+           port);
+
   if (sandbox_level == SANDBOX_LEVEL_WARN) {
     // Warn once per destination (ip:port), modeled on the fs per-path dedup so
     // a client that retries the same endpoint does not flood the log. The key
@@ -1994,6 +2099,7 @@ static bool sandbox_check_connect(const struct sockaddr *sa,
              ip);
       else
         warn("connect to %s:%d is not in the network policy", ip, port);
+      audit_append("net", "connect", dest_audit, "warned");
     }
     return true; // warn permits the connect.
   }
@@ -2009,6 +2115,7 @@ static bool sandbox_check_connect(const struct sockaddr *sa,
              ip);
     else
       _error("connect to %s:%d is not in the network policy", ip, port);
+    audit_append("net", "connect", dest_audit, "denied");
     fflush(stderr);
   }
   return false;
