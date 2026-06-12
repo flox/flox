@@ -241,6 +241,9 @@ options.
    mediated.
    This is an experimental prototype and may change or be removed.
 
+   Under `ask`, review and approve queued requests — and inspect or edit
+   saved grants — with [`flox-sandbox(1)`](./flox-sandbox.md).
+
 `-g <generation>`, `--generation <generation>`
 :  Activate a FloxHub environment at a specific generation.
 
@@ -357,4 +360,5 @@ eval "$(flox activate)"
 [`flox-push(1)`](./flox-push.md),
 [`flox-pull(1)`](./flox-pull.md),
 [`flox-edit(1)`](./flox-edit.md),
-[`flox-delete(1)`](./flox-delete.md)
+[`flox-delete(1)`](./flox-delete.md),
+[`flox-sandbox(1)`](./flox-sandbox.md)

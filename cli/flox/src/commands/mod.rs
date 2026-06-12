@@ -23,6 +23,7 @@ mod publish;
 mod pull;
 mod push;
 mod run;
+mod sandbox;
 mod search;
 mod services;
 mod services_socket;
@@ -758,6 +759,16 @@ enum UseCommands {
         )]
         services::ServicesCommands,
     ),
+
+    /// Review and manage sandbox grants for an 'ask'-mode activation
+    #[bpaf(command)]
+    Sandbox(
+        #[bpaf(
+            external(sandbox::sandbox_commands),
+            fallback(sandbox::SandboxCommands::Help)
+        )]
+        sandbox::SandboxCommands,
+    ),
 }
 
 impl UseCommands {
@@ -767,6 +778,7 @@ impl UseCommands {
             UseCommands::Deactivate(args) => args.handle(config, flox),
             UseCommands::Run(args) => args.handle(flox).await,
             UseCommands::Services(args) => args.handle(config, flox).await,
+            UseCommands::Sandbox(args) => args.handle(config, flox).await,
         }
     }
 

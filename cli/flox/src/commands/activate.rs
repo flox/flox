@@ -7,6 +7,7 @@ use std::{env, fs};
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
+use flox_activations::sandbox::grants;
 use flox_config::{AutoActivationPreference, Config, EnvironmentPromptConfig};
 use flox_core::activate::context::{
     ActivateCtx,
@@ -431,6 +432,14 @@ impl ActivateOptions {
             message::info(
                 "Services run unsandboxed; --sandbox does not mediate their filesystem access.",
             );
+        }
+
+        // The `ask`-mode activation banner: explain the deny-and-queue model
+        // and point at the review surfaces, then surface any grant that was
+        // added outside flox (the journal tamper diff). Printed before exec so
+        // it lands on the user's terminal, not in the broker's nulled stdio.
+        if sandbox_mode == SandboxMode::Ask {
+            print_ask_banner(&concrete_environment.dot_flox_path());
         }
 
         if !self.trust
@@ -1052,6 +1061,38 @@ pub fn write_auto_activation_preference(
     ];
     update_config_with_query(config_dir, &query, Some(preference))?;
     Ok(())
+}
+
+/// Print the `ask`-mode activation banner and any journal tamper warning.
+///
+/// The banner explains the deny-and-queue model and names the review surfaces.
+/// The tamper check reads grants.toml and the journal, and warns when a grant
+/// is present in the file but absent from the journal — it was added outside
+/// flox (a hand-edit or a self-approving agent), which is friction-plus-audit,
+/// not enforcement (the journal is provenance, never policy).
+fn print_ask_banner(dot_flox_path: &Path) {
+    message::info(
+        "Sandbox 'ask' enabled (advisory; mediates file reads/writes).\n  \
+         Out-of-policy access is denied and queued for approval.\n    \
+         review queue:   flox sandbox\n    \
+         approve a path: flox sandbox allow '<glob>'   (second terminal)",
+    );
+
+    let grants_dir = dot_flox_path.join("cache").join("sandbox");
+    let unjournaled = grants::unjournaled_patterns(&grants_dir);
+    if unjournaled.is_empty() {
+        return;
+    }
+    let count = unjournaled.len();
+    let listed = unjournaled
+        .iter()
+        .map(|pattern| format!("    {pattern}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    message::warning(format!(
+        "{count} grant(s) added outside flox — possibly self-approved:\n{listed}\n  \
+         Keep them if intentional, or remove with: flox sandbox revoke '<glob>'"
+    ));
 }
 
 #[cfg(test)]
