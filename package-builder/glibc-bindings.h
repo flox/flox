@@ -31,6 +31,10 @@
 // atoi parses the optional :port and /cidr fields of FLOX_SANDBOX_ALLOW_NET
 // entries. At the baseline GLIBC for each arch.
 __asm__(".symver atoi,atoi@" GLIBC_MIN_VERSION);
+// close() releases the per-request ask-broker socket fd (the RPC opens a
+// fresh AF_UNIX connection per verdict and never caches the fd). At the
+// baseline GLIBC for each arch.
+__asm__(".symver close,close@" GLIBC_MIN_VERSION);
 __asm__(".symver closedir,closedir@" GLIBC_MIN_VERSION);
 __asm__(".symver __cxa_finalize,__cxa_finalize@" GLIBC_MIN_VERSION);
 __asm__(".symver dlsym,dlsym@" GLIBC_MIN_VERSION);
@@ -104,10 +108,20 @@ __asm__(".symver strdup,strdup@" GLIBC_MIN_VERSION);
 __asm__(".symver strlen,strlen@" GLIBC_MIN_VERSION);
 __asm__(".symver strncmp,strncmp@" GLIBC_MIN_VERSION);
 __asm__(".symver strncpy,strncpy@" GLIBC_MIN_VERSION);
+// strstr scans the ask broker's newline-JSON response for the verdict/scope/
+// cache/req fields (a tolerant hand-rolled parser, no JSON library); strtoul
+// parses the numeric req id out of that response. Both at the baseline GLIBC
+// for each arch.
+__asm__(".symver strstr,strstr@" GLIBC_MIN_VERSION);
 __asm__(".symver strtok_r,strtok_r@" GLIBC_MIN_VERSION);
+__asm__(".symver strtoul,strtoul@" GLIBC_MIN_VERSION);
 // syscall(SYS_gettid) is used for the debug thread id instead of the gettid()
 // wrapper, which only exists from glibc 2.30; syscall() has existed since the
 // baseline, so binding it here keeps the minimum glibc at the target.
 __asm__(".symver syscall,syscall@" GLIBC_MIN_VERSION);
+// time() stamps the short deny-cache TTL under the ask flow. At the baseline
+// GLIBC for each arch (chosen over clock_gettime, which was in librt at the
+// x86_64 baseline and would raise the floor).
+__asm__(".symver time,time@" GLIBC_MIN_VERSION);
 
 #endif // GLIBC_BINDINGS_H

@@ -36,6 +36,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
 
 /* Arguments handed to each storm worker. */
@@ -74,6 +75,35 @@ static int do_open(const char *path) {
   return 0;
 }
 
+/* open-twice — open <path>, sleep <secs>, open <path> again, all in ONE
+ * process so the sandbox library's per-process decision cache persists across
+ * the two opens. This exercises the ask deny-cache TTL: a first deny is cached
+ * for ~2s; sleeping past the TTL and re-opening forces a fresh broker RPC, so
+ * a broker that flipped deny->allow during the sleep is observed on the second
+ * open. Prints "FIRST <OPEN_OK|OPEN_FAIL>" then "SECOND <OPEN_OK|OPEN_FAIL>".
+ * Exits 0 iff the second open succeeded (the TTL-expiry case under test). */
+static int do_open_twice(const char *path, double secs) {
+  int fd1 = open(path, O_RDONLY);
+  if (fd1 >= 0) {
+    close(fd1);
+    printf("FIRST OPEN_OK %s\n", path);
+  } else {
+    printf("FIRST OPEN_FAIL %s errno=%d\n", path, errno);
+  }
+  struct timespec ts;
+  ts.tv_sec = (time_t)secs;
+  ts.tv_nsec = (long)((secs - (double)ts.tv_sec) * 1e9);
+  nanosleep(&ts, NULL);
+  int fd2 = open(path, O_RDONLY);
+  if (fd2 >= 0) {
+    close(fd2);
+    printf("SECOND OPEN_OK %s\n", path);
+    return 0;
+  }
+  printf("SECOND OPEN_FAIL %s errno=%d\n", path, errno);
+  return 1;
+}
+
 /* create — open <path> for writing with O_CREAT, exercising the write-create
  * guard. The target is expected NOT to exist, so this is a genuine new-file
  * create: the sandbox judges it by its parent directory's policy under an
@@ -90,6 +120,24 @@ static int do_create(const char *path) {
   close(fd);
   unlink(path);
   printf("CREATE_OK %s\n", path);
+  return 0;
+}
+
+/* write — open an EXISTING <path> for writing (O_WRONLY, no O_CREAT) so it has
+ * a realpath and is classified as a write access. Unlike `create` (a new file
+ * judged by its parent), this exercises the grants-dir write guard, which fires
+ * on a write to an existing path under FLOX_SANDBOX_GRANTS_DIR. Prints
+ * "WRITE_OK <path>" on success or "WRITE_FAIL <path> errno=<n> (<msg>)" on
+ * refusal, and exits 0/1. */
+static int do_write(const char *path) {
+  int fd = open(path, O_WRONLY);
+  if (fd < 0) {
+    int saved = errno;
+    printf("WRITE_FAIL %s errno=%d (%s)\n", path, saved, strerror(saved));
+    return 1;
+  }
+  close(fd);
+  printf("WRITE_OK %s\n", path);
   return 0;
 }
 
@@ -265,8 +313,14 @@ int main(int argc, char **argv) {
   if (argc >= 3 && strcmp(argv[1], "open") == 0) {
     return do_open(argv[2]);
   }
+  if (argc >= 4 && strcmp(argv[1], "open-twice") == 0) {
+    return do_open_twice(argv[2], strtod(argv[3], NULL));
+  }
   if (argc >= 3 && strcmp(argv[1], "create") == 0) {
     return do_create(argv[2]);
+  }
+  if (argc >= 3 && strcmp(argv[1], "write") == 0) {
+    return do_write(argv[2]);
   }
   if (argc >= 3 && strcmp(argv[1], "open-dir") == 0) {
     return do_open_dir(argv[2]);
@@ -288,12 +342,15 @@ int main(int argc, char **argv) {
   fprintf(stderr,
           "usage:\n"
           "  %s open <path>\n"
+          "  %s open-twice <path> <sleep_secs>\n"
           "  %s create <path>\n"
+          "  %s write <path>\n"
           "  %s open-dir <path>\n"
           "  %s readlink <path>\n"
           "  %s readlink-fn <path>\n"
           "  %s connect <ipv4> <port> [timeout_ms]\n"
           "  %s storm <nthreads> <niters> <path1> [path2 ...]\n",
-          argv[0], argv[0], argv[0], argv[0], argv[0], argv[0], argv[0]);
+          argv[0], argv[0], argv[0], argv[0], argv[0], argv[0], argv[0],
+          argv[0], argv[0]);
   return 2;
 }
