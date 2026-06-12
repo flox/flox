@@ -5,7 +5,7 @@ DEMO_DIR="${DEMO_DIR:-/tmp/sandbox-demo}"
 
 # Removing the env dir also removes its grants and provenance journal —
 # they live at $DEMO_DIR/.flox/cache/sandbox/{grants.toml,journal.ndjson}
-# (per-environment, incl. the target/debug convenience grant). The ask
+# (per-environment, incl. the target/debug convenience grant). The prompt
 # pending queue is broker-memory only and dies with the session, so there
 # is nothing else to clear.
 rm -rf "$DEMO_DIR"

@@ -17,7 +17,7 @@ flox [<general-options>] activate
      [--print-script]
      [--start-services | --no-start-services]
      [-m=(dev|run)]
-     [--sandbox[=(off|warn|enforce|ask)]]
+     [--sandbox[=(off|warn|enforce|prompt)]]
      [-g=<generation>]
      [-c=<shell command> | -- <exec command>...]
 ```
@@ -202,15 +202,15 @@ options.
    See [`manifest.toml(5)`](./manifest.toml.md) for more details on activation
    modes.
 
-`--sandbox (off|warn|enforce|ask)`
+`--sandbox (off|warn|enforce|prompt)`
 :  Mediate filesystem and outbound-network access during this activation.
    Defaults to `off`, which applies no sandbox.
-   A bare `--sandbox` with no value is shorthand for `--sandbox ask`.
+   A bare `--sandbox` with no value is shorthand for `--sandbox prompt`.
    Environments can request a mode with the `options.sandbox` manifest
    setting (see [`manifest.toml(5)`](./manifest.toml.md)); the
    command-line flag takes precedence over the manifest.
    `warn` reports out-of-policy access without blocking it,
-   `enforce` denies it, and `ask` denies it and queues it for approval.
+   `enforce` denies it, and `prompt` denies it and queues it for approval.
    File reads outside the environment closure and TCP connections to hosts
    not in the network policy are both mediated; loopback and Flox's own
    service hosts are always allowed.
@@ -249,7 +249,7 @@ options.
    reviewable afterwards with `flox sandbox audit`.
 
    This is the `standard` profile, recommended for agents. A future
-   `strict` profile pairs `ask` with no default network allowlist and the
+   `strict` profile pairs `prompt` with no default network allowlist and the
    `$HOME`-dotfile allowance fully removed, granting access incrementally
    for high-isolation work.
 
@@ -264,7 +264,7 @@ options.
    mediated.
    This is an experimental prototype and may change or be removed.
 
-   Under `ask`, review and approve queued requests — and inspect or edit
+   Under `prompt`, review and approve queued requests — and inspect or edit
    saved grants — with [`flox-sandbox(1)`](./flox-sandbox.md).
 
 `-g <generation>`, `--generation <generation>`
