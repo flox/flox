@@ -12,7 +12,7 @@ if set -q FLOX_PROMPT_ENVIRONMENTS && test -n "$FLOX_PROMPT_ENVIRONMENTS"
         set colorPrompt2 \e\[38\;5\;$FLOX_PROMPT_COLOR_2""m
         set _floxPrompt1 $colorPrompt1$FLOX_PROMPT
         set _floxPrompt2 $colorPrompt2"["$FLOX_PROMPT_ENVIRONMENTS"]"
-        set _flox (set_color --bold)$_floxPrompt1" "$_floxPrompt2
+        set _flox (set_color --bold)$_floxPrompt1" "$_floxPrompt2(set_color normal)
     end
 
     if not functions -q flox_saved_fish_prompt
