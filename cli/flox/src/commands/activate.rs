@@ -547,7 +547,6 @@ impl ActivateOptions {
             invocation_type: Some(invocation_type),
             remove_after_reading: true,
             metrics_uuid: flox.metrics_device_uuid,
-            auto_activate: flox.features.auto_activate,
             disable_hook: config.flox.disable_hook.unwrap_or(false),
             flox_bin: std::env::current_exe()
                 .ok()

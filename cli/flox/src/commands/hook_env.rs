@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::io::{BufWriter, Write, stdout};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use flox_core::activate::context::InvocationKind;
 use flox_core::hook_actions::{HookAction, take_hook_actions};
@@ -38,18 +38,6 @@ pub struct HookEnv {
 
 impl HookEnv {
     pub fn handle(self, flox: Flox) -> Result<()> {
-        if !flox.features.auto_activate {
-            bail!(
-                "'hook-env' requires the auto_activate feature flag. Set FLOX_FEATURES_AUTO_ACTIVATE=true."
-            );
-        }
-
-        // TODO: when we add auto-activation logic, we should probably skip this
-        // on the fast path and only add it when we're making a meaningful change.
-        // We could also consider counting unique environments or something
-        // instead of recording every single run of this command.
-        subcommand_metric!("hook-env");
-
         let mut writer = BufWriter::new(stdout());
 
         // Consume any actions another flox command (e.g. `flox deactivate`) left
@@ -57,6 +45,16 @@ impl HookEnv {
         // no pending actions.
         let actions = take_hook_actions(&flox.runtime_dir, self.shell_pid)
             .context("failed to read prompt-hook actions")?;
+
+        // This command runs on every prompt; only record a metric when it
+        // actually does something so metric volume tracks deactivations, not
+        // prompts.
+        // TODO: when we add auto-activation logic, consider counting unique
+        // environments or something instead of recording every consumed action.
+        if !actions.is_empty() {
+            subcommand_metric!("hook-env");
+        }
+
         for action in actions {
             match action {
                 HookAction::Deactivate {
@@ -81,13 +79,19 @@ impl HookEnv {
         }
 
         // Temporary: set _FLOX_HOOK_FIRED so we can verify the hook fires.
-        // This will be replaced by real environment activation logic.
-        let cwd = std::env::current_dir()?.to_string_lossy().to_string();
-        let escaped_cwd = shell_escape::escape(Cow::Borrowed(&cwd));
-        match self.shell {
-            Shell::Bash | Shell::Zsh => writeln!(writer, "export _FLOX_HOOK_FIRED={escaped_cwd};")?,
-            Shell::Fish => writeln!(writer, "set -gx _FLOX_HOOK_FIRED {escaped_cwd};")?,
-            Shell::Tcsh => writeln!(writer, "setenv _FLOX_HOOK_FIRED {escaped_cwd};")?,
+        // This is the placeholder for auto-activation logic and stays gated
+        // behind the auto_activate feature flag, unlike the deactivate-action
+        // handling above.
+        if flox.features.auto_activate {
+            let cwd = std::env::current_dir()?.to_string_lossy().to_string();
+            let escaped_cwd = shell_escape::escape(Cow::Borrowed(&cwd));
+            match self.shell {
+                Shell::Bash | Shell::Zsh => {
+                    writeln!(writer, "export _FLOX_HOOK_FIRED={escaped_cwd};")?
+                },
+                Shell::Fish => writeln!(writer, "set -gx _FLOX_HOOK_FIRED {escaped_cwd};")?,
+                Shell::Tcsh => writeln!(writer, "setenv _FLOX_HOOK_FIRED {escaped_cwd};")?,
+            }
         }
 
         writer.flush()?;

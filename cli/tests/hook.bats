@@ -44,13 +44,15 @@ teardown() {
 # hook-env: feature flag gating
 # ---------------------------------------------------------------------------- #
 
+# Deactivate-action handling in hook-env is not gated, but the auto-activation
+# placeholder (_FLOX_HOOK_FIRED) still is.
 # TODO: Remove this test when the auto_activate feature flag is removed.
 # bats test_tags=hook:hook-env
-@test "'flox hook-env' fails without auto_activate feature flag" {
+@test "'flox hook-env' succeeds without auto_activate feature flag but doesn't auto-activate" {
   unset FLOX_FEATURES_AUTO_ACTIVATE
   run "$FLOX_BIN" hook-env --shell bash --shell-pid "$$" --invocation-type inplace
-  assert_failure
-  assert_output --partial "auto_activate feature flag"
+  assert_success
+  refute_output --partial "_FLOX_HOOK_FIRED"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -171,11 +173,9 @@ EOF
 # bats test_tags=hook:deactivate:bash
 @test "bash: plain 'flox deactivate' restores env via the prompt hook" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   set_test_var_manifest
 
   run --separate-stderr bash -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which bash)
     export TEST_VAR=original
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
@@ -192,11 +192,9 @@ EOF
 # bats test_tags=hook:deactivate:zsh
 @test "zsh: plain 'flox deactivate' restores env via the prompt hook" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   set_test_var_manifest
 
   run --separate-stderr zsh -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which zsh)
     export TEST_VAR=original
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
@@ -213,11 +211,9 @@ EOF
 # bats test_tags=hook:deactivate:fish
 @test "fish: plain 'flox deactivate' restores env via the prompt hook" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   set_test_var_manifest
 
   run --separate-stderr fish -c "
-    set -gx FLOX_FEATURES_AUTO_ACTIVATE true
     set -gx TEST_VAR original
     eval ($FLOX_BIN activate -d $PROJECT_DIR)
     echo \"during:\$TEST_VAR\"
@@ -233,11 +229,9 @@ EOF
 # bats test_tags=hook:deactivate:tcsh
 @test "tcsh: plain 'flox deactivate' restores env via the prompt hook" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   set_test_var_manifest
 
   run --separate-stderr tcsh -c "
-    setenv FLOX_FEATURES_AUTO_ACTIVATE true
     setenv TEST_VAR original
     eval \"\`$FLOX_BIN activate -d $PROJECT_DIR\`\"
     echo \"during:\$TEST_VAR\"
@@ -248,6 +242,36 @@ EOF
   assert_success
   assert_output --partial "during:modified"
   assert_output --partial "after:original"
+}
+
+# bats test_tags=hook:deactivate:tcsh
+@test "tcsh: interactive-type deactivate exits via the auto-fired prompt hook" {
+  project_setup
+
+  # tcsh's faulty-alias handling only applies to auto-fired special aliases:
+  # an `exit` unwinding out of the eval'd `hook-env` output inside precmd makes
+  # tcsh print "Faulty alias 'precmd' removed." and delete the alias WITHOUT
+  # exiting the shell. The interactive deactivation script therefore sets
+  # `_flox_exit` for the alias body to act on after the eval. Unlike the test
+  # above, `precmd` must not be invoked manually here — a manual call is
+  # ordinary alias expansion and bypasses the faulty-alias handling under test;
+  # `tcsh -i` auto-fires precmd before each prompt even with stdin piped.
+  #
+  # The activation is in place; _FLOX_INVOCATION_TYPE is overridden to
+  # `interactive` so the hook requests the interactive (exit) deactivation
+  # script, as it would inside a real `flox activate` subshell.
+  SESSION="$BATS_TEST_TMPDIR/interactive-deactivate.tcsh"
+  cat > "$SESSION" <<EOF
+eval "\`$FLOX_BIN activate -d $PROJECT_DIR\`"
+setenv _FLOX_INVOCATION_TYPE interactive
+$FLOX_BIN deactivate
+echo SHOULD_NOT_PRINT: the shell exits at the next prompt, before this line
+EOF
+
+  run tcsh -i < "$SESSION"
+  assert_success
+  refute_output --partial "Faulty alias"
+  refute_output --partial "SHOULD_NOT_PRINT"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -262,12 +286,10 @@ EOF
 # bats test_tags=hook:deactivate:not-set-up
 @test "plain 'flox deactivate' errors when the prompt hook is not set up" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
 
   # Activate (which exports the version marker), then clear the marker to
   # simulate a shell with no prompt hook registered.
   run bash -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which bash)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     unset _FLOX_PROMPT_HOOK_VERSION
@@ -280,10 +302,8 @@ EOF
 # bats test_tags=hook:deactivate:incompatible
 @test "plain 'flox deactivate' errors when the prompt hook version is incompatible" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
 
   run bash -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which bash)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     export _FLOX_PROMPT_HOOK_VERSION=99
@@ -296,11 +316,9 @@ EOF
 # bats test_tags=hook:deactivate:disabled
 @test "plain 'flox deactivate' errors when the prompt hook is disabled in config" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   "$FLOX_BIN" config --set disable_hook true
 
   run bash -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which bash)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     $FLOX_BIN deactivate

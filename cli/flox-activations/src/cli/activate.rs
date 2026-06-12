@@ -88,11 +88,7 @@ impl ActivateArgs {
 
         // Capture env snapshot *before* modifying the process environment so
         // the diff reflects the true pre-activation state.
-        let vars_from_env = if context.auto_activate {
-            VarsFromEnvironment::get_with_snapshot()?
-        } else {
-            VarsFromEnvironment::get()?
-        };
+        let vars_from_env = VarsFromEnvironment::get_with_snapshot()?;
 
         // Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
         unsafe { std::env::remove_var("FLOX_SHELL") };
@@ -136,11 +132,7 @@ impl ActivateArgs {
         let warning_interval = Duration::from_secs(5);
         let mut last_warning: Option<Instant> = None;
 
-        let deactivate_hint = if context.auto_activate {
-            "To stop using this environment, run 'flox deactivate'"
-        } else {
-            "To stop using this environment, type 'exit'"
-        };
+        let deactivate_hint = "To stop using this environment, run 'flox deactivate'";
 
         loop {
             match self.try_start_or_attach(context, subsystem_verbosity, vars_from_env)? {

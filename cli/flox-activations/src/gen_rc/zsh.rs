@@ -363,6 +363,22 @@ mod tests {
             export _FLOX_INVOCATION_TYPE=interactive;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+            export _FLOX_PROMPT_HOOK_VERSION=1;
+            _flox_hook() {
+              local _flox_vars;
+              _flox_vars="$("/flox" hook-env --shell zsh --shell-pid $$ --invocation-type "${_FLOX_INVOCATION_TYPE:-inplace}")";
+              trap -- '' SIGINT;
+              eval "$_flox_vars";
+              trap - SIGINT;
+            };
+            typeset -ag precmd_functions;
+            if (( ! ${+functions[_flox_hook]} )) || (( ! ${precmd_functions[(I)_flox_hook]} )); then
+              precmd_functions=(_flox_hook $precmd_functions);
+            fi;
+            typeset -ag chpwd_functions;
+            if (( ! ${chpwd_functions[(I)_flox_hook]} )); then
+              chpwd_functions=(_flox_hook $chpwd_functions);
+            fi;
         "#]]
         .assert_eq(&output);
     }
@@ -391,6 +407,22 @@ mod tests {
             export _FLOX_INVOCATION_TYPE=inplace;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+            export _FLOX_PROMPT_HOOK_VERSION=1;
+            _flox_hook() {
+              local _flox_vars;
+              _flox_vars="$("/flox" hook-env --shell zsh --shell-pid $$ --invocation-type "${_FLOX_INVOCATION_TYPE:-inplace}")";
+              trap -- '' SIGINT;
+              eval "$_flox_vars";
+              trap - SIGINT;
+            };
+            typeset -ag precmd_functions;
+            if (( ! ${+functions[_flox_hook]} )) || (( ! ${precmd_functions[(I)_flox_hook]} )); then
+              precmd_functions=(_flox_hook $precmd_functions);
+            fi;
+            typeset -ag chpwd_functions;
+            if (( ! ${chpwd_functions[(I)_flox_hook]} )); then
+              chpwd_functions=(_flox_hook $chpwd_functions);
+            fi;
         "#]]
         .assert_eq(&output);
     }

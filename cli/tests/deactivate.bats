@@ -16,7 +16,6 @@ load test_support.bash
 # ---------------------------------------------------------------------------- #
 
 setup_file() {
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   common_file_setup
 }
 
@@ -509,7 +508,6 @@ assert_prompt_round_trip() {
 # bats test_tags=deactivate
 @test "deactivate preserves a user-set FLOX_SHELL (zsh)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
 
   assert_user_var_preserved FLOX_SHELL zsh
@@ -518,7 +516,6 @@ assert_prompt_round_trip() {
 # bats test_tags=deactivate
 @test "deactivate preserves a user-set SSL_CERT_FILE (zsh)" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
 
   assert_user_var_preserved SSL_CERT_FILE /user/cert
@@ -541,6 +538,15 @@ FLOX_COLD_START_UNSET=(
   -u FLOX_VERSION
   -u _FLOX_HOOK_SAVE_FPATH
   -u _activate_d
+  # Exported by an outer activation (e.g. when the test suite itself runs
+  # inside one) and unset by the deactivate flow, so leaked values surface
+  # as spurious env-diff records.
+  -u _FLOX_PROMPT_HOOK_VERSION
+  -u _FLOX_INVOCATION_TYPE
+  # A leaked auto-activate flag makes the prompt hook set _FLOX_HOOK_FIRED
+  # inside interactive test sessions, which also surfaces in the env diff.
+  -u FLOX_FEATURES_AUTO_ACTIVATE
+  -u _FLOX_HOOK_FIRED
 )
 
 # Wrapper for the cold-start env prefix. In addition to unsetting the
@@ -970,7 +976,6 @@ SSL_CERT_FILE
 TCLLIBPATH
 TERM
 _FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_HOOK_FIRED
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
   else
@@ -982,7 +987,6 @@ SSL_CERT_DIR
 TCLLIBPATH
 TERM
 _FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_HOOK_FIRED
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
   fi
@@ -1016,7 +1020,6 @@ TCLLIBPATH
 TERM
 _
 _FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_HOOK_FIRED
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
   else
@@ -1029,7 +1032,6 @@ TCLLIBPATH
 TERM
 _
 _FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_HOOK_FIRED
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
   fi
@@ -1072,7 +1074,6 @@ TCLLIBPATH
 TERM
 VENDOR
 _FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_HOOK_FIRED
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
   else
@@ -1093,10 +1094,45 @@ TCLLIBPATH
 TERM
 VENDOR
 _FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_HOOK_FIRED
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
   fi
+}
+
+# bats test_tags=activate,deactivate
+@test "interactive deactivate exits the subshell via the prompt hook (tcsh)" {
+  project_setup
+
+  # Unlike the env-diff tests above, deactivate at the TOP-LEVEL interactive
+  # prompt: the next prompt's hook consumes the action and exits the subshell.
+  # Regression test: tcsh used to print "Faulty alias 'precmd' removed." and
+  # stay in the subshell, because an `exit` unwinding out of the eval inside
+  # the auto-fired precmd alias removes the alias instead of exiting (the
+  # deactivation script now sets a flag the alias body acts on).
+  FLOX_SHELL="tcsh" run -0 \
+    flox_cold_start expect "$TESTS_DIR/activate/interactive-deactivate.exp" "$PROJECT_DIR"
+  refute_output --partial "Faulty alias"
+}
+
+# bats test_tags=activate,deactivate
+@test "interactive deactivate exits the subshell via the prompt hook (bash)" {
+  project_setup
+  FLOX_SHELL="bash" run -0 \
+    flox_cold_start expect "$TESTS_DIR/activate/interactive-deactivate.exp" "$PROJECT_DIR"
+}
+
+# bats test_tags=activate,deactivate
+@test "interactive deactivate exits the subshell via the prompt hook (fish)" {
+  project_setup
+  FLOX_SHELL="fish" run -0 \
+    flox_cold_start expect "$TESTS_DIR/activate/interactive-deactivate.exp" "$PROJECT_DIR"
+}
+
+# bats test_tags=activate,deactivate
+@test "interactive deactivate exits the subshell via the prompt hook (zsh)" {
+  project_setup
+  FLOX_SHELL="zsh" run -0 \
+    flox_cold_start expect "$TESTS_DIR/activate/interactive-deactivate.exp" "$PROJECT_DIR"
 }
 
 # bats test_tags=activate,deactivate
@@ -1130,7 +1166,6 @@ SSL_CERT_FILE
 TCLLIBPATH
 TERM
 _FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_HOOK_FIRED
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
   else
@@ -1146,7 +1181,6 @@ SSL_CERT_DIR
 TCLLIBPATH
 TERM
 _FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_HOOK_FIRED
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
   fi

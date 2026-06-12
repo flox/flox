@@ -11,7 +11,7 @@ pub struct VarsFromEnvironment {
     pub path: Option<String>,
     pub manpath: Option<String>,
     /// Full environment snapshot for activation diff computation.
-    /// Only populated when auto_activate is enabled.
+    /// Populated by [`VarsFromEnvironment::get_with_snapshot`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub full_env: Option<HashMap<String, String>>,
 }
@@ -31,7 +31,9 @@ impl VarsFromEnvironment {
     }
 
     /// Capture path-related vars plus full env snapshot.
-    /// Used when auto_activate is enabled.
+    /// Used on activation so the diff can restore the full environment on
+    /// deactivation; [`VarsFromEnvironment::get`] captures only the
+    /// path-related vars.
     pub fn get_with_snapshot() -> Result<Self> {
         // TODO(performance): is it faster to copy the entirety of env, or just get every environment variable we need?
         let all_vars: HashMap<String, String> = std::env::vars().collect();

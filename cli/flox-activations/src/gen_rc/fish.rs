@@ -333,6 +333,32 @@ mod tests {
             /flox_activations profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source;
             set -gx fish_trace 0;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+            set -gx _FLOX_PROMPT_HOOK_VERSION 1;
+            function _flox_invocation_type;
+                test -n "$_FLOX_INVOCATION_TYPE"; and echo $_FLOX_INVOCATION_TYPE; or echo inplace;
+            end;
+            function _flox_hook --on-event fish_prompt;
+                eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
+                if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" != "disable_arrow";
+                    set -g _flox_pwd_hook_active 1;
+                end;
+            end;
+            function _flox_hook_pwd --on-variable PWD;
+                if set -q _flox_pwd_hook_active;
+                    if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" = "eval_after_arrow";
+                        set -g _flox_env_again 0;
+                    else;
+                        eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
+                    end;
+                end;
+            end;
+            function _flox_hook_preexec --on-event fish_preexec;
+                if set -q _flox_env_again;
+                    set -e _flox_env_again;
+                    eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
+                end;
+                set -e _flox_pwd_hook_active;
+            end;
         "#]].assert_eq(&output);
     }
 
@@ -367,6 +393,32 @@ mod tests {
             /flox_activations profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source;
             set -gx fish_trace 0;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+            set -gx _FLOX_PROMPT_HOOK_VERSION 1;
+            function _flox_invocation_type;
+                test -n "$_FLOX_INVOCATION_TYPE"; and echo $_FLOX_INVOCATION_TYPE; or echo inplace;
+            end;
+            function _flox_hook --on-event fish_prompt;
+                eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
+                if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" != "disable_arrow";
+                    set -g _flox_pwd_hook_active 1;
+                end;
+            end;
+            function _flox_hook_pwd --on-variable PWD;
+                if set -q _flox_pwd_hook_active;
+                    if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" = "eval_after_arrow";
+                        set -g _flox_env_again 0;
+                    else;
+                        eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
+                    end;
+                end;
+            end;
+            function _flox_hook_preexec --on-event fish_preexec;
+                if set -q _flox_env_again;
+                    set -e _flox_env_again;
+                    eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
+                end;
+                set -e _flox_pwd_hook_active;
+            end;
         "#]].assert_eq(&output);
     }
 

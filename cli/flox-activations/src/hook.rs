@@ -79,6 +79,15 @@ pub fn fish_hook(flox_bin: &str) -> String {
     // so semicolons are required as statement delimiters to survive. The
     // newlines are kept for readability — fish treats them as whitespace.
     //
+    // The hook-env output is applied with `eval`, not `| source`: in fish,
+    // `exit` in a sourced file only skips the rest of that file and does NOT
+    // exit the shell, so the `exit;` script emitted for deactivating an
+    // interactive (subshell) activation would be silently swallowed. `eval`
+    // runs in the function's own context, where `exit` does exit the shell —
+    // matching the bash/zsh hooks, which eval for the same reason.
+    // `string collect` folds the output into a single argument, preserving
+    // newlines; on empty output it yields no argument and `eval` is a no-op.
+    //
     // Fish doesn't parse nested `function...end` blocks properly when the
     // code arrives via eval with collapsed newlines, so we can't nest the
     // PWD hook inside the prompt handler like direnv does. Instead, all
@@ -100,7 +109,7 @@ pub fn fish_hook(flox_bin: &str) -> String {
             test -n "$_FLOX_INVOCATION_TYPE"; and echo $_FLOX_INVOCATION_TYPE; or echo inplace;
         end;
         function _flox_hook --on-event fish_prompt;
-            "{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | source;
+            eval ("{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
             if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" != "disable_arrow";
                 set -g _flox_pwd_hook_active 1;
             end;
@@ -110,14 +119,14 @@ pub fn fish_hook(flox_bin: &str) -> String {
                 if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" = "eval_after_arrow";
                     set -g _flox_env_again 0;
                 else;
-                    "{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | source;
+                    eval ("{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
                 end;
             end;
         end;
         function _flox_hook_preexec --on-event fish_preexec;
             if set -q _flox_env_again;
                 set -e _flox_env_again;
-                "{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | source;
+                eval ("{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
             end;
             set -e _flox_pwd_hook_active;
         end;
@@ -134,6 +143,14 @@ pub fn fish_hook(flox_bin: &str) -> String {
 // it from `_FLOX_INVOCATION_TYPE` only when that is set, pass it, then unset it
 // so it doesn't linger. `inplace` is the right default because the prompt hook
 // only ever deactivates in place.
+//
+// Exiting from the hook is also awkward: if `exit` unwinds out of the eval'd
+// `hook-env` output, tcsh treats the special alias as broken, prints
+// "Faulty alias 'precmd' removed.", deletes the alias, and does NOT exit. An
+// `exit` at the alias-body top level is fine, so for an interactive
+// deactivation `hook-env` emits `set _flox_exit=1` (see
+// `emit_deactivate_script` in the `flox` crate) and the alias body checks the
+// flag after the eval completes.
 pub fn tcsh_hook(flox_bin: &str) -> String {
     // A tcsh alias body must be a single line, so assemble the statements here
     // and join them with "; " rather than writing one long string literal.
@@ -144,6 +161,7 @@ pub fn tcsh_hook(flox_bin: &str) -> String {
             r#"eval "`{flox_bin} hook-env --shell tcsh --shell-pid $$ --invocation-type "$_flox_invocation_type"`""#
         ),
         "unset _flox_invocation_type".to_string(),
+        "if ( $?_flox_exit ) exit".to_string(),
     ]
     .join("; ");
     formatdoc!(

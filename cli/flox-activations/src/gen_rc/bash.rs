@@ -299,7 +299,7 @@ mod tests {
         strip_volatile_deactivate,
         test_deactivate_ctx,
         test_startup_ctx,
-        test_startup_ctx_hook,
+        test_startup_ctx_disable_hook,
     };
 
     // NOTE: For these `expect!` tests, run unit tests with `UPDATE_EXPECT=1`
@@ -323,24 +323,23 @@ mod tests {
         strip_volatile_deactivate(&output)
     }
 
-    // The auto-activation prompt hook (the `_flox_hook` function and its
-    // PROMPT_COMMAND registration) is emitted only when auto-activation is on
-    // and `disable_hook` is not set. This replaces an integration test that
-    // activated a real shell to check the same gating.
+    // The prompt hook (the `_flox_hook` function and its PROMPT_COMMAND
+    // registration) is emitted unless `disable_hook` is set. This replaces an
+    // integration test that activated a real shell to check the same gating.
     #[test]
     fn disable_hook_suppresses_prompt_hook_registration() {
         let shell = ShellWithPath::Bash(PathBuf::from("/bin/bash"));
 
-        // Auto-activation on, hook not disabled: the hook is registered.
+        // Hook not disabled: the hook is registered.
         let with_hook =
-            render_normalized(&test_startup_ctx_hook(shell.clone(), false, true, false));
+            render_normalized(&test_startup_ctx_disable_hook(shell.clone(), false, false));
         assert!(
             with_hook.contains("_flox_hook"),
             "expected the prompt hook to be registered:\n{with_hook}"
         );
 
-        // disable_hook = true: no hook is registered, even with auto-activation on.
-        let without_hook = render_normalized(&test_startup_ctx_hook(shell, false, true, true));
+        // disable_hook = true: no hook is registered.
+        let without_hook = render_normalized(&test_startup_ctx_disable_hook(shell, false, true));
         assert!(
             !without_hook.contains("_flox_hook"),
             "expected no prompt hook when disable_hook is set:\n{without_hook}"
@@ -374,6 +373,23 @@ mod tests {
             set +h
             set +x
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+            export _FLOX_PROMPT_HOOK_VERSION=1;
+            _flox_hook() {
+              local _prev_exit=$?;
+              local _flox_vars;
+              _flox_vars="$("/flox" hook-env --shell bash --shell-pid $$ --invocation-type "${_FLOX_INVOCATION_TYPE:-inplace}")";
+              trap -- '' SIGINT;
+              eval "$_flox_vars";
+              trap - SIGINT;
+              return $_prev_exit;
+            };
+            if [[ ";${PROMPT_COMMAND[*]:-};" != *";_flox_hook;"* ]]; then
+              if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]]; then
+                PROMPT_COMMAND=(_flox_hook "${PROMPT_COMMAND[@]}");
+              else
+                PROMPT_COMMAND="_flox_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}";
+              fi;
+            fi;
         "#]].assert_eq(&output);
     }
 
@@ -406,6 +422,23 @@ mod tests {
             set +h
             set +x
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+            export _FLOX_PROMPT_HOOK_VERSION=1;
+            _flox_hook() {
+              local _prev_exit=$?;
+              local _flox_vars;
+              _flox_vars="$("/flox" hook-env --shell bash --shell-pid $$ --invocation-type "${_FLOX_INVOCATION_TYPE:-inplace}")";
+              trap -- '' SIGINT;
+              eval "$_flox_vars";
+              trap - SIGINT;
+              return $_prev_exit;
+            };
+            if [[ ";${PROMPT_COMMAND[*]:-};" != *";_flox_hook;"* ]]; then
+              if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]]; then
+                PROMPT_COMMAND=(_flox_hook "${PROMPT_COMMAND[@]}");
+              else
+                PROMPT_COMMAND="_flox_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}";
+              fi;
+            fi;
         "#]].assert_eq(&output);
     }
 

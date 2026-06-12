@@ -82,19 +82,18 @@ pub(crate) mod test_helpers {
     /// field with stable test values so snapshot output is
     /// reproducible across shells.
     ///
-    /// Auto-activation is off, so no prompt hook is registered. Use
-    /// [`test_startup_ctx_hook`] to control that.
+    /// The prompt hook is registered by default. Use
+    /// [`test_startup_ctx_disable_hook`] to suppress it.
     pub fn test_startup_ctx(shell: ShellWithPath, is_in_place: bool) -> StartupCtx {
-        test_startup_ctx_hook(shell, is_in_place, false, false)
+        test_startup_ctx_disable_hook(shell, is_in_place, false)
     }
 
-    /// Like [`test_startup_ctx`] but with control over the auto-activation
-    /// inputs, for tests that exercise prompt-hook registration. The hook is
-    /// emitted when `auto_activate` is set and `disable_hook` is not.
-    pub fn test_startup_ctx_hook(
+    /// Like [`test_startup_ctx`] but with control over the `disable_hook`
+    /// config option, for tests that exercise prompt-hook registration. The
+    /// hook is emitted unless `disable_hook` is set.
+    pub fn test_startup_ctx_disable_hook(
         shell: ShellWithPath,
         is_in_place: bool,
-        auto_activate: bool,
         disable_hook: bool,
     ) -> StartupCtx {
         let invocation_type = if is_in_place {
@@ -134,7 +133,6 @@ pub(crate) mod test_helpers {
             invocation_type: Some(invocation_type.clone()),
             remove_after_reading: false,
             metrics_uuid: None,
-            auto_activate,
             disable_hook,
             flox_bin: "/flox".to_string(),
             auto_activate_fish_mode: None,

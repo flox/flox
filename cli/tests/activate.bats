@@ -978,10 +978,8 @@ EOF
   # activation and skips the dumpfile snapshot, so deactivate has
   # nothing to restore. CI inherits a clean env; clearing here keeps
   # the test reproducible locally.
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   unset _FLOX_HOOK_SAVE_FPATH _FLOX_HOOK_SAVE_COMPINIT_DUMPFILE _FLOX_HOOK_DIFF
   run zsh -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(command -v zsh)
     autoload -Uz compinit
     compinit
@@ -1011,7 +1009,6 @@ EOF
     "$FLOX_BIN" install --dir "$inner_dir" fd
 
   # Clear any leaked hook vars (same reasoning as the test above).
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   unset _FLOX_HOOK_SAVE_FPATH _FLOX_HOOK_SAVE_COMPINIT_DUMPFILE _FLOX_HOOK_DIFF
   run zsh -c "
     export FLOX_SHELL=\$(command -v zsh)
@@ -2313,7 +2310,7 @@ EOF
   assert_output --partial - <<EOF
 nested hook.on-activate
 ✔ You are now using the environment 'nested'
-To stop using this environment, type 'exit'
+To stop using this environment, run 'flox deactivate'
 
 sourcing profile.common for first time
 sourcing profile.zsh for first time
@@ -4142,7 +4139,7 @@ EOF
         expected_message="$(cat << EOF
 spawn ${FLOX_BIN} activate --dir ${PROJECT_DIR}
 ✔ Attached to existing activation of environment '${PROJECT_NAME}'
-To stop using this environment, type 'exit'
+To stop using this environment, run 'flox deactivate'
 
 ${output_from_rc_files}
 flox [${PROJECT_NAME}] myprompt> true && exit

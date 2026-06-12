@@ -19,7 +19,7 @@ use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use indoc::{formatdoc, indoc};
 use shell_gen::ShellWithPath;
 
-use super::{activated_environments, uninitialized_environment_description};
+use super::activated_environments;
 use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::active_environments::ActiveEnvironment;
@@ -32,7 +32,8 @@ pub struct Deactivate {
     ///
     /// When provided, emits a deactivation script to stdout. The value
     /// determines the exit strategy:
-    /// - `"interactive"` → emit `exit;` (subshell will exit and clean up)
+    /// - `"interactive"` → emit an exit (subshell will exit and clean up);
+    ///   see [`emit_deactivate_script`] for the tcsh-specific form
     /// - anything else   → emit in-place env-var restoration + detach command
     #[bpaf(long("print-script"), argument("INVOCATION_TYPE"), optional, hide)]
     pub print_script: Option<String>,
@@ -40,10 +41,6 @@ pub struct Deactivate {
 
 impl Deactivate {
     pub fn handle(self, config: Config, flox: Flox) -> Result<()> {
-        if !flox.features.auto_activate {
-            return self.old_exit(flox);
-        }
-
         subcommand_metric!("deactivate");
 
         if let Some(invocation_type) = self.print_script.clone() {
@@ -123,29 +120,6 @@ impl Deactivate {
             flox_activate_tracelevel(),
             &mut writer,
         )
-    }
-
-    pub fn old_exit(self, _flox: Flox) -> Result<()> {
-        subcommand_metric!("exit");
-
-        let active_environments = activated_environments();
-        let last_active = active_environments.last_active();
-
-        let Some(last_active) = last_active else {
-            message::info(indoc! {"
-                No environment active!
-                Exit active environments by typing 'exit' to exit your current shell or close your terminal.
-                Environments can be activated using `flox activate`.
-            "});
-
-            return Ok(());
-        };
-
-        message::info(formatdoc! {"
-            Exit the currently active environment {} by typing 'exit' to exit your current shell or close your terminal.
-        ", uninitialized_environment_description(&last_active)?});
-
-        Ok(())
     }
 }
 
@@ -233,8 +207,14 @@ pub(crate) fn flox_activate_tracelevel() -> u32 {
 /// Emit a deactivation script for `invocation_kind` to `writer`.
 ///
 /// Shared by `flox deactivate --print-script` and `flox hook-env`:
-/// - `Interactive` → `exit;` (the subshell exits and the executive cleans up
-///   state.json when the PID goes away).
+/// - `Interactive` → an exit (the subshell exits and the executive cleans up
+///   state.json when the PID goes away). For most shells this is a literal
+///   `exit;`, but tcsh removes a special alias (`precmd`/`cwdcmd`) — printing
+///   "Faulty alias 'precmd' removed." — without exiting the shell when `exit`
+///   unwinds out of an `eval` inside it. The tcsh prompt hook evals this
+///   script from exactly that position, so for tcsh emit a flag the alias
+///   body checks after the eval, exiting at the alias top level instead
+///   (see `tcsh_hook` in `flox-activations`).
 /// - `InPlace`/`ShellCommand` → restore env vars, then emit a
 ///   `flox-activations detach` command so state.json is updated once the caller
 ///   eval's the script.
@@ -249,7 +229,10 @@ pub(crate) fn emit_deactivate_script(
 ) -> Result<()> {
     match invocation_kind {
         InvocationKind::Interactive => {
-            write!(writer, "exit;")?;
+            match shell {
+                ShellWithPath::Tcsh(_) => write!(writer, "set _flox_exit=1;")?,
+                _ => write!(writer, "exit;")?,
+            }
             Ok(())
         },
         InvocationKind::InPlace | InvocationKind::ShellCommand => {
@@ -267,5 +250,40 @@ pub(crate) fn emit_deactivate_script(
         InvocationKind::ExecCommand => {
             bail!("cannot deactivate an exec command activation");
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn interactive_deactivate_script(shell: ShellWithPath) -> String {
+        let mut buf = Vec::new();
+        emit_deactivate_script(
+            shell,
+            InvocationKind::Interactive,
+            Path::new("/activation_state_dir"),
+            Path::new("/flox_env"),
+            0,
+            &mut buf,
+        )
+        .unwrap();
+        String::from_utf8(buf).unwrap()
+    }
+
+    #[test]
+    fn interactive_deactivate_emits_exit_for_bash() {
+        let script = interactive_deactivate_script(ShellWithPath::Bash("bash".into()));
+        assert_eq!(script, "exit;");
+    }
+
+    #[test]
+    fn interactive_deactivate_emits_exit_flag_for_tcsh() {
+        // The tcsh prompt hook evals this script inside the precmd/cwdcmd alias
+        // body; an `exit` there makes tcsh remove the alias ("Faulty alias
+        // 'precmd' removed.") without exiting, so the script sets a flag the
+        // alias checks after the eval instead.
+        let script = interactive_deactivate_script(ShellWithPath::Tcsh("tcsh".into()));
+        assert_eq!(script, "set _flox_exit=1;");
     }
 }
