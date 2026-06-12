@@ -198,16 +198,16 @@ pub fn btree_maps_overlapping_keys<T: Arbitrary>(
             )| {
                 let mut map1 = BTreeMap::new();
                 let mut map2 = BTreeMap::new();
-                for (k, v) in keys_map1.clone().into_iter().zip(vals_map1.into_iter()) {
+                for (k, v) in keys_map1.clone().into_iter().zip(vals_map1) {
                     map1.insert(k, v);
                 }
-                for (k, v) in keys_dup.clone().into_iter().zip(vals_dup_map1.into_iter()) {
+                for (k, v) in keys_dup.clone().into_iter().zip(vals_dup_map1) {
                     map1.insert(k, v);
                 }
-                for (k, v) in keys_map2.clone().into_iter().zip(vals_map2.into_iter()) {
+                for (k, v) in keys_map2.clone().into_iter().zip(vals_map2) {
                     map2.insert(k, v);
                 }
-                for (k, v) in keys_dup.clone().into_iter().zip(vals_dup_map2.into_iter()) {
+                for (k, v) in keys_dup.clone().into_iter().zip(vals_dup_map2) {
                     map2.insert(k, v);
                 }
                 OverlappingMaps {

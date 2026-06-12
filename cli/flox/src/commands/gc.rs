@@ -335,6 +335,8 @@ fn run_store_gc() -> Result<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches::assert_matches;
+
     use super::*;
 
     fn state_sequence(lines: &[&str]) -> Vec<GcProgress> {
@@ -372,26 +374,26 @@ mod tests {
         let states = state_sequence(&lines);
         assert!(!states.is_empty());
         let mut states = states.into_iter();
-        assert!(matches!(states.next().unwrap(), GcProgress::Init));
-        assert!(matches!(states.next().unwrap(), GcProgress::FindingRoots));
-        assert!(matches!(states.next().unwrap(), GcProgress::RemovingLinks));
-        assert!(matches!(states.next().unwrap(), GcProgress::Scanning));
-        assert!(matches!(
+        assert_matches!(states.next().unwrap(), GcProgress::Init);
+        assert_matches!(states.next().unwrap(), GcProgress::FindingRoots);
+        assert_matches!(states.next().unwrap(), GcProgress::RemovingLinks);
+        assert_matches!(states.next().unwrap(), GcProgress::Scanning);
+        assert_matches!(
             states.next().unwrap(),
             GcProgress::DeletingStorePaths(_)
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             states.next().unwrap(),
             GcProgress::DeletingStorePaths(_)
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             states.next().unwrap(),
             GcProgress::DeletingStorePaths(_)
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             states.next().unwrap(),
             GcProgress::DeletingStorePaths(_)
-        ));
+        );
         assert!(states.next().is_none());
     }
 
@@ -414,21 +416,21 @@ mod tests {
         let states = state_sequence(&lines);
         assert!(!states.is_empty());
         let mut states = states.into_iter();
-        assert!(matches!(states.next().unwrap(), GcProgress::Init));
-        assert!(matches!(states.next().unwrap(), GcProgress::FindingRoots));
-        assert!(matches!(states.next().unwrap(), GcProgress::Scanning));
-        assert!(matches!(
+        assert_matches!(states.next().unwrap(), GcProgress::Init);
+        assert_matches!(states.next().unwrap(), GcProgress::FindingRoots);
+        assert_matches!(states.next().unwrap(), GcProgress::Scanning);
+        assert_matches!(
             states.next().unwrap(),
             GcProgress::DeletingStorePaths(_)
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             states.next().unwrap(),
             GcProgress::DeletingStorePaths(_)
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             states.next().unwrap(),
             GcProgress::DeletingStorePaths(_)
-        ));
+        );
         assert!(states.next().is_none());
     }
 
@@ -447,20 +449,20 @@ mod tests {
         let states = state_sequence(&lines);
         assert!(!states.is_empty());
         let mut states = states.into_iter();
-        assert!(matches!(states.next().unwrap(), GcProgress::Init));
-        assert!(matches!(states.next().unwrap(), GcProgress::FindingRoots));
-        assert!(matches!(
+        assert_matches!(states.next().unwrap(), GcProgress::Init);
+        assert_matches!(states.next().unwrap(), GcProgress::FindingRoots);
+        assert_matches!(
             states.next().unwrap(),
             GcProgress::DeletingStorePaths(_)
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             states.next().unwrap(),
             GcProgress::DeletingStorePaths(_)
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             states.next().unwrap(),
             GcProgress::DeletingStorePaths(_)
-        ));
+        );
         assert!(states.next().is_none());
     }
 }

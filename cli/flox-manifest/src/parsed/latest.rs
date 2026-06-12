@@ -104,6 +104,7 @@ impl ManifestLatest {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches::assert_matches;
     use std::path::PathBuf;
 
     use flox_core::data::environment_ref::RemoteEnvironmentRef;
@@ -599,7 +600,7 @@ mod tests {
         let result = manifest_mock
             .resolve_install_id("dotted.package", &None)
             .unwrap_err();
-        assert!(matches!(result, ManifestError::MultiplePackagesMatch(_, _)));
+        assert_matches!(result, ManifestError::MultiplePackagesMatch(_, _));
     }
 
     #[test]
@@ -609,7 +610,7 @@ mod tests {
         let result = manifest_mock
             .resolve_install_id("invalid.packageName", &None)
             .unwrap_err();
-        assert!(matches!(result, ManifestError::PackageNotFound(_)));
+        assert_matches!(result, ManifestError::PackageNotFound(_));
     }
 
     #[test]

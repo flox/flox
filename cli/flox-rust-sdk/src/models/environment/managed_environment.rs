@@ -1743,6 +1743,7 @@ pub mod test_helpers {
 
 #[cfg(test)]
 mod test {
+    use std::assert_matches::assert_matches;
     use std::str::FromStr;
 
     use flox_core::Version;
@@ -2206,10 +2207,10 @@ mod test {
         let reg_path = env_registry_path(&flox);
         assert!(reg_path.exists());
         let reg = read_environment_registry(&reg_path).unwrap().unwrap();
-        assert!(matches!(
+        assert_matches!(
             reg.entries[0].envs[0].pointer,
             EnvironmentPointer::Managed(_)
-        ));
+        );
     }
 
     #[test]

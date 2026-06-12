@@ -70,6 +70,7 @@ pub fn cleanup_pid(
 
 #[cfg(test)]
 pub mod test {
+    use std::assert_matches::assert_matches;
     use std::collections::BTreeMap;
     use std::path::PathBuf;
     use std::process::{Child, Command};
@@ -157,7 +158,7 @@ pub mod test {
         };
         state.set_ready(&start_id);
         let result = state.start_or_attach(pid2, &store_path);
-        assert!(matches!(result, StartOrAttachResult::Attach { .. }));
+        assert_matches!(result, StartOrAttachResult::Attach { .. });
 
         write_activation_state(runtime_dir.path(), &dot_flox_path, state);
 

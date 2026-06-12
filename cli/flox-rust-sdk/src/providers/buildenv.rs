@@ -1462,6 +1462,8 @@ mod test_helpers {
 #[cfg(test)]
 mod realise_nixpkgs_tests {
 
+    use std::assert_matches::assert_matches;
+
     use flox_manifest::lockfile::test_helpers::{
         locked_package_catalog_from_mock,
         locked_published_package,
@@ -1562,7 +1564,7 @@ mod realise_nixpkgs_tests {
             &Semaphore::new(1, 1),
         );
         let err = result.expect_err("realising nixpkgs#AAAAAASomeThingsFailToEvaluate should fail");
-        assert!(matches!(err, BuildEnvError::Realise2 { .. }));
+        assert_matches!(err, BuildEnvError::Realise2 { .. });
     }
 
     /// Ensure that we can build, or (attempt to build) a package from the catalog,
@@ -1668,10 +1670,10 @@ mod realise_nixpkgs_tests {
             &Semaphore::new(1, 1),
         );
         eprintln!("RESULT: {subst_resp:?}");
-        assert!(matches!(
+        assert_matches!(
             subst_resp,
             Err(BuildEnvError::NoPackageStoreLocation(_))
-        ));
+        );
     }
 
     #[test]
@@ -1748,7 +1750,7 @@ mod realise_nixpkgs_tests {
             &Semaphore::new(1, 1),
         );
         let err = result.unwrap_err();
-        assert!(matches!(err, BuildEnvError::BuildPublishedPackage { .. }));
+        assert_matches!(err, BuildEnvError::BuildPublishedPackage { .. });
         assert_eq!(err.to_string(), indoc! {r#"
             Couldn't download package 'hello' from the following locations
 
@@ -1779,6 +1781,7 @@ mod realise_nixpkgs_tests {
 
 #[cfg(test)]
 mod realise_flakes_tests {
+    use std::assert_matches::assert_matches;
     use std::fs;
 
     use flox_manifest::parsed::latest::PackageDescriptorFlake;
@@ -1937,7 +1940,7 @@ mod realise_flakes_tests {
             .build();
         let result = BuildEnvNix::<NixAuth>::realise_flake(&locked_package);
         let err = result.expect_err("realising flake should fail");
-        assert!(matches!(err, BuildEnvError::Realise2 { .. }));
+        assert_matches!(err, BuildEnvError::Realise2 { .. });
     }
 
     /// Realising a flake should fail if the output is not valid and the source cannot be evaluated.
@@ -1956,7 +1959,7 @@ mod realise_flakes_tests {
 
         let result = BuildEnvNix::<NixAuth>::realise_flake(&locked_package);
         let err = result.expect_err("realising flake should fail");
-        assert!(matches!(err, BuildEnvError::Realise2 { .. }));
+        assert_matches!(err, BuildEnvError::Realise2 { .. });
     }
 
     /// Evaluation (and build) are skipped if the store path is already valid.
@@ -1983,6 +1986,8 @@ mod realise_flakes_tests {
 
 #[cfg(test)]
 mod realise_store_path_tests {
+    use std::assert_matches::assert_matches;
+
     use flox_manifest::parsed::common::DEFAULT_PRIORITY;
 
     use super::*;
@@ -2024,7 +2029,7 @@ mod realise_store_path_tests {
         let result =
             BuildEnvNix::<NixAuth>::realise_single_store_path(&locked, span, &Semaphore::new(1, 1))
                 .expect_err("invalid store path should fail to realise");
-        assert!(matches!(result, BuildEnvError::Realise2 { .. }));
+        assert_matches!(result, BuildEnvError::Realise2 { .. });
     }
 }
 
@@ -2760,6 +2765,7 @@ mod join_realise_results_tests {
 
 #[cfg(test)]
 mod materialise_retry_tests {
+    use std::assert_matches::assert_matches;
     use std::cell::Cell;
     use std::collections::HashMap;
     use std::path::PathBuf;
@@ -2959,7 +2965,7 @@ mod materialise_retry_tests {
                 Ok(fake_outputs())
             },
         );
-        assert!(matches!(result.unwrap_err(), BuildEnvError::Build(_)));
+        assert_matches!(result.unwrap_err(), BuildEnvError::Build(_));
         assert!(
             !build_called.get(),
             "build_env must not be called if realise fails"
