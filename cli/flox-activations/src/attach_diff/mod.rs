@@ -22,7 +22,12 @@ use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
 use crate::env_diff::EnvDiff;
 use crate::sandbox::seed::SeedContext;
-use crate::sandbox::{FLOX_SANDBOX_ALLOW_NET_VAR, PRELOAD_VAR, sandbox_env};
+use crate::sandbox::{
+    FLOX_SANDBOX_ALLOW_NET_VAR,
+    PRELOAD_VAR,
+    sandbox_env,
+    verdict_socket_path,
+};
 use crate::start_diff::StartDiff;
 use crate::vars_from_env::VarsFromEnvironment;
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
@@ -426,11 +431,17 @@ fn sandbox_double_sets(
     // the seeds rather than discarding it.
     let existing_allow_net = std::env::var(FLOX_SANDBOX_ALLOW_NET_VAR).ok();
 
+    // The verdict socket path is a pure function of the services socket, so it
+    // matches the path the broker binds inside the executive — no shared
+    // mutable state, no second channel. Only `ask` actually exports it.
+    let verdict_socket = verdict_socket_path(&project.flox_services_socket);
+
     sandbox_env(
         context.sandbox_mode,
         &seed_ctx,
         &project.env_project,
         &grants_dir,
+        &verdict_socket,
         existing_preload.as_deref(),
         existing_allow_net.as_deref(),
     )
@@ -598,7 +609,9 @@ mod tests {
             env_project: project_dir,
             dot_flox_path: dot_flox,
             flox_env_log_dir: tmp.path().join("log"),
-            flox_services_socket: tmp.path().join("services.sock"),
+            // Real services sockets are `runtime_dir/flox.<id>.sock`; use that
+            // shape so the derived verdict socket asserts the production form.
+            flox_services_socket: tmp.path().join("flox.testid.sock"),
             process_compose_bin: PathBuf::from("/nix/store/fake-process-compose"),
             services_to_start: Vec::new(),
         };
@@ -662,10 +675,37 @@ mod tests {
             "enforce"
         );
         assert!(diff.additions.contains_key(PRELOAD_VAR));
-        // No broker socket yet in this batch.
+        // Enforce never contacts a broker, so it exports no verdict socket.
         assert!(!diff.additions.contains_key(FLOX_SANDBOX_SOCKET_VAR));
         // The grants dir was created so the engine write guard has a target.
         assert!(project.dot_flox_path.join("cache").join("sandbox").is_dir());
+    }
+
+    #[test]
+    fn double_set_envs_exports_verdict_socket_for_ask() {
+        let tmp = TempDir::new().unwrap();
+        let (attach, project) = test_contexts(&tmp, SandboxMode::Ask);
+        let build_mk = fake_build_mk(&tmp);
+
+        let diff = temp_env::with_vars(
+            [
+                ("FLOX_BUILD_MK", Some(build_mk.as_os_str())),
+                (PRELOAD_VAR, None::<&OsStr>),
+            ],
+            || double_set_envs(&attach, Some(&project)),
+        );
+
+        // Ask exports the verdict socket, and its value is the sibling of the
+        // services socket the broker binds — the contract both sides share.
+        let expected = project
+            .flox_services_socket
+            .parent()
+            .unwrap()
+            .join("sbx.testid.sock");
+        assert_eq!(
+            diff.additions.get(FLOX_SANDBOX_SOCKET_VAR).unwrap(),
+            &expected.to_string_lossy().into_owned()
+        );
     }
 
     #[test]
