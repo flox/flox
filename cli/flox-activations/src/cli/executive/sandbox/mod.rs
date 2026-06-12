@@ -1,4 +1,4 @@
-//! The ask-broker, hosted as a thread inside the per-activation executive.
+//! The prompt broker, hosted as a thread inside the per-activation executive.
 //!
 //! When an activation runs with `sandbox_mode == Ask`, the executive spawns
 //! this broker before entering its event loop. The broker binds a Unix
@@ -12,7 +12,7 @@
 //! [`start`] stops the accept loop and removes the socket file when it is
 //! dropped, which the executive does as its event loop returns. An activation
 //! with no executive (the containerize own-pid path) never starts a broker,
-//! so `ask` there has no socket and the engine fail-closes — handled entirely
+//! so `prompt` there has no socket and the engine fail-closes — handled entirely
 //! on the C side.
 
 mod control;
@@ -82,10 +82,10 @@ impl BrokerHandle {
             if let Some(thread) = socket.thread.take()
                 && let Err(err) = thread.join()
             {
-                warn!(?err, "ask broker thread panicked during shutdown");
+                warn!(?err, "prompt broker thread panicked during shutdown");
             }
             let _ = std::fs::remove_file(&socket.socket_path);
-            debug!(socket = ?socket.socket_path, "ask broker socket stopped");
+            debug!(socket = ?socket.socket_path, "prompt broker socket stopped");
         }
     }
 }
@@ -96,11 +96,11 @@ impl Drop for BrokerHandle {
     }
 }
 
-/// Start the ask broker for this activation if its mode is `Ask`.
+/// Start the prompt broker for this activation if its mode is `Prompt`.
 ///
-/// Returns `Ok(None)` for any non-ask mode (no broker needed) so the caller
+/// Returns `Ok(None)` for any non-prompt mode (no broker needed) so the caller
 /// can unconditionally call this and hold the result for the activation's
-/// lifetime. On `ask`, binds the verdict and control sockets, seeds the grant
+/// lifetime. On `prompt`, binds the verdict and control sockets, seeds the grant
 /// set from `grants.toml`, and spawns both accept-loop threads.
 ///
 /// `session_root_pid` is the activation's session-root process (the executive's
@@ -110,13 +110,13 @@ impl Drop for BrokerHandle {
 ///
 /// A bind failure is returned as an error so the executive can log it; the
 /// engine then fail-closes (no socket to connect to), which is the correct
-/// degradation for `ask`.
+/// degradation for `prompt`.
 pub fn start(
     attach_ctx: &AttachCtx,
     project_ctx: &AttachProjectCtx,
     session_root_pid: i32,
 ) -> Result<Option<BrokerHandle>> {
-    if attach_ctx.sandbox_mode != SandboxMode::Ask {
+    if attach_ctx.sandbox_mode != SandboxMode::Prompt {
         return Ok(None);
     }
 
@@ -125,11 +125,11 @@ pub fn start(
     let grants_dir = project_ctx.dot_flox_path.join("cache").join("sandbox");
 
     let handle = bind_and_serve(&verdict_path, &control_path, &grants_dir, session_root_pid)
-        .with_context(|| format!("failed to start ask broker on {}", verdict_path.display()))?;
+        .with_context(|| format!("failed to start prompt broker on {}", verdict_path.display()))?;
     info!(
         verdict = ?verdict_path,
         control = ?control_path,
-        "ask broker listening"
+        "prompt broker listening"
     );
     Ok(Some(handle))
 }
@@ -171,7 +171,7 @@ fn bind_and_serve(
     let control_listener = bind_socket(control_path, "control")?;
 
     // Seed the session grant set from grants.toml. A missing file is normal (no
-    // grants yet); a matching path is allowed silently under ask, so an
+    // grants yet); a matching path is allowed silently under prompt, so an
     // already-trusted environment stays quiet. The file's own source is
     // carried through (so default-seed grants stay distinguishable in the
     // session view), and net-kind grants are excluded — the fs broker only
@@ -187,7 +187,7 @@ fn bind_and_serve(
         .collect();
     debug!(
         count = grant_seeds.len(),
-        "seeded ask broker session grants"
+        "seeded prompt broker session grants"
     );
 
     let state = Arc::new(Mutex::new(BrokerState::with_grants_dir(
@@ -374,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn start_is_a_noop_for_non_ask_modes() {
+    fn start_is_a_noop_for_non_prompt_modes() {
         let tmp = tempfile::tempdir().unwrap();
         let dot_flox = tmp.path().join(".flox");
         std::fs::create_dir_all(&dot_flox).unwrap();

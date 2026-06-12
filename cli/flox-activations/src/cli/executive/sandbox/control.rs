@@ -15,7 +15,7 @@
 //!   so the broker reads the connecting process's pid (`UnixStream::peer_cred`)
 //!   and refuses if that pid is the activation session root or a descendant of
 //!   it. A coding agent running *inside* the sandbox therefore cannot approve
-//!   its own pending requests, even though it can connect to ask. `list` and
+//!   its own pending requests, even though it can connect to query. `list` and
 //!   `status` are read-only and allowed from anywhere.
 //!
 //! This is friction, not a wall (ADR-004, cooperative principal): an agent

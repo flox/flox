@@ -751,7 +751,7 @@ enum UseCommands {
         services::ServicesCommands,
     ),
 
-    /// Review and manage sandbox grants for an 'ask'-mode activation
+    /// Review and manage sandbox grants for a 'prompt'-mode activation
     #[bpaf(command)]
     Sandbox(
         #[bpaf(
