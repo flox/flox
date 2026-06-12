@@ -308,12 +308,21 @@ teardown() {
     _flox_hook
     echo \"still:\${TEST_VAR2:-unset}\"
     printenv _FLOX_SUPPRESSED_ENVIRONMENTS
+    cd $BATS_TEST_TMPDIR
+    _flox_hook
+    echo \"left:\${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    echo \"back:\$TEST_VAR2\"
   "
   assert_success
   assert_output --partial "during:auto2"
   assert_output --partial "after:unset"
   assert_output --partial "still:unset"
   assert_output --partial "$(realpath "$PROJECT2_DIR")"
+  # Leaving the directory revokes the suppression; re-entering re-activates.
+  assert_output --partial "left:unset"
+  assert_output --partial "back:auto2"
 }
 
 # ---------------------------------------------------------------------------- #
