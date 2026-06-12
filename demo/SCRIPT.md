@@ -23,8 +23,14 @@ cd /tmp/sandbox-demo
 > On macOS, system tools (`/usr/bin/curl`, `/bin/cat`) are
 > SIP-protected and escape the loader, so the demo uses tools
 > installed *into* the environment (`flox install …`, done by
-> setup). That's an honest limitation, not a bug — call it out
-> if asked.
+> setup). For the same reason a sandboxed activation swaps a
+> SIP-protected session shell (`/bin/zsh`) for the bash bundled
+> with Flox — otherwise the shell's own redirections
+> (`echo x > ~/file`) would escape the policy — and rewrites
+> `SHELL` inside the session. Interactive sessions print an
+> `ℹ Cannot mediate …` line explaining the swap; `-- CMD`
+> invocations exec the command directly and stay quiet. That's
+> an honest limitation, not a bug — call it out if asked.
 
 > Expected blocks below are live captures with the username
 > shown as `/Users/you`. PIDs in the `[exe:pid]` tags, resolved
@@ -133,7 +139,10 @@ project — blocked, and the denial is graceful: the command gets
 `Permission denied`, your shell survives. Calling an unapproved
 host — blocked. The agent edits your code and uses the network
 it needs, but it can't exfiltrate secrets, trash your home
-directory, or phone home somewhere you didn't allow."**
+directory, or phone home somewhere you didn't allow. The same
+holds inside an interactive session — the session shell itself
+is mediated, so even a bare `echo pwned > ~/file` at the prompt
+is denied."**
 
 ---
 
@@ -217,12 +226,12 @@ Saved grants for /private/tmp/sandbox-demo/.flox
   PATTERN                          OPS    SOURCE              ADDED       EVIDENCE
   /Users/djsauble/Code/flox/target/debug/** any    allow               2026-06-12  manual
   /Users/you/demo-data/**          any    allow               2026-06-12  manual
-  default-seed: 29 grants — use --all to show
+  default-seed: 31 grants — use --all to show
 
 Sensitive (never auto-granted, never folded into a directory grant):
   /Users/you/.ssh/** /Users/you/.aws/** /Users/you/.gnupg/** /Users/you/.kube/** /Users/you/.netrc /Users/you/.config/gh/** **/.env* **/.flox/cache/sandbox/**
 
-20 saved filesystem grant(s) use 20 of 256 allow entries (0.5 of 16 KB); network grants are uncapped.
+22 saved filesystem grant(s) use 22 of 256 allow entries (0.6 of 16 KB); network grants are uncapped.
 ℹ OPS is informational; saved grants allow all access kinds in this prototype.
 ```
 
@@ -278,6 +287,9 @@ Terminal A (leave it running):
 
 ```bash
 flox activate --sandbox
+# on macOS the session swaps to the Flox-bundled bash and says so:
+#   ℹ Cannot mediate '/bin/zsh' inside the sandbox; using the bash
+#     bundled with Flox for this session.
 # inside the session:
 cat ~/demo-data/fixtures.csv      # → denied + queued (req 1)
 ```

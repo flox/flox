@@ -20,6 +20,15 @@ pub fn format_updated(v: impl Display) -> String {
     format!("{icon} {v}")
 }
 
+pub fn format_info(v: impl Display) -> String {
+    let icon = if stderr_supports_color() {
+        "ℹ".blue().to_string()
+    } else {
+        "ℹ".to_string()
+    };
+    format!("{icon} {v}")
+}
+
 pub fn stdout_supports_color() -> bool {
     supports_color::on(supports_color::Stream::Stdout).is_some()
 }

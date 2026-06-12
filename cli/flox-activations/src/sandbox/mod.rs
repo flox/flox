@@ -103,6 +103,44 @@ fn flox_build_mk() -> PathBuf {
         .into()
 }
 
+/// The interactive bash bundled with flox, used as the session shell when a
+/// sandboxed activation cannot mediate the user's shell. Follows the same
+/// env-var-with-compile-time-fallback idiom as [`flox_build_mk`].
+pub fn bundled_bash() -> PathBuf {
+    std::env::var("X_BASH_BIN")
+        .unwrap_or_else(|_| env!("X_BASH_BIN").to_string())
+        .into()
+}
+
+/// Whether libsandbox can load into `shell` when the activation execs it.
+///
+/// macOS strips `DYLD_INSERT_LIBRARIES` when exec'ing a SIP-protected binary
+/// (`/bin/zsh` and friends), so a SIP-protected session shell escapes
+/// mediation entirely: its own builtins and redirections (`echo x > file`)
+/// run outside the policy even though the children it spawns are mediated
+/// via the rc-script re-export. Other platforms have no equivalent strip, so
+/// every shell is mediable there.
+///
+/// Bare command names (e.g. a `_FLOX_SHELL_FORCE=bash` test override) cannot
+/// be classified and are treated as mediable.
+pub fn mediable_shell(shell: &Path) -> bool {
+    !(cfg!(target_os = "macos") && sip_protected(shell))
+}
+
+/// Whether `path` sits under one of macOS's SIP-protected prefixes: `/bin`,
+/// `/sbin`, `/usr` (except `/usr/local`), and `/System`. A prefix check
+/// against the canonical protected roots (see
+/// `/System/Library/Sandbox/rootless.conf`), not an attribute lookup, so it
+/// also classifies paths that do not exist on the build machine.
+fn sip_protected(path: &Path) -> bool {
+    if path.starts_with("/usr/local") {
+        return false;
+    }
+    ["/bin", "/sbin", "/usr", "/System"]
+        .iter()
+        .any(|prefix| path.starts_with(prefix))
+}
+
 /// Derive the prompt broker's verdict-socket path from the services socket path.
 ///
 /// The broker rides the per-activation executive and binds a Unix socket the
@@ -470,6 +508,41 @@ mod tests {
             home_dir: None,
             runtime_dir: None,
         }
+    }
+
+    #[test]
+    fn sip_protected_matches_system_prefixes_only() {
+        assert!(sip_protected(Path::new("/bin/zsh")));
+        assert!(sip_protected(Path::new("/sbin/mount")));
+        assert!(sip_protected(Path::new("/usr/bin/env")));
+        assert!(sip_protected(Path::new("/System/Volumes/Data/x")));
+        assert!(!sip_protected(Path::new("/usr/local/bin/zsh")));
+        assert!(!sip_protected(Path::new("/opt/homebrew/bin/fish")));
+        assert!(!sip_protected(Path::new("/nix/store/abc-zsh-5.9/bin/zsh")));
+        assert!(!sip_protected(Path::new("bash")));
+    }
+
+    #[test]
+    fn mediable_shell_only_rejects_sip_shells_on_macos() {
+        // Mediable everywhere: the preload variable survives exec.
+        assert!(mediable_shell(Path::new(
+            "/nix/store/abc-bash-5.2/bin/bash"
+        )));
+        assert!(mediable_shell(Path::new("bash")));
+        // The SIP strip only exists on macOS; elsewhere /bin/zsh honors
+        // LD_PRELOAD like any other dynamic binary.
+        assert_eq!(
+            mediable_shell(Path::new("/bin/zsh")),
+            cfg!(not(target_os = "macos"))
+        );
+    }
+
+    #[test]
+    fn bundled_bash_prefers_runtime_env_over_compile_time() {
+        let overridden = temp_env::with_var("X_BASH_BIN", Some("/custom/bash"), bundled_bash);
+        assert_eq!(overridden, PathBuf::from("/custom/bash"));
+        let fallback = temp_env::with_var("X_BASH_BIN", None::<&str>, bundled_bash);
+        assert_eq!(fallback, PathBuf::from(env!("X_BASH_BIN")));
     }
 
     #[test]
