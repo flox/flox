@@ -193,14 +193,26 @@ static int debug_sandbox = 0;
 // not a live race today; it is atomic for consistency with home_dotfile_hint
 // and to stay correct should warn_once ever be called from a threaded path.
 static atomic_int warn_count = 0;
+// Program name for message attribution. Every SANDBOX line is tagged
+// [exe:pid] so a report can be traced to the process that triggered it —
+// a bare PID is useless once the process exits (e.g. flox's own short-lived
+// metrics phone-home was mistaken for blocked curl requests). glibc exposes
+// the invocation basename via program_invocation_short_name (declared in
+// <errno.h> under _GNU_SOURCE); macOS provides getprogname() in <stdlib.h>.
+#ifdef linux
+#define SANDBOX_PROGNAME program_invocation_short_name
+#else
+#define SANDBOX_PROGNAME getprogname()
+#endif
 #define debug(format, ...)                                                     \
   do {                                                                         \
     if (debug_sandbox)                                                         \
-      fprintf(stderr, "SANDBOX DEBUG[%d]: " format "\n", getpid(),             \
-              __VA_ARGS__);                                                    \
+      fprintf(stderr, "SANDBOX DEBUG[%s:%d]: " format "\n", SANDBOX_PROGNAME,  \
+              getpid(), __VA_ARGS__);                                          \
   } while (0)
 #define warn(format, ...)                                                      \
-  fprintf(stderr, "SANDBOX WARNING[%d]: " format "\n", getpid(), ##__VA_ARGS__)
+  fprintf(stderr, "SANDBOX WARNING[%s:%d]: " format "\n", SANDBOX_PROGNAME,    \
+          getpid(), ##__VA_ARGS__)
 #define warn_once(format, ...)                                                 \
   do {                                                                         \
     if (debug_sandbox)                                                         \
@@ -210,15 +222,18 @@ static atomic_int warn_count = 0;
       warn(format " (further warnings suppressed)", ##__VA_ARGS__);            \
   } while (0)
 #define _error(format, ...)                                                    \
-  fprintf(stderr, "SANDBOX ERROR[%d]: " format "\n", getpid(), ##__VA_ARGS__)
+  fprintf(stderr, "SANDBOX ERROR[%s:%d]: " format "\n", SANDBOX_PROGNAME,      \
+          getpid(), ##__VA_ARGS__)
 #define hint(format, ...)                                                      \
-  fprintf(stderr, "SANDBOX HINT[%d]: " format "\n", getpid(), ##__VA_ARGS__)
+  fprintf(stderr, "SANDBOX HINT[%s:%d]: " format "\n", SANDBOX_PROGNAME,       \
+          getpid(), ##__VA_ARGS__)
 // A denial receipt under ask: the access was refused and queued for approval
 // outside the session. Distinct prefix from WARNING/ERROR because it is
 // neither — the operation failed cleanly and can be redeemed by retry once
 // approved.
 #define denied(format, ...)                                                    \
-  fprintf(stderr, "SANDBOX DENIED[%d]: " format "\n", getpid(), ##__VA_ARGS__)
+  fprintf(stderr, "SANDBOX DENIED[%s:%d]: " format "\n", SANDBOX_PROGNAME,     \
+          getpid(), ##__VA_ARGS__)
 
 // Resolved realpath of the user's $HOME and its length, captured once during
 // initialization. Used to recognize "$HOME/.<dotfile>" accesses (see
