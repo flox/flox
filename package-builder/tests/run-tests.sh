@@ -348,32 +348,35 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# Layer 4: ask mode (stub broker — deny-all out of policy via graceful EACCES).
+# Layer 4: ask mode.
 #
-# In this batch the broker RPC is not wired, so ask deterministically denies
-# any out-of-policy access: sandbox_check_path() returns false, the
-# interceptor's errno=EACCES branch fires, and the calling process sees a
-# clean permission error (it is NOT aborted, unlike enforce). A two-line
-# SANDBOX DENIED receipt is printed once per resolved path.
+# Under ask, an out-of-policy access asks the broker over FLOX_SANDBOX_SOCKET
+# for a verdict. sandbox_check_path() returns the broker's allow/deny; on deny
+# the interceptor's errno=EACCES branch fires and the calling process sees a
+# clean permission error (NOT aborted, unlike enforce). A dead/absent broker
+# fails closed: deny plus a distinct "SANDBOX ERROR ... ask broker unreachable"
+# receipt, rate-limited once per path.
 # ----------------------------------------------------------------------------
 
-# ask + no socket env → deny. An out-of-closure read fails with EACCES (the
-# probe sees open() return -1 and continues to print OPEN_FAIL — no crash, no
-# exit(1) of the probe), and exactly one "SANDBOX DENIED ... not in policy"
-# receipt appears. run_probe sets no FLOX_SANDBOX_SOCKET, so this is the
-# unconfigured-broker case.
+# ask + no socket env → fail-closed deny. run_probe sets no FLOX_SANDBOX_SOCKET,
+# so the RPC has nothing to connect to. The read fails with EACCES (the probe
+# prints OPEN_FAIL — no crash, no exit(1)), and exactly one fail-closed
+# "SANDBOX ERROR ... ask broker unreachable" line appears for the path (not the
+# two-line DENIED receipt, which is reserved for a real deny verdict).
 out="$(run_probe ask open "$out_file" 2>&1)"; rc=$?
-denied_n="$(grep -c "SANDBOX DENIED" <<<"$out")"
+error_n="$(grep -c "ask broker unreachable" <<<"$out")"
 if [[ $rc -ne 0 && "$out" == *"OPEN_FAIL"* && "$out" == *"errno=13"* \
-      && "$out" == *"read $out_file (not in policy)"* && "$denied_n" -eq 2 ]]; then
-  pass "ask: out-of-closure read denied with graceful EACCES + receipt"
+      && "$out" == *"denying read of $out_file (fail-closed"* \
+      && "$error_n" -eq 1 && "$out" != *"SANDBOX DENIED"* ]]; then
+  pass "ask: no socket → fail-closed EACCES + SANDBOX ERROR once per path"
 else
-  fail "ask: expected EACCES (errno=13) + two-line DENIED receipt (rc=$rc, DENIED lines=$denied_n)" "$out"
+  fail "ask: expected EACCES (errno=13) + fail-closed SANDBOX ERROR (rc=$rc, ERROR lines=$error_n)" "$out"
 fi
 
 # Dotfile flip. Under ask the $HOME-dotfile carve-out is skipped, so a read of
-# an out-of-closure $HOME dotfile is DENIED (EACCES + receipt). Under enforce
-# the same read is PERMITTED with the existing "$HOME dotfile" warn line. The
+# an out-of-closure $HOME dotfile is routed through the ask flow and DENIED
+# (here with no socket, that deny is the fail-closed EACCES). Under enforce the
+# same read is PERMITTED with the existing "$HOME dotfile" warn line. The
 # dotfile lives under a temp HOME that is not an allow-dir prefix, so the access
 # genuinely exercises the home-dotfile branch rather than a directory allow.
 home_dir="$(mktemp -d "$HOME/flox-sandbox-tests-home.XXXXXX")"
@@ -383,7 +386,7 @@ out="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
     FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=ask \
     HOME="$home_dir" "$root/tests/sandbox_probe" open "$home_dir/.fakerc" 2>&1)"; rc=$?
 if [[ $rc -ne 0 && "$out" == *"OPEN_FAIL"* && "$out" == *"errno=13"* \
-      && "$out" == *"read $home_dir/.fakerc (not in policy)"* ]]; then
+      && "$out" == *"denying read of $home_dir/.fakerc (fail-closed"* ]]; then
   pass "ask: \$HOME dotfile read denied (dotfile carve-out skipped under ask)"
 else
   fail "ask: \$HOME dotfile should be denied under ask (rc=$rc)" "$out"
@@ -414,6 +417,232 @@ if [[ $rc -ne 0 && "$out" == *"$out_file is not in the sandbox"* && "$out" != *"
   pass "enforce: normal out-of-closure read still fatal, no DENIED receipt"
 else
   fail "enforce: normal out-of-closure read should remain fatal (rc=$rc)" "$out"
+fi
+
+# ----------------------------------------------------------------------------
+# Layer 4.1: ask broker RPC (against a scripted fake broker).
+#
+# The real broker is a thread in the flox-activations executive. Here a tiny
+# Python script (tests/fake-broker.py) binds the verdict socket and replies a
+# canned verdict, logging every request so we can assert the RPC count. These
+# cases prove the libsandbox RPC client end to end: allow-scope caching makes
+# zero further RPCs, a deny produces the two-line receipt (deduped), and the
+# negative TTL expires so a later allow is picked up on retry.
+#
+# Skipped gracefully if python3 is unavailable (the rest of the suite, which
+# needs no broker, still runs).
+# ----------------------------------------------------------------------------
+
+broker_pid=""
+broker_log=""
+broker_sock=""
+broker_mode_file=""
+broker_ready=""
+stop_fake_broker() {
+  if [[ -n "$broker_pid" ]]; then
+    # SIGTERM lets the broker close its socket cleanly; fall back to SIGKILL.
+    kill "$broker_pid" 2>/dev/null
+    wait "$broker_pid" 2>/dev/null
+    broker_pid=""
+  fi
+  # Belt-and-braces: remove the socket so a later start rebinds cleanly even if
+  # a stray broker lingered.
+  [[ -n "$broker_sock" ]] && rm -f "$broker_sock"
+}
+# Extend the existing EXIT cleanup (which removes $fixture) so no broker
+# outlives the suite even if a case bails early. Re-set the trap to do both.
+trap 'stop_fake_broker; rm -rf "$fixture"' EXIT
+# Start the fake broker in MODE (allow-scope|allow-file|deny), optionally with
+# a --scope glob. Waits for it to print READY (socket bound) before returning.
+# Sets broker_sock / broker_log / broker_mode_file for the caller and the probe.
+#
+# The broker is a plain background job with stdin/stdout/stderr redirected to
+# files (NOT inherited from the test's stdout). This is deliberate: a broker
+# that inherited the test's stdout pipe would hold it open after the test
+# exits, so the `make tests | ...` pipe would never see EOF and make would
+# appear to hang. Redirecting detaches it, and $! gives the real PID to reap.
+start_fake_broker() {
+  local mode="$1"; local scope="${2:-}"
+  broker_sock="$fixture/broker.$$.sock"
+  broker_log="$fixture/broker.$$.log"
+  broker_mode_file="$fixture/broker.$$.mode"
+  broker_ready="$fixture/broker.$$.ready"
+  rm -f "$broker_sock" "$broker_log" "$broker_mode_file" "$broker_ready"
+  local args=(--socket "$broker_sock" --log "$broker_log" --mode "$mode"
+              --mode-file "$broker_mode_file")
+  [[ -n "$scope" ]] && args+=(--scope "$scope")
+  python3 "$here/fake-broker.py" "${args[@]}" </dev/null >"$broker_ready" 2>&1 &
+  broker_pid=$!
+  # Poll the readiness file for the READY line (socket bound) before returning.
+  local waited=0
+  while [[ $waited -lt 100 ]]; do
+    if grep -q READY "$broker_ready" 2>/dev/null; then
+      return 0
+    fi
+    # Bail if the broker died before becoming ready.
+    kill -0 "$broker_pid" 2>/dev/null || return 1
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  return 1
+}
+# Run the probe with the broker socket configured.
+run_probe_ask_socket() {
+  env "$preload_var=$sandbox_lib" \
+      FLOX_ENV="$fixture" \
+      FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" \
+      FLOX_VIRTUAL_SANDBOX=ask \
+      FLOX_SANDBOX_SOCKET="$broker_sock" \
+      "$root/tests/sandbox_probe" "$@"
+}
+
+if ! command -v python3 >/dev/null 2>&1; then
+  pass "ask broker RPC tests skipped (python3 unavailable)"
+else
+  # The broker cases need paths that are genuinely OUT of policy so the access
+  # reaches the ask tail and RPCs. The fixture lives under $TMPDIR / /tmp, both
+  # of which are built-in allow-dirs, so a path there is permitted WITHOUT any
+  # RPC. $HOME is not an allow-dir (only $HOME/.dotfiles get a carve-out, and
+  # that is skipped under ask), so a regular subdir of $HOME is out of policy.
+  # Use one such dir for all broker cases and remove it at the end.
+  ask_home="$(mktemp -d "$HOME/flox-sandbox-ask-tests.XXXXXX")"
+
+  # Case 2: allow scope glob → open succeeds; a second open UNDER the scope
+  # makes ZERO further RPCs (the C scope-verdict cache answers it). We probe two
+  # sibling files under a dir and grant the dir glob.
+  scope_dir="$ask_home/scope_probe"
+  mkdir -p "$scope_dir"
+  printf 'a' > "$scope_dir/a.txt"
+  printf 'b' > "$scope_dir/b.txt"
+  if start_fake_broker allow-scope "$scope_dir/*"; then
+    out1="$(run_probe_ask_socket open "$scope_dir/a.txt" 2>&1)"; rc1=$?
+    out2="$(run_probe_ask_socket open "$scope_dir/b.txt" 2>&1)"; rc2=$?
+    stop_fake_broker
+    if [[ $rc1 -eq 0 && "$out1" == *"OPEN_OK"* && $rc2 -eq 0 \
+          && "$out2" == *"OPEN_OK"* ]]; then
+      pass "ask: broker allow-scope verdict permits the open"
+    else
+      fail "ask: allow-scope should permit (rc1=$rc1 rc2=$rc2)" "$out1"$'\n'"$out2"
+    fi
+  else
+    fail "ask: could not start fake broker (allow-scope)"
+    stop_fake_broker
+  fi
+
+  # Case 2b: zero further RPCs within one process. The storm probe opens the
+  # same in-scope path many times in one process; the scope cache must answer
+  # all but the first from cache, so the broker logs exactly ONE request.
+  if start_fake_broker allow-scope "$scope_dir/*"; then
+    out="$(run_probe_ask_socket storm 1 8 "$scope_dir/a.txt" 2>&1)"; rc=$?
+    req_n="$(wc -l <"$broker_log" | tr -d ' ')"
+    stop_fake_broker
+    if [[ $rc -eq 0 && "$req_n" -eq 1 ]]; then
+      pass "ask: second open under an allowed scope makes zero further RPCs"
+    else
+      fail "ask: scope cache should collapse 8 opens to 1 RPC (rc=$rc, RPCs=$req_n)" "$out"
+    fi
+  else
+    fail "ask: could not start fake broker (allow-scope 2b)"
+    stop_fake_broker
+  fi
+
+  # Case 3: deny verdict → EACCES + two-line receipt, deduped on repeat. The
+  # storm probe opens the same out-of-policy path 4 times in one process; the
+  # receipt is printed once (deduped per path), and the read fails with EACCES.
+  if start_fake_broker deny; then
+    out="$(run_probe_ask_socket open "$out_file" 2>&1)"; rc=$?
+    denied_n="$(grep -c "SANDBOX DENIED" <<<"$out")"
+    # Repeat in one process to prove receipt dedup: the storm worker opens the
+    # same path repeatedly but the receipt appears at most twice (the two
+    # DENIED lines for one path), never per-open.
+    out_storm="$(run_probe_ask_socket storm 1 4 "$out_file" 2>&1)"
+    denied_storm="$(grep -c "SANDBOX DENIED" <<<"$out_storm")"
+    stop_fake_broker
+    if [[ $rc -ne 0 && "$out" == *"OPEN_FAIL"* && "$out" == *"errno=13"* \
+          && "$out" == *"read $out_file (not in policy)"* \
+          && "$out" == *"queued as req"* && "$denied_n" -eq 2 \
+          && "$denied_storm" -eq 2 ]]; then
+      pass "ask: broker deny → EACCES + two-line receipt, deduped on repeat"
+    else
+      fail "ask: deny should EACCES + 2-line receipt deduped (rc=$rc, DENIED=$denied_n, storm=$denied_storm)" "$out"
+    fi
+  else
+    fail "ask: could not start fake broker (deny)"
+    stop_fake_broker
+  fi
+
+  # Case 4: negative TTL expiry, within ONE process so the C deny cache is in
+  # play. The open-twice probe opens the path (denied, cached for 2s), sleeps
+  # past the TTL, then opens again. Mid-sleep the harness flips the live broker
+  # from deny to allow. The first open fails (EACCES, cached deny); the second
+  # open — past the TTL — re-asks the now-allowing broker and succeeds, proving
+  # the negative cache entry expired rather than pinning the path closed.
+  if start_fake_broker deny; then
+    # Launch the two-open probe in the background; flip the broker during its
+    # sleep so the second open (after the TTL) sees allow.
+    out_ttl_file="$fixture/ttl.$$.out"
+    run_probe_ask_socket open-twice "$out_file" 3 >"$out_ttl_file" 2>&1 &
+    probe_pid=$!
+    sleep 0.5
+    printf 'allow-file' > "$broker_mode_file"  # broker now allows the retry
+    wait "$probe_pid"; rc_ttl=$?
+    out_ttl="$(cat "$out_ttl_file")"
+    stop_fake_broker
+    if [[ "$out_ttl" == *"FIRST OPEN_FAIL"*"errno=13"* \
+          && "$out_ttl" == *"SECOND OPEN_OK"* && $rc_ttl -eq 0 ]]; then
+      pass "ask: deny then allow-after-TTL → retry succeeds (negative TTL expiry)"
+    else
+      fail "ask: TTL retry should succeed after broker flips to allow (rc=$rc_ttl)" "$out_ttl"
+    fi
+  else
+    fail "ask: could not start fake broker (TTL)"
+    stop_fake_broker
+  fi
+
+  # Case 8: grants-dir write guard. The grants dir sits inside the project
+  # allow-dir, so an access there is normally permitted with NO RPC. The guard
+  # makes WRITES the exception: a write to an existing file under
+  # FLOX_SANDBOX_GRANTS_DIR is routed through the ask flow (so an agent cannot
+  # silently edit its own future-session approvals), while a READ of the same
+  # path stays quiet (no RPC). $fixture is under $TMPDIR, a built-in allow-dir,
+  # so the grants dir there is genuinely in-policy — exactly the condition the
+  # guard must override for writes only.
+  guard_dir="$fixture/guard_grants"
+  mkdir -p "$guard_dir"
+  printf 'x' > "$guard_dir/grants.toml"
+  if start_fake_broker deny; then
+    # WRITE to the existing grants.toml: the guard forces the ask flow even
+    # though the path is under the allow-dir → broker denies (RPC made). `write`
+    # opens an existing file O_WRONLY so it has a realpath and is classified as
+    # a write (a `create` of a new file would take the create-parent path, not
+    # the guard).
+    out_w="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+        FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=ask \
+        FLOX_SANDBOX_SOCKET="$broker_sock" FLOX_SANDBOX_GRANTS_DIR="$guard_dir" \
+        "$root/tests/sandbox_probe" write "$guard_dir/grants.toml" 2>&1)"; rc_w=$?
+    req_after_write="$(wc -l <"$broker_log" | tr -d ' ')"
+    # READ of the same file: not a write, so the guard does not fire; the path
+    # is inside the allow-dir, so it is permitted with NO further RPC.
+    out_r="$(env "$preload_var=$sandbox_lib" FLOX_ENV="$fixture" \
+        FLOX_SANDBOX_ALLOW_DIRS="$allow_dirs" FLOX_VIRTUAL_SANDBOX=ask \
+        FLOX_SANDBOX_SOCKET="$broker_sock" FLOX_SANDBOX_GRANTS_DIR="$guard_dir" \
+        "$root/tests/sandbox_probe" open "$guard_dir/grants.toml" 2>&1)"; rc_r=$?
+    req_after_read="$(wc -l <"$broker_log" | tr -d ' ')"
+    stop_fake_broker
+    if [[ $rc_w -ne 0 && "$out_w" == *"WRITE_FAIL"* && "$out_w" == *"errno=13"* \
+          && "$req_after_write" -eq 1 \
+          && $rc_r -eq 0 && "$out_r" == *"OPEN_OK"* \
+          && "$req_after_read" -eq "$req_after_write" ]]; then
+      pass "ask: grants-dir write RPCs (guard fires), read does not"
+    else
+      fail "ask: grants-dir guard should RPC writes but not reads (write rc=$rc_w RPCs=$req_after_write, read rc=$rc_r RPCs=$req_after_read)" "$out_w"$'\n'"$out_r"
+    fi
+  else
+    fail "ask: could not start fake broker (grants-dir guard)"
+    stop_fake_broker
+  fi
+
+  rm -rf "$ask_home"
 fi
 
 # ----------------------------------------------------------------------------
@@ -487,11 +716,12 @@ else
 fi
 
 # ask + flag: the inner shell no longer exit(1)s on the foreign exe. A foreign
-# exe reading an OUT-OF-POLICY file gets the graceful ask deny (EACCES + receipt)
-# — never the exe abort — so an activation completes past the shell.
+# exe reading an OUT-OF-POLICY file gets the graceful ask deny (EACCES) — never
+# the exe abort — so an activation completes past the shell. run_foreign sets
+# no socket, so the deny here is the fail-closed form.
 out="$(run_foreign ask 1 open "$out_file" 2>&1)"; rc=$?
 if [[ $rc -ne 0 && "$out" == *"OPEN_FAIL"* && "$out" == *"errno=13"* \
-      && "$out" == *"read $out_file (not in policy)"* \
+      && "$out" == *"denying read of $out_file (fail-closed"* \
       && "$out" != *"process executable"* ]]; then
   pass "ask: flag exempts the foreign exe; out-of-policy read still EACCES-denied"
 else
