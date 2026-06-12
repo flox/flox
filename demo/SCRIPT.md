@@ -3,13 +3,20 @@
 A ~5-minute single-terminal walkthrough. **Bold** lines are
 roughly what to *say*; fenced blocks are what to *type*. Every
 command and its output below was verified on macOS (arm64)
-against this prototype. Run `bash demo/setup.sh` first, then in
-the same dev shell:
+against this prototype.
+
+Prereqs (verified by `bash demo/setup.sh`, which creates
+everything):
+
+- your locally built `flox` (e.g. `target/debug`) is already
+  first in PATH
+- `FLOX_FEATURES_SANDBOX_ACTIVATE=true` is already exported in
+  your shell
+
+Run `bash demo/setup.sh` once, then:
 
 ```bash
-alias flox="$FLOX_BIN"
-export FLOX_FEATURES_SANDBOX_ACTIVATE=true
-cd ~/sandbox-demo
+cd /tmp/sandbox-demo
 ```
 
 > The sandbox only mediates Nix-store / env-provided binaries.
@@ -18,6 +25,10 @@ cd ~/sandbox-demo
 > installed *into* the environment (`flox install …`, done by
 > setup). That's an honest limitation, not a bug — call it out
 > if asked.
+
+> Expected blocks below are live captures with the username
+> shown as `/Users/you`. PIDs in the `[exe:pid]` tags, resolved
+> IPs, and git hashes vary run to run.
 
 ---
 
@@ -48,14 +59,16 @@ flox activate --sandbox warn -- bash -c '
 Expected:
 
 ```
-SANDBOX WARNING: /Users/you/demo-secrets/.env is not in the sandbox (sensitive)
-SANDBOX WARNING: connect to example.com:443 (...) is not in the network policy
+SANDBOX WARNING[cat:41624]: /Users/you/demo-secrets/.env is not in the sandbox (sensitive)
+SANDBOX WARNING[curl:41625]: connect to example.com:443 (2606:4700:10::6814:179a) is not in the network policy
 agent ran fine
 ```
 
 **"The agent ran fine — nothing was blocked — but we can see it
-touched a secret and reached the network. Notice it even flags
-the secret as `sensitive`."**
+touched a secret and reached the network, and every report names
+the process that did it. Notice it even flags the secret as
+`sensitive`. The secret lives outside the project on purpose —
+that's exactly what the sandbox is for."**
 
 ---
 
@@ -77,10 +90,10 @@ flox activate --sandbox enforce -- bash -c '
 '
 ```
 
-Expected (no SANDBOX lines):
+Expected (no SANDBOX lines; hash varies):
 
 ```
-3ee3353 agent: tweak greet
+<hash> agent: tweak greet
 github: reachable
 agent work: done
 ```
@@ -101,19 +114,26 @@ flox activate --sandbox enforce -- bash -c 'echo pwned > ~/sbx-pwned.txt'
 flox activate --sandbox enforce -- bash -c 'curl -sI https://example.com'
 ```
 
-Expected (each blocked):
+Expected (each blocked; curl prints one line per address it
+tries, so the count varies with DNS):
 
 ```
-SANDBOX ERROR: /Users/you/demo-secrets/.env is not in the sandbox (sensitive)
-SANDBOX ERROR: /Users/you/sbx-pwned.txt is not in the sandbox
-SANDBOX ERROR: connect to example.com:443 (...) is not in the network policy
+SANDBOX ERROR[cat:41648]: /Users/you/demo-secrets/.env is not in the sandbox (sensitive)
+cat: /Users/you/demo-secrets/.env: Permission denied
+
+SANDBOX ERROR[bash:41657]: /Users/you/sbx-pwned.txt is not in the sandbox
+bash: line 1: /Users/you/sbx-pwned.txt: Permission denied
+
+SANDBOX ERROR[curl:41667]: connect to example.com:443 (2606:4700:10::ac42:93f3) is not in the network policy
+SANDBOX ERROR[curl:41667]: connect to example.com:443 (104.20.23.154) is not in the network policy
 ```
 
 **"Reading a secret — blocked. Writing a file outside the
-project — blocked. Calling an unapproved host — blocked. The
-agent edits your code and uses the network it needs, but it
-can't exfiltrate secrets, trash your home directory, or phone
-home somewhere you didn't allow."**
+project — blocked, and the denial is graceful: the command gets
+`Permission denied`, your shell survives. Calling an unapproved
+host — blocked. The agent edits your code and uses the network
+it needs, but it can't exfiltrate secrets, trash your home
+directory, or phone home somewhere you didn't allow."**
 
 ---
 
@@ -121,19 +141,24 @@ home somewhere you didn't allow."**
 
 **"`enforce` is great once you know your policy. `ask` is how you
 get there: when something's blocked, instead of just failing, the
-request is queued and you decide — once, or forever."**
+request is queued and you decide — once, or forever. `ask` is the
+default: bare `--sandbox` means `--sandbox ask`."**
 
 ### 3.1 — a legitimate access is denied and queued
 
 ```bash
-flox activate --sandbox ask -- bash -c 'cat ~/demo-data/fixtures.csv'
+flox activate --sandbox -- bash -c 'cat ~/demo-data/fixtures.csv'
 ```
 
 Expected:
 
 ```
-SANDBOX DENIED: read /Users/you/demo-data/fixtures.csv (not in policy)
-SANDBOX DENIED: queued as req 1 — approve outside: flox sandbox
+ℹ Sandbox 'ask' enabled (advisory; mediates file reads/writes).
+  Out-of-policy access is denied and queued for approval.
+    review queue:   flox sandbox
+    approve a path: flox sandbox allow '<glob>'   (second terminal)
+SANDBOX DENIED[cat:41681]: read /Users/you/demo-data/fixtures.csv (not in policy)
+SANDBOX DENIED[cat:41681]: queued as req 1 — approve outside: flox sandbox
 cat: /Users/you/demo-data/fixtures.csv: Permission denied
 ```
 
@@ -154,15 +179,25 @@ Expected:
 ✔ Saved grant '/Users/you/demo-data/**' to grants.toml — it applies at the next activation.
 ```
 
-### 3.3 — now it just works, silently
+> If an `ask` session is still running (e.g. you left 3.1's
+> session open in another pane), the live broker answers instead:
+> `✔ Saved grant '/Users/you/demo-data/**' (cleared 1 pending) —
+> future sessions won't ask.` — and the grant reaches the running
+> session within a few seconds.
+
+### 3.3 — now it just works
 
 ```bash
-flox activate --sandbox ask -- bash -c 'cat ~/demo-data/fixtures.csv'
+flox activate --sandbox -- bash -c 'cat ~/demo-data/fixtures.csv'
 ```
 
-Expected:
+Expected (the `ask` banner always prints; no denials follow):
 
 ```
+ℹ Sandbox 'ask' enabled (advisory; mediates file reads/writes).
+  Out-of-policy access is denied and queued for approval.
+    review queue:   flox sandbox
+    approve a path: flox sandbox allow '<glob>'   (second terminal)
 order_id,amount
 1001,42
 ```
@@ -173,27 +208,42 @@ order_id,amount
 flox sandbox list
 ```
 
-Expected (excerpt):
+Expected:
 
 ```
-  PATTERN                    OPS    SOURCE     ADDED       EVIDENCE
-  /Users/you/demo-data/**    any    allow      2026-06-12  manual
+Saved grants for /private/tmp/sandbox-demo/.flox
+(/private/tmp/sandbox-demo/.flox/cache/sandbox/grants.toml — edit by hand or flox sandbox allow|revoke)
+
+  PATTERN                          OPS    SOURCE              ADDED       EVIDENCE
+  /Users/djsauble/Code/flox/target/debug/** any    allow               2026-06-12  manual
+  /Users/you/demo-data/**          any    allow               2026-06-12  manual
+  default-seed: 29 grants — use --all to show
+
 Sensitive (never auto-granted, never folded into a directory grant):
-  ~/.ssh/** ~/.aws/** ... **/.env ...
+  /Users/you/.ssh/** /Users/you/.aws/** /Users/you/.gnupg/** /Users/you/.kube/** /Users/you/.netrc /Users/you/.config/gh/** **/.env* **/.flox/cache/sandbox/**
+
+20 saved filesystem grant(s) use 20 of 256 allow entries (0.5 of 16 KB); network grants are uncapped.
+ℹ OPS is informational; saved grants allow all access kinds in this prototype.
 ```
 
 **"One grant, and the data file is allowed forever — saved to a
-plain, hand-editable file you can inspect. Over a session or two
-the agent zeroes in on exactly the policy it needs, and you never
-had to turn the sandbox off."**
+plain, hand-editable file you can inspect. The `default-seed` row
+is the out-of-box policy itself — git hosts, package registries,
+your shell dotfiles, even flox's own metrics endpoint — every
+implicit allowance is a visible, revocable grant; `--all` expands
+them. (The `target/debug` grant is my dev-build convenience —
+setup added it so the prototype's own binaries run quietly inside
+the session.) Over a session or two the agent zeroes in on
+exactly the policy it needs, and you never had to turn the
+sandbox off."**
 
 ### 3.5 — (say it, optionally show it) the agent can't approve itself
 
 ```bash
-flox activate --sandbox ask -- bash -c 'flox sandbox allow /tmp/anything'
+flox activate --sandbox -- bash -c 'flox sandbox allow /tmp/anything'
 ```
 
-Expected:
+Expected (after the `ask` banner):
 
 ```
 ✘ ERROR: refusing to allow from inside the sandboxed session.
@@ -208,9 +258,9 @@ Expected:
 that keeps agents productive, and `ask` to tighten the policy
 interactively. It's a prototype — it's advisory, not bulletproof:
 it covers cooperative, dynamically-linked tools, not static
-binaries or system binaries that bypass the loader. But for the
-'don't let my agent wreck my laptop' problem, it's already
-useful today."**
+binaries or system binaries that bypass the loader, and file
+*metadata* (stat) isn't mediated yet. But for the 'don't let my
+agent wreck my laptop' problem, it's already useful today."**
 
 ```bash
 bash demo/cleanup.sh   # afterwards, off-camera
@@ -227,7 +277,7 @@ agent's blocked call is redeemed on its next retry, no restart.
 Terminal A (leave it running):
 
 ```bash
-flox activate --sandbox ask
+flox activate --sandbox
 # inside the session:
 cat ~/demo-data/fixtures.csv      # → denied + queued (req 1)
 ```
@@ -235,10 +285,10 @@ cat ~/demo-data/fixtures.csv      # → denied + queued (req 1)
 Terminal B:
 
 ```bash
-cd ~/sandbox-demo
+cd /tmp/sandbox-demo
 flox sandbox            # interactive review → approve req 1
 ```
 
 Terminal A — run it again; it now succeeds. (A grant pushed to a
-live session takes effect within ~2 seconds, so an agent's own
-retry loop just works.)
+live session takes effect within a few seconds, so an agent's
+own retry loop just works.)
