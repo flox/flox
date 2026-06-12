@@ -772,6 +772,7 @@ Options ::= {
 , allow                     = null | Allows
 , semver                    = null | Semver
 , cuda-detection            = null | <BOOL>
+, sandbox                   = null | 'off' | 'warn' | 'enforce' | 'ask'
 }
 
 Activate ::= {
@@ -840,6 +841,18 @@ Semver ::= {
     The default is `true`.
     When enabled, Flox will detect if you have an Nvidia device and attempt to
     locate `libcuda` in well-known paths.
+
+`sandbox`
+:   The sandbox mode applied when the environment is activated:
+    `off` (default), `warn`, `enforce`, or `ask`.
+    An explicit `flox activate --sandbox` flag takes precedence over this
+    setting.
+    See [`flox-activate(1)`](./flox-activate.md) for the mode semantics.
+    Requires the `sandbox_activate` feature flag
+    (set `FLOX_FEATURES_SANDBOX_ACTIVATE=true`);
+    without it the setting is ignored with a warning.
+    Ignored for the ephemeral activations used by service startup.
+    This is an experimental prototype and may change or be removed.
 
 # SEE ALSO
 [`flox-init(1)`](./flox-init.md),

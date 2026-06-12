@@ -5,7 +5,7 @@ use std::process::Stdio;
 use std::{env, fs};
 
 use anyhow::{Context, Result, anyhow, bail};
-use bpaf::Bpaf;
+use bpaf::{Bpaf, Parser};
 use crossterm::tty::IsTty;
 use flox_activations::sandbox::grants;
 use flox_core::activate::context::{
@@ -144,10 +144,9 @@ pub struct ActivateOptions {
     #[bpaf(short, long)]
     pub mode: Option<ActivateMode>,
 
-    /// Mediate filesystem access during this activation:
-    /// "off" (default), "warn", "enforce", or "ask".
-    /// Experimental prototype; requires the sandbox_activate feature flag.
-    #[bpaf(long("sandbox"), argument("MODE"))]
+    // Help text lives in `sandbox_flag()` because external parsers don't
+    // pick up doc comments.
+    #[bpaf(external(sandbox_flag))]
     pub sandbox: Option<SandboxMode>,
 
     /// Activate a FloxHub environment at a specific generation.
@@ -156,6 +155,20 @@ pub struct ActivateOptions {
 
     #[bpaf(external(command_select), optional)]
     pub command: Option<CommandSelect>,
+}
+
+/// Parser for the `--sandbox` flag.
+///
+/// `--sandbox <MODE>` selects an explicit mode; a bare `--sandbox` (followed
+/// by another flag, `--`, or end of input) selects `ask`. The `[valued, bare]
+/// ordering is load-bearing: the valued branch must win when a mode word
+/// follows, while the hidden bare branch matches when no value is present.
+fn sandbox_flag() -> impl Parser<Option<SandboxMode>> {
+    let valued = bpaf::long("sandbox")
+        .help("Mediate filesystem access during this activation: \"off\" (default), \"warn\", \"enforce\", or \"ask\". A bare --sandbox means \"ask\". Experimental prototype; requires the sandbox_activate feature flag.")
+        .argument::<SandboxMode>("MODE");
+    let bare = bpaf::long("sandbox").req_flag(SandboxMode::Ask).hide();
+    bpaf::construct!([valued, bare]).optional()
 }
 
 impl ActivateOptions {
@@ -254,14 +267,10 @@ impl Activate {
         // Reject sandboxed in-place activation before anything reaches the
         // stdout statement stream. A non-TTY stdout silently selects InPlace,
         // so this also blocks `flox activate --sandbox ask | tee`, which would
-        // otherwise unsandbox silently.
-        if options.sandbox.unwrap_or_default() != SandboxMode::Off
-            && invocation_type == InvocationType::InPlace
-        {
-            bail!(
-                "--sandbox requires an interactive shell or a command ('flox activate --sandbox ask -- <cmd>'); in-place activation cannot be sandboxed."
-            );
-        }
+        // otherwise unsandbox silently. This early check only sees the CLI
+        // flag; a manifest-sourced mode is re-checked after resolution in
+        // `ActivateOptions::activate`.
+        ensure_sandbox_not_in_place(options.sandbox.unwrap_or_default(), &invocation_type)?;
 
         if (invocation_type == InvocationType::Interactive
             || invocation_type == InvocationType::InPlace)
@@ -378,7 +387,21 @@ impl ActivateOptions {
         };
         let manifest = &lockfile.migrated_manifest()?;
 
-        let sandbox_mode = self.sandbox.unwrap_or_default();
+        let is_ephemeral = !services_for_ephemeral_activation.is_empty();
+
+        let sandbox_mode = resolve_sandbox_mode(
+            self.sandbox,
+            manifest.as_latest_schema().options.sandbox,
+            flox.features.sandbox_activate,
+            is_ephemeral,
+        )?;
+
+        // A manifest-sourced mode first becomes visible here, after the
+        // handle-level in-place guard (which only sees the CLI flag) has
+        // already run, so re-check the rejection with the resolved mode.
+        // Otherwise `options.sandbox = "ask"` piped to `tee` would activate
+        // in-place unsandboxed.
+        ensure_sandbox_not_in_place(sandbox_mode, &invocation_type)?;
 
         // Services run outside the sandbox in this prototype (TH-003
         // deferred), so warn once when the environment defines any.
@@ -538,7 +561,6 @@ impl ActivateOptions {
         };
 
         // Determine services to start with a new process-compose
-        let is_ephemeral = !services_for_ephemeral_activation.is_empty();
         let services_to_start = if is_ephemeral {
             services_for_ephemeral_activation
         } else {
@@ -954,6 +976,69 @@ pub fn is_allowed(config: &Config, concrete_environment: &ConcreteEnvironment) -
     }
 }
 
+/// Resolve the effective sandbox mode for an activation.
+///
+/// Precedence: CLI flag > manifest `options.sandbox` > off.
+///
+/// An explicit CLI flag without the sandbox_activate feature flag is a hard
+/// error so the user knows the flag did not take effect. A manifest-sourced
+/// mode is gentler — shared manifests must not hard-fail consumers — so it
+/// is ignored for ephemeral (service) activations with a debug note, and
+/// downgraded to off with a warning when the feature flag is absent.
+fn resolve_sandbox_mode(
+    cli_mode: Option<SandboxMode>,
+    manifest_mode: Option<SandboxMode>,
+    sandbox_feature_enabled: bool,
+    is_ephemeral: bool,
+) -> Result<SandboxMode> {
+    if let Some(mode) = cli_mode {
+        // Normally already rejected by the gate at the top of
+        // `ActivateOptions::activate`; repeated here so resolution is
+        // self-contained.
+        if !sandbox_feature_enabled {
+            bail!(
+                "'--sandbox' requires the sandbox_activate feature flag. Set FLOX_FEATURES_SANDBOX_ACTIVATE=true."
+            );
+        }
+        return Ok(mode);
+    }
+
+    let Some(mode) = manifest_mode else {
+        return Ok(SandboxMode::Off);
+    };
+
+    if is_ephemeral {
+        debug!("ignoring manifest 'options.sandbox' for an ephemeral (service) activation");
+        return Ok(SandboxMode::Off);
+    }
+
+    if !sandbox_feature_enabled {
+        message::warning(
+            "Ignoring 'options.sandbox' from the manifest; sandboxing requires the sandbox_activate feature flag. Set FLOX_FEATURES_SANDBOX_ACTIVATE=true.",
+        );
+        return Ok(SandboxMode::Off);
+    }
+
+    Ok(mode)
+}
+
+/// Reject a sandboxed in-place activation.
+///
+/// A non-TTY stdout silently selects [InvocationType::InPlace], so without
+/// this guard `flox activate --sandbox ask | tee` (or a manifest-set mode)
+/// would activate unsandboxed without any indication.
+fn ensure_sandbox_not_in_place(
+    sandbox_mode: SandboxMode,
+    invocation_type: &InvocationType,
+) -> Result<()> {
+    if sandbox_mode != SandboxMode::Off && *invocation_type == InvocationType::InPlace {
+        bail!(
+            "--sandbox requires an interactive shell or a command ('flox activate --sandbox ask -- <cmd>'); in-place activation cannot be sandboxed."
+        );
+    }
+    Ok(())
+}
+
 /// Print the `ask`-mode activation banner and any journal tamper warning.
 ///
 /// The banner explains the deny-and-queue model and names the review surfaces.
@@ -991,6 +1076,7 @@ mod tests {
     use std::sync::LazyLock;
 
     use flox_rust_sdk::models::environment::{DotFlox, EnvironmentPointer, PathPointer};
+    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
 
     use super::*;
     use crate::commands::ActiveEnvironments;
@@ -1067,6 +1153,149 @@ mod tests {
     fn test_conflicting_service_flags_are_rejected() {
         let options = activate_options_with_flags(true, true);
         assert!(options.validate_service_flags().is_err());
+    }
+
+    /// Run the [ActivateOptions] parser against a synthetic command line.
+    fn parse_activate_options(args: &[&str]) -> Result<ActivateOptions, bpaf::ParseFailure> {
+        activate_options().to_options().run_inner(args)
+    }
+
+    #[test]
+    fn sandbox_flag_absent_parses_as_none() {
+        let options = parse_activate_options(&[]).unwrap();
+        assert_eq!(options.sandbox, None);
+    }
+
+    #[test]
+    fn bare_sandbox_flag_parses_as_ask() {
+        let options = parse_activate_options(&["--sandbox"]).unwrap();
+        assert_eq!(options.sandbox, Some(SandboxMode::Ask));
+    }
+
+    #[test]
+    fn sandbox_flag_with_value_parses_explicit_mode() {
+        let options = parse_activate_options(&["--sandbox", "warn"]).unwrap();
+        assert_eq!(options.sandbox, Some(SandboxMode::Warn));
+
+        let options = parse_activate_options(&["--sandbox=enforce"]).unwrap();
+        assert_eq!(options.sandbox, Some(SandboxMode::Enforce));
+
+        let options = parse_activate_options(&["--sandbox", "off"]).unwrap();
+        assert_eq!(options.sandbox, Some(SandboxMode::Off));
+    }
+
+    #[test]
+    fn bare_sandbox_flag_parses_before_trailing_command() {
+        let options = parse_activate_options(&["--sandbox", "--", "true"]).unwrap();
+        assert_eq!(options.sandbox, Some(SandboxMode::Ask));
+        let Some(CommandSelect::ExecCommand { command, args }) = options.command else {
+            panic!("expected an exec command");
+        };
+        assert_eq!(command, "true");
+        assert_eq!(args, Vec::<String>::new());
+    }
+
+    #[test]
+    fn valued_sandbox_flag_parses_before_trailing_command() {
+        let options = parse_activate_options(&["--sandbox", "enforce", "--", "true"]).unwrap();
+        assert_eq!(options.sandbox, Some(SandboxMode::Enforce));
+        let Some(CommandSelect::ExecCommand { command, .. }) = options.command else {
+            panic!("expected an exec command");
+        };
+        assert_eq!(command, "true");
+    }
+
+    #[test]
+    fn sandbox_flag_rejects_invalid_mode() {
+        assert!(parse_activate_options(&["--sandbox", "bogus"]).is_err());
+    }
+
+    #[test]
+    fn resolve_sandbox_mode_cli_flag_wins_over_manifest() {
+        let mode = resolve_sandbox_mode(
+            Some(SandboxMode::Warn),
+            Some(SandboxMode::Enforce),
+            true,
+            false,
+        )
+        .unwrap();
+        assert_eq!(mode, SandboxMode::Warn);
+
+        // An explicit `--sandbox off` overrides a manifest-set mode.
+        let mode =
+            resolve_sandbox_mode(Some(SandboxMode::Off), Some(SandboxMode::Ask), true, false)
+                .unwrap();
+        assert_eq!(mode, SandboxMode::Off);
+    }
+
+    #[test]
+    fn resolve_sandbox_mode_manifest_applies_without_cli_flag() {
+        let mode = resolve_sandbox_mode(None, Some(SandboxMode::Warn), true, false).unwrap();
+        assert_eq!(mode, SandboxMode::Warn);
+    }
+
+    #[test]
+    fn resolve_sandbox_mode_defaults_to_off() {
+        let mode = resolve_sandbox_mode(None, None, true, false).unwrap();
+        assert_eq!(mode, SandboxMode::Off);
+
+        let mode = resolve_sandbox_mode(None, None, false, false).unwrap();
+        assert_eq!(mode, SandboxMode::Off);
+    }
+
+    #[test]
+    fn resolve_sandbox_mode_ignores_manifest_for_ephemeral_activation() {
+        let mode = resolve_sandbox_mode(None, Some(SandboxMode::Enforce), true, true).unwrap();
+        assert_eq!(mode, SandboxMode::Off);
+    }
+
+    #[test]
+    fn resolve_sandbox_mode_manifest_downgraded_without_feature_flag() {
+        let (subscriber, writer) = test_subscriber_message_only();
+
+        let mode = tracing::subscriber::with_default(subscriber, || {
+            resolve_sandbox_mode(None, Some(SandboxMode::Ask), false, false).unwrap()
+        });
+
+        assert_eq!(mode, SandboxMode::Off);
+        let printed = writer.to_string();
+        assert!(
+            printed.contains("Ignoring 'options.sandbox' from the manifest"),
+            "printed: {printed}"
+        );
+    }
+
+    #[test]
+    fn resolve_sandbox_mode_cli_flag_without_feature_flag_errors() {
+        let err = resolve_sandbox_mode(Some(SandboxMode::Warn), None, false, false).unwrap_err();
+        assert!(
+            err.to_string().contains("sandbox_activate feature flag"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn in_place_guard_rejects_any_active_sandbox_mode() {
+        assert!(ensure_sandbox_not_in_place(SandboxMode::Ask, &InvocationType::InPlace).is_err());
+        assert!(ensure_sandbox_not_in_place(SandboxMode::Warn, &InvocationType::InPlace).is_err());
+        assert!(
+            ensure_sandbox_not_in_place(SandboxMode::Enforce, &InvocationType::InPlace).is_err()
+        );
+        assert!(ensure_sandbox_not_in_place(SandboxMode::Off, &InvocationType::InPlace).is_ok());
+    }
+
+    #[test]
+    fn in_place_guard_allows_other_invocation_types() {
+        assert!(
+            ensure_sandbox_not_in_place(SandboxMode::Ask, &InvocationType::Interactive).is_ok()
+        );
+        assert!(
+            ensure_sandbox_not_in_place(
+                SandboxMode::Enforce,
+                &InvocationType::ExecCommand(vec!["true".to_string()])
+            )
+            .is_ok()
+        );
     }
 }
 

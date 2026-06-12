@@ -17,7 +17,7 @@ flox [<general-options>] activate
      [--print-script]
      [--start-services | --no-start-services]
      [-m=(dev|run)]
-     [--sandbox=(off|warn|enforce|ask)]
+     [--sandbox[=(off|warn|enforce|ask)]]
      [-g=<generation>]
      [-c=<shell command> | -- <exec command>...]
 ```
@@ -131,6 +131,10 @@ Inside a `flox activate` subshell,
 `--sandbox (off|warn|enforce|ask)`
 :  Mediate filesystem and outbound-network access during this activation.
    Defaults to `off`, which applies no sandbox.
+   A bare `--sandbox` with no value is shorthand for `--sandbox ask`.
+   Environments can request a mode with the `options.sandbox` manifest
+   setting (see [`manifest.toml(5)`](./manifest.toml.md)); the
+   command-line flag takes precedence over the manifest.
    `warn` reports out-of-policy access without blocking it,
    `enforce` denies it, and `ask` denies it and queues it for approval.
    File reads outside the environment closure and TCP connections to hosts

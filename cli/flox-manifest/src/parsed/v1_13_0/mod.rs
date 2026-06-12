@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use flox_core::activate::sandbox_mode::SandboxMode;
+use flox_core::data::System;
 #[cfg(test)]
 use flox_test_utils::proptest::alphanum_and_whitespace_string;
 #[cfg(any(test, feature = "tests"))]
@@ -17,12 +19,14 @@ use serde_with::skip_serializing_none;
 
 use crate::interfaces::{AsTypedOnlyManifest, SchemaVersion, impl_pkg_lookup};
 use crate::parsed::common::{
+    ActivateOptions,
+    Allows,
     BuildVersion,
     Containerize,
     Hook,
     Include,
     KnownSchemaVersion,
-    Options,
+    SemverOptions,
     Vars,
 };
 use crate::parsed::v1_10_0::{Install, ManifestPackageDescriptor};
@@ -72,6 +76,9 @@ pub struct ManifestV1_13_0 {
     #[serde(default)]
     pub profile: Option<Profile>,
     /// Options that control the behavior of the manifest.
+    ///
+    /// This is the version-specific [Options] (with `sandbox`), not
+    /// `common::Options`.
     #[serde(default)]
     pub options: Options,
     /// Service definitions
@@ -209,6 +216,67 @@ pub struct ProfileDeactivate {
         proptest(strategy = "proptest::option::of(alphanum_and_whitespace_string(5))")
     )]
     pub(crate) tcsh: Option<String>,
+}
+
+/// Options for V1_13_0.
+///
+/// This is a version-specific copy of `common::Options` because V1_13_0 adds
+/// the `sandbox` field; the other fields (and their leaf types) are identical
+/// and continue to live in `parsed::common`.
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct Options {
+    /// A list of systems that each package is resolved for.
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "optional_vec_of_strings(3, 4)")
+    )]
+    pub systems: Option<Vec<System>>,
+    /// Options that control what types of packages are allowed.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Allows::skip_serializing")]
+    pub allow: Allows,
+    /// Options that control how semver versions are resolved.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "SemverOptions::skip_serializing")]
+    pub semver: SemverOptions,
+    /// Whether to detect CUDA devices and libs during activation.
+    // TODO: Migrate to `ActivateOptions`.
+    pub cuda_detection: Option<bool>,
+    /// The sandbox mode applied when the environment is activated
+    /// (`off`, `warn`, `enforce`, or `ask`). An explicit `--sandbox` flag
+    /// on `flox activate` takes precedence over this setting.
+    pub sandbox: Option<SandboxMode>,
+    /// Options that control the behavior of activations.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "ActivateOptions::skip_serializing")]
+    pub activate: ActivateOptions,
+}
+
+// Conversion from the common Options, used by the V1_12_0 -> V1_13_0
+// migration. The new `sandbox` field defaults to None, which is what makes
+// the migration lossless.
+impl From<crate::parsed::common::Options> for Options {
+    fn from(options: crate::parsed::common::Options) -> Self {
+        let crate::parsed::common::Options {
+            systems,
+            allow,
+            semver,
+            cuda_detection,
+            activate,
+        } = options;
+        Options {
+            systems,
+            allow,
+            semver,
+            cuda_detection,
+            sandbox: None,
+            activate,
+        }
+    }
 }
 
 /// A map of package ids to package build descriptors.
