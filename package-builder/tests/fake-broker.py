@@ -1,32 +1,36 @@
 #!/usr/bin/env python3
-"""fake-broker.py — a scripted stand-in for the ask broker, for C probe tests.
+"""fake-broker.py — a scripted stand-in for the prompt broker, for C probe tests.
 
-The real broker is a thread inside the flox-activations executive. To test the
-libsandbox RPC client (package-builder/sandbox.c `ask_broker`) in isolation,
-this script binds the same AF_UNIX/SOCK_STREAM verdict socket and replies with
-a canned verdict per the newline-JSON wire protocol:
+The real broker is a thread inside the flox-activations executive (or, for
+builds, the flox prompt broker). To test the libsandbox prompt client
+(package-builder/sandbox.c `prompt_broker`) in isolation, this script binds
+the same AF_UNIX/SOCK_STREAM socket and replies with a canned verdict per the
+newline line protocol:
 
-  request line  (from libsandbox): {"v":1,"kind":"fs","op":"read|write",
-                                    "path":..,"raw":..,"pid":..,"exe":..}
-  response line (to libsandbox):   {"v":1,"verdict":"allow|deny",
-                                    "scope":..,"cache":"scope|ttl|none",
-                                    "req":<n>}
+  request line  (from libsandbox): <realpath>
+  response line (to libsandbox):   allow
+                                   allow-glob <pattern>
+                                   deny
+                                   deny <req>
 
 One request/response exchange per connection, matching the C client.
 
-Every request is appended (as its raw JSON line) to a log file so a test can
-assert the RPC count — in particular that a cached allow scope makes ZERO
+Every request is appended (as its raw line) to a log file so a test can
+assert the RPC count — in particular that an accepted allow-glob makes ZERO
 further RPCs.
 
 Usage:
   fake-broker.py --socket PATH --log PATH --mode MODE [--scope GLOB]
 
 Modes:
-  allow-scope   reply allow with cache=scope and the given --scope glob (so the
-                engine caches the subtree and a second open under it never RPCs)
-  deny          reply deny with cache=ttl and scope=<request path>, req counter
-  allow-file    reply allow with cache=scope but scope=<request path> (a single
-                file allowed, no subtree)
+  allow-scope   reply "allow-glob <--scope glob>" (the client caches the
+                pattern and a second open under it never RPCs)
+  allow-file    reply "allow" (a single file allowed; the client caches the
+                exact path)
+  deny          reply "deny <req>" with an incrementing req counter (the
+                activation broker form, queued for out-of-band review)
+  deny-bare     reply "deny" (the build broker form: the user answered the
+                interactive prompt with Deny)
 
 The mode can be switched live by writing a new mode word into the file named by
 --mode-file (if given); this lets a test flip deny -> allow to exercise the
@@ -34,7 +38,6 @@ The mode can be switched live by writing a new mode word into the file named by
 """
 
 import argparse
-import json
 import os
 import socketserver
 import sys
@@ -77,49 +80,28 @@ def make_handler(state):
     class Handler(socketserver.BaseRequestHandler):
         def handle(self):
             data = b""
-            # Read one line (the request is a single newline-terminated JSON
-            # object); stop at the newline.
+            # Read one line (the request is a single newline-terminated
+            # realpath); stop at the newline.
             while b"\n" not in data:
                 chunk = self.request.recv(4096)
                 if not chunk:
                     break
                 data += chunk
-            line = data.decode("utf-8", "replace").strip()
-            if not line:
+            path = data.decode("utf-8", "replace").strip()
+            if not path:
                 return
-            state.log_request(line)
-            try:
-                request = json.loads(line)
-            except json.JSONDecodeError:
-                request = {}
-            path = request.get("path", "")
+            state.log_request(path)
 
             mode = state.current_mode()
             if mode == "allow-scope":
-                response = {
-                    "v": 1,
-                    "verdict": "allow",
-                    "scope": state.scope or path,
-                    "cache": "scope",
-                    "req": 0,
-                }
+                response = "allow-glob %s" % (state.scope or path)
             elif mode == "allow-file":
-                response = {
-                    "v": 1,
-                    "verdict": "allow",
-                    "scope": path,
-                    "cache": "scope",
-                    "req": 0,
-                }
+                response = "allow"
+            elif mode == "deny-bare":
+                response = "deny"
             else:  # deny
-                response = {
-                    "v": 1,
-                    "verdict": "deny",
-                    "scope": path,
-                    "cache": "ttl",
-                    "req": state.next_req(),
-                }
-            self.request.sendall((json.dumps(response) + "\n").encode("utf-8"))
+                response = "deny %d" % state.next_req()
+            self.request.sendall((response + "\n").encode("utf-8"))
 
     return Handler
 
@@ -134,7 +116,8 @@ def main():
     parser.add_argument("--socket", required=True)
     parser.add_argument("--log", required=True)
     parser.add_argument("--mode", required=True,
-                        choices=["allow-scope", "allow-file", "deny"])
+                        choices=["allow-scope", "allow-file", "deny",
+                                 "deny-bare"])
     parser.add_argument("--scope", default=None)
     parser.add_argument("--mode-file", default=None)
     args = parser.parse_args()
