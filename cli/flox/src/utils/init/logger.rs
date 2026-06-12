@@ -28,7 +28,9 @@ pub(crate) fn init_logger(verbosity: Option<Verbosity>) {
         // Only show warnings, and user facing messages
         Verbosity::Verbose(0) => "warn,flox::utils::message=info",
         // Show internal info logs
-        Verbosity::Verbose(1) => "warn,flox=info,flox-rust-sdk=info,flox-core=info",
+        Verbosity::Verbose(1) => {
+            "warn,flox=info,flox-rust-sdk=info,flox-core=info,flox::utils::message=debug"
+        },
         // Show debug logs from our libraries
         Verbosity::Verbose(2) => "warn,flox=debug,flox-rust-sdk=debug,flox-core=debug",
         // Show trace logs from our libraries

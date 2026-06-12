@@ -350,7 +350,7 @@ mod tests {
         }
 
         #[test]
-        fn version_change_shows_arrow() {
+        fn upgrade_with_different_versions() {
             let before = make_catalog_package(
                 "curl",
                 "8.9.0",
@@ -417,6 +417,41 @@ mod tests {
             let mut diff = SingleSystemUpgradeDiff::new();
             diff.insert("hello".to_string(), (before, after));
             assert_eq!(render_diff(&diff), "- hello: 2.12.1 (rebuild)");
+        }
+
+        #[test]
+        fn dry_run_summary_with_rebuild() {
+            let date = chrono::Utc.with_ymd_and_hms(2025, 1, 15, 0, 0, 0).unwrap();
+            let before = make_catalog_package("hello", "2.12.1", "/nix/store/old", "abc1234", date);
+            let after = make_catalog_package("hello", "2.12.1", "/nix/store/new", "abc1234", date);
+            let mut diff = SingleSystemUpgradeDiff::new();
+            diff.insert("hello".to_string(), (before, after));
+            let (vc, rb) = count_upgrade_categories(&diff);
+            assert_eq!(format_upgrade_summary(vc, rb), "1 rebuild");
+            assert_eq!(render_diff(&diff), "- hello: 2.12.1 (rebuild)");
+        }
+
+        #[test]
+        fn dry_run_summary_with_version_change_and_rebuild() {
+            let date = chrono::Utc.with_ymd_and_hms(2025, 1, 15, 0, 0, 0).unwrap();
+            let before_curl = make_catalog_package("curl", "8.9.0", "/nix/store/old", "aaa", date);
+            let after_curl = make_catalog_package("curl", "8.10.1", "/nix/store/new", "bbb", date);
+            let before_hello =
+                make_catalog_package("hello", "2.12.1", "/nix/store/old", "abc1234", date);
+            let after_hello =
+                make_catalog_package("hello", "2.12.1", "/nix/store/new", "abc1234", date);
+            let mut diff = SingleSystemUpgradeDiff::new();
+            diff.insert("curl".to_string(), (before_curl, after_curl));
+            diff.insert("hello".to_string(), (before_hello, after_hello));
+            let (vc, rb) = count_upgrade_categories(&diff);
+            assert_eq!(
+                format_upgrade_summary(vc, rb),
+                "1 version change and 1 rebuild"
+            );
+            assert_eq!(
+                render_diff(&diff),
+                "- curl: 8.9.0 -> 8.10.1\n- hello: 2.12.1 (rebuild)"
+            );
         }
 
         #[test]

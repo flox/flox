@@ -746,12 +746,14 @@ fn notify_package_upgrades(
         debug!("Not notifying user of upgrade, no changes in lockfile");
         return Ok(());
     }
+    let description = environment_description(environment)?;
     let diff_for_system = upgrade_result.diff_for_system(&flox.system);
     if diff_for_system.is_empty() {
-        debug!("Not notifying user of upgrade, no changes for this system");
+        message::verbose(formatdoc! {"
+            Upgrades available for {description} on other systems.
+            Use 'flox upgrade --dry-run' for details."});
         return Ok(());
     }
-    let description = environment_description(environment)?;
     // TODO: this doesn't capture the environment chosen by the user if we prompted
     let flags = environment_select
         .to_flags()
