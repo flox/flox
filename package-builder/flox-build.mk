@@ -450,11 +450,17 @@ define BUILD_local_template =
 	@# expanding ~ or globbing *, leaving libsandbox to interpret the patterns).
 	@# As a result of the space delimiter, individual patterns cannot contain
 	@# spaces; this is documented for the `sandbox-allow` manifest field.
+	@#
+	@# FLOX_SANDBOX_GRANTS_DIR and FLOX_SANDBOX_ALLOW_FOREIGN_EXE are blanked
+	@# because a `flox build` may run INSIDE a prompt-mode activation, whose
+	@# session exports both. A build must keep pure build semantics: no audit
+	@# records in the session's store, no activation-flavored fail-closed
+	@# behavior, and the foreign-executable reproducibility check intact.
 	$(_V_) $(_env) $$(QUOTED_ENV_DISALLOW_ARGS) out=$($(_pvarname)_out) \
 	  $(FLOX_INTERPRETER)/activate --env $$($(_pvarname)_develop_copy_env) \
 	    --mode build --skip-hook-on-activate --env-project $(PWD) -- \
 	    $(_t3) $($(_pvarname)_logfile) -- \
-	    $(if $(_virtualSandbox),$(_env) $(PRELOAD_VARS) FLOX_SRC_DIR=$(PWD) FLOX_SANDBOX_ALLOW_DIRS="$(__bashInteractive) $$($(_pvarname)_buildDeps)" FLOX_SANDBOX_ALLOW=$(_sandbox_allow) FLOX_SANDBOX_PROMPT_SOCKET="$(FLOX_SANDBOX_PROMPT_SOCKET)" FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
+	    $(if $(_virtualSandbox),$(_env) $(PRELOAD_VARS) FLOX_SRC_DIR=$(PWD) FLOX_SANDBOX_ALLOW_DIRS="$(__bashInteractive) $$($(_pvarname)_buildDeps)" FLOX_SANDBOX_ALLOW=$(_sandbox_allow) FLOX_SANDBOX_PROMPT_SOCKET="$(FLOX_SANDBOX_PROMPT_SOCKET)" FLOX_SANDBOX_GRANTS_DIR= FLOX_SANDBOX_ALLOW_FOREIGN_EXE= FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
 	    $(_bash) -e $$<
 	@#
 	@# Finally, rewrite references to temporary build wrapper in "out",
