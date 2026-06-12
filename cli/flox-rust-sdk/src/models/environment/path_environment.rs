@@ -1038,7 +1038,7 @@ pub mod tests {
     // -------------------------------------------------------------------------
     // Regression tests: PathEnvironment::build must not rewrite a current lock
     //
-    // Before AI-159, `build` called `lock()` unconditionally.  Even when the
+    // Previously, `build` called `lock()` unconditionally.  Even when the
     // lockfile was already up-to-date, `lock()` could rewrite it (e.g. due to
     // formatting normalisation), updating the mtime and triggering a spurious
     // needs_rebuild() on the next activate.
@@ -1145,25 +1145,16 @@ pub mod tests {
     }
 
     // -------------------------------------------------------------------------
-    // AI-159-3: prior-release rendered-env stamp acceptance
+    // Cross-release coverage: a current-release activate must accept the build
+    // stamp left by an earlier release without triggering a needless rebuild.
     //
-    // This test loads a prior-release manifest.toml + manifest.lock, builds
-    // the environment with the current release, and asserts that
-    // needs_rebuild() returns false after the build.  This covers the
-    // cross-release path where a current-release activate must accept the
-    // prior-release build stamp without triggering a rebuild.
-    //
-    // Fixtures are captured via `just regen-prior-release-fixtures`; this test
-    // is active.
-    // See the 'regen-prior-release-fixtures' Justfile recipe.
+    // Fixtures live in test_data/manually_generated/prior_release_baselines/
+    // and are captured by the `regen-prior-release-fixtures` Justfile recipe.
     // -------------------------------------------------------------------------
 
-    /// AI-159-3 (needs_rebuild predicate, plain environment).
-    ///
-    /// Copies a prior-release manifest.toml + manifest.lock into a
-    /// PathEnvironment, builds it with the current release, then asserts
-    /// needs_rebuild() returns false, proving the current release accepts
-    /// the prior-release build state without triggering a rebuild.
+    /// Building a prior-release manifest + lockfile with the current release
+    /// and then checking `needs_rebuild()` must return false: the current
+    /// release accepts the prior-release build state without rebuilding.
     #[test]
     fn needs_rebuild_accepts_prior_release_stamp_plain() {
         use flox_test_utils::MANUALLY_GENERATED;
@@ -1189,23 +1180,16 @@ pub mod tests {
 
         // Lock (no-op if the prior-release lockfile is up-to-date) and
         // build, creating the rendered-env stamp.
-        env.build(&flox).expect(
-            "build should succeed with prior-release lockfile; \
-             if it fails, the fixture may need refreshing. \
-             See the 'regen-prior-release-fixtures' Justfile recipe",
-        );
+        env.build(&flox)
+            .expect("build should succeed with the prior-release lockfile");
 
         // After the build, needs_rebuild() must return false: the
         // rendered-env stamp's lockfile matches the env's lockfile.
         assert!(
             !env.needs_rebuild().unwrap(),
             "needs_rebuild() returned true after building from a prior-release \
-             lockfile. This means either:\n  \
-             (a) the rendered-env stamp's lockfile format diverged from the \
-                 env's lockfile (serialisation regression); or\n  \
-             (b) the prior-release fixture is too old to build correctly \
-                 (refresh with 'just regen-prior-release-fixtures').\n\
-             See the 'regen-prior-release-fixtures' Justfile recipe"
+             lockfile: the rendered-env stamp's lockfile diverged from the \
+             env's lockfile across releases",
         );
     }
 }

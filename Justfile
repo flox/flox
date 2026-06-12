@@ -295,46 +295,44 @@ test-all: test-nix-plugins impure-tests integ-tests nix-integ-tests
 
 # ---------------------------------------------------------------------------- #
 
-# Refresh the prior-release lockfile fixtures used by AI-159 cross-release
-# tests.  Fixtures live in
+# Refresh the prior-release lockfile fixtures under
 #   test_data/manually_generated/prior_release_baselines/
-#
-# This recipe is documentation-of-procedure and automation for future
-# maintainers.  The fixtures checked into the repository are the actual test
-# inputs; this recipe is only needed when it is time to advance the prior
-# release pin.
+# used by the cross-release tests: a current Flox release must still honor
+# lockfiles produced by an earlier release (accept them without a re-lock, and
+# re-lock them byte-for-byte).
 #
 # Usage:
-#   just regen-prior-release-fixtures           # auto: picks N-1 minor
+#   just regen-prior-release-fixtures           # default pin (see below)
 #   just regen-prior-release-fixtures 1.12.0    # explicit version
 #
-# When to run:
-#   - A new minor Flox release ships (advance the pin to the new N-1)
-#   - The lockfile schema bumps (fixture format changed)
-#   - A predicate-rejection test fails with a fixture-rot diagnostic
+# Pin choice: the default is the EARLIEST release whose lockfiles the current
+# release still reproduces byte-for-byte, NOT the previous minor. Pinning to
+# this floor exercises the longest migration path (every schema migration from
+# that release up to the current one must be a no-op), which is the widest
+# scope we can test. Do not advance the pin as new releases ship.
 #
-# This recipe fetches the named prior Flox release into the Nix store (NOT
-# your user profile), locks each fixture shape with it, and copies out the
-# resulting lockfiles + catalog replays.  It still requires:
-#   1. Network access (to fetch the release flake and the Flox catalog)
-#   2. A local Nix store (to build the rendered environment during activate)
-# so it cannot run in CI; a maintainer runs it when advancing the pin.
+# That floor is v1.12.0: the first release with the compose.composer
+# schema-version drift fix (#4180). Earlier releases (1.10.x, 1.11.x) wrote a
+# drifted composer the current release cannot accept as up-to-date or reproduce
+# byte-for-byte, so composed (with_include) fixtures captured there would fail.
+# Only raise the floor if a new, similarly incompatible boundary appears below
+# the current floor.
+#
+# When to run:
+#   - A test reports the current release no longer honors the floor fixtures
+#     (investigate: likely a real serialization or predicate regression); or
+#   - You are intentionally raising the floor.
+#
+# Requirements (so it cannot run in CI; a maintainer runs it):
+#   1. Network access to fetch the release flake.
+#   2. A local Nix store to build the rendered environment during activate.
 #
 # It deliberately uses 'nix build' rather than 'nix profile install': the
 # former only populates the content-addressed store plus a temporary gcroot
-# symlink, leaving your profile and PATH untouched.  All prior-Flox state
+# symlink, leaving your profile and PATH untouched. All prior-Flox state
 # (HOME, XDG dirs, config) is redirected into a tempdir so the host is not
-# touched either.
-#
-# The current fixtures install no packages, so locking makes no catalog
-# requests and needs no network beyond fetching the release flake.  Capturing
-# replays for package-bearing fixtures would require a source-built binary
-# (see the note on the capture() helper below).
-#
-# This recipe is the procedure: the comments above and below document each
-# step. The prior pin must be >= v1.12.0 for composed (with_include) fixtures —
-# earlier releases had the compose.composer schema-version drift bug (#4180),
-# whose lockfile output the current release cannot reproduce byte-for-byte.
+# touched either. The fixtures install no packages, so locking makes no catalog
+# requests and needs no network beyond the release flake.
 regen-prior-release-fixtures version="auto":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -342,21 +340,14 @@ regen-prior-release-fixtures version="auto":
     BASELINES="test_data/manually_generated/prior_release_baselines"
 
     # --- Resolve the version pin to a release tag --------------------------
+    # The default pin is the floor: the earliest release whose lockfiles the
+    # current release still reproduces byte-for-byte (see the header comment).
+    FLOOR_VERSION="1.12.0"
     VERSION="{{version}}"
     if [ "$VERSION" = "auto" ]; then
-      # N-1 minor: the highest patch of the minor below the current trunk.
-      top=$(git tag --list 'v*.*.*' --sort=-v:refname | head -n1)
-      major=$(printf '%s' "$top" | sed -E 's/^v([0-9]+)\..*/\1/')
-      minor=$(printf '%s' "$top" | sed -E 's/^v[0-9]+\.([0-9]+)\..*/\1/')
-      TAG=$(git tag --list "v${major}.$((minor - 1)).*" --sort=-v:refname | head -n1)
-      if [ -z "$TAG" ]; then
-        echo "Could not auto-resolve an N-1 minor tag below $top." >&2
-        echo "Pass an explicit version, e.g. 'just regen-prior-release-fixtures 1.11.0'." >&2
-        exit 1
-      fi
-    else
-      TAG="v${VERSION#v}"
+      VERSION="$FLOOR_VERSION"
     fi
+    TAG="v${VERSION#v}"
     echo "==> Capturing prior-release fixtures with Flox $TAG"
 
     # Capture provenance now, before HOME is redirected away from ~/.gitconfig.
@@ -395,22 +386,18 @@ regen-prior-release-fixtures version="auto":
     PRIOR_FLOX="$WORKROOT/flox-result/bin/flox"
     echo "==> Using $("$PRIOR_FLOX" --version)"
 
-    # --- Lock one env dir with the prior release and copy artifacts out ----
+    # --- Lock one env dir with the prior release and copy the lockfile out --
     # $1 = throwaway env dir (already contains .flox), $2 = fixture out dir
     #
-    # The current fixture shapes install no packages, so locking makes zero
-    # catalog requests and the recorded replay is empty (a 0-byte file, as
-    # 'mk_data' itself emits for zero-interaction scenarios).  We therefore do
-    # NOT enable catalog record mode here: with a Nix-store-built binary,
-    # httpmock saves recordings to a compile-time path inside the read-only
-    # store and panics.  If a future fixture installs packages, capturing its
-    # replay requires a source-built (cargo) binary with a writable
-    # CARGO_MANIFEST_DIR; revisit this recipe then.
+    # The fixtures install no packages, so locking makes zero catalog requests
+    # and there is nothing to record. A package-bearing fixture would need its
+    # catalog responses captured, which a Nix-store-built binary cannot do
+    # (httpmock records to a read-only compile-time path); use a source-built
+    # (cargo) binary then.
     capture() {
       local envdir="$1" outdir="$2"
       "$PRIOR_FLOX" activate --dir "$envdir" -c true
       cp "$envdir/.flox/env/manifest.lock" "$outdir/manifest.lock"
-      : > "$outdir/catalog_replay.yaml"  # empty: zero catalog interactions
     }
 
     # --- plain shape -------------------------------------------------------
@@ -441,18 +428,16 @@ regen-prior-release-fixtures version="auto":
       --arg on  "$(date -u +%Y-%m-%d)" \
       --arg by  "$CAPTURED_BY" \
       --arg pl  "$(sha "$BASELINES/plain/manifest.lock")" \
-      --arg pr  "$(sha "$BASELINES/plain/catalog_replay.yaml")" \
       --arg ql  "$(sha "$BASELINES/with_include/parent/manifest.lock")" \
-      --arg qr  "$(sha "$BASELINES/with_include/parent/catalog_replay.yaml")" \
       '{
         captured_with_flox_version: $ver,
         captured_on: $on,
         captured_by: $by,
         note: "Captured via '\''just regen-prior-release-fixtures'\''.",
         fixtures: {
-          plain: { manifest_lock_sha256: $pl, catalog_replay_sha256: $pr },
+          plain: { manifest_lock_sha256: $pl },
           with_include: {
-            parent: { manifest_lock_sha256: $ql, catalog_replay_sha256: $qr },
+            parent: { manifest_lock_sha256: $ql },
             included: { manifest_lock_sha256: null }
           }
         }
@@ -466,7 +451,7 @@ regen-prior-release-fixtures version="auto":
     echo "    Next steps:"
     echo "      1. Inspect the diff under $BASELINES/"
     echo "      2. just unit-tests   &&   just integ-tests -- --filter prior-release"
-    echo "      3. Commit: test(ai-159): capture prior-release baselines to ${TAG#v}"
+    echo "      3. Commit the refreshed fixtures."
 
 
 # ---------------------------------------------------------------------------- #
