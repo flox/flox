@@ -103,6 +103,7 @@ impl ManifestLatest {
 mod tests {
     use std::path::PathBuf;
 
+    use flox_core::activate::sandbox_mode::SandboxMode;
     use flox_core::data::environment_ref::RemoteEnvironmentRef;
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
@@ -119,9 +120,10 @@ mod tests {
         IncludeDescriptor,
         PackageDescriptorStorePath,
     };
-    // ManifestLatest's build section is the version-specific Build (with
-    // `sandbox-allow`), so build assertions use the latest schema's types.
-    use crate::parsed::v1_13_0::{Build, BuildDescriptor, Profile, ProfileDeactivate};
+    // ManifestLatest's build and options sections are the version-specific
+    // types (with `sandbox-allow` and `sandbox`), so assertions on them use
+    // the latest schema's types.
+    use crate::parsed::v1_13_0::{Build, BuildDescriptor, Options, Profile, ProfileDeactivate};
     use crate::test_helpers::{with_latest_schema, with_schema};
 
     #[test]
@@ -209,6 +211,85 @@ mod tests {
                 }),
             })
         );
+    }
+
+    #[test]
+    fn options_sandbox_parses_with_latest_schema() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [options]
+            sandbox = "warn"
+        "#});
+
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        assert_eq!(parsed.options, Options {
+            sandbox: Some(SandboxMode::Warn),
+            ..Default::default()
+        });
+    }
+
+    #[test]
+    fn options_sandbox_rejects_unknown_value() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [options]
+            sandbox = "bogus"
+        "#});
+
+        let err = toml_edit::de::from_str::<ManifestLatest>(&manifest)
+            .expect_err("'bogus' should not be a valid sandbox mode");
+
+        assert!(
+            err.message().starts_with("unknown variant `bogus`"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn options_sandbox_rejected_by_v1_12_0_schema() {
+        let manifest = with_schema(KnownSchemaVersion::V1_12_0, indoc! {r#"
+            [options]
+            sandbox = "warn"
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest)
+            .expect_err("'options.sandbox' should be rejected by the v1.12.0 schema");
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        assert!(
+            err.message()
+                .starts_with("unknown field `sandbox`, expected one of"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn downgrades_to_v1_12_0_when_sandbox_unused() {
+        let manifest = ManifestLatest::default();
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_12_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_12_0);
+    }
+
+    #[test]
+    fn stays_latest_schema_when_sandbox_set() {
+        let manifest = ManifestLatest {
+            options: Options {
+                sandbox: Some(SandboxMode::Ask),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_12_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_13_0);
     }
 
     #[test]

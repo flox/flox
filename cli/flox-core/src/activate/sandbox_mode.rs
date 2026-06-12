@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
     JsonSchema,
 )]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub enum SandboxMode {
     /// No sandbox is applied (default).
     #[default]

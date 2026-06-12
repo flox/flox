@@ -1222,9 +1222,9 @@
               "description": "The minimum CLI version that can activate this environment."
             },
             "options": {
-              "$ref": "#/$defs/Options",
+              "$ref": "#/$defs/Options2",
               "default": {},
-              "description": "Options that control the behavior of the manifest."
+              "description": "Options that control the behavior of the manifest.\n\nThis is the version-specific [Options] (with `sandbox`), not\n`common::Options`."
             },
             "profile": {
               "anyOf": [
@@ -1301,6 +1301,53 @@
                 "boolean",
                 "null"
               ]
+            },
+            "semver": {
+              "$ref": "#/$defs/SemverOptions",
+              "description": "Options that control how semver versions are resolved."
+            },
+            "systems": {
+              "description": "A list of systems that each package is resolved for.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "Options2": {
+          "additionalProperties": false,
+          "description": "Options for V1_13_0.\n\nThis is a version-specific copy of `common::Options` because V1_13_0 adds\nthe `sandbox` field; the other fields (and their leaf types) are identical\nand continue to live in `parsed::common`.",
+          "properties": {
+            "activate": {
+              "$ref": "#/$defs/ActivateOptions",
+              "description": "Options that control the behavior of activations."
+            },
+            "allow": {
+              "$ref": "#/$defs/Allows",
+              "description": "Options that control what types of packages are allowed."
+            },
+            "cuda-detection": {
+              "description": "Whether to detect CUDA devices and libs during activation.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "sandbox": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SandboxMode"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The sandbox mode applied when the environment is activated\n(`off`, `warn`, `enforce`, or `ask`). An explicit `--sandbox` flag\non `flox activate` takes precedence over this setting."
             },
             "semver": {
               "$ref": "#/$defs/SemverOptions",
@@ -1713,6 +1760,31 @@
             "Always"
           ],
           "type": "string"
+        },
+        "SandboxMode": {
+          "description": "The filesystem-mediation level requested for an activation.\n\n`Off` is the default and matches the historical behavior where no\nsandbox is applied. `Warn`, `Enforce`, and `Ask` correspond to the\nlibsandbox levels of the same name; this type only carries the\nselection through the CLI and activation context — it does not by\nitself change libsandbox behavior.",
+          "oneOf": [
+            {
+              "const": "off",
+              "description": "No sandbox is applied (default).",
+              "type": "string"
+            },
+            {
+              "const": "warn",
+              "description": "Out-of-policy access is reported but permitted.",
+              "type": "string"
+            },
+            {
+              "const": "enforce",
+              "description": "Out-of-policy access is denied.",
+              "type": "string"
+            },
+            {
+              "const": "ask",
+              "description": "Out-of-policy access is denied and queued for approval.",
+              "type": "string"
+            }
+          ]
         },
         "SelectedOutputs": {
           "anyOf": [
