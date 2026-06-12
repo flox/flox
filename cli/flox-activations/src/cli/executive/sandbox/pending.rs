@@ -86,9 +86,22 @@ impl PendingQueue {
     }
 
     /// Snapshot of pending entries, for the review surface and tests.
-    #[allow(dead_code)]
     pub fn entries(&self) -> Vec<PendingEntry> {
         self.entries.values().cloned().collect()
+    }
+
+    /// Remove every entry whose path satisfies `keep_if_matches`, returning how
+    /// many were removed.
+    ///
+    /// Used when a grant is approved: the entries the new grant now covers are
+    /// no longer pending, so the broker drains them and reports the count to
+    /// the CLI ("approved, cleared N pending"). A predicate (rather than an
+    /// exact path) lets a directory grant clear a whole burst at once.
+    pub fn drain_matching(&mut self, keep_if_matches: impl Fn(&str) -> bool) -> usize {
+        let before = self.entries.len();
+        self.entries
+            .retain(|(path, _op), _entry| !keep_if_matches(path));
+        before - self.entries.len()
     }
 }
 

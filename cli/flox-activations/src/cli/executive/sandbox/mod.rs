@@ -15,7 +15,7 @@
 //! so `ask` there has no socket and the engine fail-closes — handled entirely
 //! on the C side.
 
-mod grants;
+mod control;
 mod pending;
 mod verdict;
 
@@ -31,7 +31,7 @@ use flox_core::activate::context::{AttachCtx, AttachProjectCtx, SandboxMode};
 use tracing::{debug, info, warn};
 
 use self::verdict::BrokerState;
-use crate::sandbox::verdict_socket_path;
+use crate::sandbox::{control_socket_path, grants, verdict_socket_path};
 
 /// Socket file mode: owner read/write only. The verdict socket is the engine's
 /// only contact point and must not be writable by other users on the host.
@@ -47,33 +47,46 @@ const MAX_SOCKET_LEN: usize = 104;
 #[cfg(not(target_os = "macos"))]
 const MAX_SOCKET_LEN: usize = 107;
 
-/// A running broker. Dropping it stops the accept loop and removes the socket.
-pub struct BrokerHandle {
+/// One bound socket and its accept-loop thread, joined on shutdown.
+struct SocketThread {
     socket_path: PathBuf,
-    shutdown: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
 
+/// A running broker. Dropping it stops both accept loops and removes both
+/// sockets. The verdict socket serves engine RPCs; the control socket serves
+/// `flox sandbox`. Both accept loops share one [`BrokerState`], so a control
+/// `allow` is visible to the next verdict.
+pub struct BrokerHandle {
+    shutdown: Arc<AtomicBool>,
+    /// Verdict and control socket threads, in shutdown order.
+    sockets: Vec<SocketThread>,
+}
+
 impl BrokerHandle {
-    /// Stop the broker and clean up its socket. Called from `Drop`, but
+    /// Stop the broker and clean up its sockets. Called from `Drop`, but
     /// exposed so a caller can shut down explicitly and observe completion.
     fn shutdown(&mut self) {
-        // Order matters: set the flag, THEN wake the accept loop with a
-        // self-connect while the socket still exists, THEN join, THEN remove
-        // the file. Removing the socket before the wake-up would leave the
+        // Order matters: set the flag, THEN wake each accept loop with a
+        // self-connect while its socket still exists, THEN join, THEN remove
+        // the files. Removing a socket before the wake-up would leave its
         // thread blocked in accept() with no way to reach it — the deadlock
         // this ordering avoids. The wake-up connection sends nothing, so the
         // handler reads an empty line and returns, and the loop then sees the
         // flag and exits.
         self.shutdown.store(true, Ordering::Relaxed);
-        let _ = UnixStream::connect(&self.socket_path);
-        if let Some(thread) = self.thread.take()
-            && let Err(err) = thread.join()
-        {
-            warn!(?err, "ask broker thread panicked during shutdown");
+        for socket in &self.sockets {
+            let _ = UnixStream::connect(&socket.socket_path);
         }
-        let _ = std::fs::remove_file(&self.socket_path);
-        debug!(socket = ?self.socket_path, "ask broker stopped");
+        for socket in &mut self.sockets {
+            if let Some(thread) = socket.thread.take()
+                && let Err(err) = thread.join()
+            {
+                warn!(?err, "ask broker thread panicked during shutdown");
+            }
+            let _ = std::fs::remove_file(&socket.socket_path);
+            debug!(socket = ?socket.socket_path, "ask broker socket stopped");
+        }
     }
 }
 
@@ -87,8 +100,13 @@ impl Drop for BrokerHandle {
 ///
 /// Returns `Ok(None)` for any non-ask mode (no broker needed) so the caller
 /// can unconditionally call this and hold the result for the activation's
-/// lifetime. On `ask`, binds the verdict socket, seeds the grant set from
-/// `grants.toml`, and spawns the accept-loop thread.
+/// lifetime. On `ask`, binds the verdict and control sockets, seeds the grant
+/// set from `grants.toml`, and spawns both accept-loop threads.
+///
+/// `session_root_pid` is the activation's session-root process (the executive's
+/// `parent_pid`): the control socket refuses approval verbs from a caller that
+/// is this pid or a descendant of it, which is the server side of the
+/// self-approval guard.
 ///
 /// A bind failure is returned as an error so the executive can log it; the
 /// engine then fail-closes (no socket to connect to), which is the correct
@@ -96,68 +114,116 @@ impl Drop for BrokerHandle {
 pub fn start(
     attach_ctx: &AttachCtx,
     project_ctx: &AttachProjectCtx,
+    session_root_pid: i32,
 ) -> Result<Option<BrokerHandle>> {
     if attach_ctx.sandbox_mode != SandboxMode::Ask {
         return Ok(None);
     }
 
-    let socket_path = verdict_socket_path(&project_ctx.flox_services_socket);
+    let verdict_path = verdict_socket_path(&project_ctx.flox_services_socket);
+    let control_path = control_socket_path(&project_ctx.flox_services_socket);
     let grants_dir = project_ctx.dot_flox_path.join("cache").join("sandbox");
 
-    let handle = bind_and_serve(&socket_path, &grants_dir)
-        .with_context(|| format!("failed to start ask broker on {}", socket_path.display()))?;
-    info!(socket = ?socket_path, "ask broker listening");
+    let handle = bind_and_serve(&verdict_path, &control_path, &grants_dir, session_root_pid)
+        .with_context(|| format!("failed to start ask broker on {}", verdict_path.display()))?;
+    info!(
+        verdict = ?verdict_path,
+        control = ?control_path,
+        "ask broker listening"
+    );
     Ok(Some(handle))
 }
 
-/// Bind the verdict socket, seed grants, and spawn the accept loop.
-fn bind_and_serve(socket_path: &Path, grants_dir: &Path) -> Result<BrokerHandle> {
-    if socket_path.as_os_str().len() > MAX_SOCKET_LEN {
+/// Bind one socket at `path` with owner-only mode, removing any leftover first.
+fn bind_socket(path: &Path, label: &str) -> Result<UnixListener> {
+    if path.as_os_str().len() > MAX_SOCKET_LEN {
         anyhow::bail!(
-            "verdict socket path is too long for this platform ({} > {}): {}",
-            socket_path.as_os_str().len(),
+            "{label} socket path is too long for this platform ({} > {}): {}",
+            path.as_os_str().len(),
             MAX_SOCKET_LEN,
-            socket_path.display(),
+            path.display(),
         );
     }
-
     // A leftover socket from a crashed prior broker would make bind fail with
     // EADDRINUSE; remove it first. The path is per-activation, so this never
     // races a live broker for the same activation.
-    let _ = std::fs::remove_file(socket_path);
-    if let Some(parent) = socket_path.parent() {
+    let _ = std::fs::remove_file(path);
+    if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("could not create socket dir {}", parent.display()))?;
     }
+    let listener = UnixListener::bind(path)
+        .with_context(|| format!("could not bind {label} socket {}", path.display()))?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(SOCKET_MODE))
+        .with_context(|| format!("could not chmod {label} socket {}", path.display()))?;
+    Ok(listener)
+}
 
-    let listener = UnixListener::bind(socket_path)
-        .with_context(|| format!("could not bind verdict socket {}", socket_path.display()))?;
-    std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(SOCKET_MODE))
-        .with_context(|| format!("could not chmod verdict socket {}", socket_path.display()))?;
+/// Bind both sockets, seed grants, and spawn both accept loops over one shared
+/// state.
+fn bind_and_serve(
+    verdict_path: &Path,
+    control_path: &Path,
+    grants_dir: &Path,
+    session_root_pid: i32,
+) -> Result<BrokerHandle> {
+    let verdict_listener = bind_socket(verdict_path, "verdict")?;
+    let control_listener = bind_socket(control_path, "control")?;
 
-    // Seed the session grant set from grants.toml (read-only this batch). A
-    // missing file is normal (no grants yet); a matching path is allowed
-    // silently under ask, so an already-trusted environment stays quiet.
+    // Seed the session grant set from grants.toml. A missing file is normal (no
+    // grants yet); a matching path is allowed silently under ask, so an
+    // already-trusted environment stays quiet. The grants dir is held in state
+    // so a control `allow` can persist back to it.
     let grants_file = grants::read_grants(grants_dir);
     let grant_globs: Vec<String> = grants_file
         .grants
         .into_iter()
         .map(|grant| grant.pattern)
         .collect();
-    debug!(count = grant_globs.len(), "seeded ask broker session grants");
+    debug!(
+        count = grant_globs.len(),
+        "seeded ask broker session grants"
+    );
 
-    let state = Arc::new(Mutex::new(BrokerState::new(grant_globs)));
+    let state = Arc::new(Mutex::new(BrokerState::with_grants_dir(
+        grant_globs,
+        grants_dir.to_path_buf(),
+    )));
     let shutdown = Arc::new(AtomicBool::new(false));
-    let serve_shutdown = Arc::clone(&shutdown);
-    let thread = std::thread::Builder::new()
-        .name("flox-ask-broker".to_string())
-        .spawn(move || verdict::serve(listener, state, serve_shutdown))
-        .context("could not spawn ask broker thread")?;
+
+    let verdict_state = Arc::clone(&state);
+    let verdict_shutdown = Arc::clone(&shutdown);
+    let verdict_thread = std::thread::Builder::new()
+        .name("flox-ask-verdict".to_string())
+        .spawn(move || verdict::serve(verdict_listener, verdict_state, verdict_shutdown))
+        .context("could not spawn verdict broker thread")?;
+
+    let control_state = Arc::clone(&state);
+    let control_shutdown = Arc::clone(&shutdown);
+    let control_thread = std::thread::Builder::new()
+        .name("flox-ask-control".to_string())
+        .spawn(move || {
+            control::serve(
+                control_listener,
+                control_state,
+                session_root_pid,
+                control_shutdown,
+            )
+        })
+        .context("could not spawn control broker thread")?;
 
     Ok(BrokerHandle {
-        socket_path: socket_path.to_path_buf(),
         shutdown,
-        thread: Some(thread),
+        sockets: vec![
+            SocketThread {
+                socket_path: verdict_path.to_path_buf(),
+                thread: Some(verdict_thread),
+            },
+            SocketThread {
+                socket_path: control_path.to_path_buf(),
+                thread: Some(control_thread),
+            },
+        ],
     })
 }
 
@@ -190,16 +256,24 @@ mod tests {
         dir
     }
 
+    /// Verdict and control socket paths under a tempdir. Tests use a session
+    /// root of 1 (init): the test caller's pid is a descendant of init, so
+    /// approval verbs would be refused — these socket tests exercise the
+    /// verdict path, which is unguarded.
+    fn sockets(tmp: &Path) -> (PathBuf, PathBuf) {
+        (tmp.join("sbx.test.sock"), tmp.join("sbc.test.sock"))
+    }
+
     #[test]
     fn broker_denies_and_queues_an_unmatched_request() {
         let tmp = tempfile::tempdir().unwrap();
-        let socket = tmp.path().join("sbx.test.sock");
+        let (verdict, control) = sockets(tmp.path());
         let dir = grants_dir(tmp.path(), None);
 
-        let _handle = bind_and_serve(&socket, &dir).unwrap();
+        let _handle = bind_and_serve(&verdict, &control, &dir, 1).unwrap();
 
         let response = ask(
-            &socket,
+            &verdict,
             r#"{"v":1,"kind":"fs","op":"read","path":"/home/dev/.aws/credentials","raw":"~/.aws/credentials","pid":1,"exe":""}"#,
         );
         assert!(response.contains("\"verdict\":\"deny\""), "{response}");
@@ -214,18 +288,18 @@ mod tests {
     #[test]
     fn broker_honors_a_preseeded_grant() {
         let tmp = tempfile::tempdir().unwrap();
-        let socket = tmp.path().join("sbx.test.sock");
+        let (verdict, control) = sockets(tmp.path());
         let dir = grants_dir(
             tmp.path(),
             Some("[[grant]]\npattern = \"/home/dev/.config/**\"\n"),
         );
 
-        let _handle = bind_and_serve(&socket, &dir).unwrap();
+        let _handle = bind_and_serve(&verdict, &control, &dir, 1).unwrap();
 
         // A path covered by the saved grant is allowed silently under ask,
         // with the matched glob as the cache scope.
         let response = ask(
-            &socket,
+            &verdict,
             r#"{"v":1,"kind":"fs","op":"read","path":"/home/dev/.config/gh/hosts.yml","raw":"~/.config/gh/hosts.yml","pid":1,"exe":""}"#,
         );
         assert!(response.contains("\"verdict\":\"allow\""), "{response}");
@@ -237,28 +311,84 @@ mod tests {
     }
 
     #[test]
-    fn the_socket_is_owner_only() {
+    fn both_sockets_are_owner_only() {
         let tmp = tempfile::tempdir().unwrap();
-        let socket = tmp.path().join("sbx.test.sock");
+        let (verdict, control) = sockets(tmp.path());
         let dir = grants_dir(tmp.path(), None);
 
-        let _handle = bind_and_serve(&socket, &dir).unwrap();
+        let _handle = bind_and_serve(&verdict, &control, &dir, 1).unwrap();
 
-        let mode = std::fs::metadata(&socket).unwrap().permissions().mode();
-        assert_eq!(mode & 0o777, SOCKET_MODE);
+        for socket in [&verdict, &control] {
+            let mode = std::fs::metadata(socket).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, SOCKET_MODE, "{}", socket.display());
+        }
     }
 
     #[test]
-    fn dropping_the_handle_removes_the_socket() {
+    fn dropping_the_handle_removes_both_sockets() {
         let tmp = tempfile::tempdir().unwrap();
-        let socket = tmp.path().join("sbx.test.sock");
+        let (verdict, control) = sockets(tmp.path());
         let dir = grants_dir(tmp.path(), None);
 
         {
-            let _handle = bind_and_serve(&socket, &dir).unwrap();
-            assert!(socket.exists());
+            let _handle = bind_and_serve(&verdict, &control, &dir, 1).unwrap();
+            assert!(verdict.exists());
+            assert!(control.exists());
         }
-        assert!(!socket.exists(), "socket should be removed on drop");
+        assert!(
+            !verdict.exists(),
+            "verdict socket should be removed on drop"
+        );
+        assert!(
+            !control.exists(),
+            "control socket should be removed on drop"
+        );
+    }
+
+    #[test]
+    fn a_control_allow_is_visible_to_the_next_verdict() {
+        // The headline live-approve loop end to end over real sockets: a denied
+        // path becomes allowed once a control `allow` lands, because both
+        // accept loops share one BrokerState. The control caller (the test
+        // process) is NOT a descendant of session root 1's *child* — we use a
+        // session root of 1 here, which makes the test process in-session, so
+        // we drive the allow through the state directly via the control
+        // protocol with an out-of-session peer is not possible over a real
+        // socket. Instead we assert the verdict-side visibility by seeding the
+        // grant through the same shared state the control socket mutates: the
+        // control protocol itself is unit-tested in `control.rs` with an
+        // explicit peer pid. Here we prove the *socket wiring*: a grant added
+        // to the shared state is honored by the verdict socket.
+        let tmp = tempfile::tempdir().unwrap();
+        let (verdict, control) = sockets(tmp.path());
+        let dir = grants_dir(tmp.path(), None);
+
+        // Use a session root that the test process is definitely NOT descended
+        // from, so the control `allow` over the real socket is permitted.
+        // Pid 2 (kthreadd on Linux / launchd-adjacent on macOS) is never our
+        // ancestor.
+        let _handle = bind_and_serve(&verdict, &control, &dir, 2).unwrap();
+
+        // Before: the path is denied.
+        let denied = ask(
+            &verdict,
+            r#"{"v":1,"kind":"fs","op":"read","path":"/home/dev/.config/gh/hosts.yml","raw":"~","pid":1,"exe":""}"#,
+        );
+        assert!(denied.contains("\"verdict\":\"deny\""), "{denied}");
+
+        // Approve over the control socket (session-only).
+        let control_reply = ask(
+            &control,
+            r#"{"cmd":"allow","pattern":"/home/dev/.config/gh/hosts.yml","source":"review","persist":false}"#,
+        );
+        assert!(control_reply.contains("\"ok\":true"), "{control_reply}");
+
+        // After: the same path now allows, with zero re-activation.
+        let allowed = ask(
+            &verdict,
+            r#"{"v":1,"kind":"fs","op":"read","path":"/home/dev/.config/gh/hosts.yml","raw":"~","pid":1,"exe":""}"#,
+        );
+        assert!(allowed.contains("\"verdict\":\"allow\""), "{allowed}");
     }
 
     #[test]
@@ -290,7 +420,7 @@ mod tests {
         };
 
         // Enforce (and warn/off) never start a broker.
-        let handle = start(&attach, &project).unwrap();
+        let handle = start(&attach, &project, 1).unwrap();
         assert!(handle.is_none());
     }
 }
