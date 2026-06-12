@@ -17,14 +17,14 @@ use crate::parsed::common::{
     Containerize,
     Hook,
     Include,
-    Options,
     SemverOptions,
     Vars,
 };
 use crate::parsed::latest::{Install, ManifestLatest, MinimumCliVersion};
-// merge_build operates on the latest schema's Build (which carries
-// `sandbox-allow`), so composing environments preserves the field.
-use crate::parsed::v1_13_0::{Build, Profile, ProfileDeactivate, Services};
+// merge_build and merge_options operate on the latest schema's Build and
+// Options (which carry `sandbox-allow` and `sandbox` respectively), so
+// composing environments preserves those fields.
+use crate::parsed::v1_13_0::{Build, Options, Profile, ProfileDeactivate, Services};
 
 /// Merges two manifests by applying `manifest2` on top of `manifest1` and
 /// overwriting any conflicts for keys within the top-level of each `ManifestV1`
@@ -222,6 +222,12 @@ impl ShallowMerger {
             high_priority.activate.mode.clone(),
         );
 
+        let (merged_sandbox, sandbox_warning) = shallow_merge_options(
+            root_key.push("sandbox"),
+            low_priority.sandbox,
+            high_priority.sandbox,
+        );
+
         let merged = Options {
             systems: merged_systems,
             allow: Allows {
@@ -233,6 +239,7 @@ impl ShallowMerger {
                 allow_pre_releases: merged_semver_allow_pre_releases,
             },
             cuda_detection: merged_cuda_detection,
+            sandbox: merged_sandbox,
             activate: ActivateOptions {
                 mode: merged_activate_mode,
             },
@@ -246,6 +253,7 @@ impl ShallowMerger {
                 allow_licenses_warning,
                 allow_pre_releases_warning,
                 cuda_detection_warning,
+                sandbox_warning,
                 systems_warning,
             ]
             .into_iter()
@@ -397,6 +405,7 @@ impl ManifestMergeTrait for ShallowMerger {
 #[cfg(test)]
 mod tests {
 
+    use flox_core::activate::sandbox_mode::SandboxMode;
     use flox_test_utils::proptest::btree_maps_overlapping_keys;
     use pretty_assertions::assert_eq;
     use proptest::prelude::*;
@@ -544,10 +553,11 @@ mod tests {
             };
             let semver = SemverOptions { allow_pre_releases: options2.semver.allow_pre_releases.or(options1.semver.allow_pre_releases) };
             let cuda_detection = options2.cuda_detection.or(options1.cuda_detection);
+            let sandbox = options2.sandbox.or(options1.sandbox);
             let activate = ActivateOptions {
                 mode: options2.activate.mode.or(options1.activate.mode),
             };
-            let expected = Options { systems, allow, semver, cuda_detection, activate };
+            let expected = Options { systems, allow, semver, cuda_detection, sandbox, activate };
             prop_assert_eq!(merged, expected);
         }
 
@@ -948,5 +958,53 @@ mod tests {
     #[test]
     fn merges_profile_sections_both_outer_none() {
         assert_eq!(ShallowMerger::merge_profile(None, None).unwrap(), None);
+    }
+
+    /// `options.sandbox` shallow merges with the higher priority manifest
+    /// winning, just like `options.activate.mode`, and warns on override.
+    #[test]
+    fn merges_options_sandbox_high_priority_wins() {
+        let low_priority = Options {
+            sandbox: Some(SandboxMode::Warn),
+            ..Default::default()
+        };
+        let high_priority = Options {
+            sandbox: Some(SandboxMode::Enforce),
+            ..Default::default()
+        };
+
+        let (merged, warnings) =
+            ShallowMerger::merge_options(&low_priority, &high_priority).unwrap();
+
+        assert_eq!(merged, Options {
+            sandbox: Some(SandboxMode::Enforce),
+            ..Default::default()
+        });
+        assert!(
+            warnings.contains(&Warning::Overriding(KeyPath::from_iter([
+                "options", "sandbox"
+            ]))),
+            "expected a warning about overriding options.sandbox in {warnings:?}"
+        );
+    }
+
+    /// A low-priority `options.sandbox` is preserved when the higher priority
+    /// manifest doesn't set one.
+    #[test]
+    fn merges_options_sandbox_falls_back_to_low_priority() {
+        let low_priority = Options {
+            sandbox: Some(SandboxMode::Ask),
+            ..Default::default()
+        };
+        let high_priority = Options::default();
+
+        let (merged, warnings) =
+            ShallowMerger::merge_options(&low_priority, &high_priority).unwrap();
+
+        assert_eq!(merged, Options {
+            sandbox: Some(SandboxMode::Ask),
+            ..Default::default()
+        });
+        assert!(warnings.is_empty(), "unexpected warnings: {warnings:?}");
     }
 }
