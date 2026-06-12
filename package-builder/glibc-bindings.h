@@ -31,8 +31,8 @@
 // atoi parses the optional :port and /cidr fields of FLOX_SANDBOX_ALLOW_NET
 // entries. At the baseline GLIBC for each arch.
 __asm__(".symver atoi,atoi@" GLIBC_MIN_VERSION);
-// close() releases the per-request ask-broker socket fd (the RPC opens a
-// fresh AF_UNIX connection per verdict and never caches the fd). At the
+// close() releases the per-request prompt-broker socket fd (the client opens
+// a fresh AF_UNIX connection per verdict and never caches the fd). At the
 // baseline GLIBC for each arch.
 __asm__(".symver close,close@" GLIBC_MIN_VERSION);
 __asm__(".symver closedir,closedir@" GLIBC_MIN_VERSION);
@@ -77,16 +77,13 @@ __asm__(".symver pthread_once,pthread_once@" GLIBC_MIN_VERSION);
 // minimum so the library does not silently require GLIBC_2.34.
 __asm__(".symver pthread_mutex_lock,pthread_mutex_lock@" GLIBC_MIN_VERSION);
 __asm__(".symver pthread_mutex_unlock,pthread_mutex_unlock@" GLIBC_MIN_VERSION);
-// Sockets API for the broker RPC clients (the activation ask flow and the
-// interactive prompt client). All have existed since the baseline GLIBC for
-// each arch (2.17 on aarch64, 2.2.5 on x86_64), so binding them to
-// GLIBC_MIN_VERSION matches the rest. read/write back the prompt client's
-// line-protocol I/O; recv/send back the ask RPC.
+// Sockets API for the prompt broker client. All have existed since the
+// baseline GLIBC for each arch (2.17 on aarch64, 2.2.5 on x86_64), so binding
+// them to GLIBC_MIN_VERSION matches the rest. read/write carry the client's
+// line-protocol I/O; poll bounds the activation-side wait on a reply.
 __asm__(".symver connect,connect@" GLIBC_MIN_VERSION);
 __asm__(".symver poll,poll@" GLIBC_MIN_VERSION);
 __asm__(".symver read,read@" GLIBC_MIN_VERSION);
-__asm__(".symver recv,recv@" GLIBC_MIN_VERSION);
-__asm__(".symver send,send@" GLIBC_MIN_VERSION);
 __asm__(".symver socket,socket@" GLIBC_MIN_VERSION);
 // Network-egress mediation. The connect() interceptor formats the destination
 // address for policy matching and messages: getaddrinfo()/freeaddrinfo()
@@ -115,20 +112,17 @@ __asm__(".symver strdup,strdup@" GLIBC_MIN_VERSION);
 __asm__(".symver strlen,strlen@" GLIBC_MIN_VERSION);
 __asm__(".symver strncmp,strncmp@" GLIBC_MIN_VERSION);
 __asm__(".symver strncpy,strncpy@" GLIBC_MIN_VERSION);
-// strstr scans the ask broker's newline-JSON response for the verdict/scope/
-// cache/req fields (a tolerant hand-rolled parser, no JSON library); strtoul
-// parses the numeric req id out of that response. Both at the baseline GLIBC
-// for each arch.
-__asm__(".symver strstr,strstr@" GLIBC_MIN_VERSION);
+// strtoul parses the numeric req id out of a `deny <req>` broker reply. At
+// the baseline GLIBC for each arch.
 __asm__(".symver strtok_r,strtok_r@" GLIBC_MIN_VERSION);
 __asm__(".symver strtoul,strtoul@" GLIBC_MIN_VERSION);
 // syscall(SYS_gettid) is used for the debug thread id instead of the gettid()
 // wrapper, which only exists from glibc 2.30; syscall() has existed since the
 // baseline, so binding it here keeps the minimum glibc at the target.
 __asm__(".symver syscall,syscall@" GLIBC_MIN_VERSION);
-// time() stamps the short deny-cache TTL under the ask flow. At the baseline
-// GLIBC for each arch (chosen over clock_gettime, which was in librt at the
-// x86_64 baseline and would raise the floor).
+// time() stamps the short deny-cache TTL under the prompt flow. At the
+// baseline GLIBC for each arch (chosen over clock_gettime, which was in librt
+// at the x86_64 baseline and would raise the floor).
 __asm__(".symver time,time@" GLIBC_MIN_VERSION);
 // write() performs the single-shot O_APPEND record append in the audit-store
 // hook (audit_append) and the prompt client's request write. At the baseline
