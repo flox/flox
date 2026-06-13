@@ -1321,6 +1321,8 @@ mod tests {
     use self::test_helpers::new_core_environment;
     use super::*;
     use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::Environment;
+    use crate::models::environment::path_environment::test_helpers::new_path_environment_in;
     use crate::models::environment::test_helpers::manifest_with_incompatible_system;
     use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::services::process_compose::SERVICE_CONFIG_FILENAME;
@@ -1787,6 +1789,225 @@ mod tests {
         assert_eq!(
             original_manifest.as_writable().to_string(),
             post_lock_manifest.as_writable().to_string()
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Cross-release coverage: a lockfile produced by an earlier Flox release
+    // must still be honored by the current release. Two guarantees are tested:
+    //
+    //   - the up-to-date predicate accepts a prior-release lockfile as-is, so
+    //     upgrading Flox does not force a spurious re-lock; and
+    //   - re-locking the same manifest reproduces the prior-release lockfile
+    //     byte-for-byte, so lockfile serialization stays stable across releases.
+    //
+    // Fixtures live in test_data/manually_generated/prior_release_baselines/
+    // and are captured by the `regen-prior-release-fixtures` Justfile recipe.
+    // -------------------------------------------------------------------------
+
+    /// The up-to-date predicate must accept a v1-schema lockfile produced by an
+    /// older Flox release. Reuses `migration_baselines/v1/hello` as that input,
+    /// the oldest schema the current release still supports.
+    #[test]
+    fn lockfile_if_up_to_date_accepts_prior_release_v1_schema() {
+        let (flox, _temp) = flox_instance();
+
+        let lockfile_path = MANUALLY_GENERATED.join("migration_baselines/v1/hello/manifest.lock");
+        let lockfile_contents = fs::read_to_string(&lockfile_path).expect(
+            "migration_baselines/v1/hello/manifest.lock must exist; \
+             this is the v1-schema prior-release fixture",
+        );
+
+        // The v1/hello lockfile embeds:
+        //   version = 1
+        //   [install]
+        //   hello.pkg-path = "hello"
+        //
+        // Explicit [hook] and [profile] sections are needed because the
+        // lockfile JSON serialises those fields as `{}` rather than omitting
+        // them, so the TOML deserialization must produce the same
+        // Option<T>::Some(T::default()) values.
+        let manifest_contents = indoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+
+            [hook]
+
+            [profile]
+        "#};
+
+        let environment =
+            new_core_environment_with_lockfile(&flox, manifest_contents, &lockfile_contents);
+
+        let result = environment
+            .lockfile_if_up_to_date()
+            .expect("lockfile_if_up_to_date must not error on the v1/hello fixture");
+
+        assert!(
+            result.is_some(),
+            "the current predicate classified the v1-schema prior-release lockfile \
+             as stale; either the predicate regressed or the lockfile schema \
+             changed and the fixture needs refreshing",
+        );
+    }
+
+    /// The up-to-date predicate must accept a plain (single, uncomposed)
+    /// prior-release lockfile paired with its manifest, without forcing a
+    /// re-lock.
+    #[test]
+    fn lockfile_if_up_to_date_accepts_prior_release_plain() {
+        let (flox, _temp) = flox_instance();
+
+        let base = MANUALLY_GENERATED
+            .join("prior_release_baselines")
+            .join("plain");
+        let manifest_contents =
+            fs::read_to_string(base.join("manifest.toml")).expect("plain manifest.toml must exist");
+        let lockfile_contents = fs::read_to_string(base.join("manifest.lock")).expect(
+            "plain manifest.lock must exist; \
+             run 'just regen-prior-release-fixtures' to capture it",
+        );
+
+        let environment =
+            new_core_environment_with_lockfile(&flox, &manifest_contents, &lockfile_contents);
+
+        let result = environment
+            .lockfile_if_up_to_date()
+            .expect("lockfile_if_up_to_date must not error on the plain fixture");
+
+        assert!(
+            result.is_some(),
+            "the current predicate classified a plain prior-release lockfile as \
+             stale, which would force a spurious re-lock on activate",
+        );
+    }
+
+    /// The up-to-date predicate must accept a composed (one include)
+    /// prior-release lockfile without forcing a re-lock.
+    ///
+    /// The prior pin must be >= v1.12.0: earlier releases had the
+    /// `compose.composer` schema-version drift bug (fixed in #4180), which
+    /// stored the composer as `schema-version: "1.11.0"` instead of preserving
+    /// `version = 1`, causing the predicate to classify it stale.
+    #[test]
+    fn lockfile_if_up_to_date_accepts_prior_release_with_include() {
+        let (flox, _temp) = flox_instance();
+
+        let base = MANUALLY_GENERATED
+            .join("prior_release_baselines")
+            .join("with_include")
+            .join("parent");
+        let manifest_contents = fs::read_to_string(base.join("manifest.toml"))
+            .expect("with_include parent manifest.toml must exist");
+        let lockfile_contents = fs::read_to_string(base.join("manifest.lock")).expect(
+            "with_include parent manifest.lock must exist; \
+             run 'just regen-prior-release-fixtures' to capture it",
+        );
+
+        let environment =
+            new_core_environment_with_lockfile(&flox, &manifest_contents, &lockfile_contents);
+
+        let result = environment
+            .lockfile_if_up_to_date()
+            .expect("lockfile_if_up_to_date must not error on the with_include fixture");
+
+        assert!(
+            result.is_some(),
+            "the current predicate classified a composed prior-release lockfile \
+             as stale, which would force a spurious re-lock on activate",
+        );
+    }
+
+    /// Re-locking the plain manifest under the current release must reproduce
+    /// the prior-release lockfile byte-for-byte (lockfile serialization
+    /// stability).
+    ///
+    /// The plain fixture installs no packages, so locking makes no catalog
+    /// requests and runs offline; no replay client is needed.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn locking_matches_prior_release_plain() {
+        let (flox, _temp) = flox_instance();
+
+        let base = MANUALLY_GENERATED
+            .join("prior_release_baselines")
+            .join("plain");
+
+        let manifest_contents =
+            fs::read_to_string(base.join("manifest.toml")).expect("plain manifest.toml must exist");
+        let expected_lockfile_bytes = fs::read(base.join("manifest.lock"))
+            .expect("plain manifest.lock must exist; run 'just regen-prior-release-fixtures'");
+
+        // Create an env with only the manifest (no lockfile) so lock() runs.
+        let mut env = new_core_environment(&flox, &manifest_contents);
+        env.lock(&flox)
+            .expect("lock should succeed offline (no packages to resolve)");
+
+        let produced = fs::read(env.lockfile_path()).expect("lockfile must exist after lock");
+
+        assert_eq!(
+            produced, expected_lockfile_bytes,
+            "re-locking the plain manifest did not reproduce the prior-release \
+             lockfile byte-for-byte; lockfile serialization changed across \
+             releases",
+        );
+    }
+
+    /// Re-locking a composed environment under the current release must
+    /// reproduce the prior-release lockfile byte-for-byte.
+    ///
+    /// Set up as a real `PathEnvironment` composer with a sibling `included`
+    /// env (matching the fixture's `dir = "../included"` layout) so the include
+    /// resolves. Neither env installs packages, so locking runs offline.
+    ///
+    /// The prior pin must be >= v1.12.0: earlier releases had the
+    /// `compose.composer` schema-version drift bug (fixed in #4180), whose
+    /// lockfile output the current release cannot reproduce byte-for-byte.
+    #[test]
+    fn locking_matches_prior_release_with_include() {
+        let (flox, _temp) = flox_instance();
+
+        let base = MANUALLY_GENERATED
+            .join("prior_release_baselines")
+            .join("with_include");
+
+        let parent_manifest = fs::read_to_string(base.join("parent").join("manifest.toml"))
+            .expect("with_include parent manifest.toml must exist");
+        let included_manifest = fs::read_to_string(base.join("included").join("manifest.toml"))
+            .expect("with_include included manifest.toml must exist");
+        let expected_lockfile_bytes = fs::read(base.join("parent").join("manifest.lock")).expect(
+            "with_include parent manifest.lock must exist; \
+             run 'just regen-prior-release-fixtures'",
+        );
+
+        // `composer` and `included` must be siblings so `../included` resolves.
+        let workdir = tempdir_in(&flox.temp_dir).unwrap();
+        let mut included =
+            new_path_environment_in(&flox, &included_manifest, workdir.path().join("included"));
+        included
+            .lockfile(&flox)
+            .expect("included env should lock offline (no packages)");
+
+        let mut composer =
+            new_path_environment_in(&flox, &parent_manifest, workdir.path().join("composer"));
+        composer
+            .lockfile(&flox)
+            .expect("composed env should lock offline (no packages)");
+
+        let produced = fs::read(
+            composer
+                .lockfile_path(&flox)
+                .expect("composer lockfile path"),
+        )
+        .expect("composer lockfile must exist after lock");
+
+        assert_eq!(
+            produced, expected_lockfile_bytes,
+            "locking the composed environment under the current release did not \
+             byte-match the prior-release lockfile. The prior pin must be >= v1.12.0 \
+             (post-#4180 composer-drift fix); re-capture via \
+             'just regen-prior-release-fixtures'."
         );
     }
 }
