@@ -56,6 +56,79 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------- #
+# hook-env / deactivate: advisory preamble output is suppressed
+# ---------------------------------------------------------------------------- #
+
+# Same shape as the floxhub_setup() token but with an `exp` claim in the past
+# (2001-09-09). The CLI decodes tokens without verifying the signature, so the
+# signature is arbitrary.
+#   { "https://flox.dev/handle": "test", "exp": 1000000000 }
+EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjEwMDAwMDAwMDB9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74"
+
+# The prompt hook runs `flox hook-env` on every prompt inside a command
+# substitution that captures only stdout, so anything the CLI preamble prints
+# to stderr appears above every prompt — and anything it printed to stdout
+# would be eval'd by the shell.
+# bats test_tags=hook:hook-env
+@test "'flox hook-env' suppresses advisory preamble output" {
+  # With the flag set, hook-env legitimately emits an export to stdout.
+  unset FLOX_FEATURES_AUTO_ACTIVATE
+  _FLOX_FLOXHUB_GIT_URL="https://git.example.invalid/" \
+    FLOX_FLOXHUB_TOKEN="$EXPIRED_FLOXHUB_TOKEN" \
+    run --separate-stderr "$FLOX_BIN" hook-env --shell bash --shell-pid "$$" --invocation-type inplace
+  assert_success
+  assert_equal "$stderr" ""
+  assert_output ""
+}
+
+# An invalid token is normally surfaced and removed from the user's config;
+# both must be deferred to the next user-invoked command rather than printing
+# and rewriting config on every prompt.
+# bats test_tags=hook:hook-env
+@test "'flox hook-env' defers invalid token cleanup to user-invoked commands" {
+  mkdir -p "$FLOX_CONFIG_DIR"
+  echo 'floxhub_token = "not-a-jwt"' >> "$FLOX_CONFIG_DIR/flox.toml"
+
+  run --separate-stderr "$FLOX_BIN" hook-env --shell bash --shell-pid "$$" --invocation-type inplace
+  assert_success
+  assert_equal "$stderr" ""
+  run grep floxhub_token "$FLOX_CONFIG_DIR/flox.toml"
+  assert_success
+
+  run --separate-stderr "$FLOX_BIN" config
+  assert_success
+  assert_regex "$stderr" "Your FloxHub token is invalid"
+  run grep floxhub_token "$FLOX_CONFIG_DIR/flox.toml"
+  assert_failure
+}
+
+# 'flox deactivate' hands the deactivation off to the prompt hook, so its
+# preamble advisories are suppressed like hook-env's. Without an active
+# environment the command prints "No environment active!", but the advisories
+# must not print either way.
+# bats test_tags=hook:hook-env
+@test "'flox deactivate' suppresses advisory preamble output" {
+  _FLOX_FLOXHUB_GIT_URL="https://git.example.invalid/" \
+    FLOX_FLOXHUB_TOKEN="$EXPIRED_FLOXHUB_TOKEN" \
+    run --separate-stderr "$FLOX_BIN" deactivate
+  assert_success
+  refute_regex "$stderr" "as FloxHub host"
+  refute_regex "$stderr" "token has expired"
+}
+
+# Pin that the suppression is scoped to the prompt-hook flow: user-invoked
+# commands still print both advisories.
+# bats test_tags=hook:hook-env
+@test "user-invoked commands still print advisory preamble output" {
+  _FLOX_FLOXHUB_GIT_URL="https://git.example.invalid/" \
+    FLOX_FLOXHUB_TOKEN="$EXPIRED_FLOXHUB_TOKEN" \
+    run --separate-stderr "$FLOX_BIN" config
+  assert_success
+  assert_regex "$stderr" "Using https://git.example.invalid/ as FloxHub host"
+  assert_regex "$stderr" "Your FloxHub token has expired"
+}
+
+# ---------------------------------------------------------------------------- #
 # Hook fires: verify _FLOX_HOOK_FIRED is set per shell
 # ---------------------------------------------------------------------------- #
 
