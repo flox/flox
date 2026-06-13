@@ -8,6 +8,9 @@
   manifestLock,
   name ? "environment",
   serviceConfigYaml ? null,
+  # JSON array of `[vars]` names giving the order in which to render them,
+  # so a value referencing another entry is exported after it.
+  varsOrder,
 }:
 let
   outdentScript = (import ./buildenvLib/default.nix).outdentText;
@@ -52,16 +55,13 @@ let
   profileSection = if (builtins.hasAttr "profile" manifest) then manifest.profile else { };
   vars =
     if (builtins.hasAttr "vars" manifest) then
+      let
+        varNames = builtins.fromJSON varsOrder;
+      in
       (builtins.toFile "envrc-vars" (
         builtins.concatStringsSep "" (
-          builtins.map (n: "export ${n}=\"${builtins.getAttr n manifest.vars}\"\n") (
-            builtins.attrNames manifest.vars
-          )
+          builtins.map (n: "export ${n}=\"${builtins.getAttr n manifest.vars}\"\n") varNames
         )
-        # alternative ... worth it?
-        #      foldlAttrs (
-        #        acc: n: v: acc + "export ${n}=\"${v}\"\n"
-        #      ) "" manifestData.vars
       ))
     else
       null;
