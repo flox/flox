@@ -21,13 +21,12 @@ use flox_catalog::{
     UserDerivationInfo,
 };
 use flox_manifest::lockfile::Lockfile;
+use flox_manifest::parsed::latest::BuildSandbox;
 use git_url_parse::GitUrl;
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use nef_lock_catalog::LockOptions;
-use nef_lock_catalog::lock::{NixFlakeref, lock_url_with_options};
-use serde_json::json;
+use nef_lock_catalog::lock::NixFlakeref;
 use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
@@ -42,11 +41,12 @@ use super::build::{
     PackageTargetKind,
     find_toplevel_group_nixpkgs,
 };
+use super::buildenv::BuildEnvOutputs;
 use super::git::{GitCommandError, GitCommandGetOriginError, GitCommandProvider, StatusInfo};
 use super::nix_auth::{AuthError, AuthProvider, CatalogAuth, NixCopyAuth};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
-use crate::models::environment::{Environment, EnvironmentError, copy_dir_recursive, open_path};
+use crate::models::environment::{Environment, EnvironmentError, open_path};
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
 use crate::providers::nix_auth::catalog_auth_to_envs;
@@ -179,23 +179,6 @@ pub struct CheckedEnvironmentMetadata {
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
     _private: (),
-}
-
-impl CheckedEnvironmentMetadata {
-    /// Create a canonical flakeref for NEF builds from the metadata collected for the git remote.
-    fn remote_flakeref(&self) -> Result<NixFlakeref, PublishError> {
-        let value = json! ({
-          "type": "git",
-          "url": self.build_repo_meta.url.as_str(),
-          "rev": self.build_repo_meta.rev,
-          "dir": self.rel_expression_build_base_dir.to_string_lossy()
-        });
-        NixFlakeref::try_from(value.clone()).map_err(|e| {
-            PublishError::Catchall(format!(
-                "internal constructed flakeref should be valid.\nvalue: {value}\nerror: {e}"
-            ))
-        })
-    }
 }
 
 /// Ensures that the required metadata for publishing is consistent from the build process
@@ -556,7 +539,7 @@ impl ClientSideCatalogStoreConfig {
             );
             let output_nar_infos =
                 Self::get_nar_info(source_url, &output.store_path, auth_netrc_path)?;
-            nar_infos.extend(output_nar_infos.0.into_iter());
+            nar_infos.extend(output_nar_infos.0);
         }
         Ok(nar_infos.into())
     }
@@ -696,7 +679,7 @@ where
             narinfos_source_version: None,
             build_type: match self.package_metadata.package.kind() {
                 PackageTargetKind::ExpressionBuild(_) => BuildType::Nef,
-                PackageTargetKind::ManifestBuild => BuildType::Manifest,
+                PackageTargetKind::ManifestBuild { .. } => BuildType::Manifest,
             }
             .into(),
             dot_flox_dir: self
@@ -881,11 +864,26 @@ fn convert_build_result_to_build_metadata(
     })
 }
 
-/// Collect metadata needed for publishing that is obtained from the build output
+/// Collect metadata needed for publishing that is obtained from the build output.
 ///
 /// Notably, [CheckedBuildMetadata] obtained from this function testifies:
-/// * That the remote source is accessible
 /// * That the package can be built
+///
+/// A `git+file://` flake ref pinned to the committed revision is always used as
+/// the Nix source reference.  Nix's git fetcher imports only the files returned
+/// by `git ls-files` — never the `.git` directory — so source copies in the
+/// store never contain git metadata.
+///
+/// The build working directory differs by sandbox mode:
+///
+/// * `sandbox = "off"` (or unset): an ephemeral `git clone --shared` provides
+///   a clean working tree (only tracked files, no extraneous workspace state).
+///   `--shared` is safe here because `sandbox = "off"` builds run without Nix
+///   filesystem namespace isolation, so the alternates pointer back to the
+///   source repository is always reachable.
+///
+/// * `sandbox = "pure"` or any expression build: the original local checkout is
+///   used as the build working directory.
 pub fn check_build_metadata(
     flox: &Flox,
     base_nixpkgs_url: &BaseCatalogUrl,
@@ -893,48 +891,18 @@ pub fn check_build_metadata(
     env_metadata: &CheckedEnvironmentMetadata,
     pkg: &PackageTarget,
 ) -> Result<CheckedBuildMetadata, PublishError> {
-    // Fetch remote sources based on the source info collected in `CheckedEnvironmentMetadata`.
-    // This serves several purposes:
-    // 1. It ensures that the source info we have is indeed valid and accessible
-    // 2. It provides a guaranteed clean checkout that is consistent
-    //    with reproduction/catalog import.
-    // 3. It reduces coupling of publish to _the_ local repo
-    let expression_ref = env_metadata.remote_flakeref()?;
-    let expression_ref_fetched = lock_url_with_options(&expression_ref, &LockOptions::default())
-        .map_err(|e| PublishError::Catchall(e.to_string()))?;
-    let expression_ref_locked = expression_ref_fetched.locked_flakeref();
-
-    // git clone into a temp directory
-    let clean_repo_path = tempfile::tempdir_in(&flox.temp_dir)
-        .map_err(|err| PublishError::Catchall(format!("could not create tempdir: {err}")))?
-        .keep();
-
-    // base dir and buildtime environments **for manifest builds**
-    // both are inferred from the fetched source,
-    // based on relative directories of the local environment.
-    // Similar assumptions are made by the NEF at  eval time.
-    let (base_dir, built_environments) = {
-        copy_dir_recursive(expression_ref_fetched.store_path(), &clean_repo_path, false)
-            .map_err(|e| PublishError::Catchall(e.to_string()))?;
-        let project_path =
-            CanonicalPath::new(clean_repo_path.join(env_metadata.rel_project_path.as_path()))
-                .map_err(|_err| {
-                    PublishError::UnsupportedEnvironmentState(
-                    "Flox project not found in clean checkout, is it tracked in the repository?"
-                        .to_string(),
-                )
-                })?;
-        let mut clean_build_env = open_path(flox, &project_path, None)
-            .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
-        (clean_build_env.parent_path()?, clean_build_env.build(flox)?)
+    let workdir = if sandbox_is_local(pkg) {
+        BuildWorkdir::SharedClone
+    } else {
+        BuildWorkdir::OriginalCheckout
     };
+    let (expression_ref, base_dir, built_environments) = build_source(flox, env_metadata, workdir)?;
 
-    let builder = FloxBuildMk::new(flox, &base_dir, &expression_ref_locked, &built_environments);
+    let builder = FloxBuildMk::new(flox, &base_dir, &expression_ref, &built_environments);
 
-    // Build the package and collect the outputs
     let build_results = builder.build(
         &base_nixpkgs_url.as_flake_ref()?,
-        &built_environments.develop,
+        &built_environments.dev,
         &[pkg.name()],
         Some(false),
         system_override,
@@ -945,8 +913,101 @@ pub fn check_build_metadata(
             "No results returned from build command.".to_string(),
         ));
     }
-    let build_result = &build_results[0];
-    convert_build_result_to_build_metadata(build_result)
+    convert_build_result_to_build_metadata(&build_results[0])
+}
+
+/// Returns `true` when `pkg` is a manifest build that runs locally, in situ:
+/// sandbox `off` (or unset, which defaults to off), `warn`, or `enforce`. Only
+/// `pure` builds hermetically from a clean checkout, so it is the sole mode
+/// that returns `false`.
+fn sandbox_is_local(pkg: &PackageTarget) -> bool {
+    matches!(pkg.kind(), PackageTargetKind::ManifestBuild {
+        sandbox: None | Some(BuildSandbox::Off | BuildSandbox::Warn | BuildSandbox::Enforce)
+    })
+}
+
+/// Whether the manifest build working directory should be an ephemeral shared
+/// clone or the original local checkout.
+#[derive(Debug, Clone)]
+enum BuildWorkdir {
+    /// `sandbox = "off"` (or unset): clone the repo so the build runs in a
+    /// clean working tree free of extraneous files.  `--shared` is safe here
+    /// because sandbox-off builds run without Nix filesystem namespace
+    /// isolation, so the alternates pointer back to the source repository is
+    /// always reachable.
+    SharedClone,
+    /// `sandbox = "pure"` or any expression build: use the original checkout
+    /// directly.  Nix's git fetcher (driven by the `git+file://` expression
+    /// ref) handles source isolation.
+    OriginalCheckout,
+}
+
+/// Set up the build source for manifest and expression builds.
+///
+/// Constructs a `git+file://` flake ref pinned to the committed revision for
+/// use as the Nix source reference in all cases.  Nix's git fetcher imports
+/// only the files returned by `git ls-files` — never the `.git` directory —
+/// so a source copy in the store never contains git metadata.
+///
+/// The build working directory differs by `workdir`:
+/// * [`BuildWorkdir::SharedClone`]: an ephemeral `git clone --shared` of the
+///   repository at the target revision provides a clean working tree.
+/// * [`BuildWorkdir::OriginalCheckout`]: the original local checkout is used
+///   directly; Nix's sandbox handles source isolation for expression builds
+///   and `sandbox = "pure"` manifest builds.
+fn build_source(
+    flox: &Flox,
+    env_metadata: &CheckedEnvironmentMetadata,
+    workdir: BuildWorkdir,
+) -> Result<(NixFlakeref, PathBuf, BuildEnvOutputs), PublishError> {
+    let dir = (!env_metadata
+        .rel_expression_build_base_dir
+        .as_os_str()
+        .is_empty())
+    .then_some(env_metadata.rel_expression_build_base_dir.as_path());
+
+    let expression_ref = NixFlakeref::from_local_git(
+        &env_metadata.repo_root_path,
+        &env_metadata.build_repo_meta.rev,
+        dir,
+    )
+    .map_err(|e| PublishError::Catchall(e.to_string()))?;
+
+    let project_root = match workdir {
+        BuildWorkdir::SharedClone => {
+            let repo_name = env_metadata.repo_root_path.file_name().ok_or_else(|| {
+                PublishError::Catchall("repo root path has no directory name".to_string())
+            })?;
+            let parent = tempfile::tempdir_in(&flox.temp_dir)
+                .map_err(|err| PublishError::Catchall(format!("could not create tempdir: {err}")))?
+                .keep();
+            let clone_dir = parent.join(repo_name);
+            GitCommandProvider::clone_shared_rev(
+                &env_metadata.repo_root_path,
+                &clone_dir,
+                &env_metadata.build_repo_meta.rev,
+            )?;
+            clone_dir
+        },
+        BuildWorkdir::OriginalCheckout => env_metadata.repo_root_path.clone(),
+    };
+
+    let not_found_msg = match workdir {
+        BuildWorkdir::SharedClone => {
+            "Flox project not found in clean checkout, is it tracked in the repository?"
+        },
+        BuildWorkdir::OriginalCheckout => "Flox project not found in repository.",
+    };
+    let project_path =
+        CanonicalPath::new(project_root.join(env_metadata.rel_project_path.as_path()))
+            .map_err(|_| PublishError::UnsupportedEnvironmentState(not_found_msg.to_string()))?;
+
+    let mut env = open_path(flox, &project_path, None)
+        .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
+    let built_environments = env.build(flox)?;
+    let base_dir = env.parent_path()?;
+
+    Ok((expression_ref, base_dir, built_environments))
 }
 
 /// Creates an error for a build repo that's in an invalid state.
@@ -1182,12 +1243,12 @@ pub fn check_package_metadata(
     pkg: PackageTarget,
 ) -> Result<PackageMetadata, PublishError> {
     // When publishing a manifest build the toplevel nixpkgs is required as the base url.
-    // for expression builds we want to use the extenally determined base url, i.e. stability.
+    // for expression builds we want to use the externally determined base url, i.e. stability.
     //
     // We should not need this, and allow for no base catalog page dependency.
     // But for now, requiring it simplifies resolution and model updates
     // significantly.
-    let base_catalog_ref = if pkg.kind() == &PackageTargetKind::ManifestBuild {
+    let base_catalog_ref = if pkg.kind().is_manifest_build() {
         toplevel_catalog_ref.cloned().ok_or_else(|| {
             PublishError::UnsupportedEnvironmentState("No packages in toplevel group".to_string())
         })?
@@ -1209,13 +1270,15 @@ pub mod tests {
     const EXAMPLE_PACKAGE_NAME: &str = "mypkg";
     const EXAMPLE_PACKAGE_NAME_MISSING_FIELDS: &str = "mypkg_missing_fields";
     static EXAMPLE_MANIFEST_PACKAGE_TARGET: LazyLock<PackageTarget> = LazyLock::new(|| {
-        PackageTarget::new_unchecked(EXAMPLE_PACKAGE_NAME, PackageTargetKind::ManifestBuild)
+        PackageTarget::new_unchecked(EXAMPLE_PACKAGE_NAME, PackageTargetKind::ManifestBuild {
+            sandbox: None,
+        })
     });
     static EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS: LazyLock<PackageTarget> =
         LazyLock::new(|| {
             PackageTarget::new_unchecked(
                 EXAMPLE_PACKAGE_NAME_MISSING_FIELDS,
-                PackageTargetKind::ManifestBuild,
+                PackageTargetKind::ManifestBuild { sandbox: None },
             )
         });
 
@@ -1512,7 +1575,7 @@ pub mod tests {
         // result of the processing through the build process into build
         // results, and processing from there as a NixyLicense.  The formatting
         // of the license between nix and the catalog is very inconsistent and
-        // lossy unfortanately.  We'll need to address that, but for now, we
+        // lossy unfortunately.  We'll need to address that, but for now, we
         // choose to be consistent in the processing between them.  The
         // processing is to join the licenses, without quotes and spaces around
         // the brackets.   i.e. - "[ {<licenses joined with commas>} ]"
@@ -1552,6 +1615,62 @@ pub mod tests {
         assert_eq!(meta.version, Some("0.0.0".to_string()));
         assert_eq!(meta.description, None);
         assert_eq!(meta.license, None);
+    }
+
+    /// Verify that `check_build_metadata` succeeds via the `build_source`
+    /// (`OriginalCheckout`) path when the manifest declares `sandbox = "pure"` for the package.
+    #[test]
+    fn check_build_meta_sandbox_pure() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
+        let (env, git) = example_path_environment(&flox, Some(&remote_uri));
+
+        // Patch the manifest on disk to add sandbox = "pure" to mypkg so that
+        // flox-build.mk runs the build in pure sandbox mode.
+        let manifest_path = env.manifest_path(&flox).unwrap();
+        let manifest_content = std::fs::read_to_string(&manifest_path).unwrap();
+        let pure_manifest = manifest_content.replace(
+            "mypkg.version = \"1.0.2a\"",
+            "mypkg.version = \"1.0.2a\"\nmypkg.sandbox = \"pure\"",
+        );
+        assert!(
+            pure_manifest.contains("mypkg.sandbox = \"pure\""),
+            "manifest patch failed — did the fixture version string change?"
+        );
+        std::fs::write(&manifest_path, &pure_manifest).unwrap();
+
+        git.add(&[manifest_path.as_path()]).unwrap();
+        git.commit("set sandbox=pure").unwrap();
+        git.push("origin", false).unwrap();
+
+        // Pass a PackageTarget with sandbox=Pure so check_build_metadata
+        // takes the OriginalCheckout path without re-reading the manifest.
+        let pure_pkg =
+            PackageTarget::new_unchecked(EXAMPLE_PACKAGE_NAME, PackageTargetKind::ManifestBuild {
+                sandbox: Some(BuildSandbox::Pure),
+            });
+
+        let env_metadata = check_environment_metadata(&flox, &env).unwrap();
+        let meta = check_build_metadata(
+            &flox,
+            env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            None,
+            &env_metadata,
+            &pure_pkg,
+        )
+        .unwrap();
+
+        // sandbox=pure builds produce a Nix derivation with both "out" and
+        // "log" outputs; only "out" is relevant and listed in outputs_to_install.
+        assert!(
+            meta.outputs
+                .iter()
+                .any(|o| o.name == "out" && o.store_path.starts_with("/nix/store/"))
+        );
+        assert_eq!(meta.outputs_to_install, Some(vec!["out".to_string()]));
+        assert_eq!(meta.pname, EXAMPLE_PACKAGE_NAME.to_string());
+        assert_eq!(meta.system.to_string(), flox.system);
+        assert_eq!(meta.version, Some("1.0.2a".to_string()));
     }
 
     #[tokio::test]
@@ -1785,7 +1904,9 @@ pub mod tests {
 
         let package_metadata = PackageMetadata {
             base_catalog_ref: catalog_page_nixpkgs_https_url,
-            package: PackageTarget::new_unchecked(pkg_name, PackageTargetKind::ManifestBuild),
+            package: PackageTarget::new_unchecked(pkg_name, PackageTargetKind::ManifestBuild {
+                sandbox: None,
+            }),
             _private: (),
         };
 
@@ -1952,7 +2073,7 @@ pub mod tests {
         let auth = NixAuth::from_flox(&flox).unwrap();
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
-        // the 'cache' should be non existent before the publish
+        // the 'cache' should be nonexistent before the publish
         let cache_url = cache.upload_url().unwrap();
         let cache_path = cache_url.to_file_path().unwrap();
         assert!(std::fs::read_dir(&cache_path).is_err());

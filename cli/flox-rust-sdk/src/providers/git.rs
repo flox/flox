@@ -581,6 +581,56 @@ impl GitCommandProvider {
         })
     }
 
+    /// Clone a local repository into `dest` using `--shared` and check out `rev`.
+    ///
+    /// `--shared` means the clone's object store is backed by `source` via a
+    /// `.git/objects/info/alternates` reference rather than copying or
+    /// hardlinking objects.  This has two advantages over a plain local clone:
+    ///
+    /// * It is fast and space-efficient regardless of whether `source` and
+    ///   `dest` are on the same filesystem (a plain clone falls back to
+    ///   copying all objects when they are not).
+    /// * Build scripts get full access to history, tags, `git describe`, and
+    ///   `git ls-files` because all objects are reachable through the
+    ///   alternates pointer.
+    ///
+    /// The alternates pointer is safe here because this clone is only used
+    /// for `sandbox = "off"` manifest builds, where Nix does not apply
+    /// filesystem namespace isolation.  The build process therefore has
+    /// unrestricted access to the host filesystem and can always follow the
+    /// alternates path back to `source`.  (For `sandbox = "pure"` builds a
+    /// `git+file://` flake ref is used instead so that Nix can import the
+    /// source into the store before applying its sandbox.)
+    pub fn clone_shared_rev(
+        source: impl AsRef<Path>,
+        dest: impl AsRef<Path>,
+        rev: &str,
+    ) -> Result<Self, GitCommandError> {
+        let options = GitCommandOptions::default();
+
+        let mut clone_cmd = options.new_command();
+        clone_cmd
+            .arg("clone")
+            .arg("--quiet")
+            .arg("--shared")
+            .arg("--no-checkout")
+            .arg(source.as_ref())
+            .arg(dest.as_ref());
+        GitCommandProvider::run_command(&mut clone_cmd)?;
+
+        let clone = GitCommandProvider {
+            options,
+            workdir: Some(dest.as_ref().to_path_buf()),
+            path: dest.as_ref().to_path_buf(),
+        };
+
+        let mut checkout_cmd = clone.new_command();
+        checkout_cmd.arg("checkout").arg("--quiet").arg(rev);
+        GitCommandProvider::run_command(&mut checkout_cmd)?;
+
+        Ok(clone)
+    }
+
     /// Clone a branch from a remote repository using default options
     pub fn clone_branch(
         origin: impl AsRef<OsStr>,
@@ -698,7 +748,7 @@ pub enum GitCommandDiscoverError {
     Command(#[from] GitCommandError),
     #[error("Git directory is not valid unicode")]
     GitDirEncoding,
-    #[error("Git returned an uexpected output: {0}")]
+    #[error("Git returned an unexpected output: {0}")]
     UnexpectedOutput(String),
 }
 
@@ -1047,7 +1097,7 @@ impl GitProvider for GitCommandProvider {
             )?;
 
             if remote_revision.len() < 40 {
-                warn!("No commit found found upstream for ref {remote_branch}");
+                warn!("No commit found upstream for ref {remote_branch}");
                 None
             } else {
                 Some(remote_revision.to_string_lossy()[..40].to_string())
@@ -1146,11 +1196,11 @@ impl GitProvider for GitCommandProvider {
                 // If using the git cli that would probably be the better way
                 // of providing parseable data.
                 //
-                // the git putput is formatted as
+                // the git output is formatted as
                 // [*] <name> <whitespace> <rev hash> <whitespace> <subject>
                 //  L present iff branch is currently checked out
 
-                // the active branch is denoted by a leadinf '*', which cannot be disabled?
+                // the active branch is denoted by a leading '*', which cannot be disabled?
                 let (full_name, rest) =
                     line.trim_start_matches('*').trim().split_once(' ').unwrap();
                 // hash part
@@ -1530,7 +1580,7 @@ pub mod tests {
     fn test_open_subdirectory_bare() {
         let (_, tempdir_handle) = init_temp_repo(true);
 
-        // Consider the existance of the "hooks" subdirectory as confirmation
+        // Consider the existence of the "hooks" subdirectory as confirmation
         // of having successfully created a bare repository. We previously
         // tested for the existence of "branches", but that directory stopped
         // being created in a recent update of the GitCommandProvider.

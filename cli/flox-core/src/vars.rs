@@ -11,7 +11,7 @@ pub const FLOX_VERSION_VAR: &str = "FLOX_VERSION";
 ///    This is the main production artifact and canonical version.
 /// 2. Our `just` targets will set `FLOX_VERSION` using the current git tag,
 ///    so `just` builds will have the correct updated version _with_ git metadata.
-/// 3. `cargo build` when run outside of `just` will fallback to `0.0.0-dirty`.
+/// 3. `cargo build` when run outside of `just` will fall back to `0.0.0-dirty`.
 ///    This is the version that also local IDEs / rust-analyzer will use.
 ///    However, binaries built this way may fail to run in some cases,
 ///    e.g. `containerize` on macos which relies on the flox version.

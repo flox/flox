@@ -10,11 +10,14 @@ pub use crate::parsed::v1_10_0::{
     SelectedOutputs,
 };
 pub use crate::parsed::v1_11_0::MinimumCliVersion;
+// BuildSandbox is version-specific from V1_13_0 on (it adds `warn`/`enforce`),
+// so the latest schema re-exports that copy rather than common's.
+pub use crate::parsed::v1_13_0::BuildSandbox;
 use crate::{Manifest, ManifestError, TypedOnly};
-pub type ManifestLatest = crate::parsed::v1_12_0::ManifestV1_12_0;
+pub type ManifestLatest = crate::parsed::v1_13_0::ManifestV1_13_0;
 
 impl ManifestLatest {
-    /// Try to return a manifest in it's original schema
+    /// Try to return a manifest in its original schema
     ///
     /// If original_schema is the same as the current schema, this just returns
     /// self as a typed manifest
@@ -55,6 +58,15 @@ impl ManifestLatest {
                 untyped
             },
             KnownSchemaVersion::V1_12_0 => {
+                let mut untyped =
+                    serde_json::to_value(self).map_err(ManifestError::SerializeJson)?;
+                let map = untyped
+                    .as_object_mut()
+                    .expect("all valid manifests should serialize to JSON objects");
+                map.insert("schema-version".into(), "1.12.0".into());
+                untyped
+            },
+            KnownSchemaVersion::V1_13_0 => {
                 return Ok(Some(self.as_typed_only()));
             },
         };
@@ -102,18 +114,18 @@ mod tests {
 
     use super::*;
     use crate::ManifestError;
-    use crate::interfaces::PackageLookup;
+    use crate::interfaces::{PackageLookup, SchemaVersion};
     use crate::parsed::Inner;
     use crate::parsed::common::{
-        Build,
-        BuildDescriptor,
         BuildVersion,
         Hook,
         IncludeDescriptor,
         PackageDescriptorStorePath,
-        Profile,
     };
-    use crate::test_helpers::with_latest_schema;
+    // ManifestLatest's build section is the version-specific Build (with
+    // `sandbox-allow`), so build assertions use the latest schema's types.
+    use crate::parsed::v1_13_0::{Build, BuildDescriptor, Profile, ProfileDeactivate};
+    use crate::test_helpers::{with_latest_schema, with_schema};
 
     #[test]
     fn catalog_manifest_rejects_unknown_fields() {
@@ -149,6 +161,95 @@ mod tests {
     #[test]
     fn detect_catalog_manifest() {
         assert!(toml_edit::de::from_str::<ManifestLatest>(with_latest_schema("").as_str()).is_ok());
+    }
+
+    #[test]
+    fn profile_deactivate_rejected_by_v1_12_0_schema() {
+        let manifest = with_schema(KnownSchemaVersion::V1_12_0, indoc! {r#"
+            [profile.deactivate]
+            bash = "unset FOO"
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest)
+            .expect_err("'profile.deactivate' should be rejected by the v1.12.0 schema");
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        assert!(
+            err.message()
+                .starts_with("unknown field `deactivate`, expected one of"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn profile_deactivate_parses_with_latest_schema() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [profile]
+            bash = "FOO=bar"
+
+            [profile.deactivate]
+            bash = "unset FOO"
+        "#});
+
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        assert_eq!(
+            parsed.profile,
+            Some(Profile {
+                common: None,
+                bash: Some("FOO=bar".to_string()),
+                zsh: None,
+                fish: None,
+                tcsh: None,
+                deactivate: Some(ProfileDeactivate {
+                    common: None,
+                    bash: Some("unset FOO".to_string()),
+                    zsh: None,
+                    fish: None,
+                    tcsh: None,
+                }),
+            })
+        );
+    }
+
+    #[test]
+    fn downgrades_to_v1_12_0_when_deactivate_unused() {
+        let manifest = ManifestLatest {
+            profile: Some(Profile {
+                bash: Some("FOO=bar".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_12_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_12_0);
+    }
+
+    #[test]
+    fn stays_latest_schema_when_deactivate_used() {
+        let manifest = ManifestLatest {
+            profile: Some(Profile {
+                bash: Some("FOO=bar".to_string()),
+                deactivate: Some(ProfileDeactivate {
+                    bash: Some("unset FOO".to_string()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_12_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_13_0);
     }
 
     // FIXME
@@ -248,6 +349,7 @@ mod tests {
                     command: "hello".to_string(),
                     runtime_packages: None,
                     sandbox: None,
+                    sandbox_allow: None,
                     version: None,
                     description: None,
                     license: None,

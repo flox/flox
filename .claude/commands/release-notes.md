@@ -69,6 +69,6 @@ there are none), and the version in the links.
 > You can find the [SHA256 checksums for Flox 1.0.0](https://downloads.flox.dev/by-env/stable/flox-1.0.0.SHA256SUMS) and [SHA512 checksums for Flox 1.0.0](https://downloads.flox.dev/by-env/stable/flox-1.0.0.SHA512SUMS) online.
 ```
 
-Upon completion and acceptence, offer to write the contents to a file so the
+Upon completion and acceptance, offer to write the contents to a file so the
 user can copy from that, explaining that copying from the terminal will likely
 show leading spaces that will affect the markdown.

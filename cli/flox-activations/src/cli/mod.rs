@@ -6,6 +6,7 @@ use flox_core::vars::FLOX_VERSION_STRING;
 
 pub mod activate;
 pub mod attach;
+pub mod detach;
 pub mod executive;
 mod fix_fpath;
 pub mod fix_paths;
@@ -14,11 +15,12 @@ mod profile_scripts;
 pub mod set_env_dirs;
 
 use activate::ActivateArgs;
+use detach::DetachArgs;
 use executive::ExecutiveArgs;
 use fix_fpath::FixFpathArgs;
 use fix_paths::FixPathsArgs;
 use prepend_and_dedup::PrependAndDedupArgs;
-use profile_scripts::ProfileScriptsArgs;
+use profile_scripts::{ProfileScriptsArgs, ProfileScriptsDeactivateArgs};
 use set_env_dirs::SetEnvDirsArgs;
 
 const SHORT_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
@@ -47,6 +49,8 @@ pub enum Command {
     Attach(AttachArgs),
     #[command(about = "Activate a Flox environment.")]
     Activate(ActivateArgs),
+    #[command(about = "Detach a PID from an activation, updating state.json.")]
+    Detach(DetachArgs),
     #[command(about = "Start an activation and then run the executive")]
     Executive(ExecutiveArgs),
     #[command(about = "Print sourceable output fixing PATH and MANPATH for a shell.")]
@@ -55,6 +59,11 @@ pub enum Command {
     SetEnvDirs(SetEnvDirsArgs),
     #[command(about = "Print sourceable output that sources the user's profile scripts.")]
     ProfileScripts(ProfileScriptsArgs),
+    #[command(
+        about = "Print sourceable output that sources the user's profile.deactivate scripts \
+                 for the env being torn down and removes it from _FLOX_SOURCED_PROFILE_SCRIPTS."
+    )]
+    ProfileScriptsDeactivate(ProfileScriptsDeactivateArgs),
     #[command(
         about = "Prepends and dedups environment dirs, optionally pruning directories that aren't from environments"
     )]

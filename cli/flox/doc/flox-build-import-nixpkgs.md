@@ -10,7 +10,7 @@ flox-build-import-nixpkgs - Import package definition from nixpkgs
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] build import-nixpkgs
      [-d=<path>]
      [--force]
@@ -29,6 +29,7 @@ The package definition is imported as a Nix expression file at
 path of the package (e.g., `hello` for `nixpkgs#hello`).
 
 This is useful when you need to:
+
 - Modify a package's build process
 - Apply patches or customizations
 - Debug package issues
@@ -66,7 +67,7 @@ The `<installable>` parameter can be specified in one of the following formats:
 Import the `hello` package from nixpkgs:
 
 ```bash
-$ flox build import-nixpkgs hello
+flox build import-nixpkgs hello
 ```
 
 This creates `.flox/pkgs/hello/default.nix` with the package definition.
@@ -76,7 +77,7 @@ This creates `.flox/pkgs/hello/default.nix` with the package definition.
 Import a package from a specific nixpkgs revision:
 
 ```bash
-$ flox build import-nixpkgs github:nixos/nixpkgs/nixos-23.11#hello
+flox build import-nixpkgs github:nixos/nixpkgs/nixos-23.11#hello
 ```
 
 ## Overwrite an existing package
@@ -84,7 +85,7 @@ $ flox build import-nixpkgs github:nixos/nixpkgs/nixos-23.11#hello
 Force import a package, overwriting any existing definition:
 
 ```bash
-$ flox build import-nixpkgs --force hello
+flox build import-nixpkgs --force hello
 ```
 
 ## Import a complex package
@@ -92,7 +93,7 @@ $ flox build import-nixpkgs --force hello
 Import a package with a nested attribute path:
 
 ```bash
-$ flox build import-nixpkgs python310Packages.requests
+flox build import-nixpkgs python310Packages.requests
 ```
 
 This creates `.flox/pkgs/python310Packages/requests/default.nix`.
@@ -106,6 +107,6 @@ This creates `.flox/pkgs/python310Packages/requests/default.nix`.
 
 # SEE ALSO
 
-[`flox-build(1)`](./flox-build.md)
-[`flox-build-clean(1)`](./flox-build-clean.md)
+[`flox-build(1)`](./flox-build.md),
+[`flox-build-clean(1)`](./flox-build-clean.md),
 [`manifest.toml(5)`](./manifest.toml.md)

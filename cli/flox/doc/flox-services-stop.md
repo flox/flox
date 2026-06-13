@@ -10,7 +10,7 @@ flox-services-stop - stop running services
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] services stop
      [-d=<path> | -r=<owner/name>]
      [<name>] ...
@@ -26,8 +26,8 @@ displayed and the remaining services will be stopped.
 
 If any of the specified services do not exist, an error will be returned
 and no services will be stopped. If an error is encountered while stopping
-one of the specified services, the remaining services will still be stopped
-a warning will be displayed for the services that failed to stop, and a
+one of the specified services, the remaining services will still be stopped,
+but a warning will be displayed for the services that failed to stop, and a
 non-zero exit code will be returned.
 
 # OPTIONS
@@ -40,30 +40,30 @@ non-zero exit code will be returned.
 ./include/general-options.md
 ```
 
-# EXAMPLES:
+# EXAMPLES
 
 Stop a running service named 'server':
 
-```
-$ flox services stop server
+```bash
+flox services stop server
 ```
 
 Stop all running services:
 
-```
-$ flox services stop
+```bash
+flox services stop
 ```
 
 Attempt to stop a service that doesn't exist:
 
-```
+```console
 $ flox services stop myservice doesnt_exist
 ✘ ERROR: Service 'doesnt_exist' not found.
 ```
 
 Attempt to stop a service that isn't running:
 
-```
+```console
 $ flox services stop running not_running
 ⚠️  Service 'not_running' is not running
 ✔ Service 'running' stopped

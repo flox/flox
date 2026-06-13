@@ -83,7 +83,7 @@ pub use api_types::{
     NarInfo,
     NarInfos,
     PackageBuildWithNarInfo as UserBuildPublish,
-    PackageDerivationInput as UserDerivationInfo,
+    PackageDerivation as UserDerivationInfo,
     PublishInfoResponseCatalog as PublishResponse,
     StoreInfo,
     StoreInfoRequest,
@@ -352,13 +352,17 @@ pub struct BaseCatalogUrl(String);
 
 impl BaseCatalogUrl {
     pub fn as_flake_ref(&self) -> Result<Url, BaseCatalogUrlError> {
-        Url::parse(&format!("git+{}&shallow=1", self.0.as_str())).map_err(BaseCatalogUrlError)
+        let mut url = Url::parse(&format!("git+{}", self.0)).map_err(BaseCatalogUrlError)?;
+        url.query_pairs_mut().append_pair("shallow", "1");
+        Ok(url)
     }
 
-    pub fn rev(&self) -> Option<&str> {
-        self.0
-            .split_once("?rev=")
-            .map(|(_, rev)| rev.split_once('&').map(|(r, _)| r).unwrap_or(rev))
+    pub fn rev(&self) -> Option<String> {
+        Url::parse(&self.0)
+            .ok()?
+            .query_pairs()
+            .find(|(k, _)| k == "rev")
+            .map(|(_, v)| v.into_owned())
     }
 }
 
@@ -465,18 +469,39 @@ mod tests {
         let url = BaseCatalogUrl::from(
             "https://github.com/NixOS/nixpkgs?rev=4d2650789dfa690b56eb541754c06b624fe2ea03",
         );
-        assert_eq!(url.rev(), Some("4d2650789dfa690b56eb541754c06b624fe2ea03"));
+        assert_eq!(
+            url.rev().as_deref(),
+            Some("4d2650789dfa690b56eb541754c06b624fe2ea03")
+        );
     }
 
     #[test]
     fn base_catalog_url_rev_handles_additional_params() {
         let url = BaseCatalogUrl::from("https://github.com/NixOS/nixpkgs?rev=abc123&foo=bar");
-        assert_eq!(url.rev(), Some("abc123"));
+        assert_eq!(url.rev().as_deref(), Some("abc123"));
     }
 
     #[test]
     fn base_catalog_url_rev_returns_none_without_rev() {
         let url = BaseCatalogUrl::from("https://github.com/NixOS/nixpkgs");
+        assert_eq!(url.rev(), None);
+    }
+
+    #[test]
+    fn base_catalog_url_rev_handles_non_first_param() {
+        let url = BaseCatalogUrl::from("https://github.com/NixOS/nixpkgs?ref=main&rev=abc123");
+        assert_eq!(url.rev().as_deref(), Some("abc123"));
+    }
+
+    #[test]
+    fn base_catalog_url_rev_decodes_percent_encoded() {
+        let url = BaseCatalogUrl::from("https://github.com/NixOS/nixpkgs?rev=abc%2Fdef");
+        assert_eq!(url.rev().as_deref(), Some("abc/def"));
+    }
+
+    #[test]
+    fn base_catalog_url_rev_returns_none_for_malformed_url() {
+        let url = BaseCatalogUrl::from("not a url");
         assert_eq!(url.rev(), None);
     }
 
@@ -506,5 +531,25 @@ mod tests {
         let context = [("valid_systems".to_string(), "".to_string())].into();
         let systems = ResolutionMessage::valid_systems_from_context(&context);
         assert_eq!(systems, Vec::<String>::new());
+    }
+
+    #[test]
+    fn as_flake_ref_with_query_string_appends_ampersand() {
+        let url = BaseCatalogUrl::from("https://github.com/flox/nixpkgs?rev=abc123");
+        let flake_ref = url.as_flake_ref().expect("should parse");
+        assert_eq!(
+            flake_ref.as_str(),
+            "git+https://github.com/flox/nixpkgs?rev=abc123&shallow=1"
+        );
+    }
+
+    #[test]
+    fn as_flake_ref_plain_https_no_query_appends_question_mark() {
+        let url = BaseCatalogUrl::from("https://github.com/NixOS/nixpkgs");
+        let flake_ref = url.as_flake_ref().expect("should parse");
+        assert_eq!(
+            flake_ref.as_str(),
+            "git+https://github.com/NixOS/nixpkgs?shallow=1"
+        );
     }
 }

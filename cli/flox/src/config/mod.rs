@@ -6,6 +6,7 @@ use std::{env, fs};
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
 use flox_catalog::{AuthnMode, SearchLimit};
+use flox_core::activate::context::AutoActivateFishMode;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_core::{WriteError, write_atomically};
 use flox_rust_sdk::flox::Features;
@@ -122,6 +123,20 @@ pub struct FloxConfig {
     /// Whether to automatically activate environments.
     /// Possible values: `allowed` (default), `prompt`.
     pub auto_activate: Option<AutoActivate>,
+
+    /// Controls how the fish shell hook responds to directory changes.
+    /// Possible values: `eval_on_arrow` (default), `eval_after_arrow`, `disable_arrow`.
+    pub auto_activate_fish_mode: Option<AutoActivateFishMode>,
+
+    /// Per-directory auto-activation preferences.
+    /// Maps absolute paths to explicit allow/deny decisions.
+    #[serde(default)]
+    pub auto_activate_environments: HashMap<PathBuf, AutoActivationPreference>,
+
+    /// Don't setup the Flox prompt hook as part of activation.
+    /// This disables auto-activation as well as features like `flox deactivate`
+    /// without `--print-script` (default: false)
+    pub disable_hook: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -167,6 +182,14 @@ pub enum AutoActivate {
     #[default]
     Allowed,
     Prompt,
+}
+
+/// Auto-activation preference for a specific directory
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum AutoActivationPreference {
+    Allow,
+    Deny,
 }
 
 impl Display for InstallerChannel {
@@ -264,7 +287,7 @@ fn locate_user_config_dir(flox_dirs: &BaseDirectories) -> Result<PathBuf> {
 
             // Allow subshells to find the same config dir.
             // TODO: decide if its worth modifying the env for this.
-            // SAFTEY: config initially read when there is no concurrent access to env variables.
+            // SAFETY: config initially read when there is no concurrent access to env variables.
             unsafe {
                 env::set_var(FLOX_CONFIG_DIR_VAR, &config_dir);
             }
@@ -364,7 +387,7 @@ impl Config {
 
     /// get a value from the config
     ///
-    /// **intended for human consumption/intospection of config only**
+    /// **intended for human consumption/introspection of config only**
     ///
     /// Values in the context should be read from the [Config] type instead!
     pub fn get(&self, path: &[Key]) -> Result<String, ReadWriteError> {

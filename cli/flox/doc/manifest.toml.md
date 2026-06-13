@@ -49,6 +49,7 @@ Valid string values are:
 - `1.10.0`: introduced package outputs
 - `1.11.0`: introduced `minimum-cli-version`
 - `1.12.0`: introduced services `auto-start`
+- `1.13.0`: introduced `profile.deactivate` and build `sandbox-allow`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -97,7 +98,7 @@ ripgrep = { pkg-path = "ripgrep" }
 pip = { pkg-path = "python310Packages.pip" }
 ```
 or
-```
+```toml
 [install.ripgrep]
 pkg-path = "ripgrep"
 
@@ -108,8 +109,6 @@ Flox will use the first format by default when automatically editing
 the manifest.
 
 ### Package names
-
-<!-- Copied from package-names.md because it has the wrong header depth -->
 
 Packages are organized in a hierarchical structure such that certain packages
 are found at the top level (e.g. `ripgrep`),
@@ -153,7 +152,7 @@ software to install from an arbitrary Nix flake.
 #### Catalog descriptors
 
 The full list of catalog descriptor options is:
-```
+```text
 Descriptor ::= {
   pkg-group          = null | <STRING>
 , version            = null | <STRING>
@@ -267,7 +266,7 @@ Each option is described below:
 Flake descriptors allow installing software from an arbitrary Nix flake.
 
 The full list of flake descriptor options is:
-```
+```text
 Descriptor ::= {
   flake              = <STRING>
 , systems            = null | [<STRING>, ...]
@@ -300,7 +299,7 @@ and `flake` is described below:
 Store path descriptors allow installing software from an arbitrary Nix store path.
 
 The full list of store path descriptor options is:
-```
+```text
 Descriptor ::= {
   store-path         = STRING
 , systems            = null | [<STRING>, ...]
@@ -480,7 +479,7 @@ Top-level options for the `[services]` block are:
     Can be suppressed with `--no-start-services`.
 
 The full set of options for an individual service descriptor is:
-```
+```text
 ServiceDescriptor ::= {
   command    = STRING
 , vars       = null | Map[STRING, STRING]
@@ -560,28 +559,27 @@ environments = [
 ]
 ```
 
-As mentioned above, you include other environments my listing them as an array
+As mentioned above, you include other environments by listing them as an array
 of tables in the `include.environments` array. The schema for these "include
 descriptors" is shown below:
 
-```
+```text
 IncludeDescriptor ::= LocalIncludeDescriptor
                     | FloxHubIncludeDescriptor
                     | RemoteIncludeDescriptor (deprecated)
 
-
-LocalIncludeDescriptor :: = {
+LocalIncludeDescriptor ::= {
   dir  = STRING
 , name = null | STRING
 }
 
-FloxHubIncludeDescriptor :: = {
+FloxHubIncludeDescriptor ::= {
   remote = STRING
 , name   = null | STRING
 }
 
 # Deprecated, will be removed in a future release
-RemoteIncludeDescriptor :: = {
+RemoteIncludeDescriptor ::= {
   remote = STRING
 , name   = null | STRING
 }
@@ -593,7 +591,7 @@ The fields in these include descriptors are as follows:
 : The local path to the environment to include. This has the same semantics as
   the `--dir` flag passed to many Flox commands.
 
-`reference`
+`remote`
 : The FloxHub reference of an environment to include. This has the same
   semantics as the `--reference <env-ref> --upstream` flag passed to
   many Flox commands. That is, Flox will include the referenced environment
@@ -692,10 +690,11 @@ This would define a package called `hello` that produces a single file
 See `flox-build(1)` for more details.
 
 The full set of options is shown below:
-```
+```text
 BuildDescriptor ::= {
   command          = STRING
-, sandbox          = null | ("off" | "pure")
+, sandbox          = null | ("off" | "warn" | "enforce" | "pure")
+, sandbox-allow    = null | [<STRING>, ...]
 , version          = null | STRING | VersionFile | VersionCommand
 , description      = null | STRING
 , runtime-packages = null | [<STRING>, ...]
@@ -720,14 +719,31 @@ VersionCommand ::= {
     When set to `"off"`, the build is executed in a subshell
     of the current shell and is similar to running the commands manually
     in a subshell created by `flox activate`.
+    When set to `"warn"`, the build runs as for `"off"`, but a warning is
+    printed for each file the build accesses from outside its package closure.
+    This helps surface undeclared dependencies without failing the build.
+    When set to `"enforce"`, the build runs as for `"warn"`, but access to
+    files outside the build's package closure is denied,
+    so a build that relies on an undeclared dependency fails.
     When set to `"pure"`, the build will be unable to make network connections
     and can only access to the files currently under version control.
     Consequently, `"pure"` builds require your project
     to be under `git` version control.
 
+`sandbox-allow`
+:   A list of paths or glob patterns the build is permitted to read from
+    outside its package closure without the `"warn"`/`"enforce"` sandbox
+    warning about them (and, under `"enforce"`, without failing the build).
+    A leading `~/` is expanded to the user's home directory, and `*`/`**`
+    match across path separators, so for example `"~/.npm/**"` allows any
+    file under `~/.npm`. Individual patterns must not contain spaces (the list
+    is passed to the sandbox as a space-separated value). Only meaningful for
+    the local sandbox modes (`"warn"` and `"enforce"`); it has no effect under
+    `"off"` or `"pure"`.
+
 `version`
 :   The version to attach to this build artifact.
-    This may be specifed in one of the following ways:
+    This may be specified in one of the following ways:
 
     1. **as a string**: `version = "0.0.1"`
     1. **as read from a file**: `version.file = "<path>"`
@@ -749,7 +765,7 @@ The `[options]` section of the manifest details settings for the environment
 itself.
 
 The full set of options are listed below:
-```
+```text
 Options ::= {
   systems                   = null | [<STRING>, ...]
 , activate                  = null | Activate
@@ -790,7 +806,7 @@ Semver ::= {
 
     In "dev" mode a package, all of its development dependencies, and language
     specific environment variables are made available. As the name implies, this
-    is useful at development time. However, this may causes unexpected failures
+    is useful at development time. However, this may cause unexpected failures
     when layering environments or when activating an environment system-wide.
 
     In "run" mode only the requested packages are made available in `PATH` (and

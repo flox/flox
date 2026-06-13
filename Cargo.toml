@@ -1,7 +1,9 @@
 [workspace]
 members = [
+    "cli/beta",
     "cli/catalog-api-v1",
     "cli/flox",
+    "cli/flox-events",
     "cli/flox-rust-sdk",
     "cli/flox-activations",
     "cli/flox-catalog",
@@ -26,6 +28,7 @@ version = "0.0.0"
 anyhow = "1"
 async-stream = "0.3.6"
 blake3 = "1.8.2"
+beta = { path = "cli/beta" }
 bpaf = { version = "0.9.24", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "cli/catalog-api-v1" }
 flox-catalog = { path = "cli/flox-catalog" }
@@ -40,6 +43,7 @@ enum_dispatch = "0.3.13"
 flate2 = "1.0"
 flox-activations = { path = "cli/flox-activations" }
 flox-core = { path = "cli/flox-core" }
+flox-events = { path = "cli/flox-events" }
 flox-rust-sdk = { path = "cli/flox-rust-sdk" }
 flox-test-utils = { path = "cli/flox-test-utils" }
 flox-manifest = { path = "cli/flox-manifest" }
@@ -86,7 +90,7 @@ sentry = { version = "0.38.1", features = [
 ] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
-serde_with = "3.16.1"
+serde_with = { version = "3.16.1", features = ["time_0_3"] }
 serde_yaml = "0.9"
 shell-escape = "0.1.5"
 slug = "0.1"

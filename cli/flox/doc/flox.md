@@ -10,7 +10,7 @@ flox - developer environments you can take with you
 
 # SYNOPSIS
 
-```
+```text
 flox [<general options>] <command>
      [<command options>]
      [<args>] ...
@@ -51,7 +51,10 @@ sharing environments, and administration.
 :   Create an environment in the current directory.
 
 `activate`
-:   Enter the environment, type `exit` to leave.
+:   Enter the environment, run `flox deactivate` to leave.
+
+`deactivate`
+:   Deactivate the current environment.
 
 `search`
 :   Search for system or library packages to install.
@@ -68,7 +71,7 @@ sharing environments, and administration.
 `edit`
 :   Edit the declarative environment configuration file.
 
-`list`, 'l'
+`list`, `l`
 :   List packages installed in an environment.
 
 `delete`
@@ -122,18 +125,18 @@ sharing environments, and administration.
 
 # SEE ALSO
 
-[`flox-init`(1)](./flox-init.md),
-[`flox-activate`(1)](./flox-activate.md),
-[`flox-install`(1)](./flox-install.md),
+[`flox-init(1)`](./flox-init.md),
+[`flox-activate(1)`](./flox-activate.md),
+[`flox-install(1)`](./flox-install.md),
 [`flox-uninstall(1)`](./flox-uninstall.md),
-[`flox-upgrade`(1)](./flox-upgrade.md),
-[`flox-search`(1)](./flox-search.md),
+[`flox-upgrade(1)`](./flox-upgrade.md),
+[`flox-search(1)`](./flox-search.md),
 [`flox-show(1)`](./flox-show.md),
-[`flox-edit`(1)](./flox-edit.md),
-[`manifest-toml`(5)](./manifest.toml.md),
-[`flox-list`(1)](./flox-list.md),
+[`flox-edit(1)`](./flox-edit.md),
+[`manifest.toml(5)`](./manifest.toml.md),
+[`flox-list(1)`](./flox-list.md),
 [`flox-auth(1)`](./flox-auth.md),
-[`flox-push`(1)](./flox-push.md),
-[`flox-pull`(1)](./flox-pull.md),
-[`flox-delete`(1)](./flox-delete.md),
-[`flox-config`(1)](./flox-config.md)
+[`flox-push(1)`](./flox-push.md),
+[`flox-pull(1)`](./flox-pull.md),
+[`flox-delete(1)`](./flox-delete.md),
+[`flox-config(1)`](./flox-config.md)

@@ -12,6 +12,8 @@ indoc.workspace = true
 dirs.workspace = true
 proptest.workspace = true
 chrono.workspace = true
+tracing-subscriber.workspace = true
+tracing.workspace = true
 
 # flox-core = { workspace = true, features = ["proc_status"]}
 

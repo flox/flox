@@ -407,7 +407,9 @@ EOF
 # bats test_tags=edit:install-store-path
 @test "'flox edit' install-store-path" {
   "$FLOX_BIN" init
-  hello_store_path="$(nix build "github:nixos/nixpkgs/$TEST_NIXPKGS_REV_NEW#hello^out" --no-link --print-out-paths)"
+  hello_store_path="$(nix build \
+    --extra-experimental-features 'nix-command flakes' \
+    "github:nixos/nixpkgs/$TEST_NIXPKGS_REV_NEW#hello^out" --no-link --print-out-paths)"
 
   run "$FLOX_BIN" edit -f <(echo "
     version = 1
@@ -420,7 +422,7 @@ EOF
   PROJECT_DIR="$(realpath "$PROJECT_DIR")"
   run "$FLOX_BIN" activate -- bash -c 'command -v hello'
   assert_success
-  assert_output "${PROJECT_DIR}/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}.dev/bin/hello"
+  assert_output "${PROJECT_DIR}/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}-dev/bin/hello"
 
   run "$FLOX_BIN" activate -- bash -c 'realpath "$(command -v hello)"'
   assert_success

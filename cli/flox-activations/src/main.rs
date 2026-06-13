@@ -33,12 +33,14 @@ fn try_main() -> Result<(), Error> {
     match args.command {
         cli::Command::Attach(args) => args.handle(),
         cli::Command::Activate(args) => args.handle(subsystem_verbosity),
+        cli::Command::Detach(args) => args.handle(),
         cli::Command::Executive(_) => {
             unreachable!("executive already handled above")
         },
         cli::Command::FixPaths(args) => args.handle(),
         cli::Command::SetEnvDirs(args) => args.handle(),
         cli::Command::ProfileScripts(args) => args.handle(),
+        cli::Command::ProfileScriptsDeactivate(args) => args.handle(),
         cli::Command::PrependAndDedup(args) => {
             args.handle();
             Ok(())

@@ -1,0 +1,14 @@
+[package]
+name = "flox-events"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+derive_more.workspace = true
+serde.workspace = true
+serde_with.workspace = true
+time.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

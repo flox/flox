@@ -235,13 +235,31 @@ fn run_event_loop(
             },
             Ok(ExecutiveEvent::StateFileChanged) => {
                 debug!("state.json changed, checking for new PIDs to monitor");
-                let (state, _lock) = read_activations_json(&state_json_path)?;
+                let (state, lock) = read_activations_json(&state_json_path)?;
                 let Some(activations) = state else {
                     bail!("executive shouldn't be running when state.json doesn't exist");
                 };
                 coordinator
                     .ensure_monitoring_pids(activations.all_attached_pids_and_expiration())
                     .context("failed to ensure monitoring PIDs")?;
+                // When `detach` removes the last PID (e.g., in-place deactivation
+                // where the shell process is still alive), trigger cleanup now
+                // rather than waiting for the process to exit — which could be a
+                // very long time.  This mirrors ProcessExited → watcher::cleanup_pid
+                // → attached_pids_is_empty() → cleanup_all, but fires proactively
+                // on the state-file change instead.
+                if activations.attached_pids_is_empty() {
+                    info!("all PIDs gone after state.json change, running cleanup");
+                    cleanup_all(
+                        (activations, lock),
+                        &process_compose_bin,
+                        &socket_path,
+                        &activation_state_dir,
+                    )
+                    .context("cleanup failed after StateFileChanged with empty PIDs")?;
+                    return Ok(());
+                }
+                // lock drops here when PIDs remain
             },
             Ok(ExecutiveEvent::SigChld) => {
                 reap_orphaned_children();
@@ -622,9 +640,15 @@ mod test {
 
     /// Test that handle_process_exited is a no-op when the PID is not in state.json.
     ///
-    /// This can happen when --remove-pid removes a PID from state.json, but the
-    /// executive still has a watcher running for that PID. When the process eventually
-    /// exits and the executive receives a ProcessExited event, it should be a no-op.
+    /// This can happen in two cases:
+    /// 1. --remove-pid removes a PID from state.json, but the
+    ///    executive still has a watcher running for that PID.
+    /// 2. `flox-activations detach` removes a PID from state.json
+    ///
+    /// In either case, when the process eventually exits and the executive
+    /// receives a ProcessExited event, it should be a no-op.
+    ///
+    /// We mimic scenario 1 here
     #[test]
     fn process_exited_noop_for_pid_not_in_state() {
         let temp_dir = tempfile::tempdir().unwrap();
@@ -790,5 +814,59 @@ mod test {
         );
 
         stop_process(proc);
+    }
+
+    /// When state.json is updated such that all PIDs are gone (e.g., by
+    /// `flox-activations detach` for an in-place deactivation where the shell
+    /// process is still alive), the monitoring loop should trigger cleanup
+    /// immediately via StateFileChanged rather than waiting for ProcessExited.
+    #[test]
+    fn state_file_change_triggers_cleanup_when_no_pids() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let runtime_dir = temp_dir.path();
+        let dot_flox_path = PathBuf::from(".flox");
+        let flox_env = dot_flox_path.join("run/test");
+        let store_path = "store_path".to_string();
+
+        // Create activation state with a PID but then write it with 0 PIDs
+        // (simulating what happens after `flox-activations detach` removes
+        // the last PID while the process is still running).
+        let mut state =
+            ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
+        let result = state.start_or_attach(1, &store_path);
+        let StartOrAttachResult::Start { start_id, .. } = result else {
+            panic!("Expected Start")
+        };
+        state.set_ready(&start_id);
+        // Detach the PID in-memory so the written state has 0 attached PIDs.
+        let _ = state.detach(1);
+        write_activation_state(runtime_dir, &dot_flox_path, state);
+
+        let activation_state_directory = activation_state_dir_path(runtime_dir, &dot_flox_path);
+        assert!(
+            activation_state_directory.exists(),
+            "state directory should exist before the event loop"
+        );
+
+        // Inject a StateFileChanged event so the loop reacts as if the file
+        // had just been written by `detach`.
+        let coordinator = EventCoordinator::new().unwrap();
+        coordinator.inject_event(ExecutiveEvent::StateFileChanged);
+
+        let (attach, project) = test_context(&dot_flox_path, &flox_env.to_string_lossy());
+
+        run_event_loop(
+            attach,
+            project,
+            activation_state_directory.clone(),
+            coordinator,
+            0,
+        )
+        .expect("event loop should exit cleanly after cleanup");
+
+        assert!(
+            !activation_state_directory.exists(),
+            "state directory should be removed after cleanup via StateFileChanged"
+        );
     }
 }

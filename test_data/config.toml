@@ -38,7 +38,7 @@ pre_cmd = "flox init"
 cmd = "flox install badpkg1 badpkg2"
 ignore_cmd_errors = true
 
-# Install a package that doesn't exist and a another that does only exist on Linux
+# Install a package that doesn't exist and another that only exists on Linux
 [resolve.badpkg_bpftrace]
 pre_cmd = "flox init"
 cmd = "flox install badpkg bpftrace"
@@ -163,7 +163,7 @@ cmd = '''
 '''
 ignore_cmd_errors = true # build will fail on linux, that's fine
 
-# Generate a response with an "unkown" type of error.
+# Generate a response with an "unknown" type of error.
 # Instead of forcing an "unknown" type of error from the catalog server
 # we trigger a general error response and then transform the error type
 # and message to match to an "unknown" type of error,

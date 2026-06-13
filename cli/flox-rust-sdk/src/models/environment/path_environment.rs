@@ -231,11 +231,11 @@ impl Environment for PathEnvironment {
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;
-        let result = env_view.install(packages, flox)?;
-        if let Some(ref store_paths) = result.built_environments {
-            self.link(store_paths)?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        let result = env_view.install(packages, flox, Some(out_link_prefix))?;
+        if result.built_environments.is_some() {
+            self.rendered_env_links.replace_legacy_links();
         }
-
         Ok(result)
     }
 
@@ -250,26 +250,21 @@ impl Environment for PathEnvironment {
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;
-        let result = env_view.uninstall(specs, flox)?;
-        if let Some(ref store_paths) = result.built_environment_store_paths {
-            self.link(store_paths)?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        let result = env_view.uninstall(specs, flox, Some(out_link_prefix))?;
+        if result.built_environment_store_paths.is_some() {
+            self.rendered_env_links.replace_legacy_links();
         }
-
         Ok(result)
     }
 
     /// Atomically edit this environment, ensuring that it still builds
     fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;
-        let result = env_view.edit(flox, contents)?;
-        match &result {
-            EditResult::Changed {
-                built_environment_store_paths,
-                ..
-            } => {
-                self.link(built_environment_store_paths)?;
-            },
-            EditResult::Unchanged => {},
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        let result = env_view.edit(flox, contents, Some(out_link_prefix))?;
+        if matches!(&result, EditResult::Changed { .. }) {
+            self.rendered_env_links.replace_legacy_links();
         }
         Ok(result)
     }
@@ -281,7 +276,7 @@ impl Environment for PathEnvironment {
         groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;
-        let result = env_view.upgrade(flox, groups_or_iids, false)?;
+        let result = env_view.upgrade(flox, groups_or_iids, false, None)?; // dry-run: no out-link
         Ok(result)
     }
 
@@ -293,11 +288,11 @@ impl Environment for PathEnvironment {
     ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let mut env_view = self.as_core_environment_mut()?;
-        let result = env_view.upgrade(flox, groups_or_iids, true)?;
-        if let Some(ref store_paths) = result.store_path {
-            self.link(store_paths)?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        let result = env_view.upgrade(flox, groups_or_iids, true, Some(out_link_prefix))?;
+        if result.store_path.is_some() {
+            self.rendered_env_links.replace_legacy_links();
         }
-
         Ok(result)
     }
 
@@ -312,11 +307,11 @@ impl Environment for PathEnvironment {
             "upgrading included environments"
         );
         let mut env_view = self.as_core_environment_mut()?;
-        let result = env_view.include_upgrade(flox, to_upgrade)?;
-        if let Some(ref store_paths) = result.store_path {
-            self.link(store_paths)?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        let result = env_view.include_upgrade(flox, to_upgrade, Some(out_link_prefix))?;
+        if result.store_path.is_some() {
+            self.rendered_env_links.replace_legacy_links();
         }
-
         Ok(result)
     }
 
@@ -345,8 +340,7 @@ impl Environment for PathEnvironment {
         let out_paths = self.rendered_env_links.clone();
 
         if self.needs_rebuild()? {
-            let store_paths = self.build(flox)?;
-            self.link(&store_paths)?;
+            self.build(flox)?;
         }
 
         Ok(out_paths)
@@ -354,18 +348,15 @@ impl Environment for PathEnvironment {
 
     /// Build the environment
     /// This will lock the environment if it is not already locked.
+    /// Uses `ensure_locked` to skip a catalog round-trip and lockfile
+    /// rewrite when the lockfile is already current.
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;
-        env_view.lock(flox)?;
-        let store_paths = env_view.build(flox)?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        env_view.ensure_locked(flox)?;
+        let store_paths = env_view.build(flox, Some(out_link_prefix))?;
+        self.rendered_env_links.replace_legacy_links();
         Ok(store_paths)
-    }
-
-    fn link(&mut self, store_paths: &BuildEnvOutputs) -> Result<(), EnvironmentError> {
-        CoreEnvironment::link(&self.rendered_env_links.development, &store_paths.develop)?;
-        CoreEnvironment::link(&self.rendered_env_links.runtime, &store_paths.runtime)?;
-
-        Ok(())
     }
 
     /// Returns .flox/cache
@@ -517,7 +508,7 @@ impl PathEnvironment {
             )?
         };
 
-        let mut environment = Self::write_new_unchecked(
+        let environment = Self::write_new_unchecked(
             flox,
             pointer,
             dot_flox_parent_path,
@@ -531,10 +522,11 @@ impl PathEnvironment {
         );
         env_view.lock(flox)?;
 
-        // Build+link only when packages are present
+        // Build only when packages are present; nix writes the activation
+        // symlinks via --out-link, so no separate link step is needed.
         if matches!(customization.packages.as_deref(), Some([_, ..])) {
-            let store_paths = env_view.build(flox)?;
-            environment.link(&store_paths)?;
+            let out_link_prefix = environment.rendered_env_links.out_link_prefix();
+            env_view.build(flox, Some(out_link_prefix))?;
         }
 
         Ok(environment)
@@ -612,8 +604,7 @@ impl PathEnvironment {
             return Ok(true);
         };
 
-        let rendered_env_lockfile_path =
-            self.rendered_env_links.development.join(LOCKFILE_FILENAME);
+        let rendered_env_lockfile_path = self.rendered_env_links.dev.join(LOCKFILE_FILENAME);
 
         let Ok(rendered_env_lockfile_path) = CanonicalPath::new(rendered_env_lockfile_path) else {
             return Ok(true);
@@ -750,12 +741,14 @@ pub mod test_helpers {
 #[cfg(test)]
 pub mod tests {
 
-    use std::fs::OpenOptions;
+    use std::fs::{self, OpenOptions};
     use std::io::Write;
 
     use flox_manifest::interfaces::AsLatestSchema;
     use flox_manifest::parsed::Inner;
+    use flox_manifest::parsed::common::KnownSchemaVersion;
     use flox_manifest::parsed::v1::test_helpers::manifest_without_install_or_include;
+    use flox_manifest::test_helpers::{with_latest_schema, with_schema};
     use flox_test_utils::proptest::{alphanum_string, lowercase_alphanum_string};
     use indoc::indoc;
     use itertools::izip;
@@ -853,7 +846,7 @@ pub mod tests {
         let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
         let pointer = PathPointer::new("test".parse().unwrap());
 
-        let mut env = PathEnvironment::init(
+        let env = PathEnvironment::init(
             pointer,
             environment_temp_dir.path(),
             &InitCustomization::default(),
@@ -866,8 +859,8 @@ pub mod tests {
         // build the environment -> out link is created -> no rebuild necessary
         let mut env_view =
             CoreEnvironment::new(env.path.join(ENV_DIR_NAME), env.include_fetcher().unwrap());
-        let store_paths = env_view.build(&flox).unwrap();
-        env.link(&store_paths).unwrap();
+        let out_link_prefix = env.rendered_env_links.out_link_prefix();
+        env_view.build(&flox, Some(out_link_prefix)).unwrap();
 
         assert!(!env.needs_rebuild().unwrap());
 
@@ -1039,5 +1032,114 @@ pub mod tests {
         writeln!(lockfile, "\n\n\n",).unwrap();
 
         assert!(!environment.needs_rebuild().unwrap());
+    }
+
+    // -------------------------------------------------------------------------
+    // Regression tests: PathEnvironment::build must not rewrite a current lock
+    //
+    // Before AI-159, `build` called `lock()` unconditionally.  Even when the
+    // lockfile was already up-to-date, `lock()` could rewrite it (e.g. due to
+    // formatting normalisation), updating the mtime and triggering a spurious
+    // needs_rebuild() on the next activate.
+    //
+    // After the fix, `build` calls `ensure_locked()`, which skips the catalog
+    // round-trip and the file write when lockfile_if_up_to_date() returns
+    // Some(_).  These tests assert the "no rewrite" invariant on three
+    // environment shapes.
+    // -------------------------------------------------------------------------
+
+    /// Plain environment (latest schema, no packages).
+    /// After locking once, calling build() must not alter manifest.lock.
+    #[test]
+    fn build_does_not_rewrite_current_lockfile_plain() {
+        let (flox, _temp_dir) = flox_instance();
+        let manifest = with_latest_schema("");
+        let mut env = new_path_environment(&flox, &manifest);
+
+        // Lock the environment to produce an up-to-date manifest.lock.
+        env.lockfile(&flox).unwrap();
+
+        let lockfile_path = env.lockfile_path(&flox).unwrap();
+        let bytes_before = fs::read(&lockfile_path).unwrap();
+        let mtime_before = fs::metadata(&lockfile_path).unwrap().modified().unwrap();
+
+        // Build must not rewrite the lockfile.
+        env.build(&flox).unwrap();
+
+        let bytes_after = fs::read(&lockfile_path).unwrap();
+        let mtime_after = fs::metadata(&lockfile_path).unwrap().modified().unwrap();
+
+        assert_eq!(bytes_before, bytes_after, "lockfile bytes changed");
+        assert_eq!(mtime_before, mtime_after, "lockfile mtime changed");
+    }
+
+    /// Composed environment (v1 composer that includes a child environment).
+    /// After locking once, calling build() on the composer must not alter its
+    /// manifest.lock.
+    #[test]
+    fn build_does_not_rewrite_current_lockfile_composed() {
+        let (flox, tempdir) = flox_instance();
+
+        // Set up an included environment with only vars (backwards compatible
+        // with v1, so the composer won't be migrated).
+        let included_manifest = with_latest_schema(indoc! {r#"
+            [vars]
+            included_var = "value"
+        "#});
+        let included_path = tempdir.path().join("included");
+        let mut included_env = new_path_environment_in(&flox, &included_manifest, &included_path);
+        included_env.lockfile(&flox).unwrap();
+
+        // Create a v1 composer that includes the child.
+        let composer_manifest = with_schema(KnownSchemaVersion::V1, indoc! {r#"
+            [include]
+            environments = [
+              { dir = "../included" },
+            ]
+        "#});
+        let composer_path = tempdir.path().join("composer");
+        let mut composer = new_path_environment_in(&flox, &composer_manifest, &composer_path);
+
+        // Lock the composer to produce an up-to-date manifest.lock.
+        composer.lockfile(&flox).unwrap();
+
+        let lockfile_path = composer.lockfile_path(&flox).unwrap();
+        let bytes_before = fs::read(&lockfile_path).unwrap();
+        let mtime_before = fs::metadata(&lockfile_path).unwrap().modified().unwrap();
+
+        // Build must not rewrite the lockfile.
+        composer.build(&flox).unwrap();
+
+        let bytes_after = fs::read(&lockfile_path).unwrap();
+        let mtime_after = fs::metadata(&lockfile_path).unwrap().modified().unwrap();
+
+        assert_eq!(bytes_before, bytes_after, "lockfile bytes changed");
+        assert_eq!(mtime_before, mtime_after, "lockfile mtime changed");
+    }
+
+    /// v1 schema environment (no packages).
+    /// After locking once, calling build() must not alter manifest.lock.
+    /// Exercises the v1 → ensure_locked path in lockfile_if_up_to_date.
+    #[test]
+    fn build_does_not_rewrite_current_lockfile_v1() {
+        let (flox, _temp_dir) = flox_instance();
+        let manifest = with_schema(KnownSchemaVersion::V1, "");
+        let mut env = new_path_environment(&flox, &manifest);
+
+        // Lock the environment to produce an up-to-date manifest.lock.
+        env.lockfile(&flox).unwrap();
+
+        let lockfile_path = env.lockfile_path(&flox).unwrap();
+        let bytes_before = fs::read(&lockfile_path).unwrap();
+        let mtime_before = fs::metadata(&lockfile_path).unwrap().modified().unwrap();
+
+        // Build must not rewrite the lockfile.
+        env.build(&flox).unwrap();
+
+        let bytes_after = fs::read(&lockfile_path).unwrap();
+        let mtime_after = fs::metadata(&lockfile_path).unwrap().modified().unwrap();
+
+        assert_eq!(bytes_before, bytes_after, "lockfile bytes changed");
+        assert_eq!(mtime_before, mtime_after, "lockfile mtime changed");
     }
 }

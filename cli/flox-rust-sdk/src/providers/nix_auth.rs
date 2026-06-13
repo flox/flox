@@ -24,7 +24,10 @@ pub trait AuthProvider {
     fn create_netrc(&self) -> Result<TempPath, AuthError>;
     /// Attempt to create a netrc file, returning it if the user has a valid
     /// token, or `None` when they don't.
-    fn try_create_netrc(&self) -> Option<PathBuf>;
+    ///
+    /// The caller must hold the returned `TempPath` alive for as long as the
+    /// file is needed; dropping it deletes the underlying file.
+    fn try_create_netrc(&self) -> Option<TempPath>;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -123,12 +126,10 @@ impl AuthProvider for NixAuth {
         write_floxhub_netrc(tempdir, token).map_err(AuthError::CreateNetrc)
     }
 
-    fn try_create_netrc(&self) -> Option<PathBuf> {
+    fn try_create_netrc(&self) -> Option<TempPath> {
         let token = self.floxhub_token.as_ref()?;
         let tempdir = self.netrc_tempdir.as_ref()?;
-        write_floxhub_netrc(tempdir, token)
-            .ok()
-            .map(|temp_path| temp_path.to_path_buf())
+        write_floxhub_netrc(tempdir, token).ok()
     }
 }
 
@@ -138,7 +139,7 @@ pub fn write_floxhub_netrc(
     token: &FloxhubToken,
 ) -> std::io::Result<TempPath> {
     let token_secret = token.secret();
-    // Restrict to known hostnamess so that we don't accidentally leak FloxHub
+    // Restrict to known hostnames so that we don't accidentally leak FloxHub
     // credentials to third-party ingress URIs.
     let netrc_contents = FLOXHUB_AUTHENTICATED_HOSTNAMES
         .iter()
@@ -165,4 +166,66 @@ pub fn write_floxhub_netrc(
 /// can't tell that we *don't* need a token.
 pub(crate) fn store_needs_auth(url: &str) -> bool {
     !(url.starts_with("https://cache.nixos.org") || url == "daemon")
+}
+
+#[cfg(test)]
+mod tests {
+    use tempfile::tempdir;
+
+    use super::*;
+    use crate::flox::FloxhubToken;
+
+    // Unexpired JWT with handle "test" for use in tests.
+    const FAKE_TOKEN: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74";
+
+    fn test_auth() -> NixAuth {
+        let token = FloxhubToken::new(FAKE_TOKEN.to_string()).unwrap();
+        NixAuth::from_tempdir_and_token(tempdir().unwrap(), Some(token))
+    }
+
+    /// create_netrc returns a TempPath whose underlying file exists while held
+    /// and is deleted when dropped — verifying the fix for the bug where the
+    /// file was dropped inside a .map() closure before nix could read it.
+    #[test]
+    fn create_netrc_file_lives_until_dropped() {
+        let auth = test_auth();
+        let temp_path = auth.create_netrc().expect("create_netrc should succeed");
+        let path = temp_path.to_path_buf();
+        assert!(
+            path.exists(),
+            "netrc file should exist while TempPath is held"
+        );
+        drop(temp_path);
+        assert!(
+            !path.exists(),
+            "netrc file should be deleted when TempPath is dropped"
+        );
+    }
+
+    /// try_create_netrc returns the same RAII guard — the file lives while held
+    /// and is deleted on drop.
+    #[test]
+    fn try_create_netrc_file_lives_until_dropped() {
+        let auth = test_auth();
+        let temp_path = auth
+            .try_create_netrc()
+            .expect("try_create_netrc should return Some");
+        let path = temp_path.to_path_buf();
+        assert!(
+            path.exists(),
+            "netrc file should exist while TempPath is held"
+        );
+        drop(temp_path);
+        assert!(
+            !path.exists(),
+            "netrc file should be deleted when TempPath is dropped"
+        );
+    }
+
+    /// try_create_netrc returns None when no token is present.
+    #[test]
+    fn try_create_netrc_returns_none_without_token() {
+        let auth = NixAuth::from_tempdir_and_token(tempdir().unwrap(), None);
+        assert!(auth.try_create_netrc().is_none());
+    }
 }

@@ -1,0 +1,10 @@
+[package]
+name = "beta"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+bpaf.workspace = true
+flox-rust-sdk.workspace = true
+tracing.workspace = true

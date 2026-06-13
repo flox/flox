@@ -300,7 +300,7 @@ mod tests {
             command: "start-descriptor".to_string(), // overridden
             vars: Some(Vars::from_map(BTreeMap::from_iter(vec![
                 ("DESCRIPTOR_ONLY".to_string(), "from-descriptor".to_string()),
-                // overridden by systemd.service.envrionment
+                // overridden by systemd.service.environment
                 ("SHARED_KEY".to_string(), "from-descriptor".to_string()),
             ]))),
             // overridden by systemd.service.type

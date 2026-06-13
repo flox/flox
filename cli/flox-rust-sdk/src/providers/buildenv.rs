@@ -1,11 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt::Display;
-use std::hash::Hash;
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::sync::{Arc, LazyLock, Mutex};
+use std::process::Command;
+use std::sync::LazyLock;
 use std::thread::ScopedJoinHandle;
 use std::{env, fmt};
 
@@ -26,11 +24,10 @@ use flox_manifest::parsed::latest::SelectedOutputs;
 use pollster::FutureExt as _;
 use rsevents_extra::Semaphore;
 use serde::{Deserialize, Serialize};
-use tempfile::TempPath;
 use thiserror::Error;
-use tracing::{Span, debug, info_span, instrument, trace};
+use tracing::{Span, debug, info_span, instrument, warn};
 
-use super::nix::{self, nix_base_command};
+use super::nix::nix_base_command;
 use super::nix_auth::{AuthError, AuthProvider};
 use crate::data::System;
 use crate::models::nix_plugins::NIX_PLUGINS;
@@ -43,11 +40,20 @@ static BUILDENV_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
         .into()
 });
 
-/// Profix of locked_url of catalog packages that are from the nixpkgs base-catalog.
+/// Prefix of locked_url of catalog packages that are from the nixpkgs base-catalog.
 /// This url was meant to serve as a flake reference to the Flox hosted mirror of nixpkgs,
 /// but is both ill formatted and does not provide the necessary overrides
 /// to allow evaluating packages without common evaluation checks, such as unfree and broken.
 const NIXPKGS_CATALOG_URL_PREFIX: &str = "https://github.com/flox/nixpkgs?rev=";
+
+/// Returns `true` if `path` is accessible on the local filesystem.
+///
+/// Uses `metadata()` rather than `Path::exists()` so callers can distinguish
+/// "does not exist" from "permission denied" if needed in future — the two are
+/// equivalent for Nix store paths owned by the Nix daemon.
+fn path_is_present(path: &str) -> bool {
+    std::fs::metadata(path).is_ok()
+}
 
 /// The base flake reference invoking the `flox-nixpkgs` fetcher.
 /// This is a bridge to the Flox hosted mirror of nixpkgs flake,
@@ -106,7 +112,7 @@ pub enum BuildEnvError {
     /// The error message is the stderr of the `nix build` command.
     // TODO: this requires to capture the stderr of the `nix build` command
     // or essentially "tee" it if we also want to forward the logs to the user.
-    // At the moment the "interesting" logs
+    // At the moment, the "interesting" logs
     // are emitted by the `realise` portion of the build.
     // So in the interest of initial simplicity
     // we can defer forwarding the nix build logs and capture output with [Command::output].
@@ -118,7 +124,7 @@ pub enum BuildEnvError {
         Supported systems: {0}", systems.join(", "))]
     LockfileIncompatible { systems: Vec<String> },
 
-    /// An error that occurred while linking a store path.
+    /// An error that occurred while creating GC roots via `create_gc_root_in`.
     #[error("Failed to link environment: {0}")]
     Link(String),
 
@@ -133,9 +139,6 @@ pub enum BuildEnvError {
     /// An error that occurred while calling nix build.
     #[error("Failed to call 'nix build'")]
     CallNixBuild(#[source] std::io::Error),
-
-    #[error("Failed to write nix arguments to stdin")]
-    WriteNixStdin(#[source] std::io::Error),
 
     /// An error that occurred while deserializing the output of the `nix build` command.
     #[error("Failed to deserialize 'nix build' output:\n{output}\nError: {err}")]
@@ -181,12 +184,21 @@ pub enum BuildEnvError {
     /// A catch-all error variant for rare situations
     #[error("{0}")]
     Other(String),
+
+    /// Store paths were unavailable after all materialisation retry attempts.
+    #[error(
+        "Store paths were unavailable after {attempts} materialisation attempts.\n\
+        This is most likely caused by a concurrent garbage collection run.\n\
+        If a garbage collection is in progress, wait for it to finish and retry.\n\
+        Missing paths: {paths}"
+    )]
+    MaterialisationFailed { attempts: usize, paths: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct BuildEnvOutputs {
-    pub develop: BuiltStorePath,
-    pub runtime: BuiltStorePath,
+    pub dev: BuiltStorePath,
+    pub run: BuiltStorePath,
     /// A map of additional built store paths.
     /// These are the runtime environments for each manifest build.
     /// The main consumer of this is [super::build::FloxBuildMk].
@@ -199,8 +211,8 @@ impl BuildEnvOutputs {
     /// Returns the built environment path for an activation mode.
     pub fn for_mode(self, mode: &ActivateMode) -> BuiltStorePath {
         match mode {
-            ActivateMode::Dev => self.develop,
-            ActivateMode::Run => self.runtime,
+            ActivateMode::Dev => self.dev,
+            ActivateMode::Run => self.run,
         }
     }
 }
@@ -216,59 +228,20 @@ pub trait BuildEnv {
         client: &impl ClientTrait,
         lockfile: &Path,
         service_config_path: Option<PathBuf>,
+        out_link_prefix: Option<&Path>,
     ) -> Result<BuildEnvOutputs, BuildEnvError>;
 }
 
-#[derive(Debug)]
-pub struct NetRcAndAuth<A> {
-    netrc_path: Option<TempPath>,
-    auth: Arc<Mutex<A>>,
-}
-
-impl<A> NetRcAndAuth<A>
-where
-    A: AuthProvider,
-{
-    /// Returns the path to a populated netrc file, creating one if necessary.
-    pub fn get_netrc_path(&mut self) -> Result<&TempPath, BuildEnvError> {
-        if let Some(ref path) = self.netrc_path {
-            Ok(path)
-        } else {
-            let path = self
-                .auth
-                .lock()
-                .map_err(|_| {
-                    BuildEnvError::Other("internal error: mutex was poisoned".to_string())
-                })?
-                .create_netrc()
-                .map_err(BuildEnvError::Auth)?;
-            self.netrc_path = Some(path);
-            self.get_netrc_path()
-        }
-    }
-}
-
-pub struct BuildEnvNix<P, A> {
-    gc_root_base_path: P,
+pub struct BuildEnvNix<A> {
     auth: A,
 }
 
-impl<P, A> BuildEnvNix<P, A>
+impl<A> BuildEnvNix<A>
 where
-    P: AsRef<Path>,
     A: AuthProvider,
 {
-    pub fn new(gc_root_base_path: P, auth: A) -> BuildEnvNix<P, A> {
-        BuildEnvNix {
-            gc_root_base_path,
-            auth,
-        }
-    }
-
-    /// Create a new gc root path in [Self::gc_root_base_path]
-    /// with a unique prefix.
-    fn new_gc_root_path(&self, prefix: impl AsRef<str>) -> PathBuf {
-        self.gc_root_base_path.as_ref().join(prefix.as_ref())
+    pub fn new(auth: A) -> BuildEnvNix<A> {
+        BuildEnvNix { auth }
     }
 
     fn base_command() -> Command {
@@ -278,72 +251,11 @@ where
         // TODO: formalize this in a config file,
         // and potentially disable other user configs (allowing specific overrides)
         nix_build_command.args(["--option", "pure-eval", "false"]);
-
-        match std::env::var("_FLOX_NIX_STORE_URL").ok().as_deref() {
-            None | Some("") => {
-                debug!("using 'auto' store");
-            },
-            Some(store_url) => {
-                debug!(%store_url, "overriding Nix store URL");
-                nix_build_command.args(["--option", "store", store_url]);
-            },
-        }
-
+        apply_nix_store_url(&mut nix_build_command);
         // we generally want to see more logs (we can always filter them out)
         nix_build_command.arg("--print-build-logs");
 
         nix_build_command
-    }
-
-    /// Check which storepaths of the environment to be built already exist
-    /// and create GC roots for them.
-    /// GC roots prevent those paths from being deleted by a concurrently running
-    /// nix GC job, before they can be used as a dependency
-    /// for the environment being built.
-    fn pre_check_store_paths(
-        &self,
-        lockfile: &Lockfile,
-        system: &System,
-    ) -> Result<CheckedStorePaths, BuildEnvError> {
-        let mut all_paths = Vec::new();
-        for package in lockfile.packages.iter() {
-            if package.system() != system {
-                continue;
-            }
-
-            match package {
-                LockedPackage::Catalog(locked) => all_paths.extend(locked.outputs.values()),
-                LockedPackage::Flake(locked) => {
-                    all_paths.extend(locked.locked_installable.outputs.values())
-                },
-                LockedPackage::StorePath(locked) => all_paths.extend([&locked.store_path]),
-            }
-        }
-
-        let n_iters = 10;
-        let sleep_duration = std::time::Duration::from_millis(100);
-        let mut gc_root_err =
-            BuildEnvError::Link("failed to create gc roots during build".to_string());
-        for _ in 0..n_iters {
-            let checked_store_paths = check_store_paths(&all_paths)?;
-            match create_gc_root_in(
-                &checked_store_paths.valid,
-                self.new_gc_root_path("pre-checked-paths"),
-            ) {
-                Ok(_) => {
-                    return Ok(checked_store_paths);
-                },
-                Err(BuildEnvError::Link(err)) => {
-                    debug!(error = err, "failed to set one or more gc roots, retrying");
-                    gc_root_err = BuildEnvError::Link(err.clone());
-                },
-                Err(e) => {
-                    return Err(e);
-                },
-            }
-            std::thread::sleep(sleep_duration);
-        }
-        Err(gc_root_err)
     }
 
     /// Realise all store paths of packages that are installed to the environment,
@@ -357,7 +269,6 @@ where
         client: &impl ClientTrait,
         lockfile: &Lockfile,
         system: &System,
-        pre_checked_store_paths: &CheckedStorePaths,
     ) -> Result<(), BuildEnvError> {
         let mut base_catalog_pkgs = vec![];
         let mut custom_catalog_pkgs = vec![];
@@ -403,7 +314,6 @@ where
             Semaphore::new(20, 20)
         };
 
-        let gc_root_base_path = self.gc_root_base_path.as_ref();
         let span = Span::current();
 
         // Only query store info if we have custom catalog packages and they
@@ -412,11 +322,9 @@ where
             .iter()
             .flat_map(|pkg| pkg.outputs.values().map(|sp| sp.to_string()))
             .collect::<Vec<_>>();
-        let all_custom_catalog_packages_valid = {
-            all_custom_pkg_store_paths
-                .iter()
-                .all(|sp| pre_checked_store_paths.valid(sp).unwrap_or(false))
-        };
+        let all_custom_catalog_packages_valid = all_custom_pkg_store_paths
+            .iter()
+            .all(|sp| path_is_present(sp.as_str()));
         let store_locations = if all_custom_catalog_packages_valid {
             None
         } else {
@@ -434,45 +342,37 @@ where
         // provider makes it a real pain to pass it into other threads. It makes
         // life *much* easier to do some of this ahead of time.
         let no_netrc_is_error = self.auth.token().is_none();
-        let netrc_path = self.auth.try_create_netrc();
-        let borrowed_netrc_path = netrc_path.as_ref();
+        // Hold the TempPath alive for the duration of the build; dropping it
+        // would delete the underlying file before nix copy can read it.
+        let netrc_guard = self.auth.try_create_netrc();
+        let borrowed_netrc_path: Option<&Path> = netrc_guard.as_deref();
 
         std::thread::scope(|s| {
             let mut thread_handles = vec![];
-            // Spawn threads for base catalog packages
-            for pkg in base_catalog_pkgs.iter() {
-                // Check if we already have the store paths for this package.
-                let all_valid_in_pre_checked = pkg
-                    .outputs
-                    .values()
-                    .all(|store_path| pre_checked_store_paths.valid(store_path).unwrap_or(false));
-                if all_valid_in_pre_checked {
-                    continue;
-                }
-                let handle = s.spawn(|| {
-                    Self::realise_single_base_catalog_pkg(
-                        pkg,
-                        gc_root_base_path,
-                        span.clone(),
-                        &semaphore,
-                    )
-                });
-                thread_handles.push(handle);
-            }
-            // Spawn threads for custom catalog packages if there were any
+
+            // Substitute all base catalog and store path packages in a single
+            // batched nix build invocation, running in parallel with any custom
+            // catalog downloads below.
+            let batch_handle = s.spawn(|| {
+                Self::realise_base_and_store_batch(
+                    &base_catalog_pkgs,
+                    &store_path_pkgs,
+                    span.clone(),
+                    &semaphore,
+                )
+            });
+            thread_handles.push(batch_handle);
+
+            // Custom catalog packages run in parallel with the batch above.
             if let Some(ref store_locations) = store_locations {
                 for pkg in custom_catalog_pkgs.iter() {
-                    // Check if we already have the store paths for this package.
-                    let all_valid_in_pre_checked = pkg.outputs.values().all(|store_path| {
-                        pre_checked_store_paths.valid(store_path).unwrap_or(false)
-                    });
-                    if all_valid_in_pre_checked {
+                    // Check if we already have the store paths for this package via stat().
+                    if pkg.outputs.values().all(|p| path_is_present(p.as_str())) {
                         continue;
                     }
                     let handle = s.spawn(|| {
                         Self::realise_single_custom_catalog_pkg(
                             pkg,
-                            gc_root_base_path,
                             store_locations,
                             no_netrc_is_error,
                             borrowed_netrc_path,
@@ -483,24 +383,6 @@ where
                     thread_handles.push(handle);
                 }
             }
-            for pkg in store_path_pkgs.iter() {
-                if pre_checked_store_paths
-                    .valid(&pkg.store_path)
-                    .unwrap_or(false)
-                {
-                    continue;
-                }
-                let handle = s.spawn(|| {
-                    Self::realise_single_store_path(
-                        pkg,
-                        gc_root_base_path,
-                        pre_checked_store_paths,
-                        span.clone(),
-                        &semaphore,
-                    )
-                });
-                thread_handles.push(handle);
-            }
 
             join_realise_results(thread_handles)
         })?;
@@ -510,7 +392,7 @@ where
         // worried about potentially running out of memory if we end up building
         // multiple things from source at a single time.
         for flake in flake_pkgs.iter() {
-            self.realise_flake(flake, pre_checked_store_paths)?;
+            Self::realise_flake(flake)?;
         }
 
         Ok(())
@@ -530,10 +412,9 @@ where
     /// from the provided store info locations fails.
     fn realise_single_custom_catalog_pkg(
         locked_pkg: &LockedPackageCatalog,
-        gc_root_base_dir: &Path,
         store_locations: &HashMap<String, Vec<StoreInfo>>,
         no_netrc_is_error: bool,
-        maybe_netrc_path: Option<&PathBuf>,
+        maybe_netrc_path: Option<&Path>,
         parent_span: Span,
         semaphore: &Semaphore,
     ) -> Result<(), BuildEnvError> {
@@ -621,16 +502,7 @@ where
                 // If we failed, log the error and try the next location.
                 debug!(%attr_path, %drv, %location_url, %stderr, "Failed to copy custom package from store");
             } else {
-                debug!(%attr_path, %drv, %location_url, "Succesfully copied custom package from store");
-
-                // TODO: there is a real but very short period between the successful copy
-                // and setting the gc root in which the path _could_ be collected as garbage,
-                // which we could guard against by wrapping the copy/link/check in a loop.
-                // At this point its not clear whether that is worth the additional complexity.
-                create_gc_root_in(
-                    locked_pkg.outputs.values(),
-                    gc_root_base_dir.join(format!("by-iid/{}", locked_pkg.install_id)),
-                )?;
+                debug!(%attr_path, %drv, %location_url, "Successfully copied custom package from store");
 
                 any_location_succeeded = true;
 
@@ -649,12 +521,7 @@ where
         if not_found_in_custom_catalogs {
             drop(_sem_guard);
             drop(_span_guard);
-            let res = Self::realise_single_base_catalog_pkg(
-                locked_pkg,
-                gc_root_base_dir,
-                span,
-                semaphore,
-            );
+            let res = Self::realise_single_base_catalog_pkg(locked_pkg, span, semaphore);
             match res {
                 Ok(()) => return Ok(()),
                 Err(fallback_err) => {
@@ -687,18 +554,111 @@ where
         }
     }
 
+    /// Substitute all base catalog and store path packages in a single
+    /// `nix build --no-link --keep-going` invocation.
+    ///
+    /// `--keep-going` ensures that as many paths as possible are fetched even
+    /// when some are unavailable, so the per-package fallback below only needs
+    /// to handle packages that genuinely failed. On partial failure the
+    /// fallback runs per-package to surface accurate `Realise2` errors with
+    /// install IDs and messages.
+    fn realise_base_and_store_batch(
+        base_catalog_pkgs: &[&LockedPackageCatalog],
+        store_path_pkgs: &[&LockedPackageStorePath],
+        span: Span,
+        semaphore: &Semaphore,
+    ) -> Result<(), BuildEnvError> {
+        let missing: Vec<String> = base_catalog_pkgs
+            .iter()
+            .flat_map(|pkg| pkg.outputs.values())
+            .chain(store_path_pkgs.iter().map(|pkg| &pkg.store_path))
+            .filter(|p| !path_is_present(p.as_str()))
+            .cloned()
+            .collect();
+
+        if missing.is_empty() {
+            return Ok(());
+        }
+
+        debug!(count = missing.len(), "substituting store paths in batch");
+
+        let mut cmd = Self::base_command();
+        cmd.arg("build")
+            .arg("--no-link")
+            .arg("--keep-going")
+            .args(&missing);
+
+        // Acquire one semaphore slot for the batch subprocess, consistent with
+        // the per-package helpers. The slot is released before the per-package
+        // fallback below so fallback calls can each acquire their own slot.
+        let output = {
+            let _guard = semaphore.wait();
+            cmd.output().map_err(BuildEnvError::CallNixBuild)?
+        };
+        if output.status.success() {
+            return Ok(());
+        }
+
+        debug!(
+            stderr = %String::from_utf8_lossy(&output.stderr),
+            "batch substitution partially failed, falling back to per-package for error reporting"
+        );
+
+        // Per-package fallback: only process packages whose paths are still
+        // missing after the batch attempt. Collect all errors rather than
+        // short-circuiting on the first failure so every broken package is
+        // attempted and logged.
+        let mut errors: Vec<BuildEnvError> = Vec::new();
+        for pkg in base_catalog_pkgs {
+            if pkg.outputs.values().all(|p| path_is_present(p.as_str())) {
+                continue;
+            }
+            if let Err(e) = Self::realise_single_base_catalog_pkg(pkg, span.clone(), semaphore) {
+                errors.push(e);
+            }
+        }
+        for pkg in store_path_pkgs {
+            if path_is_present(pkg.store_path.as_str()) {
+                continue;
+            }
+            if let Err(e) = Self::realise_single_store_path(pkg, span.clone(), semaphore) {
+                errors.push(e);
+            }
+        }
+
+        match errors.len() {
+            0 => Ok(()),
+            1 => Err(errors.into_iter().next().unwrap()),
+            n => {
+                for e in &errors {
+                    debug!(error = %e, "per-package realisation failed");
+                }
+                Err(BuildEnvError::Other(format!(
+                    "{n} packages failed to realise; first error: {}",
+                    errors[0]
+                )))
+            },
+        }
+    }
+
     /// Tries to substitute a single base catalog package, assuming that we have
     /// its metadata, but that the binary lives in the upstream Nix cache
     /// (e.g cache.nixos.org).
     fn realise_single_base_catalog_pkg(
         locked_pkg: &LockedPackageCatalog,
-        gc_root_base_dir: &Path,
         span: Span,
         semaphore: &Semaphore,
     ) -> Result<(), BuildEnvError> {
         let _guard = semaphore.wait();
 
-        let gc_root_path = gc_root_base_dir.join(format!("by-iid/{}", locked_pkg.install_id));
+        // Fast path: all outputs already present on disk.
+        if locked_pkg
+            .outputs
+            .values()
+            .all(|p| path_is_present(p.as_str()))
+        {
+            return Ok(());
+        }
 
         // Attempt to download the store paths associated with the package outputs.
         let all_valid_after_build_or_substitution = {
@@ -707,9 +667,7 @@ where
                 "substitute catalog package",
                 progress = format!("Downloading '{}'", locked_pkg.attr_path)
             );
-            span.in_scope(|| {
-                Self::check_store_path_with_substituters(&gc_root_path, locked_pkg.outputs.values())
-            })?
+            span.in_scope(|| Self::try_substitute_store_paths(locked_pkg.outputs.values()))?
         };
 
         // If all store paths are valid after substitution, we can return early.
@@ -754,7 +712,7 @@ where
         };
 
         let _span = info_span!(
-            parent: span,
+            parent: span.clone(),
             "build from catalog",
             progress = format!("Building '{}' from source{reason}", locked_pkg.attr_path)
         )
@@ -768,8 +726,7 @@ where
         nix_build_command.arg("--no-write-lock-file");
         nix_build_command.arg("--no-update-lock-file");
         nix_build_command.args(["--option", "pure-eval", "true"]);
-        nix_build_command.arg("--out-link");
-        nix_build_command.arg(&gc_root_path);
+        nix_build_command.arg("--no-link");
         nix_build_command.arg(&installable);
 
         debug!(%installable, cmd=%nix_build_command.display(), "building catalog package");
@@ -797,27 +754,20 @@ where
     /// and building the package with essentially `nix build <flake-url>#<attr-path>^*`.
     /// We set `--option pure-eval true` to avoid improve reproducibility,
     /// and allow the use of the eval-cache to avoid costly re-evaluations.
-    /// When building or substituting sets GC temp roots for the _new_ paths.
-    #[instrument(skip(self), fields(progress = format!("Realising flake package '{}'", locked.install_id)))]
-    fn realise_flake(
-        &self,
-        locked: &LockedPackageFlake,
-        pre_checked_store_paths: &CheckedStorePaths,
-    ) -> Result<(), BuildEnvError> {
-        let all_valid_in_pre_checked = locked
+    ///
+    /// Note: an earlier version of this function performed a second stat check
+    /// after a successful build to detect the "became valid in the meantime" case.
+    /// That check is now provided by the outer [`materialise_with_retry`] loop,
+    /// which re-stats all expected paths before calling `buildenv.nix`.
+    #[instrument(skip_all, fields(progress = format!("Realising flake package '{}'", locked.install_id)))]
+    fn realise_flake(locked: &LockedPackageFlake) -> Result<(), BuildEnvError> {
+        // Fast path: all outputs already present on disk.
+        if locked
             .locked_installable
             .outputs
             .values()
-            .all(|path| pre_checked_store_paths.valid(path).unwrap_or_default());
-
-        // check if all store paths are valid, if so, return without eval
-        if all_valid_in_pre_checked {
-            return Ok(());
-        }
-
-        // check if store paths have _become_ valid in the meantime
-        let all_valid = self.check_store_path(locked.locked_installable.outputs.values())?;
-        if all_valid {
+            .all(|p| path_is_present(p.as_str()))
+        {
             return Ok(());
         }
 
@@ -841,8 +791,7 @@ where
         nix_build_command.arg("--no-write-lock-file");
         nix_build_command.arg("--no-update-lock-file");
         nix_build_command.args(["--option", "pure-eval", "true"]);
-        nix_build_command.arg("--out-link");
-        nix_build_command.arg(self.new_gc_root_path(format!("by-iid/{}", locked.install_id)));
+        nix_build_command.arg("--no-link");
         nix_build_command.arg(&installable);
 
         debug!(%installable, cmd=%nix_build_command.display(), "building flake package:");
@@ -868,28 +817,23 @@ where
     /// This function will return an error.
     fn realise_single_store_path(
         locked: &LockedPackageStorePath,
-        gc_root_base_path: &Path,
-        pre_checked_store_paths: &CheckedStorePaths,
         parent_span: Span,
         semaphore: &Semaphore,
     ) -> Result<(), BuildEnvError> {
         let _guard = semaphore.wait();
-        let pre_valid = pre_checked_store_paths
-            .valid(&locked.store_path)
-            .unwrap_or_default();
 
-        let valid = pre_valid || {
+        // Fast path: already present on disk.
+        if path_is_present(locked.store_path.as_str()) {
+            return Ok(());
+        }
+
+        let valid = {
             let span = info_span!(
-                parent: parent_span,
+                parent: parent_span.clone(),
                 "substitute store path",
                 progress = format!("Downloading '{}'", locked.store_path)
             );
-            span.in_scope(|| {
-                Self::check_store_path_with_substituters(
-                    &gc_root_base_path.join(format!("by-store-path/{}", &locked.store_path)),
-                    [&locked.store_path],
-                )
-            })?
+            span.in_scope(|| Self::try_substitute_store_paths([&locked.store_path]))?
         };
 
         if !valid {
@@ -901,64 +845,39 @@ where
         Ok(())
     }
 
-    /// Check if the given store paths exists in the configured nix store.
-    /// Substitute store paths if necessary and possible.
-    /// Sets a gc root in [Self::gc_root_base_path] on success.
+    /// Fetch the given store paths via `nix build --no-link`, which will
+    /// download from configured substituters or build from source if needed.
     ///
-    /// This methods is expected to be called _for all outputs of a derivation_
-    /// iff any output of the derivation has formerly been identified as invalid
-    /// by [Self::pre_check_store_paths].
-    ///
-    /// To avoid GC of substituted paths, pass an `--out-links` argument,
-    /// to create "temproots".
-    fn check_store_path_with_substituters(
-        gc_root_path: &Path,
+    /// Returns `true` if all paths were fetched successfully, `false`
+    /// otherwise.
+    fn try_substitute_store_paths(
         paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
     ) -> Result<bool, BuildEnvError> {
+        let paths: Vec<_> = paths.into_iter().collect();
+
         let mut cmd = Self::base_command();
         cmd.arg("build");
-        cmd.arg("--out-link");
-        cmd.arg(gc_root_path);
+        cmd.arg("--no-link");
         cmd.args(paths);
 
-        debug!(cmd=%cmd.display(), "checking store paths, including substituters");
+        debug!(cmd=%cmd.display(), "trying to fetch store paths");
 
-        let success = cmd
-            .output()
-            .map_err(BuildEnvError::CallNixBuild)?
-            .status
-            .success();
-
+        let output = cmd.output().map_err(BuildEnvError::CallNixBuild)?;
+        let success = output.status.success();
+        if !success {
+            debug!(
+                stderr = %String::from_utf8_lossy(&output.stderr),
+                "store path fetch failed"
+            );
+        }
         Ok(success)
-    }
-
-    /// Check if the given store paths _exists_ on the filesystem.
-    ///
-    /// If the store paths do not exist,
-    /// the function will fall back to querying the nix store for the store paths.
-    /// Formerly, this function checked the store paths with `nix path-info` immediately,
-    /// which would also ensure the integrity of the references of the store paths.
-    /// However, the runtime profile of the `nix path-info` command
-    /// has significant overhead for large environments.
-    /// 50ms to 100ms per package in an environment of 50 packages,
-    /// is very noticeable.
-    /// To address this we replace the nix call with a number of `stat`
-    /// calls for the paths that are checked, with the optimistic assumption
-    /// that if a path exists, it and its references are valid.
-    /// If they are not, we fall back to the nix call,
-    /// which allows checking against alternative stores.
-    fn check_store_path(
-        &self,
-        paths: impl IntoIterator<Item = impl AsRef<str> + Hash + Eq>,
-    ) -> Result<bool, BuildEnvError> {
-        Ok(check_store_paths(paths)?.all_valid())
     }
 
     /// Build the environment by evaluating and building
     /// the `buildenv.nix` expression.
     ///
     /// The `buildenv.nix` reads the lockfile and composes
-    /// an environment derivation, with outputs for the `develop` and `runtime` modes,
+    /// an environment derivation, with outputs for the `dev` and `run` modes,
     /// as well as additional outputs for each manifest build.
     /// Note that the `buildenv.nix` expression **does not** build any of the packages!
     /// Instead it will exclusively use the store paths of the packages,
@@ -971,9 +890,15 @@ where
         &self,
         lockfile_path: &Path,
         service_config_path: Option<PathBuf>,
+        out_link_prefix: Option<&Path>,
     ) -> Result<BuildEnvOutputs, BuildEnvError> {
         let mut nix_build_command = Self::base_command();
-        nix_build_command.args(["build", "--no-link", "--offline", "--json"]);
+        nix_build_command.args(["build", "--offline", "--json"]);
+        if let Some(prefix) = out_link_prefix {
+            nix_build_command.arg("--out-link").arg(prefix);
+        } else {
+            nix_build_command.arg("--no-link");
+        }
         nix_build_command.arg("--file").arg(&*BUILDENV_NIX);
         nix_build_command
             .arg("--argstr")
@@ -1006,16 +931,22 @@ where
             });
 
         if let Ok([build_env_result]) = build_env_result {
-            return Ok(build_env_result.outputs);
+            let outputs = build_env_result.outputs;
+            remove_build_output_symlinks(out_link_prefix, &outputs);
+            return Ok(outputs);
         }
 
-        // Preexisting store paths produced by the build may have-new been (partially) swept away.
+        // Preexisting store paths produced by the build may have been (partially) swept away.
         // In that case the above `nix build` only documents the _new_ outputs.
         // A second build with the same arguments will be fully substituted and contain all outputs.
         //
-        // We only try this once because the weindow for paths to disappear between the last build
+        // We only try this once because the window for paths to disappear between the last build
         // and this one is particularly short, incorrect output is now reliably wrong
         // and should be propagated up.
+        //
+        // Note: this inner retry handles only the JSON-output-parse case (partially-swept
+        // preexisting paths producing incomplete output). GC-race retries at the materialisation
+        // level are handled by `materialise_with_retry` — do not consolidate these two loops.
         debug!(err=%build_env_result.unwrap_err(), "failed to deserialize output, retrying once");
         debug!(cmd=%nix_build_command.display(), "building environment");
 
@@ -1028,19 +959,325 @@ where
         }
 
         let [build_env_result]: [BuildEnvResultRaw; 1] = serde_json::from_slice(&output.stdout)
-            .inspect_err(|_| debug!("failed to deserialize output on second try"))
+            .inspect_err(|_| {
+                debug!("failed to deserialize output on second try");
+                remove_build_output_symlinks_by_scan(out_link_prefix);
+            })
             .map_err(|err| BuildEnvError::ReadOutputs {
                 output: String::from_utf8_lossy(&output.stdout).to_string(),
                 err,
             })?;
         let outputs = build_env_result.outputs;
+        remove_build_output_symlinks(out_link_prefix, &outputs);
         Ok(outputs)
     }
 }
 
-impl<P, A> BuildEnv for BuildEnvNix<P, A>
+/// Remove the `<prefix>-build-*` symlinks that `nix build --out-link` creates
+/// for manifest build outputs.
+///
+/// `nix build --out-link <prefix>` writes a symlink for every derivation
+/// output: `<prefix>-run`, `<prefix>-dev`, and — for environments with build
+/// sections — `<prefix>-build-<id>` for each manifest build output.  The
+/// `build-*` symlinks clutter `.flox/run/`.  We delete them immediately after
+/// the build — this also removes the GC roots for those outputs, which is
+/// intentional.  The store paths are captured in
+/// `outputs.manifest_build_runtimes` before deletion.
+fn remove_build_output_symlinks(out_link_prefix: Option<&Path>, outputs: &BuildEnvOutputs) {
+    let Some(prefix) = out_link_prefix else {
+        return;
+    };
+    for key in outputs.manifest_build_runtimes.keys() {
+        let mut link_name = prefix.as_os_str().to_owned();
+        link_name.push("-");
+        link_name.push(key.as_str());
+        let link_path = PathBuf::from(link_name);
+        if link_path.is_symlink()
+            && let Err(e) = std::fs::remove_file(&link_path)
+        {
+            debug!(path=?link_path, error=%e, "failed to remove build output symlink from run dir");
+        }
+    }
+}
+
+/// Fallback version of [`remove_build_output_symlinks`] for the error path,
+/// where we have a prefix but no parsed outputs to iterate over.  Scans the
+/// parent directory and removes any symlink whose name starts with
+/// `<prefix_filename>-build-`.
+fn remove_build_output_symlinks_by_scan(out_link_prefix: Option<&Path>) {
+    let Some(prefix) = out_link_prefix else {
+        return;
+    };
+    let Some(parent) = prefix.parent() else {
+        return;
+    };
+    let Some(prefix_name) = prefix.file_name().and_then(|n| n.to_str()) else {
+        return;
+    };
+    let scan_prefix = format!("{prefix_name}-build-");
+    let Ok(entries) = std::fs::read_dir(parent) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name_str) = name.to_str() else {
+            continue;
+        };
+        if name_str.starts_with(&scan_prefix)
+            && entry.path().is_symlink()
+            && let Err(e) = std::fs::remove_file(entry.path())
+        {
+            debug!(path=?entry.path(), error=%e, "failed to remove build output symlink from run dir");
+        }
+    }
+}
+
+/// Apply the `_FLOX_NIX_STORE_URL` store override to `cmd` if set, so that
+/// Nix commands spawned outside of `BuildEnvNix::base_command` (e.g. the
+/// daemon-check and force-registration commands) target the same store as the
+/// rest of environment construction.
+fn apply_nix_store_url(cmd: &mut Command) {
+    match std::env::var("_FLOX_NIX_STORE_URL").ok().as_deref() {
+        None | Some("") => {
+            debug!("using 'auto' store");
+        },
+        Some(store_url) => {
+            debug!(%store_url, "overriding Nix store URL");
+            cmd.args(["--option", "store", store_url]);
+        },
+    }
+}
+
+/// Queries the Nix daemon's store database for `paths` using `nix path-info
+/// --json` and returns those that the daemon returns as `null` (i.e. paths
+/// that may be present on the filesystem but are not registered in the
+/// database).
+fn nix_path_info_null_paths(paths: &[String]) -> Result<Vec<String>, std::io::Error> {
+    if paths.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut cmd = nix_base_command();
+    apply_nix_store_url(&mut cmd);
+    let output = cmd.args(["path-info", "--json"]).args(paths).output()?;
+    if !output.status.success() {
+        return Err(std::io::Error::other(format!(
+            "nix path-info exited {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    let map: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_slice(&output.stdout).map_err(std::io::Error::other)?;
+    Ok(map
+        .into_iter()
+        .filter_map(|(path, value)| value.is_null().then_some(path))
+        .collect())
+}
+
+/// Retry loop for materialisation and environment construction.
+///
+/// Calls `realise` to materialise store paths, then `missing_paths` to detect
+/// any GC'd paths in the window between materialisation and the `buildenv.nix`
+/// run. Missing paths after a successful `realise` indicate concurrent GC:
+/// retry if attempts remain, or return
+/// [`BuildEnvError::MaterialisationFailed`].
+///
+/// If `build_env` fails, `missing_paths` is called again to determine the
+/// cause:
+/// - Paths now missing: GC occurred between the pre-build stat and the
+///   `buildenv.nix` run — retry if attempts remain, or return
+///   [`BuildEnvError::MaterialisationFailed`].
+/// - All paths still present per stat: `nix path-info --json` is run to
+///   check the Nix daemon's store database.  If the daemon confirms all
+///   paths are registered, retrying is still allowed because there is a
+///   race window: a path can arrive on disk (passing stat()) before the
+///   Nix daemon records it in its SQLite database (causing
+///   `builtins.storePath` to fail), then the DB registration completes
+///   before `nix path-info` runs.  Remaining retries are used to resolve
+///   that window; the error is only propagated once retries are exhausted.
+///   If the daemon returns `null` for any paths they are present on the
+///   filesystem but not registered (e.g. a CI cache that bypassed the
+///   daemon).  Those paths are force-registered with
+///   `nix build --no-link --keep-going` and the attempt is retried.
+///
+/// `realise` errors always propagate immediately; a path that never appeared
+/// in the store is not a GC race.
+///
+/// `expected_paths` returns the full list of store paths the environment
+/// depends on. It is called once per attempt for diagnostic logging and
+/// for the `nix path-info` store-database check on failure.
+fn materialise_with_retry(
+    mut realise: impl FnMut() -> Result<(), BuildEnvError>,
+    mut missing_paths: impl FnMut() -> Vec<String>,
+    expected_paths: impl Fn() -> Vec<String>,
+    mut build_env: impl FnMut() -> Result<BuildEnvOutputs, BuildEnvError>,
+) -> Result<BuildEnvOutputs, BuildEnvError> {
+    const MAX_RETRIES: usize = 3;
+    for attempt in 1..=MAX_RETRIES {
+        realise()?;
+        let missing = missing_paths();
+        if !missing.is_empty() {
+            if attempt < MAX_RETRIES {
+                debug!(
+                    ?missing,
+                    attempt,
+                    MAX_RETRIES,
+                    "store paths missing after materialisation, GC suspected — retrying"
+                );
+                continue;
+            }
+            const MAX_DISPLAY: usize = 5;
+            let total = missing.len();
+            let display = if total <= MAX_DISPLAY {
+                missing.join("\n  ")
+            } else {
+                format!(
+                    "{}\n  ... and {} more",
+                    missing[..MAX_DISPLAY].join("\n  "),
+                    total - MAX_DISPLAY
+                )
+            };
+            debug!(paths = ?missing, "full list of missing store paths after exhausting retries");
+            return Err(BuildEnvError::MaterialisationFailed {
+                attempts: MAX_RETRIES,
+                paths: display,
+            });
+        }
+        let confirmed = expected_paths();
+        debug!(
+            attempt,
+            MAX_RETRIES,
+            paths = ?confirmed,
+            "all store paths present per stat(), calling buildenv.nix"
+        );
+        match build_env() {
+            Ok(outputs) => return Ok(outputs),
+            Err(e) => {
+                // Re-stat to distinguish a GC race from a deterministic
+                // failure. A path that was present before build_env but is
+                // gone afterwards means GC swept it during the run — retry.
+                // If all paths are still present, check nix path-info to
+                // determine whether a DB-registration race or a genuinely
+                // deterministic failure (bad lockfile, spawn error) is the
+                // cause.
+                let missing_after = missing_paths();
+                if missing_after.is_empty() {
+                    // All paths still present per stat() — check whether the
+                    // Nix daemon agrees. CI caches may restore store content
+                    // by copying files directly to /nix/store, bypassing the
+                    // daemon, leaving paths on disk but unregistered.
+                    match nix_path_info_null_paths(&confirmed) {
+                        Ok(null_paths) if null_paths.is_empty() => {
+                            // Daemon confirms all paths are registered. This is
+                            // usually a genuine deterministic failure, but there
+                            // is a race: a path can arrive on disk (passing
+                            // stat()) before the Nix daemon records it in its DB
+                            // (causing builtins.storePath to fail), then the DB
+                            // registration completes before nix path-info runs.
+                            // Allow remaining retries to resolve that window;
+                            // only treat it as deterministic once retries are
+                            // exhausted.
+                            if attempt < MAX_RETRIES {
+                                warn!(
+                                    error = %e,
+                                    attempt,
+                                    MAX_RETRIES,
+                                    "buildenv.nix failed with all paths confirmed in Nix store — possible DB-registration race, retrying"
+                                );
+                                continue;
+                            }
+                            warn!(
+                                error = %e,
+                                attempt,
+                                MAX_RETRIES,
+                                "buildenv.nix failed with all paths confirmed in Nix store after all retries — treating as deterministic"
+                            );
+                            return Err(e);
+                        },
+                        Ok(null_paths) => {
+                            // Some paths are on disk but not registered with
+                            // the daemon. Force-register them, then retry.
+                            warn!(
+                                ?null_paths,
+                                attempt,
+                                MAX_RETRIES,
+                                "buildenv.nix failed: paths present on filesystem but \
+                                not registered in Nix store — force-registering and retrying"
+                            );
+                            let mut reg_cmd = nix_base_command();
+                            apply_nix_store_url(&mut reg_cmd);
+                            let reg = reg_cmd
+                                .arg("build")
+                                .arg("--no-link")
+                                .arg("--keep-going")
+                                .args(&null_paths)
+                                .output()
+                                .map_err(BuildEnvError::CallNixBuild)?;
+                            if !reg.status.success() {
+                                warn!(
+                                    error = %e,
+                                    status = %reg.status,
+                                    stderr = %String::from_utf8_lossy(&reg.stderr),
+                                    "failed to register unregistered paths — \
+                                    propagating original error"
+                                );
+                                return Err(e);
+                            }
+                            if attempt < MAX_RETRIES {
+                                continue;
+                            }
+                            // Last attempt: paths are now registered, try
+                            // build_env once more without burning another
+                            // loop iteration.
+                            return build_env();
+                        },
+                        Err(path_info_err) => {
+                            warn!(
+                                error = %e,
+                                path_info_error = %path_info_err,
+                                attempt,
+                                MAX_RETRIES,
+                                "buildenv.nix failed and nix path-info check errored \
+                                — treating as deterministic"
+                            );
+                            return Err(e);
+                        },
+                    }
+                }
+                if attempt < MAX_RETRIES {
+                    debug!(
+                        ?missing_after,
+                        error = %e,
+                        attempt,
+                        MAX_RETRIES,
+                        "store paths went missing during buildenv.nix, GC suspected — retrying"
+                    );
+                    continue;
+                }
+                const MAX_DISPLAY: usize = 5;
+                let total = missing_after.len();
+                let display = if total <= MAX_DISPLAY {
+                    missing_after.join("\n  ")
+                } else {
+                    format!(
+                        "{}\n  ... and {} more",
+                        missing_after[..MAX_DISPLAY].join("\n  "),
+                        total - MAX_DISPLAY
+                    )
+                };
+                debug!(paths = ?missing_after, "full list of missing store paths after exhausting retries");
+                return Err(BuildEnvError::MaterialisationFailed {
+                    attempts: MAX_RETRIES,
+                    paths: display,
+                });
+            },
+        }
+    }
+    unreachable!("retry loop always returns")
+}
+
+impl<A> BuildEnv for BuildEnvNix<A>
 where
-    P: AsRef<Path>,
     A: AuthProvider,
 {
     #[instrument(skip_all, fields(progress = "Building environment"))]
@@ -1049,6 +1286,7 @@ where
         client: &impl ClientTrait,
         lockfile_path: &Path,
         service_config_path: Option<PathBuf>,
+        out_link_prefix: Option<&Path>,
     ) -> Result<BuildEnvOutputs, BuildEnvError> {
         // Note: currently used in a single integration test to verify,
         // that the buildenv is not called a second time for remote environments,
@@ -1078,21 +1316,6 @@ where
             });
         }
 
-        // Check all store paths of the lockfile packages,
-        // for validity _in the current store_ as a single bulk operation.
-        // This is a performance optimization to avoid the overhead
-        // of individual `nix path-info` calls per package.
-        // `nix path-info` takes about 50ms to 100ms per call,
-        // most of which is overhead, since empirically
-        // the command shows relatively constant runtime with the number of paths.
-        // However, for large environments with many packages,
-        // the individual calls add up.
-        // Instead we use `nix path-info --stdin` to check all paths at once,
-        // and pass on the result as a cache to the `realise` step,
-        // which can query the validity of paths efficiently on a per package basis.
-        let pre_checked_store_paths =
-            self.pre_check_store_paths(&lockfile, &env!("NIX_TARGET_SYSTEM").to_string())?;
-
         // Realise the packages in the lockfile, for the current system.
         // "Realising" a package means to check if the associated store paths are valid
         // and otherwise building the package to _create_ valid store paths.
@@ -1103,56 +1326,43 @@ where
         // and to avoid the performance degradation of building
         // from within an impurely evaluated nix expression.
         //
-        // TODO:
-        // Eventually we want to retrieve a record of the built store paths,
-        // to pass explicitly to the `buildenv.nix` expression.
-        // This will prevent failures due to e.g. non-deterministic,
-        // non-sandboxed manifest builds which may produce different store paths,
-        // than previously locked in the lockfile.
-        self.realise_lockfile(
-            client,
-            &lockfile,
-            &env!("NIX_TARGET_SYSTEM").to_string(),
-            &pre_checked_store_paths,
-        )?;
-
-        // Build the lockfile by evaluating and building the `buildenv.nix` expression.
-        let outputs = self.call_buildenv_nix(lockfile_path, service_config_path)?;
-
-        Ok(outputs)
-    }
-}
-
-/// A helper struct to keep track of the store paths that have been checked
-/// and which of them are valid.
-#[derive(Clone, Debug, Default)]
-struct CheckedStorePaths {
-    /// The store paths that have been checked.
-    /// The validity of `CheckedStorePaths` is limited to the store paths actually checked.
-    /// I.e. if a store path was not checked, it can not be considered valid nor invalid.
-    checked: HashSet<String>,
-    /// The store paths that have been checked and are valid.
-    /// The construction of [CheckedStorePaths], i.e. [check_store_paths]
-    /// ensures that `valid ⊆ checked`
-    valid: HashSet<String>,
-}
-
-impl CheckedStorePaths {
-    /// Check whether all checked store paths are valid.
-    fn all_valid(&self) -> bool {
-        self.checked.len() == self.valid.len()
-    }
-
-    /// Check whether a store path is valid.
-    /// If the store path has not been checked, the function will return `None`.
-    fn valid(&self, path: impl AsRef<str>) -> Option<bool> {
-        self.checked(&path)
-            .then(|| self.valid.contains(path.as_ref()))
-    }
-
-    /// Check whether a store path has been checked.
-    fn checked(&self, path: impl AsRef<str>) -> bool {
-        self.checked.contains(path.as_ref())
+        // After each materialisation pass, stat() all paths to verify none were
+        // GC'd in the narrow window between fetching and buildenv.nix running.
+        // If call_buildenv_nix fails and paths are subsequently missing, GC is
+        // suspected and the whole pass is retried. If all paths are still
+        // present after a call_buildenv_nix failure the error is treated as
+        // deterministic (spawn failure, bad lockfile, JSON parse error) and
+        // propagated immediately without retrying.
+        let system = env!("NIX_TARGET_SYSTEM").to_string();
+        let all_env_paths: Vec<String> = lockfile
+            .packages
+            .iter()
+            .filter(|pkg| pkg.system() == &system)
+            .flat_map(|pkg| match pkg {
+                LockedPackage::Catalog(p) => p.outputs.values().cloned().collect::<Vec<_>>(),
+                LockedPackage::Flake(p) => p.locked_installable.outputs.values().cloned().collect(),
+                LockedPackage::StorePath(p) => vec![p.store_path.clone()],
+            })
+            .collect();
+        materialise_with_retry(
+            || self.realise_lockfile(client, &lockfile, &system),
+            || {
+                // Check local filesystem visibility. Even when the Nix daemon
+                // runs remotely (NIX_REMOTE=ssh-ng://...), Flox requires that
+                // store paths are visible on the local filesystem — either via
+                // an NFS-mounted /nix/store or a FUSE layer that replicates
+                // paths on demand. The buildenv.nix invocation that follows
+                // also produces store paths that must be locally visible, so
+                // a local stat is the correct and sufficient check here.
+                all_env_paths
+                    .iter()
+                    .filter(|path| !path_is_present(path.as_str()))
+                    .cloned()
+                    .collect()
+            },
+            || all_env_paths.clone(),
+            || self.call_buildenv_nix(lockfile_path, service_config_path.clone(), out_link_prefix),
+        )
     }
 }
 
@@ -1195,148 +1405,6 @@ pub fn get_installed_outputs(package: &PackageToList) -> Result<Vec<String>, Man
     }
 }
 
-/// Check the validity of store paths in the nix store,
-/// without attempting to build or substitute them.
-/// The [CheckedStorePaths] struct returned by this function
-/// will be used to inform the various `realise_*` functions,
-/// whether a package needs to be built or substituted.
-///
-/// SAFTETY: [CheckedStorePaths] poses the risk of TOCTOU issues,
-/// especially when held for a long time.
-/// We acknowledge, that store paths might be _created_,
-/// after [CheckedStorePaths] is created;
-/// Consumers may check the validity of invalid store paths again
-/// before attempting expensive operations like building or substituting,
-/// in case the paths have been created separately in the meantime.
-/// However, we assume that the store paths are not being _deleted_,
-/// which would invalidate the [CheckedStorePaths] struct.
-/// Concurrent deletion of store paths is a rare event,
-/// but can lead to intermittent build failures.
-/// Since the nix store is not in our control, or transactional,
-/// we accept this risk as a trade-off for performance and try to mitigate it
-/// by limiting the scope/lifetime of the [CheckedStorePaths] struct.
-fn check_store_paths(
-    paths: impl IntoIterator<Item = impl AsRef<str> + Eq + Hash>,
-) -> Result<CheckedStorePaths, BuildEnvError> {
-    let mut command = nix::nix_base_command();
-    command.stdin(Stdio::piped());
-    command.stderr(Stdio::null());
-    command.stdout(Stdio::piped());
-    command.args(["path-info", "--offline", "--stdin"]);
-
-    debug!(cmd=%command.display(), "bulk checking validity of store_paths (paths passed to stdin)");
-
-    let mut child = command.spawn().map_err(BuildEnvError::CallNixBuild)?;
-    let stdin = child.stdin.as_mut().unwrap();
-
-    let paths = paths
-        .into_iter()
-        .map(|p| p.as_ref().to_string())
-        .collect::<HashSet<_>>();
-
-    for path in paths.iter() {
-        trace!(%path, "checking validity of store path");
-        writeln!(stdin, "{path}").map_err(BuildEnvError::WriteNixStdin)?;
-    }
-
-    stdin.flush().map_err(BuildEnvError::WriteNixStdin)?;
-
-    let output = child
-        .wait_with_output()
-        .map_err(BuildEnvError::CallNixBuild)?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let valid_paths = stdout
-        .lines()
-        .map(|p| p.to_string())
-        .collect::<HashSet<_>>();
-
-    Ok(CheckedStorePaths {
-        checked: paths,
-        valid: valid_paths,
-    })
-}
-
-/// Create GC roots for the given store paths.
-/// All provided paths must exist and be valid.
-/// It's recommended to run [check_store_paths] to verify the validity of the paths.
-/// If a gc process may be runnin in the background there is a short time
-/// in which paths returned as valid by [check_store_paths] are deleted
-/// before a temproot can be set.
-/// In that case checking and setting gc-roots can be retried safely
-/// until setting gc roots succeeds.
-///
-/// Gc roots are created in the provided `gc_root_base_dir`
-/// with a unique prefix _per call_ to this function:
-///
-/// ```text
-/// <basedir>/
-///     gc-root.rqw2rr3-1
-///     gc-root.rqw2rr3-2
-///     gc-root.rqw2rr3-3
-///     gc-root.i1343ca-1   # separate call to create_gc_root_in()
-/// ```
-///
-/// as they would otherwise override exiting roots.
-/// It is advisable to place the <basedir> under `/tmp`
-/// to allow paths to be GC'd eventually if they are otherwise unused.
-pub(crate) fn create_gc_root_in(
-    paths: impl IntoIterator<Item = impl AsRef<Path>>,
-    gc_root_prefix: impl AsRef<Path>,
-) -> Result<(), BuildEnvError> {
-    let paths = paths
-        .into_iter()
-        .map(|p| p.as_ref().to_string_lossy().into_owned())
-        .collect::<HashSet<_>>();
-
-    if paths.is_empty() {
-        debug!("no paths to create gc roots for, skipping");
-        return Ok(());
-    }
-
-    let mut command = nix::nix_base_command();
-    command.stdin(Stdio::piped());
-    command.stderr(Stdio::piped());
-    command.stdout(Stdio::piped());
-    command.args(["build", "--stdin"]);
-    // avoid substitution or builds
-    command.args(["--offline", "-j", "0"]);
-    command.arg("--out-link");
-    command.arg(gc_root_prefix.as_ref());
-
-    let paths_arg = paths
-        .iter()
-        .map(|s| s.as_str())
-        .collect::<Vec<_>>()
-        .join(" ");
-
-    debug!(
-        cmd = format!("echo '{}' | {}", paths_arg, command.display()),
-        "bulk setting gc roots for store_paths"
-    );
-
-    let mut child = command.spawn().map_err(BuildEnvError::CallNixBuild)?;
-    let stdin = child.stdin.as_mut().unwrap();
-
-    for path in paths.iter() {
-        trace!(%path, "setting gc root for store path");
-        writeln!(stdin, "{path}").map_err(BuildEnvError::WriteNixStdin)?;
-    }
-
-    stdin.flush().map_err(BuildEnvError::WriteNixStdin)?;
-
-    let output = child
-        .wait_with_output()
-        .map_err(BuildEnvError::CallNixBuild)?;
-
-    if !output.status.success() {
-        return Err(BuildEnvError::Link(
-            String::from_utf8_lossy(&output.stderr).into_owned(),
-        ));
-    }
-
-    Ok(())
-}
-
 /// Join all realise (download) thread handles, returning the first error encountered.
 /// Thread panics are reported when no threads return an error.
 fn join_realise_results(
@@ -1369,15 +1437,25 @@ fn join_realise_results(
 
 #[cfg(test)]
 mod test_helpers {
+    pub(super) use flox_test_utils::init_tracing;
     use tempfile::TempDir;
 
     use super::*;
     use crate::providers::nix_auth::NixAuth;
 
-    pub(super) fn buildenv_instance() -> BuildEnvNix<TempDir, NixAuth> {
-        let tempdir = TempDir::new().unwrap();
+    pub(super) fn buildenv_instance() -> BuildEnvNix<NixAuth> {
+        init_tracing();
         let auth = NixAuth::from_tempdir_and_token(TempDir::new().unwrap(), None);
-        BuildEnvNix::new(tempdir, auth)
+        BuildEnvNix::new(auth)
+    }
+
+    /// Check if the given store paths exist on the local filesystem via
+    /// `stat(2)`. Fast, optimistic check used in tests to assert presence
+    /// before and after realisation.
+    pub(super) fn check_store_path(
+        paths: impl IntoIterator<Item = impl AsRef<str>>,
+    ) -> Result<bool, BuildEnvError> {
+        Ok(paths.into_iter().all(|p| path_is_present(p.as_ref())))
     }
 }
 
@@ -1391,7 +1469,6 @@ mod realise_nixpkgs_tests {
     use flox_test_utils::GENERATED_DATA;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
-    use test_helpers::buildenv_instance;
 
     use super::*;
     use crate::providers::nix::test_helpers::known_store_path;
@@ -1417,18 +1494,17 @@ mod realise_nixpkgs_tests {
         // especially if they are built by a previous run of the test suite.
         // hence we can't check if they are invalid before building.
 
-        let buildenv = buildenv_instance();
+        test_helpers::init_tracing();
 
-        let result = BuildEnvNix::<PathBuf, NixAuth>::realise_single_base_catalog_pkg(
+        let result = BuildEnvNix::<NixAuth>::realise_single_base_catalog_pkg(
             &locked_package,
-            buildenv.gc_root_base_path.path(),
             Span::current(),
             &Semaphore::new(1, 1),
         );
         assert!(result.is_ok());
 
         // Note: per the above this may be incidentally true
-        assert!(buildenv.check_store_path([original_store_path]).unwrap());
+        assert!(test_helpers::check_store_path([original_store_path]).unwrap());
     }
 
     /// When a package is available in the store, it should not be evaluated or built.
@@ -1440,10 +1516,8 @@ mod realise_nixpkgs_tests {
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
 
         // build the package to ensure it is in the store
-        let buildenv = buildenv_instance();
-        BuildEnvNix::<PathBuf, NixAuth>::realise_single_base_catalog_pkg(
+        BuildEnvNix::<NixAuth>::realise_single_base_catalog_pkg(
             &locked_package,
-            buildenv.gc_root_base_path.path(),
             Span::current(),
             &Semaphore::new(1, 1),
         )
@@ -1451,9 +1525,8 @@ mod realise_nixpkgs_tests {
 
         // replace the attr_path with one that is known to fail to evaluate
         locked_package.attr_path = "AAAAAASomeThingsFailToEvaluate".to_string();
-        BuildEnvNix::<PathBuf, NixAuth>::realise_single_base_catalog_pkg(
+        BuildEnvNix::<NixAuth>::realise_single_base_catalog_pkg(
             &locked_package,
-            buildenv.gc_root_base_path.path(),
             Span::current(),
             &Semaphore::new(1, 1),
         )
@@ -1463,7 +1536,7 @@ mod realise_nixpkgs_tests {
     /// Realising a nixpkgs package should fail if the output is not valid
     /// and cannot be built.
     /// Here we are testing the case where the attribute fails to evaluate.
-    /// Generally we expect pacakges from the catalog to be able to evaluate,
+    /// Generally we expect packages from the catalog to be able to evaluate,
     /// iff the catalog server was able to evaluate them before.
     /// This test is a catch-all for all kinds of eval failures.
     /// Eval failures for **unfree** and **broken** packages should be prevented,
@@ -1483,10 +1556,8 @@ mod realise_nixpkgs_tests {
         // replace the attr_path with one that is known to fail to evaluate
         locked_package.attr_path = "AAAAAASomeThingsFailToEvaluate".to_string();
 
-        let buildenv = buildenv_instance();
-        let result = BuildEnvNix::<PathBuf, NixAuth>::realise_single_base_catalog_pkg(
+        let result = BuildEnvNix::<NixAuth>::realise_single_base_catalog_pkg(
             &locked_package,
-            buildenv.gc_root_base_path.path(),
             Span::current(),
             &Semaphore::new(1, 1),
         );
@@ -1515,10 +1586,8 @@ mod realise_nixpkgs_tests {
             invalid_store_path,
         );
 
-        let buildenv = buildenv_instance();
-        let result = BuildEnvNix::<PathBuf, NixAuth>::realise_single_base_catalog_pkg(
+        let result = BuildEnvNix::<NixAuth>::realise_single_base_catalog_pkg(
             &locked_package,
-            buildenv.gc_root_base_path.path(),
             Span::current(),
             &Semaphore::new(1, 1),
         );
@@ -1547,10 +1616,8 @@ mod realise_nixpkgs_tests {
             invalid_store_path,
         );
 
-        let buildenv = buildenv_instance();
-        let result = BuildEnvNix::<PathBuf, NixAuth>::realise_single_base_catalog_pkg(
+        let result = BuildEnvNix::<NixAuth>::realise_single_base_catalog_pkg(
             &locked_package,
-            buildenv.gc_root_base_path.path(),
             Span::current(),
             &Semaphore::new(1, 1),
         );
@@ -1592,10 +1659,8 @@ mod realise_nixpkgs_tests {
             map
         };
 
-        let buildenv = buildenv_instance();
-        let subst_resp = BuildEnvNix::<PathBuf, NixAuth>::realise_single_custom_catalog_pkg(
+        let subst_resp = BuildEnvNix::<NixAuth>::realise_single_custom_catalog_pkg(
             &locked_package,
-            buildenv.gc_root_base_path.path(),
             &store_locations,
             true,
             None,
@@ -1637,11 +1702,9 @@ mod realise_nixpkgs_tests {
             map
         };
 
-        let buildenv = buildenv_instance();
-        let dummy_netrc = Some(&PathBuf::from("/netrc"));
-        let subst_resp = BuildEnvNix::<PathBuf, NixAuth>::realise_single_custom_catalog_pkg(
+        let dummy_netrc = Some(Path::new("/netrc"));
+        let subst_resp = BuildEnvNix::<NixAuth>::realise_single_custom_catalog_pkg(
             &locked_package,
-            buildenv.gc_root_base_path.path(),
             &store_locations,
             true,
             dummy_netrc,
@@ -1676,10 +1739,8 @@ mod realise_nixpkgs_tests {
             map
         };
 
-        let buildenv = buildenv_instance();
-        let result = BuildEnvNix::<PathBuf, NixAuth>::realise_single_custom_catalog_pkg(
+        let result = BuildEnvNix::<NixAuth>::realise_single_custom_catalog_pkg(
             &locked_package,
-            buildenv.gc_root_base_path.path(),
             &store_locations,
             true,
             None,
@@ -1723,10 +1784,10 @@ mod realise_flakes_tests {
     use flox_manifest::parsed::latest::PackageDescriptorFlake;
     use indoc::formatdoc;
     use tempfile::TempDir;
-    use test_helpers::buildenv_instance;
 
     use super::*;
     use crate::providers::flake_installable_locker::{InstallableLocker, InstallableLockerImpl};
+    use crate::providers::nix_auth::NixAuth;
 
     // region: tools to configure mock flakes for testing
     struct MockedLockedPackageFlakeBuilder {
@@ -1848,24 +1909,21 @@ mod realise_flakes_tests {
     #[test]
     fn flake_build_success() {
         let locked_package = MockedLockedPackageFlake::builder().unique(true).build();
-        let buildenv = buildenv_instance();
 
         assert!(
-            !buildenv
-                .check_store_path(locked_package.locked_installable.outputs.values())
+            !test_helpers::check_store_path(locked_package.locked_installable.outputs.values())
                 .unwrap(),
             "store path should be invalid before building"
         );
 
-        let result = buildenv.realise_flake(&locked_package, &Default::default());
+        let result = BuildEnvNix::<NixAuth>::realise_flake(&locked_package);
         assert!(
             result.is_ok(),
             "failed to build flake: {}",
             result.unwrap_err()
         );
         assert!(
-            buildenv
-                .check_store_path(locked_package.locked_installable.outputs.values())
+            test_helpers::check_store_path(locked_package.locked_installable.outputs.values())
                 .unwrap()
         );
     }
@@ -1875,9 +1933,9 @@ mod realise_flakes_tests {
     fn flake_build_failure() {
         let locked_package = MockedLockedPackageFlake::builder()
             .succeed_build(false)
+            .unique(true)
             .build();
-        let buildenv = buildenv_instance();
-        let result = buildenv.realise_flake(&locked_package, &Default::default());
+        let result = BuildEnvNix::<NixAuth>::realise_flake(&locked_package);
         let err = result.expect_err("realising flake should fail");
         assert!(matches!(err, BuildEnvError::Realise2 { .. }));
     }
@@ -1890,15 +1948,13 @@ mod realise_flakes_tests {
             .unique(true)
             .build();
 
-        let buildenv = buildenv_instance();
         assert!(
-            !buildenv
-                .check_store_path(locked_package.locked_installable.outputs.values())
+            !test_helpers::check_store_path(locked_package.locked_installable.outputs.values())
                 .unwrap(),
             "store path should be invalid before building"
         );
 
-        let result = buildenv.realise_flake(&locked_package, &Default::default());
+        let result = BuildEnvNix::<NixAuth>::realise_flake(&locked_package);
         let err = result.expect_err("realising flake should fail");
         assert!(matches!(err, BuildEnvError::Realise2 { .. }));
     }
@@ -1914,15 +1970,13 @@ mod realise_flakes_tests {
             *locked_path = env!("GIT_PKG").to_string();
         }
 
-        let buildenv = buildenv_instance();
         assert!(
-            buildenv
-                .check_store_path(locked_package.locked_installable.outputs.values())
+            test_helpers::check_store_path(locked_package.locked_installable.outputs.values())
                 .unwrap(),
             "store path should be valid before building"
         );
 
-        let result = buildenv.realise_flake(&locked_package, &Default::default());
+        let result = BuildEnvNix::<NixAuth>::realise_flake(&locked_package);
         assert!(result.is_ok(), "failed to skip building flake");
     }
 }
@@ -1930,7 +1984,6 @@ mod realise_flakes_tests {
 #[cfg(test)]
 mod realise_store_path_tests {
     use flox_manifest::parsed::common::DEFAULT_PRIORITY;
-    use test_helpers::buildenv_instance;
 
     use super::*;
     use crate::providers::nix_auth::NixAuth;
@@ -1950,41 +2003,150 @@ mod realise_store_path_tests {
 
     #[test]
     fn store_path_build_success_if_valid() {
-        let buildenv = buildenv_instance();
         let locked = mock_store_path(true);
 
         // show that the store path is valid
-        assert!(buildenv.check_store_path([&locked.store_path]).unwrap());
+        assert!(test_helpers::check_store_path([&locked.store_path]).unwrap());
         let span = info_span!("dummy");
 
-        BuildEnvNix::<PathBuf, NixAuth>::realise_single_store_path(
-            &locked,
-            buildenv.gc_root_base_path.path(),
-            &Default::default(),
-            span,
-            &Semaphore::new(1, 1),
-        )
-        .expect("an existing store path should realise");
+        BuildEnvNix::<NixAuth>::realise_single_store_path(&locked, span, &Semaphore::new(1, 1))
+            .expect("an existing store path should realise");
     }
 
     #[test]
     fn store_path_build_failure_if_invalid() {
-        let buildenv = buildenv_instance();
         let locked = mock_store_path(false);
 
         // show that the store path is invalid
-        assert!(!buildenv.check_store_path([&locked.store_path]).unwrap());
+        assert!(!test_helpers::check_store_path([&locked.store_path]).unwrap());
         let span = info_span!("dummy");
 
-        let result = BuildEnvNix::<PathBuf, NixAuth>::realise_single_store_path(
-            &locked,
-            buildenv.gc_root_base_path.path(),
-            &Default::default(),
-            span,
+        let result =
+            BuildEnvNix::<NixAuth>::realise_single_store_path(&locked, span, &Semaphore::new(1, 1))
+                .expect_err("invalid store path should fail to realise");
+        assert!(matches!(result, BuildEnvError::Realise2 { .. }));
+    }
+}
+
+#[cfg(test)]
+mod realise_batch_tests {
+    use flox_manifest::lockfile::test_helpers::locked_package_catalog_from_mock;
+    use flox_manifest::parsed::common::DEFAULT_PRIORITY;
+    use flox_test_utils::GENERATED_DATA;
+
+    use super::*;
+    use crate::providers::nix_auth::NixAuth;
+
+    fn invalid_catalog_pkg(install_id: &str, path_suffix: &str) -> LockedPackageCatalog {
+        let (mut pkg, _) =
+            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        pkg.install_id = install_id.to_string();
+        *pkg.outputs.get_mut("out").unwrap() =
+            format!("/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid-{path_suffix}");
+        pkg.attr_path = "AAAAAASomeThingsFailToEvaluate".to_string();
+        pkg
+    }
+
+    /// Fast path: all output paths already on disk → returns Ok without calling
+    /// nix. The attr_path is poisoned so any attempted nix call would fail,
+    /// proving the function returned before reaching the batch build.
+    #[test]
+    fn batch_succeeds_when_all_paths_already_registered() {
+        let (mut catalog_pkg, _) =
+            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+
+        BuildEnvNix::<NixAuth>::realise_single_base_catalog_pkg(
+            &catalog_pkg,
+            Span::current(),
             &Semaphore::new(1, 1),
         )
-        .expect_err("invalid store path should fail to realise");
-        assert!(matches!(result, BuildEnvError::Realise2 { .. }));
+        .expect("hello should be realisable before this test");
+
+        catalog_pkg.attr_path = "AAAAAASomeThingsFailToEvaluate".to_string();
+
+        let store_pkg = LockedPackageStorePath {
+            install_id: "git".to_string(),
+            store_path: env!("GIT_PKG").to_string(),
+            system: env!("NIX_TARGET_SYSTEM").to_string(),
+            priority: DEFAULT_PRIORITY,
+        };
+
+        BuildEnvNix::<NixAuth>::realise_base_and_store_batch(
+            &[&catalog_pkg],
+            &[&store_pkg],
+            Span::current(),
+            &Semaphore::new(1, 1),
+        )
+        .expect("all paths registered in Nix store — batch should be a no-op");
+    }
+
+    /// Batch substitution: paths may be missing but the package is valid and
+    /// substitutable. Returns Ok whether via fast path (already cached) or batch.
+    #[test]
+    fn batch_succeeds_for_valid_packages() {
+        let (catalog_pkg, _) =
+            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+
+        let store_pkg = LockedPackageStorePath {
+            install_id: "git".to_string(),
+            store_path: env!("GIT_PKG").to_string(),
+            system: env!("NIX_TARGET_SYSTEM").to_string(),
+            priority: DEFAULT_PRIORITY,
+        };
+
+        BuildEnvNix::<NixAuth>::realise_base_and_store_batch(
+            &[&catalog_pkg],
+            &[&store_pkg],
+            Span::current(),
+            &Semaphore::new(1, 1),
+        )
+        .expect("valid packages should realise via batch substitution or fast path");
+    }
+
+    /// Single failing package: batch fails → per-package fallback → Realise2.
+    #[test]
+    fn batch_single_failure_returns_realise2() {
+        let pkg = invalid_catalog_pkg("hello", "a");
+
+        let err = BuildEnvNix::<NixAuth>::realise_base_and_store_batch(
+            &[&pkg],
+            &[],
+            Span::current(),
+            &Semaphore::new(1, 1),
+        )
+        .expect_err("unrealisable package should return an error");
+
+        assert!(
+            matches!(err, BuildEnvError::Realise2 { .. }),
+            "expected Realise2, got: {err}"
+        );
+    }
+
+    /// Two failing packages: fallback collects both errors and returns Other with count.
+    /// This exercises the I4 fix: all per-package errors are collected rather than
+    /// short-circuiting on the first failure.
+    #[test]
+    fn batch_multiple_failures_returns_error_with_count() {
+        let pkg1 = invalid_catalog_pkg("hello1", "a");
+        let pkg2 = invalid_catalog_pkg("hello2", "b");
+
+        let err = BuildEnvNix::<NixAuth>::realise_base_and_store_batch(
+            &[&pkg1, &pkg2],
+            &[],
+            Span::current(),
+            &Semaphore::new(1, 1),
+        )
+        .expect_err("two unrealisable packages should return an error");
+
+        match &err {
+            BuildEnvError::Other(msg) => {
+                assert!(
+                    msg.contains("2 packages"),
+                    "expected '2 packages' in error message, got: {msg}"
+                );
+            },
+            _ => panic!("expected BuildEnvError::Other, got: {err}"),
+        }
     }
 }
 
@@ -2013,17 +2175,17 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/hello/manifest.lock");
         let client = MockClient::new();
-        buildenv.build(&client, &lockfile_path, None).unwrap()
+        buildenv.build(&client, &lockfile_path, None, None).unwrap()
     });
 
     #[test]
     fn build_contains_binaries() {
         let result = &*BUILDENV_RESULT_SIMPLE_PACKAGE;
-        let runtime = &result.runtime;
+        let runtime = &result.run;
         assert!(runtime.join("bin/hello").exists());
         assert!(runtime.join("bin/hello").is_executable_file());
 
-        let develop = result.develop.as_ref();
+        let develop = result.dev.as_ref();
         assert!(develop.join("bin/hello").exists());
         assert!(develop.join("bin/hello").is_executable_file());
     }
@@ -2031,12 +2193,12 @@ mod buildenv_tests {
     #[test]
     fn build_contains_activate_files() {
         let result = &*BUILDENV_RESULT_SIMPLE_PACKAGE;
-        let runtime = &result.runtime;
+        let runtime = &result.run;
         assert!(runtime.join("activate").exists());
         assert!(runtime.join("activate.d/zsh").exists());
         assert!(runtime.join("etc/profile.d").is_dir());
 
-        let develop = &result.develop;
+        let develop = &result.dev;
         assert!(develop.join("activate").exists());
         assert!(develop.join("activate.d/zsh").exists());
         assert!(develop.join("etc/profile.d").is_dir());
@@ -2045,10 +2207,10 @@ mod buildenv_tests {
     #[test]
     fn build_contains_lockfile() {
         let result = &*BUILDENV_RESULT_SIMPLE_PACKAGE;
-        let runtime = &result.runtime;
+        let runtime = &result.run;
         assert!(runtime.join("manifest.lock").exists());
 
-        let develop = &result.develop;
+        let develop = &result.dev;
         assert!(develop.join("manifest.lock").exists());
     }
     #[test]
@@ -2056,10 +2218,10 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/build-noop/manifest.lock");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None, None).unwrap();
 
-        let runtime = result.runtime.as_ref();
-        let develop = result.develop.as_ref();
+        let runtime = result.run.as_ref();
+        let develop = result.dev.as_ref();
         let build_hello = result.manifest_build_runtimes.get("build-hello").unwrap();
 
         assert!(runtime.join("package-builds.d/hello").exists());
@@ -2072,12 +2234,12 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/kitchen_sink/manifest.lock");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None, None).unwrap();
 
-        let runtime = &result.runtime;
+        let runtime = &result.run;
         assert!(runtime.join("activate.d/hook-on-activate").exists());
 
-        let develop = &result.develop;
+        let develop = &result.dev;
         assert!(develop.join("activate.d/hook-on-activate").exists());
     }
 
@@ -2086,9 +2248,9 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/kitchen_sink/manifest.lock");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None, None).unwrap();
 
-        for output in [&result.runtime, &result.develop] {
+        for output in [&result.run, &result.dev] {
             for shell in ["common", "zsh", "fish", "bash", "tcsh"] {
                 assert!(
                     output.join(format!("activate.d/profile-{shell}")).exists(),
@@ -2103,8 +2265,8 @@ mod buildenv_tests {
     fn verify_contents_of_requisites_txt() {
         let result = &*BUILDENV_RESULT_SIMPLE_PACKAGE;
 
-        let runtime = result.runtime.as_ref();
-        let develop = result.develop.as_ref();
+        let runtime = result.run.as_ref();
+        let develop = result.dev.as_ref();
 
         for out_path in [runtime, develop] {
             let requisites_path = out_path.join("requisites.txt");
@@ -2138,7 +2300,7 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict.yaml");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None);
+        let result = buildenv.build(&client, &lockfile_path, None, None);
         let err = result.expect_err("conflicting packages should fail to build");
 
         let BuildEnvError::Build(output) = err else {
@@ -2160,7 +2322,7 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict-resolved.yaml");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None);
+        let result = buildenv.build(&client, &lockfile_path, None, None);
         assert!(
             result.is_ok(),
             "conflicting packages should be resolved by priority: {}",
@@ -2175,10 +2337,10 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/null_fields/manifest.lock");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None);
+        let result = buildenv.build(&client, &lockfile_path, None, None);
         assert!(
             result.is_ok(),
-            "environment should render succesfully: {}",
+            "environment should render successfully: {}",
             result.unwrap_err()
         );
     }
@@ -2196,10 +2358,10 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/vars_escape/manifest.lock");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None, None).unwrap();
 
-        let runtime = result.runtime.as_ref();
-        let develop = result.develop.as_ref();
+        let runtime = result.run.as_ref();
+        let develop = result.dev.as_ref();
 
         for envrc_path in [
             runtime.join("activate.d/envrc"),
@@ -2217,10 +2379,10 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-all-toplevel.yaml");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None, None).unwrap();
 
-        let runtime = result.runtime.as_ref();
-        let develop = result.develop.as_ref();
+        let runtime = result.run.as_ref();
+        let develop = result.dev.as_ref();
         let build_myhello = result.manifest_build_runtimes.get("build-myhello").unwrap();
 
         assert!(runtime.join("bin/hello").is_executable_file());
@@ -2241,10 +2403,10 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-only-hello.yaml");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None, None).unwrap();
 
-        let runtime = result.runtime.as_ref();
-        let develop = result.develop.as_ref();
+        let runtime = result.run.as_ref();
+        let develop = result.dev.as_ref();
         let build_myhello = result.manifest_build_runtimes.get("build-myhello").unwrap();
 
         assert!(runtime.join("bin/hello").is_executable_file());
@@ -2265,7 +2427,7 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-toplevel.yaml");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None);
+        let result = buildenv.build(&client, &lockfile_path, None, None);
         let err = result.expect_err("build should fail if non-toplevel packages are selected");
 
         let BuildEnvError::Build(output) = err else {
@@ -2287,7 +2449,7 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-found.yaml");
         let client = MockClient::new();
-        let result = buildenv.build(&client, &lockfile_path, None);
+        let result = buildenv.build(&client, &lockfile_path, None, None);
         let err = result.expect_err("build should fail if nonexistent packages are selected");
 
         let BuildEnvError::Build(output) = err else {
@@ -2312,7 +2474,7 @@ mod buildenv_tests {
         // Get a v2 lockfile with no outputs specified (should use outputs_to_install)
         let lockfile_path = GENERATED_DATA.join("envs/bash_v1_10_0_default/manifest.lock");
 
-        let result = buildenv.build(&client, &lockfile_path, None);
+        let result = buildenv.build(&client, &lockfile_path, None, None);
         assert!(
             result.is_ok(),
             "environment should build successfully: {}",
@@ -2320,8 +2482,8 @@ mod buildenv_tests {
         );
 
         let outputs = result.unwrap();
-        let runtime = outputs.runtime.as_ref();
-        let develop = outputs.develop.as_ref();
+        let runtime = outputs.run.as_ref();
+        let develop = outputs.dev.as_ref();
 
         // For the `bash` package the full list of outputs is:
         //
@@ -2388,7 +2550,7 @@ mod buildenv_tests {
         // Get a v2 lockfile with outputs = "all"
         let lockfile_path = GENERATED_DATA.join("envs/bash_v1_10_0_all/manifest.lock");
 
-        let result = buildenv.build(&client, &lockfile_path, None);
+        let result = buildenv.build(&client, &lockfile_path, None, None);
         assert!(
             result.is_ok(),
             "environment should build successfully: {}",
@@ -2396,8 +2558,8 @@ mod buildenv_tests {
         );
 
         let outputs = result.unwrap();
-        let runtime = outputs.runtime.as_ref();
-        let develop = outputs.develop.as_ref();
+        let runtime = outputs.run.as_ref();
+        let develop = outputs.dev.as_ref();
 
         // For the `bash` package the full list of outputs is:
         //
@@ -2456,7 +2618,7 @@ mod buildenv_tests {
         // Get a v2 lockfile with outputs = ["out"]
         let lockfile_path = GENERATED_DATA.join("envs/bash_v1_10_0_out/manifest.lock");
 
-        let result = buildenv.build(&client, &lockfile_path, None);
+        let result = buildenv.build(&client, &lockfile_path, None, None);
         assert!(
             result.is_ok(),
             "environment should build successfully: {}",
@@ -2464,8 +2626,8 @@ mod buildenv_tests {
         );
 
         let outputs = result.unwrap();
-        let runtime = outputs.runtime.as_ref();
-        let develop = outputs.develop.as_ref();
+        let runtime = outputs.run.as_ref();
+        let develop = outputs.dev.as_ref();
 
         // For the `bash` package the full list of outputs is:
         //
@@ -2592,6 +2754,215 @@ mod join_realise_results_tests {
         assert!(
             matches!(result, Err(BuildEnvError::Other(_))),
             "got {result:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod materialise_retry_tests {
+    use std::cell::Cell;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+
+    use test_helpers::init_tracing;
+
+    use super::*;
+
+    fn fake_outputs() -> BuildEnvOutputs {
+        BuildEnvOutputs {
+            dev: BuiltStorePath(PathBuf::from("/nix/store/fake-develop")),
+            run: BuiltStorePath(PathBuf::from("/nix/store/fake-runtime")),
+            manifest_build_runtimes: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn succeeds_on_first_attempt_when_paths_present() {
+        init_tracing();
+        let result = materialise_with_retry(|| Ok(()), Vec::new, Vec::new, || Ok(fake_outputs()));
+        assert_eq!(result.unwrap(), fake_outputs());
+    }
+
+    // --- pre-build GC detection (missing paths before build_env) ---
+
+    #[test]
+    fn retries_when_paths_missing_before_build_env_then_succeeds() {
+        init_tracing();
+        // missing_paths call count:
+        //   attempt 1: pre-build → missing (GC detected, retry)
+        //   attempt 2: pre-build → present
+        let call = Cell::new(0usize);
+        let realise_calls = Cell::new(0usize);
+        let result = materialise_with_retry(
+            || {
+                realise_calls.set(realise_calls.get() + 1);
+                Ok(())
+            },
+            || {
+                call.set(call.get() + 1);
+                if call.get() == 1 {
+                    vec!["/nix/store/aaaa-missing".to_string()]
+                } else {
+                    vec![]
+                }
+            },
+            Vec::new,
+            || Ok(fake_outputs()),
+        );
+        assert_eq!(result.unwrap(), fake_outputs());
+        assert_eq!(
+            realise_calls.get(),
+            2,
+            "realise must be called on each attempt"
+        );
+    }
+
+    #[test]
+    fn materialisation_failed_when_paths_always_missing_before_build_env() {
+        init_tracing();
+        let missing = vec![
+            "/nix/store/aaaa-missing".to_string(),
+            "/nix/store/bbbb-missing".to_string(),
+        ];
+        let result = materialise_with_retry(
+            || Ok(()),
+            || missing.clone(),
+            Vec::new,
+            || Ok(fake_outputs()),
+        );
+        match result.unwrap_err() {
+            BuildEnvError::MaterialisationFailed { attempts, paths } => {
+                assert_eq!(attempts, 3);
+                assert_eq!(paths, "/nix/store/aaaa-missing\n  /nix/store/bbbb-missing");
+            },
+            e => panic!("expected MaterialisationFailed, got {e:?}"),
+        }
+    }
+
+    // --- post-build GC detection (missing paths discovered after build_env fails) ---
+
+    #[test]
+    fn retries_when_gc_detected_after_build_env_failure() {
+        init_tracing();
+        // Sequence:
+        //   attempt 1: pre-build → present; build_env → Err; post-build → missing (GC, retry)
+        //   attempt 2: pre-build → present; build_env → Ok
+        let missing_call = Cell::new(0usize);
+        let realise_calls = Cell::new(0usize);
+        let build_calls = Cell::new(0usize);
+        let result = materialise_with_retry(
+            || {
+                realise_calls.set(realise_calls.get() + 1);
+                Ok(())
+            },
+            || {
+                missing_call.set(missing_call.get() + 1);
+                match missing_call.get() {
+                    1 => vec![],                                      // pre-build attempt 1: present
+                    2 => vec!["/nix/store/aaaa-missing".to_string()], // post-build attempt 1: GC!
+                    _ => vec![], // pre-build attempt 2: present
+                }
+            },
+            Vec::new,
+            || {
+                build_calls.set(build_calls.get() + 1);
+                if build_calls.get() == 1 {
+                    Err(BuildEnvError::Build("nix build failed".to_string()))
+                } else {
+                    Ok(fake_outputs())
+                }
+            },
+        );
+        assert_eq!(result.unwrap(), fake_outputs());
+        assert_eq!(
+            realise_calls.get(),
+            2,
+            "realise must be called on each attempt"
+        );
+        assert_eq!(build_calls.get(), 2);
+    }
+
+    #[test]
+    fn materialisation_failed_when_gc_detected_after_build_env_on_final_attempt() {
+        init_tracing();
+        // Paths always disappear after build_env fails — exhausts all retries.
+        let missing_call = Cell::new(0usize);
+        let result = materialise_with_retry(
+            || Ok(()),
+            || {
+                missing_call.set(missing_call.get() + 1);
+                // pre-build checks always show paths present; post-build always missing
+                if missing_call.get().is_multiple_of(2) {
+                    vec!["/nix/store/aaaa-missing".to_string()]
+                } else {
+                    vec![]
+                }
+            },
+            Vec::new,
+            || Err(BuildEnvError::Build("nix build failed".to_string())),
+        );
+        match result.unwrap_err() {
+            BuildEnvError::MaterialisationFailed { attempts, paths } => {
+                assert_eq!(attempts, 3);
+                assert_eq!(paths, "/nix/store/aaaa-missing");
+            },
+            e => panic!("expected MaterialisationFailed, got {e:?}"),
+        }
+    }
+
+    #[test]
+    fn build_env_error_exhausts_retries_when_paths_confirmed_present() {
+        init_tracing();
+        // build_env always fails and re-stat always shows nothing missing.
+        // nix path-info (called with an empty expected_paths list) returns no
+        // null paths, so we cannot distinguish a genuine deterministic failure
+        // from the DB-registration race window.  The loop must use all retries
+        // before propagating the error.
+        let realise_calls = Cell::new(0usize);
+        let build_calls = Cell::new(0usize);
+        let result = materialise_with_retry(
+            || {
+                realise_calls.set(realise_calls.get() + 1);
+                Ok(())
+            },
+            Vec::new, // paths always present
+            Vec::new,
+            || {
+                build_calls.set(build_calls.get() + 1);
+                Err(BuildEnvError::Build("deterministic failure".to_string()))
+            },
+        );
+        match result.unwrap_err() {
+            BuildEnvError::Build(msg) => assert_eq!(msg, "deterministic failure"),
+            e => panic!("expected Build, got {e:?}"),
+        }
+        assert_eq!(
+            realise_calls.get(),
+            3,
+            "must exhaust all retries before propagating"
+        );
+        assert_eq!(build_calls.get(), 3, "build_env must be retried");
+    }
+
+    // --- realise errors ---
+
+    #[test]
+    fn realise_error_propagates_immediately() {
+        init_tracing();
+        let build_called = Cell::new(false);
+        let result = materialise_with_retry(
+            || Err(BuildEnvError::Build("realise failed".to_string())),
+            Vec::new,
+            Vec::new,
+            || {
+                build_called.set(true);
+                Ok(fake_outputs())
+            },
+        );
+        assert!(matches!(result.unwrap_err(), BuildEnvError::Build(_)));
+        assert!(
+            !build_called.get(),
+            "build_env must not be called if realise fails"
         );
     }
 }

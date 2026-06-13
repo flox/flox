@@ -136,11 +136,7 @@ impl ActivateArgs {
 
         // Capture env snapshot *before* modifying the process environment so
         // the diff reflects the true pre-activation state.
-        let vars_from_env = if context.capture_env_diff {
-            VarsFromEnvironment::get_with_snapshot()?
-        } else {
-            VarsFromEnvironment::get()?
-        };
+        let vars_from_env = VarsFromEnvironment::get_with_snapshot()?;
 
         // Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
         unsafe { std::env::remove_var("FLOX_SHELL") };
@@ -182,13 +178,15 @@ impl ActivateArgs {
     ) -> Result<StartIdentifier, anyhow::Error> {
         let mut retry_backoff: Option<ActivationRetryBackoff> = None;
 
+        let deactivate_hint = "To stop using this environment, run 'flox deactivate'";
+
         loop {
             match self.try_start_or_attach(context, subsystem_verbosity, vars_from_env)? {
                 StartOrAttachResult::Start { start_id, .. } => {
                     if *invocation_type == InvocationType::Interactive {
                         updated(
                             formatdoc! {"You are now using the environment '{env_description}'
-                                     To stop using this environment, type 'exit'
+                                     {deactivate_hint}
                                      ",
                             env_description = context.attach_ctx.env_description,
                             },
@@ -200,7 +198,7 @@ impl ActivateArgs {
                     if *invocation_type == InvocationType::Interactive {
                         updated(
                             formatdoc! {"Attached to existing activation of environment '{env_description}'
-                                     To stop using this environment, type 'exit'
+                                     {deactivate_hint}
                                      ",
                             env_description = context.attach_ctx.env_description,
                             },

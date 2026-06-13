@@ -3,8 +3,8 @@
 This directory is derived from the files in nixpkgs:pkgs/build-support/buildenv,
 modified to build multiple environment outputs:
 
-* `runtime`: the same env as created by nixpkgs `buildenv` upstream
-* `develop`: as above, but recurses to include links for all requisite packages
+* `run`: the same env as created by nixpkgs `buildenv` upstream
+* `dev`: as above, but recurses to include links for all requisite packages
 * `build-<pname>`: for each manifest build, creates env referring only to
   the "toplevel" packages, optionally filtered by `runtime-packages`
 
@@ -37,8 +37,8 @@ It took 0.061 seconds to realise the packages with pkgdb.
   {
     "drvPath": "/nix/store/qvv16w2mig6nwr7wdrn3ymm6dvwi9ci9-environment.drv",
     "outputs": {
-      "develop": "/nix/store/kqzy26j4ldsd0az4sbbpc0yd41b2rfvw-environment-develop",
-      "runtime": "/nix/store/warx31v9gmjadjdgdx2bskk1yr2wxl22-environment-runtime"
+      "dev": "/nix/store/kqzy26j4ldsd0az4sbbpc0yd41b2rfvw-environment-dev",
+      "run": "/nix/store/warx31v9gmjadjdgdx2bskk1yr2wxl22-environment-run"
     }
   }
 ]

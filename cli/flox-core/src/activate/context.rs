@@ -100,21 +100,107 @@ pub struct ActivateCtx {
     #[serde(default)]
     pub metrics_uuid: Option<Uuid>,
 
-    /// Whether to capture the full env diff when attaching.
-    /// Gated behind the auto_activate feature flag.
+    /// Passthrough for config.disable_hook.unwrap_or(false)
     #[serde(default)]
-    pub capture_env_diff: bool,
+    pub disable_hook: bool,
+
+    /// Path to the flox binary, used for generating hook code.
+    #[serde(default)]
+    pub flox_bin: String,
+
+    /// Controls how the fish shell hook responds to directory changes.
+    #[serde(default)]
+    pub auto_activate_fish_mode: Option<AutoActivateFishMode>,
 }
 
-#[derive(Clone, Debug, Deserialize, derive_more::Display, PartialEq, Serialize)]
+/// Fish shell hook mode, matching direnv's `direnv_fish_mode` values.
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, derive_more::Display, Serialize, PartialEq, Eq,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum AutoActivateFishMode {
+    /// Evaluate on prompt and immediately on PWD change (default).
+    #[default]
+    #[display("eval_on_arrow")]
+    EvalOnArrow,
+    /// Evaluate on prompt; defer PWD-change evaluation until before the next command.
+    #[display("eval_after_arrow")]
+    EvalAfterArrow,
+    /// Evaluate on prompt only; ignore directory changes.
+    #[display("disable_arrow")]
+    DisableArrow,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InvocationType {
-    #[display("inplace")]
     InPlace,
-    #[display("interactive")]
     Interactive,
-    #[display("command")]
     ShellCommand(String),
-    #[display("execcommand")]
     ExecCommand(Vec<String>),
+}
+
+impl InvocationType {
+    pub fn is_in_place(&self) -> bool {
+        matches!(self, Self::InPlace)
+    }
+
+    pub fn kind(&self) -> InvocationKind {
+        match self {
+            Self::InPlace => InvocationKind::InPlace,
+            Self::Interactive => InvocationKind::Interactive,
+            Self::ShellCommand(_) => InvocationKind::ShellCommand,
+            Self::ExecCommand(_) => InvocationKind::ExecCommand,
+        }
+    }
+}
+
+/// Drops the user command wrapped by `ShellCommand` and `ExecCommand` so we can
+/// roundtrip with InvocationKind
+impl std::fmt::Display for InvocationType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.kind())
+    }
+}
+
+#[derive(Clone, Copy, Debug, derive_more::Display, derive_more::FromStr, Eq, PartialEq)]
+#[display(rename_all = "lowercase")]
+#[from_str(rename_all = "lowercase")]
+pub enum InvocationKind {
+    InPlace,
+    Interactive,
+    ShellCommand,
+    ExecCommand,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invocation_type_display_round_trips_to_kind() {
+        let cases = [
+            (InvocationType::InPlace, InvocationKind::InPlace),
+            (InvocationType::Interactive, InvocationKind::Interactive),
+            (
+                InvocationType::ShellCommand("echo hi".to_string()),
+                InvocationKind::ShellCommand,
+            ),
+            (
+                InvocationType::ExecCommand(vec!["ls".to_string(), "-l".to_string()]),
+                InvocationKind::ExecCommand,
+            ),
+        ];
+
+        for (invocation_type, kind) in cases {
+            assert_eq!(invocation_type.kind(), kind);
+            assert_eq!(
+                invocation_type
+                    .to_string()
+                    .parse::<InvocationKind>()
+                    .unwrap(),
+                kind,
+            );
+        }
+    }
 }

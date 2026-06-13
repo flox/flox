@@ -21,7 +21,6 @@ use flox_manifest::{MANIFEST_FILENAME, Manifest, ManifestError, Migrated, Valida
 use itertools::Itertools;
 use pollster::FutureExt;
 use serde::{Deserialize, Serialize};
-use tempfile::TempDir;
 use thiserror::Error;
 use tracing::debug;
 
@@ -38,19 +37,10 @@ use super::{
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::install::compute_install_modifications;
-use crate::providers::buildenv::{
-    self,
-    BuildEnv,
-    BuildEnvError,
-    BuildEnvNix,
-    BuildEnvOutputs,
-    BuiltStorePath,
-};
+use crate::providers::buildenv::{BuildEnv, BuildEnvError, BuildEnvNix, BuildEnvOutputs};
 use crate::providers::lock_manifest::{LockManifest, LockResult, ResolutionFailure, ResolveError};
 use crate::providers::nix_auth::{AuthError, NixAuth};
 use crate::providers::services::process_compose::{ServiceError, maybe_make_service_config_file};
-
-const TEMPROOTS_DIR_NAME: &str = "temp-roots";
 
 pub struct ReadOnly {}
 struct ReadWrite {}
@@ -280,57 +270,41 @@ impl<State> CoreEnvironment<State> {
     /// It's included in the [ReadOnly] struct for ergonomic reasons
     /// and because it doesn't modify the manifest.
     ///
-    /// Does not lock the manifest or link the environment to an out path.
-    /// Each should be done explicitly if necessary by the caller
-    /// using [Self::lock] and [Self::link]:
+    /// Does not lock the manifest.
+    /// Call [Self::lock] explicitly before building if the lockfile may be stale.
     ///
-    /// ```ignore
-    /// # use flox_rust_sdk::models::environment::CoreEnvironment;
-    /// # use flox_rust_sdk::flox::Flox;
-    /// let flox: Flox = unimplemented!();
-    /// let core_env: CoreEnvironment = unimplemented!();
-    ///
-    /// core_env.lock(&flox).unwrap();
-    /// let store_path = core_env.build(&flox).unwrap();
-    /// core_env
-    ///     .link(&flox, "/path/to/out-link", &Some(store_path))
-    ///     .unwrap();
-    /// ```
+    /// Pass `out_link_prefix` to have `nix build` register GC roots and write
+    /// the activation symlinks atomically as part of the build.  The prefix
+    /// must be `<run_dir>/<system>.<name>`; nix appends `-dev` and `-run` to
+    /// produce the two output symlinks.  Pass `None` for validate-only or
+    /// pre-flight builds where no symlinks or GC roots are needed.
     #[must_use = "don't discard the store paths of built environments"]
-    pub fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, CoreEnvironmentError> {
+    pub fn build(
+        &mut self,
+        flox: &Flox,
+        out_link_prefix: Option<&Path>,
+    ) -> Result<BuildEnvOutputs, CoreEnvironmentError> {
         let lockfile_path = CanonicalPath::new(self.lockfile_path())
             .map_err(CoreEnvironmentError::BadLockfilePath)?;
         let lockfile = Lockfile::read_from_file(&lockfile_path)?;
 
         let service_config_path = maybe_make_service_config_file(flox, &lockfile)?;
 
-        let tempdir = TempDir::new().map_err(CoreEnvironmentError::CreateTempdir)?;
         let auth = NixAuth::from_flox(flox).map_err(CoreEnvironmentError::Auth)?;
-        let outputs = BuildEnvNix::new(tempdir, auth).build(
+
+        let outputs = BuildEnvNix::new(auth).build(
             &flox.catalog_client,
             &lockfile_path,
             service_config_path,
+            out_link_prefix,
         )?;
         debug!(?outputs, "built environment");
         Ok(outputs)
     }
 }
 
-impl CoreEnvironment<()> {
-    /// Create a new out-link for the environment at the given path with a
-    /// store-path obtained from [Self::build].
-    pub fn link(
-        out_link_path: impl AsRef<Path>,
-        store_path: &BuiltStorePath,
-    ) -> Result<(), CoreEnvironmentError> {
-        buildenv::create_gc_root_in([store_path.as_path()], out_link_path)?;
-
-        Ok(())
-    }
-}
-
-/// Environment modifying methods do not link the new environment to an out path.
-/// Linking should be done by the caller.
+/// Environment modifying methods accept an optional `out_link_prefix` and,
+/// when supplied, write activation symlinks as part of the in-transaction build.
 /// Since files referenced by the environment are ingested into the nix store,
 /// the same [CoreEnvironment] instance can be used
 /// even if the concrete [super::Environment] tracks the files in a different way
@@ -360,6 +334,7 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         packages: &[PackageToInstall],
         flox: &Flox,
+        out_link_prefix: Option<&Path>,
     ) -> Result<InstallationAttempt, EnvironmentError> {
         let manifest = self.manifest(flox)?;
         // TODO: this could lead to double resolution and surprising errors
@@ -373,7 +348,8 @@ impl CoreEnvironment<ReadOnly> {
             None
         } else {
             let new_manifest = manifest.modify_packages(&modifications)?;
-            let (built_environments, _) = self.transact_with_manifest(&new_manifest, flox)?;
+            let (built_environments, _) =
+                self.transact_with_manifest(&new_manifest, flox, out_link_prefix)?;
             Some(built_environments)
         };
 
@@ -392,6 +368,7 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         uninstall_specs: Vec<UninstallSpec>,
         flox: &Flox,
+        out_link_prefix: Option<&Path>,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         // TODO: this could lead to double resolution and surprising errors
         // (e.g. if you try to uninstall a package and we fail to resolve that package)
@@ -405,7 +382,7 @@ impl CoreEnvironment<ReadOnly> {
         let modifications = resolve_specs_to_modifications(&uninstall_specs, &manifest, &lockfile)?;
 
         let new_manifest = manifest.modify_packages(&modifications)?;
-        let (store_path, _) = self.transact_with_manifest(&new_manifest, flox)?;
+        let (store_path, _) = self.transact_with_manifest(&new_manifest, flox, out_link_prefix)?;
 
         // Collect the modified install ids that are still installed through includes
         let still_included = if let Some(compose) = &lockfile.compose {
@@ -428,7 +405,12 @@ impl CoreEnvironment<ReadOnly> {
     }
 
     /// Atomically edit this environment, ensuring that it still builds
-    pub fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError> {
+    pub fn edit(
+        &mut self,
+        flox: &Flox,
+        contents: String,
+        out_link_prefix: Option<&Path>,
+    ) -> Result<EditResult, EnvironmentError> {
         let maybe_up_to_date_lockfile = self.lockfile_if_up_to_date()?;
 
         // skip the edit if the contents are unchanged
@@ -452,7 +434,8 @@ impl CoreEnvironment<ReadOnly> {
                 (None, migrated)
             };
 
-        let (store_path, new_lockfile) = self.transact_with_manifest(&migrated_manifest, flox)?;
+        let (store_path, new_lockfile) =
+            self.transact_with_manifest(&migrated_manifest, flox, out_link_prefix)?;
 
         Ok(EditResult::Changed {
             old_lockfile: Box::new(old_lockfile),
@@ -520,7 +503,7 @@ impl CoreEnvironment<ReadOnly> {
             },
         };
 
-        let build_attempt = temp_env.build(flox);
+        let build_attempt = temp_env.build(flox, None);
 
         debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
@@ -549,6 +532,7 @@ impl CoreEnvironment<ReadOnly> {
         flox: &Flox,
         groups_or_iids: &[&str],
         write_lockfile: bool,
+        out_link_prefix: Option<&Path>,
     ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let manifest = self.manifest(flox)?;
@@ -568,7 +552,8 @@ impl CoreEnvironment<ReadOnly> {
                 return Ok(result);
             }
 
-            let store_path = self.transact_with_lockfile_contents(lockfile_contents, flox)?;
+            let store_path =
+                self.transact_with_lockfile_contents(lockfile_contents, flox, out_link_prefix)?;
             result.store_path = Some(store_path);
         } else {
             let tmp_lockfile = tempfile::NamedTempFile::new_in(&flox.temp_dir)
@@ -579,8 +564,8 @@ impl CoreEnvironment<ReadOnly> {
             // We are not interested in the store path here, so we ignore the result
             // Neither do we depend on services, so we pass `None`
             let auth = NixAuth::from_flox(flox).map_err(EnvironmentError::Auth)?;
-            let _ = BuildEnvNix::new(flox.temp_dir.join(TEMPROOTS_DIR_NAME), auth)
-                .build(&flox.catalog_client, tmp_lockfile.path(), None)
+            let _ = BuildEnvNix::new(auth)
+                .build(&flox.catalog_client, tmp_lockfile.path(), None, None)
                 .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::BuildEnv(e)))?;
         }
 
@@ -696,6 +681,7 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         flox: &Flox,
         to_upgrade: Vec<String>,
+        out_link_prefix: Option<&Path>,
     ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(
             includes = to_upgrade.iter().join(","),
@@ -751,7 +737,8 @@ impl CoreEnvironment<ReadOnly> {
             return Ok(result);
         }
 
-        let store_path = self.transact_with_lockfile_contents(lockfile_contents, flox)?;
+        let store_path =
+            self.transact_with_lockfile_contents(lockfile_contents, flox, out_link_prefix)?;
         result.store_path = Some(store_path);
 
         Ok(result)
@@ -820,12 +807,23 @@ impl CoreEnvironment<ReadOnly> {
         Ok(())
     }
 
-    /// Attempt to transactionally replace the manifest contents
+    /// Attempt to transactionally replace the manifest contents.
+    ///
+    /// Passes `out_link_prefix` to the nix build so activation symlinks are
+    /// created as part of the single build inside this transaction rather than
+    /// requiring a second `build()` call from the caller.
+    ///
+    /// Note: symlinks are created during the temp-dir build before the directory
+    /// swap completes.  If `replace_with` fails after a successful build the
+    /// symlinks will have been updated to point at the new store path.  A
+    /// follow-up (#4339) replaces the directory-swap model with a file-level
+    /// transaction that eliminates this window.
     #[must_use = "don't discard the store path of built environments"]
     fn transact_with_manifest(
         &mut self,
         manifest: &Manifest<Migrated>,
         flox: &Flox,
+        out_link_prefix: Option<&Path>,
     ) -> Result<(BuildEnvOutputs, Lockfile), EnvironmentError> {
         debug!("transaction: validating services block");
         manifest.as_latest_schema().services.validate()?;
@@ -859,7 +857,7 @@ impl CoreEnvironment<ReadOnly> {
         temp_env.write_manifest_lockfile_pair(&writable_manifest, &lockfile)?;
 
         debug!("transaction: building environment");
-        let store_path = temp_env.build(flox)?;
+        let store_path = temp_env.build(flox, out_link_prefix)?;
 
         debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
@@ -876,6 +874,7 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         lockfile_contents: impl AsRef<str>,
         flox: &Flox,
+        out_link_prefix: Option<&Path>,
     ) -> Result<BuildEnvOutputs, CoreEnvironmentError> {
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
             .map_err(CoreEnvironmentError::MakeSandbox)?
@@ -891,7 +890,7 @@ impl CoreEnvironment<ReadOnly> {
         temp_env.update_lockfile_with_contents(&lockfile_contents)?;
 
         debug!("transaction: building environment");
-        let store_path = temp_env.build(flox)?;
+        let store_path = temp_env.build(flox, out_link_prefix)?;
 
         debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
@@ -1200,9 +1199,6 @@ pub enum CoreEnvironmentError {
     #[error("could not parse lockfile")]
     ParseLockfile(#[source] serde_json::Error),
 
-    #[error("failed to create temporary directory")]
-    CreateTempdir(#[source] std::io::Error),
-
     #[error("authentication error")]
     Auth(#[source] AuthError),
     // endregion
@@ -1212,13 +1208,13 @@ pub enum CoreEnvironmentError {
 
 impl CoreEnvironmentError {
     pub fn is_incompatible_system_error(&self) -> bool {
-        // incomaptible system errors during resolution
+        // incompatible system errors during resolution
         let is_lock_incompatible_system_error = matches!(
             self,
             CoreEnvironmentError::Resolve(ResolveError::ResolutionFailed(failures))
              if failures.0.iter().any(|f| matches!(f, ResolutionFailure::PackageUnavailableOnSomeSystems { .. })));
 
-        // Incomaptible system errors during build
+        // Incompatible system errors during build
         // i.e. trying to build a lockfile that specifies systems,
         // but the current system is not in the list
         let is_build_incompatible_system_error = matches!(
@@ -1363,7 +1359,7 @@ mod tests {
 
         flox.catalog_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
-        env_view.edit(&flox, new_env_str.to_string()).unwrap();
+        env_view.edit(&flox, new_env_str.to_string(), None).unwrap();
 
         assert_eq!(
             env_view
@@ -1385,7 +1381,7 @@ mod tests {
         let mut env_view = new_core_environment(&flox, &same_manifest);
         env_view.lock(&flox).unwrap(); // Explicit lock
 
-        let result = env_view.edit(&flox, same_manifest).unwrap();
+        let result = env_view.edit(&flox, same_manifest, None).unwrap();
         assert_eq!(result, EditResult::Unchanged);
     }
 
@@ -1399,7 +1395,9 @@ mod tests {
         let mut env_view = new_core_environment(&flox, same_manifest);
         env_view.lock(&flox).unwrap(); // Explicit lock
 
-        let result = env_view.edit(&flox, same_manifest.to_string()).unwrap();
+        let result = env_view
+            .edit(&flox, same_manifest.to_string(), None)
+            .unwrap();
         assert_eq!(result, EditResult::Unchanged);
     }
 
@@ -1411,7 +1409,9 @@ mod tests {
         let same_manifest = "version = 1";
         let mut env_view = new_core_environment(&flox, same_manifest);
 
-        let result = env_view.edit(&flox, same_manifest.to_string()).unwrap();
+        let result = env_view
+            .edit(&flox, same_manifest.to_string(), None)
+            .unwrap();
         assert!(matches!(result, EditResult::Changed { .. }));
     }
 
@@ -1430,7 +1430,7 @@ mod tests {
         temp_env.lock(&flox).unwrap();
         env_view.replace_with(temp_env).unwrap();
 
-        let result = env_view.build(&flox).unwrap_err();
+        let result = env_view.build(&flox, None).unwrap_err();
 
         assert!(result.is_incompatible_system_error());
     }
@@ -1451,8 +1451,8 @@ mod tests {
         env.lock(&flox).unwrap();
 
         // Build the environment and verify that the config file exists
-        let store_path = env.build(&flox).unwrap();
-        let config_path = store_path.develop.join(SERVICE_CONFIG_FILENAME);
+        let store_path = env.build(&flox, None).unwrap();
+        let config_path = store_path.dev.join(SERVICE_CONFIG_FILENAME);
         assert!(config_path.exists());
     }
 
@@ -1471,7 +1471,7 @@ mod tests {
 
         flox.catalog_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
-        let result = env_view.edit(&flox, new_env_str.to_string()).unwrap();
+        let result = env_view.edit(&flox, new_env_str.to_string(), None).unwrap();
 
         assert!(matches!(result, EditResult::Changed { .. }));
         assert!(!result.reactivate_required().unwrap());
@@ -1489,7 +1489,7 @@ mod tests {
         on-activate = ""
         "#;
 
-        let result = env_view.edit(&flox, new_env_str.to_string()).unwrap();
+        let result = env_view.edit(&flox, new_env_str.to_string(), None).unwrap();
 
         assert!(result.reactivate_required().unwrap());
     }
@@ -1507,6 +1507,7 @@ mod tests {
                     CatalogPackage::from_str("hello").unwrap(),
                 )],
                 &flox,
+                None,
             )
             .unwrap();
 
@@ -1599,23 +1600,20 @@ mod tests {
         flox.catalog_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
+        let out_link = env_path.path().with_extension("out-link");
+        std::fs::create_dir_all(&out_link).expect("create out-link dir");
+        let out_link = CanonicalPath::new(&out_link).expect("canonicalize out-link dir");
+
         env_view.lock(&flox).expect("locking should succeed");
-        let store_path = env_view.build(&flox).expect("build should succeed");
-        CoreEnvironment::link(
-            env_path.path().with_extension("out-link"),
-            &store_path.develop,
-        )
-        .expect("link should succeed");
+        // Use a prefix so nix writes <prefix>-dev and <prefix>-run symlinks.
+        let prefix = out_link.join("env");
+        env_view
+            .build(&flox, Some(&prefix))
+            .expect("build should succeed");
 
         // very rudimentary check that the environment manifest built correctly
         // and linked to the out-link.
-        assert!(
-            env_path
-                .path()
-                .with_extension("out-link")
-                .join("bin/hello")
-                .exists()
-        );
+        assert!(out_link.join("env-dev").join("bin/hello").exists());
     }
 
     #[test]
@@ -1765,7 +1763,7 @@ mod tests {
             .get_mut("bad")
             .unwrap()
             .shutdown = None;
-        let res = env.transact_with_manifest(&manifest, &flox);
+        let res = env.transact_with_manifest(&manifest, &flox, None);
         assert!(matches!(
             res,
             Err(EnvironmentError::ManifestError(

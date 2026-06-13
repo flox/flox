@@ -3,10 +3,13 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use shell_gen::{GenerateShell, Shell, set_exported_unexpanded, source_file, unset};
+use flox_core::activate::context::InvocationType;
+use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
+use flox_core::hook_actions::PROMPT_HOOK_VERSION_ENV;
+use shell_gen::{GenerateShell, Shell, source_file};
 
-use crate::gen_rc::RM;
-use crate::start_diff::StartDiff;
+use crate::attach_diff::{todo_drop_set_exported_unexpanded, todo_drop_unset};
+use crate::gen_rc::{Action, RM};
 
 /// Arguments for generating bash startup commands
 #[derive(Debug, Clone)]
@@ -14,10 +17,7 @@ pub struct BashStartupArgs {
     pub flox_activate_tracelevel: u32,
     pub activate_d: PathBuf,
     pub flox_env: PathBuf,
-    pub flox_env_cache: Option<PathBuf>,
-    pub flox_env_project: Option<PathBuf>,
-    pub flox_env_description: Option<String>,
-    pub is_in_place: bool,
+    pub invocation_type: InvocationType,
     pub clean_up: Option<PathBuf>,
 
     // Some(_) if it exists, None otherwise
@@ -25,199 +25,462 @@ pub struct BashStartupArgs {
     pub flox_activate_tracer: String,
     pub flox_sourcing_rc: bool,
     pub flox_activations: PathBuf,
+    pub register_hook: bool,
+    pub flox_bin: String,
+    pub set_prompt: bool,
 }
 
 // N.B. the output of these scripts may be eval'd with backticks which have
 // the effect of removing newlines from the output, so we must ensure that
 // the output is a valid shell script fragment when represented on a single line.
-pub fn generate_bash_startup_commands(
-    args: &BashStartupArgs,
-    start_diff: &StartDiff,
+pub fn generate_bash_profile_commands(
+    action: &Action<BashStartupArgs>,
     writer: &mut impl Write,
 ) -> Result<()> {
     let mut stmts = vec![];
 
     // Enable trace mode if requested
-    if args.flox_activate_tracelevel >= 2 {
-        stmts.push("set -x".to_stmt());
+    match action {
+        Action::Activate { args, .. } => {
+            if args.flox_activate_tracelevel >= 2 {
+                stmts.push("set -x".to_stmt());
+            }
+        },
+        Action::Deactivate(ctx) => {
+            if ctx.flox_activate_tracelevel >= 2 {
+                stmts.push("set -x".to_stmt());
+            }
+        },
     }
 
-    // Only `Some` if it was determined to exist by the caller
-    let should_source = args.bashrc_path.is_some() && !args.is_in_place && !args.flox_sourcing_rc;
-
-    if should_source {
-        stmts.push(set_exported_unexpanded("_flox_sourcing_rc", "true"));
-        stmts.push(source_file(args.bashrc_path.as_ref().unwrap()));
-        stmts.push(unset("_flox_sourcing_rc"));
+    // The bashrc-sourcing dance must come before `attach_diff.generate_statements`
+    // so a `flox activate` inside .bashrc can't override values
+    match action {
+        Action::Activate { args, .. } => {
+            let should_source = args.bashrc_path.is_some()
+                && !args.invocation_type.is_in_place()
+                && !args.flox_sourcing_rc;
+            if should_source {
+                stmts.push(todo_drop_set_exported_unexpanded(
+                    "_flox_sourcing_rc",
+                    "true",
+                ));
+                stmts.push(source_file(args.bashrc_path.as_ref().unwrap()));
+                stmts.push(todo_drop_unset("_flox_sourcing_rc"));
+            }
+        },
+        Action::Deactivate(_) => {
+            // No-op: no way to undo bashrc sourcing
+        },
     }
 
-    // Restore environment variables set in the previous bash initialization.
-    start_diff.generate_statements(&mut stmts);
-
-    // Propagate required variables that are documented as exposed.
-    stmts.push(set_exported_unexpanded(
-        "FLOX_ENV",
-        args.flox_env.display().to_string(),
-    ));
-
-    // Propagate optional variables that are documented as exposed.
-    if let Some(flox_env_cache) = &args.flox_env_cache {
-        stmts.push(set_exported_unexpanded(
-            "FLOX_ENV_CACHE",
-            flox_env_cache.display().to_string(),
-        ));
-    } else {
-        stmts.push(unset("FLOX_ENV_CACHE"));
+    // Environment variables
+    match action {
+        Action::Activate { args, attach_diff } => {
+            stmts.extend(attach_diff.generate_statements(args.invocation_type.is_in_place()));
+        },
+        Action::Deactivate(ctx) => {
+            stmts.extend(ctx.restore_diff.generate_deactivation_statements());
+        },
     }
 
-    if let Some(flox_env_project) = &args.flox_env_project {
-        stmts.push(set_exported_unexpanded(
-            "FLOX_ENV_PROJECT",
-            flox_env_project.display().to_string(),
-        ));
-    } else {
-        stmts.push(unset("FLOX_ENV_PROJECT"));
+    match action {
+        Action::Activate { args, .. } => {
+            stmts.push(todo_drop_set_exported_unexpanded(
+                "_activate_d",
+                args.activate_d.display().to_string(),
+            ));
+            // `_flox_activations` is now folded into the activation diff via
+            // `single_set_envs`, so it is set on the exec'd env / emitted as a
+            // single_set and unset on deactivate. Do not re-export it here.
+            stmts.push(todo_drop_set_exported_unexpanded(
+                "_flox_activate_tracer",
+                &args.flox_activate_tracer,
+            ));
+        },
+        Action::Deactivate(_) => {
+            // No-op here — these are unset further down (after
+            // set-prompt and profile.deactivate, both of which still
+            // read `_activate_d` and `_flox_activate_tracer`).
+        },
     }
 
-    if let Some(description) = &args.flox_env_description {
-        stmts.push(set_exported_unexpanded("FLOX_ENV_DESCRIPTION", description));
-    } else {
-        stmts.push(unset("FLOX_ENV_DESCRIPTION"));
+    // Export _FLOX_INVOCATION_TYPE so it is visible to std::env::vars() when
+    // computing the activation diff for stacked in-place activations. The diff
+    // then handles cleanup (unset on outermost deactivate, restore outer value
+    // on nested deactivate) without requiring an explicit unset here.
+    match action {
+        Action::Activate { args, .. } => {
+            stmts.push(todo_drop_set_exported_unexpanded(
+                "_FLOX_INVOCATION_TYPE",
+                format!("{}", args.invocation_type),
+            ));
+        },
+        Action::Deactivate(_) => {
+            // Handled by the activation diff (added → unset, modified → restore).
+        },
     }
 
-    stmts.push(set_exported_unexpanded(
-        "_activate_d",
-        args.activate_d.display().to_string(),
-    ));
-    stmts.push(set_exported_unexpanded(
-        "_flox_activations",
-        args.flox_activations.display().to_string(),
-    ));
+    // The prompt hook exports `_FLOX_PROMPT_HOOK_VERSION` at registration (see
+    // hook.rs) so a subprocess like `flox deactivate` can detect a compatible
+    // hook. It is set shell-side, so it isn't part of the env-var diff; unset it
+    // on deactivation so it doesn't leak into the restored environment.
+    // Unconditional: a no-op when no hook was registered.
+    if let Action::Deactivate(_) = action {
+        stmts.push(todo_drop_unset(PROMPT_HOOK_VERSION_ENV));
+    }
 
-    stmts.push(set_exported_unexpanded(
-        "_flox_activate_tracer",
-        &args.flox_activate_tracer,
-    ));
-
-    // Set the prompt if we're in an interactive shell.
-    let set_prompt_path = args.activate_d.join("set-prompt.bash");
-    stmts.push(
-        format!(
-            "if [ -t 1 ]; then source '{}'; fi;",
-            set_prompt_path.display()
-        )
-        .to_stmt(),
-    );
+    // Source set-prompt.bash if we're in an interactive shell
+    // set-prompt.bash handles both setting and unsetting
+    // Note for deactivate this must come after reverting environment
+    // variables (which includes FLOX_PROMPT_ENVIRONMENTS)
+    let set_prompt_path = match action {
+        Action::Activate { args, .. } => args
+            .set_prompt
+            .then(|| args.activate_d.join("set-prompt.bash")),
+        Action::Deactivate(ctx) => Some(ctx.activate_d.join("set-prompt.bash")),
+    };
+    if let Some(set_prompt_path) = set_prompt_path {
+        // We could consult set_prompt, but hypothetically that config value
+        // could change between activation and deactivation, and sourcing
+        // set-prompt won't hurt
+        stmts.push(
+            format!(
+                "if [ -t 1 ]; then source '{}'; fi;",
+                set_prompt_path.display()
+            )
+            .to_stmt(),
+        );
+    };
 
     // We already customized the PATH and MANPATH, but the user and system
     // dotfiles may have changed them, so finish by doing this again.
     // Use generation time _FLOX_ENV because we want to guarantee we activate the
     // environment we think we're activating. Use runtime FLOX_ENV_DIRS to allow
     // RC files to perform activations.
-    stmts.push(format!(
-        r#"eval "$('{}' set-env-dirs --shell bash --flox-env "{}" --env-dirs "${{FLOX_ENV_DIRS:-}}")";"#,
-        args.flox_activations.display(),
-        args.flox_env.display()
-    ).to_stmt());
+    match action {
+        Action::Activate { args, .. } => {
+            stmts.push(format!(
+                r#"eval "$('{}' set-env-dirs --shell {} --flox-env "{}" --env-dirs "${{FLOX_ENV_DIRS:-}}")";"#,
+                args.flox_activations.display(),
+                Shell::Bash,
+                args.flox_env.display()
+            ).to_stmt());
+            stmts.push(format!(
+                r#"eval "$('{}' fix-paths --shell {} --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${{MANPATH:-}}")";"#,
+                args.flox_activations.display(),
+                Shell::Bash,
+            ).to_stmt());
+        },
+        Action::Deactivate(_) => {
+            // No-op: covered by environment restoration above
+        },
+    }
 
-    stmts.push(format!(
-        r#"eval "$('{}' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${{MANPATH:-}}")";"#,
-        args.flox_activations.display()
-    ).to_stmt());
+    match action {
+        Action::Activate { args, .. } => {
+            stmts.push(format!(
+                r#"eval "$('{}' profile-scripts --shell {} --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}" --env-dirs "${{FLOX_ENV_DIRS:-}}")";"#,
+                args.flox_activations.display(),
+                Shell::Bash,
+            ).to_stmt());
+        },
+        Action::Deactivate(ctx) => {
+            // Source the user's profile.deactivate.{common,bash} scripts
+            // for the env being torn down, and remove it from
+            // _FLOX_SOURCED_PROFILE_SCRIPTS so stacked activations stay
+            // consistent. We bake in the env path at generation time
+            // because by now `restore_diff` has either unset `FLOX_ENV`
+            // (outermost deactivate) or restored it to the outer env's
+            // value (nested), so runtime `$FLOX_ENV` is not a reliable
+            // handle on the env we're tearing down.
+            stmts.push(
+                format!(
+                    r#"eval "$('{}' profile-scripts-deactivate --shell {} --env '{}' --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}")";"#,
+                    FLOX_ACTIVATIONS_BIN.display(),
+                    Shell::Bash,
+                    ctx.flox_env.display()
+                )
+                .to_stmt(),
+            );
+        },
+    }
 
-    stmts.push(format!(
-        r#"eval "$('{}' profile-scripts --shell bash --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}" --env-dirs "${{FLOX_ENV_DIRS:-}}")";"#,
-        args.flox_activations.display()
-    ).to_stmt());
+    // Unset the helpers exported above. Delayed until after set-prompt
+    // and profile.deactivate, both of which read `_activate_d` and
+    // `_flox_activate_tracer`.
+    // `_flox_activations` is unset by the activation diff (it is folded
+    // into `single_set_envs`), so it is not listed here.
+    match action {
+        Action::Activate { .. } => {},
+        Action::Deactivate(_) => {
+            stmts.push("unset _activate_d _flox_activate_tracer;".to_stmt());
+        },
+    }
 
     // Disable command hashing to allow for newly installed flox packages
     // to be found immediately. We do this as the very last thing because
     // python venv activations can otherwise return nonzero return codes
     // when attempting to invoke `hash -r`.
-    stmts.push("set +h".to_stmt());
-
-    // Disable trace mode if it was enabled
-    if args.flox_activate_tracelevel >= 2 {
-        stmts.push("set +x".to_stmt());
+    match action {
+        Action::Activate { .. } => {
+            stmts.push("set +h".to_stmt());
+        },
+        Action::Deactivate(ctx) => {
+            // Re-enable command hashing (bash default), but only if no
+            // other flox environments remain active — the outer env
+            // still wants hashing off.
+            if ctx.restore_diff.is_outermost_deactivate() {
+                stmts.push("set -h;".to_stmt());
+            }
+        },
     }
 
-    if let Some(path) = args.clean_up.as_ref() {
-        let path_str = path.to_string_lossy();
-        let escaped_path = shell_escape::escape(Cow::Borrowed(path_str.as_ref()));
-        stmts.push(format!("{RM} {};", escaped_path).to_stmt());
+    // Disable trace mode if it was enabled
+    match action {
+        Action::Activate { args, .. } => {
+            if args.flox_activate_tracelevel >= 2 {
+                stmts.push("set +x".to_stmt());
+            }
+        },
+        Action::Deactivate(ctx) => {
+            if ctx.flox_activate_tracelevel >= 2 {
+                stmts.push("set +x".to_stmt());
+            }
+        },
+    }
+
+    // Self-destruct rc file
+    match action {
+        Action::Activate { args, .. } => {
+            if let Some(path) = args.clean_up.as_ref() {
+                let path_str = path.to_string_lossy();
+                let escaped_path = shell_escape::escape(Cow::Borrowed(path_str.as_ref()));
+                stmts.push(format!("{RM} {};", escaped_path).to_stmt());
+            }
+        },
+        Action::Deactivate(_) => {
+            // No-op: deactivate has no rc file to remove.
+        },
     }
 
     for stmt in stmts {
         stmt.generate_with_newline(Shell::Bash, writer)?;
     }
+
+    // Auto-activate hook registration
+    match action {
+        Action::Activate { args, .. } => {
+            if args.register_hook
+                && matches!(
+                    args.invocation_type,
+                    InvocationType::Interactive | InvocationType::InPlace
+                )
+            {
+                write!(writer, "{}", crate::hook::bash_hook(&args.flox_bin))?;
+            }
+        },
+        Action::Deactivate(_) => {
+            // TODO: unregister the auto-activate hook
+        },
+    }
+
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use expect_test::expect;
+    use shell_gen::ShellWithPath;
 
     use super::*;
+    use crate::gen_rc::test_helpers::{
+        render_normalized,
+        strip_volatile_deactivate,
+        test_deactivate_ctx,
+        test_startup_ctx,
+        test_startup_ctx_disable_hook,
+    };
 
     // NOTE: For these `expect!` tests, run unit tests with `UPDATE_EXPECT=1`
     //  to have it automatically update the expected value when the implementation
     //  changes.
 
-    #[test]
-    fn test_generate_bash_startup_commands_basic() {
-        let additions = {
-            let mut map = HashMap::new();
-            map.insert("QUOTED_VAR".to_string(), "QUOTED'VALUE".to_string());
-            map.insert("ADDED_VAR".to_string(), "ADDED_VALUE".to_string());
-            map
-        };
-        let deletions = vec!["DELETED_VAR".to_string()];
-        let start_diff = StartDiff::from_parts(additions, deletions);
-        let args = BashStartupArgs {
-            flox_activate_tracelevel: 3,
-            activate_d: PathBuf::from("/activate_d"),
-            flox_env: "/flox_env".into(),
-            flox_env_cache: Some("/flox_env_cache".into()),
-            flox_env_project: Some("/flox_env_project".into()),
-            flox_env_description: Some("env_description".to_string()),
-            is_in_place: false,
-            bashrc_path: Some(PathBuf::from("/home/user/.bashrc")),
-            flox_sourcing_rc: false,
-            flox_activate_tracer: "TRACER".into(),
-            flox_activations: PathBuf::from("/flox_activations"),
-            clean_up: Some("/path/to/rc/file".into()),
-        };
+    fn render(is_in_place: bool) -> String {
+        let shell = ShellWithPath::Bash(PathBuf::from("/bin/bash"));
+        let ctx = test_startup_ctx(shell, is_in_place);
+        render_normalized(&ctx)
+    }
+
+    fn render_deactivate(flox_activate_tracelevel: u32) -> String {
+        let shell = ShellWithPath::Bash(PathBuf::from("/bin/bash"));
+        let mut ctx = test_deactivate_ctx(shell, true);
+        ctx.flox_activate_tracelevel = flox_activate_tracelevel;
+        let action = Action::<BashStartupArgs>::Deactivate(ctx);
         let mut buf = Vec::new();
-        generate_bash_startup_commands(&args, &start_diff, &mut buf).unwrap();
-        let output = String::from_utf8_lossy(&buf);
-        let (main_output, last_line) = output
-            .strip_suffix('\n')
-            .unwrap()
-            .rsplit_once('\n')
-            .unwrap();
-        assert_eq!(last_line, format!("{RM} /path/to/rc/file;"));
+        generate_bash_profile_commands(&action, &mut buf).expect("generator should succeed");
+        let output = String::from_utf8(buf).expect("output should be utf-8");
+        strip_volatile_deactivate(&output)
+    }
+
+    // The prompt hook (the `_flox_hook` function and its PROMPT_COMMAND
+    // registration) is emitted unless `disable_hook` is set. This replaces an
+    // integration test that activated a real shell to check the same gating.
+    #[test]
+    fn disable_hook_suppresses_prompt_hook_registration() {
+        let shell = ShellWithPath::Bash(PathBuf::from("/bin/bash"));
+
+        // Hook not disabled: the hook is registered.
+        let with_hook =
+            render_normalized(&test_startup_ctx_disable_hook(shell.clone(), false, false));
+        assert!(
+            with_hook.contains("_flox_hook"),
+            "expected the prompt hook to be registered:\n{with_hook}"
+        );
+
+        // disable_hook = true: no hook is registered.
+        let without_hook = render_normalized(&test_startup_ctx_disable_hook(shell, false, true));
+        assert!(
+            !without_hook.contains("_flox_hook"),
+            "expected no prompt hook when disable_hook is set:\n{without_hook}"
+        );
+    }
+
+    #[test]
+    fn test_generate_bash_startup_commands_subprocess() {
+        let output = render(false);
         expect![[r#"
             set -x
             export _flox_sourcing_rc=true;
             source /home/user/.bashrc;
             unset _flox_sourcing_rc;
             export ADDED_VAR=ADDED_VALUE;
-            export QUOTED_VAR='QUOTED'\''VALUE';
-            unset DELETED_VAR;
+            export FLOX_ACTIVATE_START_SERVICES=false;
             export FLOX_ENV=/flox_env;
             export FLOX_ENV_CACHE=/flox_env_cache;
-            export FLOX_ENV_PROJECT=/flox_env_project;
             export FLOX_ENV_DESCRIPTION=env_description;
-            export _activate_d=/activate_d;
-            export _flox_activations=/flox_activations;
+            export FLOX_ENV_PROJECT=/flox_env_project;
+            export MODIFIED_VAR=MODIFIED_VALUE;
+            export QUOTED_VAR='QUOTED'\''VALUE';
+            unset DELETED_VAR;
+            export _activate_d=/interpreter/activate.d;
             export _flox_activate_tracer=TRACER;
-            if [ -t 1 ]; then source '/activate_d/set-prompt.bash'; fi;
+            export _FLOX_INVOCATION_TYPE=interactive;
+            if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
             eval "$('/flox_activations' set-env-dirs --shell bash --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}")";
             eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")";
             eval "$('/flox_activations' profile-scripts --shell bash --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "${FLOX_ENV_DIRS:-}")";
             set +h
-            set +x"#]].assert_eq(main_output);
+            set +x
+            /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+            export _FLOX_PROMPT_HOOK_VERSION=1;
+            _flox_hook() {
+              local _prev_exit=$?;
+              local _flox_vars;
+              _flox_vars="$("/flox" hook-env --shell bash --shell-pid $$ --invocation-type "${_FLOX_INVOCATION_TYPE:-inplace}")";
+              trap -- '' SIGINT;
+              eval "$_flox_vars";
+              trap - SIGINT;
+              return $_prev_exit;
+            };
+            if [[ ";${PROMPT_COMMAND[*]:-};" != *";_flox_hook;"* ]]; then
+              if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]]; then
+                PROMPT_COMMAND=(_flox_hook "${PROMPT_COMMAND[@]}");
+              else
+                PROMPT_COMMAND="_flox_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}";
+              fi;
+            fi;
+        "#]].assert_eq(&output);
+    }
+
+    #[test]
+    fn test_generate_bash_startup_commands_in_place() {
+        let output = render(true);
+        expect![[r#"
+            set -x
+            export FLOX_PROMPT_COLOR_1=1;
+            export FLOX_PROMPT_COLOR_2=2;
+            export FLOX_PROMPT_ENVIRONMENTS=prompt_envs;
+            export _FLOX_ACTIVE_ENVIRONMENTS=active_envs;
+            export _flox_activations=/flox_activations;
+            export ADDED_VAR=ADDED_VALUE;
+            export FLOX_ACTIVATE_START_SERVICES=false;
+            export FLOX_ENV=/flox_env;
+            export FLOX_ENV_CACHE=/flox_env_cache;
+            export FLOX_ENV_DESCRIPTION=env_description;
+            export FLOX_ENV_PROJECT=/flox_env_project;
+            export MODIFIED_VAR=MODIFIED_VALUE;
+            export QUOTED_VAR='QUOTED'\''VALUE';
+            unset DELETED_VAR;
+            export _activate_d=/interpreter/activate.d;
+            export _flox_activate_tracer=TRACER;
+            export _FLOX_INVOCATION_TYPE=inplace;
+            if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
+            eval "$('/flox_activations' set-env-dirs --shell bash --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}")";
+            eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")";
+            eval "$('/flox_activations' profile-scripts --shell bash --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "${FLOX_ENV_DIRS:-}")";
+            set +h
+            set +x
+            /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+            export _FLOX_PROMPT_HOOK_VERSION=1;
+            _flox_hook() {
+              local _prev_exit=$?;
+              local _flox_vars;
+              _flox_vars="$("/flox" hook-env --shell bash --shell-pid $$ --invocation-type "${_FLOX_INVOCATION_TYPE:-inplace}")";
+              trap -- '' SIGINT;
+              eval "$_flox_vars";
+              trap - SIGINT;
+              return $_prev_exit;
+            };
+            if [[ ";${PROMPT_COMMAND[*]:-};" != *";_flox_hook;"* ]]; then
+              if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]]; then
+                PROMPT_COMMAND=(_flox_hook "${PROMPT_COMMAND[@]}");
+              else
+                PROMPT_COMMAND="_flox_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}";
+              fi;
+            fi;
+        "#]].assert_eq(&output);
+    }
+
+    #[test]
+    fn generate_bash_profile_deactivate() {
+        let output = render_deactivate(0);
+        expect![[r#"
+            unset ADDED_VAR;
+            unset FLOX_ACTIVATE_START_SERVICES;
+            unset FLOX_ENV;
+            unset FLOX_ENV_CACHE;
+            unset FLOX_ENV_DESCRIPTION;
+            unset FLOX_ENV_DIRS;
+            unset FLOX_ENV_PROJECT;
+            unset FLOX_PROMPT_COLOR_1;
+            unset FLOX_PROMPT_COLOR_2;
+            unset FLOX_PROMPT_ENVIRONMENTS;
+            unset MANPATH;
+            unset PATH;
+            unset QUOTED_VAR;
+            unset _FLOX_ACTIVE_ENVIRONMENTS;
+            unset _FLOX_HOOK_DIFF;
+            unset _FLOX_INVOCATION_TYPE;
+            unset _flox_activations;
+            export MODIFIED_VAR=MODIFIED_ORIGINAL;
+            export DELETED_VAR=DELETED_ORIGINAL;
+            unset _FLOX_PROMPT_HOOK_VERSION;
+            if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
+            eval "$('/flox_activations' profile-scripts-deactivate --shell bash --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
+            unset _activate_d _flox_activate_tracer;
+            set -h;
+        "#]]
+        .assert_eq(&output);
+    }
+
+    #[test]
+    fn generate_bash_profile_deactivate_traced() {
+        // The traced variant is the untraced body wrapped in
+        // `set -x` / `set +x`. The body itself is snapshotted by
+        // `generate_bash_profile_deactivate`.
+        let traced = render_deactivate(2);
+        let untraced = render_deactivate(0);
+        assert_eq!(traced, format!("set -x\n{untraced}set +x\n"));
     }
 }

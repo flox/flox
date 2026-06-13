@@ -1,16 +1,18 @@
 mod activate;
 mod activation_state;
 mod auth;
+mod beta;
 mod build;
 mod check_for_upgrades;
 mod containerize;
+mod deactivate;
 mod delete;
 mod edit;
 mod envs;
-mod exit;
 mod gc;
 mod general;
 mod generations;
+mod hook_env;
 mod include;
 mod init;
 mod install;
@@ -40,6 +42,7 @@ use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::{Manifest, TypedOnly};
 use flox_rust_sdk::flox::{
     AuthContext,
+    AuthnMode,
     DEFAULT_FLOXHUB_URL,
     FLOX_VERSION,
     Flox,
@@ -269,45 +272,7 @@ impl FloxArgs {
             git_url_override,
         )?;
 
-        let floxhub_token = config
-            .flox
-            .floxhub_token
-            .as_deref()
-            .and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(FloxhubToken::from_str(s))
-                }
-            })
-            .transpose();
-
-        let floxhub_token = match floxhub_token {
-            Err(FloxhubTokenError::InvalidToken(token_error)) => {
-                message::error(formatdoc! {"
-                    Your FloxHub token is invalid: {token_error}
-                    You may need to log in again.
-                "});
-                if let Err(e) =
-                    update_config(&config.flox.config_dir, "floxhub_token", None::<String>)
-                {
-                    debug!("Could not remove token from user config: {e}");
-                }
-                None
-            },
-            Ok(Some(token)) if token.is_expired() => {
-                if !matches!(
-                    self.command,
-                    Some(Commands::Admin(AdminCommands::Auth(auth::Auth::Login)))
-                ) {
-                    message::warning(
-                        "Your FloxHub token has expired. Run 'flox auth login' to re-authenticate.",
-                    );
-                }
-                Some(token)
-            },
-            Ok(token) => token,
-        };
+        let floxhub_token = self.resolve_floxhub_token(&config);
 
         let metrics_device_uuid = (!config.flox.disable_metrics)
             .then(|| read_metrics_uuid(&config).ok())
@@ -318,7 +283,7 @@ impl FloxArgs {
 
         let catalog_client = init_catalog_client(&config, metrics_device_uuid)?;
 
-        // we already make sure $USER corresponds to **euid** earlier on oin the process.
+        // we already make sure $USER corresponds to **euid** earlier on in the process.
         let system_user_name =
             std::env::var("USER").context("could not determine username from $USER")?;
         let system_hostname = sys_info::hostname().context("could not determine hostname")?;
@@ -365,7 +330,15 @@ impl FloxArgs {
                 Commands::Modify(args) => args.handle(config, flox).await,
                 Commands::Share(args) => args.handle(config, flox).await,
                 Commands::Admin(args) => args.handle(config, flox).await,
-                Commands::Internal(args) => args.handle(flox).await,
+                Commands::Internal(args) => args.handle(config, flox).await,
+                Commands::Beta(args) => {
+                    if !flox.features.beta {
+                        bail!(indoc! {"
+                        Enable beta features to run this command:
+                          flox config --set features.beta true"});
+                    }
+                    args.handle(flox).await
+                },
             };
 
             // This will print the update notification after output from a successful
@@ -409,6 +382,59 @@ impl FloxArgs {
         }
 
         result
+    }
+
+    /// Parse and validate the configured `floxhub_token`, returning `None` and
+    /// emitting any user-facing warnings as a side effect.
+    ///
+    /// Returns `None` immediately when the configured authn mode does not use
+    /// the token (e.g. Kerberos) — in that case the token in `flox.toml` is
+    /// not consumed by the auth pipeline, so warning about its state — or
+    /// rewriting the user's config — would be misleading.
+    fn resolve_floxhub_token(&self, config: &Config) -> Option<FloxhubToken> {
+        if !matches!(config.flox.floxhub_authn_mode, AuthnMode::Auth0) {
+            return None;
+        }
+
+        let parsed = config
+            .flox
+            .floxhub_token
+            .as_deref()
+            .and_then(|s| {
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(FloxhubToken::from_str(s))
+                }
+            })
+            .transpose();
+
+        match parsed {
+            Err(FloxhubTokenError::InvalidToken(token_error)) => {
+                message::error(formatdoc! {"
+                    Your FloxHub token is invalid: {token_error}
+                    You may need to log in again.
+                "});
+                if let Err(e) =
+                    update_config(&config.flox.config_dir, "floxhub_token", None::<String>)
+                {
+                    debug!("Could not remove token from user config: {e}");
+                }
+                None
+            },
+            Ok(Some(token)) if token.is_expired() => {
+                if !matches!(
+                    self.command,
+                    Some(Commands::Admin(AdminCommands::Auth(auth::Auth::Login)))
+                ) {
+                    message::warning(
+                        "Your FloxHub token has expired. Run 'flox auth login' to re-authenticate.",
+                    );
+                }
+                Some(token)
+            },
+            Ok(token) => token,
+        }
     }
 }
 
@@ -469,6 +495,8 @@ enum Commands {
     Admin(#[bpaf(external(admin_commands))] AdminCommands),
 
     Internal(#[bpaf(external(internal_commands))] InternalCommands),
+
+    Beta(#[bpaf(external(beta::beta_commands))] beta::BetaCommands),
 }
 
 #[derive(Debug, Bpaf, Clone)]
@@ -534,7 +562,7 @@ impl ManageCommands {
 /// Use environments
 #[derive(Bpaf, Clone)]
 enum UseCommands {
-    /// Enter the environment, type 'exit' to leave
+    /// Enter the environment, run 'flox deactivate' to leave
     #[bpaf(
         command,
         long("develop"),
@@ -547,6 +575,10 @@ enum UseCommands {
         footer("Run 'man flox-activate' for more details.")
     )]
     Activate(#[bpaf(external(activate::activate))] activate::Activate),
+
+    /// Deactivate the current environment
+    #[bpaf(command, long("exit"))]
+    Deactivate(#[bpaf(external(deactivate::deactivate))] deactivate::Deactivate),
 
     /// Manage services in an environment
     #[bpaf(command)]
@@ -562,10 +594,10 @@ enum UseCommands {
 impl UseCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
-            UseCommands::Activate(args) => args.handle(config, flox).await?,
-            UseCommands::Services(args) => args.handle(config, flox).await?,
+            UseCommands::Activate(args) => args.handle(config, flox).await,
+            UseCommands::Deactivate(args) => args.handle(config, flox),
+            UseCommands::Services(args) => args.handle(config, flox).await,
         }
-        Ok(())
     }
 }
 
@@ -776,16 +808,12 @@ enum InternalCommands {
     #[bpaf(command, hide)]
     LockManifest(#[bpaf(external(lock_manifest::lock_manifest))] lock_manifest::LockManifest),
 
-    /// Check for environmet upgrades
+    /// Check for environment upgrades
     #[bpaf(command, hide)]
     CheckForUpgrades(
         #[bpaf(external(check_for_upgrades::check_for_upgrades))]
         check_for_upgrades::CheckForUpgrades,
     ),
-
-    /// Print information how to exit environment
-    #[bpaf(command, long("exit"), long("deactivate"), hide)]
-    Exit(#[bpaf(external(exit::exit))] exit::Exit),
 
     /// Print the activation state directory path for an environment.
     /// Useful for debugging activation state.
@@ -799,18 +827,22 @@ enum InternalCommands {
     ServicesSocket(
         #[bpaf(external(services_socket::services_socket))] services_socket::ServicesSocket,
     ),
+
+    /// Compute env changes for auto-activation (called on every prompt)
+    #[bpaf(command("hook-env"), hide)]
+    HookEnv(#[bpaf(external(hook_env::hook_env))] hook_env::HookEnv),
 }
 
 impl InternalCommands {
-    async fn handle(self, flox: Flox) -> Result<()> {
+    async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
         match self {
             InternalCommands::ResetMetrics(args) => args.handle(flox).await?,
             InternalCommands::Upload(args) => args.handle(flox).await?,
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
-            InternalCommands::Exit(args) => args.handle(flox)?,
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
+            InternalCommands::HookEnv(args) => args.handle(flox)?,
         }
         Ok(())
     }

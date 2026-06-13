@@ -105,6 +105,22 @@ impl From<ShellWithPath> for Shell {
     }
 }
 
+impl From<Shell> for ShellWithPath {
+    /// Build a [ShellWithPath] from a bare [Shell], using the shell's name as
+    /// the (non-absolute) executable path. Useful when only the shell kind is
+    /// known (e.g. from a `--shell` argument) and the absolute path isn't
+    /// needed.
+    fn from(value: Shell) -> Self {
+        let path = PathBuf::from(value.to_string());
+        match value {
+            Shell::Bash => ShellWithPath::Bash(path),
+            Shell::Zsh => ShellWithPath::Zsh(path),
+            Shell::Tcsh => ShellWithPath::Tcsh(path),
+            Shell::Fish => ShellWithPath::Fish(path),
+        }
+    }
+}
+
 impl Display for Shell {
     // This trait requires `fmt` with this exact signature.
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -366,20 +382,8 @@ pub fn set_unexported_unexpanded(name: impl AsRef<str>, value: impl AsRef<str>) 
     SetVar::not_exported_no_expansion(name, value).to_stmt()
 }
 
-pub fn set_exported_unexpanded(name: impl AsRef<str>, value: impl AsRef<str>) -> Statement {
-    SetVar::exported_no_expansion(name, value).to_stmt()
-}
-
 pub fn set_unexported_expanded(name: impl AsRef<str>, value: impl AsRef<str>) -> Statement {
     SetVar::not_exported_with_expansion(name, value).to_stmt()
-}
-
-pub fn set_exported_expanded(name: impl AsRef<str>, value: impl AsRef<str>) -> Statement {
-    SetVar::exported_with_expansion(name, value).to_stmt()
-}
-
-pub fn unset(name: impl AsRef<str>) -> Statement {
-    UnsetVar::new(name).to_stmt()
 }
 
 pub fn source_file(path: impl AsRef<Path>) -> Statement {

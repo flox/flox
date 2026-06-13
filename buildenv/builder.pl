@@ -707,16 +707,16 @@ if ($manifest) {
 
         # Construct data sets for each environment to be rendered by the
         # builder.pl script.
-        # Both the "runtime" and "develop" environments take _the same set of packages_,
-        # but the "develop" environment also recursively links the "propagated-build-inputs".
+        # Both the "run" and "dev" environments take _the same set of packages_,
+        # but the "dev" environment also recursively links the "propagated-build-inputs".
         my @outputData = (
             {
-              "name" => "runtime",
+              "name" => "run",
               "pkgs" => packagesToPkgs($manifest, \@developPackages),
               "recurse" => 0
             },
             {
-              "name" => "develop",
+              "name" => "dev",
               "pkgs" => packagesToPkgs($manifest, \@developPackages),
               "recurse" => 1
             }

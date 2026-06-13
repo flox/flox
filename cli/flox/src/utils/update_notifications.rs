@@ -28,7 +28,7 @@ const UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH: &str =
 const UPDATE_NOTIFICATION_FILE_NAME: &str = "update-check-timestamp.json";
 const UPDATE_NOTIFICATION_EXPIRY: Duration = Duration::days(1);
 
-/// Timestamp we serialize to a file to trackwhen we last checked
+/// Timestamp we serialize to a file to track when we last checked
 /// whether an update is available
 #[derive(Deserialize, Serialize)]
 struct LastUpdateCheck {
@@ -303,7 +303,7 @@ impl UpdateNotification {
             .timeout(TRAILING_NETWORK_CALL_TIMEOUT);
 
         let response = request.send().await.map_err(|e| {
-            // We'll want to ignore errors if network is non-existent or slow
+            // We'll want to ignore errors if network is nonexistent or slow
             if e.is_connect() || e.is_timeout() {
                 UpdateNotificationError::Network(e)
             } else {

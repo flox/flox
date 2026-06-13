@@ -122,7 +122,7 @@ pub enum ManagedEnvironmentError {
         user: Option<String>,
     },
     /// [ManagedEnvironment::push_new] may return this
-    /// if the pushed environmentname already exists
+    /// if the pushed environment name already exists
     #[error("environment '{env_ref}' already exists at upstream '{upstream}'")]
     UpstreamAlreadyExists {
         env_ref: RemoteEnvironmentRef,
@@ -317,7 +317,8 @@ impl Environment for ManagedEnvironment {
             })
             .collect();
 
-        let result = local_checkout.install(packages, flox)?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        let result = local_checkout.install(packages, flox, Some(out_link_prefix))?;
         if !result.modifications.is_empty() {
             let change = HistoryKind::Install { targets };
             generations
@@ -325,8 +326,8 @@ impl Environment for ManagedEnvironment {
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
             self.lock_pointer()?;
         }
-        if let Some(store_paths) = &result.built_environments {
-            self.link(store_paths)?;
+        if result.built_environments.is_some() {
+            self.rendered_env_links.replace_legacy_links();
         }
 
         Ok(result)
@@ -359,7 +360,8 @@ impl Environment for ManagedEnvironment {
         }
 
         let targets: Vec<String> = specs.iter().map(|s| s.package_ref.clone()).collect();
-        let result = local_checkout.uninstall(specs, flox)?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        let result = local_checkout.uninstall(specs, flox, Some(out_link_prefix))?;
         let change = HistoryKind::Uninstall { targets };
 
         // It's an error to uninstall a package that isn't installed so if we
@@ -368,8 +370,8 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut local_checkout, change)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        if let Some(store_paths) = &result.built_environment_store_paths {
-            self.link(store_paths)?;
+        if result.built_environment_store_paths.is_some() {
+            self.rendered_env_links.replace_legacy_links();
         }
 
         Ok(result)
@@ -391,18 +393,16 @@ impl Environment for ManagedEnvironment {
 
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
-        let result = local_checkout.edit(flox, contents)?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        let result = local_checkout.edit(flox, contents, Some(out_link_prefix))?;
 
         match &result {
-            EditResult::Changed {
-                built_environment_store_paths,
-                ..
-            } => {
+            EditResult::Changed { .. } => {
                 generations
                     .add_generation(&mut local_checkout, HistoryKind::Edit)
                     .map_err(ManagedEnvironmentError::CommitGeneration)?;
                 self.lock_pointer()?;
-                self.link(built_environment_store_paths)?;
+                self.rendered_env_links.replace_legacy_links();
             },
             EditResult::Unchanged => {},
         }
@@ -418,7 +418,7 @@ impl Environment for ManagedEnvironment {
         groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError> {
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
-        let result = local_checkout.upgrade(flox, groups_or_iids, false)?;
+        let result = local_checkout.upgrade(flox, groups_or_iids, false, None)?; // dry-run: no out-link
         Ok(result)
     }
 
@@ -448,7 +448,8 @@ impl Environment for ManagedEnvironment {
             ))?
         }
 
-        let result = local_checkout.upgrade(flox, groups_or_iids, true)?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        let result = local_checkout.upgrade(flox, groups_or_iids, true, Some(out_link_prefix))?;
         if !result.diff().is_empty() {
             let change = HistoryKind::Upgrade {
                 targets: result.packages().collect(),
@@ -458,6 +459,9 @@ impl Environment for ManagedEnvironment {
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
             self.lock_pointer()?;
+        }
+        if result.store_path.is_some() {
+            self.rendered_env_links.replace_legacy_links();
         }
         Ok(result)
     }
@@ -488,8 +492,10 @@ impl Environment for ManagedEnvironment {
             ))?
         }
 
-        let result = local_checkout.include_upgrade(flox, to_upgrade.clone())?;
-        if !result.include_diff().is_empty() {
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        let result =
+            local_checkout.include_upgrade(flox, to_upgrade.clone(), Some(out_link_prefix))?;
+        if result.store_path.is_some() {
             let change = HistoryKind::IncludeUpgrade {
                 targets: to_upgrade,
             };
@@ -498,6 +504,7 @@ impl Environment for ManagedEnvironment {
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
             self.lock_pointer()?;
+            self.rendered_env_links.replace_legacy_links();
         }
 
         Ok(result)
@@ -520,12 +527,10 @@ impl Environment for ManagedEnvironment {
             .map_err(ManagedEnvironmentError::Core)?
             .expect("lockfile presence checked");
 
-        let rendered_env_lockfile_path =
-            self.rendered_env_links.development.join(LOCKFILE_FILENAME);
+        let rendered_env_lockfile_path = self.rendered_env_links.dev.join(LOCKFILE_FILENAME);
 
         let mut build_and_link = || -> Result<(), EnvironmentError> {
-            let store_paths = self.build(flox)?;
-            self.link(&store_paths)?;
+            self.build(flox)?;
             Ok(())
         };
 
@@ -549,17 +554,13 @@ impl Environment for ManagedEnvironment {
     }
 
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
         // todo: ensure lockfile exists?
 
-        Ok(local_checkout.build(flox)?)
-    }
-
-    fn link(&mut self, store_paths: &BuildEnvOutputs) -> Result<(), EnvironmentError> {
-        CoreEnvironment::link(&self.rendered_env_links.development, &store_paths.develop)?;
-        CoreEnvironment::link(&self.rendered_env_links.runtime, &store_paths.runtime)?;
-
-        Ok(())
+        let store_paths = local_checkout.build(flox, Some(out_link_prefix))?;
+        self.rendered_env_links.replace_legacy_links();
+        Ok(store_paths)
     }
 
     /// Returns .flox/cache
@@ -680,8 +681,7 @@ impl GenerationsExt for ManagedEnvironment {
         // update the rendered environment
         self.lock_pointer()?;
         self.reset_local_env_to_current_generation(flox)?;
-        let buildenv_paths = self.build(flox)?;
-        self.link(&buildenv_paths)?;
+        self.build(flox)?;
 
         Ok(())
     }
@@ -723,8 +723,6 @@ impl GenerationsExt for ManagedEnvironment {
         let mut core_environment =
             generation_rw.get_generation(*generation, self.include_fetcher.clone());
 
-        let store_paths = core_environment.build(flox)?;
-
         let run_dir = &self.path.join(GCROOTS_DIR_NAME);
         if !run_dir.exists() {
             std::fs::create_dir_all(run_dir).map_err(ManagedEnvironmentError::CreateLinksDir)?;
@@ -740,8 +738,9 @@ impl GenerationsExt for ManagedEnvironment {
                 generation,
             );
 
-        CoreEnvironment::link(&rendered_env_links.development, &store_paths.develop)?;
-        CoreEnvironment::link(&rendered_env_links.runtime, &store_paths.runtime)?;
+        let out_link_prefix = rendered_env_links.out_link_prefix();
+        core_environment.build(flox, Some(out_link_prefix))?;
+        rendered_env_links.replace_legacy_links();
 
         Ok(rendered_env_links)
     }
@@ -775,7 +774,7 @@ impl GenerationsExt for ManagedEnvironment {
 /// Constructors and related functions
 impl ManagedEnvironment {
     /// Guard against modifying an environment that is activated at a specific
-    /// generation so that we don't create unecessary branches in the generation
+    /// generation so that we don't create unnecessary branches in the generation
     /// history.
     fn guard_generation_immutable(&self) -> Result<(), EnvironmentError> {
         if let Some(generation) = self.generation {
@@ -1021,10 +1020,9 @@ impl ManagedEnvironment {
         local_checkout.lock(flox)?;
 
         // Ensure the created generation is valid
-        let store_paths = local_checkout.build(flox)?;
-
-        // TODO: should use self.link but that returns an EnvironmentError
-        self.link(&store_paths)?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        local_checkout.build(flox, Some(out_link_prefix))?;
+        self.rendered_env_links.replace_legacy_links();
 
         let mut generations = self.generations();
         let mut generations = generations
@@ -1053,7 +1051,7 @@ impl ManagedEnvironment {
     /// Pulling an environment for example may result in an invalid environment
     /// e.g. because the manifest does not specify the current system,
     /// resetting in that context should not fail either.
-    /// Like [ManagedEnvironment::pull], downtream commands should check that the environment builds
+    /// Like [ManagedEnvironment::pull], downstream commands should check that the environment builds
     /// if applicable.
     ///
     /// TODO: Specific behavior for other files than the manifest should is undefined.
@@ -1283,10 +1281,10 @@ impl ManagedEnvironment {
 
         // Ensure the environment builds before we push it
         core_environment
-            .build(flox)
+            .build(flox, None)
             .map_err(ManagedEnvironmentError::Build)?;
 
-        // Ensure that the environment does not include other local ennvironments
+        // Ensure that the environment does not include other local environments
         check_for_local_includes(&lockfile)?;
 
         Self::push_new_without_building(
@@ -1383,7 +1381,7 @@ impl ManagedEnvironment {
             // git may produce two identical commits despite different repos.
             // Therefore the push to "FloxHub" will succeed with [PushFlag::UpToDate].
             // Since we want to signal that the upstream repo already exists
-            // we need to also catch this success.
+            // we also need to catch this success.
             Err(GitRemoteCommandError::Diverged) | Ok(PushFlag::UptoDate) => {
                 Err(ManagedEnvironmentError::UpstreamAlreadyExists {
                     env_ref: RemoteEnvironmentRef::new_from_parts(owner, name),
@@ -1439,7 +1437,7 @@ impl ManagedEnvironment {
                 .map_err(|_| ManagedEnvironmentError::CheckoutOutOfSync)?
                 .into();
             local_checkout
-                .build(flox)
+                .build(flox, None)
                 .map_err(ManagedEnvironmentError::Build)?;
 
             check_for_local_includes(&lockfile)?;
@@ -1538,8 +1536,7 @@ impl ManagedEnvironment {
 
         if is_uptodate && !checkout_valid && force {
             self.reset_local_env_to_current_generation(flox)?;
-            let store_paths = self.build(flox)?;
-            self.link(&store_paths)?;
+            self.build(flox)?;
 
             return Ok(PullResult::Updated);
         } else if is_uptodate {
@@ -1580,8 +1577,7 @@ impl ManagedEnvironment {
         // update the pointer lockfile and build
         self.lock_pointer()?;
         self.reset_local_env_to_current_generation(flox)?;
-        let store_paths = self.build(flox)?;
-        self.link(&store_paths)?;
+        self.build(flox)?;
 
         Ok(PullResult::Updated)
     }
@@ -1663,10 +1659,7 @@ pub mod test_helpers {
         let floxmeta_branch = unusable_mock_floxmeta_branch();
         ManagedEnvironment {
             path: CanonicalPath::new(PathBuf::from("/")).unwrap(),
-            rendered_env_links: RenderedEnvironmentLinks::new_unchecked(
-                PathBuf::new(),
-                PathBuf::new(),
-            ),
+            rendered_env_links: RenderedEnvironmentLinks::new_unchecked(PathBuf::new()),
             pointer: ManagedPointer::new(
                 "owner".parse().unwrap(),
                 "test".parse().unwrap(),
@@ -1917,7 +1910,7 @@ mod test {
                 .exists()
         );
 
-        // dlete env dir to see whether it is recreated
+        // delete env dir to see whether it is recreated
         fs::remove_dir_all(managed_env.path.join(ENV_DIR_NAME)).unwrap();
 
         let _ = managed_env
@@ -2142,7 +2135,7 @@ mod test {
     }
 
     /// Validate that two environments with equivalent manifests fail validation
-    /// if the binary representationnof the manifest differs.
+    /// if the binary representation of the manifest differs.
     #[test]
     fn test_validate_local_different_binary_content() {
         let (flox, _temp_dir_handle) = flox_instance();
@@ -2185,8 +2178,7 @@ mod test {
         let dot_flox_path = CanonicalPath::new(&dot_flox_path).unwrap();
 
         // dummy paths since we are not rendering the environment
-        let rendered_env_links =
-            RenderedEnvironmentLinks::new_unchecked(PathBuf::new(), PathBuf::new());
+        let rendered_env_links = RenderedEnvironmentLinks::new_unchecked(PathBuf::new());
 
         // create a mock remote
         let (test_pointer, _remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
@@ -2228,8 +2220,7 @@ mod test {
         let dot_flox_path = CanonicalPath::new(&dot_flox_path).unwrap();
 
         // dummy paths since we are not rendering the environment
-        let rendered_env_links =
-            RenderedEnvironmentLinks::new_unchecked(PathBuf::new(), PathBuf::new());
+        let rendered_env_links = RenderedEnvironmentLinks::new_unchecked(PathBuf::new());
 
         // create a mock remote
         let (test_pointer, _remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
@@ -2276,8 +2267,7 @@ mod test {
         let env2_dir = CanonicalPath::new(env2_dir).unwrap();
 
         // dummy paths since we are not rendering the environment
-        let rendered_env_links =
-            RenderedEnvironmentLinks::new_unchecked(PathBuf::new(), PathBuf::new());
+        let rendered_env_links = RenderedEnvironmentLinks::new_unchecked(PathBuf::new());
 
         // create a mock remote
         let (test_pointer, _remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));

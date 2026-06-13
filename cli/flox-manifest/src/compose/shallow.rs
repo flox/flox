@@ -14,17 +14,17 @@ use crate::parsed::Inner;
 use crate::parsed::common::{
     ActivateOptions,
     Allows,
-    Build,
     Containerize,
     Hook,
     Include,
     Options,
-    Profile,
     SemverOptions,
     Vars,
 };
 use crate::parsed::latest::{Install, ManifestLatest, MinimumCliVersion};
-use crate::parsed::v1_12_0::Services;
+// merge_build operates on the latest schema's Build (which carries
+// `sandbox-allow`), so composing environments preserves the field.
+use crate::parsed::v1_13_0::{Build, Profile, ProfileDeactivate, Services};
 
 /// Merges two manifests by applying `manifest2` on top of `manifest1` and
 /// overwriting any conflicts for keys within the top-level of each `ManifestV1`
@@ -35,7 +35,7 @@ pub struct ShallowMerger;
 impl ShallowMerger {
     #[instrument(skip_all)]
     fn merge_version(_low_priority: &str, high_priority: &str) -> Result<String, MergeError> {
-        // To be consistent with other "composing manfiest wins" behaviors,
+        // To be consistent with other "composing manifest wins" behaviors,
         // the higher priority manifest determines the manifest version
         // and therefore 'outputs' behavior.
         Ok(high_priority.to_string())
@@ -132,14 +132,42 @@ impl ShallowMerger {
                     low_priority.fish.as_ref(),
                     high_priority.fish.as_ref(),
                 );
+                let deactivate = Self::merge_profile_deactivate(
+                    low_priority.deactivate.as_ref(),
+                    high_priority.deactivate.as_ref(),
+                );
                 Ok(Some(Profile {
                     common,
                     bash,
                     zsh,
                     fish,
                     tcsh,
+                    deactivate,
                 }))
             },
+        }
+    }
+
+    /// Merge per-shell deactivation scripts. Deactivation runs in reverse
+    /// order from activation (LIFO cleanup), so a low-priority deactivate
+    /// snippet should run *after* the high-priority one. Append accordingly:
+    /// high first, then low.
+    #[instrument(skip_all)]
+    fn merge_profile_deactivate(
+        low_priority: Option<&ProfileDeactivate>,
+        high_priority: Option<&ProfileDeactivate>,
+    ) -> Option<ProfileDeactivate> {
+        match (low_priority, high_priority) {
+            (None, None) => None,
+            (Some(low), None) => Some(low.clone()),
+            (None, Some(high)) => Some(high.clone()),
+            (Some(low), Some(high)) => Some(ProfileDeactivate {
+                common: append_optional_strings(high.common.as_ref(), low.common.as_ref()),
+                bash: append_optional_strings(high.bash.as_ref(), low.bash.as_ref()),
+                zsh: append_optional_strings(high.zsh.as_ref(), low.zsh.as_ref()),
+                fish: append_optional_strings(high.fish.as_ref(), low.fish.as_ref()),
+                tcsh: append_optional_strings(high.tcsh.as_ref(), low.tcsh.as_ref()),
+            }),
         }
     }
 
@@ -374,14 +402,10 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::parsed::common::{
-        Allows,
-        BuildDescriptor,
-        ContainerizeConfig,
-        SemverOptions,
-        ServiceDescriptor,
-    };
+    use crate::parsed::common::{Allows, ContainerizeConfig, SemverOptions, ServiceDescriptor};
     use crate::parsed::latest::ManifestPackageDescriptor;
+    // Build merging operates on the latest schema's BuildDescriptor.
+    use crate::parsed::v1_13_0::BuildDescriptor;
 
     proptest! {
         // Ensures that the vars unique to each manifest are present in the merged output,
@@ -632,7 +656,7 @@ mod tests {
             }
         }
 
-        // Ensures that a merged config retains a single working directory, preferrably
+        // Ensures that a merged config retains a single working directory, preferably
         // the one from the higher priority config.
         #[test]
         fn containerize_cfg_shallow_merges_working_dir(
@@ -791,6 +815,7 @@ mod tests {
             zsh: Some("zsh1".to_string()),
             fish: Some("fish1".to_string()),
             tcsh: Some("tcsh1".to_string()),
+            deactivate: None,
         });
         let high_priority = Some(Profile {
             common: Some("common2".to_string()),
@@ -798,6 +823,7 @@ mod tests {
             zsh: Some("zsh2".to_string()),
             fish: Some("fish2".to_string()),
             tcsh: Some("tcsh2".to_string()),
+            deactivate: None,
         });
         let expected = Some(Profile {
             common: Some("common1\ncommon2".to_string()),
@@ -805,6 +831,58 @@ mod tests {
             zsh: Some("zsh1\nzsh2".to_string()),
             fish: Some("fish1\nfish2".to_string()),
             tcsh: Some("tcsh1\ntcsh2".to_string()),
+            deactivate: None,
+        });
+        let merged =
+            ShallowMerger::merge_profile(low_priority.as_ref(), high_priority.as_ref()).unwrap();
+        assert_eq!(merged, expected);
+    }
+
+    #[test]
+    fn merges_profile_deactivate_runs_high_before_low() {
+        let low_priority = Some(Profile {
+            common: None,
+            bash: None,
+            zsh: None,
+            fish: None,
+            tcsh: None,
+            deactivate: Some(ProfileDeactivate {
+                common: Some("low_common".to_string()),
+                bash: Some("low_bash".to_string()),
+                zsh: Some("low_zsh".to_string()),
+                fish: Some("low_fish".to_string()),
+                tcsh: Some("low_tcsh".to_string()),
+            }),
+        });
+        let high_priority = Some(Profile {
+            common: None,
+            bash: None,
+            zsh: None,
+            fish: None,
+            tcsh: None,
+            deactivate: Some(ProfileDeactivate {
+                common: Some("high_common".to_string()),
+                bash: Some("high_bash".to_string()),
+                zsh: Some("high_zsh".to_string()),
+                fish: Some("high_fish".to_string()),
+                tcsh: Some("high_tcsh".to_string()),
+            }),
+        });
+        let expected = Some(Profile {
+            common: None,
+            bash: None,
+            zsh: None,
+            fish: None,
+            tcsh: None,
+            // High runs first on teardown, then low — inverse of
+            // activation, which appends low before high.
+            deactivate: Some(ProfileDeactivate {
+                common: Some("high_common\nlow_common".to_string()),
+                bash: Some("high_bash\nlow_bash".to_string()),
+                zsh: Some("high_zsh\nlow_zsh".to_string()),
+                fish: Some("high_fish\nlow_fish".to_string()),
+                tcsh: Some("high_tcsh\nlow_tcsh".to_string()),
+            }),
         });
         let merged =
             ShallowMerger::merge_profile(low_priority.as_ref(), high_priority.as_ref()).unwrap();
@@ -819,6 +897,7 @@ mod tests {
             zsh: Some("zsh1".to_string()),
             fish: Some("fish1".to_string()),
             tcsh: Some("tcsh1".to_string()),
+            deactivate: None,
         });
         let high_priority = Some(Profile::default());
 
@@ -841,6 +920,7 @@ mod tests {
             zsh: Some("zsh2".to_string()),
             fish: Some("fish2".to_string()),
             tcsh: Some("tcsh2".to_string()),
+            deactivate: None,
         });
 
         assert_eq!(

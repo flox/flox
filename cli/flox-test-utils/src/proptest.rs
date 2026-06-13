@@ -136,7 +136,7 @@ pub struct OverlappingMaps<T> {
 ///
 /// The return values are the two maps whose keys overlap and the overlapping keys.
 /// Note that this returns a `BoxedStrategy` purely for the sake of not killing
-/// `rust-analyzer` with the horendous type that would otherwise be generated as
+/// `rust-analyzer` with the horrendous type that would otherwise be generated as
 /// the return type for this function.
 pub fn btree_maps_overlapping_keys<T: Arbitrary>(
     key_max_size: usize,
@@ -198,16 +198,16 @@ pub fn btree_maps_overlapping_keys<T: Arbitrary>(
             )| {
                 let mut map1 = BTreeMap::new();
                 let mut map2 = BTreeMap::new();
-                for (k, v) in keys_map1.clone().into_iter().zip(vals_map1.into_iter()) {
+                for (k, v) in keys_map1.clone().into_iter().zip(vals_map1) {
                     map1.insert(k, v);
                 }
-                for (k, v) in keys_dup.clone().into_iter().zip(vals_dup_map1.into_iter()) {
+                for (k, v) in keys_dup.clone().into_iter().zip(vals_dup_map1) {
                     map1.insert(k, v);
                 }
-                for (k, v) in keys_map2.clone().into_iter().zip(vals_map2.into_iter()) {
+                for (k, v) in keys_map2.clone().into_iter().zip(vals_map2) {
                     map2.insert(k, v);
                 }
-                for (k, v) in keys_dup.clone().into_iter().zip(vals_dup_map2.into_iter()) {
+                for (k, v) in keys_dup.clone().into_iter().zip(vals_dup_map2) {
                     map2.insert(k, v);
                 }
                 OverlappingMaps {

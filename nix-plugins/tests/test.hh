@@ -41,7 +41,7 @@ static const std::string curlVersion = "8.4.0";
  * check calls to `size()'.
  * Note that the legacy implementation used to populate `DbPackageSet' will
  * fail to evaluate 3 packages which require `NIXPKGS_ALLOW_BROKEN', causing
- * different sizes to be collected ( until migration is coompleted ).
+ * different sizes to be collected ( until migration is completed ).
  */
 static const size_t unbrokenPkgCount = 64163;
 static const size_t fullPkgCount     = 64040;

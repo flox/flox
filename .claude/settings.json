@@ -1,0 +1,137 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Edit(*.rs)",
+            "command": ".claude/hooks/format.sh rustfmt --edition 2024",
+            "timeout": 30,
+            "statusMessage": "Formatting Rust..."
+          },
+          {
+            "type": "command",
+            "if": "Write(*.rs)",
+            "command": ".claude/hooks/format.sh rustfmt --edition 2024",
+            "timeout": 30,
+            "statusMessage": "Formatting Rust..."
+          },
+          {
+            "type": "command",
+            "if": "Edit(*.nix)",
+            "command": ".claude/hooks/format.sh treefmt",
+            "timeout": 30,
+            "statusMessage": "Formatting Nix..."
+          },
+          {
+            "type": "command",
+            "if": "Write(*.nix)",
+            "command": ".claude/hooks/format.sh treefmt",
+            "timeout": 30,
+            "statusMessage": "Formatting Nix..."
+          },
+          {
+            "type": "command",
+            "if": "Edit(*.yml)",
+            "command": ".claude/hooks/format.sh treefmt",
+            "timeout": 30,
+            "statusMessage": "Formatting YAML..."
+          },
+          {
+            "type": "command",
+            "if": "Write(*.yml)",
+            "command": ".claude/hooks/format.sh treefmt",
+            "timeout": 30,
+            "statusMessage": "Formatting YAML..."
+          },
+          {
+            "type": "command",
+            "if": "Edit(*.yaml)",
+            "command": ".claude/hooks/format.sh treefmt",
+            "timeout": 30,
+            "statusMessage": "Formatting YAML..."
+          },
+          {
+            "type": "command",
+            "if": "Write(*.yaml)",
+            "command": ".claude/hooks/format.sh treefmt",
+            "timeout": 30,
+            "statusMessage": "Formatting YAML..."
+          },
+          {
+            "type": "command",
+            "if": "Edit(*.c)",
+            "command": ".claude/hooks/format.sh clang-format -i",
+            "timeout": 30,
+            "statusMessage": "Formatting C/C++..."
+          },
+          {
+            "type": "command",
+            "if": "Write(*.c)",
+            "command": ".claude/hooks/format.sh clang-format -i",
+            "timeout": 30,
+            "statusMessage": "Formatting C/C++..."
+          },
+          {
+            "type": "command",
+            "if": "Edit(*.h)",
+            "command": ".claude/hooks/format.sh clang-format -i",
+            "timeout": 30,
+            "statusMessage": "Formatting C/C++..."
+          },
+          {
+            "type": "command",
+            "if": "Write(*.h)",
+            "command": ".claude/hooks/format.sh clang-format -i",
+            "timeout": 30,
+            "statusMessage": "Formatting C/C++..."
+          },
+          {
+            "type": "command",
+            "if": "Edit(*.cpp)",
+            "command": ".claude/hooks/format.sh clang-format -i",
+            "timeout": 30,
+            "statusMessage": "Formatting C/C++..."
+          },
+          {
+            "type": "command",
+            "if": "Write(*.cpp)",
+            "command": ".claude/hooks/format.sh clang-format -i",
+            "timeout": 30,
+            "statusMessage": "Formatting C/C++..."
+          },
+          {
+            "type": "command",
+            "if": "Edit(*.c++)",
+            "command": ".claude/hooks/format.sh clang-format -i",
+            "timeout": 30,
+            "statusMessage": "Formatting C/C++..."
+          },
+          {
+            "type": "command",
+            "if": "Write(*.c++)",
+            "command": ".claude/hooks/format.sh clang-format -i",
+            "timeout": 30,
+            "statusMessage": "Formatting C/C++..."
+          },
+          {
+            "type": "command",
+            "if": "Edit(*.hpp)",
+            "command": ".claude/hooks/format.sh clang-format -i",
+            "timeout": 30,
+            "statusMessage": "Formatting C/C++..."
+          },
+          {
+            "type": "command",
+            "if": "Write(*.hpp)",
+            "command": ".claude/hooks/format.sh clang-format -i",
+            "timeout": 30,
+            "statusMessage": "Formatting C/C++..."
+          }
+        ]
+      }
+    ]
+  }
+}

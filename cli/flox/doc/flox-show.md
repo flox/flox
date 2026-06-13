@@ -11,7 +11,7 @@ flox-show - show detailed information about a single package
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] show <pkg-path>
 ```
 
@@ -38,10 +38,11 @@ and available versions.
 `<pkg-path>`
 :   Package name to show details for.
 
-# EXAMPLES:
+# EXAMPLES
 
 Display detailed information about the `ripgrep` package:
-```
+
+```console
 $ flox show ripgrep
 ripgrep - A utility that combines the usability of The Silver Searcher with the raw speed of grep
     ripgrep@13.0.0

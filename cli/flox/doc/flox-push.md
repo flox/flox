@@ -11,7 +11,7 @@ flox-push - send environment to FloxHub
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] push
      [-d=<path>]
      [-o=<owner>]

@@ -46,7 +46,7 @@ pub enum BaseCatalogUrlSelect {
             help(
                 "Perform a nix expression build using a base package set of the given stability\n\
                 as tracked by the catalog server.\n\
-                Can not be used with manifest base builds."
+                Cannot be used with manifest base builds."
             )
         )]
         String,
@@ -312,10 +312,10 @@ impl Build {
             .collect::<Result<Vec<_>, _>>()?;
 
         match links_to_print.as_slice() {
-            // This case shouldnt occur with the current FloxBuildMk backend,
+            // This case shouldn't occur with the current FloxBuildMk backend,
             // which either errors earlier if nothing will be built,
             // or produces at least one link.
-            // Handle anyway for completeness and to avoid erros in case the above changes.
+            // Handle anyway for completeness and to avoid errors in case the above changes.
             [] => message::info("Completed build with no outputs"),
             [link] => message::created(format!("Built output: {link}")),
             links => message::created(formatdoc! {"
@@ -801,7 +801,7 @@ mod test {
     fn manifest_builds_not_allowed_with_stabilities_present() {
         let mut packages = vec![PackageTarget::new_unchecked(
             "manifest",
-            PackageTargetKind::ManifestBuild,
+            PackageTargetKind::ManifestBuild { sandbox: None },
         )];
 
         let result = disallow_base_url_select_for_manifest_builds(&packages, true);
@@ -828,7 +828,7 @@ mod test {
     fn manifest_builds_allowed_with_stabilities_absent() {
         let mut packages = vec![PackageTarget::new_unchecked(
             "manifest",
-            PackageTargetKind::ManifestBuild,
+            PackageTargetKind::ManifestBuild { sandbox: None },
         )];
 
         let result = disallow_base_url_select_for_manifest_builds(&packages, false);
@@ -952,7 +952,7 @@ mod test {
     fn manifest_builds_do_not_require_git_repo() {
         let packages = vec![PackageTarget::new_unchecked(
             "manifest",
-            PackageTargetKind::ManifestBuild,
+            PackageTargetKind::ManifestBuild { sandbox: None },
         )];
         let base_dir = tempfile::tempdir().unwrap();
 

@@ -2,7 +2,6 @@ use std::io::{BufWriter, stdout};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::LazyLock;
 use std::{env, fs};
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -39,7 +38,6 @@ use flox_rust_sdk::providers::services::process_compose::{PROCESS_COMPOSE_BIN, P
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use indoc::{formatdoc, indoc};
-use shell_gen::ShellWithPath;
 use tracing::{debug, trace, warn};
 
 use super::{
@@ -50,6 +48,7 @@ use super::{
     environment_select,
 };
 use crate::commands::check_for_upgrades::spawn_detached_check_for_upgrades_process;
+use crate::commands::general::update_config;
 use crate::commands::services::ServicesCommandsError;
 use crate::commands::{
     EnvironmentSelectError,
@@ -59,17 +58,12 @@ use crate::commands::{
     render_composition_manifest,
     uninitialized_environment_description,
 };
-use crate::config::{Config, EnvironmentPromptConfig};
+use crate::config::{AutoActivationPreference, Config, EnvironmentPromptConfig};
+use crate::utils::detect_shell::{detect_shell_for_in_place, detect_shell_for_subshell};
 use crate::utils::errors::format_diverged_metadata;
 use crate::utils::message;
-use crate::utils::openers::CliShellExt;
+use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
 use crate::{Exit, environment_subcommand_metric, subcommand_metric, utils};
-
-pub static INTERACTIVE_BASH_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
-    PathBuf::from(
-        env::var("INTERACTIVE_BASH_BIN").unwrap_or(env!("INTERACTIVE_BASH_BIN").to_string()),
-    )
-});
 
 #[derive(Debug, Clone, Bpaf)]
 pub enum CommandSelect {
@@ -97,6 +91,36 @@ pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     pub environment: EnvironmentSelect,
 
+    #[bpaf(external(activate_subcommand_or_options))]
+    pub subcommand_or_options: ActivateSubcommandOrOptions,
+}
+
+#[derive(Bpaf, Clone)]
+pub enum ActivateSubcommandOrOptions {
+    AutoActivate {
+        #[bpaf(external(auto_activate))]
+        auto_activate: AutoActivate,
+    },
+
+    ActivateOptions {
+        #[bpaf(external(activate_options))]
+        options: ActivateOptions,
+    },
+}
+
+#[derive(Bpaf, Debug, Clone, Copy)]
+pub enum AutoActivate {
+    /// Allow auto-activation for an environment
+    #[bpaf(command, hide)]
+    Allow,
+
+    /// Deny auto-activation for an environment
+    #[bpaf(command, hide)]
+    Deny,
+}
+
+#[derive(Bpaf, Clone)]
+pub struct ActivateOptions {
     /// Trust a remote environment temporarily for this activation, including
     /// the includes of any remote environments.
     #[bpaf(long, short)]
@@ -127,7 +151,7 @@ pub struct Activate {
     pub command: Option<CommandSelect>,
 }
 
-impl Activate {
+impl ActivateOptions {
     /// Validate that `--start-services` and `--no-start-services` are not
     /// used together, since they are mutually exclusive.
     fn validate_service_flags(&self) -> Result<()> {
@@ -136,13 +160,25 @@ impl Activate {
         }
         Ok(())
     }
+}
 
+impl Activate {
     pub async fn handle(self, mut config: Config, mut flox: Flox) -> Result<()> {
-        self.validate_service_flags()?;
+        let options = match self.subcommand_or_options {
+            ActivateSubcommandOrOptions::AutoActivate { auto_activate } => {
+                return self
+                    .handle_auto_activation_subcommand(auto_activate, config, flox)
+                    .await;
+            },
+            ActivateSubcommandOrOptions::ActivateOptions { options } => {
+                options.validate_service_flags()?;
+                options
+            },
+        };
 
         let mut concrete_environment = match self
             .environment
-            .to_concrete_environment(&mut flox, self.generation)
+            .to_concrete_environment(&mut flox, options.generation)
             .await
         {
             Ok(concrete_environment) => concrete_environment,
@@ -160,12 +196,16 @@ impl Activate {
         environment_subcommand_metric!(
             "activate",
             concrete_environment,
-            start_services = self.start_services,
-            mode = self.mode.clone().unwrap_or(ActivateMode::Dev).to_string()
+            start_services = options.start_services,
+            mode = options
+                .mode
+                .clone()
+                .unwrap_or(ActivateMode::Dev)
+                .to_string()
         );
 
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment
-            && !self.trust
+            && !options.trust
         {
             ensure_environment_trust(
                 &mut config,
@@ -179,9 +219,9 @@ impl Activate {
             .await?;
         }
 
-        let invocation_type = match self.command {
+        let invocation_type = match options.command {
             None => {
-                if self.print_script || !stdout().is_tty() {
+                if options.print_script || !stdout().is_tty() {
                     InvocationType::InPlace
                 } else {
                     InvocationType::Interactive
@@ -225,16 +265,63 @@ impl Activate {
             None,
         )?;
 
-        self.activate(
-            config,
-            flox,
-            concrete_environment,
-            invocation_type,
-            Vec::new(),
-        )
-        .await
+        options
+            .activate(
+                config,
+                flox,
+                concrete_environment,
+                invocation_type,
+                Vec::new(),
+            )
+            .await
     }
 
+    async fn handle_auto_activation_subcommand(
+        self,
+        subcommand: AutoActivate,
+        config: Config,
+        mut flox: Flox,
+    ) -> Result<()> {
+        if !flox.features.auto_activate {
+            let cmd_name = match subcommand {
+                AutoActivate::Allow => "allow",
+                AutoActivate::Deny => "deny",
+            };
+            bail!(
+                "'{}' requires the auto_activate feature flag. Set FLOX_FEATURES_AUTO_ACTIVATE=true.",
+                cmd_name
+            );
+        }
+
+        let concrete_environment = self
+            .environment
+            .to_concrete_environment(&mut flox, None)
+            .await
+            .context("Failed to find environment")?;
+
+        let verb = match subcommand {
+            AutoActivate::Allow => {
+                environment_subcommand_metric!("activate::allow", concrete_environment);
+                allow(&config, &concrete_environment)?;
+                "allowed"
+            },
+            AutoActivate::Deny => {
+                environment_subcommand_metric!("activate::deny", concrete_environment);
+                deny(&config, &concrete_environment)?;
+                "denied"
+            },
+        };
+
+        let description = environment_description(&concrete_environment)?;
+        message::updated(formatdoc! {"
+            Auto-activation {verb} for {description}.
+        "});
+
+        Ok(())
+    }
+}
+
+impl ActivateOptions {
     /// This function contains the bulk of the implementation for
     /// Activate::handle,
     /// but it allows us to create an activation for use by `services start` or
@@ -416,9 +503,9 @@ impl Activate {
         );
 
         let shell = if invocation_type == InvocationType::InPlace {
-            Self::detect_shell_for_in_place()?
+            detect_shell_for_in_place()?
         } else {
-            Self::detect_shell_for_subshell()
+            detect_shell_for_subshell()
         };
         subcommand_metric!("activate", "shell" = shell.to_string());
 
@@ -461,7 +548,12 @@ impl Activate {
             invocation_type: Some(invocation_type),
             remove_after_reading: true,
             metrics_uuid: flox.metrics_device_uuid,
-            capture_env_diff: flox.features.auto_activate && !already_active,
+            disable_hook: config.flox.disable_hook.unwrap_or(false),
+            flox_bin: std::env::current_exe()
+                .ok()
+                .and_then(|p| p.to_str().map(String::from))
+                .unwrap_or_else(|| "flox".to_string()),
+            auto_activate_fish_mode: config.flox.auto_activate_fish_mode,
         };
 
         let tempfile = tempfile::NamedTempFile::new_in(flox.temp_dir)?;
@@ -504,43 +596,6 @@ impl Activate {
             // TODO: did this break in-place metrics?
             Err(command.exec().into())
         }
-    }
-
-    /// Detect the shell to use for activation
-    ///
-    /// Used to determine shell for
-    /// `flox activate` and `flox activate -- CMD`
-    ///
-    /// Returns the first shell found in the following order:
-    /// 1. FLOX_SHELL environment variable
-    /// 2. SHELL environment variable
-    /// 3. Parent process shell
-    /// 4. Default to bash bundled with flox
-    fn detect_shell_for_subshell() -> ShellWithPath {
-        Self::detect_shell_for_subshell_with(ShellWithPath::detect_from_parent_process)
-    }
-
-    /// Utility method for testing implementing the logic of shell detection
-    /// for subshells, generically over a parent shell detection function.
-    fn detect_shell_for_subshell_with(
-        parent_shell_fn: impl Fn() -> Result<ShellWithPath>,
-    ) -> ShellWithPath {
-        ShellWithPath::detect_from_env("FLOX_SHELL")
-            .or_else(|err| {
-                debug!("Failed to detect shell from FLOX_SHELL: {err}");
-                ShellWithPath::detect_from_env("SHELL")
-            })
-            .or_else(|err| {
-                debug!("Failed to detect shell from SHELL: {err}");
-                parent_shell_fn()
-            })
-            .unwrap_or_else(|err| {
-                debug!("Failed to detect shell from parent process: {err}");
-                warn!(
-                    "Failed to detect shell from environment or parent process. Defaulting to bash"
-                );
-                ShellWithPath::Bash(INTERACTIVE_BASH_BIN.clone())
-            })
     }
 
     /// Determine which services to start on activation.
@@ -600,28 +655,6 @@ impl Activate {
         }
 
         services_for_system.inner().keys().cloned().collect()
-    }
-
-    /// Detect the shell to use for in-place activation
-    ///
-    /// Used to determine shell for `eval "$(flox activate)"`,
-    /// `flox activate --print-script`, and
-    /// when adding activation of a default environment to RC files.
-    pub(crate) fn detect_shell_for_in_place() -> Result<ShellWithPath> {
-        Self::detect_shell_for_in_place_with(ShellWithPath::detect_from_parent_process)
-    }
-
-    /// Utility method for testing implementing the logic of shell detection
-    /// for in-place activation, generically over a parent shell detection function.
-    fn detect_shell_for_in_place_with(
-        parent_shell_fn: impl Fn() -> Result<ShellWithPath>,
-    ) -> Result<ShellWithPath> {
-        ShellWithPath::detect_from_env("FLOX_SHELL")
-            .or_else(|_| parent_shell_fn())
-            .or_else(|err| {
-                warn!("Failed to detect shell from environment: {err}");
-                ShellWithPath::detect_from_env("SHELL")
-            })
     }
 
     /// Construct the environment list for the shell prompt
@@ -690,7 +723,7 @@ fn notify_upgrades_if_available(
         return Ok(());
     };
 
-    notify_package_upgrades(flox, environment, &info.upgrade_result)?;
+    notify_package_upgrades(flox, environment, &info.upgrade_result, environment_select)?;
 
     Ok(())
 }
@@ -699,6 +732,7 @@ fn notify_package_upgrades(
     flox: &Flox,
     environment: &mut ConcreteEnvironment,
     upgrade_result: &UpgradeResult,
+    environment_select: &EnvironmentSelect,
 ) -> Result<()> {
     let current_lockfile = environment.lockfile(flox)?.into();
     if Some(current_lockfile) != upgrade_result.old_lockfile {
@@ -712,9 +746,23 @@ fn notify_package_upgrades(
         return Ok(());
     }
     let description = environment_description(environment)?;
+    let diff_for_system = upgrade_result.diff_for_system(&flox.system);
+    if diff_for_system.is_empty() {
+        message::verbose(formatdoc! {"
+            Upgrades available for {description} on other systems.
+            Use 'flox upgrade --dry-run' for details."});
+        return Ok(());
+    }
+    // TODO: this doesn't capture the environment chosen by the user if we prompted
+    let flags = environment_select
+        .to_flags()
+        .map(|flags| format!(" {}", flags.join(" ")))
+        .unwrap_or("".to_string());
+    let (version_changes, rebuilds) = count_upgrade_categories(&diff_for_system);
+    let summary = format_upgrade_summary(version_changes, rebuilds);
     let message = formatdoc! {"
-        Upgrades are available for packages in {description}.
-        Use 'flox upgrade --dry-run' for details.
+        {summary} available in {description}.
+        Use 'flox upgrade --dry-run{flags}' for details.
     "};
     message::info(message);
     Ok(())
@@ -820,6 +868,51 @@ fn notify_environment_upgrades(
     Ok(())
 }
 
+/// Allow auto-activation for an environment by updating the config.
+///
+/// Writes the allow preference to the config file for the environment's parent path.
+pub fn allow(config: &Config, concrete_environment: &ConcreteEnvironment) -> Result<()> {
+    let env_path = concrete_environment.parent_path()?;
+    let path_str = env_path.display().to_string();
+    let key = format!("auto_activate_environments.{}", path_str);
+    update_config(
+        &config.flox.config_dir,
+        key,
+        Some(AutoActivationPreference::Allow),
+    )?;
+    Ok(())
+}
+
+/// Deny auto-activation for an environment by updating the config.
+///
+/// Writes the deny preference to the config file for the environment's parent path.
+pub fn deny(config: &Config, concrete_environment: &ConcreteEnvironment) -> Result<()> {
+    let env_path = concrete_environment.parent_path()?;
+    let path_str = env_path.display().to_string();
+    let key = format!("auto_activate_environments.{}", path_str);
+    update_config(
+        &config.flox.config_dir,
+        key,
+        Some(AutoActivationPreference::Deny),
+    )?;
+    Ok(())
+}
+
+/// Check if auto-activation is allowed for an environment.
+///
+/// Returns true if the environment is explicitly allowed or has no preference set.
+/// Returns false if the environment is explicitly denied.
+#[allow(dead_code)]
+pub fn is_allowed(config: &Config, concrete_environment: &ConcreteEnvironment) -> Result<bool> {
+    let env_path = concrete_environment.parent_path()?;
+    let preference = config.flox.auto_activate_environments.get(&env_path);
+
+    match preference {
+        Some(AutoActivationPreference::Deny) => Ok(false),
+        Some(AutoActivationPreference::Allow) | None => Ok(true),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::LazyLock;
@@ -843,73 +936,10 @@ mod tests {
         })
     });
 
-    const SHELL_SET: (&'_ str, Option<&'_ str>) = ("SHELL", Some("/shell/bash"));
-    const FLOX_SHELL_SET: (&'_ str, Option<&'_ str>) = ("FLOX_SHELL", Some("/flox_shell/bash"));
-    const SHELL_UNSET: (&'_ str, Option<&'_ str>) = ("SHELL", None);
-    const FLOX_SHELL_UNSET: (&'_ str, Option<&'_ str>) = ("FLOX_SHELL", None);
-    const PARENT_DETECTED: &dyn Fn() -> Result<ShellWithPath> =
-        &|| Ok(ShellWithPath::Bash("/parent/bash".into()));
-    const PARENT_UNDETECTED: &dyn Fn() -> Result<ShellWithPath> =
-        &|| Err(anyhow::anyhow!("parent shell detection failed"));
-
-    #[test]
-    fn test_detect_shell_for_subshell() {
-        temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_SET], || {
-            let shell = Activate::detect_shell_for_subshell_with(|| unreachable!());
-            assert_eq!(shell, ShellWithPath::Bash("/shell/bash".into()));
-        });
-
-        temp_env::with_vars([FLOX_SHELL_SET, SHELL_SET], || {
-            let shell = Activate::detect_shell_for_subshell_with(|| unreachable!());
-            assert_eq!(shell, ShellWithPath::Bash("/flox_shell/bash".into()));
-        });
-
-        temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_UNSET], || {
-            let shell = Activate::detect_shell_for_subshell_with(PARENT_DETECTED);
-            assert_eq!(shell, ShellWithPath::Bash("/parent/bash".into()));
-        });
-
-        temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_UNSET], || {
-            let shell = Activate::detect_shell_for_subshell_with(PARENT_UNDETECTED);
-            assert_eq!(shell, ShellWithPath::Bash(INTERACTIVE_BASH_BIN.clone()));
-        });
-    }
-
-    #[test]
-    fn test_detect_shell_for_in_place() {
-        // $SHELL is used as a fallback only if parent detection fails
-        temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_SET], || {
-            let shell = Activate::detect_shell_for_in_place_with(PARENT_DETECTED).unwrap();
-            assert_eq!(shell, ShellWithPath::Bash("/parent/bash".into()));
-
-            // fall back to $SHELL if parent detection fails
-            let shell = Activate::detect_shell_for_in_place_with(PARENT_UNDETECTED).unwrap();
-            assert_eq!(shell, ShellWithPath::Bash("/shell/bash".into()));
-        });
-
-        // $FLOX_SHELL takes precedence over $SHELL and detected parent shell
-        temp_env::with_vars([FLOX_SHELL_SET, SHELL_SET], || {
-            let shell = Activate::detect_shell_for_in_place_with(PARENT_DETECTED).unwrap();
-            assert_eq!(shell, ShellWithPath::Bash("/flox_shell/bash".into()));
-
-            let shell = Activate::detect_shell_for_in_place_with(PARENT_UNDETECTED).unwrap();
-            assert_eq!(shell, ShellWithPath::Bash("/flox_shell/bash".into()));
-        });
-
-        // if both $FLOX_SHELL and $SHELL are unset, we should fail iff parent detection fails
-        temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_UNSET], || {
-            let shell = Activate::detect_shell_for_in_place_with(PARENT_DETECTED).unwrap();
-            assert_eq!(shell, ShellWithPath::Bash("/parent/bash".into()));
-
-            let shell = Activate::detect_shell_for_in_place_with(PARENT_UNDETECTED);
-            assert!(shell.is_err());
-        });
-    }
-
     #[test]
     fn test_shell_prompt_empty_without_active_environments() {
         let active_environments = ActiveEnvironments::default();
-        let prompt = Activate::make_prompt_environments(false, &active_environments);
+        let prompt = ActivateOptions::make_prompt_environments(false, &active_environments);
 
         assert_eq!(prompt, "");
     }
@@ -920,11 +950,11 @@ mod tests {
         active_environments.set_last_active(DEFAULT_ENV.clone(), None, ActivateMode::Dev);
 
         // with `hide_default_prompt = false` we should see the default environment
-        let prompt = Activate::make_prompt_environments(false, &active_environments);
+        let prompt = ActivateOptions::make_prompt_environments(false, &active_environments);
         assert_eq!(prompt, "default".to_string());
 
         // with `hide_default_prompt = true` we should not see the default environment
-        let prompt = Activate::make_prompt_environments(true, &active_environments);
+        let prompt = ActivateOptions::make_prompt_environments(true, &active_environments);
         assert_eq!(prompt, "");
     }
 
@@ -935,18 +965,20 @@ mod tests {
         active_environments.set_last_active(NON_DEFAULT_ENV.clone(), None, ActivateMode::Dev);
 
         // with `hide_default_prompt = false` we should see the default environment
-        let prompt = Activate::make_prompt_environments(false, &active_environments);
+        let prompt = ActivateOptions::make_prompt_environments(false, &active_environments);
         assert_eq!(prompt, "wichtig default".to_string());
 
         // with `hide_default_prompt = true` we should not see the default environment
-        let prompt = Activate::make_prompt_environments(true, &active_environments);
+        let prompt = ActivateOptions::make_prompt_environments(true, &active_environments);
         assert_eq!(prompt, "wichtig".to_string());
     }
 
-    /// Build a minimal Activate with only the service-related flags set.
-    fn activate_with_flags(start_services: bool, no_start_services: bool) -> Activate {
-        Activate {
-            environment: EnvironmentSelect::default(),
+    /// Build minimal ActivateOptions with only the service-related flags set.
+    fn activate_options_with_flags(
+        start_services: bool,
+        no_start_services: bool,
+    ) -> ActivateOptions {
+        ActivateOptions {
             trust: false,
             print_script: false,
             start_services,
@@ -959,8 +991,8 @@ mod tests {
 
     #[test]
     fn test_conflicting_service_flags_are_rejected() {
-        let activate = activate_with_flags(true, true);
-        assert!(activate.validate_service_flags().is_err());
+        let options = activate_options_with_flags(true, true);
+        assert!(options.validate_service_flags().is_err());
     }
 }
 
@@ -985,6 +1017,7 @@ mod upgrade_notification_tests {
     #[test]
     fn no_notification_printed_if_absent() {
         let (flox, _tempdir) = flox_instance();
+
         let (subscriber, writer) = test_subscriber_message_only();
 
         let environment =
@@ -1092,10 +1125,45 @@ mod upgrade_notification_tests {
         let printed = writer.to_string();
 
         assert_eq!(printed, formatdoc! {"
-            ℹ Upgrades are available for packages in 'name'.
+            ℹ 1 rebuild available in 'name'.
             Use 'flox upgrade --dry-run' for details.
 
         "});
+    }
+
+    /// When the user specifies an environment via flags (e.g. `-d <path>` or
+    /// `-r <env>`), the upgrade hint must include those flags so the suggested
+    /// command actually targets the right environment.
+    #[test]
+    fn notification_printed_with_dir_flags() {
+        let (flox, _tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
+
+        let path_env = new_named_path_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            "name",
+        );
+        // Capture the parent of the .flox directory so we can construct a
+        // matching EnvironmentSelect::Dir value.
+        let dot_flox_parent = path_env.path.parent().unwrap().to_path_buf();
+        let mut environment = ConcreteEnvironment::Path(path_env);
+
+        write_upgrade_available(&flox, &mut environment);
+
+        let env_select = EnvironmentSelect::Dir(dot_flox_parent.clone());
+
+        tracing::subscriber::with_default(subscriber, || {
+            notify_upgrades_if_available(&flox, &mut environment, &env_select).unwrap();
+        });
+
+        let printed = writer.to_string();
+        let expected_flags = format!("-d {}", dot_flox_parent.display());
+
+        assert!(
+            printed.contains(&format!("'flox upgrade --dry-run {expected_flags}'")),
+            "expected upgrade hint to include env flags, got: {printed}"
+        );
     }
 
     #[test]

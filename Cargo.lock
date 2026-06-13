@@ -523,6 +523,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55248b47b0caf0546f7988906588779981c43bb1bc9d0c44087278f80cdb44ba"
 
 [[package]]
+name = "beta"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "bpaf",
+ "flox-rust-sdk",
+ "tracing",
+]
+
+[[package]]
 name = "bindgen"
 version = "0.71.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1419,6 +1429,7 @@ name = "flox"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "beta",
  "bpaf",
  "chrono",
  "close_fds",
@@ -1426,6 +1437,7 @@ dependencies = [
  "crossterm 0.29.0",
  "derive_more",
  "dirs",
+ "flox-activations",
  "flox-catalog",
  "flox-core",
  "flox-manifest",
@@ -1456,6 +1468,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "serial_test",
+ "shell-escape",
  "shell_gen",
  "slug",
  "supports-color",
@@ -1573,6 +1586,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "flox-events"
+version = "0.0.0"
+dependencies = [
+ "derive_more",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "time",
+ "uuid",
+]
+
+[[package]]
 name = "flox-manifest"
 version = "0.0.0"
 dependencies = [
@@ -1669,6 +1694,8 @@ dependencies = [
  "nix",
  "proptest",
  "tempfile",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

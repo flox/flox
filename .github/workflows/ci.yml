@@ -183,15 +183,6 @@ jobs:
           RUST_BACKTRACE: 1
         run: nix develop -L --no-update-lock-file --command just impure-tests
 
-      - name: "Upload CLI Unit Test Results"
-        uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3 # v1
-        if: ${{ !cancelled() && steps.unit-tests.outcome != 'skipped' }}
-        with:
-          disable_search: true
-          files: "./target/nextest/ci/junit.xml"
-          flags: "dev-unittests, ${{ matrix.test-tags }}, ${{ matrix.os }}"
-          verbose: true
-          use_oidc: true
       - name: "Check schemas are up to date"
         run: |
           nix develop -L --no-update-lock-file --command just gen-schemas
@@ -204,6 +195,11 @@ jobs:
 
   nix-build:
     name: "Nix build"
+    # Fork PRs can't access the AWS OIDC / Tailscale secrets this job needs, so
+    # it can only fail. The required "Nix build (*)" contexts are posted on the
+    # same commit by the maintainer-run community-ci draft PR (CONTRIBUTING.md).
+    # Pushes, merge-queue runs, and same-repo PRs are unaffected.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: "ubuntu-latest"
     timeout-minutes: 120
 
@@ -291,6 +287,9 @@ jobs:
 
   nix-build-kerberos:
     name: "Verify Kerberos CLI build"
+    # Same as nix-build: fork PRs lack the secrets this job needs. The required
+    # "Verify Kerberos CLI build (*)" contexts come from the community-ci draft.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: "ubuntu-latest"
     timeout-minutes: 60
 
@@ -472,10 +471,10 @@ jobs:
           - system: "x86_64-darwin"
         include:
           # Disable containerize and activation tests on x86_64-darwin
-          # Containerize tests are run through rosetta, and thius are slow and dont necessarily represent real usage.
+          # Containerize tests are run through rosetta, and thus are slow and dont necessarily represent real usage.
           # Activation tests are taking the largest part of test runtime (up to ~10 minutes)
           # we disable these in an effort to speed up CI.
-          # We assume that activation is sufficiently testsd on macos through aarch64-darwin
+          # We assume that activation is sufficiently tested on macos through aarch64-darwin
           # and on x86_64-darwin through the remaining integration tests
           - system: "x86_64-darwin"
             test-tags: "!containerize,!activate"
@@ -512,13 +511,3 @@ jobs:
           MATRIX_SYSTEM: ${{ matrix.system }}
           MATRIX_TEST_TAGS: ${{ matrix.test-tags }}
         run: ./.github/scripts/remote-execute-integration-tests.sh
-
-      - name: "Upload Bats Tests results"
-        uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3 # v1
-        if: ${{ !cancelled() }}
-        with:
-          disable_search: true
-          files: "./report.xml"
-          flags: "nix-integration-tests, ${{ matrix.test-tags }}, ${{ matrix.system }}"
-          verbose: true
-          use_oidc: true

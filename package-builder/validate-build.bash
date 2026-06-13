@@ -214,7 +214,7 @@ function diff_assoc_keys {
     done
 }
 
-# verify_requistites(): verify that the build contains only the packages
+# verify_requisites(): verify that the build contains only the packages
 #         found in the build wrapper's closure and/or any "extra" requisites.
 #         Uses global variables _build_env, _develop_env, _output, and
 #         _extra_requisites.

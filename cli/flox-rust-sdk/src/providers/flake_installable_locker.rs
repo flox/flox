@@ -37,7 +37,7 @@ pub(crate) struct FlakeInstallableToLock {
 /// time-consuming unless cached.
 ///
 /// The trait is implemented by the [Nix] struct which is the canonical implementation
-/// using the `buitins.lockFlakeInstallable` primop.
+/// using the `builtins.lockFlakeInstallable` primop.
 ///
 /// The trait is also implemented by the [`InstallableLockerMock`] struct which is used for testing.
 #[enum_dispatch]
@@ -207,8 +207,8 @@ mod tests {
         local_test_flake_path.to_str().unwrap().to_string()
     }
 
-    /// Test that the output of `buitins.lockFlakeInstallable` can be deserialized
-    /// into a [LockedFlakeInstallble] struct.
+    /// Test that the output of `builtins.lockFlakeInstallable` can be deserialized
+    /// into a [LockedFlakeInstallable] struct.
     #[test]
     fn test_output_format() {
         // `$system` is set by the nix devshell

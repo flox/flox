@@ -382,7 +382,8 @@ pub fn new_package_overrides(old_ids: &[String], new_ids: &[String]) -> Vec<Stri
 mod tests {
     use super::shallow::ShallowMerger;
     use super::*;
-    use crate::parsed::common::{Profile, Vars};
+    use crate::parsed::common::Vars;
+    use crate::parsed::v1_13_0::Profile;
 
     #[test]
     fn composite_manifest_runs_merger() {

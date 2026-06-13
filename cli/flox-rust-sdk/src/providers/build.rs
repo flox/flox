@@ -9,6 +9,7 @@ use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
+use flox_manifest::parsed::latest::BuildSandbox;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -235,7 +236,7 @@ impl FloxBuildMk<'_> {
 
     /// Create a new instance with std{out,err} piped into buffers
     /// instead of inherited from the current process.
-    /// Useful for testing or when one wants to delibrately call the subsystem
+    /// Useful for testing or when one wants to deliberately call the subsystem
     /// without its output forwarded.
     pub fn new_with_buffers<'args>(
         flox: &'args Flox,
@@ -316,7 +317,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
 
         command.arg(format!(
             "FLOX_ENV={}",
-            self.built_environments.develop.display()
+            self.built_environments.dev.display()
         ));
         command.arg(format!(
             "FLOX_ENV_OUTPUTS={}",
@@ -435,7 +436,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         // TODO: is this even necessary, or can we detect build outputs instead?
         command.arg(format!(
             "FLOX_ENV={}",
-            self.built_environments.develop.display()
+            self.built_environments.dev.display()
         ));
 
         // TODO: is this even necessary, or can we detect build outputs instead?
@@ -626,19 +627,19 @@ pub struct ExpressionBuildMetadata {
 }
 
 /// The kind of a package target,
-/// i.e. whether a pacakge is sourced from the manifest or a nix expression.
+/// i.e. whether a package is sourced from the manifest or a nix expression.
 ///
-/// While not relevant to the build itself,
-/// publishing pacakges may differ depending on the kind.
-/// For example [super::publish::check_package_metadata]
-/// needs to infer the base catalog url
-/// from the installed packages in the  top-level group
-/// for manifest builds, while expression builds
-/// are assigned their base nixpkgs url in coordination with the catalog API
+/// The kind is used during publishing: [super::publish::check_package_metadata]
+/// needs to infer the base catalog url from the installed packages in the
+/// top-level group for manifest builds, while expression builds are assigned
+/// their base nixpkgs url in coordination with the catalog API.
+/// The sandbox mode stored on [PackageTargetKind::ManifestBuild] additionally
+/// controls whether [super::publish::check_build_metadata] runs the build in
+/// an ephemeral clone or the original checkout.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackageTargetKind {
     ExpressionBuild(ExpressionBuildMetadata),
-    ManifestBuild,
+    ManifestBuild { sandbox: Option<BuildSandbox> },
 }
 
 impl PackageTargetKind {
@@ -647,7 +648,7 @@ impl PackageTargetKind {
     }
 
     pub fn is_manifest_build(&self) -> bool {
-        matches!(self, PackageTargetKind::ManifestBuild)
+        matches!(self, PackageTargetKind::ManifestBuild { .. })
     }
 }
 
@@ -658,9 +659,9 @@ impl PackageTargetKind {
 /// while avoiding the builder to require [PackageTargetKinds],
 /// which would otherwise be unused.
 ///
-/// Outside of tests [PacakgeTargetName]s
+/// Outside of tests [PackageTargetName]s
 /// should only be produced via [PackageTarget::name],
-/// to maintain the guarantee that the package suppiosedly exists.
+/// to maintain the guarantee that the package supposedly exists.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display, derive_more::AsRef)]
 pub struct PackageTargetName<'t>(&'t str);
 
@@ -729,8 +730,12 @@ impl PackageTargets {
         targets.extend(
             environment_packages
                 .inner()
-                .keys()
-                .map(|name| (name.to_string(), PackageTargetKind::ManifestBuild)),
+                .iter()
+                .map(|(name, descriptor)| {
+                    (name.to_string(), PackageTargetKind::ManifestBuild {
+                        sandbox: descriptor.sandbox.clone(),
+                    })
+                }),
         );
 
         for (expression_build_target, expression_build_metadata) in nix_expression_packages {
@@ -758,7 +763,7 @@ impl PackageTargets {
     }
 
     /// Validates a list of target names (e.g. CLI arguments),
-    /// against the knwon targets, returning a [Vec<PackageTarget>] of valid targets.
+    /// against the known targets, returning a [Vec<PackageTarget>] of valid targets.
     /// If invalid target names are detected this function will return an error instead.
     pub fn select(
         &self,
@@ -848,7 +853,7 @@ pub mod test_helpers {
         )
         .build(
             &toplevel_or_common_nixpkgs,
-            &env.rendered_env_links(flox).unwrap().development,
+            &env.rendered_env_links(flox).unwrap().dev,
             &[PackageTargetName::new_unchecked(&package)],
             build_cache,
             None,
@@ -1200,7 +1205,7 @@ mod tests {
 
     use anyhow::Context;
     use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
-    use flox_test_utils::GENERATED_DATA;
+    use flox_test_utils::{GENERATED_DATA, init_tracing};
     use indoc::{formatdoc, indoc};
 
     use super::test_helpers::*;
@@ -1312,6 +1317,142 @@ mod tests {
         assert!(
             !output.stderr.contains("failed to produce output path"),
             "nix's own error for empty output path is bypassed"
+        );
+    }
+
+    /// Build script that deliberately reads a file outside the build's
+    /// closure (`/etc/hosts` exists on both Linux and macOS and is not part of
+    /// any Flox environment), then produces a valid `$out`. Used by the
+    /// virtual-sandbox tests below to drive each sandbox level against a known
+    /// out-of-closure access.
+    ///
+    /// The output is a plain file directly under `$out` — deliberately NOT an
+    /// executable under `$out/bin`. An executable there triggers the
+    /// post-build `makeShellWrapper`, which embeds bash/glibc references that
+    /// the subsequent `validate-build` step then rejects against this manifest's
+    /// empty closure (it declares no packages). That wrapping/validation step
+    /// is unrelated to what these tests exercise — the sandbox interception of
+    /// the `/etc/hosts` read — so we avoid it to keep the tests focused and
+    /// portable (the wrapping behaves differently on Linux vs macOS).
+    fn sandbox_manifest(pname: &str, mode: &str) -> String {
+        // `warn`/`enforce` are v1.13.0 sandbox values, so declare that schema
+        // version. `off`/`pure` are also valid there, so the same helper serves
+        // every mode.
+        formatdoc! {r#"
+            schema-version = "1.13.0"
+
+            [build.{pname}]
+            sandbox = "{mode}"
+            command = '''
+                cat /etc/hosts > /dev/null
+                mkdir -p $out
+                echo done > $out/{pname}
+            '''
+        "#}
+    }
+
+    /// `sandbox = "off"`: the virtual sandbox is not engaged at all, so an
+    /// out-of-closure read is invisible and the build succeeds silently.
+    #[test]
+    fn build_sandbox_off_allows_out_of_closure_access() {
+        let pname = String::from("foo");
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &sandbox_manifest(&pname, "off"));
+
+        let output = assert_build_status(&flox, &mut env, &pname, None, true);
+
+        assert!(
+            !output.stderr.contains("is not in the sandbox"),
+            "off mode must not engage the virtual sandbox; stderr:\n{}",
+            output.stderr
+        );
+    }
+
+    /// `sandbox = "warn"`: the build still succeeds, but the virtual sandbox
+    /// reports the out-of-closure read so the author can discover undeclared
+    /// dependencies.
+    #[test]
+    fn build_sandbox_warn_flags_out_of_closure_access() {
+        let pname = String::from("foo");
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &sandbox_manifest(&pname, "warn"));
+
+        let output = assert_build_status(&flox, &mut env, &pname, None, true);
+
+        // The message may include the resolved realpath in parentheses (on
+        // macOS /etc/hosts resolves to /private/etc/hosts), so match the path
+        // and the "not in the sandbox" phrase separately rather than adjacently.
+        let flagged =
+            output.stderr.contains("/etc/hosts") && output.stderr.contains("not in the sandbox");
+        assert!(
+            flagged,
+            "warn mode should flag the out-of-closure read of /etc/hosts; stderr:\n{}",
+            output.stderr
+        );
+    }
+
+    /// `sandbox = "enforce"`: an out-of-closure access is fatal — the build
+    /// fails with a `SANDBOX ERROR` naming the offending path.
+    ///
+    /// The preload is injected right at the build script's bash (see
+    /// flox-build.mk), so the build invocation machinery (`activate`, the `t3`
+    /// trace wrapper) runs outside the sandbox and the block lands on the
+    /// script's *own* out-of-closure read of `/etc/hosts`, not on wrapper
+    /// paths.
+    #[test]
+    fn build_sandbox_enforce_blocks_out_of_closure_access() {
+        let pname = String::from("foo");
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &sandbox_manifest(&pname, "enforce"));
+
+        // expect the build to FAIL
+        let output = assert_build_status(&flox, &mut env, &pname, None, false);
+
+        let is_error = output.stderr.contains("SANDBOX ERROR");
+        // The path may be followed by its resolved realpath in parentheses.
+        let names_path = output.stderr.contains("/etc/hosts");
+        assert!(
+            is_error && names_path,
+            "enforce should block the script's out-of-closure read of /etc/hosts; stderr:\n{}",
+            output.stderr
+        );
+    }
+
+    /// `sandbox-allow` permits a specific out-of-closure path even under
+    /// enforce. The build reads `/etc/hosts` (out of closure) but allow-lists
+    /// it, so — unlike build_sandbox_enforce_blocks_out_of_closure_access —
+    /// the build succeeds. Exercises the whole path: manifest -> lockfile ->
+    /// flox-build.mk -> FLOX_SANDBOX_ALLOW -> libsandbox fnmatch.
+    #[test]
+    fn build_sandbox_allow_permits_listed_path() {
+        let pname = String::from("foo");
+        // sandbox-allow is a v1.13.0 field, so the manifest must declare that
+        // schema version. /etc/hosts resolves to /private/etc/hosts on macOS;
+        // list both.
+        let manifest = formatdoc! {r#"
+            schema-version = "1.13.0"
+
+            [build.{pname}]
+            sandbox = "enforce"
+            sandbox-allow = ["/etc/hosts", "/private/etc/hosts"]
+            command = '''
+                cat /etc/hosts > /dev/null
+                mkdir -p $out
+                echo done > $out/{pname}
+            '''
+        "#};
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+
+        // The build must SUCCEED — the allow-listed read is no longer fatal.
+        let output = assert_build_status(&flox, &mut env, &pname, None, true);
+
+        let blocked =
+            output.stderr.contains("/etc/hosts") && output.stderr.contains("not in the sandbox");
+        assert!(
+            !blocked,
+            "sandbox-allow should silently permit /etc/hosts; stderr:\n{}",
+            output.stderr
         );
     }
 
@@ -1935,6 +2076,56 @@ mod tests {
         build_depending_on_another_build("pure", "off");
     }
 
+    /// Staged build (design §3.4): a chain of three builds with *differing*
+    /// sandbox levels, each consuming the previous one's output via `${...}`.
+    /// Demonstrates that sandbox levels can be mixed across a sequential build
+    /// workflow and still produce a correct final artifact.
+    ///
+    /// The chain spans all three local levels (`off` → `warn` → `enforce`).
+    /// Each stage only reads the prior stage's output, which is a declared
+    /// dependency, so even the `enforce` stage stays within its closure and
+    /// succeeds — no stage reaches for anything out-of-closure.
+    #[test]
+    fn build_staged_chain_with_mixed_sandbox_levels() {
+        let file_name = String::from("artifact");
+        let file_content = String::from("staged content");
+
+        // `warn`/`enforce` are v1.13.0 sandbox values, so declare that schema.
+        let manifest = formatdoc! {r#"
+            schema-version = "1.13.0"
+
+            [build.stage-one]
+            sandbox = "off"
+            command = """
+                mkdir $out
+                echo -n "{file_content}" > $out/{file_name}
+            """
+
+            [build.stage-two]
+            sandbox = "warn"
+            command = """
+                mkdir $out
+                cp ${{stage-one}}/{file_name} $out/{file_name}
+            """
+
+            [build.stage-three]
+            sandbox = "enforce"
+            command = """
+                mkdir $out
+                cp ${{stage-two}}/{file_name} $out/{file_name}
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+        let _ = GitCommandProvider::init(&env_path, false).unwrap();
+
+        // Building the last stage transitively builds the whole chain.
+        assert_build_status(&flox, &mut env, "stage-three", None, true);
+        assert_build_file(&env_path, "stage-three", &file_name, &file_content);
+    }
+
     #[test]
     fn rebuild_with_modified_command() {
         let package_name = String::from("foo");
@@ -2202,7 +2393,7 @@ mod tests {
         // guarantees about the portability or reproducibility of impure builds
         // which may link against system libraries.
         //
-        // This also serves as a regression test against `autoPathelfHook`
+        // This also serves as a regression test against `autoPatchelfHook`
         // conflicting with `gcc` or `libc` from the Flox environment which will
         // cause either binaries that hang or fail with:
         //
@@ -2998,7 +3189,7 @@ mod tests {
     }
 
     /// Test that patchShebangs is able to substitute the path for `cat`
-    /// as provided by Nix runCommmand by way of the `coreutils` package.
+    /// as provided by Nix runCommand by way of the `coreutils` package.
     /// If it uses a version of `coreutils` from a different nixpkgs
     /// revision then the build will fail the closure check, and
     /// `assert_build_status()` will flag the error accordingly.
@@ -3058,7 +3249,7 @@ mod tests {
     }
 
     /// Test that patchShebangs is able to substitute the path for `cat`
-    /// as provided by Nix runCommmand by way of the `coreutils` package.
+    /// as provided by Nix runCommand by way of the `coreutils` package.
     /// If it uses a version of `coreutils` from a different nixpkgs
     /// revision then the build will fail the closure check, and
     /// `assert_build_status()` will flag the error accordingly.
@@ -3269,12 +3460,12 @@ mod tests {
               # shell tracing so that all we get from the build is the output.
               set +x
               # Report where we find a representative executable from each pkg.
-              # Print this to stdout so that we can assert it in the test, but
-              # do not embed these paths in the output because those packages
-              # are not expected to be present in the final closure.
+              # Write to stderr so that all diagnostic output shares one fd with
+              # the shell-tracing output (set +x also writes to stderr); mixing
+              # stdout and stderr produces a non-deterministic ordering.
               for i in bash cat find grep sed; do
                 path="$(type -p $i)"
-                echo "found $i in $path"
+                echo "found $i in $path" >&2
               done
               # Create a valid executable in $out/bin for a clean build.
               mkdir -p $out/bin
@@ -3307,13 +3498,9 @@ mod tests {
         let re = regex::Regex::new(&expected_pattern).unwrap();
 
         // Assert that the expected output is present in the build output.
-        // Note that this output will appear in the stdout for the local
-        // build and stderr for the sandbox build.
-        let output_stream = if sandbox {
-            output.stderr
-        } else {
-            output.stdout
-        };
+        // The echo statements write to stderr, so the output is always in
+        // output.stderr regardless of sandbox mode.
+        let output_stream = output.stderr;
         if !re.is_match(&output_stream) {
             pretty_assertions::assert_eq!(
                 output_stream,
@@ -3406,6 +3593,7 @@ mod tests {
     /// Test that cmake can make use of the CMAKE_PREFIX_PATH variable as
     /// set by etc-profiles.
     async fn build_can_use_cmake(sandbox: bool) {
+        init_tracing();
         let package_name = String::from("hello-cmake");
         // from: test_data/input_data/build/hello-cmake/HelloTarget/share/hello/HelloTarget.cmake
         let file_name = String::from("hello.txt");
@@ -3532,7 +3720,7 @@ mod tests {
 
         let git = GitCommandProvider::init(&env_path, false).unwrap();
 
-        // simulate deleting a tracked file (explicically, without 'git rm')
+        // simulate deleting a tracked file (explicitly, without 'git rm')
         git.add(&[&deleted_file_path]).unwrap();
         fs::remove_file(&deleted_file_path).unwrap();
 

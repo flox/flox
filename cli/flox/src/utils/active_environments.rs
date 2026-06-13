@@ -47,7 +47,7 @@ impl FromStr for ActiveEnvironments {
         }
 
         serde_json::from_str(s).map(Self).or_else(|_| {
-            // Fallback from the old flat UnitializedEnvironment format.
+            // Fallback from the old flat UninitializedEnvironment format.
             serde_json::from_str::<VecDeque<UninitializedEnvironment>>(s).map(|envs| {
                 Self(
                     envs.into_iter()
@@ -69,6 +69,13 @@ impl ActiveEnvironments {
     /// Read the last active environment.
     pub fn last_active(&self) -> Option<UninitializedEnvironment> {
         self.0.front().map(|active| &active.environment).cloned()
+    }
+
+    /// Read the last active environment along with its activation metadata
+    /// (mode, generation). Needed when callers must know how the env was
+    /// activated, e.g. to pick the matching rendered-env link for deactivation.
+    pub fn last_active_full(&self) -> Option<ActiveEnvironment> {
+        self.0.front().cloned()
     }
 
     /// Set the last active environment.

@@ -11,7 +11,7 @@ flox-init - initialize a Flox environment
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] init
      [-n <name>]
      [-d <path>]
@@ -30,7 +30,7 @@ Create a new empty environment in the current directory or on FloxHub.
 
 The name of the environment will be the basename of the current directory
 or `default` if the current directory is `$HOME`.
-The `--name` flag can be used to give the environment a specific name.
+The `--name` flag can be used to name a specific environment.
 
 By default, the environment will be created in the current directory.
 Flox will add a directory `$PWD/.flox` containing all relevant environment
@@ -46,7 +46,7 @@ and it will prompt with suggestions for packages or activation scripts to be
 added to the environment.
 These suggestions can be taken without prompting by passing `--auto-setup`.
 The suggestions can be accepted but then edited using `flox edit`.
-Currently, suggestions are made for Python and Nodejs.
+Currently, suggestions are made for Python and Node.js.
 
 With `--reference` Flox will create a FloxHub environment which can
 subsequently be used by other commands using the `--reference` flag.
@@ -90,4 +90,4 @@ on the current directory.
 
 # SEE ALSO
 [`flox-activate(1)`](./flox-activate.md),
-[`flox-install(1)`](./flox-install.md),
+[`flox-install(1)`](./flox-install.md)

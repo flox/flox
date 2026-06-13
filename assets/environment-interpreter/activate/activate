@@ -49,13 +49,15 @@ env:,\
 env-project:,\
 mode:,\
 start-state-dir:,\
-skip-hook-on-activate"
+skip-hook-on-activate,\
+cuda-detection"
 USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
 [(-e|--env) <env>] \
 [--env-project <path>] \
 [(-m|--mode) (dev|run|build)] \
 [--start-state-dir <path>] \
-[--skip-hook-on-activate]"
+[--skip-hook-on-activate] \
+[--cuda-detection]"
 
 if ! PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@"); then
   echo "Failed to parse options." >&2
@@ -124,6 +126,13 @@ while true; do
       ;;
     --skip-hook-on-activate)
       _skip_hook_on_activate="true"
+      shift
+      ;;
+    --cuda-detection)
+      # Rename to _V2 to avoid conflicts with earlier CLI versions that leak
+      # _FLOX_ENV_CUDA_DETECTION
+      # We can probably drop the suffix after a few releases
+      _FLOX_ENV_CUDA_DETECTION_V2="1"
       shift
       ;;
     --)

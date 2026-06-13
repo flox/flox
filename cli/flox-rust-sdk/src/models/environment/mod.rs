@@ -180,14 +180,12 @@ pub trait Environment: Send {
         flox: &Flox,
     ) -> Result<RenderedEnvironmentLinks, EnvironmentError>;
 
-    /// Build the environment and return the built store paths
-    /// for the development and runtime variants,
+    /// Build the environment, write the activation symlinks, register GC roots,
+    /// and return the built store paths for the development and runtime variants,
     /// as well as runtime environments of the manifest builds defined in this environment.
     ///
-    /// This does not link the environment, but may lock the environment, if necessary.
+    /// May lock the environment if necessary.
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError>;
-
-    fn link(&mut self, store_paths: &BuildEnvOutputs) -> Result<(), EnvironmentError>;
 
     /// Return a path to store transient data,
     /// such as temporary files created by the environment hooks or the environment itself,
@@ -298,20 +296,40 @@ impl TryFrom<&ConcreteEnvironment> for ActivateEnvironmentRef {
 #[as_ref(forward)]
 pub struct RenderedEnvironmentLink(PathBuf);
 
-/// A pair of links to the development and runtime variants of an environment.
+/// Append `suffix` to the final component of `prefix`, mirroring how
+/// `nix build` names an output link: `<out-link prefix><suffix>`
+/// (e.g. `…/system.name` + `-dev` -> `…/system.name-dev`).
+fn append_output_suffix(prefix: &Path, suffix: &str) -> PathBuf {
+    let mut name = prefix.as_os_str().to_os_string();
+    name.push(suffix);
+    PathBuf::from(name)
+}
+
+/// A pair of links to the dev and run variants of an environment.
 /// Refer to the documentation of [RenderedEnvironmentLink] for what guarantees
 /// the existence of these paths provides.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct RenderedEnvironmentLinks {
-    pub development: RenderedEnvironmentLink,
-    pub runtime: RenderedEnvironmentLink,
+    /// The `--out-link` prefix passed to `nix build`. With outputs named
+    /// `"dev"` and `"run"`, nix creates `<prefix>-dev` and `<prefix>-run`,
+    /// which are exactly `dev` and `run` below. Stored rather than re-derived
+    /// from `dev` so the prefix is always available and unambiguous.
+    out_link_prefix: PathBuf,
+    pub dev: RenderedEnvironmentLink,
+    pub run: RenderedEnvironmentLink,
 }
 
 impl RenderedEnvironmentLinks {
-    pub(crate) fn new_unchecked(development: PathBuf, runtime: PathBuf) -> Self {
+    /// Construct from a `--out-link` prefix, deriving the dev and run links the
+    /// same way `nix build` does: by appending the output names `-dev` and
+    /// `-run` to the prefix.
+    pub(crate) fn new_unchecked(out_link_prefix: PathBuf) -> Self {
+        let dev = append_output_suffix(&out_link_prefix, "-dev");
+        let run = append_output_suffix(&out_link_prefix, "-run");
         Self {
-            development: RenderedEnvironmentLink(development),
-            runtime: RenderedEnvironmentLink(runtime),
+            out_link_prefix,
+            dev: RenderedEnvironmentLink(dev),
+            run: RenderedEnvironmentLink(run),
         }
     }
 
@@ -320,11 +338,8 @@ impl RenderedEnvironmentLinks {
         name: impl AsRef<str>,
         system: &System,
     ) -> Self {
-        let development_name = format!("{system}.{name}.dev", name = name.as_ref());
-        let development_path = base_dir.join(development_name);
-        let runtime_name = format!("{system}.{name}.run", name = name.as_ref());
-        let runtime_path = base_dir.join(runtime_name);
-        Self::new_unchecked(development_path, runtime_path)
+        let prefix = base_dir.join(format!("{system}.{name}", name = name.as_ref()));
+        Self::new_unchecked(prefix)
     }
 
     pub fn new_in_base_dir_with_name_system_and_generation(
@@ -333,18 +348,81 @@ impl RenderedEnvironmentLinks {
         system: &System,
         generation: GenerationId,
     ) -> Self {
-        let development_name = format!("{system}.{name}.gen{generation}.dev", name = name.as_ref());
-        let development_path = base_dir.join(development_name);
-        let runtime_name = format!("{system}.{name}.gen{generation}.run", name = name.as_ref());
-        let runtime_path = base_dir.join(runtime_name);
-        Self::new_unchecked(development_path, runtime_path)
+        let prefix = base_dir.join(format!(
+            "{system}.{name}.gen{generation}",
+            name = name.as_ref()
+        ));
+        Self::new_unchecked(prefix)
+    }
+
+    /// Returns the `--out-link` prefix for `nix build`.
+    ///
+    /// With outputs named `"dev"` and `"run"`, nix creates `<prefix>-dev` and
+    /// `<prefix>-run`, which exactly match `self.dev` and `self.run`.
+    pub fn out_link_prefix(&self) -> &Path {
+        &self.out_link_prefix
+    }
+
+    /// Replace legacy dot-separator symlinks with redirect symlinks to the
+    /// new dash-separator ones.
+    ///
+    /// Previous versions of Flox used `<system>.<name>.dev` and
+    /// `<system>.<name>.run` as activation symlink names.  This method checks
+    /// for those old names in the same directory and, if found, replaces them
+    /// with symlinks that point to the current `<system>.<name>-dev` /
+    /// `<system>.<name>-run` names so that scripts or tooling holding old
+    /// paths continue to resolve correctly.
+    ///
+    /// Errors are logged at debug level and do not propagate; this is a
+    /// best-effort compatibility shim and must not fail the build.
+    pub fn replace_legacy_links(&self) {
+        for (new_link, suffix) in [(self.dev.as_path(), "dev"), (self.run.as_path(), "run")] {
+            let Some(parent) = new_link.parent() else {
+                continue;
+            };
+            let Some(new_name) = new_link.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let Some(stem) = new_name.strip_suffix(&format!("-{suffix}")) else {
+                continue;
+            };
+            let old_path = parent.join(format!("{stem}.{suffix}"));
+            if !old_path.is_symlink() {
+                continue;
+            }
+            // Only replace symlinks that point into the Nix store.  Relative
+            // redirect symlinks created by a previous run of this function
+            // already point to the correct dash-separator name and must not be
+            // deleted and recreated on every build.
+            let points_to_store = std::fs::read_link(&old_path)
+                .ok()
+                .and_then(|t| t.into_os_string().into_string().ok())
+                .is_some_and(|t| t.starts_with("/nix/store/"));
+            if !points_to_store {
+                continue;
+            }
+            if let Err(e) = std::fs::remove_file(&old_path) {
+                debug!(path=?old_path, error=%e, "failed to remove legacy environment link");
+                continue;
+            }
+            if new_link.is_symlink()
+                && let Err(e) = std::os::unix::fs::symlink(new_name, &old_path)
+            {
+                debug!(
+                    path=?old_path,
+                    target=new_name,
+                    error=%e,
+                    "failed to create legacy compatibility link"
+                );
+            }
+        }
     }
 
     /// Returns the built environment path for an activation mode.
     pub fn for_mode(self, mode: &ActivateMode) -> RenderedEnvironmentLink {
         match mode {
-            ActivateMode::Dev => self.development,
-            ActivateMode::Run => self.runtime,
+            ActivateMode::Dev => self.dev,
+            ActivateMode::Run => self.run,
         }
     }
 }
@@ -970,7 +1048,7 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
 ///
 /// On Linux use XDG_RUNTIME_DIR per
 /// https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
-/// If unset, fallback to cache_dir like for macOS.
+/// If unset, fall back to cache_dir like for macOS.
 fn services_socket_path(id: &str, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
     if let Ok(path) = std::env::var(FLOX_SERVICES_SOCKET_OVERRIDE_VAR) {
         return Ok(PathBuf::from(path));
@@ -1336,6 +1414,24 @@ mod test {
             EnvironmentError::ServicesSocketPathTooLong(_)
         ));
     }
+
+    /// The dev and run links are the `--out-link` prefix with the nix output
+    /// names appended, and `out_link_prefix()` returns that prefix verbatim
+    /// rather than re-deriving it from the dev link.
+    #[test]
+    fn rendered_env_links_derives_dev_and_run_from_out_link_prefix() {
+        let prefix = PathBuf::from("/base/x86_64-linux.name");
+        let links = RenderedEnvironmentLinks::new_unchecked(prefix.clone());
+        assert_eq!(links.out_link_prefix(), prefix);
+        assert_eq!(
+            links.dev.as_path(),
+            Path::new("/base/x86_64-linux.name-dev")
+        );
+        assert_eq!(
+            links.run.as_path(),
+            Path::new("/base/x86_64-linux.name-run")
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1392,7 +1488,7 @@ mod migration_tests {
             .to_string();
 
         expect![[r#"
-            schema-version = "1.12.0"
+            schema-version = "1.13.0"
         "#]]
         .assert_eq(&manifest_contents);
     }
@@ -1559,9 +1655,94 @@ mod migration_tests {
         included_env.edit(&flox, updated_included_manifest).unwrap();
 
         // Upgrade all includes on the composer.
-        composer.include_upgrade(&flox, vec![]).unwrap();
+        let new_lockfile = composer
+            .include_upgrade(&flox, vec![])
+            .unwrap()
+            .new_lockfile;
 
-        // The composer's manifest should now be migrated to v1.10.0.
+        // Check all schemas have been migrated to latest
+        // #1 compose.composer in lockfile
+        assert_eq!(
+            new_lockfile
+                .compose
+                .as_ref()
+                .unwrap()
+                .composer
+                .get_schema_version(),
+            KnownSchemaVersion::latest()
+        );
+
+        // #2 manifest in lockfile
+        assert_eq!(
+            new_lockfile.manifest.get_schema_version(),
+            KnownSchemaVersion::latest()
+        );
+
+        // #3 on-disk manifest
+        let manifest = composer.manifest_without_migrating(&flox).unwrap();
+        assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::latest());
+    }
+
+    /// A v1 composer that includes a v1 environment should have its
+    /// compose.composer migrated when the composer itself is edited to
+    /// add a package with explicit outputs.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn edit_triggers_migration() {
+        let (mut flox, tempdir) = flox_instance();
+
+        // Set up a v1 included environment with only vars.
+        let included_manifest = with_schema(KnownSchemaVersion::V1, indoc! {r#"
+            [vars]
+            included_var = "value"
+        "#});
+        setup_locked_included_env(&flox, tempdir.path(), &included_manifest);
+
+        // Create and lock a v1 composer that includes it.
+        let mut composer = setup_v1_composer_with_include(&flox, tempdir.path());
+        composer.lockfile(&flox).unwrap();
+
+        let manifest = composer.manifest_without_migrating(&flox).unwrap();
+        assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::V1);
+
+        // Edit the composer to add a package with explicit outputs,
+        // which requires a schema bump.
+        let edited_manifest = with_latest_schema(indoc! {r#"
+            [include]
+            environments = [
+              { dir = "../included" },
+            ]
+
+            [install]
+            bash.pkg-path = "bashNonInteractive"
+            bash.outputs = "all"
+        "#});
+
+        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
+
+        let result = composer.edit(&flox, edited_manifest).unwrap();
+        let EditResult::Changed { new_lockfile, .. } = result else {
+            panic!("expected EditResult::Changed");
+        };
+
+        // Check all schemas have been migrated to latest
+        // #1 compose.composer in lockfile
+        assert_eq!(
+            new_lockfile
+                .compose
+                .as_ref()
+                .unwrap()
+                .composer
+                .get_schema_version(),
+            KnownSchemaVersion::latest()
+        );
+
+        // #2 manifest in lockfile
+        assert_eq!(
+            new_lockfile.manifest.get_schema_version(),
+            KnownSchemaVersion::latest()
+        );
+
+        // #3 on-disk manifest
         let manifest = composer.manifest_without_migrating(&flox).unwrap();
         assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::latest());
     }
@@ -1602,6 +1783,12 @@ mod migration_tests {
             .unwrap()
             .get_schema_version();
         assert_eq!(on_disk_schema, KnownSchemaVersion::V1);
+
+        // Re-locking must consider the lockfile up to date; otherwise every
+        // flox activate will unnecessarily re-lock the environment.
+        assert!(composer.lockfile_up_to_date().unwrap());
+        let second_lock = composer.lockfile(&flox).unwrap();
+        assert!(matches!(second_lock, LockResult::Unchanged(_)));
     }
 
     #[tokio::test(flavor = "multi_thread")]

@@ -17,8 +17,8 @@ activate_cuda() {
   # Pattern of libraries that we support.
   local lib_pattern="lib(cuda|nv|dxcore).*\.so.*"
 
-  # Only run if _FLOX_ENV_CUDA_DETECTION is set
-  if [[ "${_FLOX_ENV_CUDA_DETECTION:-}" != 1 ]]; then
+  # Only run if _FLOX_ENV_CUDA_DETECTION_V2 is set
+  if [[ "${_FLOX_ENV_CUDA_DETECTION_V2:-}" != 1 ]]; then
     return 0
   fi
 
@@ -58,7 +58,7 @@ activate_cuda() {
   export LD_FLOXLIB_FILES_PATH="${LD_FLOXLIB_FILES_PATH:+${LD_FLOXLIB_FILES_PATH}:}$SYSTEM_LIBS"
 }
 
-activate_cuda "/" "$_ldconfig"
+activate_cuda "${_FLOX_TESTING_CUDA_FHS_ROOT:-/}" "${_FLOX_TESTING_CUDA_LDCONFIG:-$_ldconfig}"
 
 # ---------------------------------------------------------------------------- #
 #

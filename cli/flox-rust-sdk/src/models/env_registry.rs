@@ -240,7 +240,7 @@ pub fn env_registry_path(flox: &Flox) -> PathBuf {
     flox.data_dir.join(ENV_REGISTRY_FILENAME)
 }
 
-/// Returns the path to the user's environment registry lock file. The presensce
+/// Returns the path to the user's environment registry lock file. The presence
 /// of the lock file does not indicate an active lock because the file isn't
 /// removed after use. This is a separate file because we replace the registry
 /// on write.
@@ -330,7 +330,7 @@ pub fn deregister(
     Ok(())
 }
 
-/// Garbage collect non-existent environments from the registry. Writes to the
+/// Garbage collect nonexistent environments from the registry. Writes to the
 /// registry file, in addition to returning the updated registry to avoid a
 /// second read by any consumers.
 #[instrument(skip_all, fields(progress = "Garbage collecting stale environments"))]

@@ -81,6 +81,19 @@ flox config --set 'trusted_environments."owner/name"' trust
     first time the directory containing that environment is
     entered.
 
+`auto_activate_fish_mode`
+:   Controls how the fish shell hook responds to directory
+    changes during auto-activation.
+    Possible values are `eval_on_arrow` (default),
+    `eval_after_arrow`, and `disable_arrow`.
+    `eval_on_arrow` evaluates on prompt and immediately when
+    the working directory changes during interactive use.
+    `eval_after_arrow` evaluates on prompt and defers
+    directory-change evaluation until before the next command
+    executes.
+    `disable_arrow` evaluates on prompt only, ignoring
+    directory changes entirely.
+
 `config_dir`
 :   Directory where Flox should load its configuration file
     (default: `$XDG_CONFIG_HOME/flox`).
@@ -94,6 +107,11 @@ flox config --set 'trusted_environments."owner/name"' trust
 `data_dir`
 :   Directory where Flox should store persistent data
     (default: `$XDG_DATA_HOME/flox`).
+
+`disable_hook`
+:   Don't set up the Flox prompt hook as part of activation.
+    This disables auto-activation; the prompt hook is also required for
+    `flox deactivate` to take effect (default: false).
 
 `disable_metrics`
 :   Disable collecting and sending usage metrics.

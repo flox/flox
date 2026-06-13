@@ -10,7 +10,7 @@ flox-services-start - start services
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] services start
      [-d=<path> | -r=<owner/name>]
      [<name>] ...
@@ -45,30 +45,30 @@ of how many times the environment is activated concurrently.
 ./include/general-options.md
 ```
 
-# EXAMPLES:
+# EXAMPLES
 
 Start a service named 'server':
 
-```
-$ flox services start server
+```bash
+flox services start server
 ```
 
 Start all services:
 
-```
-$ flox services start
+```bash
+flox services start
 ```
 
 Attempt to start a service that doesn't exist:
 
-```
+```console
 $ flox services start myservice doesnt_exist
 ✘ ERROR: Service 'doesnt_exist' not found.
 ```
 
 Attempt to start a service that is already running:
 
-```
+```console
 $ flox services start running not_running
 ✔ Service 'not_running' started
 ⚠️  Service 'running' is already running

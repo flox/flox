@@ -7,6 +7,7 @@ use flox_core::util::default_nix_env_vars;
 
 pub mod active_environments;
 pub mod colors;
+pub mod detect_shell;
 pub mod dialog;
 pub mod didyoumean;
 pub mod errors;
@@ -17,6 +18,7 @@ pub mod openers;
 pub mod search;
 pub mod tracing;
 pub mod update_notifications;
+pub mod upgrade_output;
 
 pub static TERMINAL_STDERR: LazyLock<Mutex<Stderr>> =
     LazyLock::new(|| Mutex::new(std::io::stderr()));

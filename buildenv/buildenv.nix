@@ -68,8 +68,8 @@ let
 
   # Calculate environment outputs.
   environmentOutputs = [
-    "runtime"
-    "develop"
+    "run"
+    "dev"
   ]
   ++ (builtins.map (buildId: "build-${buildId}") (builtins.attrNames buildSection));
 
@@ -135,6 +135,42 @@ let
           in
           ''
             "${coreutils}/bin/cp" ${scriptFile} $out/activate.d/profile-${shellType}
+          ''
+        else
+          ""
+      )
+      [
+        "bash"
+        "common"
+        "fish"
+        "tcsh"
+        "zsh"
+      ]
+  )
+  ++ (
+    # [profile.deactivate] section
+    let
+      deactivateSection =
+        if (builtins.hasAttr "deactivate" profileSection && profileSection.deactivate != null) then
+          profileSection.deactivate
+        else
+          { };
+    in
+    builtins.map
+      (
+        shellType:
+        if
+          (
+            builtins.hasAttr shellType deactivateSection
+            && (builtins.getAttr shellType deactivateSection) != null
+          )
+        then
+          let
+            contents = outdentScript (builtins.getAttr shellType deactivateSection);
+            scriptFile = builtins.toFile "deactivate-profile-${shellType}" contents;
+          in
+          ''
+            "${coreutils}/bin/cp" ${scriptFile} $out/activate.d/deactivate-profile-${shellType}
           ''
         else
           ""

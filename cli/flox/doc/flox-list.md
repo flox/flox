@@ -11,7 +11,7 @@ flox-list - list packages installed in an environment
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] list
      [-d=<path> | -r=<owner/name>]
      [-u]

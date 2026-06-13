@@ -12,7 +12,7 @@ use flox_manifest::parsed::latest::SelectedOutputs;
 use flox_manifest::raw::PackageToInstall;
 use indoc::formatdoc;
 use minus::{ExitStrategy, Pager, page_all};
-use tracing::info;
+use tracing::{debug, info};
 
 /// Write a message to stderr.
 ///
@@ -51,6 +51,10 @@ pub(crate) fn deleted(v: impl Display) {
 }
 pub(crate) fn updated(v: impl Display) {
     print_message(format_updated(v));
+}
+/// Shown only at `-v` verbosity (`flox::utils::message=debug` filter).
+pub(crate) fn verbose(v: impl Display) {
+    debug!("{v}");
 }
 /// double width character, add an additional space for alignment
 pub(crate) fn info(v: impl Display) {
@@ -367,7 +371,7 @@ mod tests {
         .with_subscriber(subscriber)
         .await;
 
-        // - environmemnts are listed by the order they were included
+        // - environments are listed by the order they were included
         // - composer environment is listed last
         // - environment `dep_one` doesn't appear because its fields are overridden later
         assert_eq!(writer.to_string(), indoc! {"

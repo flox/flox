@@ -10,7 +10,7 @@ flox-pull - pull environment from FloxHub
 
 # SYNOPSIS
 
-```
+```text
 # Pull a new environment into a directory
 flox [<general-options>] pull <owner>/<name>
      [-d=<path>]
@@ -36,7 +36,7 @@ or, if an environment has already been pulled, retrieve any updates.
 ## Pulling a new environment (`<owner>/<name> [--dir <dir>]`)
 
 Create an environment in the current directory or the directory specified by
-the `--dir` flag, that is linked to the centrally managed environemnt
+the `--dir` flag, that is linked to the centrally managed environment
 `<owner>/<name>` on FloxHub.
 You can make changes locally and push them back with
 [`flox-push(1)`](./flox-push.md).
@@ -112,7 +112,7 @@ environments.
 `-r <owner>/<name>`, `--reference <owner>/<name>`
 :   Pull updates for a local copy of a FloxHub environment
 
-    The pulled environment can be used by passing '--reference' to other
+    The pulled environment can be used by passing `--reference` to other
     subcommands.
 
     This updates a FloxHub environment that has been activated or pulled

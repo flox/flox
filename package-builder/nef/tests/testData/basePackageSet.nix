@@ -2,7 +2,7 @@
 
 lib.makeScope lib.callPackageWith (self: {
   topLevelValue = "value";
-  topLevelDependency = throw "This will be overriden";
+  topLevelDependency = throw "This will be overridden";
   topLevelDependent = self.callPackage (
     { topLevelValue, topLevelDependency }: "depends on ${topLevelValue} and ${topLevelDependency}"
   ) { };
@@ -11,7 +11,7 @@ lib.makeScope lib.callPackageWith (self: {
   # on ambient ones.
   setMakeExtensible = lib.makeExtensible (final: {
     extensibleValue = "value";
-    extensibleDependency = throw "This will be overriden";
+    extensibleDependency = throw "This will be overridden";
     extensibleDependent = "depends on ${final.extensibleValue}, ${self.topLevelValue} and ${final.extensibleDependency}";
   });
 
@@ -19,7 +19,7 @@ lib.makeScope lib.callPackageWith (self: {
   # on both higher level dependencies and ambient ones.
   setMakeScope = lib.makeScope self.newScope (self: {
     makeScopeValue = "value";
-    makeScopeDependency = throw "This will be overriden";
+    makeScopeDependency = throw "This will be overridden";
     makeScopeDependent = self.callPackage (
       {
         makeScopeValue,

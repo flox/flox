@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fs::OpenOptions;
 use std::io::{ErrorKind, IsTerminal};
 use std::os::unix::process::CommandExt;
@@ -15,14 +14,14 @@ use nix::unistd::{close, dup2_stdin, pipe, write};
 use shell_gen::{Shell, ShellWithPath};
 use tracing::debug;
 
-use crate::attach_diff::{AttachDiff, activate_tracer, old_cli_envs};
+use crate::attach_diff::{AttachDiff, activate_tracer};
 use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
 use crate::cli::attach::{AttachArgs, AttachExclusiveArgs};
-use crate::gen_rc::bash::{BashStartupArgs, generate_bash_startup_commands};
-use crate::gen_rc::fish::{FishStartupArgs, generate_fish_startup_commands};
-use crate::gen_rc::tcsh::{TcshStartupArgs, generate_tcsh_startup_commands};
-use crate::gen_rc::zsh::{ZshStartupArgs, generate_zsh_startup_commands};
-use crate::gen_rc::{StartupArgs, StartupCtx};
+use crate::gen_rc::bash::{BashStartupArgs, generate_bash_profile_commands};
+use crate::gen_rc::fish::{FishStartupArgs, generate_fish_profile_commands};
+use crate::gen_rc::tcsh::{TcshStartupArgs, generate_tcsh_profile_commands};
+use crate::gen_rc::zsh::{ZshStartupArgs, generate_zsh_profile_commands};
+use crate::gen_rc::{Action, ShellStartupArgs, StartupCtx};
 use crate::start_diff::StartDiff;
 use crate::vars_from_env::VarsFromEnvironment;
 
@@ -38,16 +37,6 @@ pub fn attach(
     // Use pre-computed activation_state_dir to get start state directory
     let start_state_dir = start_id.start_state_dir(&context.activation_state_dir)?;
     let diff = StartDiff::from_files(&start_state_dir)?;
-
-    // Construct the activation environment once — collects vars, computes
-    // the diff, and encodes it. All consumers share this single source of truth.
-    let attach_diff = AttachDiff::new(
-        &context.attach_ctx,
-        context.project_ctx.as_ref(),
-        subsystem_verbosity,
-        vars_from_env,
-        &diff,
-    )?;
 
     // Create the path if we're going to need it (we won't for in-place).
     // We're doing this ahead of time here because it's shell-agnostic and the `match`
@@ -66,14 +55,28 @@ pub fn attach(
         rc_path = Some(path);
     }
     let tracer = activate_tracer(&context.attach_ctx.interpreter_path);
+
+    let is_sourcing_rc = std::env::var("_flox_sourcing_rc").is_ok_and(|val| val == "true");
+    let self_destruct = !std::env::var(NO_REMOVE_ACTIVATION_FILES).is_ok_and(|val| val == "true");
+    let bashrc_path = if matches!(context.shell, ShellWithPath::Bash(_)) {
+        let home_dir = dirs::home_dir().ok_or_else(|| anyhow!("failed to get home directory"))?;
+        let bashrc_path = home_dir.join(".bashrc");
+        bashrc_path.exists().then_some(bashrc_path)
+    } else {
+        None
+    };
+
     let startup_ctx = startup_ctx(
         context,
         invocation_type.clone(),
         rc_path,
-        diff.clone(),
-        &start_state_dir,
+        diff,
         &tracer,
         subsystem_verbosity,
+        vars_from_env,
+        is_sourcing_rc,
+        self_destruct,
+        bashrc_path,
     )?;
 
     match invocation_type {
@@ -89,30 +92,32 @@ pub fn attach(
             Ok(())
         },
         // All other invocation types only return if exec fails
-        InvocationType::Interactive => activate_interactive(startup_ctx, &attach_diff),
+        InvocationType::Interactive => activate_interactive(startup_ctx),
         InvocationType::ShellCommand(shell_command) => {
-            activate_shell_command(shell_command, startup_ctx, &attach_diff)
+            activate_shell_command(shell_command, startup_ctx)
         },
         InvocationType::ExecCommand(exec_command) => {
-            activate_exec_command(exec_command, startup_ctx, &attach_diff)
+            activate_exec_command(exec_command, startup_ctx)
         },
     }
 }
 
 /// Build startup context for shell configuration.
 /// Used by both normal activations (with project context) and containers (without).
-fn startup_ctx(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn startup_ctx(
     ctx: ActivateCtx,
     invocation_type: InvocationType,
     rc_path: Option<PathBuf>,
     start_diff: StartDiff,
-    start_state_dir: &Path,
     activate_tracer: &str,
     subsystem_verbosity: u32,
+    vars_from_env: VarsFromEnvironment,
+    is_sourcing_rc: bool,
+    self_destruct: bool,
+    bashrc_path: Option<PathBuf>,
 ) -> Result<StartupCtx> {
-    let is_sourcing_rc = std::env::var("_flox_sourcing_rc").is_ok_and(|val| val == "true");
     let flox_activations = (*FLOX_ACTIVATIONS_BIN).clone();
-    let self_destruct = !std::env::var(NO_REMOVE_ACTIVATION_FILES).is_ok_and(|val| val == "true");
 
     let clean_up = if rc_path.is_some() && self_destruct {
         rc_path.clone()
@@ -120,80 +125,114 @@ fn startup_ctx(
         None
     };
 
-    // Get env_project from project context if present (None for containers)
-    let env_project = ctx.project_ctx.as_ref().map(|e| e.env_project.clone());
+    let attach_diff = AttachDiff::new(
+        &ctx.attach_ctx,
+        ctx.project_ctx.as_ref(),
+        subsystem_verbosity,
+        vars_from_env,
+        &start_diff,
+        invocation_type.is_in_place(),
+    )?;
+
+    let set_prompt = ctx.attach_ctx.set_prompt;
+
+    // Respect the disable_hook config option
+    let register_hook = !ctx.disable_hook;
 
     let args = match ctx.shell {
-        ShellWithPath::Bash(_) => {
-            let bashrc_path = if let Some(home_dir) = dirs::home_dir() {
-                let bashrc_path = home_dir.join(".bashrc");
-                if bashrc_path.exists() {
-                    Some(bashrc_path)
-                } else {
-                    None
-                }
-            } else {
-                return Err(anyhow!("failed to get home directory"));
-            };
-            StartupArgs::Bash(BashStartupArgs {
-                flox_activate_tracelevel: subsystem_verbosity,
-                activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
-                flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-                flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-                flox_env_project: env_project.clone(),
-                flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
-                is_in_place: invocation_type == InvocationType::InPlace,
-                bashrc_path,
-                flox_sourcing_rc: is_sourcing_rc,
-                flox_activate_tracer: activate_tracer.to_string(),
-                flox_activations,
-                clean_up,
-            })
-        },
-        ShellWithPath::Fish(_) => StartupArgs::Fish(FishStartupArgs {
+        ShellWithPath::Bash(_) => ShellStartupArgs::Bash(BashStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-            flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-            flox_env_project: env_project.clone(),
-            flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
-            is_in_place: invocation_type == InvocationType::InPlace,
+            invocation_type,
+            bashrc_path,
             flox_sourcing_rc: is_sourcing_rc,
             flox_activate_tracer: activate_tracer.to_string(),
             flox_activations,
             clean_up,
+            register_hook,
+            flox_bin: ctx.flox_bin.clone(),
+            set_prompt,
         }),
-        ShellWithPath::Tcsh(_) => StartupArgs::Tcsh(TcshStartupArgs {
+        ShellWithPath::Fish(_) => ShellStartupArgs::Fish(FishStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-            flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-            flox_env_project: env_project.clone(),
-            flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
-            is_in_place: invocation_type == InvocationType::InPlace,
+            invocation_type,
             flox_sourcing_rc: is_sourcing_rc,
             flox_activate_tracer: activate_tracer.to_string(),
             flox_activations,
             clean_up,
+            register_hook,
+            flox_bin: ctx.flox_bin.clone(),
+            auto_activate_fish_mode: ctx.auto_activate_fish_mode,
+            set_prompt,
         }),
-        ShellWithPath::Zsh(_) => StartupArgs::Zsh(ZshStartupArgs {
+        ShellWithPath::Tcsh(_) => ShellStartupArgs::Tcsh(TcshStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
             activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
             flox_env: PathBuf::from(ctx.attach_ctx.env.clone()),
-            flox_env_cache: Some(ctx.attach_ctx.env_cache.clone()),
-            flox_env_project: env_project.clone(),
-            flox_env_description: Some(ctx.attach_ctx.env_description.clone()),
+            invocation_type,
+            flox_sourcing_rc: is_sourcing_rc,
+            flox_activate_tracer: activate_tracer.to_string(),
+            flox_activations,
             clean_up,
+            register_hook,
+            flox_bin: ctx.flox_bin.clone(),
+            set_prompt,
+        }),
+        ShellWithPath::Zsh(_) => ShellStartupArgs::Zsh(ZshStartupArgs {
+            flox_activate_tracelevel: subsystem_verbosity,
+            activate_d: ctx.attach_ctx.interpreter_path.join("activate.d"),
+            invocation_type,
+            clean_up,
+            register_hook,
+            flox_bin: ctx.flox_bin.clone(),
+            set_prompt,
         }),
     };
 
     Ok(StartupCtx {
         args,
-        start_state_dir: start_state_dir.to_path_buf(),
-        start_diff,
         rc_path,
         act_ctx: ctx,
+        attach_diff,
     })
+}
+
+pub(crate) fn write_to_writer(ctx: &StartupCtx, writer: &mut impl std::io::Write) -> Result<()> {
+    let attach_diff = ctx.attach_diff.clone();
+    match &ctx.args {
+        ShellStartupArgs::Bash(args) => {
+            let action = Action::Activate {
+                args: args.clone(),
+                attach_diff,
+            };
+            generate_bash_profile_commands(&action, writer)?
+        },
+        ShellStartupArgs::Fish(args) => {
+            let action = Action::Activate {
+                args: args.clone(),
+                attach_diff,
+            };
+            generate_fish_profile_commands(&action, writer)?
+        },
+        ShellStartupArgs::Tcsh(args) => {
+            let action = Action::Activate {
+                args: args.clone(),
+                attach_diff,
+            };
+            generate_tcsh_profile_commands(&action, writer)?
+        },
+        ShellStartupArgs::Zsh(args) => {
+            let action = Action::Activate {
+                args: args.clone(),
+                attach_diff,
+            };
+            generate_zsh_profile_commands(&action, writer)?
+        },
+    }
+    Ok(())
 }
 
 fn write_to_path(ctx: &StartupCtx, path: &Path) -> Result<()> {
@@ -203,48 +242,16 @@ fn write_to_path(ctx: &StartupCtx, path: &Path) -> Result<()> {
         .write(true)
         .truncate(true)
         .open(path)?;
-    match ctx.args {
-        StartupArgs::Bash(ref args) => {
-            generate_bash_startup_commands(args, &ctx.start_diff, &mut writer)?
-        },
-        StartupArgs::Fish(ref args) => {
-            generate_fish_startup_commands(args, &ctx.start_diff, &mut writer)?
-        },
-        StartupArgs::Tcsh(ref args) => {
-            generate_tcsh_startup_commands(args, &ctx.start_diff, &mut writer)?
-        },
-        StartupArgs::Zsh(ref args) => {
-            generate_zsh_startup_commands(args, &ctx.start_diff, &mut writer)?
-        },
-    }
-    Ok(())
+    write_to_writer(ctx, &mut writer)
 }
 
 fn write_to_stdout(ctx: &StartupCtx) -> Result<()> {
     let mut writer = std::io::stdout();
-    match ctx.args {
-        StartupArgs::Bash(ref args) => {
-            generate_bash_startup_commands(args, &ctx.start_diff, &mut writer)?
-        },
-        StartupArgs::Fish(ref args) => {
-            generate_fish_startup_commands(args, &ctx.start_diff, &mut writer)?
-        },
-        StartupArgs::Tcsh(ref args) => {
-            generate_tcsh_startup_commands(args, &ctx.start_diff, &mut writer)?
-        },
-        StartupArgs::Zsh(ref args) => {
-            generate_zsh_startup_commands(args, &ctx.start_diff, &mut writer)?
-        },
-    }
-    Ok(())
+    write_to_writer(ctx, &mut writer)
 }
 
 /// Used for `flox activate -- exec_command ...`
-fn activate_exec_command(
-    exec_command: Vec<String>,
-    _startup_ctx: StartupCtx,
-    attach_diff: &AttachDiff,
-) -> Result<()> {
+fn activate_exec_command(exec_command: Vec<String>, startup_ctx: StartupCtx) -> Result<()> {
     if exec_command.is_empty() {
         return Err(anyhow!("empty command provided"));
     }
@@ -252,7 +259,7 @@ fn activate_exec_command(
     if exec_command.len() > 1 {
         command.args(&exec_command[1..]);
     };
-    attach_diff.apply_to_command(&mut command);
+    startup_ctx.attach_diff.apply_to_command(&mut command);
 
     debug!("executing command directly: {:?}", command);
 
@@ -265,13 +272,9 @@ fn activate_exec_command(
 }
 
 /// Used for `flox activate -c shell_command`
-fn activate_shell_command(
-    shell_command: String,
-    startup_ctx: StartupCtx,
-    attach_diff: &AttachDiff,
-) -> Result<()> {
+fn activate_shell_command(shell_command: String, startup_ctx: StartupCtx) -> Result<()> {
     let mut command = Command::new(startup_ctx.act_ctx.shell.exe_path());
-    attach_diff.apply_to_command(&mut command);
+    startup_ctx.attach_diff.apply_to_command(&mut command);
 
     let rcfile = startup_ctx
         .rc_path
@@ -381,9 +384,9 @@ fn activate_shell_command(
 /// and running the respective activation scripts.
 ///
 /// This function should never return as it replaces the current process
-fn activate_interactive(startup_ctx: StartupCtx, attach_diff: &AttachDiff) -> Result<()> {
+fn activate_interactive(startup_ctx: StartupCtx) -> Result<()> {
     let mut command = Command::new(startup_ctx.act_ctx.shell.exe_path());
-    attach_diff.apply_to_command(&mut command);
+    startup_ctx.attach_diff.apply_to_command(&mut command);
 
     let rcfile = startup_ctx
         .rc_path
@@ -486,8 +489,6 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
     // Put a 5 second timeout on the activation
     attach_command.handle()?;
 
-    let legacy_exports = render_legacy_exports(&startup_ctx.act_ctx);
-
     let exports_for_zsh = if matches!(startup_ctx.act_ctx.shell, ShellWithPath::Zsh(_)) {
         let zdotdir_path = startup_ctx
             .act_ctx
@@ -519,7 +520,6 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
     };
 
     let script = formatdoc! {r#"
-            {legacy_exports}
             {flox_activations} attach --activation-state-dir "{activation_state_dir}" --pid {self_pid_var} --store-path "{store_path}" --timestamp "{timestamp}" --remove-pid "{pid}";
             {exports_for_zsh}
         "#,
@@ -539,25 +539,6 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
     write_to_stdout(&startup_ctx)?;
 
     Ok(())
-}
-
-/// The CLI used to print export statements for in-place activations for
-/// every environment variable set prior to invoking the activate script
-fn render_legacy_exports(context: &ActivateCtx) -> String {
-    // Render the exports in the correct shell dialect.
-    old_cli_envs(&context.attach_ctx, context.project_ctx.as_ref())
-        .iter()
-        .map(|(key, value)| (key, shell_escape::escape(Cow::Borrowed(value))))
-        // TODO: we should use a method on Shell here, possibly using
-        // shell_escape in the Shell method?
-        // But not quoting here is intentional because we already use shell_escape
-        .map(|(key, value)| match context.shell {
-            ShellWithPath::Bash(_) => format!("export {key}={value};",),
-            ShellWithPath::Fish(_) => format!("set -gx {key} {value};",),
-            ShellWithPath::Tcsh(_) => format!("setenv {key} {value};",),
-            ShellWithPath::Zsh(_) => format!("export {key}={value};",),
-        })
-        .join("\n")
 }
 
 /// Quote run args so that words don't get split,

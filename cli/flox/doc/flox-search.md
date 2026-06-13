@@ -11,7 +11,7 @@ flox-search - search for packages
 
 # SYNOPSIS
 
-```
+```text
 flox [<general options>] search
      [--json]
      [-a]

@@ -107,7 +107,7 @@ impl CliShellExt for ShellWithPath {
     ///
     /// This function tries to detect the shell from the parent process.
     /// If reading process information of the parent process fails,
-    /// or the exe path of the parent process can not be parsed to a known shell,
+    /// or the exe path of the parent process cannot be parsed to a known shell,
     /// an error is returned.
     fn detect_from_parent_process() -> Result<Self> {
         let parent_process_exe = get_parent_process_exe()?;
